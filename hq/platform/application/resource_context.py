@@ -44,7 +44,7 @@ lazy from .conditions import DEGRADED, DRIFTED, held_since
 lazy from .connections import connection_readings
 lazy from .facts import kinds_read
 lazy from .managed_records import ManagedResourceListed, ManagedResourceRecord
-lazy from .projection import keyset_page, read_once
+lazy from .projection import page_of, read_once
 lazy from .security import internal_principal
 lazy from .services import certificate_use
 lazy from .whereabouts import machine_link, whereabouts
@@ -324,7 +324,7 @@ def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: s
         resources = resources.filter(kind=kind)
     if kinds:
         resources = resources.filter(kind__in=kinds.split(","))
-    page = keyset_page(resources, ("kind", "key"), limit)
+    page = page_of(resources, limit, order=("kind", "key"))
     # Read once for the whole page: asked per row, where each forwards is a
     # query budget that grows with the estate.
     machines, targets = declared_machines(), delivery_targets()

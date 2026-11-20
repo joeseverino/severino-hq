@@ -1,4 +1,18 @@
-{% if is_paginated %}
+{% if pages %}
+<nav class="pagination" aria-label="Pages">
+  {% if pages.previous %}
+    <a data-hit href="{% querystring page=pages.previous %}"><span aria-hidden="true">←</span>&nbsp;Prev</a>
+  {% else %}
+    {% muted %}<span aria-hidden="true">←</span>&nbsp;Prev{% endmuted %}
+  {% endif %}
+  {% muted %}Page {{ pages.number|breakable }}{% if pages.of %} of {{ pages.of|breakable }}{% endif %}{% endmuted %}
+  {% if pages.next %}
+    <a data-hit href="{% querystring page=pages.next %}">Next{% arrow %}</a>
+  {% else %}
+    {% muted %}Next{% arrow %}{% endmuted %}
+  {% endif %}
+</nav>
+{% elif is_paginated %}
 <nav class="pagination" aria-label="Pages">
   {% if page_obj.has_previous %}
     <a data-hit href="{% querystring page=page_obj.previous_page_number %}"><span aria-hidden="true">←</span>&nbsp;Prev</a>

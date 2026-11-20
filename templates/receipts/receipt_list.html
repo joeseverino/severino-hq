@@ -1,9 +1,9 @@
 {% extends "list_page.html" %}
 {% block row %}
-  <td><strong>{% entity row|record label=row.label %}</strong></td>
+  <td><strong>{% entity "receipt"|entity_of:row.id label=row.label %}</strong></td>
   <td>{{ row.date|when }}</td>
   <td>{{ row.amount|money }}</td>
-  <td>{% present row.related_expense|default:row.related_asset %}{% include "receipts/_linked_to.html" with receipt=row expense_label=row.related_expense.item listed=True %}{% endpresent %}</td>
+  <td>{% present row.related_expense|default:row.related_asset %}{% list %}{% if row.related_expense %}<li>{% entity "expense"|entity_of:row.related_expense label=row.expense_item %}</li>{% endif %}{% if row.related_asset %}<li>{% entity "asset"|entity_of:row.related_asset label=row.asset_name %}</li>{% endif %}{% endlist %}{% endpresent %}</td>
   <td>{% muted %}{{ row.original_filename|or_empty }}{% endmuted %}</td>
   <td>{% muted %}{{ row.uploaded_at|when:"ago" }}{% endmuted %}</td>
 {% endblock %}

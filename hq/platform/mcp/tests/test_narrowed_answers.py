@@ -5,7 +5,6 @@ from django.test import TestCase
 from pydantic import ValidationError
 
 from hq.platform.application.capabilities import InvalidCapabilityQuery
-from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.projection import PageScope
 from hq.platform.application.resources import BoundedQuery, InvalidResourceInput, _page
 from hq.platform.application.security import mcp_principal
@@ -65,8 +64,8 @@ class CutOffListSaysSoTests(TestCase):
         self.assertEqual(page["count"], 2)
         self.assertEqual(page["total"], 3)
         self.assertTrue(page["truncated"])
-        self.assertEqual(set(page["next"]), {"cursor"})
-        rest = services.list_resource("infrastructure", limit=2, **page["next"])
+        self.assertEqual(page["next"], 2)
+        rest = services.list_resource("infrastructure", limit=2, page=page["next"])
         self.assertEqual((rest["count"], rest["truncated"], rest["next"]), (1, False, None))
 
     def test_a_page_holding_every_match_says_so(self):
@@ -86,11 +85,10 @@ class CutOffListSaysSoTests(TestCase):
                 services.list_resource("infrastructure", filters)
 
     def test_a_full_page_from_a_list_that_does_not_count_is_read_as_cut_off(self):
-        spec = ResourceSpec("example.things", "Things", "Things.", "read", ListRead(lambda **_: {}, BoundedQuery, dict))
         full = {"items": [{}, {}], "count": 2}
 
         def page(limit):
-            return _page(spec, BoundedQuery(limit=limit), full, PageScope(None), "")
+            return _page(BoundedQuery(limit=limit), full, PageScope())
 
         self.assertTrue(page(2)["truncated"])
         self.assertIsNone(page(2)["total"])

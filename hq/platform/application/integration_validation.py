@@ -17,7 +17,6 @@ from .connection_contracts import ConnectionAbility, ConnectionSpec
 from .contracts import DJANGO_ROUTE, DOTTED_NAME, SCOPE_NAME
 from .integration_specs import (
     CONSENT_KEYWORD,
-    PAGE_FIELD,
     RESERVED_QUERY_FIELD,
     SENT_KEYWORD,
     STALE_WRITE_KEYWORD,
@@ -253,7 +252,7 @@ def _validate_list_contract(spec: ResourceSpec) -> None:
             f"Resource {spec.name!r} fields must be the unique top-level names of a list's items."
         )
     try:
-        values = read.query().model_dump(exclude={PAGE_FIELD})
+        values = read.query().model_dump(exclude=spec.read_around)
         inspect.signature(read.reader, annotation_format=Format.STRING).bind(**values, **_principal_argument(spec))
     except (TypeError, ValidationError) as exc:
         raise ImproperlyConfigured(

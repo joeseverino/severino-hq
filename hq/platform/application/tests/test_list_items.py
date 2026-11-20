@@ -61,7 +61,7 @@ class ListItemIsTheSavedRecordTests(TestCase):
 
         self.assertEqual([item["date"] for item in list_expenses(year=2030)["items"]], ["2030-01-02"])
         self.assertEqual([item["category"] for item in list_expenses(category="hardware")["items"]], ["hardware"])
-        self.assertNotIn(matched.pk, [item["id"] for item in list_receipts(unmatched_only=True)["items"]])
+        self.assertNotIn(matched.pk, [item["id"] for item in list_receipts(unlinked=True)["items"]])
 
 
 def _functions(prefix: str):

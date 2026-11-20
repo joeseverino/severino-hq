@@ -26,7 +26,7 @@ from .command_fields import Choices, Describe, Refers, stored_in
 from .derivations import derivation
 from .integration_specs import Kept, keeps
 from .moments import when_day
-from .projection import window
+from .projection import page_of
 from .record_errors import RecordNotFound
 from .record_fields import Notes
 from .record_saves import Held, as_sent, found, held, row, written
@@ -368,7 +368,7 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
         placed,
         key=lambda item: (item.event.first_day, item.event.timed, str(item.event.starts), item.event.title),
     )
-    page, paged = window(items, limit, maximum=AGENDA_PAGE)
+    paged = page_of(items, limit, maximum=AGENDA_PAGE)
     shown = [
         {
             "source": item.source.id,
@@ -381,7 +381,7 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
             "detail": item.event.detail,
             "url": item.event.url,
         }
-        for item in page
+        for item in paged["items"]
     ]
     return {**paged, "start": first.isoformat(), "end": last.isoformat(), "items": shown}
 

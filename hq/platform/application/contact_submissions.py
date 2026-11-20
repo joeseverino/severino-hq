@@ -31,7 +31,7 @@ from .cadence import ask
 from .command_fields import Describe, confirm
 from .deletion import DeleteCommand
 from .integration_specs import Kept, keeps
-from .projection import window
+from .projection import page_of
 from .record_errors import PolicyError, RecordNotFound
 from .record_saves import written
 from .resource_operations import queue_reconcile
@@ -72,8 +72,7 @@ def _matches(row: dict[str, Any], status: str | None, wanted: str) -> bool:
 def list_contact_submissions(*, status: str | None = None, query: str = "", limit: int = 100) -> dict[str, Any]:
     wanted = query.strip().casefold()
     matches = [row for row in inbox.current().rows if _matches(row, status, wanted)]
-    items, paged = window(matches, limit)
-    return {**paged, "items": list(items)}
+    return page_of(matches, limit)
 
 
 def find_submission(identifier: int, current: inbox.Inbox | None = None) -> dict[str, Any] | None:

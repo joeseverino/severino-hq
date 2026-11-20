@@ -76,14 +76,14 @@ def _value(extracted: Any) -> Any:
 
 
 def a_next_page_moves_on(ctx: CheckContext, response: Any, case: Any) -> None:
-    """The page a list's cursor reads holds none of the records of the page that gave it."""
+    """The page a list's next names holds none of the records of the page that named it."""
 
     linked = _linked(ctx, case)
     if linked is None or response.status_code != 200 or not isinstance(case.query, dict):
         return
     transition, parent = linked
-    cursor = _value(transition.parameters.get("query", {}).get(PAGE_FIELD))
-    if cursor is None or case.query.get(PAGE_FIELD) != cursor:
+    page = _value(transition.parameters.get("query", {}).get(PAGE_FIELD))
+    if page is None or case.query.get(PAGE_FIELD) != page:
         return
     before = parent.json()["data"]["items"]
     repeated = [item for item in response.json()["data"]["items"] if item in before]

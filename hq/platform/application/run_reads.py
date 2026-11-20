@@ -20,7 +20,7 @@ from .command_fields import RequiredText
 from .describe import Describe, listed
 from .integration_specs import ListRead, ResourceSpec
 from .managed_records import AskedAt
-from .projection import iso, keyset_page
+from .projection import iso, page_of
 from .record_errors import RecordNotFound
 from .resources import BoundedQuery, one_of
 from .security import Capability
@@ -198,7 +198,7 @@ def list_runs(
     found = listed_runs(
         playbook=playbook or "", host=machine or "", correlation=correlation or "", state=(state,) if state else ()
     )
-    page = keyset_page(found, _ORDER, limit)
+    page = page_of(found, limit, order=_ORDER)
     return {**page, "items": [_row(run) for run in run_rows(page["items"])]}
 
 

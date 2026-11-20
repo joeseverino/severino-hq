@@ -18,7 +18,7 @@ from hq.platform.application.describe import Describe
 from hq.platform.application.domains import records_of
 from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
 from hq.platform.application.record_fields import Notes, PublishedUrl
-from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
+from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, SearchText, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 
@@ -89,7 +89,7 @@ ProjectQuery = create_model(
     "ProjectQuery",
     __base__=BoundedQuery,
     status=(one_of(Project.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
-    query=(TextFilter, None),
+    query=(SearchText, None),
     updates=(
         bool | None,
         Field(

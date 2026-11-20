@@ -148,7 +148,7 @@
         "style": "form"
       },
       "AgendaLimit": {
-        "description": "How many records a page holds, 1 to 500; next.cursor reads the page after.",
+        "description": "How many records a page holds, 1 to 500; `page` reads the ones after.",
         "explode": true,
         "in": "query",
         "name": "limit",
@@ -679,19 +679,6 @@
           },
           "minItems": 1,
           "type": "array"
-        },
-        "style": "form"
-      },
-      "Cursor": {
-        "description": "The page after the one whose next.cursor this is. Send it as it came, with the filters that page was read with; absent, the first page.",
-        "explode": true,
-        "in": "query",
-        "name": "cursor",
-        "required": false,
-        "schema": {
-          "maxLength": 4000,
-          "title": "Cursor",
-          "type": "string"
         },
         "style": "form"
       },
@@ -1507,7 +1494,7 @@
         }
       },
       "PageLimit": {
-        "description": "How many records a page holds, 1 to 100; next.cursor reads the page after.",
+        "description": "How many records a page holds, 1 to 100; `page` reads the ones after.",
         "explode": true,
         "in": "query",
         "name": "limit",
@@ -1515,6 +1502,20 @@
         "schema": {
           "default": 50,
           "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "style": "form"
+      },
+      "PageNumber": {
+        "description": "Which page to read, 1 first, each `limit` records long; each page names the pages beside it.",
+        "explode": true,
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": {
+          "default": 1,
+          "maximum": 1000000,
           "minimum": 1,
           "type": "integer"
         },
@@ -1906,17 +1907,18 @@
               "date",
               "amount",
               "notes",
+              "label",
               "related_expense",
+              "expense_item",
               "related_asset",
+              "asset_name",
               "uploaded_at",
               "updated_at",
               "url",
-              "label",
               "file",
               "file_type_label",
               "expense_label",
               "expense_date",
-              "asset_name",
               "*"
             ],
             "type": "string"
@@ -1943,8 +1945,11 @@
               "date",
               "amount",
               "notes",
+              "label",
               "related_expense",
+              "expense_item",
               "related_asset",
+              "asset_name",
               "uploaded_at",
               "updated_at",
               "*"
@@ -2138,6 +2143,18 @@
           "maximum": 100,
           "minimum": 1,
           "type": "integer"
+        },
+        "style": "form"
+      },
+      "SearchText": {
+        "description": "Only the records a search for this finds, the best match first unless a sort is asked; absent, every record.",
+        "explode": true,
+        "in": "query",
+        "name": "query",
+        "required": false,
+        "schema": {
+          "title": "Search text",
+          "type": "string"
         },
         "style": "form"
       },
@@ -2559,18 +2576,6 @@
           },
           "minItems": 1,
           "type": "array"
-        },
-        "style": "form"
-      },
-      "TextFilter": {
-        "description": "Only the records whose text holds this, ignoring case; absent, every record.",
-        "explode": true,
-        "in": "query",
-        "name": "query",
-        "required": false,
-        "schema": {
-          "title": "Text filter",
-          "type": "string"
         },
         "style": "form"
       },
@@ -5102,7 +5107,7 @@
         "type": "object"
       },
       "AgendaLimit": {
-        "description": "How many records a page holds, 1 to 500; next.cursor reads the page after.",
+        "description": "How many records a page holds, 1 to 500; `page` reads the ones after.",
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
@@ -10782,19 +10787,6 @@
           }
         },
         "type": "object"
-      },
-      "Cursor": {
-        "anyOf": [
-          {
-            "maxLength": 4000,
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "The page after the one whose next.cursor this is. Send it as it came, with the filters that page was read with; absent, the first page.",
-        "title": "Cursor"
       },
       "DashboardMachineSelectRequest": {
         "additionalProperties": false,
@@ -16991,14 +16983,14 @@
             "type": "array"
           },
           "filters": {
-            "description": "The fields a listing narrows by, without `limit` and `cursor`, which page it; `describe_resources` given this name says each one's type and choices.",
+            "description": "The fields a listing narrows by, without `limit` and `page`, which page it; `describe_resources` given this name says each one's type and choices.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "paging": {
-            "description": "The JSON Schema of `limit`, with the most it may ask for, and `cursor`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource; absent, the list takes neither.",
+            "description": "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource; absent, the list takes neither.",
             "type": "object"
           },
           "query_schema": {
@@ -19679,19 +19671,6 @@
         ],
         "type": "object"
       },
-      "NextPage": {
-        "description": "Where the page after a list's is read from.",
-        "properties": {
-          "cursor": {
-            "description": "What reads the page after this one, sent back as the `cursor` filter with the same filters.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "cursor"
-        ],
-        "type": "object"
-      },
       "NotFoundRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -20572,25 +20551,42 @@
         "type": "object"
       },
       "PageLimit": {
-        "description": "How many records a page holds, 1 to 100; next.cursor reads the page after.",
+        "description": "How many records a page holds, 1 to 100; `page` reads the ones after.",
         "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "PageNumber": {
+        "description": "Which page to read, 1 first, each `limit` records long; each page names the pages beside it.",
+        "maximum": 1000000,
         "minimum": 1,
         "type": "integer"
       },
       "PagePosition": {
         "additionalProperties": false,
-        "description": "Where a page of a list stopped.",
+        "description": "Where a page of a list stands among the others.",
         "properties": {
           "next": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NextPage",
-                "title": "Next page"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The `page` after this one; null on the last."
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The `page` before this one; null on the first."
           },
           "total": {
             "anyOf": [
@@ -20611,7 +20607,8 @@
         "required": [
           "total",
           "truncated",
-          "next"
+          "next",
+          "previous"
         ],
         "type": "object"
       },
@@ -23978,14 +23975,13 @@
       },
       "ReceiptRecord": {
         "additionalProperties": false,
-        "description": "One receipt with what it is called, whether HQ holds its file, and the names of what it proves.",
+        "description": "One receipt with whether HQ holds its file, and the name and day of the expense it proves.",
         "properties": {
           "amount": {
             "$ref": "#/components/schemas/ReceiptRow/properties/amount"
           },
           "asset_name": {
-            "description": "The name of the asset it is for; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/ReceiptRow/properties/asset_name"
           },
           "content_type": {
             "$ref": "#/components/schemas/ReceiptRow/properties/content_type"
@@ -24003,6 +23999,9 @@
               }
             ],
             "description": "That expense's day, an ISO 8601 date; null for none."
+          },
+          "expense_item": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/expense_item"
           },
           "expense_label": {
             "description": "What the expense it proves is called; empty for none.",
@@ -24025,8 +24024,7 @@
             "$ref": "#/components/schemas/ReceiptRow/properties/id"
           },
           "label": {
-            "description": "What the receipt is called wherever it is named: who it is from, else its file.",
-            "type": "string"
+            "$ref": "#/components/schemas/ReceiptRow/properties/label"
           },
           "notes": {
             "$ref": "#/components/schemas/ReceiptRow/properties/notes"
@@ -24065,29 +24063,30 @@
           "date",
           "amount",
           "notes",
+          "label",
           "related_expense",
+          "expense_item",
           "related_asset",
+          "asset_name",
           "uploaded_at",
           "updated_at",
           "url",
-          "label",
           "file",
           "file_type_label",
           "expense_label",
-          "expense_date",
-          "asset_name"
+          "expense_date"
         ],
         "type": "object"
       },
       "ReceiptRecordPartial": {
         "additionalProperties": false,
-        "description": "One receipt with what it is called, whether HQ holds its file, and the names of what it proves.",
+        "description": "One receipt with whether HQ holds its file, and the name and day of the expense it proves.",
         "properties": {
           "amount": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/amount"
           },
           "asset_name": {
-            "$ref": "#/components/schemas/ReceiptRecord/properties/asset_name"
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/asset_name"
           },
           "content_type": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/content_type"
@@ -24097,6 +24096,9 @@
           },
           "expense_date": {
             "$ref": "#/components/schemas/ReceiptRecord/properties/expense_date"
+          },
+          "expense_item": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/expense_item"
           },
           "expense_label": {
             "$ref": "#/components/schemas/ReceiptRecord/properties/expense_label"
@@ -24111,7 +24113,7 @@
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/id"
           },
           "label": {
-            "$ref": "#/components/schemas/ReceiptRecord/properties/label"
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/label"
           },
           "notes": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/notes"
@@ -24171,6 +24173,10 @@
             ],
             "type": "string"
           },
+          "asset_name": {
+            "description": "The name of the asset it is for; empty for none.",
+            "type": "string"
+          },
           "content_type": {
             "description": "The file's media type: `application/pdf`, `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`, `image/gif`, `image/tiff` or `text/plain`.",
             "type": "string"
@@ -24186,9 +24192,17 @@
             ],
             "description": "The day on the receipt, an ISO 8601 date; null when not recorded."
           },
+          "expense_item": {
+            "description": "What the expense it proves paid for; empty for none.",
+            "type": "string"
+          },
           "id": {
             "description": "The receipt's id, which its page names it by.",
             "type": "integer"
+          },
+          "label": {
+            "description": "What the receipt is called wherever it is named: who it is from, else its file.",
+            "type": "string"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
@@ -24228,8 +24242,11 @@
           "date",
           "amount",
           "notes",
+          "label",
           "related_expense",
+          "expense_item",
           "related_asset",
+          "asset_name",
           "uploaded_at",
           "updated_at"
         ],
@@ -24272,14 +24289,23 @@
           "amount": {
             "$ref": "#/components/schemas/ReceiptRow/properties/amount"
           },
+          "asset_name": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/asset_name"
+          },
           "content_type": {
             "$ref": "#/components/schemas/ReceiptRow/properties/content_type"
           },
           "date": {
             "$ref": "#/components/schemas/ReceiptRow/properties/date"
           },
+          "expense_item": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/expense_item"
+          },
           "id": {
             "$ref": "#/components/schemas/ReceiptRow/properties/id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/label"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
@@ -25249,6 +25275,9 @@
           "next": {
             "$ref": "#/components/schemas/PagePosition/properties/next"
           },
+          "previous": {
+            "$ref": "#/components/schemas/PagePosition/properties/previous"
+          },
           "total": {
             "$ref": "#/components/schemas/PagePosition/properties/total"
           },
@@ -25260,6 +25289,7 @@
           "total",
           "truncated",
           "next",
+          "previous",
           "items",
           "count"
         ],
@@ -26581,6 +26611,18 @@
           "scope"
         ],
         "type": "object"
+      },
+      "SearchText": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Only the records a search for this finds, the best match first unless a sort is asked; absent, every record.",
+        "title": "Search text"
       },
       "SecurityNotes": {
         "description": "What protects it, and what to watch.",
@@ -28847,18 +28889,6 @@
       "TechnologiesUsed": {
         "description": "What it is built with.",
         "type": "string"
-      },
-      "TextFilter": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "Only the records whose text holds this, ignoring case; absent, every record.",
-        "title": "Text filter"
       },
       "ThemeSet": {
         "additionalProperties": false,
@@ -36122,7 +36152,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ActionItemPageFields"
@@ -36147,9 +36177,9 @@
               "listActionItemsV2": {
                 "operationId": "listActionItemsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
                   "query.source": "$request.query.source",
                   "query.status": "$request.query.status"
@@ -36364,13 +36394,13 @@
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/TextFilter"
+            "$ref": "#/components/parameters/SearchText"
           },
           {
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/AssetRowPageFields"
@@ -36415,9 +36445,9 @@
               "listAssetsV2": {
                 "operationId": "listAssetsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
                   "query.status": "$request.query.status"
                 }
@@ -36582,7 +36612,7 @@
             "$ref": "#/components/parameters/AgendaLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/AgendaItemPageFields"
@@ -36607,10 +36637,10 @@
               "listCalendarV2": {
                 "operationId": "listCalendarV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.days": "$request.query.days",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.start": "$request.query.start"
                 }
               }
@@ -36906,7 +36936,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ContactSubmissionRowFields"
@@ -36949,9 +36979,9 @@
               "listContactSubmissionsV2": {
                 "operationId": "listContactSubmissionsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
                   "query.status": "$request.query.status"
                 }
@@ -37088,7 +37118,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ContainerRecordFields"
@@ -37119,9 +37149,9 @@
               "listContainersV2": {
                 "operationId": "listContainersV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -37243,13 +37273,13 @@
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/TextFilter"
+            "$ref": "#/components/parameters/SearchText"
           },
           {
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ContentRowPageFields"
@@ -37294,9 +37324,9 @@
               "listContentV2": {
                 "operationId": "listContentV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
                   "query.status": "$request.query.status"
                 }
@@ -37577,13 +37607,13 @@
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/TextFilter"
+            "$ref": "#/components/parameters/SearchText"
           },
           {
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/DocumentationRowPageFields"
@@ -37628,9 +37658,9 @@
               "listDocumentationV2": {
                 "operationId": "listDocumentationV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
                   "query.status": "$request.query.status"
                 }
@@ -37769,7 +37799,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/DomainRowPageFields"
@@ -37800,9 +37830,9 @@
               "listDomainsV2": {
                 "operationId": "listDomainsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -38001,7 +38031,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ExpenseRecordFields"
@@ -38047,9 +38077,9 @@
                 "operationId": "listExpensesV2",
                 "parameters": {
                   "query.category": "$request.query.category",
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.year": "$request.query.year"
                 }
               }
@@ -38283,7 +38313,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ManagedResourceListedPageFields"
@@ -38373,11 +38403,11 @@
               "listInfrastructureV2": {
                 "operationId": "listInfrastructureV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.kind": "$request.query.kind",
                   "query.kinds": "$request.query.kinds",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               },
               "tailnetPolicyRemoveEmptyGroupsV2": {
@@ -38603,7 +38633,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/MachineRecordFields"
@@ -38634,9 +38664,9 @@
               "listMachinesV2": {
                 "operationId": "listMachinesV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -39017,7 +39047,7 @@
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/TextFilter"
+            "$ref": "#/components/parameters/SearchText"
           },
           {
             "description": "True for the projects HQ's dependency update run covers, false for the rest; absent, both.",
@@ -39034,7 +39064,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ProjectRowPageFields"
@@ -39065,9 +39095,9 @@
               "listProjectsV2": {
                 "operationId": "listProjectsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
                   "query.status": "$request.query.status",
                   "query.updates": "$request.query.updates"
@@ -39274,7 +39304,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ReadingItemPageFields"
@@ -39305,9 +39335,9 @@
               "listReadingsV2": {
                 "operationId": "listReadingsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.provider": "$request.query.provider"
                 }
               }
@@ -39414,14 +39444,41 @@
         "operationId": "listReceiptsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
             "description": "True for only the receipts matched to no expense and no asset.",
             "explode": true,
             "in": "query",
-            "name": "unmatched_only",
+            "name": "unlinked",
             "required": false,
             "schema": {
               "default": false,
+              "title": "No expense or asset",
               "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else recently uploaded.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-uploaded_at",
+                "uploaded_at",
+                "vendor",
+                "-vendor",
+                "date",
+                "-date",
+                "amount",
+                "-amount",
+                "original_filename",
+                "-original_filename"
+              ],
+              "type": "string"
             },
             "style": "form"
           },
@@ -39429,7 +39486,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ReceiptRowPageFields"
@@ -39460,10 +39517,12 @@
               "listReceiptsV2": {
                 "operationId": "listReceiptsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
-                  "query.unmatched_only": "$request.query.unmatched_only"
+                  "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
+                  "query.unlinked": "$request.query.unlinked"
                 }
               },
               "receiptDeleteV2": {
@@ -39780,7 +39839,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/RunRowPageFields"
@@ -39812,10 +39871,10 @@
                 "operationId": "listRunsV2",
                 "parameters": {
                   "query.correlation": "$request.query.correlation",
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
                   "query.machine": "$request.query.machine",
+                  "query.page": "$response.body#/data/next",
                   "query.playbook": "$request.query.playbook",
                   "query.state": "$request.query.state"
                 }
@@ -40230,7 +40289,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/UpgradeRecordFields"
@@ -40261,9 +40320,9 @@
               "listUpgradesV2": {
                 "operationId": "listUpgradesV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }

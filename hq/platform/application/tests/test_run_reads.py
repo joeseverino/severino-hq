@@ -156,7 +156,7 @@ class ListRunsTests(RunReadTestCase):
         second = self.asked(APP, key="example-second")
 
         page = list_resource(RUNS, {"limit": 1}, principal=MCP_READER)
-        after = list_resource(RUNS, {"limit": 1, "cursor": page["next"]["cursor"]}, principal=MCP_READER)
+        after = list_resource(RUNS, {"limit": 1, "page": page["next"]}, principal=MCP_READER)
 
         self.assertEqual([item["operation_id"] for item in page["items"] + after["items"]], [second, first])
         self.assertIsNone(after["next"])

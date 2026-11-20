@@ -6,10 +6,10 @@ from annotationlib import Format
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
 from functools import cache
-from typing import TYPE_CHECKING, Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
 from django.db.models import BigIntegerField
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
 
 from .contracts import Effect
 from .display_words import display
@@ -417,7 +417,7 @@ FIELD_MASK = (
 )
 # The query field a page past the first is asked by, read by the resource
 # layer around the handler (application.resources) and never passed to it.
-PAGE_FIELD = "cursor"
+PAGE_FIELD = "page"
 
 
 def typed_keys(kind: type) -> tuple[str, ...]:
@@ -428,13 +428,39 @@ def typed_keys(kind: type) -> tuple[str, ...]:
     return tuple(annotationlib.get_annotations(kind, format=Format.FORWARDREF))
 
 
+# The query field a list's order is asked by, which a list that declares its
+# sorts takes, and the one a searched kind's text is, each read by the resource
+# layer around the handler and never passed to it.
+SORT_FIELD = "sort"
+SEARCH_FIELD = "query"
+
+
+@dataclass(frozen=True, slots=True)
+class ListSort:
+    """One order a list is read in: its name in the query's ``sort``, which a
+    column's heading links by (``date``, ``-date``), its label, and the
+    ordering it stands for (a field or an annotation, ``-`` descending),
+    where that is not the name."""
+
+    name: str
+    label: str
+    ordering: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.ordering:
+            object.__setattr__(self, "ordering", (self.name,))
+
+
 @dataclass(frozen=True, slots=True)
 class ListRead:
     """A resource's list read, declared whole: the reader that answers it,
     the query it takes, the TypedDict one item is whole (``fields=*``), and
     the keys each item keeps when the caller names none, so a page costs what
     it shows (every key of ``item`` where it names none). A list answers only
-    its item's keys, and the API document types each item by it."""
+    its item's keys, and the API document types each item by it.
+
+    A list that declares ``sorts`` takes ``sort``, one of their names, and is
+    read in the first where it is asked none and is not searched."""
 
     # It may come from an extension, so its result is checked at the call
     # (application.resources) rather than trusted from the annotation.
@@ -442,10 +468,40 @@ class ListRead:
     query: type[BaseModel]
     item: type
     fields: tuple[str, ...] = ()
+    sorts: tuple[ListSort, ...] = ()
+    # False for a list too long to count on every read: its pages say whether
+    # more follow, and no total.
+    counted: bool = True
 
     def __post_init__(self) -> None:
         if not self.fields and is_typeddict(self.item):
             object.__setattr__(self, "fields", typed_keys(self.item))
+        if self.sorts:
+            object.__setattr__(self, "query", _sorted_by(self.query, self.sorts))
+
+    def ordering(self, name: str | None) -> tuple[str, ...]:
+        """The ordering ``sort`` names; none for no name."""
+
+        return next((sort.ordering for sort in self.sorts if sort.name == name), ())
+
+
+def _sorted_by(query: type[BaseModel], sorts: tuple[ListSort, ...]) -> type[BaseModel]:
+    """``query`` taking ``sort``, its every value one of ``sorts``, so the API
+    document lists them and any other is refused."""
+
+    if SORT_FIELD in query.model_fields:
+        raise ValueError(f"{query.__name__} declares {SORT_FIELD!r}, which its list's sorts derive.")
+    names = tuple(sort.name for sort in sorts)
+    words = (
+        f"The order the records come in; absent, the best match first for a search, else {lower_first(sorts[0].label)}."
+    )
+    choice: Any = Literal[names]
+    return create_model(
+        query.__name__,
+        __base__=query,
+        __doc__=query.__doc__,
+        sort=(Annotated[choice | None, Field(description=words)], None),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -473,3 +529,11 @@ class ResourceSpec(Requires):
     pass_principal: bool = False
     # The TypedDict a read of one record answers.
     record_type: type | None = None
+
+    @property
+    def read_around(self) -> frozenset[str]:
+        """The query fields the resource layer reads around the list's handler
+        and never passes to it: the page, the sort, and a searched kind's text."""
+
+        sorted_by = (SORT_FIELD,) if self.listing and self.listing.sorts else ()
+        return frozenset({PAGE_FIELD, *sorted_by, *((SEARCH_FIELD,) if self.search else ())})

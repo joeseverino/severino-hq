@@ -1,6 +1,7 @@
-"""Every row of a list is reached by following each page's ``next`` as it
-came, and a cursor reads only the list and filters it was issued under."""
+"""Every row of a list is reached by following each page's ``next``, in
+every order the list declares, and ``previous`` reads the page before."""
 
+from contextlib import suppress
 from datetime import date, timedelta
 from decimal import Decimal
 from unittest import mock
@@ -17,11 +18,11 @@ from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..projection import MAX_PAGE_SIZE
 from ..read_models import documentation_status
-from ..resources import InvalidResourceInput, list_resource, resource_registry
+from ..resources import list_resource, resource_registry
 from ..security import Principal, operator_capabilities
 
 # The query field a page past the first is asked by.
-PAGE_FIELD = "cursor"
+PAGE_FIELD = "page"
 READER = Principal("example-reader", "test", operator_capabilities())
 ROWS = MAX_PAGE_SIZE + 37
 
@@ -32,7 +33,9 @@ def walked(name, query, *, limit=MAX_PAGE_SIZE):
     pages = [list_resource(name, {**query, "limit": limit}, principal=READER, fields=["*"])]
     while pages[-1]["next"] is not None:
         pages.append(
-            list_resource(name, {**query, "limit": limit, **pages[-1]["next"]}, principal=READER, fields=["*"])
+            list_resource(
+                name, {**query, "limit": limit, PAGE_FIELD: pages[-1]["next"]}, principal=READER, fields=["*"]
+            )
         )
         if len(pages) > ROWS:
             raise AssertionError("the walk never ended")
@@ -75,33 +78,19 @@ class ListPagingTests(TestCase):
             [item["kind"] for page in pages for item in page["items"]], [item["kind"] for item in whole["items"]]
         )
 
-    def test_a_cursor_under_other_filters_is_refused_naming_the_cursor(self):
-        first = list_resource("projects", {"limit": 5}, principal=READER)
 
-        with self.assertRaises(InvalidResourceInput) as refused:
-            list_resource("projects", {"limit": 5, "query": "example-1", **first["next"]}, principal=READER)
-        self.assertEqual(refused.exception.details["errors"][0]["loc"], ["cursor"])
+def _comparable(value):
+    """A value as its column orders it: nothing first, an amount as a number."""
 
-    def test_a_cursor_of_another_list_or_not_issued_by_hq_is_refused(self):
-        cursor = list_resource("projects", {"limit": 5}, principal=READER)["next"]["cursor"]
-
-        for name, sent in (
-            ("infrastructure", cursor),
-            ("projects", cursor[:-2] + "xx"),
-            ("projects", "example"),
-        ):
-            with self.subTest(name=name, sent=sent), self.assertRaises(InvalidResourceInput) as refused:
-                list_resource(name, {"limit": 5, "cursor": sent}, principal=READER)
-            self.assertEqual(refused.exception.details["errors"][0]["loc"], ["cursor"])
-
-    def test_the_last_page_offers_no_cursor(self):
-        page = list_resource("projects", {"limit": MAX_PAGE_SIZE, "query": "example-00"}, principal=READER)
-
-        self.assertEqual((page["count"], page["truncated"], page["next"]), (10, False, None))
+    if isinstance(value, str):
+        with suppress(ArithmeticError):
+            value = Decimal(value)
+    return (value is not None, value)
 
 
-class EveryCursorIsIssuedTests(TestCase):
-    """A kind whose query offers a cursor issues one on every full page with more behind it."""
+class EveryPageNamesTheOnesBesideItTests(TestCase):
+    """A kind whose query takes a page names the next on every full page with
+    more behind it, and the page after it names the way back."""
 
     @classmethod
     def setUpTestData(cls):
@@ -109,7 +98,7 @@ class EveryCursorIsIssuedTests(TestCase):
         with throwaway_media(), seeds.built("standard"):
             pass
 
-    def test_every_paged_kind_issues_a_cursor_past_a_full_page(self):
+    def test_every_paged_kind_names_the_page_past_a_full_one(self):
         paged = {
             name
             for name, spec in resource_registry().items()
@@ -127,22 +116,50 @@ class EveryCursorIsIssuedTests(TestCase):
                     if not more:
                         self.assertIsNone(first["next"])
                         continue
-                    self.assertIsNotNone(first["next"], "a full page with more behind it offers no cursor")
-                    second = list_resource(name, {"limit": 1, **first["next"]}, principal=READER, fields=["*"])
+                    self.assertIsNotNone(first["next"], "a full page with more behind it names no next")
+                    second = list_resource(
+                        name, {"limit": 1, PAGE_FIELD: first["next"]}, principal=READER, fields=["*"]
+                    )
                     self.assertNotEqual(second["items"], first["items"])
+                    self.assertIsNone(first["previous"])
+                    back = list_resource(
+                        name, {"limit": 1, PAGE_FIELD: second["previous"]}, principal=READER, fields=["*"]
+                    )
+                    self.assertEqual(back["items"], first["items"])
                     walked_past.add(name)
         # The kinds that cut a list derived whole, among those the estate fills.
         self.assertLessEqual({"calendar", "contact.submissions", "readings"}, walked_past)
 
+    def test_every_declared_sort_pages_in_its_order(self):
+        sorted_by = {name: spec.listing.sorts for name, spec in resource_registry().items() if spec.listing}
+        self.assertTrue(any(sorted_by.values()))
+        for name, sorts in sorted_by.items():
+            for sort in sorts:
+                with self.subTest(name=name, sort=sort.name):
+                    asked = {"sort": sort.name}
+                    whole = list_resource(name, {**asked, "limit": MAX_PAGE_SIZE}, principal=READER, fields=["*"])
+                    self.assertGreater(whole["count"], 1, "the estate holds too few rows to show an order")
+                    held = [_comparable(item[sort.name.removeprefix("-")]) for item in whole["items"]]
+                    self.assertEqual(held, sorted(held, reverse=sort.name.startswith("-")))
+                    first = list_resource(name, {**asked, "limit": 1}, principal=READER, fields=["*"])
+                    second = list_resource(
+                        name, {**asked, "limit": 1, PAGE_FIELD: first["next"]}, principal=READER, fields=["*"]
+                    )
+                    self.assertEqual(first["items"] + second["items"], whole["items"][:2])
+                    back = list_resource(
+                        name, {**asked, "limit": 1, PAGE_FIELD: second["previous"]}, principal=READER, fields=["*"]
+                    )
+                    self.assertEqual(back["items"], first["items"])
+
 
 class DocumentationStatusPagingTests(TestCase):
-    def test_the_summary_holds_one_page_and_the_cursor_reads_the_rest(self):
+    def test_the_summary_holds_one_page_and_its_next_reads_the_rest(self):
         DocumentationRecord.objects.bulk_create(
             DocumentationRecord(doc_id=f"rb-example-{n:03d}", title=f"Example {n}") for n in range(ROWS)
         )
 
         status = documentation_status(principal=READER)
-        rest = list_resource("documentation", dict(status["next"]), principal=READER)
+        rest = list_resource("documentation", {PAGE_FIELD: status["next"]}, principal=READER)
 
         seen = [record["doc_id"] for record in status["records"] + rest["items"]]
         self.assertEqual(status["total"], ROWS)

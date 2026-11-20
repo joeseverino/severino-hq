@@ -17,7 +17,6 @@ from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
-    ListView,
     TemplateView,
     UpdateView,
     View,
@@ -25,6 +24,7 @@ from django.views.generic import (
 
 from hq.domains.expenses.models import Expense
 from hq.platform.application.labels import dotted, dotted_html, human_bytes
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.moments import moment, when
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
@@ -37,7 +37,7 @@ from hq.platform.application.receipts import (
     served_type,
     stored_file,
 )
-from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
+from hq.platform.application.tables import TableColumn
 from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
@@ -55,36 +55,25 @@ RECEIPTS_TRAIL = (("Receipts", reverse_lazy("receipts:list")),)
 _DETAILS = ("vendor", "date", "amount", "notes", "related_asset")
 
 
-class ReceiptListView(PageMixin, TableListMixin, ListView):
+class ReceiptListView(ListPageMixin, TemplateView):
+    resource = "receipts"
     table_empty = "No receipts yet."
-    model = Receipt
     template_name = "receipts/receipt_list.html"
-    paginate_by = 25
     page_title = "Receipts"
-    table_search_scope = "receipts"
     table_selectable = True
     table_columns = (
         TableColumn("Vendor", "vendor"),
-        TableColumn("Date", "date", "Oldest receipt date", "Newest receipt date"),
-        TableColumn("Amount", "amount", "Lowest amount", "Highest amount", css="key-col"),
+        TableColumn("Date", "date", kind="status"),
+        TableColumn("Amount", "amount", css="key-col", kind="numeric"),
         TableColumn("For"),
         TableColumn("File", "original_filename"),
-        TableColumn("Uploaded", "uploaded_at", "Least recently uploaded", "Recently uploaded"),
+        TableColumn("Uploaded", "uploaded_at", kind="status"),
     )
-    table_toggles = (TableToggle("unlinked", "No expense or asset"),)
-    table_default_sort = "-uploaded_at"
     table_search_placeholder = "Search vendors, filenames, and notes…"
 
     @override
     def get_page_actions(self):
         return (PageAction.command(UPLOAD, primary=True),)
-
-    @override
-    def get_queryset(self):
-        qs = Receipt.objects.select_related("related_expense", "related_asset")
-        if self.request.GET.get("unlinked"):
-            qs = qs.filter(related_expense__isnull=True, related_asset__isnull=True)
-        return self.apply_table_query(qs)
 
 
 class ReceiptPage(PageMixin):

@@ -143,10 +143,8 @@ def as_issued(context, case):
     if isinstance(payload, dict):
         for name in ruled(case.operation):
             payload.pop(name, None)
-    # A cursor and a stale-write token are values HQ issued, which no schema
-    # draws: a drawn one names no page and no version.
-    if case.query:
-        case.query.pop("cursor", None)
+    # A stale-write token is a value HQ issued, which no schema draws: a drawn
+    # one names no version.
     if isinstance(case.body, dict):
         case.body.pop(STALE_WRITE_KEYWORD, None)
     # So is a connection a declaration names: a sweep reported it, and a drawn

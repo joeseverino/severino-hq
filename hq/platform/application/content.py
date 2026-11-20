@@ -83,15 +83,8 @@ def serialize_content(item: ContentItem, *, relationships: bool = True) -> dict[
     return fields
 
 
-def list_content(*, status: str | None = None, query: str | None = None, limit: int = 50) -> dict[str, Any]:
-    return listing(
-        ContentItem,
-        partial(serialize_content, relationships=False),
-        search=("title", "slug", "topic"),
-        status=status,
-        query=query,
-        limit=limit,
-    )
+def list_content(*, status: str | None = None, limit: int = 50) -> dict[str, Any]:
+    return listing(ContentItem, partial(serialize_content, relationships=False), status=status, limit=limit)
 
 
 def get_content(slug: str) -> dict[str, Any]:

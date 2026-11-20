@@ -6,7 +6,7 @@ from hq.platform.application import documentation
 from hq.platform.application.contracts import Effect
 from hq.platform.application.documentation import DocumentationItem, DocumentationRow
 from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
-from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
+from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, SearchText, one_of
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 from hq.platform.application.sync import HQSyncCommand, execute_hq_sync
@@ -46,7 +46,7 @@ DocumentationQuery = create_model(
     "DocumentationQuery",
     __base__=BoundedQuery,
     status=(one_of(DocumentationRecord.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
-    query=(TextFilter, None),
+    query=(SearchText, None),
 )
 
 

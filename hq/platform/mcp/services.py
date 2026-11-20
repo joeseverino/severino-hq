@@ -31,8 +31,8 @@ from hq.platform.application.reports import (
 )
 from hq.platform.application.resources import (
     PAGING,
-    Cursor,
     InvalidResourceInput,
+    PageNumber,
     ResourceCatalog,
     ResourceCollection,
     TopLimit,
@@ -138,7 +138,7 @@ def describe_resources(name: str | None = None) -> ResourceCatalog:
 
     Each list names the `filters` it takes. Pass a kind as `name` to get its
     `fields`, its `query_schema` (each filter's type and values) and its
-    `paging`: the largest `limit`, and `cursor` where the list pages.
+    `paging`: the largest `limit`, and `page` where the list pages.
     """
 
     return describe_application_resources(principal=current_principal(), name=name or "")
@@ -194,7 +194,7 @@ def list_resource(
     filters: dict[str, Any] | None = None,
     fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None,
     limit: PageSize = None,
-    cursor: Cursor = None,
+    page: PageNumber | None = None,
 ) -> ResourceCollection:
     """One page of records of a kind, narrowed by the filters its schema checks.
 
@@ -206,9 +206,10 @@ def list_resource(
     every field where it lists none. `fields` picks others.
 
     `limit` bounds the page. `truncated` says more follow, and `total` says
-    how many matched, where HQ counts them. Send `next.cursor` back as
-    `cursor`, with the same filters, for the next page. `next` is null on
-    the last page, and on a list that does not page.
+    how many matched, where HQ counts them. Send `next` back as `page`,
+    with the same filters, for the next page, and `previous` for the one
+    before. `next` is null on the last page, and on a list that does not
+    page.
     """
 
     query = dict(filters or {})
@@ -218,7 +219,7 @@ def list_resource(
     # The queue's page is this tool's own; the kind's query still bounds a limit sent.
     if limit is None and name == QUEUE:
         limit = ACTION_ITEMS_PAGE
-    query |= {field: value for field, value in (("limit", limit), (PAGE_FIELD, cursor)) if value is not None}
+    query |= {field: value for field, value in (("limit", limit), (PAGE_FIELD, page)) if value is not None}
     return list_application_resource(name, query, principal=current_principal(), strict=True, fields=fields)
 
 
@@ -269,8 +270,8 @@ def documentation_status() -> DocumentationStatus:
     of docs, each with its title, system and location. Sensitive docs are
     left out.
 
-    For the next page, send `next.cursor` as the `cursor` of
-    `list_resource` with the name `documentation`. `next` is null when this
+    For the next page, send `next` as the `page` of `list_resource` with
+    the name `documentation`. `next` is null when this
     page holds them all. `audit_registry` names the records no doc covers.
     """
     return read_models.documentation_status(principal=current_principal())

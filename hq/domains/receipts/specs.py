@@ -9,11 +9,11 @@ from hq.platform.application.answer_fields import PageUrl, UpdatedAt
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe, listed
 from hq.platform.application.domains import records_of
-from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ListSort, ResourceSpec
 from hq.platform.application.labels import adding
 from hq.platform.application.record_fields import Notes, RecordId
 from hq.platform.application.records import KEPT
-from hq.platform.application.resources import BoundedQuery
+from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 from hq.platform.application.ui import ended
@@ -62,9 +62,27 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
 
 
 class ReceiptQuery(BoundedQuery):
-    unmatched_only: bool = Field(
-        default=False, description="True for only the receipts matched to no expense and no asset."
+    query: SearchText = None
+    unlinked: bool = Field(
+        default=False,
+        title="No expense or asset",
+        description="True for only the receipts matched to no expense and no asset.",
     )
+
+
+# Each order the list is read in, the first where none is asked.
+SORTS = (
+    ListSort("-uploaded_at", "Recently uploaded"),
+    ListSort("uploaded_at", "Least recently uploaded"),
+    ListSort("vendor", "Vendor A–Z"),
+    ListSort("-vendor", "Vendor Z–A"),
+    ListSort("date", "Oldest receipt date"),
+    ListSort("-date", "Newest receipt date"),
+    ListSort("amount", "Lowest amount"),
+    ListSort("-amount", "Highest amount"),
+    ListSort("original_filename", "File A–Z"),
+    ListSort("-original_filename", "File Z–A"),
+)
 
 
 class ReceiptRow(TypedDict):
@@ -80,17 +98,19 @@ class ReceiptRow(TypedDict):
         str, Describe("The amount on the receipt, a decimal string with two places.", examples=("12.50",))
     ]
     notes: Notes
+    label: Annotated[str, Describe("What the receipt is called wherever it is named: who it is from, else its file.")]
     related_expense: receipts.ReceiptExpense
+    expense_item: Annotated[str, Describe("What the expense it proves paid for; empty for none.")]
     related_asset: receipts.ReceiptAsset
+    asset_name: Annotated[str, Describe("The name of the asset it is for; empty for none.")]
     uploaded_at: Annotated[str, Describe("When the file was uploaded, an ISO 8601 date-time.")]
     updated_at: UpdatedAt
 
 
 class ReceiptRecord(ReceiptRow):
-    """One receipt with what it is called, whether HQ holds its file, and the names of what it proves."""
+    """One receipt with whether HQ holds its file, and the name and day of the expense it proves."""
 
     url: PageUrl
-    label: Annotated[str, Describe("What the receipt is called wherever it is named: who it is from, else its file.")]
     file: Annotated[
         Literal["stored", "missing", "none"],
         Describe(
@@ -100,7 +120,6 @@ class ReceiptRecord(ReceiptRow):
     file_type_label: Annotated[str, Describe("The file's type in words; empty for one HQ does not accept.")]
     expense_label: Annotated[str, Describe("What the expense it proves is called; empty for none.")]
     expense_date: Annotated[str | None, Describe("That expense's day, an ISO 8601 date; null for none.")]
-    asset_name: Annotated[str, Describe("The name of the asset it is for; empty for none.")]
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -110,7 +129,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Receipts",
             "Receipt metadata without file contents, storage paths, or URLs.",
             Capability.READ,
-            listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow),
+            listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow, sorts=SORTS),
             detail_handler=receipts.get_receipt,
             identifier="id",
             identifier_type=RecordId,

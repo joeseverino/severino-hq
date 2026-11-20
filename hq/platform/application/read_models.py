@@ -10,7 +10,7 @@ from hq.platform.core.models import AuditLog
 
 from . import history, records
 from .documentation import DocumentationRow
-from .projection import NextPage, page_size
+from .projection import page_size
 from .routes import reverse
 from .sensitivity import readable_records
 lazy from .resources import list_resource
@@ -23,7 +23,8 @@ class DocumentationStatus(TypedDict):
     by_type: dict[str, int]
     # The first page of the documentation list, as it reads it.
     records: list[DocumentationRow]
-    next: NextPage | None
+    # The documentation list's ``page`` after it.
+    next: int | None
 
 
 def documentation_status(*, principal: Principal) -> DocumentationStatus:

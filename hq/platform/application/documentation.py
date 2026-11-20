@@ -351,16 +351,14 @@ def serialize_documentation(
 
 
 def list_documentation(
-    *, status: str | None = None, query: str | None = None, limit: int = 50, principal: Principal | None = None
+    *, status: str | None = None, limit: int = 50, principal: Principal | None = None
 ) -> dict[str, Any]:
     """The documentation records ``principal`` may read (``sensitivity``)."""
 
     return listing(
         readable_records(principal),
         partial(serialize_documentation, relationships=False, principal=principal),
-        search=("doc_id", "title", "system_service"),
         status=status,
-        query=query,
         order=("doc_id",),
         limit=limit,
     )

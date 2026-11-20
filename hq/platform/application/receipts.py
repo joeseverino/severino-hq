@@ -117,7 +117,13 @@ _REPLACED = Kept(_stored, always_sent=frozenset({"file"}))
 
 
 def serialize_receipt(receipt: Receipt) -> ReceiptRow:
-    return row(receipt, ReceiptRow)
+    expense, asset = receipt.related_expense, receipt.related_asset
+    return row(
+        receipt,
+        ReceiptRow,
+        expense_item=expense.item if expense else "",
+        asset_name=asset.item_name if asset else "",
+    )
 
 
 def stored_file(receipt: Receipt) -> Path | None:
@@ -149,25 +155,24 @@ def get_receipt(identifier: int) -> ReceiptRecord:
     receipt = Receipt.objects.select_related("related_expense", "related_asset").filter(pk=identifier).first()
     if receipt is None:
         raise RecordNotFound("No receipt has that id.")
-    expense, asset = receipt.related_expense, receipt.related_asset
+    expense = receipt.related_expense
     return {
         **serialize_receipt(receipt),
         "url": entity_link(Kind.RECEIPT, str(receipt.pk)).url,
-        "label": receipt.label,
         "file": "stored" if stored_file(receipt) else "missing" if receipt.file else "none",
         "file_type_label": receipt.file_type,
         "expense_label": expense.label if expense else "",
         "expense_date": expense.date.isoformat() if expense else None,
-        "asset_name": asset.item_name if asset else "",
     }
 
 
-def list_receipts(*, unmatched_only: bool = False, limit: int = 50) -> dict[str, Any]:
+def list_receipts(*, unlinked: bool = False, limit: int = 50) -> dict[str, Any]:
     """List receipt metadata without file contents, storage paths, or URLs."""
-    rows = Receipt.objects.select_related("related_asset")
-    if unmatched_only:
+    rows = Receipt.objects.select_related("related_expense", "related_asset")
+    if unlinked:
         rows = rows.filter(related_expense__isnull=True, related_asset__isnull=True)
-    return listing(rows, serialize_receipt, order=("-uploaded_at",), limit=limit)
+    # In the order its list read asks, the first it declares when none is asked.
+    return listing(rows, serialize_receipt, order=(), limit=limit)
 
 
 def _relations(command: ReceiptMetadataCommand):

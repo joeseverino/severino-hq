@@ -187,21 +187,13 @@ def _updates(project: Project) -> dict[str, Any]:
 def list_projects(
     *,
     status: str | None = None,
-    query: str | None = None,
     updates: bool | None = None,
     limit: int = 50,
 ) -> dict[str, Any]:
     rows = Project.objects.all() if updates is None else Project.objects.filter(dependency_updates=updates)
     # Every item reads the same stored GitHub reading.
     with projection_scope():
-        return listing(
-            rows,
-            serialize_project,
-            search=("name", "slug", "description", "technologies_used"),
-            status=status,
-            query=query,
-            limit=limit,
-        )
+        return listing(rows, serialize_project, status=status, limit=limit)
 
 
 def get_project(slug: str) -> dict[str, Any]:

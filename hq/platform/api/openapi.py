@@ -280,7 +280,7 @@ class _Builder:
         if listed and PAGE_FIELD in query:
             parameters = {f"query.{name}": f"$request.query.{name}" for name in query if name != PAGE_FIELD}
             found[_list_id(resource)] = _link(
-                _list_id(resource), {f"query.{PAGE_FIELD}": f"$response.body#/data/next/{PAGE_FIELD}", **parameters}
+                _list_id(resource), {f"query.{PAGE_FIELD}": "$response.body#/data/next", **parameters}
             )
         record = spec.record_type
         carried = (

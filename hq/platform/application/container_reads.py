@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .integration_specs import ListRead, ResourceSpec, typed_keys
-from .projection import projection_scope, window
+from .projection import page_of, projection_scope
 from .record_errors import RecordNotFound
 from .resources import BoundedQuery
 from .security import Capability
@@ -164,8 +164,8 @@ def serialize_container(item: Any) -> ContainerRecord:
 
 def _listed(found: Callable[[], list[Any]], serialize: Callable[[Any], dict[str, Any]], limit: int) -> dict[str, Any]:
     with projection_scope():
-        page, paging = window(found(), limit)
-        return {**paging, "items": [serialize(item) for item in page]}
+        page = page_of(found(), limit)
+        return {**page, "items": [serialize(item) for item in page["items"]]}
 
 
 def _one(found: Callable[[], list[Any]], address: str, serialize: Callable[[Any], dict[str, Any]]) -> dict[str, Any]:

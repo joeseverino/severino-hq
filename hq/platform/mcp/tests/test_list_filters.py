@@ -175,10 +175,10 @@ class DescribeResourcesNarrowsTests(TestCase):
         (entry,) = answer.structured_content["resources"]
 
         self.assertEqual(entry["name"], "projects")
-        # Its filters are what narrows it; limit and cursor page it, described beside them.
+        # Its filters are what narrows it; limit and page page it, described beside them.
         listed = entry["operations"].get("list")
         self.assertEqual(set(listed["query_schema"]["properties"]), set(listed["filters"]))
-        self.assertEqual(set(listed["paging"]["properties"]), {"limit", "cursor"})
+        self.assertEqual(set(listed["paging"]["properties"]), {"limit", "page"})
 
     def test_a_name_is_one_of_the_kinds_composed_at_the_call(self):
         # The server is reached first with no extension installed, as an

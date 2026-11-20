@@ -89,7 +89,7 @@ class DashboardAnswerTests(TestCase):
             rows += read.structured_content.get("items", [])
             if not (after := read.structured_content.get("next")):
                 return rows
-            arguments["cursor"] = after["cursor"]
+            arguments["page"] = after
 
     def test_each_item_keeps_what_an_agent_acts_on_and_leaves_the_pages_own_parts(self):
         page = {item["key"]: item for item in operating_snapshot(principal=READER)["priority"]}

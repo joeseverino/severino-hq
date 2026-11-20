@@ -58,5 +58,5 @@ class GuardedTests(TestCase):
         with self.assertRaises(FieldFetchBlocked):
             _ = rows[0].related_project
 
-        modes = listing(Project, lambda row: row._state.fetch_mode, search=())["items"]
+        modes = listing(Project, lambda row: row._state.fetch_mode)["items"]
         self.assertEqual(modes, [FETCH_RAISE] * 3)

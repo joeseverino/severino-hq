@@ -73,7 +73,7 @@ def action_queue(principal: Principal) -> ResourceCollection:
     page = registry.list_resource("action_items", None, principal=principal)
     items = list(page["items"])
     while after := page.get("next"):
-        page = registry.list_resource("action_items", {PAGE_FIELD: after["cursor"]}, principal=principal)
+        page = registry.list_resource("action_items", {PAGE_FIELD: after}, principal=principal)
         items += page["items"]
     return cast(ResourceCollection, complete(items))
 
