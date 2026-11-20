@@ -2,8 +2,9 @@
 
 The runner isolates the adopted catalog, the agent limits and the controller's
 markers per test (``isolation_testing``). A class's own setup runs before its
-first test, so it is held to the same: a class that stopped in its setup or
-wrote in its teardown leaves nothing for the next class to set up on.
+first test, so it is held to the same: a class that stopped in its setup,
+wrote in its teardown, or built a process cache under a patch leaves nothing
+for the next class to set up on.
 """
 
 import io
@@ -16,6 +17,7 @@ from django.test import TestCase
 from hq.platform.application import cadence
 from hq.platform.application.automation_runs import runs_procedure
 from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.integrations import _compiled_integration_graph
 from hq.platform.application.security import web_principal
 from hq.platform.core.example_estate import automation
 from hq.platform.core.test_runner import SeverinoTestRunner
@@ -120,3 +122,28 @@ class ClassSetupStartsFreshTests(TestCase):
 
                 self.assertEqual([said for _, said in result.failures + result.errors], [])
                 self.assertEqual(seen, {"heartbeat": False})
+
+    def test_a_class_sets_up_on_no_cache_a_patch_before_it_built(self):
+        seen: dict[str, set[str]] = {}
+
+        class Narrows(unittest.TestCase):
+            def test_reads_its_commands_without_the_records(self):
+                with unittest.mock.patch(
+                    "hq.platform.application.integrations.record_capability_specs", return_value=()
+                ):
+                    _compiled_integration_graph.cache_clear()
+                    seen["narrowed"] = set(capability_registry())
+
+        class Reads(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                seen["set up"] = set(capability_registry())
+
+            def test_reads_its_commands(self):
+                pass
+
+        result = _run(Narrows("test_reads_its_commands_without_the_records"), Reads("test_reads_its_commands"))
+
+        self.assertEqual([said for _, said in result.failures + result.errors], [])
+        self.assertNotIn("project.update", seen["narrowed"])
+        self.assertIn("project.update", seen["set up"])

@@ -9,7 +9,6 @@ newer reading, so a surface says it is out of date.
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from functools import lru_cache
 
 lazy from django.core.exceptions import ImproperlyConfigured
 
@@ -17,6 +16,7 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .derivations import reached
 from .moments import ago
+from .process_caches import kept
 lazy from . import plugins
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
 
@@ -102,7 +102,7 @@ def host_kind(kind: str) -> bool:
     return kind in _NAMED or kind in OBSERVATIONS
 
 
-@lru_cache(maxsize=1)
+@kept
 def _extension_cadences(_composition: plugins.Composition) -> dict[str, Callable[[], object]]:
     """Each extension kind's cadence, refused whole when a kind is the host's,
     is declared twice, or is answered by no callable."""

@@ -4,7 +4,6 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from functools import lru_cache
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -19,6 +18,7 @@ from .integration_validation import (
     validate_resource_spec,
 )
 from .json_schemas import fields
+from .process_caches import kept
 from .search_contracts import SearchDefinition
 from .ui import ended
 lazy from . import automation_adoption, automation_runs, outbound_work, plugins
@@ -307,7 +307,7 @@ def compile_integration_graph(
 
 # One graph at a time, keyed by the composition and the adopted catalog's
 # digest: either moves the commands, and the graph is built anew at its next ask.
-@lru_cache(maxsize=1)
+@kept
 def _compiled_integration_graph(_composition: plugins.Composition, generation: str) -> IntegrationGraph:
     host = (*record_capability_specs(), *host_specs("capabilities"))
     # HQ's own command says what it is in words of its own; only an

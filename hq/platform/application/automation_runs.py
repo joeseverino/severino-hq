@@ -8,7 +8,7 @@ docs/Architecture.md, "Running a playbook".
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
-from functools import lru_cache, partial
+from functools import partial
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
@@ -36,6 +36,7 @@ from .automation_manifest import OperationManifest, OperationRegistry, sorted_un
 from .command_fields import Among, AmongNow, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
+from .process_caches import kept
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
@@ -78,7 +79,7 @@ if TYPE_CHECKING:
 
 # One catalog at a time: a process builds its commands from the catalog
 # adopted now, and builds them anew once another is.
-@lru_cache(maxsize=1)
+@kept
 def _registry(generation: str) -> OperationRegistry:
     return OperationRegistry(automation_adoption.manifests(generation))
 

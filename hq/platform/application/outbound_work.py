@@ -12,7 +12,6 @@ from annotationlib import Format
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from functools import cache, lru_cache
 from typing import Annotated, Any, NotRequired, cast
 
 from django.core.exceptions import ImproperlyConfigured
@@ -25,6 +24,7 @@ from .asks import FAILED, Ask, Asked, AskedAnswer, Standing
 from .contracts import DOTTED_NAME, Effect
 from .describe import Describe
 from .integration_specs import CapabilitySpec, requested
+from .process_caches import kept
 from .projection import read_once
 from .record_errors import RecordNotFound
 from .refusal_codes import Code
@@ -137,7 +137,7 @@ def validate(work: object) -> OutboundWork:
     return work
 
 
-@lru_cache(maxsize=1)
+@kept
 def _declared(_composition: Composition) -> dict[str, OutboundWork]:
     declared: dict[str, OutboundWork] = {}
     # The host's domains declare theirs as an extension does, so neither can
@@ -150,7 +150,7 @@ def _declared(_composition: Composition) -> dict[str, OutboundWork]:
     return declared
 
 
-@cache
+@kept
 def _host() -> frozenset[str]:
     return frozenset(work.name for work in host_specs("outbound") if not work.offered)
 

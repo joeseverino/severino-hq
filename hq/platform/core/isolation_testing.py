@@ -15,7 +15,7 @@ from unittest import mock
 from django.conf import settings
 
 from hq.config.sandbox import MARKERS
-lazy from hq.platform.application import agent_limits, automation_adoption, derivations
+lazy from hq.platform.application import agent_limits, automation_adoption, derivations, process_caches
 
 if TYPE_CHECKING:
     from hq.platform.application.agent_limits import Limits
@@ -33,7 +33,8 @@ def patches_leave_no_copy() -> None:
     loads, and either can happen while a test patches ``domains.all_domains``.
     The importer then holds the mock, which the patch never put there and so
     never takes back, and every later test in the process reads it. Each such
-    copy is given back the patched name's own value.
+    copy is given back the patched name's own value, and each process cache
+    holds again what it held as the patch began (``process_caches``).
     """
 
     global _left_by
@@ -49,6 +50,7 @@ def _noting_aliases(enter):
     @functools.wraps(enter)
     def entering(patcher):
         _read_new_modules()
+        patcher.held = [cached.held for cached in process_caches.KEPT]
         return enter(patcher)
 
     return entering
@@ -66,6 +68,10 @@ def _taking_back_copies(leave):
         finally:
             if started:
                 _give_back(name, replaced, _held(target, name))
+                # A cache first made while the patch held starts empty.
+                began = getattr(patcher, "held", [])
+                for index, cached in enumerate(process_caches.KEPT):
+                    cached.held = began[index] if index < len(began) else None
 
     return leaving
 

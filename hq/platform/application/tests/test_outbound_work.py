@@ -521,17 +521,10 @@ def host_declares(*works: OutboundWork):
     """The host's own work as ``works``, beside whatever the composition installs."""
 
     # What the host declares is fixed in a process, so its caches are not keyed on it.
-    _forget_declared()
-    try:
-        with mock.patch.object(host_work, "outbound", return_value=works):
-            yield
-    finally:
-        _forget_declared()
-
-
-def _forget_declared() -> None:
     outbound_work._declared.cache_clear()
     outbound_work._host.cache_clear()
+    with mock.patch.object(host_work, "outbound", return_value=works):
+        yield
 
 
 def offering_work(*works: OutboundWork):
