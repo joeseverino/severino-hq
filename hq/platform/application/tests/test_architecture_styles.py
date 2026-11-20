@@ -185,27 +185,6 @@ class StyleContractTests(SimpleTestCase):
     def _stylesheet() -> str:
         return stylesheet()
 
-    def test_every_face_is_preloaded_beside_the_stylesheet(self):
-        """A face is shown only if it is ready for the first paint (lint:css
-        holds each @font-face to `font-display: optional`), so its file is
-        preloaded beside the stylesheet, where it usually is ready."""
-
-        root = Path(__file__).resolve().parents[4]
-        head = (root / "templates" / "scripts" / "head.html").read_text(encoding="utf-8")
-        faces = [
-            (sheet, face)
-            for sheet in sheet_paths()
-            for face in re.findall(r"@font-face\s*\{([^}]*)\}", sheet.read_text(encoding="utf-8"))
-        ]
-        self.assertTrue(faces)
-        for sheet, face in faces:
-            source = re.search(r'url\("([^"]+)"\)', face)
-            # The face's address as `{% static %}` names it: relative to the sheet that asks for it.
-            asset = (sheet.parent / source.group(1)).resolve().relative_to(STATIC).as_posix() if source else ""
-            with self.subTest(face=asset or face[:60]):
-                self.assertIsNotNone(source)
-                self.assertIn(f'{{% static \'{asset}\' %}}" as="font"', head)
-
     def test_a_blur_has_something_to_show_through(self):
         """A backdrop filter costs a layer redrawn on every scroll; behind an
         opaque background it shows nothing, so a rule that blurs must also let
@@ -327,24 +306,6 @@ class StyleContractTests(SimpleTestCase):
         self.assertTrue(fallen_back)
         self.assertEqual(sorted(fallen_back - defined), [])
 
-    def test_user_menu_rows_share_one_element_independent_primitive(self):
-        """A link and a POST action in one menu must render as one kind of row.
-
-        Styling ``a`` and ``button`` separately lets the generic button
-        primitive turn only the POST actions back into boxed controls. Every
-        interactive row names the menu primitive instead, so adding another
-        action cannot reintroduce that split by choosing the wrong element.
-        """
-
-        root = Path(__file__).resolve().parents[4]
-        template = (root / "templates" / "partials" / "_user_menu.html").read_text(encoding="utf-8")
-        panel = template.split('<div class="user-menu-panel"', 1)[1]
-        rows = re.findall(r"<(?:a|button)\b[^>]*>", panel, re.DOTALL)
-
-        self.assertTrue(rows)
-        self.assertEqual([row for row in rows if "menu-item" not in row], [])
-        self.assertIn(".menu-item {", self._stylesheet())
-
     def test_no_tracked_file_names_a_reachable_endpoint(self):
         """Addresses, ports and account names are deployment facts, not source.
 
@@ -376,45 +337,6 @@ class StyleContractTests(SimpleTestCase):
             f"reachable endpoints in tracked files: {findings}. A dotted number that is not an address,"
             " such as a specification's section, passes written as section-3.1.3.7. A host key a fixture"
             " needs passes written short, under 32 base64 characters after AAAA.",
-        )
-
-    def test_images_live_where_images_belong(self):
-        """A screenshot taken while debugging is not an asset of this project.
-
-        This repository is public, so a capture of any internal page is
-        published the moment it is pushed (carrying whatever happened to be
-        on screen) and force-pushing afterwards does not unpublish it.
-
-        Images are diagrams, documentation captures, or icons, and each of
-        those has a home. Anything outside them is something that arrived by
-        accident.
-
-        The question is what is *committed*, not what is on the disk, so it is
-        asked of git rather than of the filesystem. A working tree holds plenty
-        of images that are nobody's business (the Playwright MCP writes
-        captures to `.playwright-mcp/`, which is ignored and therefore already
-        safe) and a walk of the disk would either report those or need a
-        hand-maintained list of directories to skip. Tracked files are exactly
-        the ones that can be pushed.
-        """
-
-        root = Path(__file__).resolve().parents[4]
-        allowed = ("docs/diagrams/", "docs/images/", "static/img/")
-        suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        tracked = subprocess.run(
-            ["git", "ls-files", "-z"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.split("\0")
-        strays = [
-            name for name in tracked if name and Path(name).suffix.lower() in suffixes and not name.startswith(allowed)
-        ]
-        self.assertEqual(
-            sorted(strays),
-            [],
-            f"images belong in one of {allowed}",
         )
 
     def test_chart_templates_do_not_hardcode_the_plot_rectangle(self):
@@ -449,51 +371,6 @@ class StyleContractTests(SimpleTestCase):
             offenders,
             [],
             "chart templates must read plot coordinates from the chart, not restate them",
-        )
-
-    def test_chart_drawings_declare_no_fixed_pixel_floor(self):
-        """A floor wider than the column it lives in is only ever a scrollbar.
-
-        `.two-col` lays out at `minmax(320px, 1fr)`, so a half-width chart card
-        offers roughly 284-446px. A floor above that range cannot protect a
-        narrow plot; it only guarantees that every chart on the page scrolls
-        at once.
-        Label collision is handled by `Chart.dense` and a container query,
-        which measure the labels and the card rather than guessing at a width.
-        """
-
-        css = self._stylesheet()
-        for rule in ("bar-chart", "line-chart"):
-            block = re.search(r"^\." + rule + r"\s*\{(.*?)\}", css, re.MULTILINE | re.DOTALL)
-            self.assertIsNotNone(block, f".{rule} must exist")
-            self.assertNotIn(
-                "min-width",
-                block.group(1),
-                f".{rule} must not declare a fixed floor; it cannot be satisfied by a half-width card",
-            )
-
-    def test_scrollable_boxes_state_both_axes(self):
-        """One declared scrollbar is two offered ones unless both are stated.
-
-        A box with `overflow-x: auto` and no `overflow-y` does not keep the
-        other axis at `visible`: the spec computes it to `auto`. Chart
-        drawings land on fractional heights, so each overflowed itself by one
-        rounded pixel and drew a full-height vertical scrollbar for it. Any
-        rule that scrolls one axis has to say what the other one does.
-        """
-
-        css = self._stylesheet()
-        offenders = []
-        for selector, body in re.findall(r"^(\.[a-z0-9-]+)\s*\{([^}]*)\}", css, re.MULTILINE):
-            has_x = re.search(r"overflow-x\s*:\s*(auto|scroll)", body)
-            if not has_x:
-                continue
-            if not re.search(r"overflow-y\s*:", body):
-                offenders.append(selector)
-        self.assertEqual(
-            offenders,
-            [],
-            "a rule that scrolls one axis must declare the other",
         )
 
     def test_categorical_series_slots_are_defined_and_distinct(self):

@@ -123,7 +123,7 @@ row in the flow.
     {% muted element="p" %}{{ work.renderers_unread|breakable }}{% endmuted %}
   {% elif work.renderers %}
     {% table_region "Credentials refresh" %}
-      <table class="data-table compact-table">
+      <table class="data-table">
         <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=True %}{% table_heading "Result" "status" css="key-col" local_sort=True %}{% table_heading "Tried" "status" local_sort=True drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=True drop=1 %}</tr></thead>
         <tbody>
           {% for item in work.renderers %}

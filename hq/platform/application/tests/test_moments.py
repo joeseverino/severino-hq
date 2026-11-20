@@ -61,12 +61,24 @@ class PhrasingTests(SimpleTestCase):
         naive = datetime(2019, 1, 3, 9, 29, 15)  # noqa: DTZ001 - a naive moment is shown without a zone
         self.assertEqual(when_exact(naive), "Jan\xa03,\xa02019, 9:29:15\xa0AM")
 
-    def test_an_age_is_one_unit(self):
+    def test_an_age_is_one_unit_and_a_stamp_is_read_as_written(self):
         now = timezone.now()
+        cases = {
+            timedelta(seconds=59): "just now",
+            timedelta(seconds=60): "1\xa0minute ago",
+            timedelta(minutes=59): "59\xa0minutes ago",
+            timedelta(hours=5, minutes=40): "5\xa0hours ago",
+            timedelta(days=5, hours=15): "5\xa0days ago",
+        }
+        for age, said in cases.items():
+            with self.subTest(age=age):
+                self.assertEqual(ago(now - age, now), said)
+                self.assertEqual(ago((now - age).isoformat(), now), said)
 
-        self.assertEqual(ago(now - timedelta(days=6, hours=12)), "6\xa0days ago")
-        self.assertEqual(ago(now - timedelta(hours=3, minutes=40)), "3\xa0hours ago")
-        self.assertEqual(ago(now - timedelta(seconds=20)), "just now")
+    def test_no_moment_is_never_and_a_future_one_is_just_now(self):
+        for missing in ("", "not a time"):
+            self.assertEqual(ago(missing, timezone.now()), "never")
+        self.assertEqual(ago(timezone.now() + timedelta(minutes=5)), "just now")
 
     def test_a_run_of_days_says_a_shared_year_once(self):
         year = timezone.localdate().year

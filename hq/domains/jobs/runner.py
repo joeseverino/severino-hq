@@ -25,7 +25,8 @@ from hq.platform.core.audit import Outcome, tallied, work_ended
 from hq.platform.core.database import gives_way
 from hq.platform.core.facets import Counts, Failure
 from hq.platform.core.models import AuditLog
-from hq.platform.core.outbound import OutboundInRequest, off_request, serving_request
+from hq.platform.core.outbound import OutboundInRequest, serving_request
+from hq.platform.core.outbound_allowed import off_request
 from hq.platform.core.outside_requests import connections_of_its_own
 
 from .models import LAPSE, LOST_ERROR, Job

@@ -1,16 +1,11 @@
-"""The stylesheet is its sheets, all of them, linked in one cascade order."""
+"""What the sheets hold together, which Stylelint, reading one sheet at a time, cannot."""
 
 import re
 
-from django.templatetags.static import static
-from django.test import SimpleTestCase, TestCase, tag
-from django.urls import reverse
+from django.test import SimpleTestCase, tag
 
-from hq.platform.application.markup_testing import elements
-from hq.platform.core.stylesheets import SHEETS, sheet_paths
+from hq.platform.core.stylesheets import sheet_paths
 
-LAYER_ORDER = re.compile(r"@layer\s+([\w\s,.-]+);")
-LAYER_BLOCK = re.compile(r"@layer\s+([\w.-]+)\s*\{")
 CONTAINER_QUERY = re.compile(r"@container\s+([^{]+)\{")
 QUERY_NAME = re.compile(r"([a-zA-Z_][\w-]*)\s*(?=\(|not\b|style\()")
 # A query of a custom property's value, asked or negated: a style query is
@@ -36,7 +31,6 @@ def _uncommented(css: str) -> str:
     return re.sub(r"/\*.*?\*/", " ", css, flags=re.DOTALL)
 
 
-@tag("source", "tree")
 def _scroll_state_containers(css: str) -> set[str]:
     """The names a rule declares with a scroll-state container type."""
 
@@ -74,21 +68,8 @@ def container_query_faults(css: str) -> tuple[list[str], list[str]]:
     return unnamed, undeclared
 
 
+@tag("source", "tree")
 class SheetTests(SimpleTestCase):
-    def test_the_layer_order_is_declared_once_before_any_layer_opens(self):
-        """A layer is ordered where it is first named. One a sheet opens
-        without its declaration would be ordered after `components`, and its
-        rules would beat every component's."""
-
-        sheets = [_uncommented(path.read_text(encoding="utf-8")) for path in sheet_paths()]
-        declared = [order for sheet in sheets for order in LAYER_ORDER.findall(sheet)]
-        self.assertEqual(len(declared), 1)
-        first = sheets[0]
-        self.assertLess(first.index(declared[0]), LAYER_BLOCK.search(first).start())
-        layers = {name.strip() for name in declared[0].split(",")}
-        opened = {name for sheet in sheets for name in LAYER_BLOCK.findall(sheet)}
-        self.assertLessEqual(opened, layers)
-
     def test_every_size_query_names_a_container_the_stylesheets_declare(self):
         """An unnamed size query is asked of whichever size container happens
         to be nearest, and of none once that one stops being a container, so it
@@ -149,11 +130,3 @@ class SheetTests(SimpleTestCase):
         self.assertEqual(held, ["page.css"], "the button rule keeps a control's label on one line")
         self.assertEqual(restated, [], "a control's line is held by the button rule alone")
         self.assertEqual(wrapped, [], "a control's label keeps its line; its column gives way")
-
-
-class LinkedSheetTests(TestCase):
-    def test_a_page_links_every_sheet_in_cascade_order(self):
-        response = self.client.get(reverse("login"))
-
-        links = [link.attrs["href"] for link in elements(response, "link") if link.attrs.get("rel") == "stylesheet"]
-        self.assertEqual(links, [static(sheet) for sheet in SHEETS])

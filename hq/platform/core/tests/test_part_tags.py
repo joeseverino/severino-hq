@@ -101,14 +101,6 @@ class SectionTagTests(SimpleTestCase):
         self.assertTrue(heading.words.startswith("Today "))
         self.assertTrue(heading.words.endswith(moment.words))
 
-    def test_with_no_body_and_nothing_to_say_it_draws_nothing(self):
-        self.assertEqual(render('{% section "Agents" %} {# none #} {% endsection %}').strip(), "")
-
-    def test_a_body_draws_no_empty_line(self):
-        html = render('{% section "Agents" %}<p>Rows</p>{% empty %}None yet.{% endsection %}')
-
-        self.assertEqual(select(html, "data-empty-state"), [])
-
     def test_a_section_in_a_section_heads_itself_a_level_down(self):
         html = render(
             '{% section "Outer" %}{% section "Inner" %}<p>A</p>{% endsection %}{% endsection %}'

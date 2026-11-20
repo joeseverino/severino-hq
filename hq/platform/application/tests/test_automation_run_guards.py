@@ -12,7 +12,7 @@ from unittest.mock import patch
 from hq.platform.core.tests import test_command_pages
 from hq.platform.mcp.tests import test_unkeyed_writes
 
-from . import test_capability_verbs, test_command_descriptions, test_command_forms
+from . import test_command_descriptions, test_command_forms
 from .procedures import Supply, manifest
 
 PROCEDURES = (
@@ -47,11 +47,6 @@ def walked(guard: type, module, *walks: str, runs_only: bool = True) -> type:
     return type(f"Run{guard.__name__}", (guard,), {**left, "setUp": setUp, "__module__": __name__})
 
 
-RunCapabilityVerbTests = walked(
-    test_capability_verbs.CapabilityVerbTests,
-    test_capability_verbs,
-    "test_a_capability_is_named_starting_with_its_button_s_word",
-)
 RunCommandDescriptionTests = walked(
     test_command_descriptions.CommandDescriptionTests,
     test_command_descriptions,

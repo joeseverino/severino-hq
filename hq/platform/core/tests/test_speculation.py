@@ -143,7 +143,7 @@ class SpeculativeRequestTests(TestCase):
         self.assertTrue(response["X-Speculation-Refused"])
 
     def test_the_outbound_boundary_refuses_a_guess(self):
-        from hq.platform.core.outbound import allowed
+        from hq.platform.core.outbound_allowed import allowed
 
         with speculation._refused.set([]), self.assertRaises(speculation.Speculative), allowed("lookup"):
             self.fail("a speculative request reached outside")

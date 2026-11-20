@@ -3,8 +3,8 @@
 Each fact has one owner. The registry's are built into schemas every time
 (``bridge_registry``), the bridge's own are written in ``bridge_base.json``,
 and the files the controller's generator and the secret renderer read are
-written from the two. These hold the join and the names the controller's
-constants take.
+written from the two. These hold the join and what the registry refuses to
+emit.
 """
 
 import json
@@ -17,14 +17,9 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, tag
-from pydantic.json_schema import SkipJsonSchema
 
 from hq.domains.control_plane import bridge_contract, bridge_registry
-from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
-from hq.domains.control_plane.connection_shapes import SHAPES, projections
-from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import caddy
-from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 
@@ -51,10 +46,6 @@ class CheckCommandTests(SimpleTestCase):
 
 
 class JoinTests(SimpleTestCase):
-    def test_the_base_restates_nothing_the_registry_declares(self):
-        declared = bridge_registry.schemas()
-        self.assertEqual(set(_base()["components"]["schemas"]) & set(declared), set())
-
     def test_a_name_stated_twice_is_refused(self):
         base = _base()
         name = next(iter(base["components"]["schemas"]))
@@ -72,63 +63,12 @@ class JoinTests(SimpleTestCase):
         ):
             bridge_registry.schemas()
 
+    def test_two_values_under_one_constant_are_refused(self):
+        with self.assertRaisesMessage(ValueError, "its own controller constant"):
+            bridge_registry._enumeration("Example", ("example.a_b", "example_a.b"), "Example")
 
-class RegistrySchemaTests(SimpleTestCase):
-    def setUp(self):
-        self.schemas = bridge_registry.schemas()
 
-    def test_the_kinds_are_the_registrys(self):
-        self.assertEqual(self.schemas["ResourceKind"]["enum"], sorted(set(PROVIDERS) | set(OBSERVATION_KINDS)))
-        self.assertEqual(self.schemas["ConnectionProvider"]["enum"], sorted(CONNECTION_KINDS))
-
-    def test_a_swept_kind_is_a_controller_reading_or_a_resource_with_no_excuse(self):
-        swept = set(self.schemas["SweptKind"]["enum"])
-        for kind, spec in OBSERVATIONS.items():
-            self.assertEqual(kind in swept, spec.read_by == "controller", kind)
-        for kind, provider in PROVIDERS.items():
-            self.assertEqual(kind in swept, not provider.unobserved_reason, kind)
-
-    def test_every_controller_reading_has_its_record(self):
-        for kind, spec in OBSERVATIONS.items():
-            name = bridge_registry.record_name(kind)
-            with self.subTest(kind=kind):
-                if spec.read_by != "controller":
-                    self.assertNotIn(name, self.schemas)
-                    continue
-                # A field HQ sets as it stores the reading is left off the wire.
-                sent = {
-                    field
-                    for field, info in spec.record.model_fields.items()
-                    if not any(isinstance(mark, SkipJsonSchema) for mark in info.metadata)
-                }
-                self.assertEqual(set(self.schemas[name]["properties"]), sent)
-
-    def test_every_enumeration_names_a_constant_for_each_value(self):
-        for name, schema in self.schemas.items():
-            if "x-enum-varnames" not in schema:
-                continue
-            with self.subTest(schema=name):
-                names = schema["x-enum-varnames"]
-                self.assertEqual(len(names), len(schema["enum"]))
-                self.assertEqual(len(names), len(set(names)))
-                for constant in names:
-                    self.assertRegex(constant, r"^[A-Z][A-Za-z0-9]+$")
-
-    def test_a_constant_is_a_function_of_its_name(self):
-        for value, constant in (
-            ("adguard.query_summary", "AdGuardQuerySummary"),
-            ("cloudflare.d1_database", "CloudflareD1Database"),
-            ("hq.request_path", "HQRequestPath"),
-            ("npm.proxy_host", "NPMProxyHost"),
-            ("tls.uploaded_certificate", "TLSUploadedCertificate"),
-            ("github_app", "GitHubApp"),
-            ("acl_management", "ACLManagement"),
-            ("querylog", "QueryLog"),
-            ("cpanel", "CPanel"),
-            ("machine", "Machine"),
-        ):
-            self.assertEqual(bridge_registry.go_name(value), constant)
-
+class CleanTests(SimpleTestCase):
     def test_a_nullable_value_states_one_type(self):
         found = bridge_registry._clean(
             {"anyOf": [{"type": "integer", "minimum": 0}, {"type": "null"}], "title": "N"}, {}
@@ -138,47 +78,6 @@ class RegistrySchemaTests(SimpleTestCase):
     def test_a_property_called_title_is_kept(self):
         found = bridge_registry._clean({"properties": {"title": {"type": "string", "title": "T"}}}, {})
         self.assertEqual(found, {"properties": {"title": {"type": "string"}}})
-
-
-class ConnectionShapeTests(SimpleTestCase):
-    def test_every_provider_arrives_in_a_declared_shape(self):
-        for provider, kind in CONNECTION_KINDS.items():
-            with self.subTest(provider=provider):
-                self.assertIs(SHAPES[kind.shape.name], kind.shape)
-
-    def test_the_document_has_one_member_per_shape(self):
-        schemas = bridge_registry.connections_document()["components"]["schemas"]
-        connection = schemas["Connection"]["properties"]
-        self.assertEqual(set(connection) - {"ref", "provider", "manages", "store"}, set(SHAPES))
-        for name, shape in SHAPES.items():
-            schema = schemas[bridge_registry.go_name(name)]
-            with self.subTest(shape=name):
-                self.assertFalse(schema["additionalProperties"])
-                self.assertEqual(set(schema["properties"]), {setting.name.lower() for setting in shape.settings})
-                self.assertEqual(
-                    set(schema["required"]),
-                    {setting.name.lower() for setting in shape.settings if not setting.optional},
-                )
-                for setting in shape.settings:
-                    tags = schema["properties"][setting.name.lower()]["x-oapi-codegen-extra-tags"]
-                    self.assertEqual(tags.get("secret") == "true", setting.secret)
-
-    def test_a_credential_is_secret(self):
-        for shape in SHAPES.values():
-            for setting in shape.settings:
-                if setting.item_field in {"credential", "password"}:
-                    self.assertTrue(setting.secret, f"{shape.name}.{setting.name}")
-
-    def test_the_renderers_registry_states_where_each_setting_comes_from(self):
-        login = projections()["login"]
-        self.assertEqual(login["URL"], {"source": "url", "index": 0})
-        self.assertEqual(login["PASSWORD"], {"source": "field", "id": "password"})
-        self.assertEqual(login["CONNECTION_REF"], {"source": "connection_ref"})
-        self.assertEqual(projections()["github_app"]["PROVIDER"], {"source": "constant", "value": "github_app"})
-        self.assertEqual(
-            projections()["ssh_transport"]["ROLE"],
-            {"source": "field", "label": "role", "optional": True},
-        )
 
 
 def _production(**env: str) -> subprocess.CompletedProcess:

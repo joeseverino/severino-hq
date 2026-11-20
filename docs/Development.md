@@ -366,6 +366,10 @@ check.
 
 The tests it selects are:
 
+- when the only Python modules an edit starts from are test modules under
+  `tests/` with no importers, fast runs those modules directly. Tests that
+  read the changed files are still selected. Editing a shared test fixture
+  or base class in a module another imports takes the regular path below;
 - the test modules that ran a function body the change reaches, as the
   record of what each test ran says. `mise run fast:map` makes it: the suite
   fast runs, under coverage.py's C tracer, each class's lines kept under its
@@ -387,7 +391,9 @@ The tests it selects are:
   ran as the suite started, before any test (a registry's assembly), to all
   that refers to it. The edit is read from the changed modules' text at the base and at the
   record's tree, so what a test runs that its record predates is a change
-  too, and a comment or the module's docstring changes nothing. The
+  too, and a comment or the module's docstring changes nothing. A change
+  with no Python module, migration or task definition starts from the files
+  its readers name and the routes they render, so it skips the coverage record. The
   references are read from the source: a name an import binds, an attribute
   read off an imported module (`inbox.recent`), a name the module defines,
   and in a module under a `tests` directory a dotted string (a mock target).
@@ -605,8 +611,8 @@ outside the modules run through `apart`:
   (`hq/platform/application/tests/apart.py`), in a process that exits; the
   walk takes and answers JSON. `django_printers` is one.
 
-Each is a walk to `tree.is_walk`, an ast-grep command line included, so the
-test carries the `tree` tag.
+Each walks the tree, an ast-grep command line included, so the test carries
+the `tree` tag.
 
 The wording rules are Vale's, in `tools/lint/vale`: `.vale.ini` there says
 which files each style reads, `styles` holds the rules, and `lint:prose` runs

@@ -1,6 +1,5 @@
 """How the code is laid out: delivery adapters, file sizes, requests that never wait, where tests and dependencies live."""
 
-import ast
 import os
 import sys
 from pathlib import Path
@@ -19,7 +18,7 @@ from hq.platform.core.compression import Compressed
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
 
-from .source import source_files, template_files
+from .source import source_files
 from .test_view_writes import routed_modules, shown
 
 
@@ -158,26 +157,6 @@ class RequestNeverWaitsTests(SimpleTestCase):
     starts a process or sleeps: the interpreter refuses it (``core.outbound``),
     whichever library the call came through."""
 
-    ROOT = Path(__file__).resolve().parents[4]
-    # Where each declared exception is entered. An entry here is a place a
-    # request may wait: adding one is a decision, with its reason in ``ALLOWED``.
-    ENTERED = {
-        "oidc": {"hq/platform/core/oidc.py"},
-        "lookup": {"hq/platform/application/lookup.py"},
-        "tailscaled": {"hq/platform/application/tailscaled.py"},
-    }
-
-    def sources(self):
-        paths = [
-            path
-            for package in ("hq", "hq_sdk")
-            for path in sorted((self.ROOT / package).rglob("*.py"))
-            if "tests" not in path.parts and not path.name.startswith("test")
-        ]
-        self.assertTrue(paths, "no source was found to check")
-        for path in paths:
-            yield path.relative_to(self.ROOT).as_posix(), path.read_text(encoding="utf-8")
-
     def test_every_request_is_served_under_the_rule(self):
         import time
         from unittest import mock
@@ -202,42 +181,6 @@ class RequestNeverWaitsTests(SimpleTestCase):
             self.assertRaises(OutboundInRequest),
         ):
             RequestContextMiddleware(view)(RequestFactory().get("/example/"))
-
-    @tag("source", "tree")
-    def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
-        from hq.platform.core.outbound import ALLOWED
-
-        entered: dict[str, set[str]] = {}
-        for relative, source in self.sources():
-            for node in ast.walk(ast.parse(source)):
-                if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "allowed"):
-                    continue
-                argument = node.args[0] if node.args else None
-                name = argument.value if isinstance(argument, ast.Constant) else "<not a literal>"
-                entered.setdefault(str(name), set()).add(relative)
-
-        self.assertEqual(entered, self.ENTERED)
-        self.assertEqual(set(ALLOWED), set(self.ENTERED))
-        for name, reason in ALLOWED.items():
-            self.assertGreater(len(reason), 60, name)
-
-    @tag("source", "tree")
-    def test_only_a_job_leaves_the_request_that_started_it(self):
-        leaving = {relative for relative, source in self.sources() if "off_request" in source}
-
-        self.assertEqual(leaving, {"hq/platform/core/outbound.py", "hq/domains/jobs/runner.py"})
-
-    @tag("source", "tree")
-    def test_asked_for_work_is_followed_by_one_script_behavior(self):
-        script = (self.ROOT / "static" / "js" / "ask.js").read_text(encoding="utf-8")
-        templates = "\n".join(path.read_text(encoding="utf-8") for _name, path in template_files())
-
-        # The controls that ask for work outside the request are all an ask.
-        for partial in ("_ask.html", "_job_progress.html", "_visit_refresh.html"):
-            self.assertIn("data-ask", (self.ROOT / "templates" / "partials" / partial).read_text(encoding="utf-8"))
-        for retired in ("data-job=", "data-visit-refresh", "data-job-note", "data-visit-status"):
-            self.assertNotIn(retired, script + templates)
-        self.assertEqual(script.count("[data-ask][data-ask-status]"), 1)
 
 
 @tag("source", "tree")

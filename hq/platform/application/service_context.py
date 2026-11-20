@@ -73,8 +73,6 @@ class ServiceSection:
     records: tuple[tuple[Cell, ...], ...]
     # ``(label, text)`` shown read-only under a disclosure, for raw readouts.
     readouts: tuple[tuple[str, str], ...] = ()
-    # Rendered as a compact table.
-    compact: bool = False
     # The reading kinds whose records it lists, so a page leaves those out of
     # its Relationships rather than saying them twice.
     renders: tuple[str, ...] = ()
@@ -139,7 +137,6 @@ class ServiceSection:
             self.label,
             tuple(TableColumn(name) for name in self.columns),
             tuple(zip(self.records, below, actions, strict=True)),
-            compact=self.compact,
         )
 
 

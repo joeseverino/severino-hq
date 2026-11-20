@@ -16,10 +16,10 @@ lazy from django.utils.http import url_has_allowed_host_and_scheme
 lazy from hq.platform.application import roles, tokens
 lazy from hq.platform.application.avatars import SESSION_KEY, remember_avatar
 lazy from hq.platform.application.linked_accounts import SIGN_IN, bind_sign_in, record_claimed_accounts, sign_in_subject
+lazy from hq.platform.core import outbound_allowed
 lazy from hq.platform.core.attribution import signing_in
 lazy from hq.platform.core.audit import record_event
 lazy from hq.platform.core.models import AuditLog
-lazy from hq.platform.core.outbound import allowed
 
 from .write_bounds import Bound
 
@@ -98,7 +98,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         """
 
         try:
-            with allowed("oidc"):
+            with outbound_allowed.allowed("oidc"):
                 return super().authenticate(request, **kwargs)
         except requests.RequestException as exc:
             status = exc.response.status_code if exc.response is not None else None

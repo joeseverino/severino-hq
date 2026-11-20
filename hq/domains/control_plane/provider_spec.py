@@ -77,7 +77,7 @@ class Setting:
 
     Exactly one of ``item_field`` (a built-in field's stable id), ``label`` (a
     custom field's label) and ``url`` (the item's URL at that index) says
-    where. ``secret`` marks a value no log, report or page may carry.
+    where.
     """
 
     name: str
@@ -85,7 +85,13 @@ class Setting:
     label: str = ""
     url: int | None = None
     optional: bool = False
-    secret: bool = False
+
+    @property
+    def secret(self) -> bool:
+        """A value no log, report or page may carry: what an item's own
+        credential or password field holds."""
+
+        return self.item_field in {"credential", "password"}
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Z][A-Z0-9_]*", self.name):

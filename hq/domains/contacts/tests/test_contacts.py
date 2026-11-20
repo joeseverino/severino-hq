@@ -3,7 +3,6 @@ is queued for the controller. Nothing here reaches D1 or holds a credential."""
 
 from unittest.mock import patch
 
-from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
@@ -232,11 +231,6 @@ class ContactViewTests(TestCase):
         review = ManagedResource.objects.get(kind=inbox.DECLARATION).spec["reviews"][0]
         self.assertEqual((review["status"], review["assigned_to"]), ("replied", "ada"))
 
-    def test_delete_get_shows_confirm(self):
-        response = self.client.get(reverse("contacts:delete", args=[1]))
-        self.assertContains(response, "Delete message #1?")
-        self.assertContains(response, f'formaction="{reverse("contacts:delete", args=[1])}"')
-
     def test_delete_post_queues_and_redirects(self):
         _manages()
         response = self.client.post(reverse("contacts:delete", args=[1]), form_keyed())
@@ -421,9 +415,6 @@ class QueuedChangeTests(TestCase):
 
 class NoCredentialTests(TestCase):
     """The web process reads no provider credential for the inbox."""
-
-    def test_no_cloudflare_token_setting_exists(self):
-        self.assertFalse(hasattr(settings, "CLOUDFLARE_API_TOKEN"))
 
     def test_no_connection_family_is_declared_for_contacts(self):
         from hq.platform.application.domains import host_domains

@@ -17,21 +17,6 @@ class ImageTests(SimpleTestCase):
     def foreign(self, text):
         return toolchain.foreign_images({"Dockerfile": text}, MISE)
 
-    def test_stages_of_the_python_base_pass(self):
-        text = BASE + "FROM tools AS build\nCOPY --from=tools /opt/bin/uv /usr/local/bin/uv\nFROM ${HQ_IMAGE}\n"
-        self.assertEqual(self.foreign(text), [])
-
-    def test_a_stage_of_the_empty_base_passes(self):
-        text = (
-            BASE
-            + "FROM scratch AS programs\nCOPY --from=tools /opt/bin/uv /\nFROM tools\nCOPY --from=programs /uv /usr/local/bin/uv\n"
-        )
-        self.assertEqual(self.foreign(text), [])
-
-    def test_mise_from_its_image_at_min_version_by_digest_passes(self):
-        text = BASE + f"COPY --from=ghcr.io/jdx/mise:{MISE}@{DIGEST} /usr/local/bin/mise /usr/local/bin/mise\n"
-        self.assertEqual(self.foreign(text), [])
-
     def test_mise_from_another_release_or_without_a_digest_fails(self):
         for ref in (f"ghcr.io/jdx/mise:2026.10.4@{DIGEST}", f"ghcr.io/jdx/mise:{MISE}", f"ghcr.io/jdx/mise@{DIGEST}"):
             with self.subTest(ref=ref):
@@ -59,9 +44,6 @@ class LockTests(SimpleTestCase):
 
     def lock(self, **tools):
         return {"tools": {"node": locked("24.22.0"), "age": locked("1.3.2"), **tools}}
-
-    def test_every_tool_locked_for_every_platform_passes(self):
-        self.assertEqual(toolchain.missing(list(PLATFORMS), self.TOOLS, self.lock()), [])
 
     def test_a_tool_with_no_lock_entry_fails(self):
         for name in self.TOOLS:

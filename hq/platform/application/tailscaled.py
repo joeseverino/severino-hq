@@ -14,7 +14,7 @@ from typing import Any
 from django.conf import settings
 
 from hq.platform.application.url_query import with_query
-from hq.platform.core.outbound import allowed
+from hq.platform.core import outbound_allowed
 
 from .tailnet import Device
 
@@ -68,7 +68,7 @@ def whois(address: str) -> Device | None:
 def get(path: str) -> tuple[int, bytes]:
     """One GET of ``path`` on the daemon's socket: its status and body."""
 
-    with closing(_Connection(socket_path())) as daemon, allowed("tailscaled"):
+    with closing(_Connection(socket_path())) as daemon, outbound_allowed.allowed("tailscaled"):
         daemon.request("GET", path)
         response = daemon.getresponse()
         return response.status, response.read(LIMIT)

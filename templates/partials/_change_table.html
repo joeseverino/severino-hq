@@ -17,7 +17,7 @@ is Field and Value alone.
 {% section preview.label count=preview.moves|default:"" %}
   {% if bodies %}
     {% table_region preview.label compare=preview.compares %}
-      <table class="data-table compact-table">
+      <table class="data-table">
         <thead><tr>{% table_heading "Field" "identifier" local_sort=False %}{% if preview.compares %}{% table_heading "Before" local_sort=False %}{% table_heading "After" css="key-col" local_sort=False %}{% table_heading "Status" "status" local_sort=False %}{% else %}{% table_heading "Value" local_sort=False %}{% endif %}</tr></thead>
         {% for body in bodies %}
         <tbody>

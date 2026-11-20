@@ -44,9 +44,17 @@ deploy/bin/
 # Playwright MCP scratch output: screenshots and page snapshots taken while
 # checking a rendered page. Evidence for a fix, not part of the app.
 .playwright-mcp/
-# Root-level browser captures are scratch evidence too. Product images belong
-# under a named static/media directory, never beside the repository README.
-/*.png
+# An image is a diagram, a documentation capture or an icon, each with its
+# home; one anywhere else is a capture taken while debugging, which a public
+# repository publishes the moment it is pushed.
+*.[pP][nN][gG]
+*.[jJ][pP][gG]
+*.[jJ][pP][eE][gG]
+*.[gG][iI][fF]
+*.[wW][eE][bB][pP]
+!/docs/diagrams/**
+!/docs/images/**
+!/static/img/**
 /hq-pass.json
 
 # Personal agent settings and guidance; never published.

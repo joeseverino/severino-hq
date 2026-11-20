@@ -86,7 +86,8 @@ class IdTokenTests(SimpleTestCase):
     @override_settings(OIDC_RP_CLIENT_ID="")
     def test_no_configured_client_refuses_every_token(self):
         with self.assertRaises(tokens.TokenError):
-            self._verify(_id_token(aud=""))
+            # The one audience PyJWT accepts for an empty one: a list holding it.
+            self._verify(_id_token(aud=[""]))
 
     def test_a_key_not_held_asks_for_a_read_and_never_fetches(self):
         tokens.KEYS.wanted.clear()

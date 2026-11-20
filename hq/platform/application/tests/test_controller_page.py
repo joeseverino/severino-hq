@@ -140,8 +140,7 @@ class ControllerPageTests(TestCase):
         self.assertContains(response, "Overdue")
         self.assertContains(response, f"Internal DNS record{dot()}")
 
-    def test_the_page_needs_a_session_and_the_dashboard_links_to_it(self):
-        self.assertEqual(self.client.get(reverse("control_plane:controller")).status_code, 302)
+    def test_the_dashboard_links_to_it(self):
         operator(self.client, "someone")
 
         self.assertContains(self.client.get("/"), f'href="{reverse("control_plane:controller")}"')

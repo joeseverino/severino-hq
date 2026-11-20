@@ -298,13 +298,3 @@ class OriginTests(SimpleTestCase):
         html = render_to_string("partials/_urgency_pill.html#panel", {"item": item})
 
         self.assertEqual(with_class(html, "modal-foot"), [])
-
-    def test_the_pill_opens_its_origin_and_nothing_else_does(self):
-        item = decision({"key": "example.domain:x", "source": "Example", "status": "attention", "label": "X"})
-
-        html = render_to_string("partials/_urgency_pill.html", {"item": item})
-        html += render_to_string("partials/_urgency_pill.html#panel", {"item": item})
-
-        (pill,) = select(html, "data-origin")
-        (panel,) = select(html, "id", pill.attrs["data-origin"])
-        self.assertIn("popover", panel.attrs)

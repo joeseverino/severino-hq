@@ -303,7 +303,6 @@ class PlaybooksPageTests(TestCase):
         self.assertFalse([key for key, offered in _decisions(html).items() if "Adopt" in offered])
         scan = self.page(_scan_page(newest))
         self.assertNotIn(_adopt(newest.pk), _posts(scan))
-        rows = [element for element in within(scan, "class", "compact-table") if element.tag == "tbody"]
         problems = {
             shown["_summary"]["label"]: shown["problems"]
             for shown in planned.compared["after"]["procedures"].values()
@@ -311,7 +310,8 @@ class PlaybooksPageTests(TestCase):
         }
         self.assertEqual(set(problems), set(planned.unadoptable))
         for named, said in problems.items():
-            (group,) = [row for row in rows if named in row.words]
+            (head,) = [row for row in select(scan, "data-folds") if named in row.words]
+            group = next(up for up in head.ancestors if up.tag == "tbody")
             with self.subTest(playbook=named):
                 self.assertTrue(said)
                 for problem in said:

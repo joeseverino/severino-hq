@@ -2,10 +2,20 @@
 // file. Any rule Stylelint cannot express stays a test beside StyleContractTests
 // (hq/platform/application/tests/test_architecture_styles.py), with its reason.
 
+import { readFileSync } from "node:fs";
+
 const tokens = "../../static/css/app/tokens.css";
 const cuts = "../../static/css/app/cuts.css";
 const sheet = (name) => `../../static/css/app/${name}.css`;
 const reference = "../../static/css/api-reference.css";
+
+// The layers are ordered where each is first named, by the statement that
+// opens tokens.css, the first sheet. A layer it leaves out would be ordered
+// after `components` and its rules would beat every component's, so no sheet
+// opens one.
+const [, layerOrder, opens] = readFileSync(new URL(tokens, import.meta.url), "utf8").match(/@layer\s+([^;{]+)([;{])/);
+if (opens !== ";") throw new Error("tokens.css opens a layer before it orders them: start it with the @layer statement");
+const layers = `^(?:${layerOrder.split(",").map((name) => name.trim()).join("|")})$`;
 
 // CSS Color 4's system colors. color-named knows only the named colors, and
 // `canvas` or `field` written in a component is as much a color the theme
@@ -73,6 +83,10 @@ const allowedValues = (keys) => [{ "font-display": ["optional"], ...keys }, { me
 // a @font-face's `src`, is the one fetch `document.fonts` reports, so the gate
 // waits for it.
 const fetched = { "/^(?!src$)/": ["/\\burl\\(/i"] };
+// A box that scrolls one axis computes the other to `auto` too, so a drawing
+// that lands on a fractional height draws a scrollbar for one rounded pixel:
+// a scroll says both axes, in `overflow` (`overflow: auto clip`).
+const oneAxisScroll = { "/^overflow-(x|inline)$/": ["/\\b(auto|scroll)\\b/"] };
 // What only a screen reader hears is clipped by `.visually-hidden`
 // (cadence.css) alone, so a change to how it is clipped is made once.
 const readerClip = { "clip-path": ["/inset\\(\\s*50%\\s*\\)/"] };
@@ -80,11 +94,13 @@ const readerClip = { "clip-path": ["/inset\\(\\s*50%\\s*\\)/"] };
 // cut and a measure from the rest. Every sheet's list holds the fetch's and
 // the reader's clip.
 const disallowedValues = (keys) => [
-  { ...keys, ...flowGrid, ...fetched, ...readerClip },
+  { ...keys, ...flowGrid, ...fetched, ...readerClip, ...oneAxisScroll },
   {
     message: (property, value) =>
       matches(paletteTone, property) && new RegExp(paletteTone["/^.+$/"][0].slice(1, -1)).test(value)
         ? `"${property}: ${value}" picks a tone's palette: give the element its state's tone class (\`tone_class\`) and read the role it sets (--tone-mark, --tone-ink, --tone-bg, --tone-tint, --tone-wash, --tone-line)`
+        : matches(oneAxisScroll, property) && /\b(auto|scroll)\b/.test(value)
+        ? `"${property}: ${value}" scrolls one axis and leaves the other to compute to auto: say both in overflow (\`overflow: auto clip\`)`
         : autoGrid.test(value)
         ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the layout part (\`{% layout %}\`, docs/Shared-UI.md); a part that lays out something else inside itself says so in a disable comment`
         : matches(cutText, property)
@@ -130,6 +146,16 @@ const caseProperties = ["text-transform", "font-variant-caps"];
 const caseOutsideKicker = { "/^(?!\\.eyebrow$)/": caseProperties };
 const caseMessage = (selector, property) =>
   `"${property}" changes a text's case in "${selector}": capitals are the kicker's, so write the \`eyebrow\` class on what heads a group, or say it in sentence case`;
+// A chart fills the column it sits in, so it declares no floor: one wider than
+// a half-width card is only a scrollbar under every chart on the page. Labels
+// give way through `Chart.dense` and a container query.
+const chartFloor = { "/(?:^|,\\s*)\\.(?:bar|line)-chart\\s*(?:,|$)/": ["/^min-(width|inline-size)$/", ...caseProperties] };
+const selectorPropertyMessage = (selector, property) =>
+  caseProperties.includes(property)
+    ? caseMessage(selector, property)
+    : matches(chartFloor, selector)
+      ? `"${selector}" sets a ${property} floor a half-width card cannot give: a chart fills its column`
+      : `Disallowed property "${property}" for selector "${selector}"`;
 const disallowedProperties = (properties) => [properties, { message: (property) => (frameProperties.includes(property) ? `"${property}" draws a frame outside surfaces.css: name the part in its list there` : `Disallowed property "${property}"`) }];
 // A reader who asks for less motion gets it from one rule in base.css, which
 // stops every transition and animation, so a part never writes its own. A
@@ -248,6 +274,7 @@ export default {
     // An unlayered rule beats every layer at any specificity, so nothing in
     // `components` could override it but another unlayered rule.
     "rule-nesting-at-rule-required-list": ["layer"],
+    "layer-name-pattern": layers,
     // A sheet another one imports is fetched once its parent arrives (`fetched`).
     "at-rule-disallowed-list": ["import"],
     // A selector's rule is written once per file and at-rule block. The test
@@ -282,16 +309,18 @@ export default {
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
     "declaration-property-value-disallowed-list": disallowedValues(everySheet),
     // A face that arrives late and is swapped in moves every line it sets, so
-    // each is shown only if it is ready for the first paint. Its file is
-    // preloaded beside the stylesheet so it usually is (StyleContractTests).
+    // each is shown only if it is ready for the first paint. The head preloads
+    // its file beside the stylesheet so it usually is, reading each quoted
+    // url() a @font-face names (`stylesheets.FACES`).
     "at-rule-property-required-list": { "font-face": ["font-display"] },
+    "function-url-quotes": "always",
     "declaration-property-value-allowed-list": allowedValues(radiusSteps),
     "property-disallowed-list": disallowedProperties(frameProperties),
     "rule-selector-property-disallowed-list": [
       // The first key a selector matches decides, so a table's selector is
       // held to the kicker's rule too.
-      { [`/${inTable}/`]: [...tableHeld, ...caseProperties], ...caseOutsideKicker },
-      { message: (selector, property) => (caseProperties.includes(property) ? caseMessage(selector, property) : `Disallowed property "${property}" for selector "${selector}"`) },
+      { ...chartFloor, [`/${inTable}/`]: [...tableHeld, ...caseProperties], ...caseOutsideKicker },
+      { message: selectorPropertyMessage },
     ],
     "selector-disallowed-list": selectorRule([], () => childInIsMessage),
   },
@@ -305,7 +334,7 @@ export default {
       // The table primitive sizes what a table holds.
       files: tablePrimitive,
       rules: {
-        "rule-selector-property-disallowed-list": [caseOutsideKicker, { message: caseMessage }],
+        "rule-selector-property-disallowed-list": [{ ...chartFloor, ...caseOutsideKicker }, { message: selectorPropertyMessage }],
         "selector-disallowed-list": selectorRule(
           cellRoles,
           (selector) =>

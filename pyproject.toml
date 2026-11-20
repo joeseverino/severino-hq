@@ -249,6 +249,20 @@ allowed_importers = [
 ]
 broken_contract_guidance = "Leave the binding to the capability runner or the job runner (attribution.own_operation); work outside both is a door."
 
+[[tool.importlinter.contracts]]
+name = "Only the places a request may wait from enter an outbound exception, and only a job leaves its request"
+type = "protected"
+protected_modules = ["hq.platform.core.outbound_allowed"]
+allowed_importers = [
+  "hq.**.tests",
+  "hq.domains.jobs.runner",
+  "hq.platform.application.lookup",
+  "hq.platform.application.tailscaled",
+  "hq.platform.core.oidc",
+  "hq.platform.core.outbound",
+]
+broken_contract_guidance = "A request answers from what HQ holds: ask the controller for a reading or start a job. A new place to wait is an entry in outbound_allowed.ALLOWED and an importer here."
+
 # audit:dead: a read in a test does not keep a name alive, unless a
 # test-support module (testing.py, *_testing.py) defines it. A function a
 # decorator hands to a caller outside HQ is called: a signal receiver, a system

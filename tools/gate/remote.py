@@ -106,7 +106,13 @@ def words(spec: dict, values: dict[str, str]) -> list[str]:
     for flag in spec["flags"]:
         if (each := given(flag)) is not None:
             name = f"--{flag['long'][0]}" if flag["long"] else f"-{flag['short'][0]}"
-            said += [part for value in each for part in [name, value]] if "arg" in flag else [name] * (each == ["true"])
+            if "arg" in flag:
+                for value in each:
+                    said.extend((name, value))
+            elif each == ["true"]:
+                said.append(name)
+            elif each == ["false"] and flag.get("negate"):
+                said.append(flag["negate"])
     rest = [value for arg in spec["args"] if (each := given(arg)) is not None for value in each]
     return [*said, "--", *rest] if rest else said
 

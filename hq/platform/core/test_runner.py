@@ -25,10 +25,13 @@ from django.db.models.signals import post_save
 from django.test.runner import DiscoverRunner, ParallelTestSuite, _init_worker
 lazy from django.apps import apps
 lazy from django.contrib.auth import get_user_model
+lazy from django.core.exceptions import ImproperlyConfigured
 lazy from django.core.management.base import BaseCommand
 lazy from django.db.backends.sqlite3.creation import DatabaseCreation
 lazy from django.test import TransactionTestCase
 lazy from django.test.utils import override_settings
+lazy from django.views import generic
+lazy from django.views.generic import View
 
 from hq.config.imports import lazily
 from hq.config.sandbox import shared_tempdir
@@ -185,6 +188,56 @@ def overrides_of_declared_settings() -> None:
     override_settings.enable = _enable
 
 
+# Names Django's generic views read that it documents as a subclass's to set.
+MEANT_TO_SET = frozenset({
+    "context_object_name", "extra_context", "fields", "form_class", "http_method_names", "initial", "model",
+    "prefix", "queryset", "success_url", "template_engine", "template_name", "template_name_field",
+    "template_name_suffix",
+    # Lists, object lookups and redirects.
+    "allow_empty", "ordering", "page_kwarg", "paginate_by", "paginate_orphans", "paginator_class",
+    "pk_url_kwarg", "query_pk_and_slug", "slug_field", "slug_url_kwarg",
+    "pattern_name", "permanent", "preserve_request", "query_string", "url",
+    # Date views.
+    "allow_future", "date_field", "date_list_period", "day", "day_format", "make_object_list", "month",
+    "month_format", "uses_datetime_field", "week", "week_format", "year", "year_format",
+})  # fmt: skip
+# State a view's own methods set on the instance.
+INSTANCE_STATE = frozenset({"request", "args", "kwargs", "object", "object_list", "headers"})
+
+
+def views_keep_djangos_names() -> None:
+    """In this process, a view whose class or mixin defines a name Django's
+    generic views read for themselves is refused as it is declared: it would
+    silently replace Django's, as a ``content_type`` property on a form view
+    became the response's ``Content-Type`` header."""
+
+    if "__init_subclass__" in vars(View):
+        return
+    reserved = set(INSTANCE_STATE)
+    for module in (generic.base, generic.dates, generic.detail, generic.edit, generic.list):
+        for value in vars(module).values():
+            if isinstance(value, type) and value.__module__ == module.__name__:
+                reserved |= {
+                    name
+                    for name, member in vars(value).items()
+                    if not name.startswith("__")
+                    and not inspect.isfunction(member)
+                    and not isinstance(member, classmethod | staticmethod)
+                }
+    reserved -= MEANT_TO_SET
+
+    def __init_subclass__(cls, **kwargs):
+        super(View, cls).__init_subclass__(**kwargs)
+        for declared in cls.__mro__:
+            if not declared.__module__.startswith("django.") and (taken := sorted(reserved & vars(declared).keys())):
+                raise ImproperlyConfigured(
+                    f"{declared.__qualname__} defines {', '.join(taken)}, which Django's views read: rename it to"
+                    " what it means."
+                )
+
+    View.__init_subclass__ = classmethod(__init_subclass__)
+
+
 # Outside the checkout. Hypothesis caches constants it finds in every module it
 # can import, installed extensions included, and a cache in the tree is text
 # the host must never carry. Outside the run's own temporary directory too, so
@@ -241,6 +294,7 @@ def prepare_this_process() -> None:
     flush_through_the_audit_guard()
     commands_from_the_shell()
     overrides_of_declared_settings()
+    views_keep_djangos_names()
     bind_test_arrangement()
     hypothesis_profiles()
 

@@ -542,12 +542,14 @@ an audit event whenever any library opens a connection, resolves a name,
 starts a process or sleeps. While a request is served, that event raises
 `OutboundInRequest`, so the call never leaves.
 
-A place a request must wait is a named entry in `ALLOWED` with its reason,
-entered with `allowed("name")`. There are three: signing in (bounded by
-`OIDC_TIMEOUT`), a public lookup an operator asked for by name, and the
-question to tailscaled on HQ's own host of which tailnet device sent an
-agent's call ([Security](Security.md), devices).
-`RequestNeverWaitsTests` holds the entries to their places.
+A place a request must wait is a named entry in `outbound_allowed.ALLOWED`
+with its reason, entered with `outbound_allowed.allowed("name")`. There are
+three: signing in (bounded by `OIDC_TIMEOUT`), a public lookup an operator
+asked for by name, and the question to tailscaled on HQ's own host of which
+tailnet device sent an agent's call ([Security](Security.md), devices). A job's
+own thread leaves its request with `outbound_allowed.off_request()`. A
+protected contract (`lint:imports`) lets only those places and the job runner
+import the module.
 
 The setting `SEVERINO_OUTBOUND_IN_REQUEST = "report"` logs
 `outbound.in_request` and lets the call go. It is for a composition whose

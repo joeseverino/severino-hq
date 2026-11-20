@@ -18,7 +18,7 @@ from pydantic import BeforeValidator, Field, IPvAnyAddress, StringConstraints
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
-from hq.platform.core.outbound import allowed
+from hq.platform.core import outbound_allowed
 
 from .answer_fields import ObservedAt
 from .command_fields import Describe
@@ -209,7 +209,7 @@ def look_up_name(
     # The gateways are injected defaults, so no test here opens a socket.
     # Resolve at execution time so scoped replacements also cover registry calls.
     resolver = resolver or resolve
-    with allowed("lookup"):
+    with outbound_allowed.allowed("lookup"):
         payload = resolver("api/dns", {"domain": wanted, "types": ",".join(RECORD_TYPES)})
     records = payload.get("records")
     server = payload.get("server")
@@ -335,7 +335,7 @@ def look_up_address(
     # other down with it. One answering is a better panel than none, and which
     # one failed is visible in what is missing.
     try:
-        with allowed("lookup"):
+        with outbound_allowed.allowed("lookup"):
             answer = resolver("api/reverse-dns", {"ip": str(parsed)})
     except LookupUnavailable:
         reading["note"] = "Reverse DNS could not be read."
@@ -353,7 +353,7 @@ def look_up_address(
             reading["note"] = str(answer.get("error") or "No PTR record exists.")
 
     try:
-        with allowed("lookup"):
+        with outbound_allowed.allowed("lookup"):
             held = allocations(str(parsed))
     except LookupUnavailable:
         reading["allocation"] = {}

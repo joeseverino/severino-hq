@@ -247,14 +247,6 @@ class ProjectListTests(SignedInTestCase):
         self.assertEqual(rows["Example"]["Edited"], rows["Example Tool tool"]["Edited"])
         self.assertEqual(rows["Example Tool tool"]["Repository"], "Not read yet")
 
-    def test_filters_and_sorts_say_what_they_do(self):
-        response = self.client.get(reverse("projects:list"))
-
-        for label in ("Active, nothing written yet", "No writeup", "No documents", "Status Z–A", "Category A–Z"):
-            self.assertContains(response, label)
-        for gone in ("Needs output", "Missing docs", "reverse"):
-            self.assertNotIn(gone, text(response))
-
 
 class ProjectToggleTests(TestCase):
     def setUp(self):

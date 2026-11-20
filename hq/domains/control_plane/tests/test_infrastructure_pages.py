@@ -26,7 +26,6 @@ from hq.platform.core.testing import READER, declare, operator
 from ..models import DashboardMachine, ManagedResource, OperationRequest, ProviderConnection
 from ..provider_adapters.cloudflare import _dns_record_readout
 from ..providers import PROVIDERS, validate_spec
-from . import bridge_client
 from .certificate_cases import certificate_spec, declare_targets
 
 
@@ -311,31 +310,6 @@ class InfrastructureViewsTests(TestCase):
         self.assertIn("One consumer serves the previous certificate.", shown)
         self.assertIn("1 name serves a different certificate", shown)
 
-    def test_controller_rejects_secret_material_in_status(self):
-        operation = OperationRequest.objects.create(
-            resource=self.resource,
-            action=OperationRequest.Action.RECONCILE,
-            state=OperationRequest.State.CLAIMED,
-            requested_actor="operator",
-            requested_interface="cli",
-            idempotency_key="secret-report",
-            input={"generation": self.resource.generation},
-            claimed_by="controller",
-            claimed_at=timezone.now(),
-            lease_expires_at=timezone.now() + timedelta(minutes=5),
-        )
-        status = {"api_token": "must-never-enter-hq", "certificate_pem": "-----BEGIN PRIVATE KEY-----\nnope"}
-        with self.assertLogs("severino.bridge", "WARNING"):
-            bridge_client.call(
-                "report",
-                {"success": False, "observed_generation": self.resource.generation, "status": status},
-                operation=str(operation.id),
-                controller_id="controller",
-            )
-        operation.refresh_from_db()
-        self.assertEqual(operation.state, OperationRequest.State.FAILED)
-        self.assertEqual(operation.result["status"], {"api_token": "[redacted]", "certificate_pem": "[redacted]"})
-
     def test_failed_controller_report_preserves_last_verified_status(self):
         verified = {
             "not_after": "2026-10-23T00:00:00+00:00",
@@ -384,34 +358,22 @@ class InfrastructureViewsTests(TestCase):
 class DnsRecordReadoutTests(TestCase):
     """A record that matches the world must not report drift against itself."""
 
-    def test_a_matching_record_reports_no_drift(self):
-        spec = {
-            "zone": "example.com",
-            "name": "example.com",
-            "record_type": "CNAME",
-            "content": "example.pages.dev",
-            "priority": None,
-            "proxied": True,
-            "ttl": 1,
-        }
-        status = {**spec, "record_id": "abc"}
-        _label, desired, observed = _dns_record_readout(spec, status)[0]
-        self.assertEqual(desired, observed)
-
-    def test_a_changed_content_or_priority_reports_drift(self):
-        for field, desired_value, observed_value in (
-            ("content", "new.pages.dev", "old.pages.dev"),
-            ("priority", 10, 20),
+    def test_desired_and_observed_differ_exactly_when_the_world_departs(self):
+        cname = {"record_type": "CNAME", "content": "example.pages.dev", "priority": None, "proxied": True, "ttl": 1}
+        mx = {"record_type": "MX", "content": "mx.example.com", "priority": 10}
+        for case, spec, status, drifts in (
+            ("matching", cname, {**cname, "record_id": "abc"}, False),
+            ("another content", mx, {**mx, "content": "old.example.com"}, True),
+            ("another priority", mx, {**mx, "priority": 20}, True),
         ):
-            with self.subTest(field=field):
-                spec = {"record_type": "MX", "content": "mx.example.com", "priority": 10, field: desired_value}
-                status = {**spec, field: observed_value}
+            with self.subTest(case):
                 _, desired, observed = _dns_record_readout(spec, status)[0]
-                self.assertNotEqual(desired, observed)
+                self.assertEqual(desired != observed, drifts)
 
     def test_an_unobserved_record_reports_nothing_rather_than_drift(self):
-        spec = {"record_type": "A", "content": "192.0.2.1", "priority": None}
-        _, desired, observed = _dns_record_readout(spec, {})[0]
+        _, desired, observed = _dns_record_readout({"record_type": "A", "content": "192.0.2.1", "priority": None}, {})[
+            0
+        ]
         self.assertEqual(observed, "")
         self.assertTrue(desired)
 

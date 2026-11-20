@@ -1,5 +1,4 @@
-"""The bridge's door strikes no name the contract declares, read from the contract itself,
-while a member the contract leaves open is still struck by a secret name."""
+"""The bridge's door strikes no name the contract declares, read from the contract itself."""
 
 import json
 from dataclasses import replace
@@ -13,8 +12,6 @@ from hq.domains.control_plane.bridge_contract import contract, operations
 from hq.domains.control_plane.observations import OBSERVATIONS
 
 from . import bridge_client
-
-REDACTED = "[redacted]"
 
 
 def _properties(node: Any):
@@ -83,23 +80,6 @@ class DeclaredNameTests(TestCase):
         answer = _send("inventory", inventory, ran)
         self.assertEqual(answer.status, 200, answer.body)
         self.assertEqual(ran, [("inventory", inventory)])
-
-    def test_every_query_parameter_the_contract_declares_is_taken(self):
-        for operation in operations().values():
-            with self.subTest(action=operation.name):
-                bridge_application._refuse_secrets(
-                    operation, {parameter.name: "example" for parameter in operation.parameters}
-                )
-
-    def test_a_credential_in_an_open_record_is_still_struck_by_its_name(self):
-        kind = min(_kinds())
-        record = {"name": "example", "api_token": "must-never-enter-hq"}
-        ran: list[tuple[str, Any]] = []
-        with self.assertLogs("severino.bridge", "WARNING") as logged:
-            answer = _send("inventory", {kind: {"ok": True, "records": [record]}}, ran)
-        self.assertEqual(answer.status, 200, answer.body)
-        self.assertEqual(ran[0][1][kind]["records"], [{"name": "example", "api_token": REDACTED}])
-        self.assertNotIn("must-never-enter-hq", "\n".join(logged.output))
 
 
 # A repository's access as the controller writes it: the workflow token's

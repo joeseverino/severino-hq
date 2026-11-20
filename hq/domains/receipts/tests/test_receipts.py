@@ -211,22 +211,16 @@ class ReceiptPageFileTests(TestCase):
         self.assertNotContains(response, "application/pdf")
         self.assertEqual(self.client.get(reverse("receipts:picture", args=[receipt.pk])).status_code, 404)
 
-    def test_an_image_no_browser_draws_is_a_link(self):
-        receipt = self._stored("photo.heic", "image/heic")
+    def test_an_image_no_browser_draws_or_of_an_unaccepted_type_is_a_link_and_never_a_picture(self):
+        for name, content_type in (("photo.heic", "image/heic"), ("page.svg", "image/svg+xml")):
+            with self.subTest(content_type):
+                receipt = self._stored(name, content_type)
 
-        response = self.client.get(receipt.get_absolute_url())
+                response = self.client.get(receipt.get_absolute_url())
 
-        self.assertEqual(self._file_part(response), "link")
-        self.assertFalse(elements(response, "img"))
-        self.assertEqual(self.client.get(reverse("receipts:picture", args=[receipt.pk])).status_code, 404)
-
-    def test_an_image_stored_under_an_unaccepted_type_is_never_a_picture(self):
-        receipt = self._stored("page.svg", "image/svg+xml", b"<svg/>")
-
-        response = self.client.get(receipt.get_absolute_url())
-
-        self.assertFalse(elements(response, "img"))
-        self.assertEqual(self.client.get(reverse("receipts:picture", args=[receipt.pk])).status_code, 404)
+                self.assertEqual(self._file_part(response), "link")
+                self.assertFalse(elements(response, "img"))
+                self.assertEqual(self.client.get(reverse("receipts:picture", args=[receipt.pk])).status_code, 404)
 
     def test_a_receipt_with_no_file_says_so_and_offers_one(self):
         receipt = Receipt.objects.create(vendor="Example Host")

@@ -53,7 +53,7 @@ declaration's machinery: the controller's actions are the buttons above, and
     {% section "Installed on" %}
       {% if resource.consumers %}
       {% table_region "Installed on" %}
-      <table class="data-table compact-table">
+      <table class="data-table">
         <thead><tr>{% table_heading "Place" "identifier" local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
         <tbody>
           {% for consumer in resource.consumers %}
@@ -213,7 +213,7 @@ certificate, so the relation reads from both ends.
   {% if resource.status.published_facts %}
     {% section "Saved to 1Password" %}
       {% table_region "Saved to 1Password" %}
-      <table class="data-table compact-table">
+      <table class="data-table">
         <thead><tr>{% table_heading "Item" "identifier" local_sort=True %}{% table_heading "Last saved" "status" local_sort=True %}</tr></thead>
         <tbody>
           {% for publication in resource.status.published_facts %}
