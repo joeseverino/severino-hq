@@ -95,7 +95,12 @@ class ListItemsComeFromTheSerializerTests(SimpleTestCase):
 
         serializers = _serializers()
         named = {
-            (path, function.name): {node.id for node in ast.walk(function) if isinstance(node, ast.Name)}
+            # A name used bare or through its module (`approvals.serialize_approval`).
+            (path, function.name): {
+                node.id if isinstance(node, ast.Name) else node.attr
+                for node in ast.walk(function)
+                if isinstance(node, (ast.Name, ast.Attribute))
+            }
             for path, function in _functions("")
         }
         held, drifted = set(), []
