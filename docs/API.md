@@ -459,7 +459,11 @@ to count on every read declares itself uncounted (`ListRead.counted`), and
 its pages say whether more follow with `total` null.
 
 A list that declares its sorts (`ListRead.sorts`) takes `sort`, one of their
-names, which its schema lists; absent, it reads in the first. A kind that
+names, which its schema lists; absent, it reads in the first. Each filter it
+declares (`ListRead.filters`) takes several values, comma-separated
+(`?status=active,idea`), each one its schema's pattern allows, and each
+toggle (`ListRead.toggles`) is a flag. A list that adds up what it matched
+(`ListRead.totals`) answers that as `totals` beside its page. A kind that
 declares its search takes `query`, looked up in its search scope, the one the
 site's search uses, with the best match first unless a `sort` is asked. A
 kind whose query has no `page` (search, which ranks each scope apart,

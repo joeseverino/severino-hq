@@ -166,11 +166,10 @@ def get_receipt(identifier: int) -> ReceiptRecord:
     }
 
 
-def list_receipts(*, unlinked: bool = False, limit: int = 50) -> dict[str, Any]:
+def list_receipts(*, limit: int = 50) -> dict[str, Any]:
     """List receipt metadata without file contents, storage paths, or URLs."""
+
     rows = Receipt.objects.select_related("related_expense", "related_asset")
-    if unlinked:
-        rows = rows.filter(related_expense__isnull=True, related_asset__isnull=True)
     # In the order its list read asks, the first it declares when none is asked.
     return listing(rows, serialize_receipt, order=(), limit=limit)
 

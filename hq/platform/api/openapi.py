@@ -12,7 +12,7 @@ import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, TypeAliasType, get_args
+from typing import Any, TypeAliasType, get_args, get_type_hints
 
 from django.urls import URLPattern, reverse
 
@@ -536,12 +536,17 @@ class _Builder:
         """A list's answer: every list's page, its items of the type the
         resource declares, which a mask cuts and never widens."""
 
-        kind = masked_kind(self.resource_specs[name], listed=True)
+        spec = self.resource_specs[name]
+        kind = masked_kind(spec, listed=True)
         if kind is None:
             return None
         page = self.data[views.resource_list.__name__]
-        items = {"type": "array", "items": self.typed(kind)}
-        return f"{kind.__name__}Page", {"allOf": [page], "properties": {"items": items}}
+        properties: dict[str, Any] = {"items": {"type": "array", "items": self.typed(kind)}}
+        # A list that reads its matched rows' totals answers them beside its page.
+        if spec.listing and spec.listing.totals is not None:
+            totals = get_type_hints(spec.listing.totals)["return"]
+            properties["totals"] = self.components.typed({totals.__name__: totals})[totals.__name__]
+        return f"{kind.__name__}Page", {"allOf": [page], "properties": properties}
 
     def record_of(self, record: type | None) -> tuple[str, dict[str, Any]] | None:
         """A read of one record's answer, where its kind types it; else the view's object."""

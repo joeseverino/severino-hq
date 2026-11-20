@@ -52,17 +52,6 @@ class ListItemIsTheSavedRecordTests(TestCase):
 
         self.assertEqual(list_receipts()["items"], [saved])
 
-    def test_the_filters_still_narrow(self):
-        writer = _writer("expenses")
-        for day, category in ((date(2030, 1, 2), "software"), (date(2031, 1, 2), "hardware")):
-            save_expense(ExpenseCommand(date=day, vendor="Example", item="Item", category=category), principal=writer)
-        matched = Receipt.objects.create(file="receipts/a.pdf", related_asset=Asset.objects.create(slug="example-a"))
-        Receipt.objects.create(file="receipts/b.pdf")
-
-        self.assertEqual([item["date"] for item in list_expenses(year=2030)["items"]], ["2030-01-02"])
-        self.assertEqual([item["category"] for item in list_expenses(category="hardware")["items"]], ["hardware"])
-        self.assertNotIn(matched.pk, [item["id"] for item in list_receipts(unlinked=True)["items"]])
-
 
 def _functions(prefix: str):
     """Each module-level function of the application's own modules whose name starts with ``prefix``."""

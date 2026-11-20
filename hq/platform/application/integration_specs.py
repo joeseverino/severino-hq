@@ -3,12 +3,12 @@
 import annotationlib
 import inspect
 from annotationlib import Format
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
 from functools import cache
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
-from django.db.models import BigIntegerField
+from django.db.models import BigIntegerField, Q
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
 
 from .contracts import Effect
@@ -20,6 +20,7 @@ from .ui import ended
 lazy from . import records, stored_columns
 lazy from .labels import human_label, lower_first
 lazy from .refusal_status import RefusalEnvelope
+lazy from .resources import several_of
 
 if TYPE_CHECKING:
     from .entity_links import EntityLink
@@ -450,6 +451,66 @@ class ListSort:
         if not self.ordering:
             object.__setattr__(self, "ordering", (self.name,))
 
+    @classmethod
+    def both(cls, name: str, label: str, reverse: str = "") -> tuple[ListSort, ListSort]:
+        """The order ``name`` names and its reverse, said ``label`` and
+        ``reverse``; a column of words names its own two from its heading
+        alone, "Vendor A–Z" and "Vendor Z–A"."""
+
+        if not reverse:
+            label, reverse = f"{label} A–Z", f"{label} Z–A"
+        return cls(name, label), cls(name[1:] if name.startswith("-") else f"-{name}", reverse)
+
+
+# The values a list is narrowed by, as one choice: each value it takes and its words.
+type Choices = Iterable[tuple[Any, str]]
+
+
+@dataclass(frozen=True, slots=True)
+class ListFilter:
+    """One field a list is narrowed by to any of several values, sent
+    comma-separated (``status=active,idea``): its name, its label, the values
+    it takes with their words, or what reads them where they are the records'
+    own (a year), and the lookup it narrows by where that is not its name. One
+    whose values are read declares the ``pattern`` each is held to.
+    ``unasked`` is what the list keeps while neither it nor a search is asked."""
+
+    name: str
+    label: str
+    choices: Choices | Callable[[], Choices]
+    lookup: str = ""
+    pattern: str = ""
+    unasked: Q | None = None
+
+    def __post_init__(self) -> None:
+        if not self.lookup:
+            object.__setattr__(self, "lookup", self.name)
+        if callable(self.choices):
+            if not self.pattern:
+                raise ValueError(f"Filter {self.name!r} reads its values, so it declares the pattern they keep to.")
+            return
+        object.__setattr__(self, "choices", tuple(self.choices))
+        if not self.pattern:
+            object.__setattr__(self, "pattern", several_of(str(value) for value, _ in self.choices))
+
+    def options(self) -> tuple[tuple[str, str], ...]:
+        """Each value it takes as it is sent, and its words."""
+
+        return tuple(
+            (str(value), label) for value, label in (self.choices() if callable(self.choices) else self.choices)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ListToggle:
+    """A flag a list is narrowed by (``no_receipts=true``): its name, its
+    label, what it keeps in a sentence and as the condition that keeps it."""
+
+    name: str
+    label: str
+    description: str
+    keeps: Q
+
 
 @dataclass(frozen=True, slots=True)
 class ListRead:
@@ -460,7 +521,9 @@ class ListRead:
     its item's keys, and the API document types each item by it.
 
     A list that declares ``sorts`` takes ``sort``, one of their names, and is
-    read in the first where it is asked none and is not searched."""
+    read in the first where it is asked none and is not searched. Each of its
+    ``filters`` and ``toggles`` is a query field of its own, and ``totals``
+    reads what the rows it matched add up to, answered beside its page."""
 
     # It may come from an extension, so its result is checked at the call
     # (application.resources) rather than trusted from the annotation.
@@ -469,6 +532,9 @@ class ListRead:
     item: type
     fields: tuple[str, ...] = ()
     sorts: tuple[ListSort, ...] = ()
+    filters: tuple[ListFilter, ...] = ()
+    toggles: tuple[ListToggle, ...] = ()
+    totals: Callable[[Any], Mapping[str, Any]] | None = None
     # False for a list too long to count on every read: its pages say whether
     # more follow, and no total.
     counted: bool = True
@@ -476,32 +542,63 @@ class ListRead:
     def __post_init__(self) -> None:
         if not self.fields and is_typeddict(self.item):
             object.__setattr__(self, "fields", typed_keys(self.item))
-        if self.sorts:
-            object.__setattr__(self, "query", _sorted_by(self.query, self.sorts))
+        if self.sorts or self.filters or self.toggles:
+            object.__setattr__(self, "query", _asked_by(self))
 
     def ordering(self, name: str | None) -> tuple[str, ...]:
         """The ordering ``sort`` names; none for no name."""
 
         return next((sort.ordering for sort in self.sorts if sort.name == name), ())
 
+    def keeps(self, asked: Mapping[str, Any], *, searched: bool) -> Q:
+        """The condition the filters and toggles ``asked`` keep a row by."""
 
-def _sorted_by(query: type[BaseModel], sorts: tuple[ListSort, ...]) -> type[BaseModel]:
-    """``query`` taking ``sort``, its every value one of ``sorts``, so the API
-    document lists them and any other is refused."""
+        kept = Q()
+        for each in self.filters:
+            if values := asked.get(each.name):
+                kept &= Q(**{f"{each.lookup}__in": values.split(",")})
+            elif each.unasked is not None and not searched:
+                kept &= each.unasked
+        for toggle in self.toggles:
+            if asked.get(toggle.name):
+                kept &= toggle.keeps
+        return kept
 
-    if SORT_FIELD in query.model_fields:
-        raise ValueError(f"{query.__name__} declares {SORT_FIELD!r}, which its list's sorts derive.")
-    names = tuple(sort.name for sort in sorts)
-    words = (
-        f"The order the records come in; absent, the best match first for a search, else {lower_first(sorts[0].label)}."
-    )
-    choice: Any = Literal[names]
-    return create_model(
-        query.__name__,
-        __base__=query,
-        __doc__=query.__doc__,
-        sort=(Annotated[choice | None, Field(description=words)], None),
-    )
+
+def _asked_by(read: ListRead) -> type[BaseModel]:
+    """``read``'s query taking a field for each filter and toggle it declares,
+    and ``sort`` where it declares sorts, so the API document says each and any
+    value they do not take is refused."""
+
+    asked: dict[str, Any] = {
+        each.name: (
+            str | None,
+            Field(
+                default=None,
+                title=each.label,
+                max_length=2000,
+                pattern=each.pattern,
+                description=f"Only the records whose {lower_first(each.label)} is one of these, comma-separated; "
+                "absent, every one.",
+            ),
+        )
+        for each in read.filters
+    }
+    asked |= {
+        toggle.name: (bool, Field(default=False, title=toggle.label, description=toggle.description))
+        for toggle in read.toggles
+    }
+    if read.sorts:
+        names = tuple(sort.name for sort in read.sorts)
+        words = (
+            "The order the records come in; absent, the best match first for a search, else "
+            f"{lower_first(read.sorts[0].label)}."
+        )
+        choice: Any = Literal[names]
+        asked[SORT_FIELD] = (Annotated[choice | None, Field(description=words)], None)
+    if declared := sorted(asked.keys() & read.query.model_fields.keys()):
+        raise ValueError(f"{read.query.__name__} declares {declared}, which its list's declarations derive.")
+    return create_model(read.query.__name__, __base__=read.query, __doc__=read.query.__doc__, **asked)
 
 
 @dataclass(frozen=True, slots=True)
@@ -533,7 +630,12 @@ class ResourceSpec(Requires):
     @property
     def read_around(self) -> frozenset[str]:
         """The query fields the resource layer reads around the list's handler
-        and never passes to it: the page, the sort, and a searched kind's text."""
+        and never passes to it: the page, the sort, the filters and toggles,
+        and a searched kind's text."""
 
-        sorted_by = (SORT_FIELD,) if self.listing and self.listing.sorts else ()
-        return frozenset({PAGE_FIELD, *sorted_by, *((SEARCH_FIELD,) if self.search else ())})
+        read = self.listing
+        declared: list[str] = []
+        if read:
+            declared += [SORT_FIELD] if read.sorts else []
+            declared += [each.name for each in read.filters] + [each.name for each in read.toggles]
+        return frozenset({PAGE_FIELD, *declared, *((SEARCH_FIELD,) if self.search else ())})

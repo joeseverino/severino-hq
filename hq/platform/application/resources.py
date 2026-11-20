@@ -366,12 +366,15 @@ def list_resource(
     around = {field: asked.pop(field, None) for field in spec.read_around}
     # A searched kind's text is its search scope's, which ranks what it finds.
     text = around.get(SEARCH_FIELD)
+    searched = Search(spec.search.scope, text, principal) if spec.search and text else None
     scope = PageScope(
         around[PAGE_FIELD] or 1,
-        Search(spec.search.scope, text, principal) if spec.search and text else None,
+        searched,
         read.ordering(around.get(SORT_FIELD)),
         read.sorts[0].ordering if read.sorts else (),
         read.counted,
+        read.keeps(around, searched=searched is not None),
+        read.totals,
     )
     with paging(scope):
         result = read.reader(**asked, **_caller(spec, principal))

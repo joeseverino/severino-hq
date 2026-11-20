@@ -8,7 +8,7 @@ from django.core.exceptions import BadRequest, ImproperlyConfigured
 from .integration_specs import SEARCH_FIELD, ListRead, ResourceSpec
 from .page_reads import Remedy
 from .pages import PageMixin
-from .tables import TableColumn, ranked
+from .tables import TableColumn, ranked, typed
 from .ui import ended
 lazy from .resources import InvalidResourceInput, list_resource, resource_registry
 lazy from .security import web_principal
@@ -21,9 +21,8 @@ class ListPageMixin(PageMixin):
     """The table page of a resource kind: one page of the list its API and MCP
     read answer (``resources.list_resource``), searched, filtered, sorted and
     paged there, so a page and an agent's list agree row for row. The address
-    is the list's query, its search as ``q``; its toggles are the query's
-    flags, each labeled by its title, and its sorts the list's own. The view
-    declares how a row is drawn, never which rows."""
+    is the list's query, its search as ``q``; its filters, toggles and sorts
+    are the list's own. The view declares how a row is drawn, never which rows."""
 
     # The ``ResourceSpec`` whose list read draws the page, by its name.
     resource = ""
@@ -56,12 +55,13 @@ class ListPageMixin(PageMixin):
         return listing
 
     def list_query(self) -> dict[str, Any]:
-        """The list's query as the address asks it: each field it names, a page's worth."""
+        """The list's query as the address asks it: each field it names, a
+        filter's several values one list, a page's worth."""
 
         asked: dict[str, Any] = {"limit": self.page_size}
         for name in self.listing.query.model_fields:
-            value = self.request.GET.get(_SEARCH if name == SEARCH_FIELD else name, "").strip()
-            if value and name != "limit":
+            values = [value.strip() for value in self.request.GET.getlist(_SEARCH if name == SEARCH_FIELD else name)]
+            if (value := ",".join(value for value in values if value)) and name != "limit":
                 asked[name] = value
         return asked
 
@@ -76,7 +76,14 @@ class ListPageMixin(PageMixin):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        return {**context, "object_list": self.collection["items"], "table": self.table(), "pages": self.pages()}
+        rows = [self.row(item) for item in self.collection["items"]]
+        return {**context, "object_list": rows, "table": self.table(), "pages": self.pages()}
+
+    def row(self, item: dict[str, Any]) -> Any:
+        """One item as its row draws it: the item itself, or with what only
+        the page says of it beside (a state as its pill takes it)."""
+
+        return item
 
     def table(self) -> dict[str, Any]:
         """What the toolbar, the headings and the empty state draw."""
@@ -88,26 +95,37 @@ class ListPageMixin(PageMixin):
                 raise ImproperlyConfigured(
                     f"Column {column.label!r} sorts by {column.sort!r}, which its list never does."
                 )
+        filters = []
+        for each in listing.filters:
+            chosen = set(asked.get(each.name, "").split(",")) - {""}
+            options = [{"value": value, "label": label, "selected": value in chosen} for value, label in each.options()]
+            # A filter with nothing to choose (a year before any record has one) is left out.
+            if options:
+                filters.append(
+                    {"name": each.name, "label": each.label, "selected_count": len(chosen), "options": options}
+                )
         toggles = [
-            {"name": name, "label": field.title, "selected": bool(asked.get(name))}
-            for name, field in listing.query.model_fields.items()
-            if field.annotation is bool
+            {"name": toggle.name, "label": toggle.label, "selected": bool(asked.get(toggle.name))}
+            for toggle in listing.toggles
         ]
         query = self.request.GET.get(_SEARCH, "")
         relevance = [("", "Relevance")] if query.strip() else []
         default = listing.sorts[0].name if listing.sorts and not relevance else ""
+        model = self.spec.search.model if self.spec.search else None
         return {
             "query": query,
             "search_placeholder": self.table_search_placeholder,
-            "filters": [],
+            "filters": filters,
             "toggles": toggles,
             "sorts": listing.sorts,
             "sort_choices": [*relevance, *((sort.name, sort.label) for sort in listing.sorts)],
             "selected_sort": asked.get("sort", default),
-            "columns": ranked(self.table_columns),
+            "columns": ranked(typed(self.table_columns, model)),
             "selectable": self.table_selectable,
             "identifier": self.spec.identifier,
-            "active_count": sum(toggle["selected"] for toggle in toggles) + bool(query.strip()),
+            "active_count": sum(item["selected_count"] for item in filters)
+            + sum(toggle["selected"] for toggle in toggles)
+            + bool(query.strip()),
             "empty": self.table_empty or ended(f"No {self.spec.label.lower()}"),
             "empty_why": self.table_empty_why,
             "empty_remedy": self.table_empty_remedy,

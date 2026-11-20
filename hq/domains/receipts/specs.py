@@ -2,14 +2,14 @@
 
 from typing import Annotated, Literal, TypedDict
 
-from pydantic import Field
+from django.db.models import Q
 
 from hq.platform.application import receipts
 from hq.platform.application.answer_fields import PageUrl, UpdatedAt
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe, listed
 from hq.platform.application.domains import records_of
-from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ListSort, ResourceSpec
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ListSort, ListToggle, ResourceSpec
 from hq.platform.application.labels import adding
 from hq.platform.application.record_fields import Notes, RecordId
 from hq.platform.application.records import KEPT
@@ -63,25 +63,23 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
 
 class ReceiptQuery(BoundedQuery):
     query: SearchText = None
-    unlinked: bool = Field(
-        default=False,
-        title="No expense or asset",
-        description="True for only the receipts matched to no expense and no asset.",
-    )
+
+
+UNLINKED = ListToggle(
+    "unlinked",
+    "No expense or asset",
+    "True for only the receipts matched to no expense and no asset.",
+    Q(related_expense__isnull=True, related_asset__isnull=True),
+)
 
 
 # Each order the list is read in, the first where none is asked.
 SORTS = (
-    ListSort("-uploaded_at", "Recently uploaded"),
-    ListSort("uploaded_at", "Least recently uploaded"),
-    ListSort("vendor", "Vendor A–Z"),
-    ListSort("-vendor", "Vendor Z–A"),
-    ListSort("date", "Oldest receipt date"),
-    ListSort("-date", "Newest receipt date"),
-    ListSort("amount", "Lowest amount"),
-    ListSort("-amount", "Highest amount"),
-    ListSort("original_filename", "File A–Z"),
-    ListSort("-original_filename", "File Z–A"),
+    *ListSort.both("-uploaded_at", "Recently uploaded", "Least recently uploaded"),
+    *ListSort.both("vendor", "Vendor"),
+    *ListSort.both("date", "Oldest receipt date", "Newest receipt date"),
+    *ListSort.both("amount", "Lowest amount", "Highest amount"),
+    *ListSort.both("original_filename", "File"),
 )
 
 
@@ -129,7 +127,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Receipts",
             "Receipt metadata without file contents, storage paths, or URLs.",
             Capability.READ,
-            listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow, sorts=SORTS),
+            listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow, sorts=SORTS, toggles=(UNLINKED,)),
             detail_handler=receipts.get_receipt,
             identifier="id",
             identifier_type=RecordId,

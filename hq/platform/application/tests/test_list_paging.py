@@ -131,16 +131,19 @@ class EveryPageNamesTheOnesBesideItTests(TestCase):
         self.assertLessEqual({"calendar", "contact.submissions", "readings"}, walked_past)
 
     def test_every_declared_sort_pages_in_its_order(self):
-        sorted_by = {name: spec.listing.sorts for name, spec in resource_registry().items() if spec.listing}
-        self.assertTrue(any(sorted_by.values()))
-        for name, sorts in sorted_by.items():
-            for sort in sorts:
+        reads = {name: spec.listing for name, spec in resource_registry().items() if spec.listing}
+        self.assertTrue(any(read.sorts for read in reads.values()))
+        for name, read in reads.items():
+            for sort in read.sorts:
                 with self.subTest(name=name, sort=sort.name):
                     asked = {"sort": sort.name}
                     whole = list_resource(name, {**asked, "limit": MAX_PAGE_SIZE}, principal=READER, fields=["*"])
                     self.assertGreater(whole["count"], 1, "the estate holds too few rows to show an order")
-                    held = [_comparable(item[sort.name.removeprefix("-")]) for item in whole["items"]]
-                    self.assertEqual(held, sorted(held, reverse=sort.name.startswith("-")))
+                    # An order by one field its items carry is read off them.
+                    key = sort.name.removeprefix("-")
+                    if sort.ordering == (sort.name,) and key in read.fields:
+                        held = [_comparable(item[key]) for item in whole["items"]]
+                        self.assertEqual(held, sorted(held, reverse=sort.name.startswith("-")))
                     first = list_resource(name, {**asked, "limit": 1}, principal=READER, fields=["*"])
                     second = list_resource(
                         name, {**asked, "limit": 1, PAGE_FIELD: first["next"]}, principal=READER, fields=["*"]
@@ -150,6 +153,31 @@ class EveryPageNamesTheOnesBesideItTests(TestCase):
                         name, {**asked, "limit": 1, PAGE_FIELD: second["previous"]}, principal=READER, fields=["*"]
                     )
                     self.assertEqual(back["items"], first["items"])
+
+    def test_every_declared_filter_and_toggle_keeps_only_what_it_names(self):
+        narrowed = {
+            name: spec
+            for name, spec in resource_registry().items()
+            if spec.listing and (spec.listing.filters or spec.listing.toggles)
+        }
+        self.assertTrue(narrowed)
+        for name, spec in narrowed.items():
+            read, key = spec.listing, spec.identifier
+            whole = {item[key] for page in walked(name, {}) for item in page["items"]}
+            for each in read.filters:
+                chosen = [value for value, _ in each.options()[:2]]
+                with self.subTest(name=name, filter=each.name):
+                    kept = [item for page in walked(name, {each.name: ",".join(chosen)}) for item in page["items"]]
+                    # A filter named for a field keeps only the records holding a value asked.
+                    if each.name in read.fields:
+                        self.assertLessEqual({str(item[each.name]) for item in kept}, {*chosen})
+                    # One that keeps what the whole list leaves out reads past it.
+                    if each.unasked is None:
+                        self.assertLessEqual({item[key] for item in kept}, whole)
+            for toggle in read.toggles:
+                with self.subTest(name=name, toggle=toggle.name):
+                    kept = {item[key] for page in walked(name, {toggle.name: True}) for item in page["items"]}
+                    self.assertLessEqual(kept, whole)
 
 
 class DocumentationStatusPagingTests(TestCase):

@@ -10,12 +10,12 @@ refusal of an input that cannot narrow) are each defined once here.
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any, overload
 
 from django.conf import settings
-from django.db.models import FETCH_PEERS, FETCH_RAISE, QuerySet
+from django.db.models import FETCH_PEERS, FETCH_RAISE, Q, QuerySet
 from pydantic import ConfigDict
 lazy from django.utils import timezone
 
@@ -241,14 +241,17 @@ class Search:
 @dataclass(slots=True)
 class PageScope:
     """One list read's page, its search, the order its caller asked for and the
-    one its list declares first, whether it counts its rows, and, once a cut
-    claims it, whether more follow."""
+    one its list declares first, whether it counts its rows, the condition its
+    filters and toggles keep a row by, what reads the matched rows' totals,
+    and, once a cut claims it, whether more follow."""
 
     page: int = 1
     search: Search | None = None
     order: tuple[str, ...] = ()
     default: tuple[str, ...] = ()
     counted: bool = True
+    keeps: Q = field(default_factory=Q)
+    totals: Callable[[QuerySet], Mapping[str, Any]] | None = None
     claimed: bool = False
     more: bool = False
 
@@ -299,21 +302,25 @@ def page_of(
     scope, size = _claimed(), page_size(limit, maximum=maximum)
     start = (scope.page - 1) * size
     total: int | None
+    summed: dict[str, Any] = {}
     if isinstance(rows, QuerySet):
+        rows = rows.filter(scope.keeps)
         if scope.search is not None:
             rows = apply_search(
                 rows, scope=scope.search.scope, query=scope.search.text, principal=scope.search.principal
             )
+        if scope.totals is not None:
+            summed["totals"] = scope.totals(rows)
         rows = _ordered(rows, scope.order or (("_search_rank",) if scope.search else scope.default or order))
         cut = list(rows[start : start + size + 1])
         page, more = cut[:size], len(cut) > size
         total = start + len(page) if not more and (page or not start) else rows.count() if scope.counted else None
     else:
-        if scope.search is not None or scope.order:
-            raise RuntimeError("A list derived whole has its own search and order, so its query declares neither.")
+        if scope.search is not None or scope.order or scope.keeps or scope.totals is not None:
+            raise RuntimeError("A list derived whole has its own search, order and filters, so its read declares none.")
         page, more, total = list(rows[start : start + size]), start + size < len(rows), len(rows)
     scope.more = more
-    return {"items": page, "count": len(page), "total": total, "truncated": more}
+    return {"items": page, "count": len(page), "total": total, "truncated": more, **summed}
 
 
 def addressable(model, serialize, slug: str) -> dict[str, Any]:
