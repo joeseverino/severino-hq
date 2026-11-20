@@ -14,7 +14,7 @@ from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 from hq.platform.core.testing import operator
 
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, subject_of, web_principal
 from .test_agent_devices import (
@@ -129,9 +129,7 @@ class WhoMayRemoveTests(TestCase):
         _seen(AGENT)
 
     def test_it_is_held_to_the_block_s_holders(self):
-        registry = capability_registry()
-
-        self.assertEqual(registry[REMOVE].required_capabilities, registry[BLOCK].required_capabilities)
+        self.assertEqual(command_spec(REMOVE).required_capabilities, command_spec(BLOCK).required_capabilities)
 
     def test_no_credential_the_block_refuses_removes_an_agent(self):
         granted = frozenset(Capability)

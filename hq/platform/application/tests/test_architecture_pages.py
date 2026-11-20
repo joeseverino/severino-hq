@@ -169,13 +169,12 @@ class PageReadCapabilityTests(TestCase):
         runs requires. Each installed extension's routes, and the example
         plugin's."""
 
-        from hq.platform.application.capabilities import capability_registry
+        from hq.platform.application.capabilities import command_spec
         from hq.platform.application.pages import declared_runs, page_capabilities
         from hq.platform.application.plugins import installed_plugins
         from tests.fixtures.example_hq_plugin.plugin import plugin as example
 
         extensions = {plugin.id: plugin for plugin in (example, *installed_plugins()) if plugin.urlconf}
-        registry = capability_registry()
         wrong = []
         for extension in extensions.values():
             own = set(extension.operator_capabilities)
@@ -184,6 +183,6 @@ class PageReadCapabilityTests(TestCase):
                 if not reads_under & own:
                     wrong.append(f"{extension.id} {each.path}: reads under none of {sorted(own)}")
                 for name, _variant in declared_runs(each.pattern.callback):
-                    if needs := set(registry[name].required_capabilities) - reads_under:
+                    if needs := set(command_spec(name).required_capabilities) - reads_under:
                         wrong.append(f"{extension.id} {each.path}: runs {name}, which needs {sorted(needs)}")
         self.assertEqual(wrong, [])

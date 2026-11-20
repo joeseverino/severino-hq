@@ -16,7 +16,7 @@ from .. import github_profile
 from ..asks import REFRESHING
 from ..cadence import asked_at
 from ..cadence_testing import controller_arrived
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..freshness import RETRY_AFTER, cadence
 from ..security import Capability, Principal
 from .sentinel import SENTINEL
@@ -288,7 +288,7 @@ class PageTests(TestCase):
         response = self.client.post(reverse("watching_refresh"), form_keyed(), follow=True)
 
         self.assertRedirects(response, reverse("watching"))
-        self.assertIn(capability_registry()[github_profile.READ_NOW].requested("@example-user"), text(response))
+        self.assertIn(command_spec(github_profile.READ_NOW).requested("@example-user"), text(response))
         self.assertContains(response, "data-ask-status=")
         self.assertTrue(select(response, "aria-disabled", "true"))
         self.assertContains(response, REFRESHING)

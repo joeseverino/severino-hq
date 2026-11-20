@@ -12,7 +12,7 @@ from hq.domains.control_plane.models import (
 from hq.domains.projects.models import Project
 
 from .. import readings
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..field_masks import WHOLE_RECORD
 from ..integrations import integration_graph
 from ..resources import list_resource
@@ -108,14 +108,12 @@ class GatewayConnectionTests(TestCase):
         self.assertEqual(instances[0].endpoint, "https://api.weather.gov")
 
     def test_capabilities_emit_the_process_steps_the_connection_names(self):
-        registry = capability_registry()
-
         self.assertIn(
             "public API, which needs no credential",
-            " ".join(registry["project.refresh"].execution_notes),
+            " ".join(command_spec("project.refresh").execution_notes),
         )
         self.assertEqual(
-            registry["contact.submission.review"].subject_resource,
+            command_spec("contact.submission.review").subject_resource,
             "contact.submissions",
         )
 

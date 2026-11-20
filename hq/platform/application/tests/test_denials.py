@@ -11,7 +11,7 @@ from hq.platform.core.audit import stamped
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
 
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..denials import LABEL, record_denial
 from ..refusal_codes import Code
 from ..security import Capability, Principal
@@ -37,7 +37,7 @@ class AuthenticatedRefusalTests(TestCase):
         self.assertTrue(row.metadata["authenticated"])
         self.assertEqual(row.actor_label, "example-agent")
         # The log says what was refused as its button does.
-        self.assertIn(capability_registry()["project.create"].title, row.message)
+        self.assertIn(command_spec("project.create").title, row.message)
         self.assertNotIn("project.create", row.message)
 
     def test_every_authenticated_refusal_gets_its_own_row(self):

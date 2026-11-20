@@ -46,7 +46,7 @@ def _run(*tests: unittest.TestCase, **options: bool) -> unittest.TestResult:
 
 
 def _procedures() -> set[str]:
-    return {name for name in capability_registry() if runs_procedure(name)}
+    return {spec.name for spec in capability_registry() if runs_procedure(spec.name)}
 
 
 class ClassSetupStartsFreshTests(TestCase):
@@ -132,12 +132,12 @@ class ClassSetupStartsFreshTests(TestCase):
                     "hq.platform.application.integrations.record_capability_specs", return_value=()
                 ):
                     _compiled_integration_graph.cache_clear()
-                    seen["narrowed"] = set(capability_registry())
+                    seen["narrowed"] = {spec.name for spec in capability_registry()}
 
         class Reads(unittest.TestCase):
             @classmethod
             def setUpClass(cls):
-                seen["set up"] = set(capability_registry())
+                seen["set up"] = {spec.name for spec in capability_registry()}
 
             def test_reads_its_commands(self):
                 pass

@@ -117,19 +117,19 @@ def _refused_at(errors: list[dict[str, Any]], path: tuple[Any, ...]) -> bool:
 class ClosedCommandTests(SimpleTestCase):
     def test_every_command_refuses_an_unknown_field_at_every_depth(self):
         open_levels = []
-        for name, spec in sorted(capability_registry().items()):
+        for spec in capability_registry():
             schema = capability_schema(spec)
             declared_open = _declared_open(TypeAdapter(spec.command_type).core_schema)
             for path, payload, node in _objects(schema, schema.get("$defs", {})):
                 if frozenset(node["properties"]) in declared_open:
                     continue
-                where = f"{name} at {'.'.join(map(str, path)) or 'the top'}"
+                where = f"{spec.name} at {'.'.join(map(str, path)) or 'the top'}"
                 if node.get("additionalProperties") is not False:
                     open_levels.append(f"{where}: its schema is open")
                 try:
                     validate_command(spec, payload)
                 except ValidationError as exc:
-                    details = pydantic_refusal(name, exc.errors()).details
+                    details = pydantic_refusal(spec.name, exc.errors()).details
                     if _refused_at(details, path):
                         continue
                 open_levels.append(f"{where}: an unknown field is not refused")

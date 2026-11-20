@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
-from hq.platform.application.capabilities import Ran, capability_registry
+from hq.platform.application.capabilities import Ran, command_spec
 from hq.platform.application.command_targets import capability_target_options
 from hq.platform.application.markup_testing import elements, links, select, text, texts, with_class, within
 from hq.platform.application.security import Capability, Principal
@@ -88,9 +88,7 @@ class CommandViewTests(SignedInTestCase):
     def test_the_page_is_a_title_what_it_changes_and_one_button(self):
         response = self.client.get("/commands/project.create/")
 
-        self.assertEqual(
-            [button.words for button in submits(response)], [capability_registry()["project.create"].title]
-        )
+        self.assertEqual([button.words for button in submits(response)], [command_spec("project.create").title])
         self.assertNotIn("project.create", text(response))
         for built in ("manage_projects", "JSON Schema", "Strict input", "Run command", "additionalProperties"):
             self.assertNotContains(response, built)
@@ -105,7 +103,7 @@ class CommandViewTests(SignedInTestCase):
             with self.subTest(command=name):
                 page = self.client.get(f"/commands/{name}/")
                 self.assertFalse(with_class(page, "page-lede"))
-                self.assertNotIn(capability_registry()[name].summary, text(page))
+                self.assertNotIn(command_spec(name).summary, text(page))
 
     def test_the_trail_names_where_the_form_lives(self):
         response = self.client.get("/commands/project.create/")
@@ -120,7 +118,7 @@ class CommandViewTests(SignedInTestCase):
         Playbooks) leads back to the page it declares, by its navigation's
         name, from its trail and its Cancel."""
 
-        spec = capability_registry()["automation.source.refresh"]
+        spec = command_spec("automation.source.refresh")
         home = reverse("control_plane:playbooks")
         response = self.client.get(f"/commands/{spec.name}/")
 
@@ -197,9 +195,7 @@ class CommandViewTests(SignedInTestCase):
             self,
             sizes=(1, 5),
             arrange=arrange,
-            draw=lambda _count: capability_target_options(
-                capability_registry()["certificate.renew"], principal=principal
-            ),
+            draw=lambda _count: capability_target_options(command_spec("certificate.renew"), principal=principal),
             rows=lambda options: len(options or ()),
         )
 

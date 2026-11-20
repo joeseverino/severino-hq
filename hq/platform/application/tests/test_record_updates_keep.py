@@ -15,7 +15,7 @@ from hq.platform.core.testing import SignedInTestCase, operator
 
 from ..action_links import command_url
 from ..assets import serialize_asset
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..integration_specs import capability_schema
 from ..plugin_testing import form_keyed
 from ..security import OPERATOR_CAPABILITIES, Principal
@@ -231,22 +231,19 @@ class TheCommandFormKeepsWhatIsLeftBlankTests(TestCase):
 
 class TheSchemaSaysAnUpdateKeepsTests(SimpleTestCase):
     def test_an_asset_update_says_a_field_left_out_keeps_its_value_and_shows_no_default(self):
-        spec = capability_registry()["asset.update"]
+        spec = command_spec("asset.update")
 
         self.assertIn(KEPT, spec.summary)
         properties = capability_schema(spec)["properties"]
         self.assertEqual([name for name, field in properties.items() if "default" in field], [])
 
     def test_an_update_requires_nothing_it_is_sent_and_a_create_still_requires_its_name(self):
-        registry = capability_registry()
-
-        self.assertNotIn("required", capability_schema(registry["asset.update"]))
-        self.assertEqual(capability_schema(registry["asset.create"])["required"], ["item_name"])
-        self.assertEqual(capability_schema(registry["receipt.replace"])["required"], ["file"])
+        self.assertNotIn("required", capability_schema(command_spec("asset.update")))
+        self.assertEqual(capability_schema(command_spec("asset.create"))["required"], ["item_name"])
+        self.assertEqual(capability_schema(command_spec("receipt.replace"))["required"], ["file"])
 
     def test_an_upsert_says_what_it_keeps_and_a_create_shows_its_defaults(self):
-        registry = capability_registry()
-        self.assertIn("a field left out keeps its value", registry["asset.upsert"].summary)
-        self.assertNotIn(KEPT, registry["asset.create"].summary)
-        properties = capability_schema(registry["asset.create"])["properties"]
+        self.assertIn("a field left out keeps its value", command_spec("asset.upsert").summary)
+        self.assertNotIn(KEPT, command_spec("asset.create").summary)
+        properties = capability_schema(command_spec("asset.create"))["properties"]
         self.assertEqual(properties["business_use_percentage"]["default"], 100)

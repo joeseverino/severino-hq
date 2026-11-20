@@ -13,7 +13,7 @@ from hq.platform.core.testing import operator
 from ..approval_review import asked, preview
 from ..approvals import AUDIT_LABEL, DECLARATIONS
 from ..attention import _asked_change, waiting_for_approval
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import capability_registry, command_spec, execute_capability
 from ..integration_specs import capability_schema
 from ..projects import DEPENDENCY_UPDATES
 from ..security import Capability, Principal
@@ -152,7 +152,7 @@ class HeldSentenceTests(TestCase):
         self.assertNotIn("example-dns", str(said))
 
     def test_a_switch_is_said_as_the_side_it_sets(self):
-        spec = capability_registry()[DEPENDENCY_UPDATES]
+        spec = command_spec(DEPENDENCY_UPDATES)
         for value, variant in ((True, "on"), (False, "off")):
             with self.subTest(value=value):
                 said = str(asked(self.held(DEPENDENCY_UPDATES, {"dependency_updates": value})))
@@ -165,14 +165,16 @@ class EveryCapabilityPreviewTests(TestCase):
     request is described in words, created, changed or deleted."""
 
     def test_every_record_capability_previews_in_words(self):
-        for name, spec in capability_registry().items():
+        for spec in capability_registry():
             if spec.subject_resource == DECLARATIONS:
                 continue  # a declaration is compared by path, as a document
             payload = {field: _sample(schema) for field, schema in capability_schema(spec)["properties"].items()}
             # A deletion is shown by what the record holds now.
             baseline = payload if spec.effect == "destructive" else {}
             for target in ("", "example"):
-                shown = preview(ApprovalRequest(capability=name, target=target, payload=payload, baseline=baseline))
+                shown = preview(
+                    ApprovalRequest(capability=spec.name, target=target, payload=payload, baseline=baseline)
+                )
                 said = [_asked_change(shown)] + [part for row in shown.rows for part in (row.before, row.after)]
-                with self.subTest(capability=name, target=target):
+                with self.subTest(capability=spec.name, target=target):
                     self.assertEqual(dumped(" ".join(said)), [], said)

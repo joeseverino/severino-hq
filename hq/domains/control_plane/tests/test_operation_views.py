@@ -9,7 +9,7 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.approval_review import asked, preview
 from hq.platform.application.approvals import ApproveCommand, approve
-from hq.platform.application.capabilities import capability_registry, execute_capability
+from hq.platform.application.capabilities import command_spec, execute_capability
 from hq.platform.application.capability_policy import Rule
 from hq.platform.application.contracts import Effect
 from hq.platform.application.markup_testing import select
@@ -164,7 +164,6 @@ class ConfirmedVerbTests(TestCase):
         operator(self.client)
 
     def test_a_verb_is_confirmed_on_a_page_of_its_own_exactly_when_its_capability_is_destructive(self):
-        registry = capability_registry()
         pages = {action: _verb_url(action) for action in ACTION_CAPABILITY}
         pages = {action: url for action, url in pages.items() if url}
         confirmed = set()
@@ -174,7 +173,9 @@ class ConfirmedVerbTests(TestCase):
                 self.assertIn(response.status_code, (200, 405))
             if response.status_code == 200:
                 confirmed.add(action)
-        destructive = {action for action in pages if registry[ACTION_CAPABILITY[action]].effect is Effect.DESTRUCTIVE}
+        destructive = {
+            action for action in pages if command_spec(ACTION_CAPABILITY[action]).effect is Effect.DESTRUCTIVE
+        }
 
         self.assertIn(OperationRequest.Action.STOP, confirmed)
         self.assertEqual(confirmed, destructive)

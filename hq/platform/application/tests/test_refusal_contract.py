@@ -47,7 +47,7 @@ class CapabilityFailureTests(TestCase):
             raise raised
 
         spec = CapabilitySpec("example.records.update", "Change.", "read", Capability.READ, ExampleCommand, handler)
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             return execute_capability(spec.name, {}, principal=principal or cli_principal())
 
     def test_an_exception_no_handler_expected_is_operation_failed_and_logged_with_its_traceback(self):

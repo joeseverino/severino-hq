@@ -20,7 +20,7 @@ def _written() -> dict[str, int]:
 class RefusedAtTheRunnerTests(TestCase):
     def test_a_caller_without_a_required_capability_is_refused_and_nothing_is_written(self):
         held = operator_capabilities()
-        for spec in capability_registry().values():
+        for spec in capability_registry():
             for capability in spec.required_capabilities:
                 with self.subTest(capability=spec.name, requires=str(capability)):
                     caller = Principal("example-operator", "web", held - {capability})

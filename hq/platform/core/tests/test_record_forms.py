@@ -12,7 +12,7 @@ from django.views.generic import CreateView
 
 from hq.domains.assets.models import Asset
 from hq.domains.projects.models import Project
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import command_spec
 from hq.platform.application.describe import meanings
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
@@ -53,7 +53,7 @@ class RecordFormTests(SignedInTestCase):
         for route, capability in pages.items():
             with self.subTest(route=route):
                 page = self.client.get(reverse(route))
-                spec = capability_registry()[capability]
+                spec = command_spec(capability)
 
                 # Its words, or a mode of them its declaration names.
                 (said,) = submits(page)
@@ -67,7 +67,7 @@ class RecordFormTests(SignedInTestCase):
                 page = self.client.get(reverse(route))
                 form = page.context["form"]
 
-                said = meanings(capability_registry()[capability].command_type)
+                said = meanings(command_spec(capability).command_type)
                 shown = {name: help_of(page, name) for name in said if name in form.fields}
                 self.assertTrue(shown)
                 # A choice with nothing to choose says so after it.

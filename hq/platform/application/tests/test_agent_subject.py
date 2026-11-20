@@ -25,7 +25,7 @@ from .. import agent_admission, agent_registry, roles
 from ..agent_access import SET_AGENT_BLOCK, refusal
 from ..agent_activity import standings
 from ..approvals import ApprovalError, ApproveCommand, approve, own_held_request, pending
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..capability_policy import Rule, columns, decide, set_rule
 from ..controller import claim_next_operation
 from ..linked_accounts import bind_sign_in, sign_in_subject
@@ -66,7 +66,7 @@ class OneSubjectPerAgentAndPersonTests(TestCase):
         self.assertEqual(len({standing.subject for standing in standings()}), 2)
 
     def test_annas_on_rule_consents_for_anna_alone(self):
-        deleting = capability_registry()["project.delete"]
+        deleting = command_spec("project.delete")
         set_rule(subject=self.column_of(self.anna).subject, spec=deleting, rule=Rule.ALLOW, user=self.anna)
 
         self.assertEqual(decide(deleting, self.as_anna, {}, None).rule, Rule.ALLOW)

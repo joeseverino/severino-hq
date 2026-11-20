@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 
 from django.test import SimpleTestCase
 
-from ..capabilities import capability_registry, describe_capabilities
+from ..capabilities import capability_registry, capability_spec, command_spec, describe_capabilities
 from ..capability_policy import agents_may_hold
 from ..integration_specs import CapabilitySpec
 from ..plugin_testing import installed, sibling
@@ -79,17 +79,15 @@ class CatalogTests(SimpleTestCase):
         # caller's flag to draw.
         bare = Principal("example-api", "api", frozenset())
         self.assertIn("project.create", _listed(bare))
-        self.assertFalse(bare.permits(*capability_registry()["project.create"].required_capabilities))
+        self.assertFalse(bare.permits(*command_spec("project.create").required_capabilities))
 
     def test_the_catalog_and_the_runner_agree_on_every_capability(self):
         with installed(_an_extension()):
-            self.assertIn("example.catalog.run", capability_registry())
+            self.assertIsNotNone(capability_spec("example.catalog.run"))
             self._agree_on_every_capability()
 
     def test_a_persons_own_settings_are_listed_only_to_a_token_a_person_signed_in(self):
-        personal = [
-            spec.name for spec in capability_registry().values() if set(PERSONAL) & set(spec.required_capabilities)
-        ]
+        personal = [spec.name for spec in capability_registry() if set(PERSONAL) & set(spec.required_capabilities)]
         self.assertTrue(personal)
         for interface in AGENT_SURFACES:
             machine, signed_in = _as(interface), _as(interface, person_key="example-key")
@@ -98,7 +96,7 @@ class CatalogTests(SimpleTestCase):
                 with self.subTest(interface=interface, capability=name):
                     self.assertNotIn(name, machine_listed)
                     self.assertIn(name, signed_in_listed)
-                    needed = capability_registry()[name].required_capabilities
+                    needed = command_spec(name).required_capabilities
                     self.assertFalse(machine.permits(*needed))
                     self.assertTrue(signed_in.permits(*needed))
 
@@ -108,7 +106,7 @@ class CatalogTests(SimpleTestCase):
             *(_as(interface, person_key="example-key") for interface in AGENT_SURFACES),
         ):
             listed = _listed(principal)
-            for spec in capability_registry().values():
+            for spec in capability_registry():
                 with self.subTest(interface=principal.interface, person=principal.person_key, capability=spec.name):
                     self.assertEqual(spec.name in listed, spec.permitted_to(principal))
 
@@ -143,6 +141,6 @@ class OnePredicateTests(SimpleTestCase):
 
     def test_the_agent_policy_page_offers_a_rule_only_where_an_agent_catalog_lists_it(self):
         agent_listed = set().union(*(_listed(_as(surface, person_key="example-key")) for surface in AGENT_SURFACES))
-        for spec in capability_registry().values():
+        for spec in capability_registry():
             with self.subTest(capability=spec.name):
                 self.assertEqual(agents_may_hold(spec), spec.name in agent_listed)

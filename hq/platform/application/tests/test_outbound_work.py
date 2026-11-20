@@ -38,7 +38,7 @@ from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.platform.application import host_work, outbound_work
-from hq.platform.application.capabilities import capability_registry, execute_capability
+from hq.platform.application.capabilities import capability_spec, command_spec, execute_capability
 from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import requested
 from hq.platform.application.markup_testing import elements
@@ -257,7 +257,7 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
 
 class TheCapabilityIsDerivedTests(ComposedExample):
     def test_the_declaration_is_a_capability_every_adapter_can_ask_through(self):
-        spec = capability_registry()[example.LOOKUP]
+        spec = command_spec(example.LOOKUP)
 
         self.assertEqual((spec.effect, spec.target_kind, spec.target_label), ("remote_write", "key", "Note"))
         self.assertEqual(spec.required_capabilities, ("notes.write",))
@@ -591,7 +591,7 @@ class HostWorkTests(TestCase):
     def test_it_is_offered_to_nobody(self):
         with host_declares(own()):
             self.assertNotIn("example.work", {spec.name for spec in outbound_work.capability_specs()})
-            self.assertNotIn("example.work", capability_registry())
+            self.assertIsNone(capability_spec("example.work"))
             with self.assertRaises(LookupError):
                 ask("example.work")
             with self.assertRaises(ImproperlyConfigured):

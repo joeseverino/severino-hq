@@ -54,7 +54,7 @@ class FormTypeTests(TestCase):
         request = RequestFactory().post("/example/plan/", {RETRY_KEY_FIELD: key})
         request.user = self.person
         SessionMiddleware(lambda request: HttpResponse()).process_request(request)
-        with commands_registered({self.spec.name: self.spec}):
+        with commands_registered(self.spec):
             return run_posted(request, self.spec.name, payload).answer
 
     def test_a_forms_text_runs_its_command_in_the_commands_types(self):
@@ -70,7 +70,7 @@ class FormTypeTests(TestCase):
         self.assertEqual(self.ran, [])
 
     def test_an_agents_text_for_a_number_is_still_refused(self):
-        with commands_registered({self.spec.name: self.spec}):
+        with commands_registered(self.spec):
             answer = execute_capability(self.spec.name, AS_POSTED, principal=cli_principal())
 
         self.assertEqual(answer["error"]["code"], "invalid_input")

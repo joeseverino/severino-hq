@@ -167,7 +167,7 @@ class ProcedurePageTests(TestCase):
         playbook, and a held run's sentence names it so too."""
 
         from hq.platform.application.automation_adoption import playbook_titles
-        from hq.platform.application.capabilities import capability_registry
+        from hq.platform.application.capabilities import command_spec
 
         titles = playbook_titles()
         self.assertTrue(titles)
@@ -181,7 +181,7 @@ class ProcedurePageTests(TestCase):
                     if element.attrs.get("type") == "submit"
                 ]
                 self.assertEqual(buttons, [title])
-                self.assertIn(title, capability_registry()[f"automation.{operation_id}.run"].wanted())
+                self.assertIn(title, command_spec(f"automation.{operation_id}.run").wanted())
 
     def test_an_agent_reads_whether_its_run_waits_and_the_page_says_none_of_it(self):
         """Whether an agent's run waits for a person is in the notes
@@ -189,13 +189,13 @@ class ProcedurePageTests(TestCase):
 
         from hq.platform.application.approvals import no_rule_allows
         from hq.platform.application.automation_adoption import playbook_titles
-        from hq.platform.application.capabilities import capability_registry
+        from hq.platform.application.capabilities import command_spec
 
         waits_note = "When an agent asks, the run waits for an operator's approval."
         waits = set()
         for operation_id in playbook_titles():
             with self.subTest(procedure=operation_id):
-                spec = capability_registry()[f"automation.{operation_id}.run"]
+                spec = command_spec(f"automation.{operation_id}.run")
                 waits.add(no_rule_allows(spec))
                 self.assertEqual(waits_note in spec.execution_notes, no_rule_allows(spec))
                 page = self.page(operation_id)

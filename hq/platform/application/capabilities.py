@@ -101,10 +101,11 @@ def command_spec(name: str) -> CapabilitySpec:
     return spec
 
 
-def capability_registry() -> dict[str, CapabilitySpec]:
-    """Every command, at the catalog adopted now; one command is ``capability_spec``."""
+def capability_registry() -> tuple[CapabilitySpec, ...]:
+    """Every command, at the catalog adopted now. It is walked, never
+    searched: one command is ``capability_spec``'s."""
 
-    return dict(integration_graph().capabilities)
+    return tuple(integration_graph().capabilities.values())
 
 
 class CapabilitySummary(TypedDict):
@@ -158,14 +159,14 @@ def _reachable(principal: Principal, *, name: str = "", resource: str = "") -> l
     ``infrastructure.resource.reconcile``), so a filter never matches half a word; one that names nothing is refused.
     """
 
-    graph, name, resource = integration_graph(), name.strip(), resource.strip()
+    name, resource = name.strip(), resource.strip()
     if name and not DOTTED_NAME.match(name):
         raise InvalidCapabilityQuery("capabilities: name is a dotted capability name or a prefix of one.")
-    if resource and resource not in graph.resources:
+    if resource and resource not in held_graph().resources:
         raise InvalidCapabilityQuery("HQ has no list by that name. describe_resources names each one.")
     return [
         spec
-        for spec in graph.capabilities.values()
+        for spec in capability_registry()
         if (not name or spec.name == name or spec.name.startswith(f"{name}."))
         and (not resource or spec.subject_resource == resource)
         and could_ever_hold(principal, spec.required_capabilities)

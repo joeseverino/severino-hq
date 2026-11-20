@@ -92,15 +92,15 @@ def reaching_a_record() -> list[tuple[str, object, set[str]]]:
     """
 
     reached = []
-    for name, spec in capability_registry().items():
-        if not may_be_held_by_default(spec) or name in COPIES_LIVE:
+    for spec in capability_registry():
+        if not may_be_held_by_default(spec) or spec.name in COPIES_LIVE:
             continue
         if not could_hold("mcp", spec.required_capabilities):
             continue
         fields = set(capability_schema(spec).get("properties", {}))
         if spec.target_kind is None and "kind" not in fields:
             continue
-        reached.append((name, spec, fields))
+        reached.append((spec.name, spec, fields))
     return reached
 
 

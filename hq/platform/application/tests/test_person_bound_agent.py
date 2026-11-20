@@ -18,7 +18,7 @@ from ..appearance import SET_THEME
 from ..approvals import ApproveCommand, approve
 from ..calendar_entries import calendar_choices
 from ..calendar_specs import CHOOSE_SOURCE
-from ..capabilities import capability_registry, describe_capabilities, execute_capability
+from ..capabilities import capability_registry, command_spec, describe_capabilities, execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
 from ..pins import CHOOSE, MOVE, PIN, SERVICE, ordered
 from ..security import agent_subject, web_principal
@@ -90,8 +90,8 @@ class PersonBoundAgentTests(TestCase):
 
     def test_a_machines_token_is_refused_them_and_never_offered_them(self):
         personal = [
-            name
-            for name, spec in capability_registry().items()
+            spec.name
+            for spec in capability_registry()
             if set(PERSONAL.split()) & {str(needed) for needed in spec.required_capabilities}
         ]
         self.assertTrue(personal)
@@ -103,7 +103,7 @@ class PersonBoundAgentTests(TestCase):
             for name in personal:
                 with self.subTest(interface=interface, capability=name):
                     self.assertFalse(listed.get(name, False))
-                    self.assertFalse(machine.permits(*capability_registry()[name].required_capabilities))
+                    self.assertFalse(machine.permits(*command_spec(name).required_capabilities))
         answer = _run(PIN, {"kind": SERVICE, "key": ONE}, _machine())
 
         self.assertEqual(answer["error"]["code"], "forbidden")

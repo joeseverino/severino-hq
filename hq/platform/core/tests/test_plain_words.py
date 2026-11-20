@@ -346,7 +346,7 @@ def command_labels() -> list[tuple[str, str]]:
 
     return [
         (where(spec), str(field.label))
-        for _name, spec in sorted(capability_registry().items())
+        for spec in sorted(capability_registry(), key=lambda spec: spec.name)
         for field in command_form_class(spec).base_fields.values()
         if field.label and not isinstance(field.widget, forms.HiddenInput)
     ]

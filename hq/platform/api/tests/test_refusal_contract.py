@@ -7,7 +7,7 @@ from unittest import mock
 
 from django.test import TestCase, override_settings
 
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.integration_testing import commands_registered
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests import audit_rows
@@ -26,9 +26,8 @@ def _denials(since: int = 0):
 def _failing(name: str, raised: Exception):
     """The registry with ``name``'s handler replaced by one that raises ``raised``."""
 
-    registry = capability_registry()
-    registry[name] = replace(registry[name], handler=mock.Mock(side_effect=raised))
-    return commands_registered(registry)
+    failing = replace(command_spec(name), handler=mock.Mock(side_effect=raised))
+    return commands_registered(*(failing if spec.name == name else spec for spec in capability_registry()))
 
 
 @override_settings(

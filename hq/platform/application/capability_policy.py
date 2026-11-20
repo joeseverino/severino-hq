@@ -300,7 +300,7 @@ def matrix(current: dict[tuple[str, str], str] | None = None) -> tuple[tuple[Col
     grants = {column.subject: column.identity.granted for column in cols}
     current = rules() if current is None else current
     grouped: dict[str, list] = {}
-    for spec in capabilities.capability_registry().values():
+    for spec in capabilities.capability_registry():
         if agents_may_hold(spec):
             grouped.setdefault(_subject_label(_subject(spec)), []).append(spec)
     groups = []
@@ -419,11 +419,10 @@ def apply_changes(command: PolicyCommand, *, principal: Principal) -> PolicyAppl
     """
 
     user = person(principal)
-    registry = capabilities.capability_registry()
     current = rules()
     changed, problems = 0, []
     for cell in command.rules:
-        spec = registry.get(cell.capability)
+        spec = capabilities.capability_spec(cell.capability)
         if spec is None:
             problems.append(f"{cell.capability} is no longer something HQ can do.")
             continue

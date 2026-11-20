@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from django.test import SimpleTestCase
 
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, capability_spec, command_spec
 from hq.platform.application.command_forms import _field_for_schema, command_form_class
 from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import fields
@@ -13,15 +13,14 @@ from hq.platform.application.json_schemas import fields
 
 class CapabilityCommandFormTests(SimpleTestCase):
     def test_destructive_and_infrastructure_effects_require_human_confirmation(self):
-        registry = capability_registry()
         for name in ("project.delete", "certificate.renew"):
             with self.subTest(name=name):
-                form_class = command_form_class(registry[name])
+                form_class = command_form_class(command_spec(name))
                 self.assertIn("__confirm_effect", form_class.base_fields)
                 self.assertTrue(form_class.base_fields["__confirm_effect"].required)
 
     def test_ordinary_write_commands_do_not_invent_confirmation(self):
-        form_class = command_form_class(capability_registry()["project.create"])
+        form_class = command_form_class(command_spec("project.create"))
 
         self.assertNotIn("__confirm_effect", form_class.base_fields)
 
@@ -36,7 +35,7 @@ class CapabilityCommandFormTests(SimpleTestCase):
             tone: Annotated[str, Choices((("plain", "Plain words"), ("terse", "Terse")))]
 
         declared = _field_for_schema("tone", command_schema(ExampleCommand)["properties"]["tone"], required=True)
-        modeled = command_form_class(capability_registry()["asset.create"]).base_fields["payment_method"]
+        modeled = command_form_class(command_spec("asset.create")).base_fields["payment_method"]
 
         self.assertEqual(list(declared.choices), [("plain", "Plain words"), ("terse", "Terse")])
         self.assertIn(("", "Not set"), list(modeled.choices))
@@ -88,8 +87,8 @@ class CapabilityCommandFormTests(SimpleTestCase):
         # Every registered command's form, an extension's in the composed suite.
         client_words = re.compile(r"`|\bnull\b|ISO 8601|\bempty (?:when|for)\b")
         said = [
-            f"{name}.{field_name}: {field.help_text}"
-            for name, spec in sorted(capability_registry().items())
+            f"{spec.name}.{field_name}: {field.help_text}"
+            for spec in sorted(capability_registry(), key=lambda spec: spec.name)
             for field_name, field in command_form_class(spec).base_fields.items()
             if client_words.search(str(field.help_text or ""))
         ]
@@ -146,17 +145,16 @@ class CapabilityCommandFormTests(SimpleTestCase):
                 and not schema.get(UPLOAD)
             )
 
-        registry = capability_registry()
         shown, as_json = [], []
-        for name, spec in sorted(registry.items()):
+        for spec in capability_registry():
             schema = command_schema(spec.command_type)
             for field in command_form_class(spec)():
                 if field.value() == "null":
-                    shown.append(f"{name}: {field.name}")
+                    shown.append(f"{spec.name}: {field.name}")
                 if isinstance(field.field, forms.JSONField) and closed(declared(schema, field.name)):
-                    as_json.append(f"{name}: {field.name}")
+                    as_json.append(f"{spec.name}: {field.name}")
 
-        self.assertIn("automation.example.maintenance.run", registry)
+        self.assertIsNotNone(capability_spec("automation.example.maintenance.run"))
         self.assertEqual(shown, [], "A field holding nothing is drawn blank, never as JSON's null.")
         self.assertEqual(
             as_json, [], "An object whose schema names each of its fields is drawn as those fields, never as JSON."
@@ -212,7 +210,7 @@ class CapabilityCommandFormTests(SimpleTestCase):
     def test_a_file_field_is_picked_as_a_file_and_sent_as_the_command_takes_it(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
 
-        form_class = command_form_class(capability_registry()["receipt.upload"])
+        form_class = command_form_class(command_spec("receipt.upload"))
         form = form_class(
             {"amount": "1.00"},
             {"file": SimpleUploadedFile("example.pdf", b"%PDF-1.4", content_type="application/pdf")},

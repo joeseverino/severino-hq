@@ -14,7 +14,7 @@ from hq.platform.core.models import AgentIdentity
 from hq.platform.core.testing import AGENT, MCP_READER, operator
 
 from ..automation_runs import CANCEL
-from ..capabilities import capability_registry, run_capability
+from ..capabilities import capability_registry, capability_spec, command_spec, run_capability
 from ..capability_policy import Rule, matrix, set_rule
 from ..controller import claim_next_operation
 from ..security import Capability, Principal, cli_principal
@@ -155,11 +155,10 @@ class AgentAskedRunTests(RunTestCase):
                 self.assert_held(name)
 
     def test_no_agent_rule_can_allow_a_change(self):
-        registry = capability_registry()
         for name in self.CHANGES:
             with self.subTest(name):
                 with self.assertRaises(ValueError):
-                    set_rule(subject=AGENT.actor, spec=registry[name], rule=Rule.ALLOW, user=self.user)
+                    set_rule(subject=AGENT.actor, spec=command_spec(name), rule=Rule.ALLOW, user=self.user)
                 # A rule stored past that refusal still lifts nothing.
                 CapabilityRule.objects.update_or_create(
                     subject=AGENT.actor, capability=name, defaults={"rule": Rule.ALLOW}
@@ -447,12 +446,10 @@ class CapabilityShapeTests(RunTestCase):
             manifest(id=LOGS, effect="read", retry="safe"),
             manifest(id="example.wipe", effect="destructive"),
         )
-        registry = capability_registry()
-
         effects = {
-            name: (registry[name].effect, registry[name].required_capabilities)
-            for name in registry
-            if name.startswith("automation.") and name.endswith(".run")
+            spec.name: (spec.effect, spec.required_capabilities)
+            for spec in capability_registry()
+            if spec.name.startswith("automation.") and spec.name.endswith(".run")
         }
 
         self.assertEqual(
@@ -467,4 +464,4 @@ class CapabilityShapeTests(RunTestCase):
     def test_a_procedure_no_longer_supplied_is_no_longer_a_command(self):
         self.supply()
 
-        self.assertNotIn(RESTART_RUN, capability_registry())
+        self.assertIsNone(capability_spec(RESTART_RUN))

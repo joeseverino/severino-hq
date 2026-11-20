@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.utils import timezone
 from mcp import Client
 
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import command_spec
 from hq.platform.application.finding_model import Finding
 from hq.platform.application.finding_steps import Press
 from hq.platform.application.findings import RULES, derive_findings
@@ -175,10 +175,9 @@ class FindingActionsTests(TestCase):
         for call, result in zip(reads, answered, strict=True):
             with self.subTest(call=call):
                 self.assertFalse(result.is_error, result.structured_content)
-        registry = capability_registry()
         for arguments in commands:
             with self.subTest(command=arguments):
-                spec = registry[arguments["name"]]
+                spec = command_spec(arguments["name"])
                 # A target exactly where the command takes one, or execute_capability refuses it.
                 self.assertEqual(arguments.get("target") is not None, bool(spec.target_kind))
 

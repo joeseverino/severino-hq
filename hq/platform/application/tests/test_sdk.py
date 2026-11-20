@@ -151,7 +151,7 @@ class AuditSdkTests(TestCase):
         spec = CapabilitySpec("example.import", "Import examples.", "remote_write", "example.write", _Nothing, handler)
         principal = Principal("example-client", "cli", frozenset({"example.write"}))
 
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             self.assertTrue(execute_capability(spec.name, {}, principal=principal)["ok"])
 
         event = AuditLog.objects.get(object_type="example.rows")

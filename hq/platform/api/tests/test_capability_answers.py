@@ -72,7 +72,7 @@ def _resolved(document: dict, value: dict) -> dict:
 
 class CapabilityAnswerTests(SimpleTestCase):
     def test_every_host_capability_names_the_shape_it_answers(self):
-        host = [spec for spec in capability_registry().values() if spec.handler.__module__.startswith("hq.")]
+        host = [spec for spec in capability_registry() if spec.handler.__module__.startswith("hq.")]
 
         self.assertTrue(host)
         self.assertEqual(

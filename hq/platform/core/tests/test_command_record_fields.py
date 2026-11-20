@@ -8,7 +8,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.command_fields import named_records
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import CommandTargetOption, record_options
@@ -34,12 +34,12 @@ def option_values(page, name: str) -> list[str]:
 class RecordFieldTests(SignedInTestCase):
     def test_every_record_field_names_a_listable_resource(self):
         resources = integration_graph().resources
-        for name, spec in capability_registry().items():
+        for spec in capability_registry():
             for field, schema in capability_schema(spec).get("properties", {}).items():
                 declared = named_records(schema)
                 if declared is None:
                     continue
-                with self.subTest(command=name, field=field):
+                with self.subTest(command=spec.name, field=field):
                     resource = resources.get(declared["resource"])
                     self.assertIsNotNone(resource)
                     self.assertIsNotNone(resource.listing)
@@ -77,7 +77,7 @@ class RecordFieldTests(SignedInTestCase):
 
     def test_a_value_its_source_no_longer_lists_is_kept_under_its_own_heading(self):
         form_class = command_form_class(
-            capability_registry()["expense.create"],
+            command_spec("expense.create"),
             record_choices={"related_project": (CommandTargetOption("example-live", "Live"),)},
         )
 
@@ -88,14 +88,14 @@ class RecordFieldTests(SignedInTestCase):
         self.assertIn("example-live", choices)
 
     def test_a_field_whose_source_cannot_be_listed_is_typed(self):
-        form_class = command_form_class(capability_registry()["expense.create"], record_choices={})
+        form_class = command_form_class(command_spec("expense.create"), record_choices={})
 
         self.assertNotIn("related_project", form_class.record_names)
         self.assertNotIsInstance(form_class.base_fields["related_project"], forms.ChoiceField)
 
     def test_the_choices_cost_the_same_however_many_records(self):
         principal = Principal("operator", "web", frozenset({Capability.READ}))
-        schema = capability_schema(capability_registry()["content.create"])
+        schema = capability_schema(command_spec("content.create"))
 
         def arrange(count):
             for index in range(Project.objects.count(), count):

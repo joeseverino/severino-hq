@@ -49,8 +49,8 @@ class RecordRefusalTests(TestCase):
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
         # Each write that keeps what it is not sent of its record reads that record first.
         cases = {
-            name: ({}, SENT_UID if TARGET_KINDS[spec.target_kind].coerce is str else SENT_ID)
-            for name, spec in capability_registry().items()
+            spec.name: ({}, SENT_UID if TARGET_KINDS[spec.target_kind].coerce is str else SENT_ID)
+            for spec in capability_registry()
             if kept_by(spec)
         }
         self.assertTrue(cases, "no command keeps its record")

@@ -16,7 +16,7 @@ from typing import Any, TypeAliasType, get_args
 
 from django.urls import URLPattern, reverse
 
-from hq.platform.application.capabilities import capability_registry, describe_capabilities
+from hq.platform.application.capabilities import capability_registry, command_spec, describe_capabilities
 from hq.platform.application.contracts import effect_glossary
 from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD
 from hq.platform.application.held_answer import HELD, AwaitingApproval
@@ -296,9 +296,8 @@ class _Builder:
             found[_read_id(resource)] = _link(
                 _read_id(resource), {"path.identifier": f"$response.body#{at}/{identifier}"}
             )
-        registry = capability_registry()
         for command in self.capabilities:
-            capability = registry[command["name"]]
+            capability = command_spec(command["name"])
             if capability.subject_resource != resource or not capability.target_kind:
                 continue
             body = {"target": f"{{$response.body#{at}/{identifier}}}"}
@@ -411,7 +410,6 @@ class _Builder:
             ],
             requestBody=_body(generic),
         )
-        registry = capability_registry()
         requests = {spec["name"]: self.components.hoist(views.request_schema(spec)) for spec in self.capabilities}
         # A target several capabilities take in the same words is written once,
         # as the component named for the first of them.
@@ -446,7 +444,7 @@ class _Builder:
             request = requests[name]
             payload = request["properties"]["payload"]
             if len(takers := shapes[json.dumps(payload, sort_keys=True)]) > 1:
-                shared = {"$ref": self.components.add(registry[takers[0]].command_type.__name__, payload)}
+                shared = {"$ref": self.components.add(command_spec(takers[0]).command_type.__name__, payload)}
                 request = {**request, "properties": {**request["properties"], "payload": shared}}
             # Capabilities taking one body share its schema, each under its own name.
             first = self.requests.setdefault(json.dumps(request, sort_keys=True), f"{_pascal(name)}Request")
@@ -458,14 +456,14 @@ class _Builder:
                 view,
                 _camel(name),
                 self.tags.of_capability(name),
-                links=self.links(answering=answer_type(registry[name])),
+                links=self.links(answering=answer_type(command_spec(name))),
                 summary=spec["label"],
                 description=spec["summary"],
                 parameters=([{"$ref": f"#/components/parameters/{IDEMPOTENCY_KEY}"}] if spec["effect"].changes else []),
                 requestBody=_body(body),
-                codes=views.execute_codes(registry[name]),
-                answer=self.answer_of(registry[name]),
-                held=views.capability_held(registry[name]),
+                codes=views.execute_codes(command_spec(name)),
+                answer=self.answer_of(command_spec(name)),
+                held=views.capability_held(command_spec(name)),
                 scopes=spec["required_capabilities"],
                 **{"x-hq-capability": name, EFFECT_EXTENSION: spec["effect"]},
             )

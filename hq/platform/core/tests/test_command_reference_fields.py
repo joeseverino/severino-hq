@@ -11,7 +11,7 @@ from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 from hq.platform.application import references
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import record_options
 from hq.platform.application.integration_specs import capability_fields, capability_schema
@@ -31,10 +31,10 @@ def stored_references() -> dict[tuple[str, str], tuple[type, str]]:
     model stores in a type:identity column."""
 
     found = {}
-    for name, spec in capability_registry().items():
+    for spec in capability_registry():
         if (model := _model_of(spec.command_type)) is not None:
             columns = {column.name for column in model._meta.get_fields() if isinstance(column, ReferenceField)}
-            found |= {(name, column): (model, column) for column in columns & set(capability_fields(spec))}
+            found |= {(spec.name, column): (model, column) for column in columns & set(capability_fields(spec))}
     return found
 
 
@@ -65,11 +65,11 @@ def reference_fields() -> dict[tuple[str, str], tuple[type, str]]:
     machine contract says holds a reference (``x-hq-reference``)."""
 
     found = {}
-    for name, spec in capability_registry().items():
+    for spec in capability_registry():
         schema = capability_schema(spec)
         for field in schema.get("properties", {}):
             if isinstance(reference := field_schema(schema, field).get("x-hq-reference"), dict):
-                found[name, field] = (apps.get_model(reference["model"]), reference["field"])
+                found[spec.name, field] = (apps.get_model(reference["model"]), reference["field"])
     return found
 
 
@@ -145,7 +145,7 @@ class GuardedReferenceTests(TestCase):
         patched = mock.patch.object(references, "targets", lambda: {"example.account": guarded})
         patched.start()
         self.addCleanup(patched.stop)
-        self.schema = capability_schema(capability_registry()["expense.create"])
+        self.schema = capability_schema(command_spec("expense.create"))
 
     def test_a_kind_is_offered_only_to_who_may_name_it(self):
         reader = Principal("a reader", "web", frozenset({"read", "example.read"}))
@@ -160,7 +160,7 @@ class GuardedReferenceTests(TestCase):
     def picker(self, principal: Principal, initial: dict[str, str] | None = None) -> bool:
         """Whether ``paid_from`` is on the expense form, for ``principal``."""
 
-        spec = capability_registry()["expense.create"]
+        spec = command_spec("expense.create")
         command = command_form_class(spec, record_choices=record_options(self.schema, principal=principal))
         return "paid_from" in command(initial=initial).fields
 

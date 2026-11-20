@@ -38,7 +38,7 @@ class CapabilityTests(TestCase):
         )
         principal = Principal("test", "test", frozenset({"example.read"}))
 
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             result = execute_capability(spec.name, {}, principal=principal)
 
         self.assertEqual(result, {"ok": True, "value": "works"})
@@ -201,7 +201,7 @@ class CapabilityTests(TestCase):
             lambda command, **kwargs: {"ok": True},
         )
         principal = Principal("test", "test", frozenset({"example.read"}))
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             result = execute_capability(spec.name, payload, principal=principal)
         self.assertFalse(result["ok"], result)
         self.assertEqual(result["error"]["code"], "invalid_input")
@@ -444,7 +444,7 @@ class WriteActTests(TestCase):
         spec = CapabilitySpec(
             "example.thing.set", "Write an example.", "remote_write", "example.write", ExampleWrite, handler
         )
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             return execute_capability(spec.name, payload, principal=self.principal)
 
     def written_since(self, before):

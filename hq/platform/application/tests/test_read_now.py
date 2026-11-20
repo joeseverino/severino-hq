@@ -19,7 +19,7 @@ from hq.platform.core.testing import READER, operator
 
 from ..action_links import read_now_link, read_now_payload
 from ..cadence import forced_reads, settle_read_requests, sweep_due
-from ..capabilities import capability_registry, execute_capability
+from ..capabilities import command_spec, execute_capability
 from ..credential_sight import fed_kinds
 from ..security import cli_principal
 
@@ -168,7 +168,7 @@ class WebTests(TestCase):
 
         self.assertEqual(link.method, "POST")
         self.assertEqual(ReadRequest.objects.get().connection_ref, "example-tailnet")
-        self.assertIn(capability_registry()[link.capability].requested("example-tailnet"), text(response))
+        self.assertIn(command_spec(link.capability).requested("example-tailnet"), text(response))
 
     def test_a_refusal_is_said_on_the_page_it_came_from(self):
         response = self.client.post(

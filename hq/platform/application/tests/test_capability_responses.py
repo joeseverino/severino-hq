@@ -32,7 +32,7 @@ class CapabilityCallTests(TestCase):
         return {"ok": True}
 
     def call(self, spec, payload, principal=None, **carried):
-        with commands_registered({spec.name: spec}):
+        with commands_registered(spec):
             return execute_capability(spec.name, payload, principal=principal or cli_principal(), **carried)
 
     @staticmethod

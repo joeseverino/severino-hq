@@ -1,16 +1,9 @@
 id: fixed-command-read-without-the-catalog
 valid:
   - capability_spec(name)
-  - command_spec(READ_NOW).requested()
-  - capabilities.capability_spec(held.capability)
   - held_graph().resources.get(subject)
-  - "for spec in capability_registry().values(): pass"
   - integration_graph().capabilities.values()
 invalid:
-  - capability_registry()[READ_NOW].requested()
-  - capability_registry().get(name)
-  - capabilities.capability_registry().get(held.capability)
-  - capabilities.capability_registry()[capability]
   - integration_graph().capabilities[name]
   - integration_graph().capabilities.get(name)
   - integration_graph().resources.get(subject)

@@ -54,5 +54,5 @@ def another_command_writing(write: Callable[[Consented], object]) -> Iterator[st
         handler,
         subject_resource="example.things",
     )
-    with commands_registered({spec.name: spec}):
+    with commands_registered(spec):
         yield spec.name

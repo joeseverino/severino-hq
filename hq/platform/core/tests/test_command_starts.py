@@ -2,7 +2,7 @@
 
 from django.urls import reverse
 
-from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.command_center import command_center
 from hq.platform.application.command_targets import starting_page
 from hq.platform.application.integration_specs import ON_ITS_PAGE
@@ -20,7 +20,7 @@ def commands_found(query: str) -> dict:
 
 class CommandStartTests(SignedInTestCase):
     def test_every_starting_page_is_a_named_page(self):
-        for spec in capability_registry().values():
+        for spec in capability_registry():
             if not spec.reached_from or spec.reached_from == ON_ITS_PAGE:
                 continue
             with self.subTest(command=spec.name):
@@ -35,12 +35,12 @@ class CommandStartTests(SignedInTestCase):
         self.assertTrue(approve.destination_label)
 
     def test_search_does_not_offer_a_command_only_its_own_page_sends(self):
-        held_by_their_pages = {spec.name for spec in capability_registry().values() if spec.reached_from == ON_ITS_PAGE}
+        held_by_their_pages = {spec.name for spec in capability_registry() if spec.reached_from == ON_ITS_PAGE}
 
         self.assertTrue(held_by_their_pages)
         for name in held_by_their_pages:
             with self.subTest(command=name):
-                self.assertTrue(OPERATOR.permits(*capability_registry()[name].required_capabilities))
+                self.assertTrue(OPERATOR.permits(*command_spec(name).required_capabilities))
                 self.assertNotIn(name, commands_found(name))
 
     def test_a_command_with_no_starting_page_still_links_its_form(self):
