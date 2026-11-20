@@ -10,7 +10,7 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..integration_specs import ListRead
-from ..integrations import integration_graph
+from ..integrations import held_graph
 from ..plugin_testing import offering
 from ..resources import (
     EmptyQuery,
@@ -99,4 +99,4 @@ class ListFieldRegistrationTests(SimpleTestCase):
                 offering(resources=(invalid,)),
                 self.assertRaisesRegex(ImproperlyConfigured, "fields"),
             ):
-                integration_graph()
+                held_graph()

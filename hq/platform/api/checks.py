@@ -5,7 +5,7 @@ from django.apps import AppConfig
 from django.core.checks import CheckMessage, Error, Tags, register
 from django.urls import NoReverseMatch, reverse
 
-lazy from hq.platform.application.integrations import IntegrationGraphError, integration_graph
+lazy from hq.platform.application.integrations import IntegrationGraphError, held_graph
 
 
 def _route_error(owner: str, name: str, route: str, error_id: str) -> Error | None:
@@ -24,7 +24,7 @@ def _route_error(owner: str, name: str, route: str, error_id: str) -> Error | No
 @register(Tags.compatibility)
 def capability_contract_check(app_configs: Sequence[AppConfig] | None, **kwargs: Any) -> list[CheckMessage]:
     try:
-        graph = integration_graph()
+        graph = held_graph()
     except IntegrationGraphError as exc:
         return [
             Error(

@@ -147,7 +147,7 @@ class CompositionCheckTests(SimpleTestCase):
                 IntegrationViolation("example.second", "Second violation."),
             )
         )
-        with patch("hq.platform.api.checks.integration_graph", side_effect=failure):
+        with patch("hq.platform.api.checks.held_graph", side_effect=failure):
             errors = capability_contract_check(None)
 
         self.assertEqual([error.id for error in errors], ["hq_api.E001"] * 2)

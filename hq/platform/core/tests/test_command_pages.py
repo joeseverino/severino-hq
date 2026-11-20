@@ -25,7 +25,7 @@ from hq.platform.application.capability_policy import agents_may_hold
 from hq.platform.application.glance import DASHBOARD_MACHINE
 from hq.platform.application.integration_specs import CapabilitySpec, command_schema, kept_by
 from hq.platform.application.integration_testing import override_integration_graph
-from hq.platform.application.integrations import integration_graph
+from hq.platform.application.integrations import held_graph
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugins import plugin_capability_specs
 from hq.platform.application.projects import DEPENDENCY_UPDATES
@@ -305,7 +305,7 @@ class WordlessSwitchTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.user)
-        graph = integration_graph()
+        graph = held_graph()
         composed = replace(graph, capabilities={**graph.capabilities, WORDLESS.name: WORDLESS})
         self.enterContext(override_integration_graph(composed))
         SENT.clear()

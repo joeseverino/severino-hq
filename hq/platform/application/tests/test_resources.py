@@ -11,7 +11,7 @@ from hq.platform.core.testing import NOBODY, OPERATOR, READER, declare
 
 from ..command_center import command_center
 from ..integration_specs import ListRead
-from ..integrations import integration_graph
+from ..integrations import held_graph
 from ..plugin_testing import offering
 from ..record_errors import RecordNotFound
 from ..report_testing import bridged
@@ -293,7 +293,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             offering(resources=(duplicate,)),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate resource name"),
         ):
-            integration_graph()
+            held_graph()
 
     def test_a_query_that_declares_fields_fails_at_registry_construction(self):
         from pydantic import Field
@@ -317,7 +317,7 @@ class ResourceRegistrationTests(SimpleTestCase):
                 offering(resources=(spec,)),
                 self.assertRaisesRegex(ImproperlyConfigured, "may not declare 'fields'"),
             ):
-                integration_graph()
+                held_graph()
 
     def test_a_query_open_to_any_filter_fails_at_registry_construction(self):
         from pydantic import BaseModel
@@ -336,7 +336,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             offering(resources=(spec,)),
             self.assertRaisesRegex(ImproperlyConfigured, "must refuse a filter it does not declare"),
         ):
-            integration_graph()
+            held_graph()
 
     def test_nested_django_namespaces_are_valid_web_routes(self):
         nested = ResourceSpec(
@@ -348,7 +348,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             web_route="example:records:list",
         )
         with offering(resources=(nested,)):
-            self.assertIn(nested, integration_graph().resources.values())
+            self.assertIn(nested, held_graph().resources.values())
 
 
 class TailnetDeviceKeyTests(TestCase):

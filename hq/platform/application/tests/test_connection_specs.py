@@ -23,7 +23,7 @@ from ..connections import (
     describe_connections,
 )
 from ..field_masks import WHOLE_RECORD
-from ..integrations import integration_graph
+from ..integrations import held_graph
 from ..plugin_testing import offering
 from ..resources import list_resource
 from ..security import Capability, Principal
@@ -106,7 +106,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         )
 
         with offering(spec):
-            self.assertIn(spec, integration_graph().connections.values())
+            self.assertIn(spec, held_graph().connections.values())
 
     def test_core_spec_derives_controller_abilities_and_carries_no_credential(self):
         from django.utils import timezone
@@ -400,7 +400,7 @@ class ConnectionRegistrationTests(TestCase):
             offering(broken),
             self.assertRaisesRegex(ImproperlyConfigured, "invalid governed kinds"),
         ):
-            integration_graph()
+            held_graph()
 
     def test_plugin_connection_names_cannot_shadow_core(self):
         duplicate = ConnectionSpec(
@@ -414,7 +414,7 @@ class ConnectionRegistrationTests(TestCase):
             offering(duplicate),
             self.assertRaisesRegex(ImproperlyConfigured, "Duplicate connection"),
         ):
-            integration_graph()
+            held_graph()
 
     def test_unknown_instance_abilities_fail_closed(self):
         broken = ConnectionSpec(

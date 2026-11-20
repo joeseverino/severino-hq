@@ -82,12 +82,12 @@ PLANTED = {
     "example_reads/frozen.py": "from example_reads.helper import ids\nFROZEN = ids()\n",
     # Two modules reading one cached graph, the second after importing the first: both are named.
     "example_reads/graph_a.py": (
-        "from hq.platform.application.integrations import integration_graph\nKINDS = integration_graph().resources\n"
+        "from hq.platform.application.integrations import held_graph\nKINDS = held_graph().resources\n"
     ),
     "example_reads/graph_b.py": (
-        "from hq.platform.application.integrations import integration_graph\n"
+        "from hq.platform.application.integrations import held_graph\n"
         "from example_reads.graph_a import KINDS\n"
-        "CAPABILITIES = sorted(integration_graph().capabilities)\n"
+        "CAPABILITIES = sorted(held_graph().capabilities)\n"
     ),
     # Read only at the call.
     "example_reads/deferred.py": "from example_reads.helper import ids\ndef current():\n    return ids()\n",
@@ -115,7 +115,7 @@ class CompositionAtImportTests(SimpleTestCase):
             [read for read in found if module_of(read).startswith("example_reads")],
             [
                 "example_reads.frozen:2 FROZEN = ids()",
-                "example_reads.graph_a:2 KINDS = integration_graph().resources",
-                "example_reads.graph_b:3 CAPABILITIES = sorted(integration_graph().capabilities)",
+                "example_reads.graph_a:2 KINDS = held_graph().resources",
+                "example_reads.graph_b:3 CAPABILITIES = sorted(held_graph().capabilities)",
             ],
         )

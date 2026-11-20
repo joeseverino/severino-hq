@@ -210,6 +210,22 @@ protected_modules = ["hq.platform.application.idempotency"]
 allowed_importers = ["hq.platform.application.capabilities"]
 broken_contract_guidance = "Hand the key to run_capability(..., idempotency_key=...); a form's first answer is capabilities.first_answer."
 
+[[tool.importlinter.contracts]]
+name = "Only the command registry reads the graph at the catalog adopted now, which asks the database; the rest of the graph is the same at every adoption"
+type = "protected"
+protected_modules = ["hq.platform.application.compiled_graph"]
+# held_graph's own module and the graph's test support, and the tests of the
+# compiled graph's cache.
+allowed_importers = [
+  "hq.platform.application.capabilities",
+  "hq.platform.application.integrations",
+  "hq.platform.application.integration_testing",
+  "hq.platform.application.tests.test_domain_declaration",
+  "hq.platform.application.tests.test_integrations",
+  "hq.platform.core.tests.test_isolation_testing",
+]
+broken_contract_guidance = "Read one command with capability_spec or command_spec, every command with capability_registry, and resources, connections or search from integrations.held_graph()."
+
 # audit:dead: a read in a test does not keep a name alive, unless a
 # test-support module (testing.py, *_testing.py) defines it. A function a
 # decorator hands to a caller outside HQ is called: a signal receiver, a system

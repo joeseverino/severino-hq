@@ -211,9 +211,9 @@ class FindingsTests(SentinelMixin, TestCase):
     def test_no_rule_offers_a_destructive_capability(self):
         """A finding may link to a review page; it may never hand over a delete."""
 
-        from ..integrations import integration_graph
+        from ..capabilities import capability_registry
 
-        destructive = {spec.name for spec in integration_graph().capabilities.values() if spec.effect == "destructive"}
+        destructive = {spec.name for spec in capability_registry() if spec.effect == "destructive"}
         observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
         observed(self.rewrite("swept"), self.now)
 
@@ -222,9 +222,9 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertEqual(offered & destructive, set())
 
     def test_every_remedy_names_a_capability_the_registry_holds(self):
-        from ..integrations import integration_graph
+        from ..capabilities import capability_registry
 
-        known = set(integration_graph().capabilities)
+        known = {spec.name for spec in capability_registry()}
         observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
         observed(self.rewrite("swept"), self.now)
 

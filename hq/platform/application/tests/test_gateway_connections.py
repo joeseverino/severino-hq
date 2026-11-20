@@ -14,7 +14,7 @@ from hq.domains.projects.models import Project
 from .. import readings
 from ..capabilities import command_spec, execute_capability
 from ..field_masks import WHOLE_RECORD
-from ..integrations import integration_graph
+from ..integrations import held_graph
 from ..resources import list_resource
 from ..security import Capability, Principal
 from .glance_readings import reported_weather
@@ -71,7 +71,7 @@ class GatewayConnectionTests(TestCase):
         )
 
     def test_host_gateways_emit_from_the_domain_registry(self):
-        names = set(integration_graph().connections)
+        names = set(held_graph().connections)
 
         self.assertLessEqual({"hq.public_registries", "hq.nws"}, names)
         # The contact inbox is read and written by the controller through the
@@ -100,7 +100,7 @@ class GatewayConnectionTests(TestCase):
         )
 
     def test_nws_discovery_is_query_free(self):
-        spec = integration_graph().connections["hq.nws"]
+        spec = held_graph().connections["hq.nws"]
 
         with self.assertNumQueries(0):
             instances = spec.instance_provider()

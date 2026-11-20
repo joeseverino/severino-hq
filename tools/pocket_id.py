@@ -25,7 +25,7 @@ from hq.platform.core.tests.task import Usage
 from tools.credentials import Call, Refused, Send, UsageError, https
 
 # Each loads once django.setup() has run, in ``catalog``.
-lazy from hq.platform.application.integrations import integration_graph
+lazy from hq.platform.application.capabilities import capability_registry
 lazy from hq.platform.application.tokens import DEVICE_SCOPE
 lazy from hq.platform.mcp.security import token_scopes
 
@@ -94,7 +94,7 @@ def catalog() -> tuple[Permission, ...]:
     django.setup()
 
     commands: dict[str, list[str]] = defaultdict(list)
-    for spec in integration_graph().capabilities.values():
+    for spec in capability_registry():
         for needed in spec.required_capabilities:
             commands[str(needed)].append(spec.title)
     return listed(token_scopes(), commands, DEVICE_SCOPE)

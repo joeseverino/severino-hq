@@ -20,8 +20,9 @@ from hq.platform.core.testing import operator
 
 from .. import domains
 from ..capabilities import execute_capability
+from ..compiled_graph import compiled
 from ..domains import DomainDescriptor, Mount, domain_navigation, load
-from ..integrations import _compiled_integration_graph, integration_graph
+from ..integrations import held_graph
 from ..plugins import NavigationItem, PluginIntegration
 from ..record_declaration import Records
 from ..records import counts
@@ -50,7 +51,7 @@ WIDGETS = DomainDescriptor(
 
 def _forget() -> None:
     domains.host_domains.cache_clear()
-    _compiled_integration_graph.cache_clear()
+    compiled.cache_clear()
     importlib.reload(urls)
     clear_url_caches()
 
@@ -86,7 +87,7 @@ class NewDomainDeclarationTests(TransactionTestCase):
         self.assertIn("widgets:list", [item.route for item in domain_navigation()])
 
     def test_its_resource_and_commands_are_registered(self):
-        graph = integration_graph()
+        graph = held_graph()
         self.assertIn("widgets", graph.resources)
         self.assertLessEqual({"widget.create", "widget.update", "widget.delete"}, set(graph.capabilities))
         self.assertEqual(graph.capabilities["widget.delete"].target_label, "Widget slug")

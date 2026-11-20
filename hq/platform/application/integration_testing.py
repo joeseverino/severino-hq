@@ -6,13 +6,14 @@ from unittest import mock
 
 from . import capabilities
 from .integration_specs import CapabilitySpec
-from .integrations import _GRAPH_OVERRIDE, IntegrationGraph
+from .compiled_graph import GRAPH_OVERRIDE
+from .integrations import IntegrationGraph
 
 
 def override_integration_graph(graph: IntegrationGraph) -> Token[IntegrationGraph | None]:
     """``graph`` answers ``integration_graph()`` inside ``with override_integration_graph(graph):``."""
 
-    return _GRAPH_OVERRIDE.set(graph)
+    return GRAPH_OVERRIDE.set(graph)
 
 
 @contextmanager

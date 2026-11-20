@@ -17,7 +17,7 @@ from django.test import TestCase
 from hq.platform.application import cadence
 from hq.platform.application.automation_runs import runs_procedure
 from hq.platform.application.capabilities import capability_registry
-from hq.platform.application.integrations import _compiled_integration_graph
+from hq.platform.application.compiled_graph import compiled
 from hq.platform.application.security import web_principal
 from hq.platform.core.example_estate import automation
 from hq.platform.core.test_runner import SeverinoTestRunner
@@ -129,9 +129,9 @@ class ClassSetupStartsFreshTests(TestCase):
         class Narrows(unittest.TestCase):
             def test_reads_its_commands_without_the_records(self):
                 with unittest.mock.patch(
-                    "hq.platform.application.integrations.record_capability_specs", return_value=()
+                    "hq.platform.application.compiled_graph.record_capability_specs", return_value=()
                 ):
-                    _compiled_integration_graph.cache_clear()
+                    compiled.cache_clear()
                     seen["narrowed"] = {spec.name for spec in capability_registry()}
 
         class Reads(unittest.TestCase):

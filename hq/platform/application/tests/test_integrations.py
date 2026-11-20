@@ -12,14 +12,14 @@ from hq.domains.projects.specs import ProjectQuery
 
 from ..capabilities import CapabilitySpec, describe_capabilities
 from ..command_center import command_center
+from ..compiled_graph import compiled
 from ..connections import ConnectionAbility, ConnectionSpec, describe_connections
 from ..integration_specs import ListRead
 from ..integration_testing import override_integration_graph
 from ..integrations import (
     IntegrationGraphError,
-    _compiled_integration_graph,
     compile_integration_graph,
-    integration_graph,
+    held_graph,
 )
 from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
@@ -46,7 +46,7 @@ def execute_targeted(command, *, principal, current_slug):
 class IntegrationGraphTests(TestCase):
     def test_compilation_is_query_free_and_immutable(self):
         with self.assertNumQueries(0):
-            graph = integration_graph()
+            graph = held_graph()
 
         self.assertIsInstance(graph.capabilities, frozendict)
         self.assertIsInstance(graph.resources, frozendict)
@@ -54,7 +54,7 @@ class IntegrationGraphTests(TestCase):
         self.assertIsInstance(graph.search, frozendict)
 
     def test_the_composed_graph_is_compiled_once(self):
-        self.assertIs(integration_graph(), integration_graph())
+        self.assertIs(held_graph(), held_graph())
 
     def test_the_graph_follows_the_installed_set_with_nothing_cleared(self):
         """The graph is keyed on what the composition is read from: an
@@ -68,10 +68,10 @@ class IntegrationGraphTests(TestCase):
             "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0",
         }
         lookup = "example.lookup.run"
-        self.assertNotIn(lookup, integration_graph().capabilities)
+        self.assertNotIn(lookup, held_graph().capabilities)
         with mock.patch.dict(os.environ, environment):
-            self.assertIn(lookup, integration_graph().capabilities)
-        self.assertNotIn(lookup, integration_graph().capabilities)
+            self.assertIn(lookup, held_graph().capabilities)
+        self.assertNotIn(lookup, held_graph().capabilities)
 
     def test_no_command_but_an_adopted_procedure_is_named_as_one(self):
         from dataclasses import replace
@@ -82,11 +82,11 @@ class IntegrationGraphTests(TestCase):
         specs = capability_specs()
         squatter = replace(specs[0], name="automation.example.check.run")
         with (
-            patch("hq.platform.application.integrations.record_capability_specs", return_value=(*specs, squatter)),
+            patch("hq.platform.application.compiled_graph.record_capability_specs", return_value=(*specs, squatter)),
             self.assertRaises(IntegrationGraphError) as raised,
         ):
-            _compiled_integration_graph.cache_clear()
-            integration_graph()
+            compiled.cache_clear()
+            held_graph()
 
         self.assertEqual([v.code for v in raised.exception.violations], ["capability_in_procedure_namespace"])
 
@@ -349,7 +349,7 @@ class IntegrationGraphTests(TestCase):
         )
 
     def test_a_connection_emits_its_capability_edge_once(self):
-        graph = integration_graph()
+        graph = held_graph()
         registries = graph.connections["hq.public_registries"]
         lookup = next(ability for ability in registries.abilities if ability.capability == "lookup.name.read")
 

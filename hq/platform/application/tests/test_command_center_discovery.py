@@ -5,9 +5,9 @@ from django.test import SimpleTestCase
 
 from hq.platform.core.testing import OPERATOR, READER
 
+from ..capabilities import capability_registry
 from ..command_center import command_center
 from ..findings import finding_rules
-from ..integrations import integration_graph
 from .host_only import host_only
 
 
@@ -32,7 +32,7 @@ class CommandOrderTests(SimpleTestCase):
     def test_without_a_query_the_commands_keep_the_registry_order(self):
         with host_only():
             names = [item.name for item in command_center("", principal=OPERATOR)["commands"]]
-            registered = [spec.name for spec in integration_graph().capabilities.values()]
+            registered = [spec.name for spec in capability_registry()]
 
         self.assertGreater(len(names), 1)
         self.assertEqual(names, [name for name in registered if name in names])

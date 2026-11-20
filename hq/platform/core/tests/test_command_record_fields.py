@@ -13,7 +13,7 @@ from hq.platform.application.command_fields import named_records
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import CommandTargetOption, record_options
 from hq.platform.application.integration_specs import capability_schema
-from hq.platform.application.integrations import integration_graph
+from hq.platform.application.integrations import held_graph
 from hq.platform.application.markup_testing import select, within
 from hq.platform.application.references import NO_LONGER_OFFERED
 from hq.platform.application.security import Capability, Principal
@@ -33,7 +33,7 @@ def option_values(page, name: str) -> list[str]:
 
 class RecordFieldTests(SignedInTestCase):
     def test_every_record_field_names_a_listable_resource(self):
-        resources = integration_graph().resources
+        resources = held_graph().resources
         for spec in capability_registry():
             for field, schema in capability_schema(spec).get("properties", {}).items():
                 declared = named_records(schema)

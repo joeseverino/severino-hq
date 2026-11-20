@@ -50,7 +50,8 @@ from .integration_specs import (
     takes_sent_fields,
     takes_stale_write_token,
 )
-from .integrations import held_graph, integration_graph
+from .compiled_graph import integration_graph
+from .integrations import held_graph
 from .labels import human_label
 from .projection import QueryRefusal
 from .record_errors import PolicyError
