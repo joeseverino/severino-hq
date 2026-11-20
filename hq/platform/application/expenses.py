@@ -94,8 +94,8 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
 
     ``rows`` is the list as its filters leave it and ``query`` the request's
     own, which each category's link keeps. Each category is a figure linking
-    to the list narrowed to it, said only where the categories divide the
-    list: two or more, and none already chosen.
+    to the list narrowed to it, said only where two or more divide the list,
+    which a list narrowed to one category never is.
     """
 
     sums = list(
@@ -110,7 +110,7 @@ def costs_by_category(rows, *, query, choices, narrowed: bool) -> tuple[CostTota
         sum((row["deductible"] or zero for row in sums), zero),
         narrowed,
     )
-    if len(sums) < 2 or query.get("category"):
+    if len(sums) < 2:
         return totals, ()
     labels = dict(choices)
     kept = query.copy()

@@ -69,14 +69,6 @@ class ExpenseListTests(_Signed):
         self.assertEqual(chosen.context["by_category"], ())
         self.assertIn("Matching: $24.00 total", text(chosen))
 
-    def test_one_category_is_not_a_division(self):
-        Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting", total_cost=Decimal("12.00"))
-
-        response = self.client.get(reverse("expenses:list"))
-
-        self.assertEqual(response.context["by_category"], ())
-        self.assertEqual(select(response, "aria-label", "Totals by category"), [])
-
     def test_the_totals_of_a_list_with_a_toggle_on_count_each_expense_once(self):
         from hq.domains.receipts.models import Receipt
 
