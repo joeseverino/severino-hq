@@ -99,7 +99,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
             {% include "control_plane/_container_standing.html" %}
             {% with posture=item.posture %}<td class="optional-col">{% if posture.serious %}{% status "Can control its machine" tone="serious" pill=False tip=posture.serious_unmet %}{% elif posture.unmet %}<span tabindex="0" data-tip="{% for result in posture.unmet %}{{ result.check.unmet }}&#10;{% endfor %}">{{ posture.unmet|length }} to fix</span>{% elif posture.measured %}{% muted %}{% if posture.met == posture.measured %}All {{ posture.measured|measured:"pass" }}{% else %}{{ posture.met|breakable }} of {{ posture.measured|measured:"pass" }}{% endif %}{% endmuted %}{% endif %}</td>{% endwith %}
             <td class="optional-col">{% list %}{% for hostname in item.serves %}<li>{% entity "service"|entity_of:hostname %}</li>{% endfor %}{% endlist %}</td>
-            <td>{% list %}{% if not item.running.state.running %}<li>{% status item.running.state %}</li>{% endif %}<li><span class="cell-part">{{ item.uptime|default:item.running.status|breakable }}{% if item.running.check %}{% muted %},{% endmuted %}{% endif %}</span>{% if item.running.check %} {% muted css="cell-part" title=item.running.check.said|capfirst %}{{ item.running.check|breakable }}{% endmuted %}{% endif %}</li>{% endlist %}</td>
+            <td>{% include "control_plane/_container_rows.html#status" with container=item.running up=item.uptime %}</td>
           </tr>
         {% endwith %}{% endfor %}
       </tbody>
