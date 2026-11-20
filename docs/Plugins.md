@@ -956,6 +956,11 @@ the column that names each row wherever a row can hold anything back.
 `{% prose_list %}`, `{% link_chips %}` and `{% title_meta %}`: `{% list
 kind=... %}` draws every list, and the classes `code-list` and `address-list`
 are its `codes` and `labeled` kinds.
+`PLUGIN_API_VERSION` 21 retires `hq_sdk.capabilities.capability_registry`:
+one command is `capability_spec(name)` (None when nothing registers it) or
+`command_spec(name)`. It also retires
+`hq_sdk.testing.unclosed_template_comments`: the host refuses a template with
+a comment left open as it loads.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -1065,8 +1070,7 @@ never negative.
 An overview says what it is built from by putting
 `hq_sdk.pages.built_from(plugin.id)`, a link to the project that names the
 extension's repository, in its context as `built_from`; `page.html` draws the
-line after the page. An extension's suite checks its templates for a
-`{# #}` comment left open with `hq_sdk.testing.unclosed_template_comments`.
+line after the page.
 
 A list extends `list_page.html` and declares its empty state on the view, never
 in its template:

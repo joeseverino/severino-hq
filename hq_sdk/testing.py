@@ -28,7 +28,6 @@ from hq.platform.application.plugin_testing import (
     sibling,
     undefined_style_classes,
 )
-from hq.platform.core.interface_text import unclosed_template_comments
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest
 
@@ -100,7 +99,6 @@ __all__ = [
     "sibling",
     "text",
     "texts",
-    "unclosed_template_comments",
     "undefined_style_classes",
     "with_class",
     "within",

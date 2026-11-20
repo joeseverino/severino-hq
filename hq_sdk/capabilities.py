@@ -5,7 +5,8 @@ A command is a frozen dataclass or a TypedDict: HQ closes it to the fields it na
 
 from hq.platform.application.capabilities import (
     CapabilitySpec,
-    capability_registry,
+    capability_spec,
+    command_spec,
     describe_capabilities,
     execute_capability,
 )
@@ -46,8 +47,9 @@ __all__ = [
     "Refers",
     "RequiredText",
     "as_sent",
-    "capability_registry",
+    "capability_spec",
     "cli_principal",
+    "command_spec",
     "describe_capabilities",
     "execute_capability",
     "execute_posted",

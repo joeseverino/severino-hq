@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "cordon.hq-plugin",
   "host": "severino-hq",
-  "plugin_api_version": 20,
+  "plugin_api_version": 21,
   "artifact": "python-wheel",
   "required_evidence": [
     "plugin-contract-tests",
