@@ -195,4 +195,4 @@ def _asked_change(shown) -> str:
     ]
     more = len(shown.changes) - len(moves)
     rest = f", and {counted(more, 'more field', 'more fields')}" if more > 0 else ""
-    return f"{shown.label}: {', '.join(moves)}{rest}." if moves else ""
+    return ended(f"{shown.label}: {', '.join(moves)}{rest}") if moves else ""
