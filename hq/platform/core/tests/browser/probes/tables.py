@@ -399,7 +399,7 @@ CUT_BESIDE_ROOM = (
 
 # A cell whose words wrap in less than their line while another column of
 # its table holds room past what its own cells need: words a few to a line
-# beside an empty column. A value's line is as much of it as fits a line of
+# beside an empty column. A heading is one of its column's cells. A value's line is as much of it as fits a line of
 # `--row-words` in its own font, and no more than its column's share of the
 # table's region (`--share`, tables.css), so a table too narrow for every
 # column's line is no finding. What a cell needs and how many lines it takes on its
@@ -413,7 +413,8 @@ ROOM_UNSHARED = (
     + """
   const found = [];
   const records = ':scope > tbody > tr:not(.row-detail, [data-row-detail], .is-expanded)';
-  const placed = (table) => [...table.querySelectorAll(records)].filter((row) => row.checkVisibility())
+  const placed = (table) => [...table.querySelectorAll(`:scope > thead > tr:last-child, ${records}`)]
+    .filter((row) => row.checkVisibility())
     .flatMap((row) => [...row.querySelectorAll(':scope > :is(td, th)')])
     .filter((cell) => cell.colSpan === 1 && cell.checkVisibility());
   const padded = (cell) => {
@@ -443,7 +444,7 @@ ROOM_UNSHARED = (
     // A column held to its widest line by a width on its heading asks no more than its narrowest there.
     ruler.querySelectorAll(':scope > thead th').forEach((head) => { head.style.inlineSize = 'auto'; });
     // A short value whole is the value past its share.
-    ruler.querySelectorAll('.cell-short').forEach((box) => { box.style.maxInlineSize = 'none'; });
+    ruler.querySelectorAll('.cell-short, :scope > thead th > *').forEach((box) => { box.style.maxInlineSize = 'none'; });
     table.after(ruler);
     // A cell is as tall as its row, so its words' own box says how many lines they take.
     const range = document.createRange();
@@ -475,7 +476,8 @@ ROOM_UNSHARED = (
       const room = [...columns].filter(([place]) => place !== cell.cellIndex)
         .map(([, column]) => [column.name, column.width - column.needs]).sort((a, b) => b[1] - a[1])[0];
       if (!room || room[1] < short) continue;
-      found.push(`${describe(table)}: ${columns.get(cell.cellIndex).name || 'a column'} wraps "${cell.innerText.trim().replace(/\\s+/g, ' ').slice(0, 24)}" in ${Math.round(asks - short)}px of its ${Math.round(asks)}px line while ${room[0] || 'a column'} holds ${Math.round(room[1])}px past its needs`);
+      const words = cell.parentElement.parentElement === table.tHead ? 'its heading' : `"${cell.innerText.trim().replace(/\\s+/g, ' ').slice(0, 24)}"`;
+      found.push(`${describe(table)}: ${columns.get(cell.cellIndex).name || 'a column'} wraps ${words} in ${Math.round(asks - short)}px of its ${Math.round(asks)}px line while ${room[0] || 'a column'} holds ${Math.round(room[1])}px past its needs`);
     }
   }
   return [...new Set(found)];
@@ -1009,6 +1011,22 @@ _CLAMP_TABLE = (
     "</tbody></table>{% endtable_region %}"
 )
 
+# A heading longer than its figures beside a column of room: sorted where two
+# rows are, plain where one is, and squeezed by a width of its own.
+_FIGURES = "<tr><td>example-01</td><td>160 bpm</td></tr>"
+_HEADING_TABLE = (
+    '{{% table_region "Headings" %}}<table class="data-table"><thead><tr>{{% table_heading "Name" "identifier" %}}'
+    "{heading}</tr></thead><tbody>{rows}</tbody></table>{{% endtable_region %}}"
+)
+_HEADED = "".join(
+    _HEADING_TABLE.format(heading='{% table_heading "Average heart rate" "numeric" %}', rows=rows)
+    for rows in (_FIGURES * 2, _FIGURES)
+)
+_SQUEEZED = _HEADING_TABLE.format(
+    heading='<th data-kind="numeric"><span style="display: inline-block; max-inline-size: 4em; white-space: normal">Average heart rate</span></th>',
+    rows=_FIGURES * 2,
+)
+
 # The chip's name is a value the page prints, as a template's is: a literal is
 # already safe, so `breakable` would pass it as plain words, which wrap.
 _CUT_VALUES = {"chip": _CHIP}
@@ -1099,6 +1117,8 @@ CHECKS = {
         ROOM_UNSHARED,
         table=True,
         reader_sees="words a few to a line beside a column holding room it does not need",
+        plants=(Plant(_SQUEEZED, finds=("wraps its heading",)),),
+        clear=(Example(_HEADED),),
     ),
     "empty panels": Check(EMPTY_PANELS, table=True, reader_sees="a panel in a table with nothing in it"),
     "rows unruled": Check(ROWS_UNRULED, table=True, reader_sees="two rows with no rule between them"),

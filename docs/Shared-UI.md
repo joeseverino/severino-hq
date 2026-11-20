@@ -1419,9 +1419,11 @@ than the region. A value longer than a line of words (`data-long` on its cell an
 `table_cells`), whatever its kind, wraps at its words in a line of `--row-words`, or its share
 where that is less, so no column of words is set a word to a line while its neighbor sits empty. A
 status, a figure or what a row's controls say that long shares the room as words do; a row's
-controls stay as narrow as their line. A long value is held to its third line (below); a heading's
-words wrap as a cell's do. *Gate:* the survey's `room unshared`, which fails a cell squeezed below
-what it needs while another column holds the room it lacks, counting each share itself.
+controls stay as narrow as their line. A long value is held to its third line (below). A heading
+is one of its column's values, held whole up to its share as a short value is, so its words wrap
+only where its share is narrower than its line. *Gate:* the survey's `room unshared`, which fails
+a cell or a heading squeezed below what it needs while another column holds the room it lacks,
+counting each share itself.
 
 The region turns a table's ranks (`table_heading drop=`) into at most four levels from the widest
 (`data-drop`, `table_cells`): its first rank leaves while the region is narrower than 64rem, its
