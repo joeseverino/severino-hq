@@ -607,8 +607,8 @@ outside the modules run through `apart`:
   (`hq/platform/application/tests/apart.py`), in a process that exits; the
   walk takes and answers JSON. `django_printers` is one.
 
-Each is a walk to `tree.is_walk`, an ast-grep command line included, so the
-test carries the `tree` tag.
+Each walks the tree, an ast-grep command line included, so the test carries
+the `tree` tag.
 
 The wording rules are Vale's, in `tools/lint/vale`: `.vale.ini` there says
 which files each style reads, `styles` holds the rules, and `lint:prose` runs
