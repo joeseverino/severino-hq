@@ -18,6 +18,7 @@ from django.utils.text import capfirst
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 
+from hq.platform.application.projection import iso
 from hq.platform.application.record_errors import RecordConflict
 from hq.platform.application.security import CLI_ACTOR, JOB_INTERFACE
 from hq.platform.core.attribution import OperationContext, own_operation
@@ -369,7 +370,7 @@ def reap(kind: str | None = None) -> int:
             "stopped early",
             ended,
             ok=False,
-            detail={"last_said": job.note, "last_beat": job.heartbeat_at.isoformat() if job.heartbeat_at else None},
+            detail={"last_said": job.note, "last_beat": iso(job.heartbeat_at)},
         )
     return Job.objects.filter(pk__in=[job.pk for job in lost]).update(
         state=Job.State.LOST,

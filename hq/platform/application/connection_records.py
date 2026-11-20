@@ -14,7 +14,7 @@ from .connection_catalog import AUTHORITY_LABELS, EVIDENCE_LABELS
 from .connection_contracts import CREDENTIAL_MODELS, GRANT_MODELS, ConnectionFact, ConnectionLink
 from .connection_lifecycle import Lifecycle
 from .connection_reach import NETWORK_LABELS
-from .credential_sight import STATE_LABELS
+from .credential_sight import SightState
 from .describe import Describe, listed
 from .json_schemas import Written
 from .policy_links import PolicyName
@@ -26,7 +26,7 @@ from .workflows import WrittenAction
 
 class TallyPart(TypedDict):
     count: Annotated[int, Describe("How many readings and records are in this state.")]
-    state: Annotated[str, Describe(ended(f"The state, in words: {listed(STATE_LABELS.values())}"))]
+    state: Annotated[str, Describe(ended(f"The state, in words: {listed(state.label for state in SightState)}"))]
 
 
 class CredentialRow(TypedDict):
@@ -48,7 +48,7 @@ class SightPart(TypedDict):
     source: Annotated[
         str, Describe(ended(f"Whether it is a reading's type or a record's: {listed(('reading', 'resource'))}"))
     ]
-    state: Annotated[str, Describe(ended(f"Whether the credential could read it: {listed(STATE_LABELS)}"))]
+    state: Annotated[str, Describe(ended(f"Whether the credential could read it: {listed(SightState)}"))]
     state_label: Annotated[str, Describe("That, in the words its row shows.")]
     records: Annotated[int, Describe("How many records its last read stored.")]
     observed_at: ObservedAt | None
@@ -132,7 +132,7 @@ class TagPart(TypedDict):
 class UnreadPart(TypedDict):
     kind: Annotated[str, Describe("The tailnet reading's type.")]
     label: Annotated[str, Describe("The tailnet reading, in words.")]
-    state: Annotated[str, Describe(ended(f"Why it was not read: {listed(STATE_LABELS)}"))]
+    state: Annotated[str, Describe(ended(f"Why it was not read: {listed(SightState)}"))]
     state_label: Annotated[str, Describe("Why, in the words its row shows.")]
     refusal: Annotated[str | None, Describe(f"How the service refused it, {listed(REFUSALS)}; null when it did not.")]
     error: Annotated[str | None, Describe("The service's words for the failure; null for none.")]

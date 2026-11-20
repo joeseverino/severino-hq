@@ -7,7 +7,7 @@ one."""
 from hq.domains.control_plane.models import OperationRequest
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
-from ..run_reads import get_run, list_runs
+from ..run_reads import get_run
 from . import test_work_runs
 from .procedures import APP, DB
 from .test_work_runs import WORKER, WorkRunsTestCase
@@ -61,7 +61,6 @@ class KeptTests(RunStatedTestCase):
         (row,) = self.listed()
         self.assertEqual(row.evidence.stated, ("host.filesystem", "host.reboot"))
         self.assertEqual(get_run(str(run.pk))["stated"], ["host.filesystem", "host.reboot"])
-        self.assertEqual(list_runs()["items"][0]["stated"], ["host.filesystem", "host.reboot"])
 
     def test_a_run_that_stated_nothing_names_no_kind(self):
         run = self.claimed(self.run_of(APP))

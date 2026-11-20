@@ -12,7 +12,7 @@ import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, TypeAliasType, get_args
+from typing import Any, TypeAliasType, get_args, get_type_hints
 
 from django.urls import URLPattern, reverse
 
@@ -280,7 +280,7 @@ class _Builder:
         if listed and PAGE_FIELD in query:
             parameters = {f"query.{name}": f"$request.query.{name}" for name in query if name != PAGE_FIELD}
             found[_list_id(resource)] = _link(
-                _list_id(resource), {f"query.{PAGE_FIELD}": f"$response.body#/data/next/{PAGE_FIELD}", **parameters}
+                _list_id(resource), {f"query.{PAGE_FIELD}": "$response.body#/data/next", **parameters}
             )
         record = spec.record_type
         carried = (
@@ -536,12 +536,17 @@ class _Builder:
         """A list's answer: every list's page, its items of the type the
         resource declares, which a mask cuts and never widens."""
 
-        kind = masked_kind(self.resource_specs[name], listed=True)
+        spec = self.resource_specs[name]
+        kind = masked_kind(spec, listed=True)
         if kind is None:
             return None
         page = self.data[views.resource_list.__name__]
-        items = {"type": "array", "items": self.typed(kind)}
-        return f"{kind.__name__}Page", {"allOf": [page], "properties": {"items": items}}
+        properties: dict[str, Any] = {"items": {"type": "array", "items": self.typed(kind)}}
+        # A list that reads its matched rows' totals answers them beside its page.
+        if spec.listing and spec.listing.totals is not None:
+            totals = get_type_hints(spec.listing.totals)["return"]
+            properties["totals"] = self.components.typed({totals.__name__: totals})[totals.__name__]
+        return f"{kind.__name__}Page", {"allOf": [page], "properties": properties}
 
     def record_of(self, record: type | None) -> tuple[str, dict[str, Any]] | None:
         """A read of one record's answer, where its kind types it; else the view's object."""
@@ -619,6 +624,19 @@ class _Builder:
             field = detail["identifier"]
             identifier = sent_schema(self.resource_specs[name].identifier_type)
             listed = spec["operations"]["list"] is not None
+            taken = _path_parameter(
+                "identifier",
+                identifier,
+                f"The record's `{field}`, as each item of the list carries it."
+                if listed
+                else f"The `{field}` to read it for.",
+            )
+            # Every resource read by one field takes it alike; one whose field
+            # of that name holds another type takes the first of that type, or
+            # names its own.
+            named = f"{_pascal(field)}Identifier" if listed else f"{_pascal(field)}Lookup"
+            if self.parameters.get(named, taken) != taken:
+                named = next((key for key, held in self.parameters.items() if held == taken), _pascal(name) + named)
             # A resource with a list holds the records its summary describes,
             # and this reads one of them; one without is read one at a time,
             # and its summary is already about one.
@@ -632,20 +650,7 @@ class _Builder:
                 description=(
                     f"One of the records {spec['label']} lists, found by its `{field}`." if listed else spec["summary"]
                 ),
-                parameters=[
-                    # Every resource read by one field takes it alike.
-                    self.parameter(
-                        f"{_pascal(field)}Identifier" if listed else f"{_pascal(field)}Lookup",
-                        _path_parameter(
-                            "identifier",
-                            identifier,
-                            f"The record's `{field}`, as each item of the list carries it."
-                            if listed
-                            else f"The `{field}` to read it for.",
-                        ),
-                    ),
-                    self.mask(name, listed=False),
-                ],
+                parameters=[self.parameter(named, taken), self.mask(name, listed=False)],
                 answer=self.record_of(self.resource_specs[name].record_type),
                 links=self.links(resource=name),
                 scopes=spec["required_capabilities"],

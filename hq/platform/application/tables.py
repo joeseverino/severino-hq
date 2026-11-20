@@ -1,43 +1,21 @@
-"""Declarative query engine for searchable, filterable list views."""
+"""A table's columns and cells: how each column sets, sorts and leaves a narrow box."""
 
-import shlex
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import FieldDoesNotExist
-from django.core.paginator import EmptyPage, Page, Paginator
 from django.db import models
-from django.db.models import Model, Q, QuerySet
+from django.db.models import Model
 
 from hq.platform.core.table_cells import leaving_order
-lazy from hq.platform.application.search import apply_search
 
 from .display_words import display
-from .page_reads import Remedy
-from .projection import guarded
-from .ui import ended
-lazy from . import security
 
 if TYPE_CHECKING:
     from .entity_links import EntityLink
     from .pages import PageAction
     from .work_runs import RunEvidence
-
-
-@dataclass(frozen=True, slots=True)
-class TableFilter:
-    name: str
-    label: str
-    lookup: str
-    choices: Iterable[tuple[Any, str]]
-
-
-@dataclass(frozen=True, slots=True)
-class TableSort:
-    value: str
-    label: str
-    ordering: str | tuple[str, ...]
 
 
 # What a column holds, which says how its cells set: prose wraps at words, an
@@ -141,22 +119,13 @@ class Cell:
 
 @dataclass(frozen=True, slots=True)
 class TableColumn:
-    """One column: its heading, and the field it sorts by if it sorts.
-
-    Declared once on the view. The list page draws the header from these, and
-    when a view declares no ``table_sorts`` the sort menu comes from them too,
-    so a column cannot sort one way in its header and another in the menu.
-    """
+    """One column: its heading, and the sort of its list it is ordered by if
+    it sorts, which its list read declares both ways (``ListSort.both``)."""
 
     # Left blank for a column of a row's controls, which shows no heading and
     # is named "Actions" to a screen reader.
     label: str
     sort: str = ""
-    # Left blank, a column of words names its two orders itself ("Status A–Z",
-    # "Status Z–A"). A date or a number says its own: "Oldest purchase",
-    # "Highest cost".
-    ascending_label: str = ""
-    descending_label: str = ""
     # Classes for the heading. ``key-col`` keeps the column at every width;
     # what a narrow box lets go is listed when a row is expanded.
     css: str = ""
@@ -173,18 +142,6 @@ class TableColumn:
     def __post_init__(self) -> None:
         object.__setattr__(self, "kind", column_kind(self.kind, self.css, otherwise=""))
         check_drop(self.drop, self.css, self.label)
-
-    def sorts(self) -> tuple[TableSort, ...]:
-        if not self.sort:
-            return ()
-        return (
-            TableSort(self.sort, self.ascending_label or f"{self.label} A–Z", self.sort),
-            TableSort(
-                f"-{self.sort}",
-                self.descending_label or f"{self.label} Z–A",
-                f"-{self.sort}",
-            ),
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,295 +166,3 @@ class DataTable:
     @property
     def has_actions(self) -> bool:
         return any(actions for _cells, _below, actions in self.rows)
-
-
-@dataclass(frozen=True, slots=True)
-class TableToggle:
-    name: str
-    label: str
-
-
-@dataclass(frozen=True, slots=True)
-class TableQuery:
-    """What a list's address asks of its rows, handed to the projection that
-    fills it (``TableListMixin.get_table_rows``): each filter's chosen values
-    by the filter's name, the search as typed, and the chosen sort's value
-    (the default where the address names none it declares)."""
-
-    filters: Mapping[str, tuple[str, ...]]
-    search: str
-    sort: str
-
-    def chosen(self, name: str) -> tuple[str, ...]:
-        return self.filters.get(name, ())
-
-
-@dataclass(frozen=True, slots=True)
-class Projected:
-    """A projection's rows as a list pages them: ``rows`` counted and cut in
-    the database, and each page of them read back whole by ``read``, so a page
-    costs the same however many rows match."""
-
-    rows: QuerySet
-    read: Callable[[list[Any]], list[Any]]
-
-    def count(self) -> int:
-        return self.rows.count()
-
-    def __len__(self) -> int:
-        return self.count()
-
-    def __getitem__(self, cut: slice) -> list[Any]:
-        return self.read(list(self.rows[cut]))
-
-    def __iter__(self) -> Iterator[Any]:
-        return iter(self[:])
-
-
-class TableListMixin:
-    """Apply one stable URL/query contract to a Django ``ListView``.
-
-    Its rows are the model's queryset, which the view passes through
-    ``apply_table_query``, or a projection's (``get_table_rows``).
-    """
-
-    table_search_fields: tuple[str, ...] = ()
-    table_search_scope = ""
-    table_filters: tuple[TableFilter, ...] = ()
-    table_columns: tuple[TableColumn, ...] = ()
-    # A checkbox per row, for copying the selected rows' ids.
-    table_selectable = False
-    table_sorts: tuple[TableSort, ...] = ()
-    table_toggles: tuple[TableToggle, ...] = ()
-    table_default_sort = ""
-    table_search_placeholder = "Search…"
-    # What an empty list means, in one line ("No assets yet."); left blank, it
-    # is "No" and the model's plural. What would fill it is derived: the page's
-    # lead action, or the connection that reads what it lists (``Page.remedy``).
-    table_empty = ""
-    # A sentence that qualifies it, in the same line ("Add one in the vault.").
-    table_empty_why = ""
-    # False where the lead action is a view of this same list, not a way to fill it.
-    table_empty_remedy = True
-    # The ListView this mixes into supplies these.
-    model: type[Model] | None
-    object_list: Any
-    _resolved_table_filters: tuple[TableFilter, ...] | None = None
-
-    def get_table_empty(self) -> str:
-        if self.table_empty:
-            return self.table_empty
-        model = getattr(self, "model", None)
-        return ended(f"No {model._meta.verbose_name_plural}") if model is not None else "No rows."
-
-    def get_table_empty_remedy(self) -> Remedy | None:
-        """What fills this list when it is empty, where the page's derived remedy
-        is not it. None takes the derived one."""
-
-        return None
-
-    def get_table_filters(self) -> tuple[TableFilter, ...]:
-        return self.table_filters
-
-    def get_table_rows(self, query: TableQuery) -> Projected | None:
-        """The rows of a list a projection fills, for what its address asks;
-        None, the default, lists the model's queryset.
-
-        A projection takes each filter, the search and the sort as parameters,
-        so a filter's ``lookup`` and a sort's ``ordering`` go unread.
-        """
-
-        return None
-
-    def table_query(self) -> TableQuery:
-        """What the address asks, as a projection reads it."""
-
-        sort = self.request.GET.get("sort", "")
-        return TableQuery(
-            filters={spec.name: tuple(self.table_values(spec.name)) for spec in self.resolved_table_filters()},
-            search=self.request.GET.get("q", "").strip(),
-            sort=sort if any(spec.value == sort for spec in self.get_table_sorts()) else self.table_default_sort,
-        )
-
-    def get_queryset(self) -> Any:
-        rows = self.get_table_rows(self.table_query())
-        if rows is None:
-            # The model's queryset, from the ListView this mixes into, which mypy does not see here.
-            return getattr(super(), "get_queryset")()  # noqa: B009 (no attribute of object's to mypy)
-        return rows
-
-    def resolved_table_filters(self) -> tuple[TableFilter, ...]:
-        if self._resolved_table_filters is None:
-            self._resolved_table_filters = tuple(self.get_table_filters())
-        return self._resolved_table_filters
-
-    def get_table_sorts(self) -> tuple[TableSort, ...]:
-        if self.table_sorts:
-            return self.table_sorts
-        return tuple(sort for column in self.table_columns for sort in column.sorts())
-
-    def table_values(self, name: str) -> list[str]:
-        return [value for value in self.request.GET.getlist(name) if value]
-
-    def _apply_table_search(self, queryset: QuerySet, query: str) -> QuerySet:
-        if query and self.table_search_scope:
-            return apply_search(
-                queryset,
-                scope=self.table_search_scope,
-                query=query,
-                principal=security.web_principal(self.request.user),
-            )
-        if query and self.table_search_fields:
-            try:
-                terms = shlex.split(query)
-            except ValueError:
-                terms = query.split()
-            for term in terms[:8]:
-                predicate = Q()
-                for field in self.table_search_fields:
-                    predicate |= Q(**{f"{field}__icontains": term})
-                queryset = queryset.filter(predicate)
-        return queryset
-
-    def _apply_table_filters(self, queryset: QuerySet) -> QuerySet:
-        for spec in self.resolved_table_filters():
-            values = self.table_values(spec.name)
-            if values:
-                queryset = queryset.filter(**{f"{spec.lookup}__in": values})
-        return queryset
-
-    def _apply_table_sort(self, queryset: QuerySet, query: str) -> QuerySet:
-        requested_sort = self.request.GET.get("sort")
-        selected_sort = requested_sort or self.table_default_sort
-        if query and self.table_search_scope and requested_sort in (None, "_relevance"):
-            return queryset.order_by("_search_rank", "pk")
-        sort = next(
-            (spec for spec in self.get_table_sorts() if spec.value == selected_sort),
-            None,
-        )
-        if sort:
-            ordering = sort.ordering if isinstance(sort.ordering, tuple) else (sort.ordering,)
-            # Stable pagination: equal values must not drift between pages.
-            if not any(field.lstrip("-") == "pk" for field in ordering):
-                ordering = (*ordering, "pk")
-            queryset = queryset.order_by(*ordering)
-        return queryset
-
-    def apply_table_query(self, queryset: QuerySet) -> QuerySet:
-        """Apply the shared search, filter, and stable-sort URL contract."""
-
-        query = self.request.GET.get("q", "").strip()
-        queryset = self._apply_table_search(queryset, query)
-        queryset = self._apply_table_filters(queryset)
-        return guarded(self._apply_table_sort(queryset, query))
-
-    def table_context(self) -> dict[str, Any]:
-        filters = []
-        active_count = 0
-        for spec in self.resolved_table_filters():
-            selected = self.table_values(spec.name)
-            active_count += len(selected)
-            filters.append(
-                {
-                    "name": spec.name,
-                    "label": spec.label,
-                    "selected_count": len(selected),
-                    "options": [
-                        {
-                            "value": str(value),
-                            "label": label,
-                            "selected": str(value) in selected,
-                        }
-                        for value, label in spec.choices
-                    ],
-                }
-            )
-        toggles = []
-        for toggle in self.table_toggles:
-            selected = bool(self.request.GET.get(toggle.name))
-            active_count += int(selected)
-            toggles.append({"name": toggle.name, "label": toggle.label, "selected": selected})
-        query = self.request.GET.get("q", "")
-        active_count += int(bool(query.strip()))
-        return {
-            "query": query,
-            "search_placeholder": self.table_search_placeholder,
-            "filters": filters,
-            "sorts": self.get_table_sorts(),
-            # A search adds the order that ranks by how well each row matches.
-            "sort_choices": [
-                *([("_relevance", "Relevance")] if query else []),
-                *((spec.value, spec.label) for spec in self.get_table_sorts()),
-            ],
-            "selected_sort": (
-                "_relevance"
-                if query and self.request.GET.get("sort") in (None, "_relevance")
-                else self.request.GET.get("sort", self.table_default_sort)
-            ),
-            "toggles": toggles,
-            "columns": ranked(typed(self.table_columns, self.model)),
-            "selectable": self.table_selectable,
-            "active_count": active_count,
-            "empty": self.get_table_empty(),
-            "empty_why": self.table_empty_why,
-            "empty_remedy": self.table_empty_remedy,
-            "empty_link": self.get_table_empty_remedy(),
-            "clear": Remedy("Clear filters", "?"),
-        }
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        context["table"] = self.table_context()
-        return context
-
-
-class UncountedPage(Page):
-    """A page that knows whether another follows without knowing how many."""
-
-    def __init__(self, object_list: list[Any], number: int, paginator: UncountedPaginator, *, more: bool):
-        super().__init__(object_list, number, paginator)
-        self.more = more
-
-    @override
-    def has_next(self) -> bool:
-        return self.more
-
-    @override
-    def next_page_number(self) -> int:
-        return self.number + 1
-
-    @override
-    def previous_page_number(self) -> int:
-        return max(1, self.number - 1)
-
-    @override
-    def start_index(self) -> int:
-        return (self.paginator.per_page * (self.number - 1)) + 1 if self.object_list else 0
-
-    @override
-    def end_index(self) -> int:
-        return (self.paginator.per_page * (self.number - 1)) + len(self.object_list)
-
-
-class UncountedPaginator(Paginator):
-    """Pages through a list too long to count on every load.
-
-    A page reads one row past its end to learn whether another follows, so the
-    pages say "Page 3", never "of 1,262", and no load counts the whole set.
-    """
-
-    # The pages partial leaves out the total where there is none.
-    counted = False
-
-    @override
-    def validate_number(self, number: Any) -> int:
-        return self._validate_number(number, float("inf"))
-
-    @override
-    def page(self, number: Any) -> UncountedPage:
-        number = self.validate_number(number)
-        bottom = (number - 1) * self.per_page
-        rows = list(self.object_list[bottom : bottom + self.per_page + 1])
-        if not rows and number > 1:
-            raise EmptyPage(self.error_messages["no_results"])
-        return UncountedPage(rows[: self.per_page], number, self, more=len(rows) > self.per_page)

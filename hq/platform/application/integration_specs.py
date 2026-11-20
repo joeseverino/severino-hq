@@ -3,13 +3,13 @@
 import annotationlib
 import inspect
 from annotationlib import Format
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
 from functools import cache
-from typing import TYPE_CHECKING, Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
-from django.db.models import BigIntegerField
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from django.db.models import BigIntegerField, Q
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
 
 from .contracts import Effect
 from .display_words import display
@@ -20,6 +20,7 @@ from .ui import ended
 lazy from . import records, stored_columns
 lazy from .labels import human_label, lower_first
 lazy from .refusal_status import RefusalEnvelope
+lazy from .resources import several_of
 
 if TYPE_CHECKING:
     from .entity_links import EntityLink
@@ -417,7 +418,7 @@ FIELD_MASK = (
 )
 # The query field a page past the first is asked by, read by the resource
 # layer around the handler (application.resources) and never passed to it.
-PAGE_FIELD = "cursor"
+PAGE_FIELD = "page"
 
 
 def typed_keys(kind: type) -> tuple[str, ...]:
@@ -428,13 +429,110 @@ def typed_keys(kind: type) -> tuple[str, ...]:
     return tuple(annotationlib.get_annotations(kind, format=Format.FORWARDREF))
 
 
+# The query field a list's order is asked by, which a list that declares its
+# sorts takes, and the one a searched kind's text is, each read by the resource
+# layer around the handler and never passed to it.
+SORT_FIELD = "sort"
+SEARCH_FIELD = "query"
+
+
+@dataclass(frozen=True, slots=True)
+class ListSort:
+    """One order a list is read in: its name in the query's ``sort``, which a
+    column's heading links by (``date``, ``-date``), its label, and the
+    ordering it stands for (a field or an annotation, ``-`` descending),
+    where that is not the name, and an example where the items do not show
+    the order: it makes records and answers their identifiers in it."""
+
+    name: str
+    label: str
+    ordering: tuple[str, ...] = ()
+    example: Callable[[], Iterable[object]] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.ordering:
+            object.__setattr__(self, "ordering", (self.name,))
+
+    @classmethod
+    def both(cls, name: str, label: str, reverse: str = "") -> tuple[ListSort, ListSort]:
+        """The order ``name`` names and its reverse, said ``label`` and
+        ``reverse``; a column of words names its own two from its heading
+        alone, "Vendor A–Z" and "Vendor Z–A"."""
+
+        if not reverse:
+            label, reverse = f"{label} A–Z", f"{label} Z–A"
+        return cls(name, label), cls(name[1:] if name.startswith("-") else f"-{name}", reverse)
+
+
+# The values a list is narrowed by, as one choice: each value it takes and its words.
+type Choices = Iterable[tuple[Any, str]]
+
+
+@dataclass(frozen=True, slots=True)
+class ListFilter:
+    """One field a list is narrowed by to any of several values, sent
+    comma-separated (``status=active,idea``): its name, its label, the values
+    it takes with their words, or what reads them where they are the records'
+    own (a year), and the lookup it narrows by where that is not its name, or
+    the condition the values asked keep a row by where no one lookup says it.
+    One whose values are read declares the ``pattern`` each is held to.
+    ``unasked`` is what the list keeps while neither it nor a search is asked."""
+
+    name: str
+    label: str
+    choices: Choices | Callable[[], Choices]
+    lookup: str = ""
+    pattern: str = ""
+    unasked: Q | None = None
+    narrows: Callable[[list[str]], Q] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.lookup:
+            object.__setattr__(self, "lookup", self.name)
+        if callable(self.choices):
+            if not self.pattern:
+                raise ValueError(f"Filter {self.name!r} reads its values, so it declares the pattern they keep to.")
+            return
+        object.__setattr__(self, "choices", tuple(self.choices))
+        if not self.pattern:
+            object.__setattr__(self, "pattern", several_of(str(value) for value, _ in self.choices))
+
+    def options(self) -> tuple[tuple[str, str], ...]:
+        """Each value it takes as it is sent, and its words."""
+
+        return tuple(
+            (str(value), label) for value, label in (self.choices() if callable(self.choices) else self.choices)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ListToggle:
+    """A flag a list is narrowed by (``no_receipts=true``): its name, its
+    label, what it keeps in a sentence and as the condition that keeps it,
+    and its example: it makes records and answers the identifiers of those
+    the flag keeps and of those it leaves out. ``unasked`` is what the list
+    keeps while the flag is off, for a flag that brings rows back."""
+
+    name: str
+    label: str
+    description: str
+    keeps: Q
+    example: Callable[[], tuple[Iterable[object], Iterable[object]]] | None = None
+    unasked: Q | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class ListRead:
     """A resource's list read, declared whole: the reader that answers it,
     the query it takes, the TypedDict one item is whole (``fields=*``), and
     the keys each item keeps when the caller names none, so a page costs what
     it shows (every key of ``item`` where it names none). A list answers only
-    its item's keys, and the API document types each item by it."""
+    its item's keys, and the API document types each item by it.
+
+    A list that declares ``sorts`` takes ``sort``, one of their names, and is
+    read in the first where it is asked none and is not searched. Each of its
+    ``filters`` and ``toggles`` is a query field of its own, and ``totals``
+    reads what the rows it matched add up to, answered beside its page."""
 
     # It may come from an extension, so its result is checked at the call
     # (application.resources) rather than trusted from the annotation.
@@ -442,10 +540,77 @@ class ListRead:
     query: type[BaseModel]
     item: type
     fields: tuple[str, ...] = ()
+    sorts: tuple[ListSort, ...] = ()
+    filters: tuple[ListFilter, ...] = ()
+    toggles: tuple[ListToggle, ...] = ()
+    totals: Callable[[Any], Mapping[str, Any]] | None = None
+    # False for a list too long to count on every read: its pages say whether
+    # more follow, and no total.
+    counted: bool = True
 
     def __post_init__(self) -> None:
         if not self.fields and is_typeddict(self.item):
             object.__setattr__(self, "fields", typed_keys(self.item))
+        if self.sorts or self.filters or self.toggles:
+            object.__setattr__(self, "query", _asked_by(self))
+
+    def ordering(self, name: str | None) -> tuple[str, ...]:
+        """The ordering ``sort`` names; none for no name."""
+
+        return next((sort.ordering for sort in self.sorts if sort.name == name), ())
+
+    def keeps(self, asked: Mapping[str, Any], *, searched: bool) -> Q:
+        """The condition the filters and toggles ``asked`` keep a row by."""
+
+        kept = Q()
+        for each in self.filters:
+            if values := asked.get(each.name):
+                chosen = values.split(",")
+                kept &= each.narrows(chosen) if each.narrows else Q(**{f"{each.lookup}__in": chosen})
+            elif each.unasked is not None and not searched:
+                kept &= each.unasked
+        for toggle in self.toggles:
+            if asked.get(toggle.name):
+                kept &= toggle.keeps
+            elif toggle.unasked is not None:
+                kept &= toggle.unasked
+        return kept
+
+
+def _asked_by(read: ListRead) -> type[BaseModel]:
+    """``read``'s query taking a field for each filter and toggle it declares,
+    and ``sort`` where it declares sorts, so the API document says each and any
+    value they do not take is refused."""
+
+    asked: dict[str, Any] = {
+        each.name: (
+            str | None,
+            Field(
+                default=None,
+                title=each.label,
+                max_length=2000,
+                pattern=each.pattern,
+                description=f"Only the records whose {lower_first(each.label)} is one of these, comma-separated; "
+                "absent, every one.",
+            ),
+        )
+        for each in read.filters
+    }
+    asked |= {
+        toggle.name: (bool, Field(default=False, title=toggle.label, description=toggle.description))
+        for toggle in read.toggles
+    }
+    if read.sorts:
+        names = tuple(sort.name for sort in read.sorts)
+        words = ended(
+            "The order the records come in; absent, the best match first for a search, else "
+            f"{lower_first(read.sorts[0].label)}"
+        )
+        choice: Any = Literal[names]
+        asked[SORT_FIELD] = (Annotated[choice | None, Field(description=words)], None)
+    if declared := sorted(asked.keys() & read.query.model_fields.keys()):
+        raise ValueError(f"{read.query.__name__} declares {declared}, which its list's declarations derive.")
+    return create_model(read.query.__name__, __base__=read.query, __doc__=read.query.__doc__, **asked)
 
 
 @dataclass(frozen=True, slots=True)
@@ -473,3 +638,16 @@ class ResourceSpec(Requires):
     pass_principal: bool = False
     # The TypedDict a read of one record answers.
     record_type: type | None = None
+
+    @property
+    def read_around(self) -> frozenset[str]:
+        """The query fields the resource layer reads around the list's handler
+        and never passes to it: the page, the sort, the filters and toggles,
+        and a searched kind's text."""
+
+        read = self.listing
+        declared: list[str] = []
+        if read:
+            declared += [SORT_FIELD] if read.sorts else []
+            declared += [each.name for each in read.filters] + [each.name for each in read.toggles]
+        return frozenset({PAGE_FIELD, *declared, *((SEARCH_FIELD,) if self.search else ())})

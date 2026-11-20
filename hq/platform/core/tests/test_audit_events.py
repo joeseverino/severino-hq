@@ -79,8 +79,7 @@ class AuditEventPageTests(TestCase):
         self.assertTrue(all(len(line.events) == 2 for lines in heads for line in lines))
         operations = [line.events[0].operation_id for lines in heads for line in lines]
         self.assertEqual(len(set(operations)), 60)
-        self.assertTrue(first["page_obj"].has_next())
-        self.assertFalse(second["page_obj"].has_next())
+        self.assertEqual((first["pages"]["next"], second["pages"]["next"]), (2, None))
 
     def test_a_page_counts_nothing(self):
         for index in range(3):

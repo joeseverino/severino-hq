@@ -16,8 +16,9 @@ from mcp import types
 from mcp.shared.exceptions import MCPError
 from mcp.shared.uri_template import UriTemplate
 
-from hq.platform.application import approval_review, approvals, resources as registry
+from hq.platform.application import resources as registry
 from hq.platform.application.access import Access, holding
+from hq.platform.application.held_answer import HELD
 from hq.platform.application.integration_specs import PAGE_FIELD
 from hq.platform.application.projection import complete
 from hq.platform.application.resources import ResourceCollection, ResourceSpec
@@ -73,7 +74,7 @@ def action_queue(principal: Principal) -> ResourceCollection:
     page = registry.list_resource("action_items", None, principal=principal)
     items = list(page["items"])
     while after := page.get("next"):
-        page = registry.list_resource("action_items", {PAGE_FIELD: after["cursor"]}, principal=principal)
+        page = registry.list_resource("action_items", {PAGE_FIELD: after}, principal=principal)
         items += page["items"]
     return cast(ResourceCollection, complete(items))
 
@@ -82,15 +83,8 @@ def hq_itself(principal: Principal) -> ResourceCollection:
     return registry.list_resource("hq", None, principal=principal)
 
 
-def held_requests(principal: Principal) -> dict[str, Any]:
-    """The changes waiting for a person that ``principal`` may read: an agent's own, or every one for a person."""
-
-    items = [serialize_held(held) for held in approvals.pending(principal=principal)]
-    return {"items": items, "count": len(items)}
-
-
-def serialize_held(held: Any) -> dict[str, Any]:
-    return {"asks": str(approval_review.asked(held)), **approvals.serialize_approval(held)}
+def held_requests(principal: Principal) -> ResourceCollection:
+    return registry.list_resource(HELD, None, principal=principal)
 
 
 VIEWS = {

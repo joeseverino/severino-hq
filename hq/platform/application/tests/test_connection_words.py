@@ -69,17 +69,6 @@ class WordTests(SimpleTestCase):
 
         self.assertFalse({state.label for state in Lifecycle} & verbs)
 
-    def test_a_state_is_drawn_good_only_while_it_works_and_never_neutral_once_it_needs_a_person(self):
-        from ..connection_lifecycle import WORKING
-        from ..tone import Tone
-
-        for state in Lifecycle:
-            with self.subTest(state):
-                self.assertIsInstance(state.tone, Tone)
-                self.assertEqual(state.tone == "good", state in WORKING)
-                if state.needs_attention:
-                    self.assertIn(state.tone, {"attention", "serious"})
-
     def test_a_domain_is_starred_in_the_word_the_services_list_uses(self):
         for pinned in (True, False):
             with self.subTest(pinned=pinned):

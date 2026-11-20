@@ -660,11 +660,7 @@ def _operations(scale: float, resources: list[ManagedResource]) -> None:
                 requested_actor="example-agent",
                 requested_interface=API_INTERFACE,
                 expires_at=now + timedelta(days=1),
-                **(
-                    {"state": "pending"}
-                    if index % 15 == 1
-                    else {"state": "approved", "decided_actor": "bench", "decided_at": now}
-                ),
+                **({"state": "pending"} if index % 15 == 1 else {"state": "approved", "decided_at": now}),
             )
             for index in range(_count(scale, 40))
         ]

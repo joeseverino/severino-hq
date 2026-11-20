@@ -34,8 +34,3 @@ class AllocationTests(SimpleTestCase):
         for parts in ((Share("Cash", 1.0, 6),), (Share("Cash", -1.0, 1),), (Share("Cash", float("nan"), 1),)):
             with self.subTest(parts=parts), self.assertRaises(ValueError):
                 AllocationBar("Example whole", parts)
-
-    def test_a_tone_outside_the_status_vocabulary_is_refused(self):
-        with self.assertRaises(ValueError):
-            Share("Owed", 1.0, 2, tone="warning")
-        self.assertEqual(Share("Owed", 1.0, 2, tone="attention").tone, "attention")

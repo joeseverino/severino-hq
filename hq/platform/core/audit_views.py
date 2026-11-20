@@ -2,33 +2,27 @@
 
 from functools import cached_property
 from typing import override
-lazy from datetime import datetime, time, timedelta
 
 from django.core.exceptions import ValidationError
 from django.core.paginator import Page, Paginator
 from django.db.models import BooleanField, ExpressionWrapper, F, Q
 from django.urls import reverse, reverse_lazy
-from django.views.generic import DetailView, ListView
-lazy from django.utils import timezone
+from django.views.generic import DetailView, TemplateView
 
 from hq.platform.application import approval_review, approvals, history
+from hq.platform.application.audit_specs import audit_rows
 from hq.platform.application.doors import door_words
 from hq.platform.application.labels import dotted
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.moments import stamp_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.payload_words import path_words, value_words
 from hq.platform.application.projection import day_span, projection_scope
-from hq.platform.application.record_timeline import record_timeline
 from hq.platform.application.security import Capability, web_principal
-from hq.platform.application.tables import (
-    TableColumn,
-    TableFilter,
-    TableListMixin,
-    TableToggle,
-    UncountedPaginator,
-)
+from hq.platform.application.tables import TableColumn
 from hq.platform.application.url_query import with_query
-lazy from hq.platform.application.approvals import AUDIT_LABEL, awaiting_ids
+lazy from hq.domains.control_plane.models import OperationRequest, SourceProposal
+lazy from hq.platform.application.approvals import awaiting_ids
 lazy from hq.platform.application.automation_adoption import procedures as adopted_procedures
 lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_rows
 
@@ -36,52 +30,32 @@ from .audit import audited_labels, audited_subjects, subject_of
 from .audit_words import change_rows, words_of
 from .models import AuditLog
 
-# The toggles that bring the asks for a fresh reading, and the work HQ did on
-# its own that changed nothing, back into the log.
-READS = "reads"
-ROUTINE = "routine"
 # ``?about=<key>``: the log narrowed to every row about one record.
 ABOUT = "about"
 # How many of the rest of an operation an event's page lists at a time.
 OPERATION_PAGE = 50
 
 
-class AuditLogListView(PageMixin, TableListMixin, ListView):
+class AuditLogListView(ListPageMixin, TemplateView):
+    """The ``audit`` list read as one history: each operation one line, what
+    it changed folded beneath it, and the deploys and container starts HQ's
+    readings hold between them."""
+
     # A security log: read apart from the baseline READ a viewer holds.
     required_capability = Capability.READ_AUDIT_LOG
-    model = AuditLog
+    resource = "audit"
     template_name = "core/auditlog_list.html"
-    context_object_name = "events"
-    paginate_by = 50
-    # Fifty events a page, and never a count of every row on each load.
-    paginator_class = UncountedPaginator
+    page_size = 50
     page_title = "Audit log"
     table_empty_remedy = False
-    table_search_scope = "audit"
     table_selectable = True
-    table_filters = (
-        TableFilter("source", "Where", "source", history.SOURCES),
-        TableFilter("action", "Action", "action", AuditLog.Action.choices),
-    )
-    # Off until asked for: an ask for a fresh reading changes nothing.
-    table_toggles = (TableToggle(READS, "Read requests"), TableToggle(ROUTINE, "Routine work"))
-    # The Message column is prose, so what a row names gets what it leaves.
     # The columns every table of history draws, each sorted here by its field.
     table_columns = tuple(
-        TableColumn(label, field, ascending, descending, css=css)
-        for (label, css), (field, ascending, descending) in zip(
-            history.COLUMNS,
-            (
-                ("object_type", "Type A–Z", "Type Z–A"),
-                ("created_at", "Oldest event", "Newest event"),
-                ("user__username", "User A–Z", "User Z–A"),
-                ("action", "Action A–Z", "Action Z–A"),
-                ("message", "Message A–Z", "Message Z–A"),
-            ),
-            strict=True,
+        TableColumn(label, sort, css=css)
+        for (label, css), sort in zip(
+            history.COLUMNS, ("object_type", "created_at", "user__username", "action", "message"), strict=True
         )
     )
-    table_default_sort = "-created_at"
     table_search_placeholder = "Search what changed, ids and messages…"
 
     @override
@@ -113,111 +87,72 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         return f"Events about {about}." if about else self.page_lede
 
     @override
-    def get_queryset(self):
-        rows = self._rows
-        # Read as history, a page is a page of events, one line per operation.
-        return history.heads(rows) if self._chronological() else rows
+    def list_query(self):
+        """Read as history, newest first, unsearched, not a queue and of every
+        action, a page is a page of events, one line per operation."""
 
-    @cached_property
-    def _rows(self):
-        """The rows this view of the log shows, before they are read as events."""
-
-        about = self._about()
-        qs = record_timeline(about) if about else AuditLog.objects.all()
-        qs = qs.select_related("user").annotate(source=history.source_of_event())
-        if not self.request.GET.get(READS):
-            qs = qs.exclude(history.read_requests())
-        if not self.request.GET.get(ROUTINE):
-            qs = qs.exclude(history.routine())
-        if self._awaiting():
-            qs = qs.filter(
-                action=AuditLog.Action.CREATED,
-                object_type=AUDIT_LABEL,
-                object_id__in=awaiting_ids(),
-            )
-        day = self._day()
-        if day is not None:
-            start, end = day_span(day, day)
-            qs = qs.filter(created_at__gte=start, created_at__lt=end)
-        return self.apply_table_query(qs)
-
-    def _day_bounds(self) -> dict:
-        day = self._day()
-        if day is None:
-            return {}
-        start = datetime.combine(day, time.min, tzinfo=timezone.get_current_timezone())
-        return {"since": start, "until": start + timedelta(days=1)}
-
-    def _day(self):
-        """``?on=YYYY-MM-DD``: one day's history, as the calendar opens it."""
-
-        return stamp_day(self.request.GET.get("on", ""))
+        asked = super().list_query()
+        default = self.listing.sorts[0].name
+        history_read = not (
+            self._awaiting() or asked.get("query") or asked.get("sort", default) != default or asked.get("action")
+        )
+        return {**asked, "events": True} if history_read else asked
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["awaiting"] = self._awaiting()
-        page = list(context["object_list"])
-        if self._chronological():
+        page = self.records(AuditLog.objects.select_related("user"))
+        asked = self.list_query()
+        if asked.get("events"):
+            # What each operation changed is read from the rows its filters keep.
+            within = audit_rows(about=self._about(), on=self._day()).filter(self.listing.keeps(asked, searched=False))
             with projection_scope():
-                found = history.external(self._external_sources(), **self._span(context, page))
-            lines = history.entries(page, found, within=self._rows)
+                moments = history.external(self._external_sources(asked), **self._span(page, within))
+            lines = history.entries(page, moments, within=within)
         else:
             lines = history.entries(page)
         # Each event, then what it changed, folded beneath it in the same columns.
         context["object_list"] = context["events"] = [line for event in lines for line in event.lines]
         return context
 
-    def _chronological(self) -> bool:
-        """The log read as history: newest first, unsearched, not a queue.
+    @override
+    def table(self):
+        if self._about():
+            empty = f"Nothing has been recorded about {self._about()}."
+        else:
+            empty = "Nothing is waiting for your approval." if self._awaiting() else "Nothing has been recorded yet."
+        return {**super().table(), "empty": empty}
 
-        Only then is each operation one line, with what it changed beneath
-        it, and the deploys and container starts HQ's readings hold take their
-        place between them. A search, a
-        sort by another column, an action filter or the approval queue asks for
-        the rows themselves.
-        """
-
-        get = self.request.GET
-        return not (
-            self._awaiting()
-            or get.get("q", "").strip()
-            or get.get("sort", self.table_default_sort) != self.table_default_sort
-            or self.table_values("action")
-        )
-
-    def _external_sources(self) -> frozenset[str]:
-        chosen = self.table_values("source")
+    def _external_sources(self, asked) -> frozenset[str]:
+        chosen = set(asked.get("source", "").split(",")) - {""}
         return history.EXTERNAL.intersection(chosen) if chosen else history.EXTERNAL
 
-    def _span(self, context, page) -> dict:
+    def _span(self, page, within) -> dict:
         """The stretch of time this page covers, so each moment lands on one page.
 
         From the page's oldest event (unbounded on the last page) up to the
         oldest event of the page before (unbounded on the first).
         """
 
-        page_obj = context.get("page_obj")
-        if page_obj is None:
-            return {}
-        span = {}
-        if page_obj.has_next() and page:
+        read, span = self.collection, {}
+        if read["next"] and page:
             span["since"] = page[-1].created_at
-        if page_obj.has_previous():
-            before = self.object_list[page_obj.start_index() - 2 : page_obj.start_index() - 1]
+        if read["previous"]:
+            start = read["previous"] * self.page_size
+            before = history.heads(within).order_by(*self.listing.sorts[0].ordering)[start - 1 : start]
             span["until"] = next(iter(before.values_list("created_at", flat=True)), None)
         # Within the page's stretch and the chosen day both.
-        day = self._day_bounds()
-        if day:
-            span["since"] = max(filter(None, (span.get("since"), day["since"])))
-            span["until"] = min(filter(None, (span.get("until"), day["until"])))
+        if (day := self._day()) is not None:
+            since, until = day_span(day, day)
+            span["since"] = max(filter(None, (span.get("since"), since)))
+            span["until"] = min(filter(None, (span.get("until"), until)))
         return span
 
-    @override
-    def get_table_empty(self) -> str:
-        if self._about():
-            return f"Nothing has been recorded about {self._about()}."
-        return "Nothing is waiting for your approval." if self._awaiting() else "Nothing has been recorded yet."
+    def _day(self):
+        """``?on=YYYY-MM-DD``: one day's history, as the calendar opens it."""
+
+        return stamp_day(self.request.GET.get("on", ""))
 
     def _about(self) -> str:
         """``?about=<key>``: the record whose whole story the log is narrowed to."""
@@ -361,8 +296,15 @@ class AuditLogDetailView(PageMixin, DetailView):
         if approval is not None:
             context["approval"] = approval
         if (scan := self.scan) is not None:
+            proposal = scan.proposal
+            refreshed, rejected = history.who_did_each(
+                history.asking(OperationRequest, (proposal.operation,)),
+                history.asking(SourceProposal, (proposal,), changed="rejected_at"),
+            )
             context.update(
                 scan=scan,
+                refreshed_by=refreshed.get(str(proposal.operation_id)),
+                rejected_by=rejected.get(str(proposal.pk)),
                 adopted_revision=adopted_revision(),
                 # Each playbook it changes, with Adopt and Reject while it waits.
                 scan_rows=playbook_rows(adopted_procedures(), scan, web_principal(self.request.user), every=False),

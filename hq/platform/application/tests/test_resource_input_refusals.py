@@ -19,7 +19,7 @@ READER = Principal("example-reader", "mcp", frozenset(Capability))
 def _filters(kind):
     """What ``kind``'s list narrows by: its query's fields, without the two that page it."""
 
-    return [name for name in resource_registry()[kind].listing.query.model_fields if name not in {"limit", "cursor"}]
+    return [name for name in resource_registry()[kind].listing.query.model_fields if name not in {"limit", "page"}]
 
 
 def _call(name, arguments):

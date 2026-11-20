@@ -4,7 +4,6 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
-from django.core import signing
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -13,19 +12,18 @@ from pydantic import (
     ValidationError,
     with_config,
 )
-
-from hq.platform.core.digests import digest
+from pydantic_core import to_json
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
 from .contracts import Closed
 from .describe import Describe
 from .field_masks import FieldMaskRefusal, Fields, asks_whole, field_paths, selected
 from .input_errors import pydantic_refusal
-from .integration_specs import PAGE_FIELD, ResourceSpec, typed_keys
+from .integration_specs import PAGE_FIELD, SEARCH_FIELD, SORT_FIELD, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .json_schemas import narrowed, sent_schema
-from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_size, paging
+from .projection import MAX_PAGE_SIZE, PageScope, Search, page_size, paging
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
 from .resource_refusals import (
@@ -49,7 +47,7 @@ def limit_words(most: int, *, paged: bool) -> str:
     """What a list query's ``limit`` says, its bound from the value it is checked by."""
 
     return (
-        f"How many records a page holds, 1 to {most}; next.cursor reads the page after."
+        f"How many records a page holds, 1 to {most}; `page` reads the ones after."
         if paged
         else f"How many records to return, 1 to {most}, first by the list's own ranking."
     )
@@ -60,14 +58,13 @@ def limit_words(most: int, *, paged: bool) -> str:
 # of its own, since the parameter the document writes carries the default.
 # The fields every paged list takes:
 type PageLimit = Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE, description=limit_words(MAX_PAGE_SIZE, paged=True))]
-type Cursor = Annotated[
-    str | None,
+# A page past any list HQ holds is still one whose first row a database can count to.
+type PageNumber = Annotated[
+    int,
     Field(
-        max_length=4000,
-        description=(
-            "The page after the one whose next.cursor this is. Send it as it came, with the filters that page was "
-            "read with; absent, the first page."
-        ),
+        ge=1,
+        le=1_000_000,
+        description="Which page to read, 1 first, each `limit` records long; each page names the pages beside it.",
     ),
 ]
 
@@ -75,11 +72,14 @@ type Cursor = Annotated[
 # What a list's own ``status`` and ``query`` narrow by, wherever a query declares them.
 STATUS_FILTER = "Only the records in this status; absent, every status."
 TEXT_FILTER = "Only the records whose text holds this, ignoring case; absent, every record."
-# A list's ``query`` where it may be left out.
-type TextFilter = Annotated[str | None, Field(description=TEXT_FILTER)]
-# A list's ``status`` where it may be left out and its statuses are not
-# declared as a choice; one that declares them types the field by ``one_of``.
-type StatusFilter = Annotated[str | None, Field(description=STATUS_FILTER)]
+# The ``query`` of a kind that declares its search, which looks it up there.
+type SearchText = Annotated[
+    str | None,
+    Field(
+        description="Only the records a search for this finds, the best match first unless a sort is asked; absent, "
+        "every record."
+    ),
+]
 # A ranked list's ``limit``: the deployment-wide ceiling, declared so a caller
 # reads it in the schema and a page past it is refused rather than quietly cut.
 type TopLimit = Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE, description=limit_words(MAX_PAGE_SIZE, paged=False))]
@@ -107,7 +107,7 @@ class BoundedQuery(TopQuery):
     """A list read one page at a time, every row reached by following each page's ``next``."""
 
     limit: PageLimit = 50
-    cursor: Cursor = None
+    page: PageNumber = 1
 
 
 def one_of(values: Iterable[str]) -> Any:
@@ -205,7 +205,7 @@ class ListOperation(TypedDict):
     filters: Annotated[
         list[str],
         Describe(
-            "The fields a listing narrows by, without `limit` and `cursor`, which page it; `describe_resources` "
+            "The fields a listing narrows by, without `limit` and `page`, which page it; `describe_resources` "
             "given this name says each one's type and choices."
         ),
     ]
@@ -223,7 +223,7 @@ class ListOperation(TypedDict):
         Annotated[
             dict[str, Any],
             Describe(
-                "The JSON Schema of `limit`, with the most it may ask for, and `cursor`, where the list takes them: "
+                "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: "
                 "`list_resource` takes each as an argument of its own beside `filters`, and the machine API as a "
                 "query parameter beside them. Only in a read of this one resource; absent, the list takes neither."
             ),
@@ -359,16 +359,24 @@ def list_resource(
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     asked = parsed.model_dump()
-    token = asked.pop(PAGE_FIELD, None)
-    bound = _bound(parsed)
-    with paging(_opened(name, token, bound) if token else None) as scope:
-        try:
-            result = read.reader(**asked, **_caller(spec, principal))
-        except CursorRefusal as exc:
-            raise _cursor_refused(name, exc.reason) from exc
-    # A schema that offers a cursor is a promise every full page issues one.
+    around = {field: asked.pop(field, None) for field in spec.read_around}
+    # A searched kind's text is its search scope's, which ranks what it finds.
+    text = around.get(SEARCH_FIELD)
+    searched = Search(spec.search.scope, text, principal) if spec.search and text else None
+    scope = PageScope(
+        around[PAGE_FIELD] or 1,
+        searched,
+        read.ordering(around.get(SORT_FIELD)),
+        read.sorts[0].ordering if read.sorts else (),
+        read.counted,
+        read.keeps(around, searched=searched is not None),
+        read.totals,
+    )
+    with paging(scope):
+        result = read.reader(**asked, **_caller(spec, principal))
+    # A schema that offers a page is a promise every full page says the next.
     if PAGE_FIELD in type(parsed).model_fields and not scope.claimed:
-        raise RuntimeError(f"Resource {name!r} declares a cursor its handler never paged by.")
+        raise RuntimeError(f"Resource {name!r} declares a page its handler never paged by.")
     invalid = RuntimeError(f"Resource {name!r} list handler returned an invalid collection.")
     try:
         handled = _HANDLED.validate_python(result, strict=True)
@@ -376,7 +384,7 @@ def list_resource(
         raise invalid from None
     if handled["count"] != len(handled["items"]):
         raise invalid
-    page: ResourceCollection = {**handled, **_page(spec, parsed, handled, scope, bound)}
+    page: ResourceCollection = {**handled, **_page(parsed, handled, scope)}
     # Each item holds only what its type declares, whatever its handler built,
     # and by default only its kind's fields of that.
     kept = frozenset(read.fields if fields is None else typed_keys(read.item))
@@ -403,11 +411,11 @@ def every_item(
         items.extend(page["items"])
         if page["next"] is None:
             return items
-        query = {**query, **page["next"]}
+        query = {**query, PAGE_FIELD: page["next"]}
 
 
 class PagePosition(TypedDict):
-    """Where a page of a list stopped."""
+    """Where a page of a list stands among the others."""
 
     total: Annotated[
         int | None, Describe("How many records matched in all, where the list counts them cheaply; else null.")
@@ -415,7 +423,8 @@ class PagePosition(TypedDict):
     truncated: Annotated[
         bool, Describe("Whether more records follow this page; `next` reads the page after, and is null on the last.")
     ]
-    next: NextPage | None
+    next: Annotated[int | None, Describe("The `page` after this one; null on the last.")]
+    previous: Annotated[int | None, Describe("The `page` before this one; null on the first.")]
 
 
 @with_config(ConfigDict(extra="allow"))
@@ -441,66 +450,29 @@ class _HandledPage(TypedDict):
 _HANDLED = TypeAdapter(_HandledPage)
 
 
-def _page(spec: ResourceSpec, parsed: BaseModel, result: _HandledPage, scope: PageScope, bound: str) -> PagePosition:
-    """Whether more follow this page, and the cursor that reads the next one.
+def _page(parsed: BaseModel, result: _HandledPage, scope: PageScope) -> PagePosition:
+    """Whether more follow this page, and the numbers of the pages beside it.
 
     ``total`` is what the handler counted, or None where counting is not cheap.
-    A page cut through ``projection``'s helpers says where it stopped; one cut
-    by hand is read as cut off when its page is full, so a full page is never
-    mistaken for the whole list, and offers no cursor, since nothing could
-    resume it.
+    A page cut through ``projection``'s helpers says whether more follow; one
+    cut by hand is read as cut off when its page is full, so a full page is
+    never mistaken for the whole list, and names no page after it, since
+    nothing could read it.
     """
 
     count, total = result["count"], result.get("total")
     if scope.claimed and PAGE_FIELD in type(parsed).model_fields:
-        more = scope.after is not None
         return {
             "total": total,
-            "truncated": more,
-            "next": {"cursor": _issued(spec.name, bound, scope.after)} if more else None,
+            "truncated": scope.more,
+            "next": scope.page + 1 if scope.more else None,
+            "previous": scope.page - 1 if scope.page > 1 else None,
         }
     # A list's query model is its declarer's, plugin or host, and need not page.
     limit = getattr(parsed, "limit", None)
     full = isinstance(limit, int) and count >= page_size(limit)
     truncated = result.get("truncated", total > count if isinstance(total, int) else full)
-    return {"total": total, "truncated": truncated, "next": None}
-
-
-# A cursor is signed, so the position in it is one HQ wrote, and carries the
-# kind and the filters it was issued under, so a page is never read past a
-# position in some other list.
-_CURSOR_SALT = "hq.platform.application.resources.cursor"
-
-
-def _bound(parsed: BaseModel) -> str:
-    """The filters a page was read under, as one digest: every query field but the page's size and cursor."""
-
-    terms = parsed.model_dump(mode="json", exclude={"limit", PAGE_FIELD})
-    return digest(terms)[:32]
-
-
-def _issued(name: str, bound: str, position: dict[str, Any] | None) -> str:
-    return signing.dumps({"kind": name, "bound": bound, "at": position}, salt=_CURSOR_SALT, compress=True)
-
-
-def _opened(name: str, token: str, bound: str) -> dict[str, Any]:
-    """The position ``token`` resumes from, or a refusal naming the cursor when it
-    was not issued by this kind's list under these filters."""
-
-    try:
-        opened = signing.loads(token, salt=_CURSOR_SALT)
-    except signing.BadSignature as exc:
-        raise _cursor_refused(name, "cursor is not one HQ issued; send a page's next.cursor as it came.") from exc
-    if not isinstance(opened, dict) or opened.get("kind") != name or not isinstance(opened.get("at"), dict):
-        raise _cursor_refused(name, "cursor was issued for another list.")
-    if opened.get("bound") != bound:
-        raise _cursor_refused(name, "cursor was issued under other filters; send the filters it was issued with.")
-    position: dict[str, Any] = opened["at"]
-    return position
-
-
-def _cursor_refused(name: str, reason: str) -> InvalidResourceInput:
-    return InvalidResourceInput(name, [{"type": "value_error", "loc": [PAGE_FIELD], "msg": reason}])
+    return {"total": total, "truncated": truncated, "next": None, "previous": None}
 
 
 def masked_kind(spec: ResourceSpec, *, listed: bool) -> type | None:
@@ -547,7 +519,9 @@ def get_resource(
     if not spec.detail_handler or not spec.identifier:
         raise undetailed(spec)
     try:
-        parsed: Any = TypeAdapter(spec.identifier_type).validate_python(identifier, strict=strict)
+        # Read as JSON, the form every caller sends it in and a record lists it
+        # in: a strict UUID or day is its text there, and a number never one.
+        parsed: Any = TypeAdapter(spec.identifier_type).validate_json(to_json(identifier), strict=strict)
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     try:

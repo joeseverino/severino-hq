@@ -6,6 +6,7 @@ a field by it; ``ui`` and ``hq_sdk.ui`` export it.
 
 from collections.abc import Iterable
 from enum import StrEnum
+from typing import cast
 
 from django.db.models.enums import ChoicesType, TextChoices
 
@@ -53,15 +54,17 @@ class Toned(StrEnum):
     declared beside the tone it is drawn in, ``ONLINE = "online", Tone.GOOD``.
 
     Its value is the words it is said in, so ``{% status machine.state %}``
-    draws a state as its label in its tone and no page spells either.
+    draws a state as its label in its tone and no page spells either. A state
+    one subject shares with another is declared as that one's member,
+    ``DRIFTED = ResourceState.DRIFTED``, so the two cannot disagree.
     """
 
     tone: Tone
 
-    def __new__(cls, value: str, tone: Tone) -> Toned:
+    def __new__(cls, value: str, tone: Tone | None = None) -> Toned:
         member = str.__new__(cls, value)
-        member._value_ = value
-        member.tone = tone
+        member._value_ = str(value)
+        member.tone = tone or cast(Toned, value).tone
         return member
 
     @property

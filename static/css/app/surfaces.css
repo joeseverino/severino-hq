@@ -68,7 +68,7 @@
      part writes another corner as a radius token, colors its edge with
      `border-color` (`--control-line` from the base layer, which this one
      outranks) and lifts by `--control-lift`. */
-  :where(button, fieldset, meter, progress, [popover]:not(:popover-open)) { border: 0; }
+  :where(button, fieldset, meter, progress, select, [popover]:not(:popover-open)) { border: 0; }
   :where(.visually-hidden) { border: 0 !important; } /* a screen reader's words keep their one pixel */
   meter::-webkit-meter-bar { border: 0; }
   :where(

@@ -177,8 +177,8 @@ A held call's `approval.id` reads where it stands at
 queued, and once done the call's `answer`, as a task's `result` reads it
 ([below](#held-changes-as-mcp-tasks)). A playbook's run reads at
 `GET /v2/resources/runs/<operation_id>/` by the `operation.id` its answer
-carried, and lists at `/v2/resources/runs/` by `playbook`, `machine`,
-`correlation` and `state`.
+carried. Runs list with HQ's jobs at `/v2/resources/work/`, by `kind` (a
+playbook's command), `host`, `correlation` and `state`.
 
 - Each is a read under the caller's own `read` grant.
 - A hold is its asker's alone (`approvals.own_held_request`, as a task is): another
@@ -444,21 +444,29 @@ closed to keys it does not name. An answer no mask cuts, a command's included,
 refers to `<Name>` itself, every field required. The test client validates
 every answer it receives, masked ones included.
 
-A list read is one page. `truncated` says more follow it, and `next` is
-`{"cursor": …}`: sent back as `cursor` (`?cursor=` over HTTP, and an argument
-of `list_resource` beside its `filters` and `limit`, as `get_findings` and
-`recent_activity` take `limit`) with the same filters, it reads the page
-after, and the last page's `next` is null. On MCP, a `limit` or `cursor` sent
-inside `filters` is refused, so paging has one place on every tool.
-A cursor is opaque and signed, and bound to the kind and filters it was issued
-under: one sent to another list, with other filters, or altered is refused as
-`invalid_input` naming `cursor`. A list cut from a queryset resumes after its
-last row's key in the list's order, so a row added or removed between reads
-moves no other. A list derived whole on every read (machines, containers, the
-action queue) resumes at a place in it, and a row whose place moved between
-reads can be skipped or shown twice. A query that offers a `cursor` is held to
-it: a handler that cuts its page without the shared helpers fails the read. A
-kind whose query has no `cursor` (search, which ranks each scope apart,
+A list read is one page, asked for by its number as GitHub's sortable lists
+are. `page` is 1 first (`?page=` over HTTP, and an argument of
+`list_resource` beside its `filters` and `limit`, as `get_findings` and
+`recent_activity` take `limit`). `truncated` says more follow it, `next` and
+`previous` are the numbers of the pages beside it, null past either end, and
+`total` counts every match, so a page says where it stands ("2 of 7"). On MCP,
+a `limit` or `page` sent inside `filters` is refused, so paging has one place
+on every tool. A row added or removed between two reads moves the rows after
+it, so one can be skipped or shown twice; a page number holds under any order,
+which a key does not. A query that offers a `page` is held to it: a handler
+that cuts its page without the shared helper fails the read. A list too long
+to count on every read declares itself uncounted (`ListRead.counted`), and
+its pages say whether more follow with `total` null.
+
+A list that declares its sorts (`ListRead.sorts`) takes `sort`, one of their
+names, which its schema lists; absent, it reads in the first. Each filter it
+declares (`ListRead.filters`) takes several values, comma-separated
+(`?status=active,idea`), each one its schema's pattern allows, and each
+toggle (`ListRead.toggles`) is a flag. A list that adds up what it matched
+(`ListRead.totals`) answers that as `totals` beside its page. A kind that
+declares its search takes `query`, looked up in its search scope, the one the
+site's search uses, with the best match first unless a `sort` is asked. A
+kind whose query has no `page` (search, which ranks each scope apart,
 analytics' ranked breakdowns, and an extension's own query) answers a top
 `limit`, narrowed rather than paged, with `next` null. `documentation_status`
 carries the documentation list's first page and its `next`.
@@ -780,7 +788,7 @@ composed one included, so an extension's declarations are held too.
 
 Each answer names the requests it leads to as OpenAPI links, derived in one
 place (`_Builder.links`) from what the registries say of it: a page links to
-the page after it, by its `next.cursor` with the same query; a page's first
+the page after it, by its `next` as `page` with the same query; a page's first
 item and a record link to that record's read and to each command on its
 resource that takes it as the target, sending its `updated_at` as
 `expected_updated_at` where the command checks for a stale write; a held
@@ -825,10 +833,10 @@ kinds as the schema's enum, the names of each kind's filters in
 from each kind's query model (`list_filters` in
 `hq/platform/application/resources.py`), so an extension's kind is described as
 it declares itself. With no `name`, `describe_resources` lists every kind with
-the `filters` its list narrows by, leaving out `limit` and `cursor`, which page
+the `filters` its list narrows by, leaving out `limit` and `page`, which page
 it. With one, as `/api/v2/resources/?name=` does, it answers that kind with its
 list's `query_schema`, the filters alone. Beside it is `paging`, the schema of
-the `limit` and `cursor` the list takes. Those are `list_resource`'s own
+the `limit` and `page` the list takes. Those are `list_resource`'s own
 arguments, which it refuses inside `filters`, and the machine API's query
 parameters beside the filters. A filter that takes only some values (a status,
 a dimension, a resource kind, an action item's source) declares them as a
@@ -901,7 +909,7 @@ recent activity, the active projects, the draft and published content), its
 `lists` names the `recent_activity` or `list_resource` call that reads it, and
 leaves out one the caller may not read. Every domain, an extension's too,
 raises items into the queue, so `list_resource` answers `action_items` a page
-of `dashboard_answer.ACTION_ITEMS_PAGE` when no `limit` is sent, `next.cursor`
+of `dashboard_answer.ACTION_ITEMS_PAGE` when no `limit` is sent, `next`
 reading the rest; the API's page is every list's default, since what an absent
 `limit` means is each door's own. `ok` is the door's own: the API wraps each
 answer in `Ok`, and a tool's answer is the type alone, its refusal saying `ok:

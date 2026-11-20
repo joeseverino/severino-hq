@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 from functools import partial
-from typing import Annotated, Any
+from typing import Annotated, Any, TypedDict
 
 from django.db.models import Count, QuerySet, Sum
 from pydantic import Field
@@ -90,20 +90,20 @@ class CostTotals:
 _SUMS = {"count": Count("pk"), "total": Sum("total_cost"), "deductible": Sum("estimated_deductible_amount")}
 
 
-def _summed(sums: dict[str, Any], narrowed: bool = False) -> CostTotals:
-    return CostTotals(sums["total"] or ZERO, sums["deductible"] or ZERO, sums["count"], narrowed)
+def _summed(sums: dict[str, Any]) -> CostTotals:
+    return CostTotals(sums["total"] or ZERO, sums["deductible"] or ZERO, sums["count"])
 
 
 def _each_once(rows: QuerySet) -> QuerySet:
-    # A filter that joins (a search, a count of receipts) can repeat a row,
+    # A filter that joins (a search) can repeat a row,
     # so the sums read each row of ``rows`` once.
     return rows.model.objects.filter(pk__in=rows.order_by().values("pk")).order_by()
 
 
-def cost_totals(rows: QuerySet, *, narrowed: bool = False) -> CostTotals:
+def cost_totals(rows: QuerySet) -> CostTotals:
     """What ``rows``, expenses or assets as their filters leave them, add up to."""
 
-    return _summed(_each_once(rows).aggregate(**_SUMS), narrowed)
+    return _summed(_each_once(rows).aggregate(**_SUMS))
 
 
 def costs_by_category(rows: QuerySet) -> tuple[tuple[str, CostTotals], ...]:
@@ -113,26 +113,55 @@ def costs_by_category(rows: QuerySet) -> tuple[tuple[str, CostTotals], ...]:
     return tuple((row["category"], _summed(row)) for row in grouped)
 
 
-def category_figures(rows: QuerySet, *, query, choices) -> tuple[Kpi, ...]:
+class CostSums(TypedDict):
+    """What a list's matching records cost."""
+
+    count: Annotated[int, Describe("How many records matched.")]
+    total: Annotated[str, Describe("What they cost in all, a decimal string with two places.", examples=("12.50",))]
+    deductible: Annotated[str, Describe("An estimate of what of that may be deducted, a decimal string.")]
+
+
+class CategorySums(CostSums):
+    """What one category of a list's matching records cost."""
+
+    category: Annotated[str, Describe("The category, as each record's `category` says it.")]
+
+
+class ListTotals(CostSums):
+    """What a list's matching records cost, whole and by category."""
+
+    categories: Annotated[list[CategorySums], Describe("What each category cost, the costliest first.")]
+
+
+def list_totals(rows: QuerySet) -> ListTotals:
+    """What the rows a list read matched cost, which it answers beside its page."""
+
+    categories = [row(sums, CategorySums, category=category) for category, sums in costs_by_category(rows)]
+    return row(cost_totals(rows), ListTotals, categories=categories)
+
+
+def said_totals(totals: ListTotals, *, narrowed: bool) -> CostTotals:
+    """A list read's ``totals`` as its page says them."""
+
+    return CostTotals(Decimal(totals["total"]), Decimal(totals["deductible"]), totals["count"], narrowed)
+
+
+def category_figures(categories: list[CategorySums], *, query, choices) -> tuple[Kpi, ...]:
     """Each category's total as a figure linking to the list narrowed to it,
     said only where two or more divide the list, which a list narrowed to one
     category never is. ``query`` is the request's own, which each link keeps."""
 
-    categories = costs_by_category(rows)
     if len(categories) < 2:
         return ()
     labels = dict(choices)
     kept = query.copy()
     kept.pop("page", None)
 
-    def narrowed_to(category: str) -> str:
-        kept["category"] = category
-        return with_query("", kept)
+    def figure(sums: CategorySums) -> Kpi:
+        category = kept["category"] = sums["category"]
+        return Kpi(labels.get(category, category), money(Decimal(sums["total"]), cents=False), url=with_query("", kept))
 
-    return tuple(
-        Kpi(labels.get(category, category), money(totals.total, cents=False), url=narrowed_to(category))
-        for category, totals in categories
-    )
+    return tuple(figure(sums) for sums in categories)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,16 +187,11 @@ class ExpenseCommand:
 _LINKED = ("related_project", "related_asset", "related_content", "related_documentation")
 
 
-def list_expenses(
-    *, year: int | None = None, category: str | None = None, limit: int = 50, principal: Principal | None = None
-) -> dict[str, Any]:
+def list_expenses(*, limit: int = 50, principal: Principal | None = None) -> dict[str, Any]:
     """List expense records whole, each doc as ``principal`` may read it."""
+
     rows = Expense.objects.select_related(*_LINKED)
-    if year is not None:
-        rows = rows.filter(date__year=year)
-    if category:
-        rows = rows.filter(category=category)
-    return listing(rows, partial(serialize_expense, principal=principal), order=("-date", "-id"), limit=limit)
+    return listing(rows, partial(serialize_expense, principal=principal), order=(), limit=limit)
 
 
 def serialize_expense(expense: Expense, *, principal: Principal | None = None) -> ExpenseRecord:

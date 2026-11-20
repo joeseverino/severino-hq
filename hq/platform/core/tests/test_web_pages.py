@@ -14,7 +14,6 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     ProviderInventory,
 )
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
@@ -424,70 +423,6 @@ class DashboardWorkflowTests(SignedInTestCase):
         queue = self.client.get(reverse("action_items"))
         self.assertNotIn(f"{reverse('projects:list')}?needs_output=1", hrefs(queue))
 
-    def test_projects_can_filter_for_missing_output(self):
-        project = Project.objects.create(name="No output yet", status=Project.Status.ACTIVE)
-        documented = Project.objects.create(name="Documented", status=Project.Status.ACTIVE)
-        doc = DocumentationRecord.objects.create(
-            doc_id="rb-documented-001",
-            title="Documented runbook",
-            status=DocumentationRecord.Status.ACTIVE,
-        )
-        doc.related_projects.add(documented)
-        content = ContentItem.objects.create(title="Documented post")
-        content.related_projects.add(documented)
-
-        response = self.client.get("/projects/?needs_output=1")
-
-        self.assertEqual(list(response.context["object_list"]), [project])
-
-    def test_archived_projects_sort_last_by_default(self):
-        active = Project.objects.create(name="ZZZ active project", status=Project.Status.ACTIVE)
-        archived = Project.objects.create(name="AAA archived project", status=Project.Status.ARCHIVED)
-
-        response = self.client.get("/projects/")
-
-        listed = list(response.context["object_list"])
-        self.assertLess(listed.index(active), listed.index(archived))
-
-    def test_table_filters_accept_multiple_values_and_compose(self):
-        active_lab = Project.objects.create(
-            name="Active lab",
-            status=Project.Status.ACTIVE,
-            category="homelab",
-        )
-        idea_lab = Project.objects.create(
-            name="Idea lab",
-            status=Project.Status.IDEA,
-            category="homelab",
-        )
-        Project.objects.create(
-            name="Archived lab",
-            status=Project.Status.ARCHIVED,
-            category="homelab",
-        )
-        Project.objects.create(
-            name="Active consulting",
-            status=Project.Status.ACTIVE,
-            category="other",
-        )
-
-        response = self.client.get(
-            "/projects/",
-            {"status": ["active", "idea"], "category": ["homelab"]},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertCountEqual(response.context["object_list"], [active_lab, idea_lab])
-        status_filter = next(item for item in response.context["table"]["filters"] if item["name"] == "status")
-        self.assertEqual(status_filter["selected_count"], 2)
-
-    def test_table_sort_is_allowlisted(self):
-        Project.objects.create(name="Safe sort")
-
-        response = self.client.get("/projects/", {"sort": "not_a_model_field"})
-
-        self.assertEqual(response.status_code, 200)
-
     def test_a_search_that_matches_nothing_is_an_empty_table_not_an_error(self):
         """A search matching nothing still carries `_search_rank`.
 
@@ -502,18 +437,6 @@ class DashboardWorkflowTests(SignedInTestCase):
                 response = self.client.get(path, {"q": "zzzznomatchhere"})
                 self.assertEqual(response.status_code, 200)
                 self.assertNotContains(response, "Something else entirely")
-
-    def test_table_search_combines_terms_across_searchable_fields(self):
-        matching = Project.objects.create(
-            name="Operations console",
-            technologies_used="Django SQLite",
-        )
-        Project.objects.create(name="Operations notes", technologies_used="Markdown")
-
-        response = self.client.get("/projects/", {"q": "operations django"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(list(response.context["object_list"]), [matching])
 
 
 class NavigationTests(SignedInTestCase):

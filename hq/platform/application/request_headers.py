@@ -2,10 +2,16 @@
 
 from dataclasses import dataclass
 
-from .tone import Tone
+from .tone import Tone, Toned
 
-# What HQ did with a header, as the tone its pill takes.
-_STATE_TONES = {"read": Tone.GOOD, "declined": Tone.ATTENTION, "ignored": Tone.NEUTRAL}
+
+class HeaderState(Toned):
+    """What HQ did with a header, in the order a page lists them: read reads
+    as good, declined as a choice to look at, ignored as neither."""
+
+    READ = "read", Tone.GOOD
+    DECLINED = "declined", Tone.ATTENTION
+    IGNORED = "ignored", Tone.NEUTRAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,16 +31,10 @@ class Header:
         return bool(self.purpose)
 
     @property
-    def state(self) -> str:
+    def state(self) -> HeaderState:
         if self.purpose:
-            return "read"
-        return "declined" if self.declined else "ignored"
-
-    @property
-    def tone(self) -> str:
-        """Read reads as good, declined as a choice to look at, ignored as neither."""
-
-        return _STATE_TONES[self.state]
+            return HeaderState.READ
+        return HeaderState.DECLINED if self.declined else HeaderState.IGNORED
 
 
 # What each header HQ reads is read *for*. Written here rather than inferred,
@@ -139,5 +139,4 @@ def headers_of(request) -> tuple[Header, ...]:
             )
         )
     # Acted on first, then deliberately declined, then everything else.
-    order = {"read": 0, "declined": 1, "ignored": 2}
-    return tuple(sorted(found, key=lambda header: order[header.state]))
+    return tuple(sorted(found, key=lambda header: list(HeaderState).index(header.state)))

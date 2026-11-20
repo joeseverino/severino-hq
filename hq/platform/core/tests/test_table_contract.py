@@ -12,17 +12,15 @@ from django.urls import reverse
 
 from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.markup_testing import all_elements, elements, links, select, with_class, within
 from hq.platform.application.plugin_testing import table_problems
 from hq.platform.application.routes import routed
-from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
+from hq.platform.application.tables import TableColumn, ranked, typed
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 from hq.platform.core.testing import SignedInTestCase
 
 TEMPLATES = Path(__file__).resolve().parents[4] / "templates"
-
-# A list's columns: the name, a column kept at every width, and one that may leave.
-_LIST_COLUMNS = (TableColumn("Name"), TableColumn("Note", css="key-col"), TableColumn("When"))
 
 
 def _template_roots() -> list[Path]:
@@ -755,12 +753,6 @@ class TableColumnTests(SimpleTestCase):
         keyed = (TableColumn("Name"), TableColumn("State", css="key-col"), TableColumn("Cost", kind="numeric"))
         self.assertEqual(self._ranks(*keyed), {"Name": 0, "State": 0, "Cost": 1})
 
-    def test_a_list_ranks_its_columns(self):
-        view = type("Listed", (TableListMixin,), {"table_columns": _LIST_COLUMNS, "model": None})()
-        view.request = RequestFactory().get("/")
-        ranks = {column.label: column.drop for column in view.table_context()["columns"]}
-        self.assertEqual(ranks, {"Name": 0, "Note": 0, "When": 1})
-
     def test_a_declared_rank_stands(self):
         ranks = self._ranks(TableColumn("Name"), TableColumn("Note", drop=2), TableColumn("When", drop=1))
         self.assertEqual(ranks, {"Name": 0, "Note": 2, "When": 1})
@@ -815,7 +807,7 @@ class ListTableTests(SignedInTestCase):
             if route.name
             and "<" not in route.path
             and isinstance(route.view, type)
-            and issubclass(route.view, TableListMixin)
+            and issubclass(route.view, ListPageMixin)
         ]
         self.assertGreater(len(lists), 5, "The walk found almost no lists")
         read = 0

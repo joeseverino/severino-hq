@@ -1,10 +1,11 @@
 """The assets resource, declared on its domain in application/domains.py."""
 
+from decimal import Decimal
 from typing import Annotated, TypedDict
 
-from pydantic import Field, create_model
+from django.db.models import Q
 
-from hq.platform.application import assets
+from hq.platform.application import assets, expenses
 from hq.platform.application.answer_fields import (
     DeductibleAmount,
     LinkedContent,
@@ -17,19 +18,51 @@ from hq.platform.application.answer_fields import (
 )
 from hq.platform.application.business_use import BusinessUseShare
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ListRead, ResourceSpec
+from hq.platform.application.integration_specs import ListFilter, ListRead, ListSort, ListToggle, ResourceSpec
 from hq.platform.application.record_fields import Notes
-from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
+from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 
-from .models import Asset
+from .models import ASSET_CATEGORY_CHOICES, Asset
 
-AssetQuery = create_model(
-    "AssetQuery",
-    __base__=BoundedQuery,
-    status=(one_of(Asset.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
-    query=(TextFilter, None),
+
+class AssetQuery(BoundedQuery):
+    query: SearchText = None
+
+
+# Each order the list is read in, the first where none is asked.
+SORTS = (
+    *ListSort.both("-purchase_date", "Newest purchase", "Oldest purchase"),
+    *ListSort.both("item_name", "Name"),
+    *ListSort.both("vendor", "Vendor"),
+    *ListSort.both("category", "Category"),
+    *ListSort.both("total_cost", "Lowest cost", "Highest cost"),
+    *ListSort.both("business_use_percentage", "Lowest business use", "Highest business use"),
+    *ListSort.both("estimated_deductible_amount", "Lowest deductible", "Highest deductible"),
+    *ListSort.both("status", "Status"),
+)
+FILTERS = (
+    ListFilter("status", "Status", Asset.Status.choices),
+    ListFilter("category", "Category", ASSET_CATEGORY_CHOICES),
+)
+
+
+def _unpriced() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """An active asset with no date or cost, kept; a priced one and a retired one, left out."""
+
+    kept = Asset.objects.create(item_name="Example router")
+    priced = Asset.objects.create(item_name="Example switch", purchase_date="2030-01-02", total_cost=Decimal("80.00"))
+    retired = Asset.objects.create(item_name="Example modem", status=Asset.Status.RETIRED)
+    return (kept.slug,), (priced.slug, retired.slug)
+
+
+UNPRICED = ListToggle(
+    "missing_purchase",
+    "No date or cost",
+    "True for only the active assets with no purchase date or no cost.",
+    Q(status=Asset.Status.ACTIVE) & (Q(purchase_date__isnull=True) | Q(total_cost=0)),
+    _unpriced,
 )
 
 
@@ -76,7 +109,15 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Assets",
             "Assets and their safe cross-domain relationships.",
             Capability.READ,
-            listing=ListRead(assets.list_assets, AssetQuery, AssetRow),
+            listing=ListRead(
+                assets.list_assets,
+                AssetQuery,
+                AssetRow,
+                sorts=SORTS,
+                filters=FILTERS,
+                toggles=(UNPRICED,),
+                totals=expenses.list_totals,
+            ),
             detail_handler=assets.get_asset,
             identifier="slug",
             search=SearchDefinition(

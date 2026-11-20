@@ -231,7 +231,9 @@ DASHBOARD_MACHINE = "dashboard.machine.select"
 class DashboardMachineCommand:
     """Whether the machine's telemetry is shown on the dashboard."""
 
-    selected: Annotated[bool, Describe("Whether the dashboard shows this machine's telemetry.")]
+    selected: Annotated[
+        bool, Field(title="Show on dashboard"), Describe("Whether the dashboard shows this machine's telemetry.")
+    ]
 
 
 class DashboardMachineSet(TypedDict):

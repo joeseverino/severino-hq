@@ -707,19 +707,20 @@ update that would reset a field it was not sent.
 
 **Resources.** A `ResourceSpec` may expose a list read, a detail handler with
 one stable identifier, a `SearchDefinition`, or any combination. Its list read
-is one `hq_sdk.resources.ListRead`: its reader, the `TopQuery` subclass
+is one `hq_sdk.resources.ListRead`: its reader, the `BoundedQuery` subclass
 it takes, the TypedDict one item is whole, and the `fields` a list keeps when
 the caller names none, every key of the item where it names none. A list
 answers only its item's keys, and the API document types each item by it. HQ validates names, permissions, a query
 that refuses any field it does not declare, query and handler compatibility, identifier contracts, and duplicate resources and
 search scopes at startup. The API, MCP and global search derive from the spec.
 A search projection that belongs to no resource comes from
-`PluginIntegration.search`. A list that reads its first `limit` rows
-subclasses `hq_sdk.resources.TopQuery` rather than declaring `limit` itself,
-so its schema carries the deployment's maximum and a larger ask is refused.
-A list narrowed by a free-text `query` or a `status` types the field by
-`hq_sdk.resources.TextFilter` or `StatusFilter`, which say what it does in
-the words every list's does, so the API reference writes them once.
+`PluginIntegration.search`. A list's query subclasses
+`hq_sdk.resources.BoundedQuery` rather than declaring `limit` and `page`
+itself, so its schema carries the deployment's maximum and a larger ask is
+refused. A searched list types its `query` by `hq_sdk.resources.SearchText`,
+which says what it does in the words every list's does, so the API reference
+writes it once. Its sorts, filters and toggles are the `ListRead`'s
+declarations, each a query field the API document says.
 
 | Field | Set it |
 | --- | --- |
@@ -957,22 +958,35 @@ imports, so `hq_sdk.site` goes, and so do `audit.Steps` and `Timing`,
 `tables.TableQuery`, `testing.Element` and `undefined_style_classes`,
 `ui.Dot`, `Dots`, `PageNavigation`, `PageSection` and `ago`, and
 `writes.CapabilityDeleteMixin`.
+`PLUGIN_API_VERSION` 22 retires the queryset table mixin of `hq_sdk.tables`,
+with its own filter, sort and toggle declarations and its projected rows, and
+`hq_sdk.resources`' ranked query and its text and status filters: a list page is
+`hq_sdk.tables.ListPageMixin`, drawing one page of its resource's list read,
+whose sorts, filters, toggles and search the `ResourceSpec` declares once.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
 (`notice` in [Shared UI](Shared-UI.md#each-parts-rules)). Its classes (`notice`, `notice-*`) are the host's, so
 `hq plugin check` refuses one written by hand.
 
-A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
+A list page declares the same through `TableColumn(kind=)`, its
 ranks derived from the columns unless one says `drop=`.
 
-A list whose rows come from a projection rather than a model's queryset
-overrides `get_table_rows(query)`. It is handed the address's filters,
-search and sort (`query.chosen("state")`, `query.search`,
-`query.sort`) and answers `Projected(rows, read)`. `rows` is a queryset the
-paginator counts and slices in the database, and `read` the function that
-turns one page of it into the rows the template draws. Its columns declare their
-`kind=`, there being no model to read it from, and it sums no totals.
+A list page is `hq_sdk.tables.ListPageMixin` over a `TemplateView`. It names
+its `resource` and its `table_columns`, and draws one page of that resource's
+list read, as `list_resource` answers the API and MCP, so a page and an
+agent read the same rows. Which rows is the `ListRead`'s alone
+(`hq_sdk.resources`): its `sorts` (`ListSort`, a column's two with
+`ListSort.both`), `filters` (`ListFilter`) and `toggles` (`ListToggle`, each
+with the example that shows what it keeps), and the spec's `search`
+(`hq_sdk.search.SearchDefinition`) for the page's `q`. The reader takes a
+`BoundedQuery` and answers `hq_sdk.resources.listing(rows, serialize)`, which
+searches, narrows, orders and cuts the page. A column that sorts names a sort
+the read declares both ways. A page adds what only it says of a row by
+overriding `row(item)`, or draws each row from its record (a form, a field the
+item leaves out) through `records(queryset)`, which reads the page's records
+in one query, in the list's order. It reads within some values of a filter
+through `scope()`.
 
 A form renders as `{{ form }}`, and one field as `{{ field.as_field_group }}`.
 HQ's form renderer draws every field in its own markup, with the help text and

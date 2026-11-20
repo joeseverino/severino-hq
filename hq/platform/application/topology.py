@@ -40,7 +40,7 @@ from .entity_links import entity_link, kind_label, node_name, record_name
 from .infrastructure import ResourceState, declared_resources, resource_health
 from .integration_validation import required_capability_names
 from .json_schemas import as_written
-from .projection import QUERY, projection_scope
+from .projection import QUERY, iso, projection_scope
 from .record_errors import RecordNotFound
 from .references import Kind
 from .resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY, removals_pending, resource_capabilities
@@ -333,7 +333,7 @@ def _connection_node(group, instance, spec_actions, connection_url) -> TopologyN
             else connection_url
         ),
         kind_key=group.spec.name,
-        observed_at=(instance.observed_at.isoformat() if instance.observed_at else ""),
+        observed_at=iso(instance.observed_at) or "",
         actions=spec_actions,
         read_capabilities=required_capability_names(group.spec),
     )
@@ -552,7 +552,7 @@ def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
             status=status,
             status_label=status_label,
             detail=detail,
-            observed_at=(resource.last_observed_at.isoformat() if resource.last_observed_at else ""),
+            observed_at=iso(resource.last_observed_at) or "",
             declared_revision=resource.generation,
             observed_revision=resource.observed_generation,
             reason=str((resource.conditions or [{}])[0].get("reason", "")).strip(),

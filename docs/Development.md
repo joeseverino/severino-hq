@@ -1102,7 +1102,7 @@ loads them. Its pages are `PAGES` in
 
 Every list page is also filled from its own model
 (`hq/platform/core/tests/test_browser_derived_fixtures.py`). Each view drawn
-through `TableListMixin` is found in the URLconf, and its rows carry every
+through `ListPageMixin` is found in the URLconf, and its rows carry every
 field at its length, money at the largest a household records, and the
 longest label of every choice. So a new list or field is measured at its worst
 the day it exists (`dev:look derived/<app>/<name>` shows one).

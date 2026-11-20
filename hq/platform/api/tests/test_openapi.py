@@ -22,7 +22,7 @@ from ..testing import ContractClient
 from .tokens import ISSUER, OTHER_KEY, RESOURCE, _serving, _token
 
 # A list that matched nothing, with every field the collection contract requires.
-EMPTY_PAGE = {"items": [], "count": 0, "total": 0, "truncated": False, "next": None}
+EMPTY_PAGE = {"items": [], "count": 0, "total": 0, "truncated": False, "next": None, "previous": None}
 
 
 @override_settings(

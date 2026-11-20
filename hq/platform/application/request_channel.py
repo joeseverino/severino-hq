@@ -19,42 +19,33 @@ class Channel:
     id: str
     label: str
     detail: str
+    # The tailnet is the private way in, a private network the one to notice,
+    # any other the exposed one.
+    tone: Tone
 
     @property
     def private(self) -> bool:
         return self.id in {"tailnet", "network", "loopback"}
 
-    @property
-    def tone(self) -> str:
-        """The tone of the network a caller is on: the tailnet the private way
-        in, a private network the one to notice, any other the exposed one."""
 
-        return _TONES.get(self.id, Tone.SERIOUS)
-
-
-_TONES = {"tailnet": Tone.GOOD, "network": Tone.ATTENTION, "loopback": Tone.ATTENTION}
-
-
-TAILNET_CHANNEL = Channel(
-    "tailnet",
-    NETWORKS["tailnet"],
-    "This request came from a tailnet address.",
-)
+TAILNET_CHANNEL = Channel("tailnet", NETWORKS["tailnet"], "This request came from a tailnet address.", Tone.GOOD)
 NETWORK_CHANNEL = Channel(
     "network",
     NETWORKS["network"],
     "This request came from a private address on the network HQ is on.",
+    Tone.ATTENTION,
 )
-LOOPBACK_CHANNEL = Channel("loopback", NETWORKS["loopback"], "This request never left the machine HQ runs on.")
+LOOPBACK_CHANNEL = Channel(
+    "loopback", NETWORKS["loopback"], "This request never left the machine HQ runs on.", Tone.ATTENTION
+)
 OPAQUE_CHANNEL = Channel(
     "opaque",
     "Address not passed through",
     "Every hop is a trusted proxy, so HQ has only the proxy's address.",
+    Tone.SERIOUS,
 )
 ELSEWHERE_CHANNEL = Channel(
-    "elsewhere",
-    "Unrecognized",
-    "This address is in none of the ranges HQ accepts.",
+    "elsewhere", "Unrecognized", "This address is in none of the ranges HQ accepts.", Tone.SERIOUS
 )
 # What HQ does with the chain a peer outside its trusted proxies forwarded.
 UNTRUSTED_FORWARDER = "Not a trusted proxy, so HQ ignores the address it forwarded."

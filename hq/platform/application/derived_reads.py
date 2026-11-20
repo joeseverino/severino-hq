@@ -18,7 +18,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from .json_schemas import as_written
 from .labels import human_label
 from .own_addresses import tailnet_sightings
-from .projection import complete, page_size, projection_scope, window
+from .projection import complete, page_of, page_size, projection_scope
 from .record_errors import RecordNotFound
 from .references import Kind
 from .security import Principal
@@ -65,8 +65,8 @@ def _collection(
 
     if limit is None:
         return complete([serialize(item) for item in items])
-    page, paging = window(items, limit)
-    return {**paging, "items": [serialize(item) for item in page]}
+    page = page_of(items, limit)
+    return {**page, "items": [serialize(item) for item in page["items"]]}
 
 
 # ----- Estate -----------------------------------------------------------------

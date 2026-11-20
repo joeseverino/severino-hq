@@ -148,7 +148,7 @@
         "style": "form"
       },
       "AgendaLimit": {
-        "description": "How many records a page holds, 1 to 500; next.cursor reads the page after.",
+        "description": "How many records a page holds, 1 to 500; `page` reads the ones after.",
         "explode": true,
         "in": "query",
         "name": "limit",
@@ -225,6 +225,36 @@
               "notes",
               "infrastructure",
               "updated_at",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
+      "AuditItemFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "id",
+              "url",
+              "created_at",
+              "action",
+              "action_label",
+              "object_type",
+              "object_id",
+              "object_repr",
+              "message",
+              "actor",
+              "source",
+              "operation_id",
               "*"
             ],
             "type": "string"
@@ -682,19 +712,6 @@
         },
         "style": "form"
       },
-      "Cursor": {
-        "description": "The page after the one whose next.cursor this is. Send it as it came, with the filters that page was read with; absent, the first page.",
-        "explode": true,
-        "in": "query",
-        "name": "cursor",
-        "required": false,
-        "schema": {
-          "maxLength": 4000,
-          "title": "Cursor",
-          "type": "string"
-        },
-        "style": "form"
-      },
       "DocIdIdentifier": {
         "description": "The record's `doc_id`, as each item of the list carries it.",
         "in": "path",
@@ -999,6 +1016,38 @@
         },
         "style": "form"
       },
+      "HeldRequestItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "id",
+              "capability",
+              "target",
+              "resource_kind",
+              "resource_key",
+              "state",
+              "requested_actor",
+              "requested_interface",
+              "reason",
+              "requested_at",
+              "expires_at",
+              "content_fingerprint",
+              "review_url",
+              "asks",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "HeldRequestRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -1148,15 +1197,6 @@
           "maximum": 9223372036854775807,
           "minimum": 1,
           "type": "integer"
-        }
-      },
-      "IdLookup": {
-        "description": "The `id` to read it for.",
-        "in": "path",
-        "name": "identifier",
-        "required": true,
-        "schema": {
-          "type": "string"
         }
       },
       "IdempotencyKey": {
@@ -1497,8 +1537,8 @@
           "type": "string"
         }
       },
-      "OperationIdIdentifier": {
-        "description": "The record's `operation_id`, as each item of the list carries it.",
+      "OperationIdLookup": {
+        "description": "The `operation_id` to read it for.",
         "in": "path",
         "name": "identifier",
         "required": true,
@@ -1507,7 +1547,7 @@
         }
       },
       "PageLimit": {
-        "description": "How many records a page holds, 1 to 100; next.cursor reads the page after.",
+        "description": "How many records a page holds, 1 to 100; `page` reads the ones after.",
         "explode": true,
         "in": "query",
         "name": "limit",
@@ -1515,6 +1555,20 @@
         "schema": {
           "default": 50,
           "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "style": "form"
+      },
+      "PageNumber": {
+        "description": "Which page to read, 1 first, each `limit` records long; each page names the pages beside it.",
+        "explode": true,
+        "in": "query",
+        "name": "page",
+        "required": false,
+        "schema": {
+          "default": 1,
+          "maximum": 1000000,
           "minimum": 1,
           "type": "integer"
         },
@@ -1906,17 +1960,18 @@
               "date",
               "amount",
               "notes",
+              "label",
               "related_expense",
+              "expense_item",
               "related_asset",
+              "asset_name",
               "uploaded_at",
               "updated_at",
               "url",
-              "label",
               "file",
               "file_type_label",
               "expense_label",
               "expense_date",
-              "asset_name",
               "*"
             ],
             "type": "string"
@@ -1943,8 +1998,11 @@
               "date",
               "amount",
               "notes",
+              "label",
               "related_expense",
+              "expense_item",
               "related_asset",
+              "asset_name",
               "uploaded_at",
               "updated_at",
               "*"
@@ -2015,11 +2073,8 @@
         "schema": {
           "items": {
             "enum": [
-              "operation_id",
               "url",
               "title",
-              "playbook",
-              "capability",
               "state",
               "state_label",
               "tone",
@@ -2033,7 +2088,6 @@
               "finished_at",
               "duration_seconds",
               "stated",
-              "reason",
               "effect",
               "attempts",
               "worker",
@@ -2050,42 +2104,10 @@
               "affected.domain",
               "affected.fingerprint_sha256",
               "matched",
-              "*"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "style": "form"
-      },
-      "RunRowPageFields": {
-        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
-        "explode": false,
-        "in": "query",
-        "name": "fields",
-        "required": false,
-        "schema": {
-          "items": {
-            "enum": [
               "operation_id",
-              "url",
-              "title",
               "playbook",
               "capability",
-              "state",
-              "state_label",
-              "tone",
-              "headline",
-              "hosts",
-              "by",
-              "approved_by",
-              "correlation",
-              "created_at",
-              "started_at",
-              "finished_at",
-              "duration_seconds",
-              "stated",
+              "reason",
               "*"
             ],
             "type": "string"
@@ -2138,6 +2160,18 @@
           "maximum": 100,
           "minimum": 1,
           "type": "integer"
+        },
+        "style": "form"
+      },
+      "SearchText": {
+        "description": "Only the records a search for this finds, the best match first unless a sort is asked; absent, every record.",
+        "explode": true,
+        "in": "query",
+        "name": "query",
+        "required": false,
+        "schema": {
+          "title": "Search text",
+          "type": "string"
         },
         "style": "form"
       },
@@ -2562,18 +2596,6 @@
         },
         "style": "form"
       },
-      "TextFilter": {
-        "description": "Only the records whose text holds this, ignoring case; absent, every record.",
-        "explode": true,
-        "in": "query",
-        "name": "query",
-        "required": false,
-        "schema": {
-          "title": "Text filter",
-          "type": "string"
-        },
-        "style": "form"
-      },
       "TopLimit": {
         "description": "How many records to return, 1 to 100, first by the list's own ranking.",
         "explode": true,
@@ -2647,6 +2669,67 @@
               "steps.id",
               "steps.label",
               "steps.detail",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
+      "WorkIdIdentifier": {
+        "description": "The record's `id`, as each item of the list carries it.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "WorkItemFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "url",
+              "title",
+              "state",
+              "state_label",
+              "tone",
+              "headline",
+              "hosts",
+              "by",
+              "approved_by",
+              "correlation",
+              "created_at",
+              "started_at",
+              "finished_at",
+              "duration_seconds",
+              "stated",
+              "effect",
+              "attempts",
+              "worker",
+              "lease_until",
+              "events",
+              "events.host",
+              "events.task",
+              "events.outcome",
+              "events.message",
+              "events.tone",
+              "expected",
+              "affected",
+              "affected.consumer",
+              "affected.domain",
+              "affected.fingerprint_sha256",
+              "matched",
+              "id",
+              "source",
+              "kind",
               "*"
             ],
             "type": "string"
@@ -2738,6 +2821,21 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/AssetSavedSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
+      "AuditItemSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AuditItemSuccess"
             }
           }
         },
@@ -4063,6 +4161,21 @@
           }
         }
       },
+      "WorkItemSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WorkItemSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
       "WorkRequestedSuccess": {
         "content": {
           "application/json": {
@@ -5102,7 +5215,7 @@
         "type": "object"
       },
       "AgendaLimit": {
-        "description": "How many records a page holds, 1 to 500; next.cursor reads the page after.",
+        "description": "How many records a page holds, 1 to 500; `page` reads the ones after.",
         "maximum": 500,
         "minimum": 1,
         "type": "integer"
@@ -5981,6 +6094,9 @@
                   "$ref": "#/components/schemas/AssetRowPartial"
                 },
                 "type": "array"
+              },
+              "totals": {
+                "$ref": "#/components/schemas/ListTotals"
               }
             }
           },
@@ -6308,6 +6424,164 @@
             "$ref": "#/components/schemas/AudiencePart/properties/tailnet_only"
           }
         },
+        "type": "object"
+      },
+      "AuditItem": {
+        "additionalProperties": false,
+        "description": "One row of the log: what was done to what, by whom, and where.",
+        "properties": {
+          "action": {
+            "description": "What was done: `created`, `updated`, `deleted`, `login`, `logout`, `login_failed`, `uploaded`, `exported`, `imported`, `done`, `failed`, `settings_changed`, `viewed`, `denied` or `observed`.",
+            "type": "string"
+          },
+          "action_label": {
+            "description": "What was done, in the words the log says it in.",
+            "type": "string"
+          },
+          "actor": {
+            "description": "Who or what acted; empty for nobody recorded.",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "When the row was written, an ISO 8601 date-time.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The row's id, which its page names it by.",
+            "type": "integer"
+          },
+          "message": {
+            "description": "What it says happened; empty when it says nothing more.",
+            "type": "string"
+          },
+          "object_id": {
+            "description": "That record's id; empty for none.",
+            "type": "string"
+          },
+          "object_repr": {
+            "description": "What that record was called when it was done.",
+            "type": "string"
+          },
+          "object_type": {
+            "description": "The kind of record it was done to; empty for none.",
+            "type": "string"
+          },
+          "operation_id": {
+            "description": "The operation it was written in; empty for a row of none.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Where it was recorded: `hq`, `outside`, `deploy` or `container`.",
+            "type": "string"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "created_at",
+          "action",
+          "action_label",
+          "object_type",
+          "object_id",
+          "object_repr",
+          "message",
+          "actor",
+          "source",
+          "operation_id"
+        ],
+        "type": "object"
+      },
+      "AuditItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/AuditItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AuditItemPartial": {
+        "additionalProperties": false,
+        "description": "One row of the log: what was done to what, by whom, and where.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/AuditItem/properties/action"
+          },
+          "action_label": {
+            "$ref": "#/components/schemas/AuditItem/properties/action_label"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/AuditItem/properties/actor"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AuditItem/properties/created_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/AuditItem/properties/id"
+          },
+          "message": {
+            "$ref": "#/components/schemas/AuditItem/properties/message"
+          },
+          "object_id": {
+            "$ref": "#/components/schemas/AuditItem/properties/object_id"
+          },
+          "object_repr": {
+            "$ref": "#/components/schemas/AuditItem/properties/object_repr"
+          },
+          "object_type": {
+            "$ref": "#/components/schemas/AuditItem/properties/object_type"
+          },
+          "operation_id": {
+            "$ref": "#/components/schemas/AuditItem/properties/operation_id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AuditItem/properties/source"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "type": "object"
+      },
+      "AuditItemSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AuditItemPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "AutomationRunCancelRequest": {
@@ -7206,6 +7480,32 @@
           "summary",
           "effect",
           "resource"
+        ],
+        "type": "object"
+      },
+      "CategorySums": {
+        "additionalProperties": false,
+        "description": "What one category of a list's matching records cost.",
+        "properties": {
+          "category": {
+            "description": "The category, as each record's `category` says it.",
+            "type": "string"
+          },
+          "count": {
+            "$ref": "#/components/schemas/CostSums/properties/count"
+          },
+          "deductible": {
+            "$ref": "#/components/schemas/CostSums/properties/deductible"
+          },
+          "total": {
+            "$ref": "#/components/schemas/CostSums/properties/total"
+          }
+        },
+        "required": [
+          "count",
+          "total",
+          "deductible",
+          "category"
         ],
         "type": "object"
       },
@@ -10432,6 +10732,33 @@
         ],
         "type": "object"
       },
+      "CostSums": {
+        "additionalProperties": false,
+        "description": "What a list's matching records cost.",
+        "properties": {
+          "count": {
+            "description": "How many records matched.",
+            "type": "integer"
+          },
+          "deductible": {
+            "description": "An estimate of what of that may be deducted, a decimal string.",
+            "type": "string"
+          },
+          "total": {
+            "description": "What they cost in all, a decimal string with two places.",
+            "examples": [
+              "12.50"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "total",
+          "deductible"
+        ],
+        "type": "object"
+      },
       "Created": {
         "description": "Whether the call created the record, rather than changing one HQ held.",
         "type": "boolean"
@@ -10783,19 +11110,6 @@
         },
         "type": "object"
       },
-      "Cursor": {
-        "anyOf": [
-          {
-            "maxLength": 4000,
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "The page after the one whose next.cursor this is. Send it as it came, with the filters that page was read with; absent, the first page.",
-        "title": "Cursor"
-      },
       "DashboardMachineSelectRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -10809,6 +11123,7 @@
             "properties": {
               "selected": {
                 "description": "Whether the dashboard shows this machine's telemetry.",
+                "title": "Show on dashboard",
                 "type": "boolean"
               }
             },
@@ -13627,6 +13942,9 @@
                   "$ref": "#/components/schemas/ExpenseRecordPartial"
                 },
                 "type": "array"
+              },
+              "totals": {
+                "$ref": "#/components/schemas/ListTotals"
               }
             }
           },
@@ -14866,6 +15184,151 @@
         ],
         "type": "object"
       },
+      "HeldRequestItem": {
+        "additionalProperties": false,
+        "description": "A held request as its list names it: what it asks.",
+        "properties": {
+          "asks": {
+            "description": "What it asks, in the sentence its card in HQ says.",
+            "type": "string"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/HeldRequest/properties/capability"
+          },
+          "content_fingerprint": {
+            "$ref": "#/components/schemas/HeldRequest/properties/content_fingerprint"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/HeldRequest/properties/expires_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/HeldRequest/properties/id"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HeldRequest/properties/reason"
+          },
+          "requested_actor": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_actor"
+          },
+          "requested_at": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_at"
+          },
+          "requested_interface": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_interface"
+          },
+          "resource_key": {
+            "$ref": "#/components/schemas/HeldRequest/properties/resource_key"
+          },
+          "resource_kind": {
+            "$ref": "#/components/schemas/HeldRequest/properties/resource_kind"
+          },
+          "review_url": {
+            "$ref": "#/components/schemas/HeldRequest/properties/review_url"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HeldRequest/properties/state"
+          },
+          "target": {
+            "$ref": "#/components/schemas/HeldRequest/properties/target"
+          }
+        },
+        "required": [
+          "id",
+          "capability",
+          "target",
+          "resource_kind",
+          "resource_key",
+          "state",
+          "requested_actor",
+          "requested_interface",
+          "reason",
+          "requested_at",
+          "expires_at",
+          "content_fingerprint",
+          "review_url",
+          "asks"
+        ],
+        "type": "object"
+      },
+      "HeldRequestItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/HeldRequestItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "HeldRequestItemPartial": {
+        "additionalProperties": false,
+        "description": "A held request as its list names it: what it asks.",
+        "properties": {
+          "asks": {
+            "$ref": "#/components/schemas/HeldRequestItem/properties/asks"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/capability"
+          },
+          "content_fingerprint": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/content_fingerprint"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/expires_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/id"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/reason"
+          },
+          "requested_actor": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/requested_actor"
+          },
+          "requested_at": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/requested_at"
+          },
+          "requested_interface": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/requested_interface"
+          },
+          "resource_key": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/resource_key"
+          },
+          "resource_kind": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/resource_kind"
+          },
+          "review_url": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/review_url"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/state"
+          },
+          "target": {
+            "$ref": "#/components/schemas/HeldRequestPartial/properties/target"
+          }
+        },
+        "type": "object"
+      },
       "HeldRequestPartial": {
         "additionalProperties": false,
         "description": "A call held for approval: what it asks, who asked, and where it is decided.",
@@ -14921,8 +15384,7 @@
             "type": "object"
           },
           "asks": {
-            "description": "What it asks, in the sentence its card in HQ says.",
-            "type": "string"
+            "$ref": "#/components/schemas/HeldRequestItem/properties/asks"
           },
           "capability": {
             "$ref": "#/components/schemas/HeldRequest/properties/capability"
@@ -15006,7 +15468,7 @@
             "$ref": "#/components/schemas/HeldRequestRecord/properties/answer"
           },
           "asks": {
-            "$ref": "#/components/schemas/HeldRequestRecord/properties/asks"
+            "$ref": "#/components/schemas/HeldRequestItemPartial/properties/asks"
           },
           "capability": {
             "$ref": "#/components/schemas/HeldRequestPartial/properties/capability"
@@ -16168,6 +16630,7 @@
               "enabled": {
                 "default": true,
                 "description": "Whether HQ keeps the live record as it expects.",
+                "title": "Managed by HQ",
                 "type": "boolean"
               },
               "key": {
@@ -16365,6 +16828,7 @@
             "properties": {
               "enabled": {
                 "description": "Whether HQ keeps the live record as it expects.",
+                "title": "Managed by HQ",
                 "type": "boolean"
               },
               "key": {
@@ -16991,14 +17455,14 @@
             "type": "array"
           },
           "filters": {
-            "description": "The fields a listing narrows by, without `limit` and `cursor`, which page it; `describe_resources` given this name says each one's type and choices.",
+            "description": "The fields a listing narrows by, without `limit` and `page`, which page it; `describe_resources` given this name says each one's type and choices.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "paging": {
-            "description": "The JSON Schema of `limit`, with the most it may ask for, and `cursor`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource; absent, the list takes neither.",
+            "description": "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource; absent, the list takes neither.",
             "type": "object"
           },
           "query_schema": {
@@ -17008,6 +17472,35 @@
         },
         "required": [
           "filters"
+        ],
+        "type": "object"
+      },
+      "ListTotals": {
+        "additionalProperties": false,
+        "description": "What a list's matching records cost, whole and by category.",
+        "properties": {
+          "categories": {
+            "description": "What each category cost, the costliest first.",
+            "items": {
+              "$ref": "#/components/schemas/CategorySums"
+            },
+            "type": "array"
+          },
+          "count": {
+            "$ref": "#/components/schemas/CostSums/properties/count"
+          },
+          "deductible": {
+            "$ref": "#/components/schemas/CostSums/properties/deductible"
+          },
+          "total": {
+            "$ref": "#/components/schemas/CostSums/properties/total"
+          }
+        },
+        "required": [
+          "count",
+          "total",
+          "deductible",
+          "categories"
         ],
         "type": "object"
       },
@@ -19445,6 +19938,7 @@
             "type": "integer"
           },
           "advanced_config": {
+            "contentMediaType": "text/x-nginx-conf",
             "default": "",
             "description": "Passed through as-is. Usually blank.",
             "title": "Extra nginx configuration",
@@ -19676,19 +20170,6 @@
         "required": [
           "tool",
           "arguments"
-        ],
-        "type": "object"
-      },
-      "NextPage": {
-        "description": "Where the page after a list's is read from.",
-        "properties": {
-          "cursor": {
-            "description": "What reads the page after this one, sent back as the `cursor` filter with the same filters.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "cursor"
         ],
         "type": "object"
       },
@@ -20572,25 +21053,42 @@
         "type": "object"
       },
       "PageLimit": {
-        "description": "How many records a page holds, 1 to 100; next.cursor reads the page after.",
+        "description": "How many records a page holds, 1 to 100; `page` reads the ones after.",
         "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "PageNumber": {
+        "description": "Which page to read, 1 first, each `limit` records long; each page names the pages beside it.",
+        "maximum": 1000000,
         "minimum": 1,
         "type": "integer"
       },
       "PagePosition": {
         "additionalProperties": false,
-        "description": "Where a page of a list stopped.",
+        "description": "Where a page of a list stands among the others.",
         "properties": {
           "next": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/NextPage",
-                "title": "Next page"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The `page` after this one; null on the last."
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The `page` before this one; null on the first."
           },
           "total": {
             "anyOf": [
@@ -20611,7 +21109,8 @@
         "required": [
           "total",
           "truncated",
-          "next"
+          "next",
+          "previous"
         ],
         "type": "object"
       },
@@ -21232,7 +21731,7 @@
         "additionalProperties": false,
         "properties": {
           "capability": {
-            "description": "The command that runs it, by name. Its schema says what it takes, and its notes what it does.",
+            "description": "The command that runs it, by name, which `work` lists its runs by as `kind`. Its schema says what it takes, and its notes what it does.",
             "type": "string"
           },
           "effect": {
@@ -21245,7 +21744,7 @@
             "type": "string"
           },
           "playbook": {
-            "description": "The playbook's id, which a read of one and the `runs` filter `playbook` take.",
+            "description": "The playbook's id, which a read of one takes.",
             "type": "string"
           },
           "reachable": {
@@ -23978,14 +24477,13 @@
       },
       "ReceiptRecord": {
         "additionalProperties": false,
-        "description": "One receipt with what it is called, whether HQ holds its file, and the names of what it proves.",
+        "description": "One receipt with whether HQ holds its file, and the name and day of the expense it proves.",
         "properties": {
           "amount": {
             "$ref": "#/components/schemas/ReceiptRow/properties/amount"
           },
           "asset_name": {
-            "description": "The name of the asset it is for; empty for none.",
-            "type": "string"
+            "$ref": "#/components/schemas/ReceiptRow/properties/asset_name"
           },
           "content_type": {
             "$ref": "#/components/schemas/ReceiptRow/properties/content_type"
@@ -24003,6 +24501,9 @@
               }
             ],
             "description": "That expense's day, an ISO 8601 date; null for none."
+          },
+          "expense_item": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/expense_item"
           },
           "expense_label": {
             "description": "What the expense it proves is called; empty for none.",
@@ -24025,8 +24526,7 @@
             "$ref": "#/components/schemas/ReceiptRow/properties/id"
           },
           "label": {
-            "description": "What the receipt is called wherever it is named: who it is from, else its file.",
-            "type": "string"
+            "$ref": "#/components/schemas/ReceiptRow/properties/label"
           },
           "notes": {
             "$ref": "#/components/schemas/ReceiptRow/properties/notes"
@@ -24065,29 +24565,30 @@
           "date",
           "amount",
           "notes",
+          "label",
           "related_expense",
+          "expense_item",
           "related_asset",
+          "asset_name",
           "uploaded_at",
           "updated_at",
           "url",
-          "label",
           "file",
           "file_type_label",
           "expense_label",
-          "expense_date",
-          "asset_name"
+          "expense_date"
         ],
         "type": "object"
       },
       "ReceiptRecordPartial": {
         "additionalProperties": false,
-        "description": "One receipt with what it is called, whether HQ holds its file, and the names of what it proves.",
+        "description": "One receipt with whether HQ holds its file, and the name and day of the expense it proves.",
         "properties": {
           "amount": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/amount"
           },
           "asset_name": {
-            "$ref": "#/components/schemas/ReceiptRecord/properties/asset_name"
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/asset_name"
           },
           "content_type": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/content_type"
@@ -24097,6 +24598,9 @@
           },
           "expense_date": {
             "$ref": "#/components/schemas/ReceiptRecord/properties/expense_date"
+          },
+          "expense_item": {
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/expense_item"
           },
           "expense_label": {
             "$ref": "#/components/schemas/ReceiptRecord/properties/expense_label"
@@ -24111,7 +24615,7 @@
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/id"
           },
           "label": {
-            "$ref": "#/components/schemas/ReceiptRecord/properties/label"
+            "$ref": "#/components/schemas/ReceiptRowPartial/properties/label"
           },
           "notes": {
             "$ref": "#/components/schemas/ReceiptRowPartial/properties/notes"
@@ -24171,6 +24675,10 @@
             ],
             "type": "string"
           },
+          "asset_name": {
+            "description": "The name of the asset it is for; empty for none.",
+            "type": "string"
+          },
           "content_type": {
             "description": "The file's media type: `application/pdf`, `image/jpeg`, `image/png`, `image/webp`, `image/heic`, `image/heif`, `image/gif`, `image/tiff` or `text/plain`.",
             "type": "string"
@@ -24186,9 +24694,17 @@
             ],
             "description": "The day on the receipt, an ISO 8601 date; null when not recorded."
           },
+          "expense_item": {
+            "description": "What the expense it proves paid for; empty for none.",
+            "type": "string"
+          },
           "id": {
             "description": "The receipt's id, which its page names it by.",
             "type": "integer"
+          },
+          "label": {
+            "description": "What the receipt is called wherever it is named: who it is from, else its file.",
+            "type": "string"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
@@ -24228,8 +24744,11 @@
           "date",
           "amount",
           "notes",
+          "label",
           "related_expense",
+          "expense_item",
           "related_asset",
+          "asset_name",
           "uploaded_at",
           "updated_at"
         ],
@@ -24272,14 +24791,23 @@
           "amount": {
             "$ref": "#/components/schemas/ReceiptRow/properties/amount"
           },
+          "asset_name": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/asset_name"
+          },
           "content_type": {
             "$ref": "#/components/schemas/ReceiptRow/properties/content_type"
           },
           "date": {
             "$ref": "#/components/schemas/ReceiptRow/properties/date"
           },
+          "expense_item": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/expense_item"
+          },
           "id": {
             "$ref": "#/components/schemas/ReceiptRow/properties/id"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ReceiptRow/properties/label"
           },
           "notes": {
             "$ref": "#/components/schemas/Notes"
@@ -25249,6 +25777,9 @@
           "next": {
             "$ref": "#/components/schemas/PagePosition/properties/next"
           },
+          "previous": {
+            "$ref": "#/components/schemas/PagePosition/properties/previous"
+          },
           "total": {
             "$ref": "#/components/schemas/PagePosition/properties/total"
           },
@@ -25260,6 +25791,7 @@
           "total",
           "truncated",
           "next",
+          "previous",
           "items",
           "count"
         ],
@@ -25833,118 +26365,97 @@
       },
       "RunRecord": {
         "additionalProperties": false,
-        "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
+        "description": "One run whole: what Jobs says of it, and its evidence.",
         "properties": {
           "affected": {
-            "description": "Each name it found serving another certificate.",
-            "items": {
-              "$ref": "#/components/schemas/ServedPart"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/_Evidence/properties/affected"
           },
           "approved_by": {
-            "$ref": "#/components/schemas/RunRow/properties/approved_by"
+            "$ref": "#/components/schemas/_Work/properties/approved_by"
           },
           "attempts": {
-            "description": "How many times a worker has taken it up.",
-            "type": "integer"
+            "$ref": "#/components/schemas/_Evidence/properties/attempts"
           },
           "by": {
-            "$ref": "#/components/schemas/RunRow/properties/by"
+            "$ref": "#/components/schemas/_Work/properties/by"
           },
           "capability": {
-            "$ref": "#/components/schemas/RunRow/properties/capability"
+            "description": "The command it was asked for through, by name: a playbook's, or the scan's refresh.",
+            "type": "string"
           },
           "correlation": {
-            "$ref": "#/components/schemas/RunRow/properties/correlation"
+            "$ref": "#/components/schemas/_Work/properties/correlation"
           },
           "created_at": {
-            "$ref": "#/components/schemas/RunRow/properties/created_at"
+            "$ref": "#/components/schemas/_Work/properties/created_at"
           },
           "duration_seconds": {
-            "$ref": "#/components/schemas/RunRow/properties/duration_seconds"
+            "$ref": "#/components/schemas/_Work/properties/duration_seconds"
           },
           "effect": {
-            "description": "What its playbook changes, as its record pins it, which cancelling it takes the authority of.",
-            "type": "string"
+            "$ref": "#/components/schemas/_Evidence/properties/effect"
           },
           "events": {
-            "description": "Each task's outcome on each machine, in the order the worker ran them.",
-            "items": {
-              "$ref": "#/components/schemas/RunTask"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/_Evidence/properties/events"
           },
           "expected": {
-            "description": "The SHA-256 fingerprint of the certificate it checked each name for; empty when it checked none.",
-            "type": "string"
+            "$ref": "#/components/schemas/_Evidence/properties/expected"
           },
           "finished_at": {
-            "$ref": "#/components/schemas/RunRow/properties/finished_at"
+            "$ref": "#/components/schemas/_Work/properties/finished_at"
           },
           "headline": {
-            "$ref": "#/components/schemas/RunRow/properties/headline"
+            "$ref": "#/components/schemas/_Work/properties/headline"
           },
           "hosts": {
-            "$ref": "#/components/schemas/RunRow/properties/hosts"
+            "$ref": "#/components/schemas/_Work/properties/hosts"
           },
           "lease_until": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When that worker must next report, or HQ reads the run as stopped; null unless one runs it."
+            "$ref": "#/components/schemas/_Evidence/properties/lease_until"
           },
           "matched": {
-            "description": "How many names it found serving the certificate it checked for.",
-            "type": "integer"
+            "$ref": "#/components/schemas/_Evidence/properties/matched"
           },
           "operation_id": {
-            "$ref": "#/components/schemas/RunRow/properties/operation_id"
+            "description": "The run's id: the `operation.id` its command answered, which a read of one names.",
+            "type": "string"
           },
           "playbook": {
-            "$ref": "#/components/schemas/RunRow/properties/playbook"
+            "description": "The id of the playbook it runs; empty for a scan.",
+            "type": "string"
           },
           "reason": {
             "description": "Why its asker asked for it; empty when they gave no reason.",
             "type": "string"
           },
           "started_at": {
-            "$ref": "#/components/schemas/RunRow/properties/started_at"
+            "$ref": "#/components/schemas/_Work/properties/started_at"
           },
           "state": {
-            "$ref": "#/components/schemas/RunRow/properties/state"
+            "$ref": "#/components/schemas/_Work/properties/state"
           },
           "state_label": {
-            "$ref": "#/components/schemas/RunRow/properties/state_label"
+            "$ref": "#/components/schemas/_Work/properties/state_label"
           },
           "stated": {
-            "$ref": "#/components/schemas/RunRow/properties/stated"
+            "$ref": "#/components/schemas/_Work/properties/stated"
           },
           "title": {
-            "$ref": "#/components/schemas/RunRow/properties/title"
+            "$ref": "#/components/schemas/_Work/properties/title"
           },
           "tone": {
-            "$ref": "#/components/schemas/RunRow/properties/tone"
+            "$ref": "#/components/schemas/_Work/properties/tone"
           },
           "url": {
-            "$ref": "#/components/schemas/RunRow/properties/url"
+            "$ref": "#/components/schemas/_Work/properties/url"
           },
           "worker": {
-            "description": "The worker running it now; empty unless one is.",
-            "type": "string"
+            "$ref": "#/components/schemas/_Evidence/properties/worker"
           }
         },
         "required": [
-          "operation_id",
           "url",
           "title",
-          "playbook",
-          "capability",
           "state",
           "state_label",
           "tone",
@@ -25958,7 +26469,6 @@
           "finished_at",
           "duration_seconds",
           "stated",
-          "reason",
           "effect",
           "attempts",
           "worker",
@@ -25966,102 +26476,98 @@
           "events",
           "expected",
           "affected",
-          "matched"
+          "matched",
+          "operation_id",
+          "playbook",
+          "capability",
+          "reason"
         ],
         "type": "object"
       },
       "RunRecordPartial": {
         "additionalProperties": false,
-        "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
+        "description": "One run whole: what Jobs says of it, and its evidence.",
         "properties": {
           "affected": {
-            "description": "Each name it found serving another certificate.",
-            "items": {
-              "$ref": "#/components/schemas/ServedPartPartial"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/_EvidencePartial/properties/affected"
           },
           "approved_by": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/approved_by"
+            "$ref": "#/components/schemas/_WorkPartial/properties/approved_by"
           },
           "attempts": {
-            "$ref": "#/components/schemas/RunRecord/properties/attempts"
+            "$ref": "#/components/schemas/_EvidencePartial/properties/attempts"
           },
           "by": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/by"
+            "$ref": "#/components/schemas/_WorkPartial/properties/by"
           },
           "capability": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/capability"
+            "$ref": "#/components/schemas/RunRecord/properties/capability"
           },
           "correlation": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/correlation"
+            "$ref": "#/components/schemas/_WorkPartial/properties/correlation"
           },
           "created_at": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/created_at"
+            "$ref": "#/components/schemas/_WorkPartial/properties/created_at"
           },
           "duration_seconds": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/duration_seconds"
+            "$ref": "#/components/schemas/_WorkPartial/properties/duration_seconds"
           },
           "effect": {
-            "$ref": "#/components/schemas/RunRecord/properties/effect"
+            "$ref": "#/components/schemas/_EvidencePartial/properties/effect"
           },
           "events": {
-            "description": "Each task's outcome on each machine, in the order the worker ran them.",
-            "items": {
-              "$ref": "#/components/schemas/RunTaskPartial"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/_EvidencePartial/properties/events"
           },
           "expected": {
-            "$ref": "#/components/schemas/RunRecord/properties/expected"
+            "$ref": "#/components/schemas/_EvidencePartial/properties/expected"
           },
           "finished_at": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/finished_at"
+            "$ref": "#/components/schemas/_WorkPartial/properties/finished_at"
           },
           "headline": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/headline"
+            "$ref": "#/components/schemas/_WorkPartial/properties/headline"
           },
           "hosts": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/hosts"
+            "$ref": "#/components/schemas/_WorkPartial/properties/hosts"
           },
           "lease_until": {
-            "$ref": "#/components/schemas/RunRecord/properties/lease_until"
+            "$ref": "#/components/schemas/_EvidencePartial/properties/lease_until"
           },
           "matched": {
-            "$ref": "#/components/schemas/RunRecord/properties/matched"
+            "$ref": "#/components/schemas/_EvidencePartial/properties/matched"
           },
           "operation_id": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/operation_id"
+            "$ref": "#/components/schemas/RunRecord/properties/operation_id"
           },
           "playbook": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/playbook"
+            "$ref": "#/components/schemas/RunRecord/properties/playbook"
           },
           "reason": {
             "$ref": "#/components/schemas/RunRecord/properties/reason"
           },
           "started_at": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/started_at"
+            "$ref": "#/components/schemas/_WorkPartial/properties/started_at"
           },
           "state": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/state"
+            "$ref": "#/components/schemas/_WorkPartial/properties/state"
           },
           "state_label": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/state_label"
+            "$ref": "#/components/schemas/_WorkPartial/properties/state_label"
           },
           "stated": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/stated"
+            "$ref": "#/components/schemas/_WorkPartial/properties/stated"
           },
           "title": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/title"
+            "$ref": "#/components/schemas/_WorkPartial/properties/title"
           },
           "tone": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/tone"
+            "$ref": "#/components/schemas/_WorkPartial/properties/tone"
           },
           "url": {
-            "$ref": "#/components/schemas/RunRowPartial/properties/url"
+            "$ref": "#/components/schemas/_WorkPartial/properties/url"
           },
           "worker": {
-            "$ref": "#/components/schemas/RunRecord/properties/worker"
+            "$ref": "#/components/schemas/_EvidencePartial/properties/worker"
           }
         },
         "type": "object"
@@ -26081,219 +26587,6 @@
           "ok",
           "data"
         ],
-        "type": "object"
-      },
-      "RunRow": {
-        "additionalProperties": false,
-        "properties": {
-          "approved_by": {
-            "description": "Who approved it; empty for a run that needed no approval.",
-            "type": "string"
-          },
-          "by": {
-            "description": "Who asked for it, through which door, and who approved it, as Jobs names them.",
-            "type": "string"
-          },
-          "capability": {
-            "description": "The command it was asked for through, by name: a playbook's, or the scan's refresh.",
-            "type": "string"
-          },
-          "correlation": {
-            "description": "The correlation id its asker sent; empty when it sent none.",
-            "type": "string"
-          },
-          "created_at": {
-            "$ref": "#/components/schemas/AskedAt"
-          },
-          "duration_seconds": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "How long it worked for; null until it ends."
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When it ended; null while it waits or works."
-          },
-          "headline": {
-            "description": "What it is doing or how it ended, in a sentence.",
-            "type": "string"
-          },
-          "hosts": {
-            "description": "The machines it acts on, each by its name in HQ.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "operation_id": {
-            "description": "The run's id: the `operation.id` its command answered, which a read of one names.",
-            "type": "string"
-          },
-          "playbook": {
-            "description": "The id of the playbook it runs, which the `playbook` filter takes; empty for a scan.",
-            "type": "string"
-          },
-          "started_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When a worker took it up; null while it waits."
-          },
-          "state": {
-            "description": "Where it stands, as Jobs shows it: `queued`, `running`, `succeeded`, `failed` or `lost`. `lost` is a run whose worker stopped reporting.",
-            "type": "string"
-          },
-          "state_label": {
-            "description": "That state in the words HQ's pages say it in.",
-            "type": "string"
-          },
-          "stated": {
-            "description": "The kinds of reading its playbook stated, each once; empty when it stated none.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "title": {
-            "description": "What it is, in words.",
-            "type": "string"
-          },
-          "tone": {
-            "description": "How that state is colored: `serious`, `attention`, `neutral` or `good`.",
-            "type": "string"
-          },
-          "url": {
-            "$ref": "#/components/schemas/PageUrl"
-          }
-        },
-        "required": [
-          "operation_id",
-          "url",
-          "title",
-          "playbook",
-          "capability",
-          "state",
-          "state_label",
-          "tone",
-          "headline",
-          "hosts",
-          "by",
-          "approved_by",
-          "correlation",
-          "created_at",
-          "started_at",
-          "finished_at",
-          "duration_seconds",
-          "stated"
-        ],
-        "type": "object"
-      },
-      "RunRowPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "$ref": "#/components/schemas/RunRowPartial"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
-        "required": [
-          "ok",
-          "data"
-        ],
-        "type": "object"
-      },
-      "RunRowPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "approved_by": {
-            "$ref": "#/components/schemas/RunRow/properties/approved_by"
-          },
-          "by": {
-            "$ref": "#/components/schemas/RunRow/properties/by"
-          },
-          "capability": {
-            "$ref": "#/components/schemas/RunRow/properties/capability"
-          },
-          "correlation": {
-            "$ref": "#/components/schemas/RunRow/properties/correlation"
-          },
-          "created_at": {
-            "$ref": "#/components/schemas/AskedAt"
-          },
-          "duration_seconds": {
-            "$ref": "#/components/schemas/RunRow/properties/duration_seconds"
-          },
-          "finished_at": {
-            "$ref": "#/components/schemas/RunRow/properties/finished_at"
-          },
-          "headline": {
-            "$ref": "#/components/schemas/RunRow/properties/headline"
-          },
-          "hosts": {
-            "$ref": "#/components/schemas/RunRow/properties/hosts"
-          },
-          "operation_id": {
-            "$ref": "#/components/schemas/RunRow/properties/operation_id"
-          },
-          "playbook": {
-            "$ref": "#/components/schemas/RunRow/properties/playbook"
-          },
-          "started_at": {
-            "$ref": "#/components/schemas/RunRow/properties/started_at"
-          },
-          "state": {
-            "$ref": "#/components/schemas/RunRow/properties/state"
-          },
-          "state_label": {
-            "$ref": "#/components/schemas/RunRow/properties/state_label"
-          },
-          "stated": {
-            "$ref": "#/components/schemas/RunRow/properties/stated"
-          },
-          "title": {
-            "$ref": "#/components/schemas/RunRow/properties/title"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/RunRow/properties/tone"
-          },
-          "url": {
-            "$ref": "#/components/schemas/PageUrl"
-          }
-        },
         "type": "object"
       },
       "RunTask": {
@@ -26581,6 +26874,18 @@
           "scope"
         ],
         "type": "object"
+      },
+      "SearchText": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Only the records a search for this finds, the best match first unless a sort is asked; absent, every record.",
+        "title": "Search text"
       },
       "SecurityNotes": {
         "description": "What protects it, and what to watch.",
@@ -27667,7 +27972,7 @@
         "type": "object"
       },
       "Standing": {
-        "description": "Where one check stands: every word a page says of it is a view of this.",
+        "description": "Where one check stands: every word a page says of it is a view of this.\nIts tone is a rung of a check ladder's: a check that cannot be read is one\nto look at, never a fault.",
         "enum": [
           "met",
           "unmet",
@@ -28716,6 +29021,7 @@
             "type": "string"
           },
           "document": {
+            "contentMediaType": "application/hujson",
             "default": "",
             "description": "The tailnet's access policy.",
             "title": "Policy",
@@ -28847,18 +29153,6 @@
       "TechnologiesUsed": {
         "description": "What it is built with.",
         "type": "string"
-      },
-      "TextFilter": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "Only the records whose text holds this, ignoring case; absent, every record.",
-        "title": "Text filter"
       },
       "ThemeSet": {
         "additionalProperties": false,
@@ -30426,6 +30720,258 @@
         "description": "The page of HQ's web interface that shows it, by its route name such as `projects:list`; null for none.",
         "title": "Web route"
       },
+      "WorkItem": {
+        "additionalProperties": false,
+        "description": "One job or run as Jobs lists it, its evidence beneath.",
+        "properties": {
+          "affected": {
+            "$ref": "#/components/schemas/_Evidence/properties/affected"
+          },
+          "approved_by": {
+            "$ref": "#/components/schemas/_Work/properties/approved_by"
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/_Evidence/properties/attempts"
+          },
+          "by": {
+            "$ref": "#/components/schemas/_Work/properties/by"
+          },
+          "correlation": {
+            "$ref": "#/components/schemas/_Work/properties/correlation"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/_Work/properties/created_at"
+          },
+          "duration_seconds": {
+            "$ref": "#/components/schemas/_Work/properties/duration_seconds"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/_Evidence/properties/effect"
+          },
+          "events": {
+            "$ref": "#/components/schemas/_Evidence/properties/events"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/_Evidence/properties/expected"
+          },
+          "finished_at": {
+            "$ref": "#/components/schemas/_Work/properties/finished_at"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/_Work/properties/headline"
+          },
+          "hosts": {
+            "$ref": "#/components/schemas/_Work/properties/hosts"
+          },
+          "id": {
+            "description": "Its id: a run's `operation.id`, or a job's.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "What the `kind` filter names it by: a job's kind, or the command a run was asked through.",
+            "type": "string"
+          },
+          "lease_until": {
+            "$ref": "#/components/schemas/_Evidence/properties/lease_until"
+          },
+          "matched": {
+            "$ref": "#/components/schemas/_Evidence/properties/matched"
+          },
+          "source": {
+            "description": "Whether it is one of HQ's own jobs or a run of automation.",
+            "enum": [
+              "job",
+              "run"
+            ],
+            "type": "string"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/_Work/properties/started_at"
+          },
+          "state": {
+            "$ref": "#/components/schemas/_Work/properties/state"
+          },
+          "state_label": {
+            "$ref": "#/components/schemas/_Work/properties/state_label"
+          },
+          "stated": {
+            "$ref": "#/components/schemas/_Work/properties/stated"
+          },
+          "title": {
+            "$ref": "#/components/schemas/_Work/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/_Work/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/_Work/properties/url"
+          },
+          "worker": {
+            "$ref": "#/components/schemas/_Evidence/properties/worker"
+          }
+        },
+        "required": [
+          "url",
+          "title",
+          "state",
+          "state_label",
+          "tone",
+          "headline",
+          "hosts",
+          "by",
+          "approved_by",
+          "correlation",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "duration_seconds",
+          "stated",
+          "effect",
+          "attempts",
+          "worker",
+          "lease_until",
+          "events",
+          "expected",
+          "affected",
+          "matched",
+          "id",
+          "source",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "WorkItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/WorkItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "WorkItemPartial": {
+        "additionalProperties": false,
+        "description": "One job or run as Jobs lists it, its evidence beneath.",
+        "properties": {
+          "affected": {
+            "$ref": "#/components/schemas/_EvidencePartial/properties/affected"
+          },
+          "approved_by": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/approved_by"
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/_EvidencePartial/properties/attempts"
+          },
+          "by": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/by"
+          },
+          "correlation": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/correlation"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/created_at"
+          },
+          "duration_seconds": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/duration_seconds"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/_EvidencePartial/properties/effect"
+          },
+          "events": {
+            "$ref": "#/components/schemas/_EvidencePartial/properties/events"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/_EvidencePartial/properties/expected"
+          },
+          "finished_at": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/finished_at"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/headline"
+          },
+          "hosts": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/hosts"
+          },
+          "id": {
+            "$ref": "#/components/schemas/WorkItem/properties/id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WorkItem/properties/kind"
+          },
+          "lease_until": {
+            "$ref": "#/components/schemas/_EvidencePartial/properties/lease_until"
+          },
+          "matched": {
+            "$ref": "#/components/schemas/_EvidencePartial/properties/matched"
+          },
+          "source": {
+            "$ref": "#/components/schemas/WorkItem/properties/source"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/started_at"
+          },
+          "state": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/state"
+          },
+          "state_label": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/state_label"
+          },
+          "stated": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/stated"
+          },
+          "title": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/url"
+          },
+          "worker": {
+            "$ref": "#/components/schemas/_EvidencePartial/properties/worker"
+          }
+        },
+        "type": "object"
+      },
+      "WorkItemSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WorkItemPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "WorkRequested": {
         "additionalProperties": false,
         "description": "Work asked of HQ, and the job doing it.",
@@ -30592,6 +31138,269 @@
           }
         },
         "type": "object"
+      },
+      "_Evidence": {
+        "additionalProperties": false,
+        "description": "What a run shows for itself past its row: the worker's lease while it holds it, and each task's outcome.",
+        "properties": {
+          "affected": {
+            "description": "Each name it found serving another certificate.",
+            "items": {
+              "$ref": "#/components/schemas/ServedPart"
+            },
+            "type": "array"
+          },
+          "attempts": {
+            "description": "How many times a worker has taken it up.",
+            "type": "integer"
+          },
+          "effect": {
+            "description": "What its playbook changes, as its record pins it, which cancelling it takes the authority of.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Each task's outcome on each machine, in the order the worker ran them.",
+            "items": {
+              "$ref": "#/components/schemas/RunTask"
+            },
+            "type": "array"
+          },
+          "expected": {
+            "description": "The SHA-256 fingerprint of the certificate it checked each name for; empty when it checked none.",
+            "type": "string"
+          },
+          "lease_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When that worker must next report, or HQ reads the run as stopped; null unless one runs it."
+          },
+          "matched": {
+            "description": "How many names it found serving the certificate it checked for.",
+            "type": "integer"
+          },
+          "worker": {
+            "description": "The worker running it now; empty unless one is.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "effect",
+          "attempts",
+          "worker",
+          "lease_until",
+          "events",
+          "expected",
+          "affected",
+          "matched"
+        ],
+        "type": "object"
+      },
+      "_EvidencePartial": {
+        "additionalProperties": false,
+        "description": "What a run shows for itself past its row: the worker's lease while it holds it, and each task's outcome.",
+        "properties": {
+          "affected": {
+            "description": "Each name it found serving another certificate.",
+            "items": {
+              "$ref": "#/components/schemas/ServedPartPartial"
+            },
+            "type": "array"
+          },
+          "attempts": {
+            "$ref": "#/components/schemas/_Evidence/properties/attempts"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/_Evidence/properties/effect"
+          },
+          "events": {
+            "description": "Each task's outcome on each machine, in the order the worker ran them.",
+            "items": {
+              "$ref": "#/components/schemas/RunTaskPartial"
+            },
+            "type": "array"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/_Evidence/properties/expected"
+          },
+          "lease_until": {
+            "$ref": "#/components/schemas/_Evidence/properties/lease_until"
+          },
+          "matched": {
+            "$ref": "#/components/schemas/_Evidence/properties/matched"
+          },
+          "worker": {
+            "$ref": "#/components/schemas/_Evidence/properties/worker"
+          }
+        },
+        "type": "object"
+      },
+      "_Work": {
+        "additionalProperties": false,
+        "description": "What a piece of work says of itself, a job or a run.",
+        "properties": {
+          "approved_by": {
+            "description": "Who approved it; empty for work that needed no approval.",
+            "type": "string"
+          },
+          "by": {
+            "description": "Who asked for it, through which door, and who approved it, as Jobs names them.",
+            "type": "string"
+          },
+          "correlation": {
+            "description": "The correlation id its asker sent; empty when it sent none.",
+            "type": "string"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AskedAt"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How long it worked for; null until it ends."
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it ended; null while it waits or works."
+          },
+          "headline": {
+            "description": "What it is doing or how it ended, in a sentence.",
+            "type": "string"
+          },
+          "hosts": {
+            "description": "The machines it acts on, each by its name in HQ.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When a worker took it up; null while it waits."
+          },
+          "state": {
+            "description": "Where it stands, as Jobs shows it: `queued`, `running`, `succeeded`, `failed` or `lost`. `lost` is work whose worker stopped reporting.",
+            "type": "string"
+          },
+          "state_label": {
+            "description": "That state in the words HQ's pages say it in.",
+            "type": "string"
+          },
+          "stated": {
+            "description": "The kinds of reading its playbook stated, each once; empty when it stated none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "What it is, in words.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "How that state is colored: `serious`, `attention`, `neutral` or `good`.",
+            "type": "string"
+          },
+          "url": {
+            "description": "Its page in HQ; empty for a job, which has none.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "title",
+          "state",
+          "state_label",
+          "tone",
+          "headline",
+          "hosts",
+          "by",
+          "approved_by",
+          "correlation",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "duration_seconds",
+          "stated"
+        ],
+        "type": "object"
+      },
+      "_WorkPartial": {
+        "additionalProperties": false,
+        "description": "What a piece of work says of itself, a job or a run.",
+        "properties": {
+          "approved_by": {
+            "$ref": "#/components/schemas/_Work/properties/approved_by"
+          },
+          "by": {
+            "$ref": "#/components/schemas/_Work/properties/by"
+          },
+          "correlation": {
+            "$ref": "#/components/schemas/_Work/properties/correlation"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AskedAt"
+          },
+          "duration_seconds": {
+            "$ref": "#/components/schemas/_Work/properties/duration_seconds"
+          },
+          "finished_at": {
+            "$ref": "#/components/schemas/_Work/properties/finished_at"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/_Work/properties/headline"
+          },
+          "hosts": {
+            "$ref": "#/components/schemas/_Work/properties/hosts"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/_Work/properties/started_at"
+          },
+          "state": {
+            "$ref": "#/components/schemas/_Work/properties/state"
+          },
+          "state_label": {
+            "$ref": "#/components/schemas/_Work/properties/state_label"
+          },
+          "stated": {
+            "$ref": "#/components/schemas/_Work/properties/stated"
+          },
+          "title": {
+            "$ref": "#/components/schemas/_Work/properties/title"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/_Work/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/_Work/properties/url"
+          }
+        },
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -30701,7 +31510,8 @@
                 "service.paths",
                 "services",
                 "tailnet",
-                "upgrades"
+                "upgrades",
+                "work"
               ],
               "type": "string"
             }
@@ -36016,7 +36826,8 @@
                 "service.paths",
                 "services",
                 "tailnet",
-                "upgrades"
+                "upgrades",
+                "work"
               ],
               "type": "string"
             }
@@ -36122,7 +36933,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ActionItemPageFields"
@@ -36147,9 +36958,9 @@
               "listActionItemsV2": {
                 "operationId": "listActionItemsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
                   "query.source": "$request.query.source",
                   "query.status": "$request.query.status"
@@ -36284,13 +37095,85 @@
         "x-hq-resource": "analytics"
       }
     },
-    "/api/v2/resources/approvals/{identifier}/": {
+    "/api/v2/resources/approvals/": {
       "get": {
         "description": "A change you asked for that waits for approval, by the `approval.id` its answer carried.",
+        "operationId": "listApprovalsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HeldRequestItemPageFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeldRequestItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "getApprovalsV2": {
+                "operationId": "getApprovalsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Held requests: the list",
+        "tags": [
+          "hq.approvals"
+        ],
+        "x-hq-resource": "approvals"
+      }
+    },
+    "/api/v2/resources/approvals/{identifier}/": {
+      "get": {
+        "description": "One of the records Held requests lists, found by its `id`.",
         "operationId": "getApprovalsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/IdLookup"
+            "$ref": "#/components/parameters/WorkIdIdentifier"
           },
           {
             "$ref": "#/components/parameters/HeldRequestRecordFields"
@@ -36346,31 +37229,83 @@
         "operationId": "listAssetsV2",
         "parameters": [
           {
-            "description": "Only the records in this status; absent, every status.",
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose status is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:active|retired|sold|returned|replaced)(?:,(?:active|retired|sold|returned|replaced))*$",
+              "title": "Status",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose category is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:networking|server_hardware|software|subscription|domain|hosting|camera_audio|office|tools|training|other)(?:,(?:networking|server_hardware|software|subscription|domain|hosting|camera_audio|office|tools|training|other))*$",
+              "title": "Category",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the active assets with no purchase date or no cost.",
+            "explode": true,
+            "in": "query",
+            "name": "missing_purchase",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No date or cost",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else newest purchase.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
               "enum": [
-                "active",
-                "retired",
-                "sold",
-                "returned",
-                "replaced"
+                "-purchase_date",
+                "purchase_date",
+                "item_name",
+                "-item_name",
+                "vendor",
+                "-vendor",
+                "category",
+                "-category",
+                "total_cost",
+                "-total_cost",
+                "business_use_percentage",
+                "-business_use_percentage",
+                "estimated_deductible_amount",
+                "-estimated_deductible_amount",
+                "status",
+                "-status"
               ],
               "type": "string"
             },
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/TextFilter"
-          },
-          {
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/AssetRowPageFields"
@@ -36415,10 +37350,13 @@
               "listAssetsV2": {
                 "operationId": "listAssetsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.category": "$request.query.category",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.missing_purchase": "$request.query.missing_purchase",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
                   "query.status": "$request.query.status"
                 }
               }
@@ -36547,6 +37485,287 @@
         "x-hq-resource": "assets"
       }
     },
+    "/api/v2/resources/audit/": {
+      "get": {
+        "description": "Security-sensitive audit events indexed by HQ.",
+        "operationId": "listAuditV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the rows about the record with this key; absent, every row.",
+            "explode": true,
+            "in": "query",
+            "name": "about",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the rows of this day, in HQ's time zone; absent, every day.",
+            "explode": true,
+            "in": "query",
+            "name": "on",
+            "required": false,
+            "schema": {
+              "format": "date",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the requests still waiting for a person.",
+            "explode": true,
+            "in": "query",
+            "name": "awaiting",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for one row per operation, its newest of those kept, in place of every row it wrote.",
+            "explode": true,
+            "in": "query",
+            "name": "events",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose where is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:hq|outside|deploy|container)(?:,(?:hq|outside|deploy|container))*$",
+              "title": "Where",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose action is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:created|updated|deleted|login|logout|login_failed|uploaded|exported|imported|done|failed|settings_changed|viewed|denied|observed)(?:,(?:created|updated|deleted|login|logout|login_failed|uploaded|exported|imported|done|failed|settings_changed|viewed|denied|observed))*$",
+              "title": "Action",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for the asks for a fresh reading too; absent, they are left out.",
+            "explode": true,
+            "in": "query",
+            "name": "reads",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Read requests",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for the work HQ did on its own that changed nothing too; absent, it is left out.",
+            "explode": true,
+            "in": "query",
+            "name": "routine",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Routine work",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else newest event.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-created_at",
+                "created_at",
+                "object_type",
+                "-object_type",
+                "user__username",
+                "-user__username",
+                "action",
+                "-action",
+                "message",
+                "-message"
+              ],
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "$ref": "#/components/parameters/AuditItemFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "getAuditV2": {
+                "operationId": "getAuditV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
+              "listAuditV2": {
+                "operationId": "listAuditV2",
+                "parameters": {
+                  "query.about": "$request.query.about",
+                  "query.action": "$request.query.action",
+                  "query.awaiting": "$request.query.awaiting",
+                  "query.events": "$request.query.events",
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.on": "$request.query.on",
+                  "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
+                  "query.reads": "$request.query.reads",
+                  "query.routine": "$request.query.routine",
+                  "query.sort": "$request.query.sort",
+                  "query.source": "$request.query.source"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read_audit_log"
+            ]
+          }
+        ],
+        "summary": "Audit log: the list",
+        "tags": [
+          "hq.audit"
+        ],
+        "x-hq-resource": "audit"
+      }
+    },
+    "/api/v2/resources/audit/{identifier}/": {
+      "get": {
+        "description": "One of the records Audit log lists, found by its `id`.",
+        "operationId": "getAuditV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/AuditItemFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AuditItemSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read_audit_log"
+            ]
+          }
+        ],
+        "summary": "Audit log: one by id",
+        "tags": [
+          "hq.audit"
+        ],
+        "x-hq-identifier": "id",
+        "x-hq-resource": "audit"
+      }
+    },
     "/api/v2/resources/calendar/": {
       "get": {
         "description": "Everything on the calendar over a span of days, and your own events.",
@@ -36582,7 +37801,7 @@
             "$ref": "#/components/parameters/AgendaLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/AgendaItemPageFields"
@@ -36607,10 +37826,10 @@
               "listCalendarV2": {
                 "operationId": "listCalendarV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.days": "$request.query.days",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.start": "$request.query.start"
                 }
               }
@@ -36906,7 +38125,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ContactSubmissionRowFields"
@@ -36949,9 +38168,9 @@
               "listContactSubmissionsV2": {
                 "operationId": "listContactSubmissionsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
                   "query.status": "$request.query.status"
                 }
@@ -37088,7 +38307,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ContainerRecordFields"
@@ -37119,9 +38338,9 @@
               "listContainersV2": {
                 "operationId": "listContainersV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -37227,29 +38446,77 @@
         "operationId": "listContentV2",
         "parameters": [
           {
-            "description": "Only the records in this status; absent, every status.",
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose status is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:draft|published|archived)(?:,(?:draft|published|archived))*$",
+              "title": "Status",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose type is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "content_type",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:article|video|lab_writeup|guide|review|portfolio_page|service_page|case_study|page)(?:,(?:article|video|lab_writeup|guide|review|portfolio_page|service_page|case_study|page))*$",
+              "title": "Type",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the writeups and pages no document names.",
+            "explode": true,
+            "in": "query",
+            "name": "no_docs",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No source document",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else recently updated.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
               "enum": [
-                "draft",
-                "published",
-                "archived"
+                "-updated_at",
+                "updated_at",
+                "title",
+                "-title",
+                "content_type",
+                "-content_type",
+                "status",
+                "-status",
+                "-published_at",
+                "published_at"
               ],
               "type": "string"
             },
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/TextFilter"
-          },
-          {
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ContentRowPageFields"
@@ -37294,10 +38561,13 @@
               "listContentV2": {
                 "operationId": "listContentV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.content_type": "$request.query.content_type",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.no_docs": "$request.query.no_docs",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
                   "query.status": "$request.query.status"
                 }
               }
@@ -37560,30 +38830,98 @@
         "operationId": "listDocumentationV2",
         "parameters": [
           {
-            "description": "Only the records in this status; absent, every status.",
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose status is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:draft|active|deprecated|archived)(?:,(?:draft|active|deprecated|archived))*$",
+              "title": "Status",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose environment is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "environment",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:homelab|vps|wordpress|cloudflare|tailscale|adguard|unifi|local_mac|other)(?:,(?:homelab|vps|wordpress|cloudflare|tailscale|adguard|unifi|local_mac|other))*$",
+              "title": "Environment",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose type is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "doc_type",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:runbook|architecture_note|deployment_guide|troubleshooting_guide|recovery_procedure|public_article_draft|decision_record|report|queue)(?:,(?:runbook|architecture_note|deployment_guide|troubleshooting_guide|recovery_procedure|public_article_draft|decision_record|report|queue))*$",
+              "title": "Type",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose sensitivity is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "sensitivity",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:public|internal|sensitive|restricted)(?:,(?:public|internal|sensitive|restricted))*$",
+              "title": "Sensitivity",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else recently updated.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
               "enum": [
-                "draft",
-                "active",
-                "deprecated",
-                "archived"
+                "-updated_at",
+                "updated_at",
+                "doc_id",
+                "-doc_id",
+                "title",
+                "-title",
+                "doc_type",
+                "-doc_type",
+                "environment",
+                "-environment",
+                "last_reviewed",
+                "-last_reviewed",
+                "status",
+                "-status",
+                "sensitivity",
+                "-sensitivity"
               ],
               "type": "string"
             },
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/TextFilter"
-          },
-          {
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/DocumentationRowPageFields"
@@ -37628,10 +38966,14 @@
               "listDocumentationV2": {
                 "operationId": "listDocumentationV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.doc_type": "$request.query.doc_type",
+                  "query.environment": "$request.query.environment",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
+                  "query.sensitivity": "$request.query.sensitivity",
+                  "query.sort": "$request.query.sort",
                   "query.status": "$request.query.status"
                 }
               }
@@ -37769,7 +39111,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/DomainRowPageFields"
@@ -37800,9 +39142,9 @@
               "listDomainsV2": {
                 "operationId": "listDomainsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -37960,38 +39302,71 @@
         "operationId": "listExpensesV2",
         "parameters": [
           {
-            "description": "Only the expenses dated in this year.",
-            "explode": true,
-            "in": "query",
-            "name": "year",
-            "required": false,
-            "schema": {
-              "maximum": 9999,
-              "minimum": 1,
-              "type": "integer"
-            },
-            "style": "form"
+            "$ref": "#/components/parameters/SearchText"
           },
           {
-            "description": "Only the expenses in this category; absent, every category.",
+            "description": "Only the records whose category is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "category",
             "required": false,
             "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:hosting|domains|software|hardware|networking|office|education|subscriptions|content_production|consulting_tools|professional_services|miscellaneous)(?:,(?:hosting|domains|software|hardware|networking|office|education|subscriptions|content_production|consulting_tools|professional_services|miscellaneous))*$",
+              "title": "Category",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose year is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^\\d{1,4}(?:,\\d{1,4})*$",
+              "title": "Year",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the expenses with no receipt.",
+            "explode": true,
+            "in": "query",
+            "name": "no_receipts",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No receipt",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else newest expense.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
               "enum": [
-                "hosting",
-                "domains",
-                "software",
-                "hardware",
-                "networking",
-                "office",
-                "education",
-                "subscriptions",
-                "content_production",
-                "consulting_tools",
-                "professional_services",
-                "miscellaneous"
+                "-date",
+                "date",
+                "vendor",
+                "-vendor",
+                "item",
+                "-item",
+                "category",
+                "-category",
+                "total_cost",
+                "-total_cost",
+                "business_use_percentage",
+                "-business_use_percentage",
+                "estimated_deductible_amount",
+                "-estimated_deductible_amount"
               ],
               "type": "string"
             },
@@ -38001,7 +39376,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ExpenseRecordFields"
@@ -38047,9 +39422,12 @@
                 "operationId": "listExpensesV2",
                 "parameters": {
                   "query.category": "$request.query.category",
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.no_receipts": "$request.query.no_receipts",
+                  "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
                   "query.year": "$request.query.year"
                 }
               }
@@ -38283,7 +39661,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ManagedResourceListedPageFields"
@@ -38373,11 +39751,11 @@
               "listInfrastructureV2": {
                 "operationId": "listInfrastructureV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.kind": "$request.query.kind",
                   "query.kinds": "$request.query.kinds",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               },
               "tailnetPolicyRemoveEmptyGroupsV2": {
@@ -38603,7 +39981,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/MachineRecordFields"
@@ -38634,9 +40012,9 @@
               "listMachinesV2": {
                 "operationId": "listMachinesV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -38998,35 +40376,108 @@
         "operationId": "listProjectsV2",
         "parameters": [
           {
-            "description": "Only the records in this status; absent, every status.",
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose status is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
             "name": "status",
             "required": false,
             "schema": {
-              "enum": [
-                "idea",
-                "active",
-                "paused",
-                "completed",
-                "published",
-                "archived"
-              ],
+              "maxLength": 2000,
+              "pattern": "^(?:idea|active|paused|completed|published|archived)(?:,(?:idea|active|paused|completed|published|archived))*$",
+              "title": "Status",
               "type": "string"
             },
             "style": "form"
           },
           {
-            "$ref": "#/components/parameters/TextFilter"
-          },
-          {
-            "description": "True for the projects HQ's dependency update run covers, false for the rest; absent, both.",
+            "description": "Only the records whose category is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
-            "name": "updates",
+            "name": "category",
             "required": false,
             "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:wordpress_security|cloudflare|dns_email_security|homelab|vps|tailscale|adguard|networking|tls_certificates|automation|cybersecurity_labs|other)(?:,(?:wordpress_security|cloudflare|dns_email_security|homelab|vps|tailscale|adguard|networking|tls_certificates|automation|cybersecurity_labs|other))*$",
+              "title": "Category",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the active projects still missing a writeup or a document.",
+            "explode": true,
+            "in": "query",
+            "name": "needs_output",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active, nothing written yet",
               "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the projects no writeup or page names.",
+            "explode": true,
+            "in": "query",
+            "name": "no_content",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No writeup",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the projects no document names.",
+            "explode": true,
+            "in": "query",
+            "name": "no_docs",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No documents",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "True for only the projects HQ's dependency update run covers.",
+            "explode": true,
+            "in": "query",
+            "name": "updates_on",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Updates on",
+              "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else recently edited.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-updated_at",
+                "updated_at",
+                "name",
+                "-name",
+                "status",
+                "-status",
+                "category",
+                "-category",
+                "technologies_used",
+                "-technologies_used"
+              ],
+              "type": "string"
             },
             "style": "form"
           },
@@ -39034,7 +40485,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ProjectRowPageFields"
@@ -39065,12 +40516,17 @@
               "listProjectsV2": {
                 "operationId": "listProjectsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
+                  "query.category": "$request.query.category",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.needs_output": "$request.query.needs_output",
+                  "query.no_content": "$request.query.no_content",
+                  "query.no_docs": "$request.query.no_docs",
+                  "query.page": "$response.body#/data/next",
                   "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
                   "query.status": "$request.query.status",
-                  "query.updates": "$request.query.updates"
+                  "query.updates_on": "$request.query.updates_on"
                 }
               },
               "projectDeleteV2": {
@@ -39274,7 +40730,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ReadingItemPageFields"
@@ -39305,9 +40761,9 @@
               "listReadingsV2": {
                 "operationId": "listReadingsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
                   "query.provider": "$request.query.provider"
                 }
               }
@@ -39414,14 +40870,41 @@
         "operationId": "listReceiptsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
             "description": "True for only the receipts matched to no expense and no asset.",
             "explode": true,
             "in": "query",
-            "name": "unmatched_only",
+            "name": "unlinked",
             "required": false,
             "schema": {
               "default": false,
+              "title": "No expense or asset",
               "type": "boolean"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else recently uploaded.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-uploaded_at",
+                "uploaded_at",
+                "vendor",
+                "-vendor",
+                "date",
+                "-date",
+                "amount",
+                "-amount",
+                "original_filename",
+                "-original_filename"
+              ],
+              "type": "string"
             },
             "style": "form"
           },
@@ -39429,7 +40912,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/ReceiptRowPageFields"
@@ -39460,10 +40943,12 @@
               "listReceiptsV2": {
                 "operationId": "listReceiptsV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",
-                  "query.unmatched_only": "$request.query.unmatched_only"
+                  "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
+                  "query.unlinked": "$request.query.unlinked"
                 }
               },
               "receiptDeleteV2": {
@@ -39713,161 +41198,13 @@
         "x-hq-resource": "request.path"
       }
     },
-    "/api/v2/resources/runs/": {
-      "get": {
-        "description": "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, its state and each task's outcome.",
-        "operationId": "listRunsV2",
-        "parameters": [
-          {
-            "description": "Only the runs of the playbook with this id; absent, every one.",
-            "explode": true,
-            "in": "query",
-            "name": "playbook",
-            "required": false,
-            "schema": {
-              "maxLength": 200,
-              "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
-            "description": "Only the runs on the machine with this name, as `machines` names it; absent, every machine.",
-            "explode": true,
-            "in": "query",
-            "name": "machine",
-            "required": false,
-            "schema": {
-              "maxLength": 253,
-              "minLength": 1,
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
-            "description": "Only the runs asked for with this correlation id; absent, every run.",
-            "explode": true,
-            "in": "query",
-            "name": "correlation",
-            "required": false,
-            "schema": {
-              "maxLength": 200,
-              "minLength": 1,
-              "pattern": "^[!-~]*$",
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
-            "description": "Only the runs in this state, as Jobs shows it; absent, every state.",
-            "explode": true,
-            "in": "query",
-            "name": "state",
-            "required": false,
-            "schema": {
-              "enum": [
-                "queued",
-                "running",
-                "succeeded",
-                "failed",
-                "lost"
-              ],
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
-            "$ref": "#/components/parameters/RunRowPageFields"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunRowPageSuccess"
-                }
-              }
-            },
-            "description": "Success.",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/CacheControl"
-              }
-            },
-            "links": {
-              "getRunsV2": {
-                "operationId": "getRunsV2",
-                "parameters": {
-                  "path.identifier": "$response.body#/data/items/0/operation_id"
-                }
-              },
-              "listRunsV2": {
-                "operationId": "listRunsV2",
-                "parameters": {
-                  "query.correlation": "$request.query.correlation",
-                  "query.cursor": "$response.body#/data/next/cursor",
-                  "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit",
-                  "query.machine": "$request.query.machine",
-                  "query.playbook": "$request.query.playbook",
-                  "query.state": "$request.query.state"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidInput"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ResourceReadNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearer": [
-              "read"
-            ]
-          }
-        ],
-        "summary": "Playbook runs: the list",
-        "tags": [
-          "hq.jobs"
-        ],
-        "x-hq-resource": "runs"
-      }
-    },
     "/api/v2/resources/runs/{identifier}/": {
       "get": {
-        "description": "One of the records Playbook runs lists, found by its `operation_id`.",
+        "description": "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, its state and each task's outcome.",
         "operationId": "getRunsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/OperationIdIdentifier"
+            "$ref": "#/components/parameters/OperationIdLookup"
           },
           {
             "$ref": "#/components/parameters/RunRecordFields"
@@ -40230,7 +41567,7 @@
             "$ref": "#/components/parameters/PageLimit"
           },
           {
-            "$ref": "#/components/parameters/Cursor"
+            "$ref": "#/components/parameters/PageNumber"
           },
           {
             "$ref": "#/components/parameters/UpgradeRecordFields"
@@ -40261,9 +41598,9 @@
               "listUpgradesV2": {
                 "operationId": "listUpgradesV2",
                 "parameters": {
-                  "query.cursor": "$response.body#/data/next/cursor",
                   "query.fields": "$request.query.fields",
-                  "query.limit": "$request.query.limit"
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -40363,6 +41700,231 @@
         "x-hq-resource": "upgrades"
       }
     },
+    "/api/v2/resources/work/": {
+      "get": {
+        "description": "HQ's own jobs and the automation runs it queued, as Jobs lists them: who asked, its state, its machines and each task's outcome.",
+        "operationId": "listWorkV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose state is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:queued|running|succeeded|failed|lost)(?:,(?:queued|running|succeeded|failed|lost))*$",
+              "title": "State",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose job is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^[A-Za-z0-9_.:-]{1,253}(?:,[A-Za-z0-9_.:-]{1,253})*$",
+              "title": "Job",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose host is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "host",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^[A-Za-z0-9_.:-]{1,253}(?:,[A-Za-z0-9_.:-]{1,253})*$",
+              "title": "Host",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose correlation is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "correlation",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^[!-+\\--~]{1,200}(?:,[!-+\\--~]{1,200})*$",
+              "title": "Correlation",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else failed first.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "failed",
+                "-created_at",
+                "created_at",
+                "title",
+                "state"
+              ],
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "$ref": "#/components/parameters/WorkItemFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "getWorkV2": {
+                "operationId": "getWorkV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
+              "listWorkV2": {
+                "operationId": "listWorkV2",
+                "parameters": {
+                  "query.correlation": "$request.query.correlation",
+                  "query.fields": "$request.query.fields",
+                  "query.host": "$request.query.host",
+                  "query.kind": "$request.query.kind",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
+                  "query.state": "$request.query.state"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Background jobs: the list",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-resource": "work"
+      }
+    },
+    "/api/v2/resources/work/{identifier}/": {
+      "get": {
+        "description": "One of the records Background jobs lists, found by its `id`.",
+        "operationId": "getWorkV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkIdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/WorkItemFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/WorkItemSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Background jobs: one by id",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-identifier": "id",
+        "x-hq-resource": "work"
+      }
+    },
     "/api/v2/resources/{name}/": {
       "get": {
         "description": "One resource's records, narrowed by the query its schema checks.",
@@ -40377,7 +41939,9 @@
               "enum": [
                 "action_items",
                 "analytics",
+                "approvals",
                 "assets",
+                "audit",
                 "calendar",
                 "connections",
                 "contact.submissions",
@@ -40397,11 +41961,11 @@
                 "readings",
                 "receipts",
                 "request.path",
-                "runs",
                 "search",
                 "services",
                 "tailnet",
-                "upgrades"
+                "upgrades",
+                "work"
               ],
               "type": "string"
             }
@@ -40480,7 +42044,8 @@
                 "runs",
                 "service.paths",
                 "services",
-                "upgrades"
+                "upgrades",
+                "work"
               ],
               "type": "string"
             }
@@ -40644,7 +42209,7 @@
   },
   "tags": [
     {
-      "description": "HQ's own machinery: its audit log, its agents, this API and HQ itself.\n\n- [API](#tag/hqapi)\n- [HQ](#tag/hqself)",
+      "description": "HQ's own machinery: its audit log, its agents, this API and HQ itself.\n\n- [API](#tag/hqapi)\n- [Audit](#tag/hqaudit)\n- [HQ](#tag/hqself)",
       "kind": "nav",
       "name": "nav.system",
       "summary": "System"
@@ -40655,6 +42220,13 @@
       "name": "hq.api",
       "parent": "nav.system",
       "summary": "API"
+    },
+    {
+      "description": "Every security-relevant change HQ made, who asked for it and when.",
+      "kind": "nav",
+      "name": "hq.audit",
+      "parent": "nav.system",
+      "summary": "Audit"
     },
     {
       "description": "How HQ itself is doing, read as its own page shows it.",

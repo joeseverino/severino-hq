@@ -60,9 +60,15 @@ class RecordPageTests(TestCase):
         self.client.force_login(self.owner)
         for route in pages:
             view = route.view
-            identifier = str(resource_registry()[view.resource].identifier)
+            spec = resource_registry()[view.resource]
+            identifier = str(spec.identifier)
             with self.subTest(view.__name__):
-                listed = list_resource(view.resource, principal=principal, fields=[identifier])["items"]
+                if spec.listing:
+                    listed = list_resource(view.resource, principal=principal, fields=[identifier])["items"]
+                else:
+                    # A run lists among the work, by the id a read of one takes.
+                    work = list_resource("work", principal=principal, fields=["id", "source"])["items"]
+                    listed = [{identifier: item["id"]} for item in work if item["source"] == "run"]
                 drawn = 0
                 for item in listed:
                     asked = {view.url_kwarg or identifier: item[identifier]}

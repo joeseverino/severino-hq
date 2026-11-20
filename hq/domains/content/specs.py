@@ -2,8 +2,9 @@
 
 from typing import Annotated, TypedDict
 
-from pydantic import Field, create_model
+from django.db.models import Q
 
+from hq.domains.docs_index.models import DocumentationRecord
 from hq.platform.application import content
 from hq.platform.application.answer_fields import (
     AddedAt,
@@ -16,19 +17,47 @@ from hq.platform.application.answer_fields import (
     UpdatedAt,
 )
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ListRead, ResourceSpec
+from hq.platform.application.integration_specs import ListFilter, ListRead, ListSort, ListToggle, ResourceSpec
 from hq.platform.application.record_fields import Notes, PublishedAt, PublishedUrl
-from hq.platform.application.resources import STATUS_FILTER, BoundedQuery, TextFilter, one_of
+from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 
 from .models import ContentItem
 
-ContentQuery = create_model(
-    "ContentQuery",
-    __base__=BoundedQuery,
-    status=(one_of(ContentItem.Status.values) | None, Field(default=None, description=STATUS_FILTER)),
-    query=(TextFilter, None),
+
+class ContentQuery(BoundedQuery):
+    query: SearchText = None
+
+
+def _undocumented() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """A writeup no document names, kept, and one a runbook is the source of, left out."""
+
+    ContentItem.objects.create(title="Bare", slug="bare")
+    sourced = ContentItem.objects.create(title="Sourced", slug="sourced")
+    sourced.related_documentation.add(DocumentationRecord.objects.create(doc_id="rb-example", title="Example runbook"))
+    return ("bare",), ("sourced",)
+
+
+FILTERS = (
+    ListFilter("status", "Status", ContentItem.Status.choices),
+    ListFilter("content_type", "Type", ContentItem.Type.choices),
+)
+NO_DOCS = ListToggle(
+    "no_docs",
+    "No source document",
+    "True for only the writeups and pages no document names.",
+    Q(related_documentation=None),
+    _undocumented,
+)
+
+# Each order the list is read in, the first where none is asked.
+SORTS = (
+    *ListSort.both("-updated_at", "Recently updated", "Least recently updated"),
+    *ListSort.both("title", "Title"),
+    *ListSort.both("content_type", "Type"),
+    *ListSort.both("status", "Status"),
+    *ListSort.both("-published_at", "Recently published", "Oldest published"),
 )
 
 
@@ -71,7 +100,14 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Content",
             "Content records indexed by HQ.",
             Capability.READ,
-            listing=ListRead(content.list_content, ContentQuery, ContentRow),
+            listing=ListRead(
+                content.list_content,
+                ContentQuery,
+                ContentRow,
+                sorts=SORTS,
+                filters=FILTERS,
+                toggles=(NO_DOCS,),
+            ),
             detail_handler=content.get_content,
             identifier="slug",
             search=SearchDefinition(

@@ -26,7 +26,7 @@ from .command_fields import Choices, Describe, Refers, stored_in
 from .derivations import derivation
 from .integration_specs import Kept, keeps
 from .moments import when_day
-from .projection import window
+from .projection import iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import Notes
 from .record_saves import Held, as_sent, found, held, row, written
@@ -267,8 +267,8 @@ def serialize_entry(entry: Entry) -> EntryRecord:
         entry,
         EntryRecord,
         uid=str(entry.uid),
-        starts_at=entry.starts_at.isoformat(timespec="minutes") if entry.starts_at else None,
-        ends_at=entry.ends_at.isoformat(timespec="minutes") if entry.ends_at else None,
+        starts_at=iso(entry.starts_at, timespec="minutes"),
+        ends_at=iso(entry.ends_at, timespec="minutes"),
         repeat_label=repeat_label(entry),
         weekdays=list(entry.weekday_numbers),
         url=entry.get_absolute_url(),
@@ -368,20 +368,20 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
         placed,
         key=lambda item: (item.event.first_day, item.event.timed, str(item.event.starts), item.event.title),
     )
-    page, paged = window(items, limit, maximum=AGENDA_PAGE)
+    paged = page_of(items, limit, maximum=AGENDA_PAGE)
     shown = [
         {
             "source": item.source.id,
             "calendar": item.source.label,
             "title": item.event.title,
             "starts": item.event.starts.isoformat(),
-            "ends": item.event.ends.isoformat() if item.event.ends else None,
+            "ends": iso(item.event.ends),
             "all_day": not item.event.timed,
             "state": item.event.state or None,
             "detail": item.event.detail,
             "url": item.event.url,
         }
-        for item in page
+        for item in paged["items"]
     ]
     return {**paged, "start": first.isoformat(), "end": last.isoformat(), "items": shown}
 

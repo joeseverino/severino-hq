@@ -1,12 +1,11 @@
+from dataclasses import replace
 from typing import override
 
-from django.db.models import Case, IntegerField, Value, When
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
 from django.views.generic import (
     CreateView,
     DeleteView,
-    ListView,
     TemplateView,
     UpdateView,
     View,
@@ -19,7 +18,8 @@ from hq.platform.application import related
 from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
-from hq.platform.application.entity_links import page_url, web_url
+from hq.platform.application.entity_links import entity_link, page_url, web_url
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RecordPageMixin
 from hq.platform.application.projects import (
@@ -32,13 +32,7 @@ from hq.platform.application.projects import (
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.references import Kind
 from hq.platform.application.security import web_principal
-from hq.platform.application.tables import (
-    TableColumn,
-    TableFilter,
-    TableListMixin,
-    TableSort,
-    TableToggle,
-)
+from hq.platform.application.tables import TableColumn
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 lazy from hq.platform.application import standards
@@ -59,13 +53,11 @@ from .models import PROJECT_CATEGORY_CHOICES, Project
 PROJECTS_TRAIL = (("Projects", reverse_lazy("projects:list")),)
 
 
-class ProjectListView(PageMixin, TableListMixin, ListView):
+class ProjectListView(ListPageMixin, TemplateView):
+    resource = "projects"
     table_empty = "No projects yet."
-    model = Project
     template_name = "projects/project_list.html"
-    paginate_by = 25
     page_title = "Projects"
-    table_search_scope = "projects"
     table_selectable = True
     table_columns = (
         TableColumn("Name", "name"),
@@ -76,33 +68,6 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         TableColumn("Edited", "updated_at"),
         TableColumn("", css="row-actions"),
     )
-    table_filters = (
-        TableFilter("status", "Status", "status", Project.Status.choices),
-        TableFilter("category", "Category", "category", PROJECT_CATEGORY_CHOICES),
-    )
-    table_sorts = (
-        TableSort("-updated_at", "Recently edited", ("archive_rank", "-updated_at")),
-        TableSort("updated_at", "Least recently edited", ("archive_rank", "updated_at")),
-        TableSort("name", "Name A–Z", ("archive_rank", "name")),
-        TableSort("-name", "Name Z–A", ("archive_rank", "-name")),
-        TableSort("status", "Status A–Z", ("archive_rank", "status")),
-        TableSort("-status", "Status Z–A", ("archive_rank", "-status")),
-        TableSort("category", "Category A–Z", ("archive_rank", "category")),
-        TableSort("-category", "Category Z–A", ("archive_rank", "-category")),
-        TableSort("technologies_used", "Technology A–Z", ("archive_rank", "technologies_used")),
-        TableSort(
-            "-technologies_used",
-            "Technology Z–A",
-            ("archive_rank", "-technologies_used"),
-        ),
-    )
-    table_toggles = (
-        TableToggle("needs_output", "Active, nothing written yet"),
-        TableToggle("no_content", "No writeup"),
-        TableToggle("no_docs", "No documents"),
-        TableToggle("updates_on", "Updates on"),
-    )
-    table_default_sort = "-updated_at"
     table_search_placeholder = "Search projects, technology, and notes…"
 
     @override
@@ -110,31 +75,19 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
         return (PageAction.command("project.create", primary=True),)
 
     @override
-    def get_queryset(self):
-        qs = Project.objects.all()
-        for toggle in self.table_toggles:
-            if self.request.GET.get(toggle.name, "").strip():
-                qs = getattr(qs, toggle.name)()
-        qs = qs.annotate(
-            archive_rank=Case(
-                When(status=Project.Status.ARCHIVED, then=Value(1)),
-                default=Value(0),
-                output_field=IntegerField(),
-            )
-        )
-        return self.apply_table_query(qs)
-
-    @override
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        # GitHub's reading for the rows on this page: one stored reading,
+    def row(self, item):
+        # GitHub's reading of the row's repository: one stored reading,
         # whatever the page size.
-        for project in context["object_list"]:
-            repository = repository_for(project.repository_url)
-            project.repository = repository
-            project.pushed_at = moment(str(repository.pushed_at or "")) if repository is not None else None
-            project.row_actions = (PageAction.command("project.update", project.slug),)
-        return context
+        repository = repository_for(item["repository_url"])
+        link = entity_link(Kind.PROJECT, item["slug"])
+        return {
+            **item,
+            "state": Project.Status(item["status"]),
+            "repository": repository,
+            "pushed_at": moment(str(repository.pushed_at or "")) if repository is not None else None,
+            "updates_link": replace(link, url=f"{link.url}#updates"),
+            "row_actions": (PageAction.command("project.update", item["slug"]),),
+        }
 
 
 # The fact a run is shown in, fetched again when the run is handed off.

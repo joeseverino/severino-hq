@@ -281,10 +281,6 @@ def a_dialog() -> None:
     pages.PageAction.command("example.import", modal=3)  # type: ignore[arg-type]
 
 
-def a_projected_list() -> None:
-    tables.Projected([], lambda page: page)  # type: ignore[arg-type]
-
-
 class WronglyTrailed(pages.PageMixin):
     # One crumb written bare, not a tuple of them.
     page_trail = ("Things", reverse_lazy("example:things"))  # type: ignore[assignment]
@@ -298,7 +294,8 @@ def a_trail() -> None:
     pages.page_context("Example", trail=(("Things", 1),))  # type: ignore[arg-type]
 
 
-class WronglyDeclared(tables.TableListMixin):
+class WronglyDeclared(tables.ListPageMixin):
+    resource = "example.things"
     table_empty = None  # type: ignore[assignment]
     table_columns = ("Name",)  # type: ignore[assignment]
 
@@ -375,7 +372,7 @@ def an_allocation(cash: Decimal, owed: Decimal) -> None:
 
 
 def a_list_with_its_own_fields(rows: Callable[..., dict[str, Any]]) -> None:
-    resources.ListRead(rows, resources.TopQuery, dict, fields="name")  # type: ignore[arg-type]
+    resources.ListRead(rows, resources.BoundedQuery, dict, fields="name")  # type: ignore[arg-type]
 
 
 def a_list_without_its_query_or_item(rows: Callable[..., dict[str, Any]]) -> None:
@@ -383,17 +380,22 @@ def a_list_without_its_query_or_item(rows: Callable[..., dict[str, Any]]) -> Non
 
 
 def a_list_with_the_deployment_ceiling(rows: Callable[..., dict[str, Any]]) -> None:
-    resources.TopQuery(limit="many")  # type: ignore[arg-type]
+    resources.BoundedQuery(limit="many")  # type: ignore[arg-type]
 
 
-def a_list_narrowed_by_status_and_text(rows: Callable[..., dict[str, Any]]) -> None:
-    # A list's status and text filters say what every list's do; each may be left out.
-    class Query(resources.TopQuery):
-        status: resources.StatusFilter = None
-        query: resources.TextFilter = None
+def a_list_searched(rows: Callable[..., dict[str, Any]]) -> None:
+    # A list's search says what every searched list's does, and may be left out.
+    class Query(resources.BoundedQuery):
+        query: resources.SearchText = None
 
-    Query(status=1)  # type: ignore[arg-type]
     Query(query=["example"])  # type: ignore[arg-type]
+
+
+def a_list_sorted_and_narrowed() -> None:
+    resources.ListSort("name", "Name", "name")  # type: ignore[arg-type]
+    resources.ListSort.both("name", 1)  # type: ignore[arg-type]
+    resources.ListFilter("kind", "Kind", ("one",))  # type: ignore[arg-type]
+    resources.ListToggle("stale", "Stale", "True for only the stale records.")  # type: ignore[call-arg]
 
 
 def a_capability_renamed() -> None:

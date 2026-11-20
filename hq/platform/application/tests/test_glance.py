@@ -398,7 +398,7 @@ class DashboardGlanceTests(TestCase):
 
         response = self.client.post(
             reverse("control_plane:edit", kwargs={"key": other.key}),
-            form_keyed({"name": "other-machine", "enabled": "on", "show_on_dashboard": "on"}),
+            form_keyed({"name": "other-machine", "enabled": "on", "selected": "on"}),
         )
 
         self.assertEqual(response.status_code, 302)

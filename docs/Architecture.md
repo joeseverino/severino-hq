@@ -634,10 +634,10 @@ mise run manage --scratch -- search_hq projects "certificate automation"
 mise run manage --scratch -- rebuild_search_index
 ```
 
-`hq.platform.application.tables.TableListMixin` composes indexed search with
-multi-value filters, workflow toggles, allowlisted ordering and database
-pagination, over a model's queryset or a projection's rows
-(`get_table_rows`, as Jobs lists HQ's jobs and automation runs as one). The browser enhances that GET contract with debounced, cancelable
+`hq.platform.application.list_pages.ListPageMixin` draws a table page from
+one page of its resource's list read, which composes indexed search with
+multi-value filters, toggles, declared sorts and paging by page number, over
+a queryset, a union of several (Jobs) or a list derived whole. The browser enhances that GET contract with debounced, cancelable
 requests; plain links and forms remain the complete fallback.
 
 ## Emit once, derive everywhere
@@ -1442,7 +1442,8 @@ holds its lease and reports: [The controller](#the-controller).
 
 The command takes `hosts` (machines by their name in HQ), `parameters` (the
 manifest's input type), an optional `correlation` (up to 200 printable
-characters, kept with the run so an investigation can find it) and `reason`.
+characters, no space or comma, kept with the run so an investigation can find
+it on Jobs or in the `work` list) and `reason`.
 Anything else is refused, inside the parameters too. Each host resolves to a
 machine `machine_catalog()` knows, by its name or an alias, and is held to
 `admits`. The operation's `input` carries `operation`, `revision`,

@@ -670,8 +670,8 @@ is refused the audit log (`read_audit_log`) and the calendar
   shown (`over_live` in `controller.py`). A kind nothing reads live is not
   applied this way.
 - The change runs as the agent that asked, so its audit events name that
-  agent. The person who approved or declined it is the request's
-  `decided_actor`, which a decided request cannot be saved without.
+  agent. The person who approved or declined it is named by the audit row
+  of the save that settled the request, written in the same transaction.
 - Every capability's audit events name its caller: the capability runner
   sets the actor, interface and capability name for whatever the handler
   records (`_run` in `hq/platform/application/capabilities.py`).

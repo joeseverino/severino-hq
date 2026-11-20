@@ -23,30 +23,26 @@ from hq.domains.control_plane.reading_parts import RefusedPart, parts_of, refuse
 
 from .labels import human_label
 from .projection import read_once
-from .tone import Tone
+from .tone import Tone, TonedChoices
 lazy from .facts import stored_snapshots
 lazy from .freshness import STALE, freshness
 lazy from .ui import counted
 
-READABLE = "readable"
-# Read, with a declared part of it refused.
-PARTIAL = "partial"
-REFUSED = "refused"
-UNREADABLE = "unreadable"
-NOT_CONNECTED = "not_connected"
-NEVER_SWEPT = "never_swept"
 
-STATE_LABELS = {
-    READABLE: "Readable",
-    PARTIAL: "Partly read",
-    REFUSED: "Refused",
-    UNREADABLE: "Could not be read",
-    NOT_CONNECTED: "Not connected",
-    NEVER_SWEPT: "Never read",
-}
-# The tone a state's word is drawn in where it stands beside the kind; a
-# state with none (never read, not connected) is said quietly.
-STATE_TONES = {READABLE: Tone.GOOD, PARTIAL: Tone.ATTENTION, REFUSED: Tone.SERIOUS, UNREADABLE: Tone.SERIOUS}
+class SightState(TonedChoices):
+    """How a kind's last read went, in the tone its word is drawn in beside
+    the kind; one nothing tried (never read, not connected) is said quietly."""
+
+    READABLE = "readable", Tone.GOOD, "Readable"
+    # Read, with a declared part of it refused.
+    PARTIAL = "partial", Tone.ATTENTION, "Partly read"
+    REFUSED = "refused", Tone.SERIOUS, "Refused"
+    UNREADABLE = "unreadable", Tone.SERIOUS, "Could not be read"
+    NOT_CONNECTED = "not_connected", Tone.NEUTRAL, "Not connected"
+    NEVER_SWEPT = "never_swept", Tone.NEUTRAL, "Never read"
+
+
+READABLE, PARTIAL, REFUSED, UNREADABLE, NOT_CONNECTED, NEVER_SWEPT = SightState
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,11 +67,11 @@ class Sight:
 
     @property
     def state_label(self) -> str:
-        return STATE_LABELS[self.state]
+        return SightState(self.state).label
 
     @property
-    def tone(self) -> str:
-        return STATE_TONES.get(self.state, "")
+    def tone(self) -> Tone:
+        return SightState(self.state).tone
 
     @property
     def missing(self) -> tuple[str, ...]:
@@ -152,9 +148,9 @@ class ProviderSight:
 
     @property
     def tally(self) -> tuple[tuple[int, str], ...]:
-        """(count, state label) for each state present, in STATE_LABELS order."""
+        """(count, state label) for each state present, in ``SightState``'s order."""
 
-        return tuple((count, label) for state, label in STATE_LABELS.items() if (count := self._count(state)))
+        return tuple((count, state.label) for state in SightState if (count := self._count(state)))
 
     @property
     def summary(self) -> str:
@@ -163,8 +159,8 @@ class ProviderSight:
         read = self._count(READABLE)
         parts = [f"Reads {counted(read, 'thing')}" if read else "Reads nothing"]
         parts.extend(
-            f"{count} {label.lower()}"
-            for state, label in STATE_LABELS.items()
+            f"{count} {state.label.lower()}"
+            for state in SightState
             if state != READABLE and (count := self._count(state))
         )
         return ", ".join(parts)
@@ -286,7 +282,7 @@ def sight(
 
 
 def standing(row: ProviderInventory, *, now: datetime | None = None) -> tuple[str, str]:
-    """``(state, label)`` for one stored reading: a ``STATE_LABELS`` state, or
+    """``(state, label)`` for one stored reading: a ``SightState``, or
     freshness's ``STALE`` once a readable reading is out of date."""
 
     found = sight(row.kind, "", "reading", row)

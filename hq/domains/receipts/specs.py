@@ -2,18 +2,19 @@
 
 from typing import Annotated, Literal, TypedDict
 
-from pydantic import Field
+from django.db.models import Q
 
+from hq.domains.expenses.models import Expense
 from hq.platform.application import receipts
 from hq.platform.application.answer_fields import PageUrl, UpdatedAt
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe, listed
 from hq.platform.application.domains import records_of
-from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ListSort, ListToggle, ResourceSpec
 from hq.platform.application.labels import adding
 from hq.platform.application.record_fields import Notes, RecordId
 from hq.platform.application.records import KEPT
-from hq.platform.application.resources import BoundedQuery
+from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
 from hq.platform.application.ui import ended
@@ -62,9 +63,34 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
 
 
 class ReceiptQuery(BoundedQuery):
-    unmatched_only: bool = Field(
-        default=False, description="True for only the receipts matched to no expense and no asset."
-    )
+    query: SearchText = None
+
+
+def _unlinked() -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """A receipt matched to nothing, kept, and one that proves an expense, left out."""
+
+    proof = Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting")
+    kept = Receipt.objects.create(vendor="Example Host")
+    return (kept.pk,), (Receipt.objects.create(vendor="Example Host", related_expense=proof).pk,)
+
+
+UNLINKED = ListToggle(
+    "unlinked",
+    "No expense or asset",
+    "True for only the receipts matched to no expense and no asset.",
+    Q(related_expense__isnull=True, related_asset__isnull=True),
+    _unlinked,
+)
+
+
+# Each order the list is read in, the first where none is asked.
+SORTS = (
+    *ListSort.both("-uploaded_at", "Recently uploaded", "Least recently uploaded"),
+    *ListSort.both("vendor", "Vendor"),
+    *ListSort.both("date", "Oldest receipt date", "Newest receipt date"),
+    *ListSort.both("amount", "Lowest amount", "Highest amount"),
+    *ListSort.both("original_filename", "File"),
+)
 
 
 class ReceiptRow(TypedDict):
@@ -80,17 +106,19 @@ class ReceiptRow(TypedDict):
         str, Describe("The amount on the receipt, a decimal string with two places.", examples=("12.50",))
     ]
     notes: Notes
+    label: Annotated[str, Describe("What the receipt is called wherever it is named: who it is from, else its file.")]
     related_expense: receipts.ReceiptExpense
+    expense_item: Annotated[str, Describe("What the expense it proves paid for; empty for none.")]
     related_asset: receipts.ReceiptAsset
+    asset_name: Annotated[str, Describe("The name of the asset it is for; empty for none.")]
     uploaded_at: Annotated[str, Describe("When the file was uploaded, an ISO 8601 date-time.")]
     updated_at: UpdatedAt
 
 
 class ReceiptRecord(ReceiptRow):
-    """One receipt with what it is called, whether HQ holds its file, and the names of what it proves."""
+    """One receipt with whether HQ holds its file, and the name and day of the expense it proves."""
 
     url: PageUrl
-    label: Annotated[str, Describe("What the receipt is called wherever it is named: who it is from, else its file.")]
     file: Annotated[
         Literal["stored", "missing", "none"],
         Describe(
@@ -100,7 +128,6 @@ class ReceiptRecord(ReceiptRow):
     file_type_label: Annotated[str, Describe("The file's type in words; empty for one HQ does not accept.")]
     expense_label: Annotated[str, Describe("What the expense it proves is called; empty for none.")]
     expense_date: Annotated[str | None, Describe("That expense's day, an ISO 8601 date; null for none.")]
-    asset_name: Annotated[str, Describe("The name of the asset it is for; empty for none.")]
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -110,7 +137,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Receipts",
             "Receipt metadata without file contents, storage paths, or URLs.",
             Capability.READ,
-            listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow),
+            listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow, sorts=SORTS, toggles=(UNLINKED,)),
             detail_handler=receipts.get_receipt,
             identifier="id",
             identifier_type=RecordId,

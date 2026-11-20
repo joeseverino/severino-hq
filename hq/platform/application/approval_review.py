@@ -22,7 +22,7 @@ lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
 lazy from .entity_links import entity_link, kind_label, record_name
-lazy from .history import asked_by
+lazy from .history import asking, who_did_each
 lazy from .integration_specs import TARGET, capability_fields
 lazy from .labels import human_label, lower_first
 lazy from .resource_capabilities import LIFECYCLE_VERBS
@@ -405,7 +405,11 @@ def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     decisions it offers them (``approvals.offers``)."""
 
     shown, warnings = marked(preview(held), _warnings(held))
-    who = asked_by(ApprovalRequest, (held,)).get(str(held.pk), NOBODY)
+    asker, settler = who_did_each(asking(ApprovalRequest, (held,)), asking(ApprovalRequest, (held,), changed="state"))
+    who = asker.get(str(held.pk), NOBODY)
+    # Whoever settled an approval or a rejection decided it; any other end
+    # (lapsed, superseded, withdrawn) nobody decided.
+    decided = held.state in (ApprovalRequest.State.APPROVED, ApprovalRequest.State.REJECTED)
     # Its heading names whoever its audit row says asked.
     sentence = replace(asked(held, shown), actor=who.actor) if who else asked(held, shown)
     found = ManagedResource.objects.filter(key=held.resource_key).first() if held.resource_kind else None
@@ -414,6 +418,7 @@ def review(held: ApprovalRequest, principal: Principal) -> dict[str, Any]:
     return {
         "held": held,
         "who": who,
+        "decided_by": settler.get(str(held.pk), NOBODY) if decided else NOBODY,
         "tone": Tone.ATTENTION if held.state == ApprovalRequest.State.PENDING else "",
         # A settled request offers nothing, and its aside says how it ended.
         "offer": offers(principal, (held,))[held.pk] if held.state == ApprovalRequest.State.PENDING else NO_OFFER,

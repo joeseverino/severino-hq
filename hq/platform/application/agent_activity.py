@@ -30,7 +30,6 @@ from .security import (
     subject_of,
     web_principal,
 )
-from .tone import Tone
 
 # How far back the page reads, and how many of an agent's latest events it shows.
 RECENT = timedelta(days=7)
@@ -48,15 +47,6 @@ def agent_name(identity: AgentIdentity) -> str:
     provider's, which HQ holds no key to read, so it is the client id."""
 
     return identity.client_id
-
-
-# What each standing is called on the page, and its pill's tone.
-_STANDING_WORDS = {
-    DeviceStanding.APPROVED: ("Approved", Tone.GOOD),
-    DeviceStanding.AWAITING: ("Needs approval", Tone.ATTENTION),
-    DeviceStanding.BLOCKED: ("Blocked", Tone.SERIOUS),
-    DeviceStanding.UNPLACEABLE: ("Refused", Tone.ATTENTION),
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,16 +70,6 @@ class DeviceRow:
     address: str = ""
     # Whether the person reading may approve it: theirs, or a machine's.
     yours: bool = False
-
-    @property
-    def label(self) -> str:
-        return _STANDING_WORDS[self.standing][0]
-
-    @property
-    def tone(self) -> str:
-        """The tone its status is drawn in."""
-
-        return _STANDING_WORDS[self.standing][1]
 
     @property
     def waits_for(self) -> str:

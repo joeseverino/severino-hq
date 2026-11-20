@@ -49,9 +49,12 @@
   );
   const showing = () => document.visibilityState === "visible";
 
+  // The server's short `moments.duration`, each figure held to its unit.
   const elapsed = (seconds) => {
-    if (seconds < 60) return `${seconds} s`;
-    return `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, "0")} s`;
+    const [hours, minutes] = [Math.floor(seconds / 3600), Math.floor(seconds / 60)];
+    const [larger, unit, smaller, smallUnit] = hours ? [hours, "h", minutes % 60, "min"] : [minutes, "min", seconds % 60, "s"];
+    if (!larger) return `${smaller}\u00a0s`;
+    return smaller ? `${larger}\u00a0${unit} ${smaller}\u00a0${smallUnit}` : `${larger}\u00a0${unit}`;
   };
   const tick = (control) => {
     const slot = control.querySelector("[data-ask-elapsed]");

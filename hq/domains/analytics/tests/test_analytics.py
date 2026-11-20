@@ -27,6 +27,12 @@ SITE_TAG = "0" * 32
 HOST = "example.test"
 
 
+def _items(*records):
+    """Content records as the list read's items carry them, by slug and address."""
+
+    return [{"slug": record.slug, "published_url": record.published_url} for record in records]
+
+
 def _principal() -> Principal:
     return Principal(
         actor="controller",
@@ -349,8 +355,8 @@ class JoinTests(TestCase):
     def test_a_published_url_joins_to_the_path_the_browser_asked_for(self):
         bridged("analytics", _payload([_row(value="/portfolio/a-writeup/", pageviews=412)]))
 
-        (writeup,) = service.attach_traffic([self.writeup])
-        self.assertEqual(writeup.pageviews, 412)
+        (writeup,) = service.attach_traffic(_items(self.writeup))
+        self.assertEqual(writeup["pageviews"], 412)
         self.assertTrue(service.item_traffic(self.writeup.published_url)["measured"])
 
     def test_the_same_path_on_another_host_is_not_credited(self):
@@ -370,7 +376,7 @@ class JoinTests(TestCase):
             },
         )
 
-        self.assertEqual(service.attach_traffic([self.writeup])[0].pageviews, 412)
+        self.assertEqual(service.attach_traffic(_items(self.writeup))[0]["pageviews"], 412)
         self.assertEqual(service.item_traffic(self.writeup.published_url)["pageviews"], 412)
 
     def test_each_item_gets_its_own_path_and_the_unmeasured_read_as_unknown(self):
@@ -388,8 +394,8 @@ class JoinTests(TestCase):
             _payload([_row(value="/portfolio/a-writeup/", pageviews=412), _row(value="/contact/", pageviews=96)]),
         )
 
-        items = service.attach_traffic([self.writeup, self.page, unread])
-        self.assertEqual([item.pageviews for item in items], [412, 96, None])
+        items = service.attach_traffic(_items(self.writeup, self.page, unread))
+        self.assertEqual([item["pageviews"] for item in items], [412, 96, None])
         self.assertFalse(service.item_traffic(unread.published_url)["measured"])
 
     def test_a_trailing_slash_is_not_tidied_away(self):
@@ -521,7 +527,7 @@ class ContentSectionTrafficTests(TestCase):
     def test_unmeasured_is_absent_rather_than_zero(self):
         """Nobody visited and nobody looked are different claims."""
 
-        attached = {item.slug: item.pageviews for item in service.attach_traffic([self.read, self.unread])}
+        attached = {item["slug"]: item["pageviews"] for item in service.attach_traffic(_items(self.read, self.unread))}
 
         self.assertEqual(attached["read"], 412)
         self.assertIsNone(attached["unread"])
@@ -559,13 +565,13 @@ class ContentSectionTrafficTests(TestCase):
 
         # Materialized outside the count: the claim is about the join, not
         # about the queryset the table engine already paid for.
-        items = list(ContentItem.objects.all())
+        items = _items(*ContentItem.objects.all())
 
         assert_cost_does_not_grow(
             self,
             sizes=(1, len(items)),
             draw=lambda count: service.attach_traffic(items[:count]),
-            rows=lambda attached: sum(hasattr(item, "pageviews") for item in attached),
+            rows=lambda attached: sum("pageviews" in item for item in attached),
         )
 
     def test_nothing_measured_leaves_the_section_readable(self):

@@ -30,23 +30,14 @@ class StatusPillTests(SimpleTestCase):
                 pill = elements(_drawn("{% status state %}", state=said), "span")[0]
                 self.assertEqual(pill.words, shown)
 
-    def test_a_resources_health_state_takes_the_tone_every_page_draws_it_in(self):
-        """A record's "drifted" or "healthy" is a state, not a class the
-        stylesheet colors, so it is said as its tone."""
-
-        from hq.platform.application.infrastructure import ResourceState
-
-        for state in ResourceState:
-            with self.subTest(state):
-                pill = elements(_drawn("{% status label tone=state %}", label="Working", state=state), "span")[0]
-                self.assertEqual(pill.attrs["class"].split(), ["pill", f"tone-{state.tone}"])
-
     def test_a_subjects_state_is_drawn_in_its_own_words_and_tone(self):
         """Every subject's states carry both (a machine's, a container's, a
         model's stored status), so a page names neither, and its pill is
         colored by its tone, never by its word."""
 
+        from hq.domains.control_plane.provider_adapters.cloudflare import SubmissionStatus
         from hq.platform.application.container_state import ContainerState
+        from hq.platform.application.infrastructure import ResourceState
         from hq.platform.application.machines import MachineState
         from hq.platform.application.tone import Toned
 
@@ -55,30 +46,14 @@ class StatusPillTests(SimpleTestCase):
                 yield each
                 yield from subjects(each)
 
-        states = {*MachineState, *ContainerState, *(state for kind in subjects(Toned) for state in kind)}
+        # Those named are walked even before their modules load.
+        named = {*MachineState, *ContainerState, *ResourceState, *SubmissionStatus}
+        states = {*named, *(state for kind in subjects(Toned) for state in kind)}
         for state in states:
             with self.subTest(f"{type(state).__qualname__}.{state.name}"):
                 pill = elements(_drawn("{% status state %}", state=state), "span")[0]
                 self.assertEqual(pill.attrs["class"].split(), ["pill", f"tone-{state.tone}"])
                 self.assertEqual(pill.words.lower(), state.label.lower())
-
-    def test_a_models_stored_states_each_take_one_of_the_four_tones(self):
-        """A stored status (an asset's "retired", a message's "unread") is
-        declared with its tone, and its pill says it in the model's label."""
-
-        from hq.domains.assets.models import Asset
-        from hq.domains.control_plane.provider_adapters.cloudflare import SubmissionStatus
-        from hq.platform.core.models import AuditLog
-
-        for state, label, tone in (
-            (Asset.Status.RETIRED, "Retired", "neutral"),
-            (SubmissionStatus.UNREAD, "Unread", "attention"),
-            (AuditLog.Action.LOGIN_FAILED, "Login failed", "serious"),
-        ):
-            with self.subTest(state):
-                pill = elements(_drawn("{% status state %}", state=state), "span")[0]
-                self.assertEqual(pill.words, label)
-                self.assertEqual(pill.attrs["class"].split(), ["pill", f"tone-{tone}"])
 
     def test_several_parts_are_one_label_only_the_first_cased(self):
         pill = elements(_drawn('{% status record_type "not managed" %}', record_type="cname"), "span")[0]

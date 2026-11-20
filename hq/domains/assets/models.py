@@ -51,14 +51,8 @@ class Asset(TimestampedModel):
     category = models.CharField(max_length=30, choices=ASSET_CATEGORY_CHOICES, default="other")
     purchase_date = models.DateField(null=True, blank=True)
     total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
-    business_use_percentage = models.PositiveSmallIntegerField(
-        default=100,
-        validators=business_use.VALIDATORS,
-        help_text="0-100. Multiplied into total_cost to estimate deductible amount.",
-    )
-    estimated_deductible_amount = business_use.deductible(
-        "total_cost × business_use_percentage / 100. Estimate, not tax advice."
-    )
+    business_use_percentage = models.PositiveSmallIntegerField(default=100, validators=business_use.VALIDATORS)
+    estimated_deductible_amount = business_use.deductible()
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
     serial_number = models.CharField(max_length=120, blank=True)
     warranty_date = models.DateField(null=True, blank=True)

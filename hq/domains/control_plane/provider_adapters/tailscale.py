@@ -81,6 +81,8 @@ class TailnetPolicySpec(ProviderModel):
         # What saving does is the provider's declared change effect, which the
         # form states under the field; saying it here too would print it twice.
         description="The tailnet's access policy.",
+        # Tailscale writes its policy file as JSON with comments.
+        json_schema_extra={"contentMediaType": "application/hujson"},
     )
 
 

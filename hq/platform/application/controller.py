@@ -37,6 +37,7 @@ from .infrastructure import controller_contract, resolved_spec, serialize_resour
 from .inventory import read_as, read_since, strike_removed
 from .labels import lower_first
 from .plugin_admission import admitted_sources
+from .projection import iso
 from .resource_operations import REPLACES, Prepared, enqueue, serialize_operation
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
@@ -525,7 +526,7 @@ def _stop(reason: str, lease_expires_at=None) -> dict[str, Any]:
         "ok": True,
         "continue": False,
         "reason": reason,
-        "lease_expires_at": lease_expires_at.isoformat() if lease_expires_at else None,
+        "lease_expires_at": iso(lease_expires_at),
     }
 
 

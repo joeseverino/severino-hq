@@ -166,14 +166,8 @@ def _usable_by(spec, identity: AgentIdentity) -> bool:
     return identity.person_id is not None or NEEDS_A_PERSON.isdisjoint(spec.required_capabilities)
 
 
-# What a rule is called on the page, beside "Default". The stored values keep their names.
-RULE_LABELS = {rule: rule.label for rule in Rule}
-# The status tone a rule is drawn in; the default is neutral.
-RULE_TONES = {Rule.ALLOW: Tone.GOOD, Rule.APPROVE: Tone.ATTENTION, Rule.DENY: Tone.SERIOUS}
-
-
 def _name(rule: str | None) -> str:
-    return "Default" if rule is None else RULE_LABELS[Rule(rule)]
+    return "Default" if rule is None else Rule(rule).label
 
 
 # Form field names are produced and parsed only here.
@@ -225,7 +219,7 @@ class PolicyCell:
 
     @property
     def tone(self) -> str:
-        return RULE_TONES.get(self.rule, Tone.NEUTRAL)
+        return Rule(self.rule).tone if self.rule else Tone.NEUTRAL
 
     @property
     def words(self) -> str:
@@ -341,10 +335,10 @@ def _default_label(spec) -> str:
     asks for that type."""
 
     if spec.effect is Effect.DESTRUCTIVE or waits(spec) is not None:
-        return RULE_LABELS[Rule.APPROVE]
+        return Rule.APPROVE.label
     if may_be_held_by_default(spec):
-        return f"{RULE_LABELS[Rule.APPROVE]} for {_approved_types(spec)}"
-    return RULE_LABELS[Rule.ALLOW]
+        return f"{Rule.APPROVE.label} for {_approved_types(spec)}"
+    return Rule.ALLOW.label
 
 
 def _approved_types(spec) -> str:
@@ -366,10 +360,10 @@ def _cell(spec, column: Column, current, grants, group: str) -> PolicyCell:
         return PolicyCell(field, column.label, None, (), "Person sign-in only")
     options = [("", "Default")]
     if not no_rule_allows(spec):
-        options.append((Rule.ALLOW, RULE_LABELS[Rule.ALLOW]))
+        options.append((Rule.ALLOW, Rule.ALLOW.label))
     if spec.effect.changes:
-        options.append((Rule.APPROVE, RULE_LABELS[Rule.APPROVE]))
-    options.append((Rule.DENY, RULE_LABELS[Rule.DENY]))
+        options.append((Rule.APPROVE, Rule.APPROVE.label))
+    options.append((Rule.DENY, Rule.DENY.label))
     return PolicyCell(
         field,
         column.label,

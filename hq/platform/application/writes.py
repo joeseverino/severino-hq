@@ -1,6 +1,6 @@
 """Form views whose write is one capability, run through ``web_writes.run_posted``.
 
-The write side of what ``TableListMixin`` is for the read side: a record's
+The write side of what ``ListPageMixin`` is for the read side: a record's
 create, update and delete share their steps, so they are declared once, and
 none has a way to write but the runner. A resend is answered from the first
 post's answer (``web_writes.posted_answer``).
@@ -116,7 +116,7 @@ class _RecordWrite(PostedOnce):
 
 
 class CapabilityFormMixin(_RecordWrite):
-    """Create or update a record from its ``ModelForm`` through its capabilities.
+    """Create or update a record from its command's form through its capabilities.
 
     For ``CreateView`` and ``UpdateView``: ``creates`` and ``updates`` name
     them, the update targeted at the record as stored. The form's values are

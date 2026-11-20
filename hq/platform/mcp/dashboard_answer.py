@@ -14,7 +14,7 @@ from hq.platform.application.security import Principal
 
 # The queue's first page as an agent is answered it: every domain, an
 # extension's too, raises items into the queue, so the glance and
-# list_resource answer the most urgent few, and next.cursor the rest. The
+# list_resource answer the most urgent few, and next the rest. The
 # machine API keeps its own page, the default of every list it serves.
 ACTION_ITEMS_PAGE = 4
 

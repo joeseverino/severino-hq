@@ -1,8 +1,8 @@
 {% extends "list_page.html" %}
 {% block summary %}{% if site %}{% muted element="p" %}Published on {% entity site %}{% endmuted %}{% endif %}{% endblock %}
 {% block row %}
-  <td><strong>{% entity row|record label=row.title %}</strong></td>
-  {% if show_type %}<td>{{ row.get_content_type_display|breakable }}</td>{% endif %}
+  <td><strong>{% entity "writeup"|entity_of:row.slug label=row.title %}</strong></td>
+  {% if show_type %}<td>{{ row.type_label|breakable }}</td>{% endif %}
   <td>{% status row.state %}</td>
   <td>{% muted %}{% present row.topic %}{{ row.topic|breakable }}{% endpresent %}{% endmuted %}</td>
   <td>{{ row.pageviews|or_empty }}</td>

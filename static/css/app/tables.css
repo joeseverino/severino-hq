@@ -63,8 +63,9 @@
 .table-sort-link { display: inline-flex; align-items: center; gap: var(--space-2); color: inherit; white-space: nowrap; }
 .table-sort-link:hover { color: var(--ink); text-decoration: none; }
 /* The page's own sort control is a button that reads exactly as a server sort link: the button primitive's styling is taken back off. */
-/* A heading's words wrap as a cell's do, so a column is never wider than its widest value for its name. */
+/* A heading is one of its column's values, held whole up to its share as a short value is (below); past its share its words wrap. A sort control fills its heading, so a figure's stands at the end, over its figures. */
 .data-table thead .table-sort-link { white-space: normal; }
+.data-table thead [data-kind="numeric"] > .table-sort-link { justify-content: end; }
 .data-table thead button.table-sort-link { text-align: inherit; border-radius: 0; }
 /* The sort mark is a polygon cut from the heading's color, drawn with the box and in the server's HTML, so it is one shape in every face and nothing moves when a script sorts. */
 .sort-indicator {
@@ -115,11 +116,11 @@
   box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share));
 }
 /* A short value of words (`cell-short`, table_cells) is one box as wide as it says, up to its share, so its column holds it whole: broken, a project's name or an address and its port reads as two. Past its share it wraps inside its box. The box fills its cell, so a column given more than its share (the room a table has past every column's needs) holds the value on that wider line. A value that is one list is its own box, a block already. */
-.data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short { inline-size: max-content; max-inline-size: var(--share); min-inline-size: 100%; }
-.data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short:not(ul, ol) { display: inline-block; vertical-align: top; baseline-source: first; }
+.data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short, .data-table > thead > tr > th > :is(.table-sort-link, .heading-words) { inline-size: max-content; max-inline-size: var(--share); min-inline-size: 100%; }
+.data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short:not(ul, ol), .data-table > thead > tr > th > .heading-words { display: inline-block; vertical-align: top; baseline-source: first; }
 /* Where an engine sizes by a box's own content (`calc-size`), only the room a short value is sure of is held to its share: its column still asks for the value whole, so a table with room past every column's needs gives it there rather than to a column already whole. */
 @supports (min-inline-size: calc-size(max-content, size)) {
-  .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short { inline-size: 100%; max-inline-size: none; min-inline-size: calc-size(max-content, min(size, var(--share))); }
+  .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short, .data-table > thead > tr > th > :is(.table-sort-link, .heading-words) { inline-size: 100%; max-inline-size: none; min-inline-size: calc-size(max-content, min(size, var(--share))); }
 }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

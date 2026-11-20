@@ -41,4 +41,4 @@ class ListTotalTests(TestCase):
                 self.assertEqual(found["count"], 1)
                 self.assertEqual(found["total"], whole[name])
                 self.assertTrue(found["truncated"])
-                self.assertEqual(set(found["next"]), {"cursor"})
+                self.assertEqual(found["next"], 2)

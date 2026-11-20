@@ -1,6 +1,5 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
-from datetime import datetime
 from typing import Literal, TypedDict, cast
 
 from django.db.models import FETCH_RAISE, Count
@@ -10,7 +9,7 @@ from hq.platform.core.models import AuditLog
 
 from . import history, records
 from .documentation import DocumentationRow
-from .projection import NextPage, page_size
+from .projection import iso, page_size
 from .routes import reverse
 from .sensitivity import readable_records
 lazy from .resources import list_resource
@@ -23,7 +22,8 @@ class DocumentationStatus(TypedDict):
     by_type: dict[str, int]
     # The first page of the documentation list, as it reads it.
     records: list[DocumentationRow]
-    next: NextPage | None
+    # The documentation list's ``page`` after it.
+    next: int | None
 
 
 def documentation_status(*, principal: Principal) -> DocumentationStatus:
@@ -85,13 +85,6 @@ class RecentActivity(TypedDict):
     count: int
 
 
-def _second(at: datetime) -> str:
-    """When an event happened, to the second: the list's order already sets
-    apart the events of one second, so a fraction is bytes no reader needs."""
-
-    return at.isoformat(timespec="seconds")
-
-
 def _activity_row(event: AuditLog) -> ActivityRow:
     return {
         "id": event.id,
@@ -101,8 +94,9 @@ def _activity_row(event: AuditLog) -> ActivityRow:
         "object_id": event.object_id,
         "object_repr": event.object_repr,
         "message": event.message,
-        "actor": event.actor_label,
-        "created_at": _second(event.created_at),
+        "actor": event.who.actor,
+        # The list's order sets apart the events of one second.
+        "created_at": iso(event.created_at, timespec="seconds"),
     }
 
 
@@ -124,7 +118,7 @@ def recent_activity(*, limit: int = 25) -> RecentActivity:
             "actor": line.who.actor,
             "by": line.who.words,
             "message": line.message,
-            "created_at": _second(line.at),
+            "created_at": iso(line.at, timespec="seconds"),
             "operation_id": line.events[0].operation_id,
             "items": [_activity_row(item) for item in line.items],
             # The items past those carried, and the page that lists every one.

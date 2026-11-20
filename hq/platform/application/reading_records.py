@@ -6,7 +6,7 @@ from hq.domains.control_plane.observations.contract import READERS, READING_FACE
 from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 
 from .answer_fields import AsRead, ObservedAt
-from .credential_sight import STATE_LABELS
+from .credential_sight import SightState
 from .describe import Describe, listed
 from .ui import ended
 
@@ -15,7 +15,7 @@ class ReadingRow(TypedDict):
     kind: Annotated[str, Describe("The reading's type, such as `adguard.client`, which a read of one names it by.")]
     label: Annotated[str, Describe("The reading's name, in words.")]
     provider: Annotated[str, Describe("The service it is read from, such as `adguard`.")]
-    state: Annotated[str, Describe(ended(f"How its last read went: {listed(STATE_LABELS)}"))]
+    state: Annotated[str, Describe(ended(f"How its last read went: {listed(SightState)}"))]
     records: Annotated[int, Describe("How many records the last read stored.")]
     observed_at: ObservedAt | None
     error: Annotated[str, Describe("Why the last read failed, as the service said; empty when it did not.")]

@@ -31,7 +31,7 @@ from .finding_steps import WrittenStep
 from .findings import finding_key, rule_for
 from .json_schemas import as_written
 from .plugins import source_overview
-from .projection import projection_scope
+from .projection import iso, projection_scope
 from .read_models import ActivityEvent, recent_activity
 from .security import Capability, Principal
 from .workflows import WrittenAction
@@ -85,7 +85,7 @@ def _holds_a_card(cards, overview: DomainOverview | None) -> bool:
 def work_queue() -> list[QueueItem]:
     """The composed queue, flattened for transport, derived once per change.
 
-    Projected from ``domain_attention_items`` rather than assembled here: the
+    Derived from ``domain_attention_items`` rather than assembled here: the
     domains own what needs doing, and this is only the shape it travels in.
     ``url`` rides along so no consumer needs a table to turn an entry back into
     a link. The host's part and each extension's are derived on their own, so
@@ -203,8 +203,8 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "family": rule.title if rule is not None else finding.family,
         "why": finding_why(finding, rule),
         "clears": rule.clears if rule is not None else finding.clears,
-        "since": finding.since.isoformat() if finding.since else "",
-        "observed_at": finding.observed_at.isoformat() if finding.observed_at else "",
+        "since": iso(finding.since) or "",
+        "observed_at": iso(finding.observed_at) or "",
         "reads": finding.reads,
         "facts": [list(fact) for fact in finding.evidence],
         "links": [as_written(link) for link in finding.pages],

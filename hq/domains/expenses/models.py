@@ -38,18 +38,10 @@ class Expense(TimestampedModel):
     item = models.CharField(max_length=200)
     category = models.CharField(max_length=32, choices=EXPENSE_CATEGORY_CHOICES, default=DEFAULT_CATEGORY)
     total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
-    business_use_percentage = models.PositiveSmallIntegerField(
-        default=100,
-        validators=business_use.VALIDATORS,
-        help_text="0-100. Used to estimate the deductible amount.",
-    )
-    estimated_deductible_amount = business_use.deductible("Estimate, not tax advice.")
+    business_use_percentage = models.PositiveSmallIntegerField(default=100, validators=business_use.VALIDATORS)
+    estimated_deductible_amount = business_use.deductible()
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
-    business_purpose = models.CharField(
-        max_length=300,
-        blank=True,
-        help_text="Why this is a business expense, in one line.",
-    )
+    business_purpose = models.CharField(max_length=300, blank=True)
     notes = models.TextField(blank=True)
 
     related_project = models.ForeignKey(

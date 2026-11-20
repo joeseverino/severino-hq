@@ -11,7 +11,6 @@ from hq.domains.projects.models import Project
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..projection import guarded, listing
-from ..tables import TableListMixin
 
 
 def _expenses(count: int) -> None:
@@ -49,14 +48,6 @@ class GuardedTests(TestCase):
             rows=len,
         )
 
-    def test_every_table_and_every_listing_is_guarded(self):
-        class View(TableListMixin):
-            class request:
-                GET = __import__("django.http").http.QueryDict("")
-
-        rows = View().apply_table_query(Expense.objects.all())
-        with self.assertRaises(FieldFetchBlocked):
-            _ = rows[0].related_project
-
-        modes = listing(Project, lambda row: row._state.fetch_mode, search=())["items"]
+    def test_every_listing_is_guarded(self):
+        modes = listing(Project, lambda row: row._state.fetch_mode)["items"]
         self.assertEqual(modes, [FETCH_RAISE] * 3)

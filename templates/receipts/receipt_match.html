@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 {% if already_linked %}
-  {% notice tone="info" %}Already linked to {% include "receipts/_linked_to.html" %}.{% endnotice %}
+  {% notice tone="info" %}Already linked to {% if receipt.related_expense %}{% if receipt.related_asset %}{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label mark="," %} {% else %}{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label mark="." %}{% endif %}{% endif %}{% if receipt.related_asset %}{% entity "asset"|entity_of:receipt.related_asset.slug label=receipt.related_asset.item_name mark="." %}{% endif %}{% endnotice %}
 {% endif %}
 {% layout %}
 {% card label="Receipt" %}{% facts %}

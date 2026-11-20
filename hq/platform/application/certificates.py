@@ -37,12 +37,22 @@ UPLOAD = "certificate.upload"
 # Where an uploaded certificate's private key is sealed; the controller's
 # uploadedReconcile reads it from the same slot.
 PRIVATE_KEY_SLOT = "certificate:private_key"
+PEM = "application/x-pem-file"
 
 
 @dataclass(frozen=True, slots=True)
 class UploadCertificateCommand:
-    fullchain: Annotated[str, Field(title="Certificate chain"), Describe("The certificate and its chain, PEM-encoded.")]
-    private_key: Annotated[str, Describe("The certificate's private key, PEM-encoded.")]
+    fullchain: Annotated[
+        str,
+        Field(title="Certificate chain", json_schema_extra={"contentMediaType": PEM}),
+        Describe("The certificate and its chain, PEM-encoded."),
+    ]
+    # Written, never read back: no answer or form draws it again.
+    private_key: Annotated[
+        str,
+        Field(json_schema_extra={"contentMediaType": PEM, "writeOnly": True}),
+        Describe("The certificate's private key, PEM-encoded."),
+    ]
 
 
 def inspect(fullchain: str, private_key: str) -> dict[str, Any]:

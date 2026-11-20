@@ -216,7 +216,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
               {% for header in request_path.headers %}{% if header.used %}
                 <tr>
                   <td><code class="cell-whole">{{ header.name|breakable:":" }} {{ header.value|breakable }}</code></td>
-                  <td>{% status header.state tone=header.tone %}</td>
+                  <td>{% status header.state %}</td>
                   <td><span class="cell-prose">{{ header.purpose|breakable }}</span></td>
                 </tr>
               {% endif %}{% endfor %}
@@ -232,7 +232,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
                   {% for header in request_path.unread_headers %}
                     <tr>
                       <td><code class="cell-whole">{{ header.name|breakable:":" }} {{ header.value|breakable }}</code></td>
-                      <td>{% status header.state tone=header.tone %}</td>
+                      <td>{% status header.state %}</td>
                       <td><span class="cell-prose">{{ header.declined|breakable }}</span></td>
                     </tr>
                   {% endfor %}

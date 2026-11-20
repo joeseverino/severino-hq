@@ -8,30 +8,24 @@ requires it to fail, declared with the reason, is "by design" and never a gap.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Any, Self
 
 from .labels import dotted
-from .tone import Tone
+from .tone import Tone, Toned
 from .ui import ended
 lazy from . import dashboard
 lazy from .finding_model import Finding
 lazy from .standard_findings import worded
 
 
-class Standing(StrEnum):
-    """Where one check stands: every word a page says of it is a view of this."""
+class Standing(Toned):
+    """Where one check stands: every word a page says of it is a view of this.
+    Its tone is a rung of a check ladder's: a check that cannot be read is one
+    to look at, never a fault."""
 
-    MET = "met"
-    UNMET = "unmet"
-    UNAVAILABLE = "unavailable"
-
-    @property
-    def tone(self) -> Tone:
-        """The tone a rung of a check ladder is drawn in: a check that cannot
-        be read is one to look at, never a fault."""
-
-        return {Standing.MET: Tone.GOOD, Standing.UNMET: Tone.SERIOUS, Standing.UNAVAILABLE: Tone.ATTENTION}[self]
+    MET = "met", Tone.GOOD
+    UNMET = "unmet", Tone.SERIOUS
+    UNAVAILABLE = "unavailable", Tone.ATTENTION
 
 
 # A result, not a standing: a check failed on purpose, for a declared reason.

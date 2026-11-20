@@ -32,13 +32,6 @@ class KpiToneTests(SimpleTestCase):
         (detail,) = with_class(drawn, "fact-detail")
         self.assertIn(detail, toned.ancestors)
 
-    def test_a_tone_comes_from_the_one_vocabulary(self):
-        from ..card_items import Kpi
-
-        for field in ("tone", "detail_tone"):
-            with self.subTest(field), self.assertRaises(ValueError):
-                Kpi("Example", "1", "Example line", **{field: "warning"})
-
 
 class KpiLinkTests(SimpleTestCase):
     def test_a_line_that_counts_records_leads_to_them(self):

@@ -273,11 +273,20 @@ def when_range(start: date, end: date) -> str:
     return f"{first} – {when_day(end)}"
 
 
-def duration(delta) -> str:
-    """A length of time in the phrasing ``ago`` uses, without the "ago"."""
+def duration(delta: timedelta, *, short: bool = False) -> str:
+    """A length of time in the phrasing ``ago`` uses, without the "ago"; ``short``, a run time as ``ask.js``'s
+    ``elapsed`` ticks one: "45 s", "4 min 33 s", "1 h 2 min", never a zero part after a larger one."""
 
-    start = datetime(2000, 1, 1, tzinfo=UTC)
-    return timesince(start, start + max(delta, timedelta(0)))
+    delta = max(delta, timedelta(0))
+    if not short:
+        start = datetime(2000, 1, 1, tzinfo=UTC)
+        return timesince(start, start + delta)
+    hours, rest = divmod(round(delta.total_seconds()), 3600)
+    minutes, left = divmod(rest, 60)
+    larger, unit, smaller, small_unit = (hours, "h", minutes, "min") if hours else (minutes, "min", left, "s")
+    if not larger:
+        return f"{left} s"
+    return f"{larger} {unit} {smaller} {small_unit}" if smaller else f"{larger} {unit}"
 
 
 # Up to this many days a length of time is said in days: "46 days" is what a

@@ -7,8 +7,9 @@ from typing import Any
 
 from django.conf import settings
 
+from ..projection import iso
 from ..tone import Tone
-from .band import Tile, iso
+from .band import Tile
 lazy from ..entity_links import web_url
 lazy from ..github_estate import repository_for
 lazy from ..plugins import installed_plugins

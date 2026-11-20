@@ -8,7 +8,6 @@ from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
-    ListView,
     TemplateView,
     UpdateView,
     View,
@@ -17,14 +16,10 @@ from django.views.generic import (
 from hq.platform.application import related
 from hq.platform.application.documentation import SYNC
 from hq.platform.application.labels import dotted
+from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, page_context
 from hq.platform.application.refusal_codes import Code
-from hq.platform.application.tables import (
-    TableColumn,
-    TableFilter,
-    TableListMixin,
-    TableSort,
-)
+from hq.platform.application.tables import TableColumn
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
@@ -37,13 +32,11 @@ from .models import DocStatus, DocumentationRecord
 DOCS_TRAIL = (("Docs", reverse_lazy("docs_index:list")),)
 
 
-class DocsListView(PageMixin, TableListMixin, ListView):
+class DocsListView(ListPageMixin, TemplateView):
+    resource = "documentation"
     table_empty = "No documents yet."
-    model = DocumentationRecord
     template_name = "docs_index/docs_list.html"
-    paginate_by = 25
     page_title = "Docs"
-    table_search_scope = "documentation"
     table_selectable = True
     # The ID sits beside a title of a dozen words, which it leaves the room.
     table_columns = (
@@ -55,41 +48,6 @@ class DocsListView(PageMixin, TableListMixin, ListView):
         TableColumn("Sensitivity", "sensitivity"),
         TableColumn("Last changed", "last_reviewed"),
     )
-    table_filters = (
-        TableFilter("status", "Status", "status", DocumentationRecord.Status.choices),
-        TableFilter(
-            "environment",
-            "Environment",
-            "environment",
-            DocumentationRecord.Environment.choices,
-        ),
-        TableFilter("doc_type", "Type", "doc_type", DocumentationRecord.DocType.choices),
-        TableFilter(
-            "sensitivity",
-            "Sensitivity",
-            "sensitivity",
-            DocumentationRecord.Sensitivity.choices,
-        ),
-    )
-    table_sorts = (
-        TableSort("-updated_at", "Recently updated", "-updated_at"),
-        TableSort("doc_id", "ID A–Z", "doc_id"),
-        TableSort("-doc_id", "ID Z–A", "-doc_id"),
-        TableSort("title", "Title A–Z", "title"),
-        TableSort("-title", "Title Z–A", "-title"),
-        TableSort("doc_type", "Type A–Z", "doc_type"),
-        TableSort("-doc_type", "Type Z–A", "-doc_type"),
-        TableSort("environment", "Environment A–Z", "environment"),
-        TableSort("-environment", "Environment Z–A", "-environment"),
-        TableSort("last_reviewed", "Oldest change", "last_reviewed"),
-        TableSort("-last_reviewed", "Newest change", "-last_reviewed"),
-        TableSort("status", "Status A–Z", "status"),
-        TableSort("-status", "Status Z–A", "-status"),
-        TableSort("sensitivity", "Sensitivity A–Z", "sensitivity"),
-        TableSort("-sensitivity", "Sensitivity Z–A", "-sensitivity"),
-        TableSort("updated_at", "Least recently updated", "updated_at"),
-    )
-    table_default_sort = "-updated_at"
     table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 
     @override
@@ -100,17 +58,15 @@ class DocsListView(PageMixin, TableListMixin, ListView):
         )
 
     @override
-    def get_queryset(self):
-        qs = DocumentationRecord.objects.all()
-        q = self.request.GET.get("q", "").strip()
-        doc_types = self.table_values("doc_type")
-
-        # Writeups and pages live in the Content tab; hide them from the
-        # default Docs view unless the user explicitly filtered for that
-        # doc_type or searched for one.
-        if not doc_types and not q:
-            qs = qs.exclude(doc_type=DocumentationRecord.DocType.PUBLIC_ARTICLE_DRAFT)
-        return self.apply_table_query(qs)
+    def row(self, item):
+        record = DocumentationRecord
+        return {
+            **item,
+            "state": record.Status(item["status"]),
+            "doc_type_label": record.DocType(item["doc_type"]).label,
+            "environment_label": record.Environment(item["environment"]).label,
+            "sensitivity_label": record.Sensitivity(item["sensitivity"]).label,
+        }
 
 
 class DocsPage(PageMixin):

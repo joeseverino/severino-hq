@@ -45,7 +45,7 @@ from .path_model import ServicePath
 from .paths import hq_path
 from .posture import estate_inputs, guide, posture
 from .problems import problem_counts
-from .projection import complete, projection_scope, read_once
+from .projection import complete, iso, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .request_connection import connection as request_connection
 from .request_path import joined
@@ -227,10 +227,6 @@ class ConnectionRow:
         )
 
 
-def _moment(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
-
-
 def _sight(sight: ProviderSight) -> CredentialSightPart:
     return record_saves.row(sight, CredentialSightPart, tally=tally(sight))
 
@@ -311,7 +307,7 @@ class ConnectionsContext:
     def attention_states(self) -> tuple[tuple[int, str], ...]:
         """(count, state) for each state that needs a person, in the rows' own words."""
 
-        counts = Counter(row.state_label.lower() for row in self.rows if row.lifecycle.needs_attention)
+        counts = Counter(row.state_label.lower() for row in self.rows if row.lifecycle.tone.acted_on)
         return tuple((count, label) for label, count in counts.items())
 
     @property
@@ -346,7 +342,7 @@ class ConnectionsContext:
                     {
                         "label": self.oldest.label,
                         "connection_ref": self.oldest.connection_ref or None,
-                        "observed_at": _moment(self.oldest.observed_at),
+                        "observed_at": iso(self.oldest.observed_at),
                     }
                     if self.oldest is not None
                     else None
@@ -382,7 +378,7 @@ class ConnectionsContext:
             },
             "hq_path": serialize_path(self.hq_path) if self.hq_path else None,
             "read_all": as_written(self.read_all) if self.read_all else None,
-            "reading_everything_since": _moment(self.reading_everything_since),
+            "reading_everything_since": iso(self.reading_everything_since),
             # The posture's request half (how the request being answered
             # reached HQ) exists only where there is a request; the estate
             # half above is the same for every caller.
@@ -455,7 +451,7 @@ def _rows(
                 )
             )
         # Within its group, a connection that needs a person comes first.
-        rows.extend(sorted(found, key=lambda row: not row.lifecycle.needs_attention))
+        rows.extend(sorted(found, key=lambda row: not row.lifecycle.tone.acted_on))
     # Under what each is used for, in the order the first of each appears: the
     # sort is stable, so the controller's connections still lead.
     order = {name: place for place, name in enumerate(dict.fromkeys(row.used_for for row in rows))}

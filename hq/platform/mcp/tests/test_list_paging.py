@@ -54,11 +54,11 @@ class PagingArgumentTests(TestCase):
         for index in range(3):
             Project.objects.create(name=f"Paged {index}", slug=f"paged-{index}")
 
-    def test_limit_and_cursor_beside_the_filters_read_the_list_page_by_page(self):
+    def test_limit_and_page_beside_the_filters_read_the_list_page_by_page(self):
         with served(with_kind(_example_kind())) as server:
             (first,) = _calls(server.server, {"name": "projects", "limit": 2})
             page = first.structured_content
-            (second,) = _calls(server.server, {"name": "projects", "limit": 2, "cursor": page["next"]["cursor"]})
+            (second,) = _calls(server.server, {"name": "projects", "limit": 2, "page": page["next"]})
 
         self.assertFalse(first.is_error, page)
         self.assertEqual(page["count"], 2)
@@ -92,5 +92,5 @@ class FiltersInTheDescriptionTests(TestCase):
                 said = named[f"`{spec.name}`"]
                 for field in spec.listing.query.model_fields:
                     # Paging is the tool's own arguments, never a filter a kind is named by.
-                    (self.assertNotIn if field in {"limit", "cursor"} else self.assertIn)(f"`{field}`", said)
+                    (self.assertNotIn if field in {"limit", "page"} else self.assertIn)(f"`{field}`", said)
         self.assertIn("`shade`", named[f"`{KIND}`"])

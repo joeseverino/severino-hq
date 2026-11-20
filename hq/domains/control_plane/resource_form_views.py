@@ -3,6 +3,7 @@
 import logging
 from typing import get_origin
 
+from django import forms
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
@@ -203,7 +204,7 @@ class ResourceFormView(View):
         saved = result["resource"]["key"]
         if resource and kind == MACHINE_KIND:
             shown = execute_posted(
-                request, DASHBOARD_MACHINE, {"selected": identity.cleaned_data["show_on_dashboard"]}, target=saved
+                request, DASHBOARD_MACHINE, {"selected": identity.cleaned_data["selected"]}, target=saved
             )
             refused(request, shown)
         if material is not None:
@@ -221,7 +222,7 @@ class ResourceFormView(View):
         return redirect(_after_save(request, kind, resource, saved))
 
 
-def _identity(kind: str, resource, data=None) -> ResourceIdentityForm | None:
+def _identity(kind: str, resource, data=None) -> forms.Form | None:
     """What HQ calls an existing resource and whether it reconciles, with a
     machine's place on the dashboard; None while creating one."""
 
@@ -229,9 +230,7 @@ def _identity(kind: str, resource, data=None) -> ResourceIdentityForm | None:
         return None
     initial = {"enabled": resource.enabled, "expected_updated_at": resource.updated_at.isoformat()}
     if kind == MACHINE_KIND:
-        return MachineIdentityForm(
-            data, initial={**initial, "show_on_dashboard": dashboard_machine_selected(resource.key)}
-        )
+        return MachineIdentityForm(data, initial={**initial, "selected": dashboard_machine_selected(resource.key)})
     return ResourceIdentityForm(data, initial=initial)
 
 

@@ -43,7 +43,7 @@ FRAMES: dict[str, tuple[str, ...]] = {
 FRAME_ABOUT = {
     "page.html": "Any page: the head, actions, dialogs and section navigation, drawn from `page`.",
     "list_page.html": (
-        "A `TableListMixin` list: toolbar, table, empty state and pagination. "
+        "A `ListPageMixin` list: toolbar, table, empty state and pagination. "
         "`row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or "
         "filter changes, `foot` is its `<tfoot>`."
     ),

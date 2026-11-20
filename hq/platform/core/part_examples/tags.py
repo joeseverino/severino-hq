@@ -16,9 +16,10 @@ lazy from hq.domains.jobs.models import JobState
 lazy from hq.platform.application.adoption import ONLY_READS, WriteGap
 lazy from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
 lazy from hq.platform.application.approvals import DECISIONS, NO_OFFER, Offer, _decision_link
-lazy from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
+lazy from hq.platform.application.capability_policy import Column, Group, PolicyCell, Row, Rule
 lazy from hq.platform.application.contracts import Effect
 lazy from hq.platform.application.credential_mint import CredentialFix
+lazy from hq.platform.application.doors import NOBODY, Attribution
 lazy from hq.platform.application.finding_steps import Run
 lazy from hq.platform.application.money import money
 lazy from hq.platform.application.pages import PageAction, RowMark, RowOrder
@@ -67,7 +68,7 @@ def _policy():
     agent's grant. The catalog draws without script, which drops no column,
     so one agent's column is the table that fits every width."""
 
-    options = (("", "Default"), *((rule, words) for rule, words in RULE_LABELS.items()))
+    options = (("", "Default"), *Rule.choices)
     column = Column("example-agent", "example-agent", "MCP", AgentIdentity(client_id="example-agent"))
 
     def row(name, label, effect, default, rule, unavailable=""):
@@ -114,7 +115,7 @@ def _policy():
     }
 
 
-def _approval(state, **decided):
+def _approval(state, decided_by=NOBODY, **decided):
     """An approval card's entry (approvals.review()) for a request an agent
     asked with its reason, in ``state``, with what its decision said."""
 
@@ -131,6 +132,7 @@ def _approval(state, **decided):
     return {
         "entry": {
             "held": held,
+            "decided_by": decided_by,
             "tone": "attention" if pending else "",
             "asked": Asked("example-agent", "wants to adopt the playbooks", "", ""),
             "preview": compare({}, _CHANGED_AFTER, label="Would change"),
@@ -429,7 +431,7 @@ APPROVAL_CARD_STATES = {
         '{% include "partials/_approval_card.html" %}',
         lambda: _approval(
             ApprovalRequest.State.REJECTED,
-            decided_actor="example-person",
+            Attribution("example-person", "web"),
             decided_at=DRAWN_AT - timedelta(minutes=3),
             decision_note="The upgrade waits for the example-host-02 backup to finish; ask again tomorrow.",
         ),

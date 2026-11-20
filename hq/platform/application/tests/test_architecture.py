@@ -13,7 +13,6 @@ from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, override_settings, tag
 from starlette.staticfiles import StaticFiles
 
-from hq.platform.application.tables import TableListMixin
 from hq.platform.core.compression import Compressed
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
@@ -82,7 +81,8 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
         )
 
     @tag("source", "tree")
-    def test_paginated_list_views_use_the_shared_table_engine(self):
+    def test_no_page_paginates_a_list_of_its_own(self):
+        """A list page draws its resource's list read (``ListPageMixin``), which pages it."""
         root = Path(__file__).resolve().parents[4]
         modules = routed_modules(root)
         loaded = {
@@ -100,8 +100,8 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
             and "paginate_by" in vars(value)
         }
 
-        self.assertTrue(paginated, "the walk found no paginated view")
-        self.assertEqual([name for name, view in paginated.items() if not issubclass(view, TableListMixin)], [])
+        self.assertTrue(modules, "the walk found no view")
+        self.assertEqual(sorted(paginated), [])
 
 
 @tag("source", "tree")

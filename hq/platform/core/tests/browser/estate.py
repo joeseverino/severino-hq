@@ -470,7 +470,7 @@ class ExampleEstateControlTests(BrowserGate):
         which a search's toolbar names once it has a query)."""
 
         parts = urlsplit(address)
-        unnamed = {cls.default_sort.get(parts.path), "_relevance"}
+        unnamed = {cls.default_sort.get(parts.path)}
         asked = frozenset(
             (name, value)
             for name, value in parse_qsl(parts.query)

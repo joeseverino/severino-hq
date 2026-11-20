@@ -13,7 +13,7 @@ and those that hold across parts in [Design](Design.md).
 | --- | --- | --- |
 | `confirm_page.html` | `consequences` | A destructive action's confirmation: `consequences` says what will happen. |
 | `form_page.html` | nothing | A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and `cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says what saving does, each from the view, so the page fills no block. |
-| `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `TableListMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
+| `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `ListPageMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
 | `page.html` | `page`, `print_footer` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
 
 | Partial | Required | Optional | What it is |
@@ -1419,9 +1419,11 @@ than the region. A value longer than a line of words (`data-long` on its cell an
 `table_cells`), whatever its kind, wraps at its words in a line of `--row-words`, or its share
 where that is less, so no column of words is set a word to a line while its neighbor sits empty. A
 status, a figure or what a row's controls say that long shares the room as words do; a row's
-controls stay as narrow as their line. A long value is held to its third line (below); a heading's
-words wrap as a cell's do. *Gate:* the survey's `room unshared`, which fails a cell squeezed below
-what it needs while another column holds the room it lacks, counting each share itself.
+controls stay as narrow as their line. A long value is held to its third line (below). A heading
+is one of its column's values, held whole up to its share as a short value is, so its words wrap
+only where its share is narrower than its line. *Gate:* the survey's `room unshared`, which fails
+a cell or a heading squeezed below what it needs while another column holds the room it lacks,
+counting each share itself.
 
 The region turns a table's ranks (`table_heading drop=`) into at most four levels from the widest
 (`data-drop`, `table_cells`): its first rank leaves while the region is narrower than 64rem, its
