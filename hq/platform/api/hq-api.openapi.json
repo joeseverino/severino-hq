@@ -16993,8 +16993,7 @@
           }
         },
         "required": [
-          "filters",
-          "fields"
+          "filters"
         ],
         "type": "object"
       },
@@ -25036,7 +25035,7 @@
           },
           "schema_version": {
             "$ref": "#/components/schemas/SchemaVersion",
-            "const": 3
+            "const": 4
           }
         },
         "required": [

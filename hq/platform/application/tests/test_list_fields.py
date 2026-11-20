@@ -75,11 +75,10 @@ class ListFieldTests(TestCase):
         self.assertEqual({key for item in page["items"] for key in item}, {"name", "containers"})
 
     def test_the_catalog_names_each_kinds_list_fields(self):
-        described = {entry["name"]: entry for entry in describe_resources()["resources"]}
-
         for name, spec in _declaring().items():
             with self.subTest(name=name):
-                self.assertEqual(described[name]["operations"]["list"]["fields"], list(spec.listing.fields))
+                (described,) = describe_resources(name=name)["resources"]
+                self.assertEqual(described["operations"]["list"]["fields"], list(spec.listing.fields))
 
 
 class _ExampleRecord(TypedDict):

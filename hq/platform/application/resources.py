@@ -209,7 +209,7 @@ class ListOperation(TypedDict):
             "given this name says each one's type and choices."
         ),
     ]
-    fields: Annotated[list[str], Describe("The fields each item keeps unless the caller names its own.")]
+    fields: NotRequired[Annotated[list[str], Describe("The fields each item keeps unless the caller names its own.")]]
     query_schema: NotRequired[
         Annotated[
             dict[str, Any],
@@ -264,7 +264,7 @@ class ResourceDescription(TypedDict):
 
 
 # The shape describe_resources answers in; it moves when that shape does.
-RESOURCES_SCHEMA_VERSION = 3
+RESOURCES_SCHEMA_VERSION = 4
 
 
 class ResourceCatalog(TypedDict):
@@ -292,10 +292,10 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
 def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     if not spec.listing:
         return None
-    query = spec.listing.query
-    listing: ListOperation = {"filters": list(list_filters(query)), "fields": list(spec.listing.fields)}
+    listing: ListOperation = {"filters": list(list_filters(spec.listing.query))}
     if whole:
-        schema = sent_schema(query)
+        listing["fields"] = list(spec.listing.fields)
+        schema = sent_schema(spec.listing.query)
         properties = schema.get("properties", {})
         listing["query_schema"] = narrowed(schema, properties.keys() - PAGING)
         if PAGING & properties.keys():

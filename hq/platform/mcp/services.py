@@ -137,8 +137,8 @@ def describe_resources(name: str | None = None) -> ResourceCatalog:
     """Every resource HQ can read, the operations each supports, and whether you may use each.
 
     Each list names the `filters` it takes. Pass a kind as `name` to get its
-    `query_schema`, with each filter's type and values, and its `paging`:
-    the largest `limit`, and `cursor` where the list pages.
+    `fields`, its `query_schema` (each filter's type and values) and its
+    `paging`: the largest `limit`, and `cursor` where the list pages.
     """
 
     return describe_application_resources(principal=current_principal(), name=name or "")
