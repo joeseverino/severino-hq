@@ -268,7 +268,12 @@ class _Fill:
         while self.waiting:
             parent, above = self.waiting.pop()
             for relation in _pointing_back(type(parent)):
-                if relation.related_model in above:
+                # A row pointing at two parents (a pair one constraint keeps
+                # unique) was written for whichever parent was filled first.
+                if (
+                    relation.related_model in above
+                    or relation.related_model._base_manager.filter(**{relation.field.name: parent}).exists()
+                ):
                     continue
                 child = self._row(relation.related_model, {relation.field.name: parent})
                 self._relate(child)
