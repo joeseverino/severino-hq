@@ -14,8 +14,7 @@ lazy from hq.platform.application.tone import Tone
 
 
 class _Drawn:
-    """A template from its source, compiled when it is drawn, which a page
-    head's ``page_aside`` includes as it would a template's name."""
+    """A template's source, which a page head's ``page_aside`` draws as it would a template's name."""
 
     def __init__(self, source):
         self.source = source
@@ -94,6 +93,16 @@ _TIGHTER = """(lists) => {
 }"""
 
 
+# A press lands on each target at its middle, and on a fact's lone value link at its label.
+_WHOLE = """(facts) => [...document.querySelectorAll(facts)].flatMap((fact) => {
+  const label = fact.querySelector('.fact-label'), targets = [...fact.querySelectorAll('a[href], button')].filter((t) => t.checkVisibility());
+  const lone = targets.length === 1 && targets[0].matches('.fact-value a') ? [[targets[0], label]] : [];
+  const hit = (at) => { at.scrollIntoView({block: 'nearest'}); const box = at.getBoundingClientRect(); return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2); };
+  return [...targets.map((t) => [t, t]), ...lone].filter(([target, at]) => !target.contains(hit(at)))
+    .map(([target, at]) => `${label.textContent.trim()}: a press on ${at === label ? 'its label' : target.textContent.trim()} misses it`);
+})"""
+
+
 FACTS_STATES = {
     # A domain's overview as the dashboard draws it, its lead figure with the
     # line of its recent readings beside it.
@@ -138,6 +147,7 @@ FACTS_STATES = {
                 Kpi("Unrealized gain", "−$40.00", tone=Tone.ATTENTION),
             ]
         },
+        premise=(_WHOLE, ".fact"),
     ),
     # Figures in a row of their own, as a report's year draws them: a line
     # that counts records leading to them, a figure that is its page's link,
@@ -245,7 +255,8 @@ FACTS_STATES = {
         '{% fact "Example open updates" value=2 url="/example/updates/" detail="2 example alerts with no fix open" %}'
         '{% fact "Example drafts" value=1 url="/example/drafts/" detail="22 published" %}'
         '{% fact "Example expenses" value="$1,204.50" url="/example/expenses/" detail="All deductible est." %}'
-        "{% endfacts %}{% endcard %}"
+        "{% endfacts %}{% endcard %}",
+        premise=(_WHOLE, ".fact"),
     ),
     # A few short pairs, one of them a long address that wraps in its own
     # value's track as the pairs go across the page.
@@ -349,6 +360,7 @@ FACTS_STATES = {
     "band-glance": Example(
         '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
         lambda: {"page": Page(title="Example glance"), "page_aside": _Drawn(_GLANCE), "hours": _hours()},
+        premise=(_WHOLE, ".fact"),
         heads_the_page=True,
     ),
     # The same band on its own line, as a narrower head draws it, under the dashboard's day and its note.

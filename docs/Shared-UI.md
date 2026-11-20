@@ -454,10 +454,11 @@ that is markup. A zero and a linked count stand alike. A fact is drawn as a figu
 with its mark before it, its value large under it, its detail under that. What a figure counts may
 follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
 ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value
-is colored. Given `{% heading %}`, `{% panel %}` and `{% foot %}` parts and an `id`, its value is
-the button that opens the panel in place, as a menu does, and each `data_*` option is its
-attribute, so a fragment region in the band holds facts refreshed in place as its own
-(`core/_dashboard_glance.html`).
+is colored. A fact whose one target is its value's link is that link whole, its label and detail
+pressed as its value is; one holding another target keeps each its own. Given `{% heading %}`,
+`{% panel %}` and `{% foot %}` parts and an `id`, its value is the button that opens the panel
+in place, as a menu does, and each `data_*` option is its attribute, so a fragment region in the
+band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).
 
 A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
 or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure
@@ -547,7 +548,7 @@ pair and leaves that pair's row a gap.
 A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
 each fact one phrase, its bold value then its words ("3 rules") then its detail, a fixed gap
 apart, wrapping fact by fact, so a wide card holds them on one line. Under the card's head it
-takes a rule above. A fact with an address is a link whole.
+takes a rule above.
 
 **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
 two shares a row with the sections beside it, so its values never end a third of the way across
