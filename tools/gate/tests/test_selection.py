@@ -4,6 +4,7 @@ carries, and every check that reads a changed file."""
 import ast
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import grimp
 from django.test import SimpleTestCase, tag
@@ -23,6 +24,12 @@ class ReaderSelectionTests(SimpleTestCase):
         modules = sorted(map(selection.module_name, changed))
 
         self.assertEqual(selection.test_labels(files, set(modules), set())[0], modules)
+
+    def test_a_sheet_selects_its_reader_without_consulting_python_coverage(self):
+        reader = Path("hq/platform/core/tests/test_look_reach.py")
+        with patch.object(selection.ran, "recorded", side_effect=AssertionError("CSS has no Python edits")):
+            labels, _ = selection.selection(["static/css/app/figures.css"], [], [reader, PROBES], "HEAD")
+        self.assertEqual(labels, [selection.module_name(reader)])
 
     def test_an_imported_helper_selects_the_checks_that_read_it(self):
         helper = Path("hq/platform/application/tests/facts.py")

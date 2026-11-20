@@ -210,7 +210,7 @@ def affected(changed: list[str], deleted: list[str], files: list[Path], base: st
     paths = [*changed, *deleted]
     started = seeds(paths)
     every = routes(chain.ROOT, tuple(files))
-    names, loading = reached(changed, deleted, files, base, {route.urls for route in every})
+    names, loading = reached(started, changed, deleted, files, base, {route.urls for route in every})
     read = reading(paths, files)
     index = named(chain.ROOT, tuple(files))
     shown = [path for path in rendering(paths) if not path.endswith(".py")]
@@ -235,7 +235,7 @@ def affected(changed: list[str], deleted: list[str], files: list[Path], base: st
 
 
 def reached(
-    changed: list[str], deleted: list[str], files: list[Path], base: str, urls: set[str]
+    started: set[str], changed: list[str], deleted: list[str], files: list[Path], base: str, urls: set[str]
 ) -> tuple[dict[str, set[str]], set[str]]:
     """(each module the change reaches through the names it changed since ``base``, with the names it
     changes there; the modules it reaches as they load).
@@ -250,9 +250,12 @@ def reached(
     statement reached only as its module loads) reaches every module that loads it (``importing``).
     """
 
+    if not started:
+        return {}, set()
     every = outlines(files)
     record = ran.recorded()
-    since = [p for p in changed_paths(record.tree, chain.ROOT)[0] if p.endswith(".py")] if record else []
+    since = changed_paths(record.tree, chain.ROOT)[0] if record else []
+    print(f"[fast] {ran.said(record, len(since))}")
     edited = [path for path in {*changed, *since} if path.endswith(".py") and module_name(Path(path)) in every]
     was, held = at_base(base, edited), at_base(record.tree, edited) if record else {}
     seeded: dict[str, Edit] = {}
@@ -269,7 +272,7 @@ def reached(
         sourced = {module_name(p) for p in files if is_test(p) and '@tag("source"' in (chain.ROOT / p).read_text()}
         static = name_reach(seeded, every, urls | tests).names.keys() & (tests - (record.tests - sourced))
         names = names | {test: set() for test in record.ran(found.ran, held) | static}
-    start = (seeds([*changed, *deleted]) - seeded.keys()) | found.dynamic
+    start = (started - seeded.keys()) | found.dynamic
     loading = importing(start, with_gone(importers(files), deleted, files), files) if start else set()
     return names, loading
 

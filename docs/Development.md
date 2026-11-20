@@ -387,7 +387,9 @@ The tests it selects are:
   ran as the suite started, before any test (a registry's assembly), to all
   that refers to it. The edit is read from the changed modules' text at the base and at the
   record's tree, so what a test runs that its record predates is a change
-  too, and a comment or the module's docstring changes nothing. The
+  too, and a comment or the module's docstring changes nothing. A change
+  with no Python module, migration or task definition starts from the files
+  its readers name and the routes they render, so it skips the coverage record. The
   references are read from the source: a name an import binds, an attribute
   read off an imported module (`inbox.recent`), a name the module defines,
   and in a module under a `tests` directory a dotted string (a mock target).

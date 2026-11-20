@@ -19,7 +19,6 @@ from pathlib import Path
 
 from coverage import CoverageData
 
-from hq.platform.core.tests.task import changed_paths
 from tools.gate import chain
 from tools.gate.names import functions, module_name
 from tools.gate.tree import working_tree
@@ -100,13 +99,11 @@ class Started(Mapping[str, frozenset[str]]):
         return len(self.record.files)
 
 
-def said(root: Path = chain.ROOT) -> str:
+def said(record: Record | None, since: int) -> str:
     """What fast's line on its selection says of the record it selected by."""
 
-    record = recorded(root)
     if record is None:
         return f"no record of what each test ran, so the reach is read from the source alone: `mise run {TASK}`"
-    since = len(changed_paths(record.tree, root)[0])
     return (
         f"selected by the record of tree {record.tree[:9]}, {since} files changed since (`mise run {TASK}` renews it)"
     )
