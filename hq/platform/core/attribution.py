@@ -6,17 +6,15 @@
 
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any
-from uuid import uuid7
 
 lazy from hq.domains.control_plane.models import ApprovalRequest
 lazy from hq.platform.application import request_context
 lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE, WEB_INTERFACE
 
-from . import tracing
-lazy from .audit import audit_operation, made_in
+from . import bindings, tracing
+lazy from .audit import made_in
 
 # The operation a sign-in's writes are named by where no request bound one.
 SIGN_IN_OPERATION = "sign_in"
@@ -41,72 +39,10 @@ class OperationContext:
     person: Callable[[], Any] | None = None
 
 
-_operation_context: ContextVar[OperationContext | None] = ContextVar("hq_operation_context", default=None)
-# True only while own_operation opens a held approval's binding.
-_rebinding: ContextVar[bool] = ContextVar("hq_rebinding", default=False)
-
-
 def bound() -> OperationContext | None:
     """The operation this code runs inside, or None outside every door."""
 
-    return _operation_context.get()
-
-
-class Rebound(RuntimeError):
-    """A binding opened inside an operation naming someone other than whoever started it."""
-
-
-@contextmanager
-def operation_context(
-    *,
-    interface: str,
-    actor: str,
-    operation: str,
-    operation_id: str = "",
-    device: str = "",
-    cause: str = "",
-    approved_by: str = "",
-    person: Callable[[], Any] | None = None,
-) -> Iterator[None]:
-    """Attach adapter-neutral attribution to audit events in this operation.
-
-    Every row inside one operation carries its one id. Once an actor is bound,
-    a nested binding naming another is refused, so no code inside can write its
-    rows as someone else's, but a held approval's (``own_operation``).
-    """
-
-    outer = None if not actor else _operation_context.get()
-    if outer is not None and outer.actor and not _rebinding.get() and actor != outer.actor:
-        raise Rebound(
-            f"{operation!r} binds {interface}/{actor or '(nobody)'} inside {outer.operation!r}, "
-            f"which {outer.interface}/{outer.actor} started. An operation's rows are its starter's: "
-            "run the inner work under the binding in force."
-        )
-    within = outer.operation_id if outer is not None else ""
-    if operation_id and operation_id != within:
-        cause = cause or within
-    elif not cause and outer is not None:
-        cause = outer.cause
-    operation_id = operation_id or within or str(uuid7())
-    # A nested binding of the same caller keeps the device the outer one
-    # placed, and the consent the outer one carried.
-    same_caller = outer is not None and outer.actor == actor
-    device = device or (outer.device if same_caller else "")
-    approved_by = approved_by or (outer.approved_by if same_caller else "")
-    person = person or (outer.person if same_caller else None)
-    with _operation_context.set(
-        OperationContext(
-            interface=interface,
-            actor=actor,
-            operation=operation,
-            operation_id=operation_id,
-            device=device,
-            cause=cause,
-            approved_by=approved_by,
-            person=person,
-        )
-    ):
-        yield
+    return bindings.OPERATION.get()
 
 
 @contextmanager
@@ -114,7 +50,7 @@ def _door_of_its_own(door: OperationContext) -> Iterator[None]:
     """Bind ``door`` as the outermost, whatever is bound around it, outside the
     request being answered."""
 
-    with _operation_context.set(door), request_context.bind(None):
+    with bindings.OPERATION.set(door), request_context.bind(None):
         yield
 
 
@@ -136,7 +72,7 @@ def own_operation(
     if requester is not None:
         return _door_of_its_own(replace(requester, operation_id=str(record.pk)))
     outer = bound()
-    binding = audit_operation(
+    binding = bindings.audit_operation(
         operation=operation or (outer.operation if outer is not None else ""),
         principal=principal,
         operation_id=str(record.pk),
@@ -150,7 +86,7 @@ def _rebound(binding: AbstractContextManager[None]) -> Iterator[None]:
     """``binding``, opened over whoever is bound; what runs inside it is not."""
 
     with ExitStack() as stack:
-        with _rebinding.set(True):
+        with bindings.REBINDING.set(True):
             stack.enter_context(binding)
         yield
 
@@ -164,7 +100,7 @@ def outside_every_door() -> Iterator[None]:
     made, so none takes the door of whatever runs the seed.
     """
 
-    with _operation_context.set(None):
+    with bindings.OPERATION.set(None):
         yield
 
 
@@ -177,7 +113,7 @@ def bind_this_thread(*, interface: str, actor: str, operation: str) -> None:
     thread is still refused unless that door binds it.
     """
 
-    _operation_context.set(OperationContext(interface=interface, actor=actor, operation=operation))
+    bindings.OPERATION.set(OperationContext(interface=interface, actor=actor, operation=operation))
 
 
 class BoundDoor:
@@ -198,7 +134,9 @@ class BoundDoor:
             tracing.trace(
                 f"{scope['method']} {scope['path']}", **{"http.request.method": scope["method"]}
             ) as request_id,
-            operation_context(interface=self.interface, actor="", operation=self.operation, operation_id=request_id),
+            bindings.operation_context(
+                interface=self.interface, actor="", operation=self.operation, operation_id=request_id
+            ),
         ):
             await self.app(scope, receive, send)
 
@@ -210,7 +148,7 @@ def from_the_shell(operation: str) -> AbstractContextManager[None]:
     process of its own binds its run.
     """
 
-    return operation_context(interface=CLI_INTERFACE, actor=CLI_ACTOR, operation=operation)
+    return bindings.operation_context(interface=CLI_INTERFACE, actor=CLI_ACTOR, operation=operation)
 
 
 def signing_in(username: str) -> AbstractContextManager[None]:
@@ -219,7 +157,7 @@ def signing_in(username: str) -> AbstractContextManager[None]:
     picture) is that person's doing, under the request's operation."""
 
     outer = bound()
-    return operation_context(
+    return bindings.operation_context(
         interface=WEB_INTERFACE, actor=username, operation=outer.operation if outer else SIGN_IN_OPERATION
     )
 

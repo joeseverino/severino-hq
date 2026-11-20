@@ -14,7 +14,7 @@ from hq.platform.application.resources import get_resource
 from hq.platform.application.run_reads import RUNS
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.procedures import APPROVER, Supply, approved_run, manifest, run_payload
-from hq.platform.core.attribution import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import AGENT, declare, operator
 

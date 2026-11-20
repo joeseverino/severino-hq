@@ -19,7 +19,8 @@ from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.tests import bridge_client
 from hq.domains.jobs.runner import start
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
-from hq.platform.core.audit import audit_operation, operation_context, record_event, record_operation
+from hq.platform.core.audit import record_event, record_operation
+from hq.platform.core.bindings import audit_operation, operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
 

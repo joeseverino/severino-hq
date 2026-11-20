@@ -16,7 +16,8 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.history import Moment
 from hq.platform.application.markup_testing import Element, all_elements, hrefs, select, text
 from hq.platform.core import append_only
-from hq.platform.core.audit import audited_labels, operation_context
+from hq.platform.core.audit import audited_labels
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare, operator
 

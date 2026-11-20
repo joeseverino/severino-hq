@@ -11,9 +11,11 @@ note: >-
   `with audit_operation(operation=name, principal=principal):` binds the same
   interface, actor and operation.
 ignores:
-  - "hq/platform/core/audit.py"
+  - "hq/platform/core/bindings.py"
 rule:
-  pattern: operation_context($$$)
+  any:
+    - pattern: operation_context($$$)
+    - pattern: $BINDINGS.operation_context($$$)
   all:
     - has:
         kind: argument_list

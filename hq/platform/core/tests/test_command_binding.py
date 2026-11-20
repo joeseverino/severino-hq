@@ -7,8 +7,9 @@ from django.core.management.base import BaseCommand
 from django.test import SimpleTestCase, TestCase
 
 from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE
-from hq.platform.core.attribution import Rebound, bound
-from hq.platform.core.audit import operation_context, record_operation
+from hq.platform.core.attribution import bound
+from hq.platform.core.audit import record_operation
+from hq.platform.core.bindings import Rebound, operation_context
 from hq.platform.core.models import AuditLog
 
 

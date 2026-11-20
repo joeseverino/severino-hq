@@ -9,7 +9,7 @@ from hq.domains.control_plane.models import (
     DashboardMachine,
     ProviderConnection,
 )
-from hq.platform.core.audit import audit_operation
+from hq.platform.core.bindings import audit_operation
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare, operator
 

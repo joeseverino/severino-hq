@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from hq.platform.application import request_context
 from hq.platform.application.markup_testing import text
-from hq.platform.core.attribution import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
 

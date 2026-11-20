@@ -32,7 +32,7 @@ from hq.platform.application.projects import DEPENDENCY_UPDATES
 from hq.platform.application.security import Capability, could_hold
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
-from hq.platform.core.attribution import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AgentAccess
 from hq.platform.core.testing import declare, operator
 

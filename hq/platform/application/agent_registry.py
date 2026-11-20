@@ -17,8 +17,8 @@ from django.db.models import Q, QuerySet
 from django.dispatch import Signal
 from django.utils import timezone
 
+from hq.platform.core import bindings
 from hq.platform.core.attribution import bound
-from hq.platform.core.audit import audit_operation
 from hq.platform.core.models import AgentIdentity, AgentSignIn
 
 from . import agent_devices
@@ -97,7 +97,7 @@ def _as_its_caller(principal: Principal) -> AbstractContextManager[None]:
     through its door: admission records it before the door binds its caller."""
 
     outer = bound()
-    return audit_operation(operation=outer.operation if outer else OBSERVE_OPERATION, principal=principal)
+    return bindings.audit_operation(operation=outer.operation if outer else OBSERVE_OPERATION, principal=principal)
 
 
 def identity_of(subject: str) -> QuerySet[AgentIdentity]:

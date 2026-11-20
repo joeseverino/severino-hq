@@ -9,7 +9,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND
 from hq.platform.application.markup_testing import all_elements, select, texts
-from hq.platform.core.attribution import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.testing import declare, operator
 from hq_sdk.testing import plain
 

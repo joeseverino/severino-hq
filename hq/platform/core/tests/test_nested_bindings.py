@@ -5,8 +5,9 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application.security import CLI_ACTOR, Principal, cli_principal
-from hq.platform.core.attribution import Rebound, own_operation
-from hq.platform.core.audit import audit_operation, operation_context, record_operation
+from hq.platform.core.attribution import own_operation
+from hq.platform.core.audit import record_operation
+from hq.platform.core.bindings import Rebound, audit_operation, operation_context
 from hq.platform.core.models import AuditLog
 
 EXAMPLE_PERSON = Principal("example-person", "web", frozenset())

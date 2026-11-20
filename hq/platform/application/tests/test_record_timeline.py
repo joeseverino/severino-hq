@@ -11,8 +11,9 @@ from hq.domains.control_plane.tests import bridge_client
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability, run_capability
 from hq.platform.application.security import cli_principal, mcp_principal, web_principal
-from hq.platform.core.attribution import bound, operation_context
+from hq.platform.core.attribution import bound
 from hq.platform.core.audit import audited_labels
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare
 

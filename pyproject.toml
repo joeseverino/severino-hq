@@ -201,7 +201,8 @@ forbidden_modules = ["hq.platform.api", "hq.platform.mcp"]
 ignore_imports = ["hq.platform.application.tests.** -> hq.**"]
 
 # A low-level piece with one home lives in a module of its own, which only
-# that home imports: a second caller cannot be written.
+# that home imports, whole, so the home re-exports none of its names: a
+# second caller cannot be written.
 
 [[tool.importlinter.contracts]]
 name = "A retry key is kept by the capability runner alone: no door runs a call once or fingerprints it itself, so one key cannot act twice by two doors"
@@ -225,6 +226,28 @@ allowed_importers = [
   "hq.platform.core.tests.test_isolation_testing",
 ]
 broken_contract_guidance = "Read one command with capability_spec or command_spec, every command with capability_registry, and resources, connections or search from integrations.held_graph()."
+
+[[tool.importlinter.contracts]]
+name = "Only a door, the capability runner and the attribution core name an operation, so no handler renames the rows its runner names"
+type = "protected"
+protected_modules = ["hq.platform.core.bindings"]
+# The doors (a request, a token's call, the shell, the controller's bridge,
+# the example estate's), the runner, and an export and a sweep's adoption,
+# each HQ's own act at the door it serves.
+allowed_importers = [
+  "hq.**.tests",
+  "hq.domains.control_plane.bridge_application",
+  "hq.platform.application.agent_registry",
+  "hq.platform.application.capabilities",
+  "hq.platform.application.reports",
+  "hq.platform.application.sweep",
+  "hq.platform.core.attribution",
+  "hq.platform.core.example_estate",
+  "hq.platform.core.management.commands.hq_call",
+  "hq.platform.core.middleware",
+  "hq.platform.mcp.security",
+]
+broken_contract_guidance = "Leave the binding to the capability runner or the job runner (attribution.own_operation); work outside both is a door."
 
 # audit:dead: a read in a test does not keep a name alive, unless a
 # test-support module (testing.py, *_testing.py) defines it. A function a

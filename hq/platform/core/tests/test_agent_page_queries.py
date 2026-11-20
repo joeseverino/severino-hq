@@ -14,7 +14,7 @@ from hq.platform.application import denials, roles
 from hq.platform.application.capability_policy import Rule
 from hq.platform.application.linked_accounts import bind_sign_in
 from hq.platform.application.refusal_codes import Code
-from hq.platform.core.audit import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 from hq.platform.core.testing import person
 

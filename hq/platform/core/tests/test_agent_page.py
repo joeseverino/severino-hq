@@ -19,7 +19,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
 from hq.platform.application.tokens import DEVICE_SCOPE
-from hq.platform.core.audit import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog, LinkedAccount, OwnDevice
 from hq.platform.core.testing import person
 from hq.platform.mcp.listing import Endpoint, Offer, Offered

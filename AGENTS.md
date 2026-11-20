@@ -198,6 +198,10 @@ than styling a page.
   `tools/lint/ast-grep/rules`, with its scope in its own `files:` and
   `ignores:` (`sgconfig.yml` there names the scopes), and its cases in
   `rule-tests/`.
+- A piece only one home may use lives in a module of its own, which a
+  `protected` contract in `pyproject.toml` lets only that home import
+  (`lint:imports`), never an ast-grep rule naming it. The home imports it
+  whole (`from . import idempotency`), so it re-exports none of its names.
 - Python says a thing the one way HQ already has for it, never by hand:
   - a text cut to a length with an ellipsis is `Truncator(text).chars(n)`;
   - a raised first letter is `capfirst(text)`;

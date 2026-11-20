@@ -20,8 +20,7 @@ from hq.platform.application import request_context
 from hq.platform.application.arrivals import ARRIVALS, note as note_arrival
 from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import DEMO_SESSION_KEY, demo_scope
-from hq.platform.core import speculation, tracing
-from hq.platform.core.attribution import operation_context
+from hq.platform.core import bindings, speculation, tracing
 from hq.platform.core.outbound import serving
 from hq.platform.core.write_bounds import NOTHING, Bound, writes
 lazy from hq.platform.application import automation_adoption, hq_self
@@ -83,7 +82,7 @@ def request_operation(path: str, *, operation_id: str) -> AbstractContextManager
         route = resolve(path)
     except Resolver404:
         route = None
-    return operation_context(
+    return bindings.operation_context(
         interface=API_INTERFACE if route is not None and API_NAMESPACE in route.app_names else WEB_INTERFACE,
         actor="",
         operation=(route.view_name or route.route) if route is not None else UNROUTED,

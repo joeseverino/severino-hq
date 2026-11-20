@@ -38,7 +38,7 @@ from hq.platform.core.outside_requests import thread_of_its_own
 from hq.platform.mcp.identity import set_principal
 lazy from hq.platform.application.agent_admission import Stopped, Unadmitted, carrying, challenge
 lazy from hq.platform.application.security import MCP_INTERFACE, Principal, agent_grantable
-lazy from hq.platform.core.audit import audit_operation
+lazy from hq.platform.core import bindings
 lazy from hq.platform.mcp import listen
 
 logger = logging.getLogger("severino.mcp")
@@ -174,7 +174,7 @@ class MCPBoundary:
                 carrying(outcome) as caller,
                 set_principal(caller),
                 request_context.bind(arrived),
-                audit_operation(operation=MCP_INTERFACE, principal=caller),
+                bindings.audit_operation(operation=MCP_INTERFACE, principal=caller),
                 listen.ending_at(self._stream_ends(presented.token) if listens else None),
             ):
                 await self._strict(scope, receive, send)

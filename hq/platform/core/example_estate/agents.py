@@ -44,8 +44,9 @@ from hq.platform.application.security import (
     web_principal,
 )
 from hq.platform.application.tokens import token_principal
+from hq.platform.core import bindings
 from hq.platform.core.attribution import from_the_shell, signing_in
-from hq.platform.core.audit import audit_operation, stamped
+from hq.platform.core.audit import stamped
 from hq.platform.core.models import AgentDevice, AgentIdentity, LinkedAccount, OwnDevice, PersonRole
 
 from . import doors
@@ -364,7 +365,7 @@ def _deciding(owner):
         with from_the_shell(SET_POLICY):
             yield
         return
-    with doors.page("agent_policy"), audit_operation(operation=SET_POLICY, principal=web_principal(owner)):
+    with doors.page("agent_policy"), bindings.audit_operation(operation=SET_POLICY, principal=web_principal(owner)):
         yield
 
 

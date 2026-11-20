@@ -15,7 +15,8 @@ from django.urls import reverse
 
 from hq.domains.control_plane.bridge_actions import CONTROLLER
 from hq.platform.application.security import CONTROLLER_INTERFACE, MCP_INTERFACE, MCP_OPERATION
-from hq.platform.core.attribution import bound, operation_context
+from hq.platform.core import bindings
+from hq.platform.core.attribution import bound
 from hq.platform.core.middleware import request_operation
 
 # Where a person's sign-in lands: the identity provider's callback, which
@@ -38,7 +39,9 @@ def page(route: str, /, **kwargs: Any) -> AbstractContextManager[None]:
 def mcp() -> AbstractContextManager[None]:
     """A request to the MCP server, as its mount binds one."""
 
-    return operation_context(interface=MCP_INTERFACE, actor="", operation=MCP_OPERATION, operation_id=uuid7().hex)
+    return bindings.operation_context(
+        interface=MCP_INTERFACE, actor="", operation=MCP_OPERATION, operation_id=uuid7().hex
+    )
 
 
 @contextmanager
@@ -48,8 +51,10 @@ def controller(action: str) -> Iterator[None]:
 
     operation = f"bridge.{action}"
     with (
-        operation_context(interface=CONTROLLER_INTERFACE, actor="", operation=operation, operation_id=uuid7().hex),
-        operation_context(interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=operation),
+        bindings.operation_context(
+            interface=CONTROLLER_INTERFACE, actor="", operation=operation, operation_id=uuid7().hex
+        ),
+        bindings.operation_context(interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=operation),
     ):
         yield
 

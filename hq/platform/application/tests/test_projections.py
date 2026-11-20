@@ -16,7 +16,7 @@ from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.markup_testing import all_elements, elements, links, select, text, with_class
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.core.attribution import operation_context
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.testing import declare
 
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek

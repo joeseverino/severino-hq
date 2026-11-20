@@ -21,3 +21,4 @@ invalid:
         export()
   - operation_context(operation=name, actor=principal.actor, interface=principal.interface)
   - operation_context(actor=self.principal.actor, interface=self.principal.interface, operation=name)
+  - bindings.operation_context(interface=principal.interface, actor=principal.actor, operation=name)

@@ -12,11 +12,13 @@ from jsonschema import Draft202012Validator, validators
 from jsonschema.exceptions import ValidationError as JSONSchemaError
 from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidationError, with_config
 
-from hq.platform.core.audit import audit_connection, audit_operation, record_event, tallied
+from hq.platform.core import bindings
+from hq.platform.core.audit import audit_connection, record_event, tallied
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
+from . import compiled_graph, idempotency
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
 from .approvals import Approved, approval, hold_for_approval
 from .call_envelope import read_call
@@ -25,15 +27,6 @@ from .contracts import DOTTED_NAME, Effect
 from .default_hold import kind_waits
 from .describe import Describe, listed
 from .held_answer import HeldCall
-from .idempotency import (
-    KEY_SHAPE,
-    IdempotencyConflict,
-    InvalidIdempotencyKey,
-    answered,
-    execute_once,
-    request_fingerprint,
-    validate_key,
-)
 from .integration_specs import (
     CONSENT_KEYWORD,
     IDEMPOTENCY_FIELD,
@@ -50,7 +43,6 @@ from .integration_specs import (
     takes_sent_fields,
     takes_stale_write_token,
 )
-from .compiled_graph import integration_graph
 from .integrations import held_graph
 from .labels import human_label
 from .projection import QueryRefusal
@@ -89,7 +81,7 @@ def capability_spec(name: str) -> CapabilitySpec | None:
     an adopted procedure's reads the adopted catalog; every other command is
     the same at every adoption, so a page that names one asks nothing."""
 
-    graph = integration_graph() if automation_runs.runs_procedure(name) else held_graph()
+    graph = compiled_graph.integration_graph() if automation_runs.runs_procedure(name) else held_graph()
     return graph.capabilities.get(name)
 
 
@@ -107,7 +99,7 @@ def capability_registry() -> tuple[CapabilitySpec, ...]:
     """Every command, at the catalog adopted now. It is walked, never
     searched: one command is ``capability_spec``'s."""
 
-    return tuple(integration_graph().capabilities.values())
+    return tuple(compiled_graph.integration_graph().capabilities.values())
 
 
 class CapabilitySummary(TypedDict):
@@ -268,7 +260,7 @@ class Performed(TypedDict):
 def first_answer(principal: Principal, key: str) -> dict[str, Any] | None:
     """What ``principal``'s call under retry ``key`` was answered when it ran, or None while it has none."""
 
-    return answered(actor=agent_subject(principal), key=key)
+    return idempotency.answered(actor=agent_subject(principal), key=key)
 
 
 class Ran(NamedTuple):
@@ -342,7 +334,7 @@ def _named_run(
             sent_key=idempotency_key,
             key_in_payload=key_in_payload,
         )
-    except InvalidIdempotencyKey as exc:
+    except idempotency.InvalidIdempotencyKey as exc:
         return Ran(refuse(Code.INVALID_IDEMPOTENCY_KEY, exc.reason))
     except Exception as exc:  # noqa: BLE001 - every other failure is answered in the one refusal shape
         return Ran(adapter_refusal(name, exc, principal=principal))
@@ -416,7 +408,7 @@ def _authorized_run(
             act,
             actor=agent_subject(principal),
         )
-    except IdempotencyConflict as exc:
+    except idempotency.IdempotencyConflict as exc:
         return Ran(refuse(Code.IDEMPOTENCY_CONFLICT, exc.reason))
 
 
@@ -466,8 +458,8 @@ def _valid_key(given: object) -> str:
     """
 
     if not isinstance(given, str):
-        raise InvalidIdempotencyKey(KEY_SHAPE)
-    return validate_key(given)
+        raise idempotency.InvalidIdempotencyKey(idempotency.KEY_SHAPE)
+    return idempotency.validate_key(given)
 
 
 def _once(
@@ -486,10 +478,10 @@ def _once(
     corrected request.
     """
 
-    result, replayed = execute_once(
+    result, replayed = idempotency.execute_once(
         actor=actor,
         key=key,
-        request_sha256=request_fingerprint(spec.name, request),
+        request_sha256=idempotency.request_fingerprint(spec.name, request),
         operation=act,
     )
     return Ran(result, replayed)
@@ -757,7 +749,7 @@ def _run(
     if takes_sent_fields(spec.handler):
         arguments[SENT_KEYWORD] = sent
     with (
-        audit_operation(operation=spec.name, principal=principal),
+        bindings.audit_operation(operation=spec.name, principal=principal),
         audit_connection(getattr(command, "connection_ref", "") or ""),
         tallied() as written,
         ringing() as asked,

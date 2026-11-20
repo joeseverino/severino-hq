@@ -4,16 +4,15 @@ from contextlib import ExitStack, contextmanager
 from contextvars import Token
 from unittest import mock
 
-from . import capabilities
+from . import capabilities, compiled_graph
 from .integration_specs import CapabilitySpec
-from .compiled_graph import GRAPH_OVERRIDE
 from .integrations import IntegrationGraph
 
 
 def override_integration_graph(graph: IntegrationGraph) -> Token[IntegrationGraph | None]:
     """``graph`` answers ``integration_graph()`` inside ``with override_integration_graph(graph):``."""
 
-    return GRAPH_OVERRIDE.set(graph)
+    return compiled_graph.GRAPH_OVERRIDE.set(graph)
 
 
 @contextmanager

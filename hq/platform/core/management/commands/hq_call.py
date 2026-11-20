@@ -28,8 +28,8 @@ from hq.platform.mcp.identity import set_principal
 from hq.platform.mcp.server import mcp, structured
 lazy from hq.platform.application import agent_admission
 lazy from hq.platform.application.security import MCP_INTERFACE, agent_grantable, agent_principal
+lazy from hq.platform.core import bindings
 lazy from hq.platform.core.attribution import outside_every_door
-lazy from hq.platform.core.audit import audit_operation
 
 FIELDS = frozenset({"tool", "arguments"})
 # Where the agent door records its calls from: the server's own loopback.
@@ -123,7 +123,7 @@ def answered_as(text: str, principal: Principal) -> Any:
         outside_every_door(),
         agent_admission.carrying(admitted) as caller,
         set_principal(caller),
-        audit_operation(operation=MCP_INTERFACE, principal=caller),
+        bindings.audit_operation(operation=MCP_INTERFACE, principal=caller),
     ):
         try:
             result = async_to_sync(call)()

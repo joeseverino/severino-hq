@@ -16,7 +16,8 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import hrefs, text, with_class, within
-from hq.platform.core.audit import audited_labels, operation_context
+from hq.platform.core.audit import audited_labels
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import SignedInTestCase, declare
 

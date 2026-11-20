@@ -16,7 +16,8 @@ from hq.platform.application.read_models import recent_activity
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.tests.writers import keyed, runbook
 from hq.platform.core import append_only
-from hq.platform.core.audit import audit_operation, record_event
+from hq.platform.core.audit import record_event
+from hq.platform.core.bindings import audit_operation
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
 

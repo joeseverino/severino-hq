@@ -8,7 +8,8 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest
 from hq.domains.jobs.runner import run
-from hq.platform.core.audit import audit_operation, operation_context, record_event
+from hq.platform.core.audit import record_event
+from hq.platform.core.bindings import audit_operation, operation_context
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import connection
