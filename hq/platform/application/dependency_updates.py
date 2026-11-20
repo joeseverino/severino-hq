@@ -128,7 +128,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
     found = {
         "owners": [{"owner": owner, "repositories": names} for owner, names in covered.items()],
         "due": False,
-        "last_started_at": started.isoformat() if started is not None else "",
+        "last_started_at": iso(started) or "",
     }
     if not covered:
         return found

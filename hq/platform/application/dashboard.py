@@ -31,7 +31,7 @@ from .finding_steps import WrittenStep
 from .findings import finding_key, rule_for
 from .json_schemas import as_written
 from .plugins import source_overview
-from .projection import projection_scope
+from .projection import iso, projection_scope
 from .read_models import ActivityEvent, recent_activity
 from .security import Capability, Principal
 from .workflows import WrittenAction
@@ -203,8 +203,8 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "family": rule.title if rule is not None else finding.family,
         "why": finding_why(finding, rule),
         "clears": rule.clears if rule is not None else finding.clears,
-        "since": finding.since.isoformat() if finding.since else "",
-        "observed_at": finding.observed_at.isoformat() if finding.observed_at else "",
+        "since": iso(finding.since) or "",
+        "observed_at": iso(finding.observed_at) or "",
         "reads": finding.reads,
         "facts": [list(fact) for fact in finding.evidence],
         "links": [as_written(link) for link in finding.pages],

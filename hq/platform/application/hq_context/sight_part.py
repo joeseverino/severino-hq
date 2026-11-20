@@ -9,10 +9,10 @@ lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from ..labels import dotted
-from ..projection import read_once
+from ..projection import iso, read_once
 from ..tone import Tone
 from ..ui import counted
-from .band import Tile, iso
+from .band import Tile
 lazy from ..connections import connection_rows
 lazy from ..credential_sight import (
     NEVER_SWEPT,

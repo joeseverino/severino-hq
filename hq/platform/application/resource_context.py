@@ -44,7 +44,7 @@ lazy from .conditions import DEGRADED, DRIFTED, held_since
 lazy from .connections import connection_readings
 lazy from .facts import kinds_read
 lazy from .managed_records import ManagedResourceListed, ManagedResourceRecord
-lazy from .projection import page_of, read_once
+lazy from .projection import iso, page_of, read_once
 lazy from .security import internal_principal
 lazy from .services import certificate_use
 lazy from .whereabouts import machine_link, whereabouts
@@ -307,8 +307,8 @@ def listed(resource: ManagedResource, machines=None, at=None, targets=None) -> M
             "tone": str(standing.state.tone),
             "label": standing.label,
             "detail": standing.detail,
-            "since": standing.since.isoformat() if standing.since else None,
-            "read_at": standing.read_at.isoformat() if standing.read_at else None,
+            "since": iso(standing.since),
+            "read_at": iso(standing.read_at),
         },
         "origin_machine": {"name": origin.name, "url": origin.url} if origin is not None else None,
     }

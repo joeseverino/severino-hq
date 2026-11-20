@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Any
+from typing import Any, overload
 
 from django.conf import settings
 from django.db.models import FETCH_PEERS, FETCH_RAISE, QuerySet
@@ -146,15 +146,22 @@ def page_size(limit: int, *, maximum: int = MAX_PAGE_SIZE) -> int:
     return min(limit, maximum)
 
 
-def iso(value: Any) -> str | None:
-    """A timestamp as a contract renders it, or None when there is none.
+@overload
+def iso(value: date, *, timespec: str = ...) -> str: ...
+@overload
+def iso(value: date | None, *, timespec: str = ...) -> str | None: ...
+def iso(value: date | None, *, timespec: str = "auto") -> str | None:
+    """A day or instant as a contract renders it, or None when there is none.
 
     None rather than an empty string, because these become JSON: a consumer can
     test for null, while "" is a value that has to be special-cased at every
-    call site to mean absent.
+    call site to mean absent. ``timespec`` is ``datetime.isoformat``'s, for an
+    instant a reader needs only to the second or minute.
     """
 
-    return value.isoformat() if value else None
+    if not value:
+        return None
+    return value.isoformat(timespec=timespec) if isinstance(value, datetime) else value.isoformat()
 
 
 def guarded(queryset: QuerySet) -> QuerySet:

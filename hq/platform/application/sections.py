@@ -20,7 +20,7 @@ from hq.platform.application.routes import reverse
 from .derivations import passed, today as local_today
 from .expenses import cost_totals
 from .money import money
-from .projection import read_once
+from .projection import iso, read_once
 from .ui import counted
 lazy from .github_estate import repository_for
 lazy from .github_profile import accounts, profile, profiles
@@ -221,7 +221,7 @@ def _content(item: ContentItem) -> dict[str, Any]:
         "title": item.title,
         "content_type_label": item.get_content_type_display(),
         "published_url": item.published_url,
-        "published_at": item.published_at.isoformat() if item.published_at else None,
+        "published_at": iso(item.published_at),
         "updated_at": item.updated_at.isoformat(),
     }
 

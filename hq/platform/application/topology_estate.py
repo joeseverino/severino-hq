@@ -27,7 +27,7 @@ from .facts import Joined, Subject, inventory_records, readings
 from .inventory import record_identity
 from .locate import Machines, index_of
 from .paths import path_to
-from .projection import read_once
+from .projection import iso, read_once
 from .references import Kind
 from .tone import Tone
 from .topology_model import (
@@ -584,7 +584,7 @@ def _reading_edges(nodes, edges, estate: _Estate) -> None:
             status=Tone.ATTENTION if any(item.stale for item in items) else Tone.NEUTRAL,
             source_kind=kind,
             detail=", ".join(titles),
-            observed_at=oldest.isoformat() if oldest else "",
+            observed_at=iso(oldest) or "",
             entities=entities,
             facet=items[0].facet,
         )

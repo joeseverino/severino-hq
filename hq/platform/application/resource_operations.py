@@ -55,6 +55,7 @@ from .managed_records import (
     RequestedActor,
     RequestedInterface,
 )
+from .projection import iso
 from .record_errors import PolicyError, RecordNotFound, Sentence
 from .record_saves import Created, row
 from .security import CONTROLLER_INTERFACE, Principal
@@ -210,7 +211,7 @@ def operation_summary(run: WorkRun, operation: OperationRequest) -> OperationSum
         # person who agreed to a change a credential asked for.
         "approved_by": who.approved_by,
         "created_at": run.created_at.isoformat(),
-        "completed_at": (run.finished.isoformat() if run.finished else None),
+        "completed_at": iso(run.finished),
         "attempt_count": operation.attempt_count,
         "reason": operation.reason,
         # A condition the controller reported is the part's shape.

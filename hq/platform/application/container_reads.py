@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .integration_specs import ListRead, ResourceSpec, typed_keys
-from .projection import page_of, projection_scope
+from .projection import iso, page_of, projection_scope
 from .record_errors import RecordNotFound
 from .resources import BoundedQuery
 from .security import Capability
@@ -19,10 +19,6 @@ lazy from .containers import containers
 lazy from .derived_reads import serialize_measurement
 lazy from .record_saves import row
 lazy from .upgrades import plans
-
-
-def _moment(value: Any) -> str | None:
-    return value.isoformat() if value is not None else None
 
 
 def _repository(repo: Any) -> RepositoryPart | None:
@@ -64,7 +60,7 @@ def _supply_chain(standing: Any) -> dict[str, Any]:
         "provenance": (
             {key: provenance.get(key, "") for key in ("format", "revision", "builder")}
             | {
-                "built_at": _moment(standing.built_at),
+                "built_at": iso(standing.built_at),
                 "built_on": list(standing.built_on),
                 "commit_url": standing.commit_url,
             }
@@ -76,7 +72,7 @@ def _supply_chain(standing: Any) -> dict[str, Any]:
         "attestations_unread": str((standing.attested or {}).get("unread", "") or "")
         if standing.attested
         else "not read yet",
-        "vulnerabilities_read_at": _moment(standing.checked_at),
+        "vulnerabilities_read_at": iso(standing.checked_at),
         "vulnerabilities": [
             {key: finding.get(key, "") for key in ("id", "package", "installed", "severity", "summary", "url")}
             | {"fixed": list(finding.get("fixed") or ())}
@@ -99,7 +95,7 @@ def _usage(usage: Any) -> UsagePart | None:
         "memory_of_limit_percent": usage.memory_of_limit,
         "cpu_percent_of_one_core": usage.cpu_percent,
         "cpu_limit": usage.cpu_limit or None,
-        "read_at": _moment(usage.read_at),
+        "read_at": iso(usage.read_at),
     }
 
 
@@ -122,7 +118,7 @@ def serialize_container(item: Any) -> ContainerRecord:
             "digest": standing.digest,
             "image_id": standing.image_id,
             "pinned": standing.pinned,
-            "built": _moment(standing.built),
+            "built": iso(standing.built),
             "source": standing.source,
         },
         "standing": {
@@ -134,7 +130,7 @@ def serialize_container(item: Any) -> ContainerRecord:
                 {
                     "tag": standing.release.get("tag", ""),
                     "url": standing.release.get("url", ""),
-                    "published": _moment(standing.release.get("published")),
+                    "published": iso(standing.release.get("published")),
                 }
                 if standing.release
                 else None
@@ -146,8 +142,8 @@ def serialize_container(item: Any) -> ContainerRecord:
             ],
             "unmatched_advisories": standing.unmatched,
             "unread": standing.unread,
-            "registry_read_at": _moment(standing.read_at),
-            "upstream_read_at": _moment(standing.upstream_read_at),
+            "registry_read_at": iso(standing.read_at),
+            "upstream_read_at": iso(standing.upstream_read_at),
         },
         "project": (
             {"name": item.project.name, "slug": item.project.slug, "url": item.project.get_absolute_url()}
@@ -204,7 +200,7 @@ def serialize_plan(plan: Any) -> UpgradeRecord:
             {
                 "tag": plan.release.get("tag", ""),
                 "url": plan.release.get("url", ""),
-                "published": _moment(plan.release.get("published")),
+                "published": iso(plan.release.get("published")),
             }
             if plan.release
             else None

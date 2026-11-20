@@ -30,6 +30,7 @@ from .finding_model import (
 from .finding_steps import Do, Run
 from .freshness import missed
 from .moments import ago, duration, moment, when
+from .projection import iso
 from .reading_facts import ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
@@ -197,7 +198,7 @@ def rendering(record: dict[str, Any], read_at: datetime | None = None) -> Render
         rendered_at=str(success.get("rendered_at", "")),
         sync=sync,
         sync_read_at=str((connect or {}).get("read_at", "")),
-        read_at=read_at.isoformat() if read_at else "",
+        read_at=iso(read_at) or "",
     )
 
 

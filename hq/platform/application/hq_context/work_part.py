@@ -13,10 +13,9 @@ lazy from hq.domains.jobs.models import Job as JobRow
 
 from ..drawings import Dot, Dots
 from ..moments import moment
-from ..projection import read_once
+from ..projection import iso, read_once
 from ..tone import Tone
 from ..ui import counted
-from .band import iso
 lazy from .. import outbound_work
 lazy from ..facts import stored_snapshots
 lazy from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering

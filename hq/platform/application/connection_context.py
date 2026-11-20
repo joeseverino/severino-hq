@@ -45,7 +45,7 @@ from .path_model import ServicePath
 from .paths import hq_path
 from .posture import estate_inputs, guide, posture
 from .problems import problem_counts
-from .projection import complete, projection_scope, read_once
+from .projection import complete, iso, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .request_connection import connection as request_connection
 from .request_path import joined
@@ -227,10 +227,6 @@ class ConnectionRow:
         )
 
 
-def _moment(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
-
-
 def _sight(sight: ProviderSight) -> CredentialSightPart:
     return record_saves.row(sight, CredentialSightPart, tally=tally(sight))
 
@@ -346,7 +342,7 @@ class ConnectionsContext:
                     {
                         "label": self.oldest.label,
                         "connection_ref": self.oldest.connection_ref or None,
-                        "observed_at": _moment(self.oldest.observed_at),
+                        "observed_at": iso(self.oldest.observed_at),
                     }
                     if self.oldest is not None
                     else None
@@ -382,7 +378,7 @@ class ConnectionsContext:
             },
             "hq_path": serialize_path(self.hq_path) if self.hq_path else None,
             "read_all": as_written(self.read_all) if self.read_all else None,
-            "reading_everything_since": _moment(self.reading_everything_since),
+            "reading_everything_since": iso(self.reading_everything_since),
             # The posture's request half (how the request being answered
             # reached HQ) exists only where there is a request; the estate
             # half above is the same for every caller.

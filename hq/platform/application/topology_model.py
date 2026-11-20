@@ -17,6 +17,7 @@ from .describe import Describe, listed
 from .entity_links import EntityLink
 from .json_schemas import ObservedMoment
 from .moments import moment
+from .projection import iso
 from .references import Kind
 from .tone import Tone
 from .ui import ended
@@ -311,7 +312,7 @@ def newest_stamp(*stamps: str) -> str:
     """The latest of several ISO 8601 instants, or ""."""
 
     moments = [when for stamp in stamps if (when := moment(stamp)) is not None]
-    return max(moments).isoformat() if moments else ""
+    return iso(max(moments, default=None)) or ""
 
 
 def derived_id(kind: Kind, *parts: str) -> str:

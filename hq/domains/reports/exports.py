@@ -20,6 +20,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.expenses import cost_totals, costs_by_category
 from hq.platform.application.labels import dotted
 from hq.platform.application.money import money
+from hq.platform.application.projection import iso
 from hq.platform.application.ui import MISSING, measured
 
 # ---------- CSV ----------------------------------------------------------------
@@ -187,12 +188,6 @@ def _read(name: str, attribute: str, shape: Callable[[Any], Any] = lambda value:
     return name, lambda record: shape(getattr(record, attribute))
 
 
-def _iso(name: str) -> Column:
-    """A date, or None when it is not yet set."""
-
-    return _read(name, name, lambda value: value.isoformat() if value else None)
-
-
 def _amount(name: str) -> Column:
     return _read(name, name, _money)
 
@@ -221,7 +216,7 @@ CONTENT_FIELDS: tuple[Column, ...] = (
     "topic",
     _read("tags", "tag_list"),
     "published_url",
-    _iso("published_at"),
+    _read("published_at", "published_at", iso),
     _handles("related_projects"),
     _handles("related_assets"),
     _handles("related_documentation", "doc_id"),
@@ -237,7 +232,7 @@ DOCUMENTATION_FIELDS: tuple[Column, ...] = (
     "obsidian_path",
     "github_path",
     "external_url",
-    _iso("last_reviewed"),
+    _read("last_reviewed", "last_reviewed", iso),
     _read("safe_for_ai_export", "is_safe_for_ai_export"),
     _handles("related_projects"),
     _handles("related_assets"),
@@ -247,7 +242,7 @@ ASSET_FIELDS: tuple[Column, ...] = (
     "item_name",
     "vendor",
     "category",
-    _iso("purchase_date"),
+    _read("purchase_date", "purchase_date", iso),
     _amount("total_cost"),
     "business_use_percentage",
     _amount("estimated_deductible_amount"),
