@@ -6,7 +6,8 @@ Each binding is one request of its own, under an id of its own, as a browser's
 or an agent's call is.
 """
 
-from contextlib import AbstractContextManager
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from typing import Any
 from uuid import uuid7
 
@@ -14,7 +15,7 @@ from django.urls import reverse
 
 from hq.domains.control_plane.bridge_actions import CONTROLLER
 from hq.platform.application.security import CONTROLLER_INTERFACE, MCP_INTERFACE, MCP_OPERATION
-from hq.platform.core.attribution import OperationContext, bound, door_of_its_own, operation_context
+from hq.platform.core.attribution import bound, operation_context
 from hq.platform.core.middleware import request_operation
 
 # Where a person's sign-in lands: the identity provider's callback, which
@@ -40,15 +41,17 @@ def mcp() -> AbstractContextManager[None]:
     return operation_context(interface=MCP_INTERFACE, actor="", operation=MCP_OPERATION, operation_id=uuid7().hex)
 
 
-def controller(action: str) -> AbstractContextManager[None]:
-    """The controller's report of ``action``, as the bridge binds one."""
+@contextmanager
+def controller(action: str) -> Iterator[None]:
+    """The controller's report of ``action``: a request of its own, which the
+    bridge binds as the controller's."""
 
-    # Of its own, as the bridge's own request is, whoever runs the seed.
-    return door_of_its_own(
-        OperationContext(
-            interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action}", operation_id=uuid7().hex
-        )
-    )
+    operation = f"bridge.{action}"
+    with (
+        operation_context(interface=CONTROLLER_INTERFACE, actor="", operation=operation, operation_id=uuid7().hex),
+        operation_context(interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=operation),
+    ):
+        yield
 
 
 def stamp(door: AbstractContextManager[None]) -> dict[str, Any]:

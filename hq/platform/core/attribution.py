@@ -109,10 +109,9 @@ def operation_context(
 
 
 @contextmanager
-def door_of_its_own(door: OperationContext) -> Iterator[None]:
+def _door_of_its_own(door: OperationContext) -> Iterator[None]:
     """Bind ``door`` as the outermost, whatever is bound around it, outside the
-    request being answered: for a record whose rows are its requester's
-    wherever it runs (``own_operation``), and the example estate's doors."""
+    request being answered."""
 
     with _operation_context.set(door), request_context.bind(None):
         yield
@@ -133,7 +132,7 @@ def own_operation(
     """
 
     if requester is not None:
-        return door_of_its_own(replace(requester, operation_id=str(record.pk)))
+        return _door_of_its_own(replace(requester, operation_id=str(record.pk)))
     outer = bound()
     return audit_operation(
         operation=operation or (outer.operation if outer is not None else ""),
