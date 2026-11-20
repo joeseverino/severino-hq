@@ -19,7 +19,6 @@ from hq.platform.application.documentation import SYNC
 from hq.platform.application.labels import dotted
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, page_context
 from hq.platform.application.refusal_codes import Code
-from hq.platform.application.sensitivity import SAFE_SENSITIVITIES
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
@@ -137,7 +136,7 @@ class DocsDetailView(RecordPageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         found = self.stored
         return super().get_context_data(**kwargs) | {
-            "safe_for_ai_export": self.record["sensitivity"] in SAFE_SENSITIVITIES,
+            "safe_for_ai_export": found.is_safe_for_ai_export,
             "related": related.related(
                 related.projects(found.related_projects.all()),
                 related.assets(found.related_assets.all()),
