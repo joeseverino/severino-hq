@@ -160,8 +160,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
 
     ROOT = Path(__file__).resolve().parents[4]
     # Where each declared exception is entered. An entry here is a place a
-    # request may wait: adding one is a decision, with its reason in ``ALLOWED``
-    # and its module in request-waits-only-where-listed's ignores.
+    # request may wait: adding one is a decision, with its reason in ``ALLOWED``.
     ENTERED = {
         "oidc": {"hq/platform/core/oidc.py"},
         "lookup": {"hq/platform/application/lookup.py"},
@@ -204,22 +203,13 @@ class RequestNeverWaitsTests(SimpleTestCase):
         ):
             RequestContextMiddleware(view)(RequestFactory().get("/example/"))
 
-    @tag("source")
+    @tag("source", "tree")
     def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
-        """request-waits-only-where-listed (tools/lint/ast-grep) refuses
-        allowed() in every other module; each listed one enters its own."""
-
-        import yaml
-
         from hq.platform.core.outbound import ALLOWED
 
-        listed = set().union(*self.ENTERED.values())
-        rule = self.ROOT / "tools/lint/ast-grep/rules/request-waits-only-where-listed.yml"
-        ignored = yaml.safe_load(rule.read_text(encoding="utf-8"))["ignores"]
-        self.assertEqual({glob for glob in ignored if "*" not in glob}, listed)
         entered: dict[str, set[str]] = {}
-        for relative in listed:
-            for node in ast.walk(ast.parse((self.ROOT / relative).read_text(encoding="utf-8"))):
+        for relative, source in self.sources():
+            for node in ast.walk(ast.parse(source)):
                 if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "allowed"):
                     continue
                 argument = node.args[0] if node.args else None
