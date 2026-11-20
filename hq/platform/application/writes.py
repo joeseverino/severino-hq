@@ -116,7 +116,7 @@ class _RecordWrite(PostedOnce):
 
 
 class CapabilityFormMixin(_RecordWrite):
-    """Create or update a record from its ``ModelForm`` through its capabilities.
+    """Create or update a record from its command's form through its capabilities.
 
     For ``CreateView`` and ``UpdateView``: ``creates`` and ``updates`` name
     them, the update targeted at the record as stored. The form's values are
