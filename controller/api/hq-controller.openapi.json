@@ -6254,6 +6254,32 @@
         "type": "object",
         "description": "One tailscale.dns record: Tailnet DNS."
       },
+      "TailscaleScope": {
+        "type": "string",
+        "description": "A read scope a Tailscale credential is granted, which a refused read names.",
+        "enum": [
+          "devices:core:read",
+          "devices:posture_attributes:read",
+          "devices:routes:read",
+          "dns:read",
+          "feature_settings:read",
+          "networking_settings:read",
+          "policy_file:read",
+          "services:read",
+          "users:read"
+        ],
+        "x-enum-varnames": [
+          "TailscaleScopeDevicesCoreRead",
+          "TailscaleScopeDevicesPostureAttributesRead",
+          "TailscaleScopeDevicesRoutesRead",
+          "TailscaleScopeDnsRead",
+          "TailscaleScopeFeatureSettingsRead",
+          "TailscaleScopeNetworkingSettingsRead",
+          "TailscaleScopePolicyFileRead",
+          "TailscaleScopeServicesRead",
+          "TailscaleScopeUsersRead"
+        ]
+      },
       "TailscaleSettingsRecord": {
         "properties": {
           "record": {

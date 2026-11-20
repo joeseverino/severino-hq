@@ -1,8 +1,9 @@
 """The permissions HQ asks an operator to grant, one table per provider.
 
 Each member reads as the provider's own screen names it and carries the name
-its API takes (``api``). Every other text that names a permission takes it from
-here, which ``test_permissions`` holds.
+its API takes (``api``). Every field that names a permission is typed as one
+of these tables, and the controller takes Tailscale's from the bridge contract
+(``TailscaleScope``).
 """
 
 from enum import StrEnum

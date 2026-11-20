@@ -356,6 +356,12 @@ SHARED = (
         "The address ranges Tailscale numbers a tailnet's devices from.",
         varnames=("TailnetRangeIPv4", "TailnetRangeIPv6"),
     ),
+    SharedValue(
+        "TailscaleScope",
+        tuple(Tailscale),
+        "A read scope a Tailscale credential is granted, which a refused read names.",
+        varnames=tuple("TailscaleScope" + scope.name.title().replace("_", "") for scope in Tailscale),
+    ),
 )
 
 # Declarations only: the controller half is still the core's.
