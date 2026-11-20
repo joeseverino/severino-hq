@@ -101,7 +101,7 @@ DEFINITION = ProviderSpec(
     console=_console,
     console_label="Open deploy on GitHub",
     connection_providers=(PROVIDER,),
-    from_record=_from_record,
+    _from_record=_from_record,
     identity=lambda spec: (spec["repository"],),
     key_hint=lambda _record: "delivery",
     adopts=lambda record: record.get("production") == CURRENT,

@@ -87,13 +87,13 @@ class SpecShapeTests(TestCase):
 class IdentityTests(TestCase):
     def test_nine_records_on_one_name_are_nine_things(self):
         provider = PROVIDERS[RECORD_KIND]
-        identities = {provider.identity(provider.from_record(row)) for row in APEX}
+        identities = {provider.identity(provider.record_spec(row)) for row in APEX}
         self.assertEqual(len(identities), len(APEX))
 
     def test_policy_records_declare_no_service(self):
         provider = PROVIDERS[RECORD_KIND]
         for row in APEX:
-            spec = provider.from_record(row)
+            spec = provider.record_spec(row)
             with self.subTest(f"{row['record_type']} {row['content'][:20]}"):
                 declares = bool(provider.hostnames(spec))
                 self.assertEqual(declares, row["record_type"] in {"A", "AAAA", "CNAME"})
@@ -104,13 +104,13 @@ class IdentityTests(TestCase):
             with self.subTest(row["record_id"]):
                 # Round-trips through validation, so adoption cannot produce a
                 # declaration the model would refuse on the next edit.
-                validate_spec(RECORD_KIND, provider.from_record(row))
+                validate_spec(RECORD_KIND, provider.record_spec(row))
 
     def test_suggested_keys_distinguish_records_sharing_a_name(self):
         provider = PROVIDERS[RECORD_KIND]
         keys = set()
         for row in APEX:
-            key = suggest_key(RECORD_KIND, provider.from_record(row))
+            key = suggest_key(RECORD_KIND, provider.record_spec(row))
             self.assertTrue(key)
             keys.add(key)
         # Three types on one name means three distinct bases; the numeric

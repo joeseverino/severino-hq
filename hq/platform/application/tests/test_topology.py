@@ -415,7 +415,7 @@ class AnUnrecognizedContainerIsCarriedByItsMachineTests(TestCase):
 
 class HolderEdgeTests(TestCase):
     """Every kind mirroring a provider's records is joined to the connection
-    holding its live record, by declaring ``from_record`` and nothing else."""
+    holding its live record, by declaring ``_from_record`` and nothing else."""
 
     CONNECTION = "connection:infrastructure.controllers:example-controller:example-holder"
 
@@ -442,25 +442,21 @@ class HolderEdgeTests(TestCase):
         return {(edge.source, edge.target, edge.kind) for edge in topology.edges}
 
     def mirrored(self):
-        return [
-            (kind, provider)
-            for kind, provider in PROVIDERS.items()
-            if provider.from_record is not None and provider.sample_record
-        ]
+        return [(kind, provider) for kind, provider in PROVIDERS.items() if provider.sweeps and provider.sample_record]
 
     def test_every_mirrored_kind_is_used_by_the_connection_holding_its_record(self):
         self.assertTrue(self.mirrored())
         for kind, provider in self.mirrored():
             with self.subTest(kind=kind):
                 record = {**provider.sample_record, "connection_ref": "example-holder"}
-                edges = self._edges(kind, declared=provider.from_record(record), record=record)
+                edges = self._edges(kind, declared=provider.record_spec(record), record=record)
 
                 self.assertIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
 
     def test_a_record_naming_no_connection_is_held_by_its_providers_connections(self):
         kind, provider = next((kind, provider) for kind, provider in self.mirrored() if provider.connection_providers)
         record = dict(provider.sample_record)
-        edges = self._edges(kind, declared=provider.from_record(record), record=record)
+        edges = self._edges(kind, declared=provider.record_spec(record), record=record)
 
         self.assertIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)
 
@@ -468,7 +464,7 @@ class HolderEdgeTests(TestCase):
         kind, provider = self.mirrored()[0]
         record = {**provider.sample_record, "connection_ref": "example-holder"}
         # The declaration also names the connection it uses, and that connection is failing.
-        declared = {**provider.from_record(record), "connection_ref": "example-holder"}
+        declared = {**provider.record_spec(record), "connection_ref": "example-holder"}
         self._edges(kind, declared=declared, record=record)
         ProviderConnection.objects.update(reachable=False)
         with host_only():
@@ -484,6 +480,6 @@ class HolderEdgeTests(TestCase):
     def test_a_record_naming_another_connection_draws_no_edge_from_this_one(self):
         kind, provider = self.mirrored()[0]
         record = {**provider.sample_record, "connection_ref": "example-elsewhere"}
-        edges = self._edges(kind, declared=provider.from_record(record), record=record)
+        edges = self._edges(kind, declared=provider.record_spec(record), record=record)
 
         self.assertNotIn((self.CONNECTION, "resource:example-declared", "used_by"), edges)

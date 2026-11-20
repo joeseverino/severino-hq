@@ -179,7 +179,7 @@ class ProviderRecordContractTests(TestCase):
         """
 
         for kind, provider in PROVIDERS.items():
-            if provider.from_record is None:
+            if not provider.sweeps:
                 continue
             with self.subTest(kind=kind):
                 self.assertTrue(
@@ -193,7 +193,7 @@ class ProviderRecordContractTests(TestCase):
             ("npm.proxy_host", A_PROXY),
         ):
             with self.subTest(kind=kind):
-                spec = PROVIDERS[kind].from_record(record)
+                spec = PROVIDERS[kind].record_spec(record)
                 self.assertEqual(validate_spec(kind, spec), spec)
 
 

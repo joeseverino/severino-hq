@@ -154,7 +154,7 @@ DEVICE = ProviderSpec(
     connection_providers=("tailscale",),
     console=tailscale_machine,
     readout=_tailnet_device_readout,
-    from_record=_tailnet_device_from_record,
+    _from_record=_tailnet_device_from_record,
     # Carries an expiry, so the round-trip guard has something to check
     # rather than passing on a field the fixture never supplied.
     sample_record={
@@ -316,7 +316,7 @@ POLICY = ProviderSpec(
     created_from="tailnet",
     # Adopted from the sweep, so the declaration starts byte-identical to
     # the live policy and editing it is editing what is actually there.
-    from_record=lambda record: {"document": record.get("document", "")},
+    _from_record=lambda record: {"document": record.get("document", "")},
     sample_record={"document": ""},
     identity=lambda _spec: ("tailnet",),
     key_hint=lambda _spec: "tailnet-policy",

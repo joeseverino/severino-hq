@@ -210,7 +210,7 @@ DEFINITION = ProviderSpec(
     certificate=lambda spec: str(spec.get("certificate_resource", "") or ""),
     origin=lambda spec: f"{spec['forward_host']}:{spec['forward_port']}",
     seed=_seed,
-    from_record=_from_record,
+    _from_record=_from_record,
     sample_record={
         "domain_names": ["shop.example.com"],
         "forward_scheme": "http",

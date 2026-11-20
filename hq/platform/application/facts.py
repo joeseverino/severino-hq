@@ -390,7 +390,7 @@ def fronted_names(kind: str) -> frozenset[str]:
     """
 
     provider = PROVIDERS.get(kind)
-    if provider is None or provider.fronts is None or provider.from_record is None:
+    if provider is None or provider.fronts is None or not provider.sweeps:
         return frozenset()
 
     def fronted(spec: dict[str, Any]) -> tuple[str, ...]:
@@ -428,7 +428,7 @@ def inventory_could_join(kind: str, subject: Subject) -> bool:
     if kind == CONTAINER_KIND:
         return bool(subject.addresses)
     provider = PROVIDERS.get(kind)
-    if provider is None or provider.from_record is None:
+    if provider is None or not provider.sweeps:
         return False
     by_name = provider.hostnames is not None or provider.identity is not None
     by_address = provider.answers is not None or provider.origin is not None
@@ -487,7 +487,7 @@ def unreadable_labels(subject: Subject | None = None) -> tuple[str, ...]:
     }
     labels.update(refused.part.label for refused in (part_refusals() if subject is None else refusals_about(subject)))
     for kind, provider in PROVIDERS.items():
-        if provider.from_record is None and kind != CONTAINER_KIND:
+        if not provider.sweeps and kind != CONTAINER_KIND:
             continue
         if subject is not None and not inventory_could_join(kind, subject):
             continue
@@ -513,7 +513,7 @@ def inventory_about(kind: str, subject: Subject) -> tuple[tuple[Any, Mapping[str
     """
 
     provider = PROVIDERS.get(kind)
-    if provider is None or provider.from_record is None:
+    if provider is None or not provider.sweeps:
         return ()
     found = []
     for snapshot, record in inventory_records(kind):
@@ -527,9 +527,7 @@ def _joined_kinds() -> tuple[str, ...]:
     """The kinds read here other than the tailnet, which has its own reader."""
 
     return (
-        tuple(OBSERVATIONS)
-        + tuple(kind for kind, provider in PROVIDERS.items() if provider.from_record is not None)
-        + (CONTAINER_KIND,)
+        tuple(OBSERVATIONS) + tuple(kind for kind, provider in PROVIDERS.items() if provider.sweeps) + (CONTAINER_KIND,)
     )
 
 

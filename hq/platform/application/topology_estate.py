@@ -442,7 +442,7 @@ def _device_hosts(device, estate: _Estate) -> set[str]:
 def _holder_edges(nodes, edges, resources) -> None:
     """The connection holding a declaration's live record uses that declaration.
 
-    Derived for every kind that mirrors a provider's records (``from_record``),
+    Derived for every kind that mirrors a provider's records (``_from_record``),
     matched by the same identity adoption uses, so a kind is joined to its
     connection by declaring those two and nothing here. The record's
     ``connection_ref`` names the connection; a record without one was read by
@@ -453,7 +453,7 @@ def _holder_edges(nodes, edges, resources) -> None:
     for resource in resources:
         node_id = Kind.RESOURCE.of(resource.key)
         provider = PROVIDERS.get(resource.kind)
-        if node_id in nodes and provider is not None and provider.from_record is not None:
+        if node_id in nodes and provider is not None and provider.sweeps:
             identity = record_identity(resource.kind, resource.spec or {})
             if identity:
                 declared.setdefault((resource.kind, identity), []).append(node_id)

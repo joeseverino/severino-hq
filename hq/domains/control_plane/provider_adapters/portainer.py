@@ -164,7 +164,7 @@ CONTAINER = ProviderSpec(
     # reaches. It is adopted from what a sweep found, which is the only
     # place its identity is known.
     readout=_container_readout,
-    from_record=_container_from_record,
+    _from_record=_container_from_record,
     adopts=_container_adopts,
     sample_record={
         "name": "example-web",

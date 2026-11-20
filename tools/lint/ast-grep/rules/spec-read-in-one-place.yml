@@ -6,6 +6,8 @@
 #
 # The exceptions read a spec where a failure is ordinary state or is said
 # where it happens:
+# - provider_spec.ProviderSpec.record_spec: the one place a swept record
+#   becomes a spec, which logs a record its provider cannot read.
 # - infrastructure.resolved_spec and desired_state.desired_fingerprint: a
 #   spec that will not resolve (a target that no longer exists) stands in as
 #   authored, which the page then shows as covering nothing.
@@ -34,6 +36,7 @@ ignores:
   - "**/test_*.py"
   - "**/migrations/**"
   - "hq/domains/control_plane/providers.py"
+  - "hq/domains/control_plane/provider_spec.py"
   - "hq/domains/control_plane/desired_state.py"
   - "hq/platform/application/adoption.py"
   - "hq/platform/application/connections.py"

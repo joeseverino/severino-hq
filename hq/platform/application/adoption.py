@@ -239,7 +239,7 @@ def keep_out_declaration(kind: str, spec: dict, *, principal) -> None:
     """
 
     provider = PROVIDERS.get(kind)
-    if provider is None or provider.from_record is None:
+    if provider is None or not provider.sweeps:
         return
     identity = record_identity(kind, spec)
     if not identity:
@@ -395,7 +395,7 @@ def unmanaged() -> tuple[Unmanaged, ...]:
     found: list[Unmanaged] = []
     for snapshot in every_snapshot():
         provider = PROVIDERS.get(snapshot.kind)
-        if provider is None or provider.from_record is None:
+        if provider is None or not provider.sweeps:
             continue
         known = declared.get(snapshot.kind, set())
         for record in snapshot.records:

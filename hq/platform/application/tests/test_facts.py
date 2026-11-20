@@ -35,7 +35,7 @@ def dns_kinds():
     first, second, *_rest = sorted(
         kind
         for kind, spec in PROVIDERS.items()
-        if spec.from_record and spec.answers and spec.hostnames and spec.sample_record
+        if spec.sweeps and spec.answers and spec.hostnames and spec.sample_record
     )
     return first, second
 
@@ -46,9 +46,9 @@ def record_for(kind, hostname, address):
     spec = PROVIDERS[kind]
     sample = dict(spec.sample_record or {})
     for field, value in sample.items():
-        if value == next(iter(spec.hostnames(spec.from_record(sample))), None):
+        if value == next(iter(spec.hostnames(spec.record_spec(sample))), None):
             sample[field] = hostname
-        elif value in spec.answers(spec.from_record(sample)):
+        elif value in spec.answers(spec.record_spec(sample)):
             sample[field] = address
     return sample
 

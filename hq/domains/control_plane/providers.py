@@ -118,35 +118,18 @@ def readout_rows(resource: Any) -> tuple[tuple[str, str, str], ...]:
 
 
 def read_record[T](kind: str, record: Mapping[str, Any], read: Callable[[dict[str, Any]], T]) -> T | None:
-    """What ``read`` makes of the spec a swept record reproduces, or None when
-    its provider cannot read the record.
+    """What ``read`` makes of the spec a swept record reproduces (``read_spec``),
+    or None when its provider cannot read the record."""
 
-    The one place a swept record becomes a spec. A record the provider cannot
-    read is the controller's reading and the provider's model disagreeing, so
-    it is logged; leaving it out of a page hides it from everything that reads
-    the inventory.
-    """
-
-    provider = PROVIDERS.get(kind)
-    if provider is None or provider.from_record is None:
-        return None
-    try:
-        return read(provider.from_record(dict(record)))
-    except (KeyError, TypeError, ValueError) as error:
-        logger.warning(
-            "A %s record from %s is one its provider cannot read: %r",
-            kind,
-            record.get("connection_ref") or "a connection",
-            error,
-            extra={"event": "providers.record.unreadable", "kind": kind},
-        )
-        return None
+    spec = record_spec(kind, record)
+    return None if spec is None else read_spec(kind, spec, read)
 
 
 def record_spec(kind: str, record: Mapping[str, Any]) -> dict[str, Any] | None:
-    """The spec a swept record reproduces, or None when its provider cannot read it."""
+    """The spec a swept record reproduces (``ProviderSpec.record_spec``), or None."""
 
-    return read_record(kind, record, lambda spec: spec)
+    provider = PROVIDERS.get(kind)
+    return None if provider is None else provider.record_spec(record)
 
 
 def read_spec[T](kind: str, spec: Mapping[str, Any], read: Callable[[dict[str, Any]], T]) -> T | None:

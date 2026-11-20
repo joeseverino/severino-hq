@@ -29,7 +29,7 @@ def npm_kind():
     return next(
         kind
         for kind, spec in sorted(PROVIDERS.items())
-        if "npm" in spec.connection_providers and spec.from_record and spec.hostnames
+        if "npm" in spec.connection_providers and spec.sweeps and spec.hostnames
     )
 
 

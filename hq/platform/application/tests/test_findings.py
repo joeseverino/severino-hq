@@ -159,13 +159,13 @@ class FindingsTests(SentinelMixin, TestCase):
 
         from hq.domains.control_plane.providers import PROVIDERS
 
-        rebuilt = PROVIDERS["tailscale.device"].from_record(
+        rebuilt = PROVIDERS["tailscale.device"].record_spec(
             {"name": "example-device", "key_expires": "2026-12-01T00:00:00Z"}
         )
         self.assertIs(rebuilt["key_expiry_disabled"], False)
 
         # No expiry is the setting, not an unknown date.
-        disabled = PROVIDERS["tailscale.device"].from_record({"name": "forever"})
+        disabled = PROVIDERS["tailscale.device"].record_spec({"name": "forever"})
         self.assertIs(disabled["key_expiry_disabled"], True)
 
     # ----- properties that must hold ---------------------------------------

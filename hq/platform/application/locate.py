@@ -268,7 +268,7 @@ def observed_answers() -> dict[str, tuple[str, ...]]:
         # later is counted here too, the one place that decides who consumes a
         # certificate.
         provider = PROVIDERS.get(snapshot.kind)
-        if provider is None or provider.from_record is None:
+        if provider is None or not provider.sweeps:
             continue
         if provider.answers is None or provider.hostnames is None:
             continue

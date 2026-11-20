@@ -175,7 +175,7 @@ def _last_records(kind: str) -> list[Any] | None:
     history (see ``_record_change``); other kinds pay no query for it."""
 
     provider = PROVIDERS.get(kind)
-    if provider is None or provider.from_record is None:
+    if provider is None or not provider.sweeps:
         return None
     return ProviderInventory.objects.filter(kind=kind).values_list("records", flat=True).first()
 
@@ -193,7 +193,7 @@ def _record_change(row: ProviderInventory, before: list[Any], after: list[Any], 
     """
 
     provider = PROVIDERS.get(row.kind)
-    if provider is None or provider.from_record is None:
+    if provider is None or not provider.sweeps:
         return
 
     def canonical(records: list[Any]) -> set[str]:

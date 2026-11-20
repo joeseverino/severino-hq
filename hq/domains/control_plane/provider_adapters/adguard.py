@@ -75,7 +75,7 @@ DEFINITION = ProviderSpec(
     answers=_answers,
     slot=_family,
     origin=_origin,
-    from_record=_from_record,
+    _from_record=_from_record,
     sample_record={"domain": "app.example.com", "answer": "10.0.0.10"},
     readout=_readout,
 )
