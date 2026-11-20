@@ -6,11 +6,11 @@ lazy from datetime import UTC, date, datetime, timedelta
 
 lazy from django.core.paginator import Paginator
 lazy from django.templatetags.static import static
-lazy from django.urls import reverse
 
 from hq.platform.core.part_examples import DRAWN_AT, NARROW, runs
 from hq.platform.core.template_parts import Example
-lazy from hq.platform.application.action_links import command_action, read_link
+lazy from hq.platform.application.action_links import read_link
+lazy from hq.platform.application.approvals import DECISIONS, _decision_link
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
 lazy from hq.platform.application.dashboard import finding_rows
@@ -773,7 +773,7 @@ def _opened_problems():
 def _glance():
     """The dashboard's short queue: a held request whose meaning outruns its line, then two failing runs."""
 
-    held, decided = "00000000-0000-4000-8000-000000000001", "control_plane:approval_decide"
+    held = "00000000-0000-4000-8000-000000000001"
     said = "Asked with: machines set to example-host-01, security only set to yes, and 2 more fields."
     asked = Finding("approval", held, "example-agent wants to run a playbook", Tone.ATTENTION, said, held=True)
     run, check = opens("Open run", "https://github.example/runs/1"), read_link("verify", CHECK_AGAIN, "/findings/")
@@ -782,11 +782,7 @@ def _glance():
         for n in ("example-app", "example-site")
     ]
     first, *runs = finding_rows("example", "Example", (asked, *failing))
-    decide = (
-        command_action(w, f"approval.{w}", reverse(decided, args=(held, w)), method="POST", recommended=w == "approve")
-        for w in ("approve", "reject")
-    )
-    items = [{**first, "actions": [*map(asdict, decide)]}, *runs]
+    items = [{**first, "actions": [asdict(_decision_link(held, decision)) for decision in DECISIONS]}, *runs]
     return {"items": items, "grouped": True, "triage": True, "glance": True}
 
 

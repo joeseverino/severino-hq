@@ -50,8 +50,8 @@ SELECTORS = {
     "decision_controls": "td.row-actions :is(a, button):not([hidden])",
     "decision_title": "[data-attention-title]",
     "decision_steps": ".step-list",
-    # What an item means: never cut.
-    "decision_detail": "[data-attention-detail]",
+    # What an item means, after its title.
+    "decision_detail": ".row-gist",
     # Running text, and what an opened row shows beneath it: code in it is
     # never cut, since only a cell's own identifier is. The rest of a
     # `line_list` is no text but the parts its line has no room for, each
