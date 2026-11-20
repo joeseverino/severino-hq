@@ -60,19 +60,28 @@ STEPS = 25
 PAGE_SIZE = "limit"
 
 
-def _linked(ctx: CheckContext, case: Any) -> tuple[Any, Any] | None:
-    """The transition ``case`` followed and the answer it followed it from, or None for a scenario's first step."""
+def _linked(ctx: CheckContext, case: Any) -> tuple[Any, Any, Any] | None:
+    """The transition ``case`` followed, the answer it followed it from and that answer's request, or None for a
+    scenario's first step."""
 
     recorder = ctx.internals.recorder
     node = recorder.cases.get(case.id) if recorder is not None else None
     if node is None or node.transition is None or node.parent_id is None:
         return None
     parent = recorder.find_response(case_id=node.parent_id)
-    return (node.transition, parent) if parent is not None and parent.status_code == 200 else None
+    if parent is None or parent.status_code != 200:
+        return None
+    return node.transition, parent, recorder.cases[node.parent_id].value
 
 
 def _value(extracted: Any) -> Any:
     return extracted.value.ok() if extracted is not None and isinstance(extracted.value, Ok) else None
+
+
+def _beside(query: dict[str, Any]) -> dict[str, Any]:
+    """A list's query without its page: what a next page is asked by besides its number."""
+
+    return {name: value for name, value in query.items() if name != PAGE_FIELD}
 
 
 def a_next_page_moves_on(ctx: CheckContext, response: Any, case: Any) -> None:
@@ -81,9 +90,17 @@ def a_next_page_moves_on(ctx: CheckContext, response: Any, case: Any) -> None:
     linked = _linked(ctx, case)
     if linked is None or response.status_code != 200 or not isinstance(case.query, dict):
         return
-    transition, parent = linked
+    transition, parent, asked = linked
     page = _value(transition.parameters.get("query", {}).get(PAGE_FIELD))
     if page is None or case.query.get(PAGE_FIELD) != page:
+        return
+    # Schemathesis sends each linked value only now and then, so a page asked at
+    # another size or order than the one that named it is not the page it named;
+    # and a write since moves rows between pages, as a page number allows.
+    steps = list(ctx.internals.recorder.cases)
+    since = steps[steps.index(asked.id) + 1 : steps.index(case.id)]
+    written = any(ctx.internals.recorder.cases[step].value.method.upper() != "GET" for step in since)
+    if written or _beside(case.query) != _beside(asked.query or {}):
         return
     before = parent.json()["data"]["items"]
     repeated = [item for item in response.json()["data"]["items"] if item in before]
@@ -96,7 +113,7 @@ def a_linked_record_reads(ctx: CheckContext, response: Any, case: Any) -> None:
     linked = _linked(ctx, case)
     if linked is None or case.method.upper() != "GET" or response.status_code != 404:
         return
-    transition, _ = linked
+    transition, _, _ = linked
     named = _value(transition.parameters.get("path_parameters", {}).get("identifier"))
     if named is None or (case.path_parameters or {}).get("identifier") != named:
         return
@@ -114,7 +131,7 @@ def a_stale_write_is_refused(ctx: CheckContext, response: Any, case: Any) -> Non
     linked = _linked(ctx, case)
     if linked is None or response.status_code != 200 or not isinstance(case.body, dict):
         return
-    transition, _ = linked
+    transition, _, _ = linked
     read = _value(transition.request_body)
     if not isinstance(read, dict) or STALE_WRITE_KEYWORD not in read:
         return
