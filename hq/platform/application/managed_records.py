@@ -197,17 +197,25 @@ class ConsumerPart(TypedDict):
     url: Annotated[str, Describe("The page in HQ of the record that delivers it there; empty for none.")]
 
 
-class ManagedResourceRecord(ManagedResourceItem):
-    """One managed record whole, what HQ derives from it, and the operations run on it."""
+class ManagedResourceListed(ManagedResourceItem):
+    """One managed record as its list says it: whole, and where it stands."""
 
     url: Annotated[str, Describe("Its page in HQ: its own, or the page of the machine it declares.")]
     name: Annotated[str, Describe("The name its page is titled by.")]
+    summary: Annotated[
+        str, Describe("What it holds, in a line short enough to recognize it by; empty when its name says it.")
+    ]
     standing: StandingPart
+    origin_machine: Annotated[MachinePointer | None, Describe("The machine it sends traffic to; null for none.")]
+
+
+class ManagedResourceRecord(ManagedResourceListed):
+    """One managed record whole, what HQ derives from it, and the operations run on it."""
+
     actions: Annotated[
         dict[str, ActionPart], Describe("Each action of its controller, by verb, and whether it may run.")
     ]
     removal: RemovalPart
-    origin_machine: Annotated[MachinePointer | None, Describe("The machine it sends traffic to; null for none.")]
     provider_machine: Annotated[
         MachinePointer | None, Describe("The machine the provider that manages it runs on; null when unknown.")
     ]

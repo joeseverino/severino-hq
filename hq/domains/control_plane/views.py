@@ -6,7 +6,7 @@ from typing import Any, override
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
-from django.views.generic import ListView, TemplateView
+from django.views.generic import TemplateView
 
 from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.certificates import UPLOAD as CERTIFICATE_UPLOAD
@@ -17,13 +17,11 @@ from hq.platform.application.doors import NOBODY
 from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.history import asked_by
 from hq.platform.application.infrastructure import (
-    declared_machines,
-    delivery_targets,
     serialize_resource,
 )
 from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
-from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, page_context
+from hq.platform.application.pages import PageAction, RecordListMixin, RecordPageMixin, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.references import Kind
 from hq.platform.application.refusal_codes import Code
@@ -39,10 +37,7 @@ from hq.platform.application.resource_context import (
     awaiting_approval,
     capabilities_of,
     controller_summary,
-    origin_machine,
     record_list,
-    record_status,
-    record_summary,
     stored,
 )
 from hq.platform.application.resource_operations import (
@@ -59,7 +54,6 @@ from hq.platform.application.service_context import operation_history
 from hq.platform.application.topology_model import RELATIONS
 from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted
-from hq.platform.application.whereabouts import whereabouts
 from hq.platform.application.work_runs import run_rows
 from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.web_refusals import refusal_response, refused
@@ -244,10 +238,11 @@ class ResourceRemoveView(View):
         return redirect("control_plane:detail", key=key)
 
 
-class InfrastructureListView(PageMixin, ListView):
-    model = ManagedResource
+class InfrastructureListView(RecordListMixin, TemplateView):
     template_name = "control_plane/resource_list.html"
+    resource = INFRASTRUCTURE
     context_object_name = "resources"
+    fields = ("key", "kind", "name", "summary", "standing", "origin_machine", "last_observed_at")
     page_title = "All records"
 
     @override
@@ -261,20 +256,6 @@ class InfrastructureListView(PageMixin, ListView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Read once for the whole page. Every row that forwards somewhere asks
-        # the same question of the same few tables, and asked per row it is a
-        # query budget that grows with the estate.
-        machines = declared_machines()
-        targets = delivery_targets()
-        at = whereabouts(machines)
-        for resource in context["resources"]:
-            resource.record_status = record_status(resource)
-            # Where it sends traffic, named rather than addressed, matching
-            # what the resource's own page has always said.
-            resource.origin_machine = origin_machine(resource, machines, at, targets)
-            # The name the row's link shows, and the line under it.
-            resource.shown_name = record_name(resource.kind, resource.spec, resource.key)
-            resource.summary = record_summary(resource, resource.shown_name)
         listed = changes(OperationRequest.objects.all(), 12)
         context["changes"] = [
             {"resource": operation.resource.key, "run": run}
@@ -282,7 +263,7 @@ class InfrastructureListView(PageMixin, ListView):
         ]
         context["provider_catalog"] = describe_providers()
         context["records"] = record_list(
-            context["resources"],
+            self.records,
             query=self.request.GET.get("q", ""),
             kind=self.request.GET.get("type", ""),
         )

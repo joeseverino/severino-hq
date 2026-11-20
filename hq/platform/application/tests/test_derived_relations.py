@@ -15,7 +15,7 @@ from hq.platform.core.testing import operator
 from ..attention import raised
 from ..connection_context import connections_context
 from ..entity_links import entity_link
-from ..resource_context import RecordStatus, record_list
+from ..resource_context import record_list
 from ..security import cli_principal
 from ..services import certificate_use
 from .host_only import host_only
@@ -94,24 +94,16 @@ class ConnectionRowsTests(TestCase):
         self.assertTrue(with_class(page, "row-group"))
 
 
-def _row(key, kind, label, tone="healthy", **extra):
-    return SimpleNamespace(
-        key=key,
-        kind=kind,
-        kind_label=label,
-        shown_name=key,
-        summary=extra.get("summary", ""),
-        record_status=RecordStatus(
-            "working" if tone == "healthy" else "degraded", "Working" if tone == "healthy" else "Has a problem"
-        ),
-    )
+def _row(key, kind, tone="good", summary=""):
+    label = "Working" if tone == "good" else "Has a problem"
+    return {"key": key, "kind": kind, "name": key, "summary": summary, "standing": {"tone": tone, "label": label}}
 
 
 class RecordListTests(TestCase):
     ROWS = [
-        _row("b-proxy", "npm.proxy_host", "Proxy host"),
-        _row("a-dns", "adguard.rewrite", "Internal DNS record", summary="192.0.2.10"),
-        _row("c-dns", "adguard.rewrite", "Internal DNS record", tone="degraded"),
+        _row("b-proxy", "npm.proxy_host"),
+        _row("a-dns", "adguard.rewrite", summary="192.0.2.10"),
+        _row("c-dns", "adguard.rewrite", tone="serious"),
     ]
 
     def test_rows_sit_under_their_type_with_what_needs_a_look_first(self):
@@ -121,7 +113,7 @@ class RecordListTests(TestCase):
             [(group.label, len(group.rows), group.unsettled) for group in listed.groups],
             [("Internal DNS record", 2, 1), ("Proxy host", 1, 0)],
         )
-        self.assertEqual([row.key for row in listed.groups[0].rows], ["c-dns", "a-dns"])
+        self.assertEqual([row["key"] for row in listed.groups[0].rows], ["c-dns", "a-dns"])
         self.assertEqual((listed.total, listed.unsettled, listed.filtered), (3, 1, False))
 
     def test_the_filter_keeps_rows_by_their_words_and_by_one_type(self):
@@ -129,7 +121,7 @@ class RecordListTests(TestCase):
         by_type = record_list(self.ROWS, kind="npm.proxy_host")
         unknown_type = record_list(self.ROWS, kind="example.none")
 
-        self.assertEqual([row.key for group in by_words.groups for row in group.rows], ["a-dns"])
+        self.assertEqual([row["key"] for group in by_words.groups for row in group.rows], ["a-dns"])
         self.assertEqual([group.label for group in by_type.groups], ["Proxy host"])
         # Every type is still offered while one is chosen.
         self.assertEqual(len(by_type.types), 2)

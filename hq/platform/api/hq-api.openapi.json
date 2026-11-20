@@ -1286,7 +1286,7 @@
         },
         "style": "form"
       },
-      "ManagedResourceItemPageFields": {
+      "ManagedResourceListedPageFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
         "in": "query",
@@ -1318,6 +1318,19 @@
               "generation",
               "observed_generation",
               "updated_at",
+              "url",
+              "name",
+              "summary",
+              "standing",
+              "standing.state",
+              "standing.tone",
+              "standing.label",
+              "standing.detail",
+              "standing.since",
+              "standing.read_at",
+              "origin_machine",
+              "origin_machine.name",
+              "origin_machine.url",
               "*"
             ],
             "type": "string"
@@ -1361,6 +1374,7 @@
               "updated_at",
               "url",
               "name",
+              "summary",
               "standing",
               "standing.state",
               "standing.tone",
@@ -1368,14 +1382,14 @@
               "standing.detail",
               "standing.since",
               "standing.read_at",
+              "origin_machine",
+              "origin_machine.name",
+              "origin_machine.url",
               "actions",
               "removal",
               "removal.mode",
               "removal.reason",
               "removal.pending",
-              "origin_machine",
-              "origin_machine.name",
-              "origin_machine.url",
               "provider_machine",
               "provider_machine.name",
               "provider_machine.url",
@@ -17769,36 +17783,6 @@
         ],
         "type": "object"
       },
-      "ManagedResourceItemPageSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ResourceCollection"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names.",
-            "properties": {
-              "items": {
-                "items": {
-                  "$ref": "#/components/schemas/ManagedResourceItemPartial"
-                },
-                "type": "array"
-              }
-            }
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
-        "required": [
-          "ok",
-          "data"
-        ],
-        "type": "object"
-      },
       "ManagedResourceItemPartial": {
         "additionalProperties": false,
         "description": "One managed record whole: what HQ expects of it and what was last read.",
@@ -17898,6 +17882,206 @@
           "tls.uploaded_certificate": "Uploaded certificate"
         }
       },
+      "ManagedResourceListed": {
+        "additionalProperties": false,
+        "description": "One managed record as its list says it: whole, and where it stands.",
+        "properties": {
+          "conditions": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/conditions"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/enabled"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/generation"
+          },
+          "health": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/health"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/id"
+          },
+          "in_sync": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/in_sync"
+          },
+          "key": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/key"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/kind"
+          },
+          "last_observed_at": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/last_observed_at"
+          },
+          "name": {
+            "description": "The name its page is titled by.",
+            "type": "string"
+          },
+          "observed_generation": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/observed_generation"
+          },
+          "origin_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointer",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine it sends traffic to; null for none."
+          },
+          "public_effect": {
+            "$ref": "#/components/schemas/ManagedResourceRow/properties/public_effect"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/spec"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingPart"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/status"
+          },
+          "summary": {
+            "description": "What it holds, in a line short enough to recognize it by; empty when its name says it.",
+            "type": "string"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ManagedResourceItem/properties/updated_at"
+          },
+          "url": {
+            "description": "Its page in HQ: its own, or the page of the machine it declares.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "enabled",
+          "in_sync",
+          "health",
+          "public_effect",
+          "last_observed_at",
+          "id",
+          "spec",
+          "status",
+          "conditions",
+          "generation",
+          "observed_generation",
+          "updated_at",
+          "url",
+          "name",
+          "summary",
+          "standing",
+          "origin_machine"
+        ],
+        "type": "object"
+      },
+      "ManagedResourceListedPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ManagedResourceListedPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ManagedResourceListedPartial": {
+        "additionalProperties": false,
+        "description": "One managed record as its list says it: whole, and where it stands.",
+        "properties": {
+          "conditions": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/conditions"
+          },
+          "enabled": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/enabled"
+          },
+          "generation": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/generation"
+          },
+          "health": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/health"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/id"
+          },
+          "in_sync": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/in_sync"
+          },
+          "key": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/key"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/kind"
+          },
+          "last_observed_at": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/last_observed_at"
+          },
+          "name": {
+            "$ref": "#/components/schemas/ManagedResourceListed/properties/name"
+          },
+          "observed_generation": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/observed_generation"
+          },
+          "origin_machine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MachinePointerPartial",
+                "title": "Machine pointer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The machine it sends traffic to; null for none."
+          },
+          "public_effect": {
+            "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/public_effect"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/spec"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingPartPartial"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/status"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ManagedResourceListed/properties/summary"
+          },
+          "updated_at": {
+            "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/updated_at"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ManagedResourceListed/properties/url"
+          }
+        },
+        "type": "object"
+      },
       "ManagedResourceRecord": {
         "additionalProperties": false,
         "description": "One managed record whole, what HQ derives from it, and the operations run on it.",
@@ -17972,8 +18156,7 @@
             "$ref": "#/components/schemas/ManagedResourceRow/properties/last_observed_at"
           },
           "name": {
-            "description": "The name its page is titled by.",
-            "type": "string"
+            "$ref": "#/components/schemas/ManagedResourceListed/properties/name"
           },
           "observed_generation": {
             "$ref": "#/components/schemas/ManagedResourceItem/properties/observed_generation"
@@ -17986,16 +18169,7 @@
             "type": "array"
           },
           "origin_machine": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MachinePointer",
-                "title": "Machine pointer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The machine it sends traffic to; null for none."
+            "$ref": "#/components/schemas/ManagedResourceListed/properties/origin_machine"
           },
           "provider_machine": {
             "anyOf": [
@@ -18037,10 +18211,13 @@
             "$ref": "#/components/schemas/ManagedResourceItem/properties/spec"
           },
           "standing": {
-            "$ref": "#/components/schemas/StandingPart"
+            "$ref": "#/components/schemas/ManagedResourceListed/properties/standing"
           },
           "status": {
             "$ref": "#/components/schemas/ManagedResourceItem/properties/status"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ManagedResourceListed/properties/summary"
           },
           "unused_names": {
             "description": "The names on a certificate nothing is served under.",
@@ -18053,8 +18230,7 @@
             "$ref": "#/components/schemas/ManagedResourceItem/properties/updated_at"
           },
           "url": {
-            "description": "Its page in HQ: its own, or the page of the machine it declares.",
-            "type": "string"
+            "$ref": "#/components/schemas/ManagedResourceListed/properties/url"
           },
           "used_by": {
             "description": "The hostnames served with a certificate.",
@@ -18081,10 +18257,11 @@
           "updated_at",
           "url",
           "name",
+          "summary",
           "standing",
+          "origin_machine",
           "actions",
           "removal",
-          "origin_machine",
           "provider_machine",
           "services",
           "readout",
@@ -18172,7 +18349,7 @@
             "$ref": "#/components/schemas/ManagedResourceRowPartial/properties/last_observed_at"
           },
           "name": {
-            "$ref": "#/components/schemas/ManagedResourceRecord/properties/name"
+            "$ref": "#/components/schemas/ManagedResourceListedPartial/properties/name"
           },
           "observed_generation": {
             "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/observed_generation"
@@ -18185,16 +18362,7 @@
             "type": "array"
           },
           "origin_machine": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MachinePointerPartial",
-                "title": "Machine pointer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The machine it sends traffic to; null for none."
+            "$ref": "#/components/schemas/ManagedResourceListedPartial/properties/origin_machine"
           },
           "provider_machine": {
             "anyOf": [
@@ -18235,10 +18403,13 @@
             "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/spec"
           },
           "standing": {
-            "$ref": "#/components/schemas/StandingPartPartial"
+            "$ref": "#/components/schemas/ManagedResourceListedPartial/properties/standing"
           },
           "status": {
             "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/status"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ManagedResourceListedPartial/properties/summary"
           },
           "unused_names": {
             "$ref": "#/components/schemas/ManagedResourceRecord/properties/unused_names"
@@ -18247,7 +18418,7 @@
             "$ref": "#/components/schemas/ManagedResourceItemPartial/properties/updated_at"
           },
           "url": {
-            "$ref": "#/components/schemas/ManagedResourceRecord/properties/url"
+            "$ref": "#/components/schemas/ManagedResourceListedPartial/properties/url"
           },
           "used_by": {
             "$ref": "#/components/schemas/ManagedResourceRecord/properties/used_by"
@@ -38115,7 +38286,7 @@
             "$ref": "#/components/parameters/Cursor"
           },
           {
-            "$ref": "#/components/parameters/ManagedResourceItemPageFields"
+            "$ref": "#/components/parameters/ManagedResourceListedPageFields"
           }
         ],
         "responses": {
@@ -38123,7 +38294,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ManagedResourceItemPageSuccess"
+                  "$ref": "#/components/schemas/ManagedResourceListedPageSuccess"
                 }
               }
             },
