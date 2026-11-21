@@ -965,6 +965,11 @@ width. `size="wide"` makes it a page in a dialog (the connection panel): two pan
 the window showing around it by a gap that grows with the window. It scrolls under a title that
 stays put, and takes the whole screen on a phone.
 
+### partials/_origin_panel.html (host only)
+
+Given the item's decision (`application.decisions`), it is drawn after the line its urgency
+stands on, never inside its words, and a Cmd- or Ctrl-click on the urgency opens it (app.js).
+
 ### partials/_page_action.html (host only)
 
 A page's action is `{% include "partials/_page_action.html" with action=... %}`, and a run of an
