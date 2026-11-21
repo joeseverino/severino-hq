@@ -316,8 +316,9 @@ def _body_marks(cell: CellFacts, kind: str, *, body: bool, toggled: bool) -> lis
             if toggled and cell.closes and _clamps(kind):
                 _box(cell, kind, "cell-clamp")
         # A fold's toggle is drawn before its head's value, which the
-        # value's span (ended at a toggle) would leave out.
-        elif cell.longest <= SHORT and cell.closes and not cell.folds:
+        # value's span (ended at a toggle) would leave out, and a field
+        # fills its column, which a short value's box would narrow.
+        elif cell.longest <= SHORT and cell.closes and not cell.folds and not cell.fields:
             _box(cell, kind, "cell-short")
     return marks
 

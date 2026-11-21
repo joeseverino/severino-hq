@@ -137,6 +137,13 @@ class StatusMark:
             return ""
         return " ".join(str(getattr(part, "label", part)) for part in self.parts if part not in (None, ""))
 
+    @property
+    def pill(self) -> bool:
+        """Whether it is drawn as a state's pill, which a column's drop order
+        keeps as a state: never words in a tone, a dot's or a chip's name."""
+
+        return bool(self.options.get("pill", True)) and not self.options.get("chip") and not self.options.get("dot")
+
     def __html__(self) -> str:
         return status_tags.status_pill(*self.parts, **self.options)
 

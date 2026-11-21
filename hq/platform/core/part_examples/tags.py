@@ -734,8 +734,8 @@ def _every_kind() -> DataTable:
     shows, and the count of a fold's rest across the row; an entity named
     as code, a state drawn as ``status_pill`` draws it (a chip, an icon), a
     tip and a title, blocks kept for the open line, a declared part, a row's
-    id, data, mark and order, a total in the foot with blank cells beside
-    it, and a region of its own height."""
+    id, data, mark and order, a blank cell, a total in the foot, and a
+    region of its own height."""
 
     from hq.platform.application import tables
 
@@ -765,6 +765,8 @@ def _every_kind() -> DataTable:
         ),
     )
     rest = tables.Row((Cell("1 more change", "/example/rest/", name=True),), folded="example-fold", across=True)
+    blank = row("example-host-03")
+    blank = replace(blank, cells=(*blank.cells[:-1], Cell(blank=True)))
     from hq.platform.core.included_parts import READING_AGE
 
     marked = tables.Row(
@@ -812,20 +814,11 @@ def _every_kind() -> DataTable:
         groups=(
             tables.Group(
                 "Example group",
-                (head, row("example-host-02", folded="example-fold"), rest, row("example-host-03"), marked),
+                (head, row("example-host-02", folded="example-fold"), rest, blank, marked),
                 count=4,
             ),
         ),
-        footer=tables.Row(
-            (
-                Cell("Total", name=True),
-                Cell(),
-                Cell(blank=True),
-                Cell(amount=Decimal(39)),
-                Cell(blank=True),
-                Cell(blank=True),
-            )
-        ),
+        footer=tables.Row((Cell("Total", name=True), Cell(), Cell(), Cell(amount=Decimal(39)), Cell(), Cell())),
         region={"pane": True},
     )
 

@@ -44,6 +44,9 @@ class DrawnCell:
     named: bool = False
     # The row's editor as ``{% row_editor %}`` answers it.
     editor: dict[str, Any] | None = None
+    # Saying nothing, it draws nothing, not the empty value's mark: a blank
+    # cell, one in the foot beside a total, or one in a column of controls.
+    quiet: bool = False
 
 
 @dataclass(slots=True)
@@ -160,8 +163,10 @@ def _heading(sorting: dict[str, Any], column: dict[str, Any], facts: CellFacts, 
 
 def _row(table: DataTable, row: Row, context: Any, width: int) -> DrawnRow:
     cells = [_cell(cell, context) for cell in row.cells]
+    footer = row is table.footer
     for drawn_cell, column in zip(cells, table.columns, strict=False):
         drawn_cell.facts.classes = tuple(name for name in column.css.split() if name in _CELL_CLASSES)
+        drawn_cell.quiet |= footer or column_kind(column.kind, column.css) == "control"
     if row.across and cells:
         cells[0].facts.colspan, cells[0].facts.spans = width, True
     drawn_row = DrawnRow(row, RowFacts("tbody", cells=[cell.facts for cell in cells]), cells)
@@ -252,7 +257,7 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         for each in cell.lines
         if each.shows not in _OFF_LINE
     ]
-    tops = [bool(cell.tone or cell.status)] + [False] * (
+    tops = [bool(cell.tone or (cell.status and cell.status.pill))] + [False] * (
         len(cell.parts) + bool(cell.lines) + (cell.count is not None) + cell.fold
     )
     facts = CellFacts(
@@ -273,7 +278,7 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         said=[not cell.says_nothing] + [True] * (len(tops) - 1),
         loose=False,
     )
-    return DrawnCell(cell, facts, role=cell.role, editor=editor)
+    return DrawnCell(cell, facts, role=cell.role, editor=editor, quiet=cell.blank)
 
 
 def _length(cell: Cell, *, after: bool = False) -> int:
