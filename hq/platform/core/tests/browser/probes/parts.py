@@ -82,6 +82,15 @@ ASKS_OUTSIDE_THEIR_ROWS = (
 )
 
 
+# The boxes on the page that lay what they hold out in a run of columns.
+_COLUMNED = """
+const columned = [...document.querySelectorAll('main *')].filter((el) => {
+  const style = getComputedStyle(el);
+  return el.checkVisibility() && (style.columnCount !== 'auto' || style.columnWidth !== 'auto');
+});
+"""
+
+
 # A heading in a run of columns starts the column that holds what it heads:
 # the first words after its head are drawn below it, never at the top of the
 # next column while the head ends the one before. Its head is the box the
@@ -89,22 +98,21 @@ ASKS_OUTSIDE_THEIR_ROWS = (
 HEADINGS_PARTED = (
     "() => {"
     + DESCRIBE
+    + _COLUMNED
     + """
   const found = [];
   const range = document.createRange();
-  const columned = [...document.querySelectorAll('main *')].filter((el) => {
-    const style = getComputedStyle(el);
-    return style.columnCount !== 'auto' || style.columnWidth !== 'auto';
-  });
   for (const flow of columned) {
     for (const heading of flow.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
       if (!heading.checkVisibility()) continue;
       const head = heading.closest('header, summary, figcaption, hgroup') ?? heading;
-      const h = box(head);
+      // A section's lead is what its head heads, drawn inside the head.
+      const lead = head.querySelector(':scope > .section-lead');
+      const h = box(lead ? (heading.closest('hgroup') ?? heading) : head);
       const walker = document.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
-      walker.currentNode = head;
+      walker.currentNode = lead ? heading : head;
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        if (head.contains(node) || !node.data.trim() || !node.parentElement.checkVisibility()) continue;
+        if ((head.contains(node) && !lead?.contains(node)) || !node.data.trim() || !node.parentElement.checkVisibility()) continue;
         range.selectNodeContents(node);
         const first = [...range.getClientRects()].find((r) => r.width && r.height);
         if (!first) continue;
@@ -113,6 +121,48 @@ HEADINGS_PARTED = (
         }
         break;
       }
+    }
+  }
+  return found;
+}"""
+)
+
+
+# A run of columns fills the columns that fit its box before it stacks two of
+# its parts in one: a column left empty while another holds two parts is room
+# beside content that the content runs past, which a part kept whole and
+# taller than the rest put together does. A part is in each column its
+# contents are drawn in, read from the range of them, whose rects each engine
+# places column by column.
+COLUMNS_LEFT_EMPTY = (
+    "() => {"
+    + DESCRIBE
+    + _COLUMNED
+    + """
+  const found = [];
+  const range = document.createRange();
+  for (const flow of columned) {
+    const style = getComputedStyle(flow);
+    const left = flow.getBoundingClientRect().left + flow.clientLeft + parseFloat(style.paddingLeft);
+    const room = flow.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const gap = parseFloat(style.columnGap) || parseFloat(style.fontSize);
+    const fit = style.columnWidth === 'auto' ? Infinity : Math.floor((room + gap) / (parseFloat(style.columnWidth) + gap));
+    const count = Math.max(1, Math.min(fit, style.columnCount === 'auto' ? Infinity : parseInt(style.columnCount, 10)));
+    if (count < 2) continue;
+    const width = (room - (count - 1) * gap) / count;
+    const held = Array.from({length: count}, () => new Set());
+    for (const [part] of inFlow(flow)) {
+      range.selectNodeContents(part);
+      for (const r of range.getClientRects()) {
+        if (!r.width || !r.height) continue;
+        const at = Math.floor((r.left - left + gap / 2) / (width + gap));
+        held[Math.min(count - 1, Math.max(0, at))].add(part);
+      }
+    }
+    const used = held.filter((parts) => parts.size).length;
+    const most = Math.max(...held.map((parts) => parts.size));
+    if (used < count && most > 1) {
+      found.push(`${describe(flow)}: ${count - used} of ${count} columns empty while one holds ${most} parts`);
     }
   }
   return found;
@@ -298,6 +348,16 @@ UNDRAWN = """(drawings) => {
 _WIDENED = """(box) => document.querySelector(box).scrollWidth > document.querySelector(box).clientWidth
   ? [] : [`${box} scrolls no wider than it shows`]"""
 
+
+def _columns(long: str) -> str:
+    """Four columns holding two short parts and a long one styled ``long``."""
+    lines = "".join(f"<li>Example line {n}</li>" for n in range(30))
+    return (
+        '<div class="example-columns" style="columns: 100px 4; inline-size: 500px">'
+        f'<p>Example</p><p>Example</p><ul style="{long}">{lines}</ul></div>'
+    )
+
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "control labels": Check(
@@ -351,6 +411,14 @@ CHECKS = {
         PILLS_IN_PIECES, table=True, reader_sees="one pill's words drawn as two pills, a line each"
     ),
     "headings parted": Check(HEADINGS_PARTED, reader_sees="a heading at a column's foot, what it heads in the next"),
+    "columns left empty": Check(
+        COLUMNS_LEFT_EMPTY,
+        reader_sees="columns standing empty beside one that runs on",
+        # Two short parts and a long one kept whole fill two of four columns;
+        # the long one free to break fills all four.
+        plants=(Plant(_columns("break-inside: avoid"), finds=("div.example-columns",)),),
+        clear=(Example(_columns("")),),
+    ),
     "asks outside their rows": Check(
         ASKS_OUTSIDE_THEIR_ROWS, reader_sees="a row's button drawn again beside its table, owned by no row"
     ),

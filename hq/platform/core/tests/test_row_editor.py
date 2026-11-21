@@ -104,7 +104,7 @@ class RowEditorTests(SimpleTestCase):
 
         fields = {each.attrs["name"]: each for each in tagged(html, "input")}
         self.assertEqual((fields["distance_miles"].attrs["value"], fields["reason"].attrs["value"]), ("-1", "example"))
-        (error,) = [each for each in all_elements(html) if "errors" in each.classes]
+        (error,) = [each for each in all_elements(html) if each.attrs.get("id", "").endswith("_error")]
         self.assertIn(error.attrs["id"], fields["distance_miles"].attrs["aria-describedby"].split())
 
     def test_a_value_for_a_field_the_form_lacks_is_refused(self):

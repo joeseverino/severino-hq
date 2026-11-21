@@ -17,6 +17,7 @@ from hq.domains.control_plane.models import (
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
+from hq.platform.application.asks import REFRESHING
 from hq.platform.application.cadence_testing import controller_arrived
 from hq.platform.application.labels import DOT
 from hq.platform.application.markup_testing import elements, hrefs, select, text, with_class
@@ -271,7 +272,8 @@ class DashboardWorkflowTests(SignedInTestCase):
             )
 
         self.assertEqual((response.status_code, response.json()["live"]), (202, True))
-        self.assertTrue(select(self.client.get("/dashboard/glance/"), "data-refreshing"))
+        # A person pressed for it, so its panel says it is under way.
+        self.assertContains(self.client.get("/dashboard/glance/"), REFRESHING)
         self.assertEqual(
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{machine.pk}"],

@@ -207,7 +207,7 @@ class FormTableTests(SimpleTestCase):
         html = self.draw(form)
 
         (control, _) = elements(html, "select")
-        (error,) = with_class(html, "errors")
+        (error,) = with_class(html, "errorlist")
         (cell,) = [e for e in error.ancestors if e.tag == "td"]
         self.assertIn(cell, control.ancestors)
         self.assertIn(error.attrs["id"], control.attrs["aria-describedby"].split())

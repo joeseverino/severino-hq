@@ -5,9 +5,9 @@
 
 {% if github %}{% include "projects/_github_panel.html" with repo=github %}{% endif %}
 
-{% if project.deployment_notes %}{% section "Deployment notes" %}{% include "partials/_linked_text.html" with parts=project.deployment_notes|named_links %}{% endsection %}{% endif %}
-{% if project.security_notes %}{% section "Security notes" %}<p>{{ project.security_notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
-{% if project.notes %}{% section "Notes" %}<p>{{ project.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
+{% if project.deployment_notes %}{% section "Deployment notes" %}{% include "partials/_linked_text.html" with parts=project.deployment_notes|named_links only %}{% endsection %}{% endif %}
+{% if project.security_notes %}{% section "Security notes" %}{% include "partials/_linked_text.html" with parts=project.security_notes|named_links only %}{% endsection %}{% endif %}
+{% if project.notes %}{% section "Notes" %}{% include "partials/_linked_text.html" with parts=project.notes|named_links only %}{% endsection %}{% endif %}
 
 {% layout %}{% include "partials/_related.html" with groups=related %}{% endlayout %}
 {% endblock %}

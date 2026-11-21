@@ -1,5 +1,4 @@
 {% comment %}A resource form's fields (control_plane/resource_form.html), derived from its provider's model.{% endcomment %}
-{% if not resource %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
 {% include "partials/_form_errors.html" with form=identity %}
 {% include "partials/_form_errors.html" with form=spec %}
 

@@ -1,6 +1,7 @@
 """The host's templates as a contract: what an extension may use."""
 
 import io
+import re
 from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -8,11 +9,12 @@ from unittest import mock
 
 from django.template import engines
 from django.template.loader import render_to_string
-from django.test import RequestFactory, SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase, tag
 
 from hq.platform.application import plugin_validation as validation
 from hq.platform.application.plugin_validation import template_violations
 from hq.platform.core import template_contract
+from hq.platform.core.tests import look_reach
 from hq_sdk.money import money
 from hq_sdk.pages import PageAction, PageDialog, page_context
 from hq_sdk.testing import plain
@@ -45,7 +47,7 @@ OUTSIDE = {
     # A class beside a tag is still written, and one built from a value is
     # its prefix's.
     "templates/example/beside.html": (
-        '<b class="{% if a %}chip{% endif %}"></b>\n<i class="compact {% if b %}kpi{% endif %}"></i>\n'
+        '<b class="{% if a %}glow{% endif %}"></b>\n<i class="compact {% if b %}kpi{% endif %}"></i>\n'
         '<s class="tone-{{ t }}"></s>'
     ),
     "templates/example/parts.html": (
@@ -90,7 +92,7 @@ class TemplateValidationTests(SimpleTestCase):
             "markup.html:2": "data-secret",
             "markup.html:3": "style attribute",
             "markup.html:4": "heading",
-            "beside.html:1": "class chip ",
+            "beside.html:1": "class glow ",
             "beside.html:2": "class kpi ",
             "beside.html:3": "class tone-* ",
             "parts.html:1": "aside",
@@ -127,6 +129,30 @@ class ClassWordsTests(SimpleTestCase):
             {word for _, word in words},
             {"tab", "tab-current", "band", "list", "table", "is-dense", "series-*", "is-start", "tone-*", "mark-*"},
         )
+
+
+@tag("source", "tree")
+class PublicClassTests(SimpleTestCase):
+    def test_every_class_an_extension_may_write_the_host_writes_too(self):
+        """A public class only an extension writes is the host styling, or
+        declaring, what it may not know: each is written by a host template, a
+        script, or Python a part's catalog entry draws."""
+
+        words = {
+            word
+            for path in (ROOT / "templates").rglob("*.html")
+            for _, word in template_contract.class_words(path.read_text(encoding="utf-8"))
+        }
+        for path in (ROOT / "static" / "js").rglob("*.js"):
+            words |= set(re.findall(r"[\w-]*\w", path.read_text(encoding="utf-8")))
+        words |= set().union(*(drawing.words for drawing in look_reach.drawings().values()))
+        built = tuple(word[:-1] for word in words if word.endswith("*"))
+
+        unwritten = {
+            name for name in template_contract.public_classes() if name not in words and not name.startswith(built)
+        }
+
+        self.assertEqual(unwritten, set())
 
 
 # The shapes a report can lose: a violation inside a block override, the same

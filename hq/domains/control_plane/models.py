@@ -324,6 +324,9 @@ class DashboardRefreshRequest(TimestampedModel):
     panel_id = models.SlugField("panel ID", max_length=80, unique=True)
     requested_at = models.DateTimeField(default=timezone.now)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # A person pressed for it and waits on it, so its panel says it is under
+    # way; one HQ asked for itself shows nothing until it lands.
+    awaited = models.BooleanField(default=False)
 
     @override
     def __str__(self) -> str:

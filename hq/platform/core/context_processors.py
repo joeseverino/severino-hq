@@ -3,7 +3,7 @@ lazy from django.utils.functional import SimpleLazyObject
 
 from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.application.agent_access import agents_paused
-lazy from hq.platform.application.appearance import Theme, theme_for
+lazy from hq.platform.application.appearance import THEME_CHOICES, theme_for
 lazy from hq.platform.application.pages import offering_for
 lazy from hq.platform.application.request_channel import channel_for_request
 lazy from hq.platform.application.request_identity import signed_in
@@ -119,5 +119,5 @@ def appearance(request):
     user = signed_in(request)
     return {
         "THEME": SimpleLazyObject(lambda: theme_for(user)),
-        "THEME_CHOICES": Theme.choices,
+        "THEME_CHOICES": THEME_CHOICES,
     }

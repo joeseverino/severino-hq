@@ -605,7 +605,7 @@ class FragmentBrowserTests(BrowserGate):
         self.assertEqual(self.asked.count(("/probe-panel/", "")), 2)
         self.assertTrue(self.page.evaluate("() => window.kept === true"))
 
-    def test_a_pages_note_says_what_its_ask_waits_for_and_the_ask_outlives_the_swap(self):
+    def test_a_pages_ask_outlives_the_swap(self):
         self.visit = _VISIT_LIVE
         self.page.goto(f"{ORIGIN}/probe-asking-head/", wait_until="load")
         note = SELECTORS["page_note"]
@@ -613,11 +613,6 @@ class FragmentBrowserTests(BrowserGate):
             "(note) => { document.querySelector('[data-ask]').kept = true; document.querySelector(note).was = true; }",
             note,
         )
-        # Under way, the page's note says so: the note the form names.
-        self.page.wait_for_function(
-            "(note) => document.querySelector(note).textContent.includes('fresh reading')", arg=note
-        )
-
         # Landed, everything but the ask is drawn again, the note with it,
         # and the new note is the one its form names.
         self.page.wait_for_function("() => document.querySelector('[data-probe=said]').textContent === 'as it is now'")

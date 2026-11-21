@@ -448,8 +448,9 @@ class PageTests(SignedInTestCase):
         response = self.client.get(reverse("calendar:month"))
 
         # Under its name, where a phone can read it; the operator's own events lead under no heading.
-        (note,) = [note for note in with_class(response, "calendar-source-note") if note.words.startswith("Events you")]
-        self.assertEqual(note.ancestors[-1].words, "My events Events you or your agents added.")
+        (note,) = [note for note in with_class(response, "muted") if note.words.startswith("Events you")]
+        source = next(element for element in reversed(note.ancestors) if element.tag == "li")
+        self.assertEqual(source.words, "My events Events you or your agents added.")
         self.assertNotIn("", texts(response, "h3"))
         self.assertNotIn("My calendars", text(response))
 

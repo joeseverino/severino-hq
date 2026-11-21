@@ -238,7 +238,7 @@ def _figures_in_chips(source: Source) -> Iterator[int]:
 
 
 # What a row holds back until it opens, and a tag that decides by a count.
-_HELD_BACK = re.compile(r"""class=["'][^"']*\b(?:row-more|row-less)\b""")
+_HELD_BACK = re.compile(r"""class=["'][^"']*\brow-more\b""")
 _BY_A_COUNT = re.compile(r"""forloop\.counter|\|length\b|\|slice:["']-?\d*:?\d|\|add:["']-\d|[<>]=?\s*\d""")
 
 
@@ -388,8 +388,43 @@ class Shape:
     drawn_by: Mapping[str, str] = field(default_factory=dict)
 
 
+_CHOICE = r"[\s}]type=[\"']?(?:checkbox|radio)\b"
+_CHIP_CLASS = r"[\s}]class=[\"'](?:[^\"']*[\s}])?(?:[\w-]*(?:chips?|badge|pill|tag)|[\w-]+-(?:count|age))(?:[\s\"'{]|$)"
+
+
+def _form_controls(source: Source) -> Iterator[int]:
+    """Each form, field and label outside a choice: a choice's box and its
+    label are the filter-choice shape's."""
+
+    choices = set(within("label", _CHOICE)(source))
+    yield from tagged("form|textarea|fieldset")(source)
+    yield from tagged("input", without=r"[\s}]type=[\"']?(?:checkbox|radio|search)\b")(source)
+    yield from (at for at in tagged("label")(source) if at not in choices)
+
+
 _FORMS_OF_THE_FRAME = "the frame's menu verbs, each one button, and the one form every post button names"
 _SCRIPTED_FORM = "a hidden form the page's script submits, with no fields"
+_FORMS = {
+    "partials/_form.html": "the form part itself",
+    "base.html": _FORMS_OF_THE_FRAME,
+    "partials/_user_menu.html": _FORMS_OF_THE_FRAME,
+    "core/_dashboard_glance.html": _SCRIPTED_FORM,
+    "partials/_visit_refresh.html": _SCRIPTED_FORM,
+}
+_FILTER_BARS = {
+    "partials/_filter_bar.html": "the filter bar part itself",
+    "partials/_select.html": "the select part itself",
+    "partials/_command_center.html": "the palette's combobox, which sends nothing",
+    "partials/_topology_map.html": "the map's find, which sends nothing",
+}
+# The table part's own toolbar: each filter's menu of boxes, a toggle apiece
+# under its own name, and the sort its label boxes.
+_TABLE_TOOLBAR = "the table part's own filter bar, as partials/_filter_bar.html is the page's"
+# The frame's bar, drawn once, whose composite controls no other control has.
+_THE_BAR = {
+    "partials/_site_header.html": "the frame's bar: each section group's label and caret, one box, and the queue's bell around its live count",
+    "partials/_user_menu.html": "the frame's bar: the person's opener, a picture and a name that folds away",
+}
 
 SHAPES = (
     Shape(
@@ -457,13 +492,7 @@ SHAPES = (
         find=tagged("form", r"(?i)[\s}]method=[\"']?post\b"),
         refuses=('<FORM action="." method=post></FORM>',),
         keeps=('<form method="get"></form>',),
-        drawn_by={
-            "partials/_form.html": "the form part itself",
-            "base.html": _FORMS_OF_THE_FRAME,
-            "partials/_user_menu.html": _FORMS_OF_THE_FRAME,
-            "core/_dashboard_glance.html": _SCRIPTED_FORM,
-            "partials/_visit_refresh.html": _SCRIPTED_FORM,
-        },
+        drawn_by=_FORMS,
     ),
     Shape(
         name="filter-bar",
@@ -474,11 +503,69 @@ SHAPES = (
         ),
         refuses=("<select></select>", '<input type="search" name="q">'),
         keeps=('<input type="hidden" name="q">',),
+        drawn_by=_FILTER_BARS,
+    ),
+    Shape(
+        name="button",
+        said="A button drawn by hand, where the button tag draws every control that looks like one.",
+        instead="{% button %}, which takes a popover, a dialog command and each data_* hook",
+        find=tagged("button"),
+        refuses=('<button type="button" popovertarget="menu">Menu</button>',),
+        keeps=('{% button "Menu" popovertarget="menu" %}',),
         drawn_by={
-            "partials/_filter_bar.html": "the filter bar part itself",
-            "partials/_select.html": "the select part itself",
-            "partials/_command_center.html": "the palette's combobox, which sends nothing",
-            "partials/_topology_map.html": "the map's find, which sends nothing",
+            "partials/_table_heading.html": "the heading's sort, the twin of its server sort link, words and mark apart",
+            **_THE_BAR,
+        },
+    ),
+    Shape(
+        name="chip",
+        said="A chip, a badge, a count or an age drawn by hand, where the status part or a value filter draws it.",
+        instead='{% status word chip=True %}, a count by {{ n|counted:"thing" }}, an age by {{ at|ago }}',
+        find=tagged(r"[\w-]+", _CHIP_CLASS),
+        refuses=('<span class="scope-chip">A</span>', '<span class="sweep-age">2h</span>'),
+        keeps=('<span class="count">2</span>', '{% status "Online" chip=True %}'),
+        drawn_by={
+            "partials/_list.html": "the list part, whose chips kind draws a link as a chip",
+            "partials/_reading_age.html": "the reading age part itself",
+            "partials/_cadence.html": "the cadence part's tally, a line of text",
+            "partials/_record_list.html": "the record list lays out the chips the status part draws",
+            "partials/_switch.html": "the switch part, each choice a chip of its row",
+            "partials/_site_header.html": _THE_BAR["partials/_site_header.html"],
+        },
+    ),
+    Shape(
+        name="filter-choice",
+        said="A choice of several drawn as boxes by hand, where the toggle set part draws it.",
+        instead='{% include "partials/_toggle_set.html" %}, or {% select %} for one choice',
+        find=tagged("input", _CHOICE),
+        refuses=('<label><input type="checkbox" name="kind" value="a"> A</label>',),
+        keeps=('<input type="hidden" name="kind" value="a">',),
+        drawn_by={
+            "partials/_toggle_set.html": "the toggle set part itself",
+            "partials/_row_select.html": "the table's box that selects its row",
+            "partials/_table_heading.html": "the table's box that selects every row",
+            "partials/_table_toolbar.html": _TABLE_TOOLBAR,
+            "partials/_chart_tabs.html": "the chart tabs' own switch, which turns with no script",
+        },
+    ),
+    Shape(
+        name="form-control",
+        said="A form, a field or a label drawn by hand, where the form, field and filter bar parts draw it.",
+        instead='{% include "partials/_form.html" %} of a Django form, or {% filter_bar %} for what a list keeps',
+        find=_form_controls,
+        refuses=('<form method="get"><label>Kind <input name="kind"></label></form>', '<input type="hidden" name="a">'),
+        keeps=('<label><input type="checkbox" name="a"> A</label>', '<input type="search" name="q">'),
+        drawn_by={
+            "django/forms/field.html": "the field part itself",
+            "django/forms/widgets/choice_cards.html": "the field part's widget",
+            "django/forms/widgets/multiple_input.html": "the field part's widget",
+            "partials/_control_label.html": "the control label part itself",
+            "partials/_toggle_set.html": "the toggle set part itself",
+            "partials/_dropzone.html": "the dropzone part, a file field",
+            "partials/_row_field.html": "the row field part, a field in a table's row",
+            "partials/_table_toolbar.html": _TABLE_TOOLBAR,
+            **_FORMS,
+            **_FILTER_BARS,
         },
     ),
     Shape(
@@ -492,25 +579,43 @@ SHAPES = (
     ),
     Shape(
         name="list",
-        said="A list drawn by hand, where the list part draws it.",
-        instead='{% list kind="down|dots|prose|chips|codes|labeled" %}<li>...</li>{% endlist %}',
+        said="A list or a band of facts drawn by hand, where the list or the facts part draws it.",
+        instead='{% list kind="down|dots|prose|chips|codes|labeled" %}<li>...</li>{% endlist %}, or {% facts %}',
         find=lambda source: (
             start
             for find in (
-                tagged("ul|ol", without=r"[\s}]class\b"),
+                tagged("ul|ol|dl"),
                 tagged(
-                    "ul|ol",
-                    r"[\s}]class=[\"'](?:[^\"']*\s)?(?:(?:stack|dot|prose|code|address)-list|link-chips)(?:[\s\"']|$)",
+                    r"[\w-]+",
+                    r"[\s}]class=[\"'](?:[^\"']*\s)?(?:(?:stack|dot|prose|code|address)-list|link-chips"
+                    r"|facts-(?:band|list|inline))(?:[\s\"']|$)",
                 ),
             )
             for start in find(source)
         ),
-        refuses=("<ul><li>A</li></ul>", '<ol class="dot-list"><li>A</li></ol>'),
-        keeps=('<ul class="nav-items"><li>A</li></ul>',),
+        refuses=(
+            "<ul><li>A</li></ul>",
+            '<ul class="example-links"><li>A</li></ul>',
+            '<span class="dot-list"><span>A</span></span>',
+        ),
+        keeps=('{% list kind="dots" %}<li>A</li>{% endlist %}', '<div class="stack">A</div>'),
         drawn_by={
             "partials/_list.html": "the list part itself",
+            "partials/_facts.html": "the facts part itself",
+            "django/forms/errors/list/ul.html": "Django's error list, which every form's and field's errors draw",
             "partials/_switch.html": "the switch styles the list it draws",
             "partials/_relation_list.html": "the relation list styles the list it draws",
+            "partials/_messages.html": "the messages part, each message a notice",
+            "partials/_record_list.html": "the record list part, each row a record",
+            "partials/_steps.html": "the steps part, a list of its own in order",
+            "partials/_timeline.html": "the timeline part, its events in order",
+            "partials/_share_list.html": "the share list part, each row a bar",
+            "partials/_check_ladder.html": "the check ladder part, its rungs in order",
+            "partials/_check_rung.html": "the rung's statement, a dot run in its summary, where no list may stand",
+            "partials/_cadence.html": "the cadence part, its periods in order",
+            "partials/_week_plan.html": "the week plan part, its days in order",
+            "partials/_dropzone.html": "the dropzone part, the files its script lists as they are chosen",
+            "partials/_page_navigation.html": "the page's section navigation",
         },
     ),
     Shape(

@@ -103,11 +103,8 @@
 /* How old the reading behind it is: quiet while current, in the attention
    tone once out of date. */
 .reading-age.is-stale { color: var(--tone-ink); }
-/* The reason it cannot be done from here, and what can be pressed, in a row's
-   opened line and on an insight card. */
+/* The reason it cannot be done from here, in a row's opened line and on an insight card. */
 .attention-reason { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
-/* The pages that help look into it: quiet links, the topology's as icons. */
-.attention-links { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin: var(--space-3) 0 0; font-size: var(--text-xs); }
 /* What raised an item, opened from its urgency: a small modal over the page,
    titled with the item it explains. */
 .modifier-held [data-origin] { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; outline: 1px solid var(--tone-line, var(--line)); outline-offset: 1px; }

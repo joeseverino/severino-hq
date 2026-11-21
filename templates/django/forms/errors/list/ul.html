@@ -1,0 +1,5 @@
+{% comment %}
+Every error list Django draws, a field's and a form's own (FORM_RENDERER reads
+templates/ before Django's own). A field's carries the id its control's
+aria-describedby names.
+{% endcomment %}{% if errors %}<ul class="{{ error_class }}"{% if errors.field_id %} id="{{ errors.field_id }}_error"{% endif %}>{% for error in errors %}<li>{{ error|breakable }}</li>{% endfor %}</ul>{% endif %}

@@ -23,7 +23,7 @@ under them.
 {% section "File" data_receipt_file="none" remedy_label="Add a file" remedy_url=edit_url %}{% empty %}No file is stored for this receipt.{% endsection %}
 {% endif %}
 
-{% if receipt.notes %}{% section "Notes" %}<p>{{ receipt.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
+{% if receipt.notes %}{% section "Notes" %}{% include "partials/_linked_text.html" with parts=receipt.notes|named_links only %}{% endsection %}{% endif %}
 {% endlayout %}
 
 {% if file_picture %}

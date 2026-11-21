@@ -10,7 +10,7 @@ lazy from django.contrib.messages.storage.base import Message
 from hq.platform.core.part_examples import DRAWN_AT
 from hq.platform.core.template_parts import Example
 lazy from hq.domains.jobs.models import Job, JobState
-lazy from hq.platform.application.appearance import Theme
+lazy from hq.platform.application.appearance import THEME_CHOICES, Theme
 lazy from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, WAITING, Ask, Standing
 lazy from hq.platform.application.command_center import DiscoveryItem
 lazy from hq.platform.application.freshness import CURRENT, STALE, Freshness
@@ -46,7 +46,7 @@ def _signed_in():
             },
         ),
         "THEME": Theme.SYSTEM,
-        "THEME_CHOICES": Theme.choices,
+        "THEME_CHOICES": THEME_CHOICES,
         "CONNECTION_CHANNEL": TAILNET_CHANNEL,
         "agents_paused": False,
         "profile_action_count": 3,

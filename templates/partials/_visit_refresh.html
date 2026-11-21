@@ -6,9 +6,9 @@ one thing asks for that thing's readings").
   {% include "partials/_visit_refresh.html" with visit=page_visit %}
 
 page.html and the dashboard draw it, and its note (`#note`) ends the head's
-first line, naming the form it speaks for. Its slot is as wide as the longest
-sentence the script writes (asks.REFRESHING, REFRESHED, NEWER_READING and
-SHOW_NEWER), drawn here unseen. A region that fills itself
+first line, naming the form it speaks for. Nobody pressed it, so it says
+nothing while its readings are under way; its slot is as wide as the offer of a
+newer reading (asks.NEWER_READING and SHOW_NEWER), drawn here unseen. A region that fills itself
 (`refresh="[data-connection-panel]"`) holds its own note.
 {% endcomment %}
 <div class="ask ask-quiet" data-ask data-ask-state="idle" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
@@ -19,4 +19,4 @@ SHOW_NEWER), drawn here unseen. A region that fills itself
   </form>
   {% if refresh %}<output class="visit-status" data-ask-note hidden></output>{% endif %}
 </div>
-{% partialdef note %}<span class="visit-slot"><output class="visit-status" form="page-visit" data-ask-note data-ask-cut></output><span class="strut" data-strut="{% refreshing %}" aria-hidden="true"></span><span class="strut" data-strut="{% refreshed %}" aria-hidden="true"></span><span class="strut" data-strut="{% newer_reading %} {% show_newer %}" aria-hidden="true"></span></span>{% endpartialdef %}
+{% partialdef note %}<span class="visit-slot"><output class="visit-status" form="page-visit" data-ask-note data-ask-cut></output><span class="strut" data-strut="{% newer_reading %} {% show_newer %}" aria-hidden="true"></span></span>{% endpartialdef %}

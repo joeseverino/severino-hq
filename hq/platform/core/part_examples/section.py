@@ -114,6 +114,15 @@ SECTION_STATES = {
         '{% aside %}<span class="count">2 example accounts</span>{% endsection %}',
         lambda: {"allocation": AllocationBar("Example allocation", (Share("Cash", 3, 1), Share("Owed", 1, 2)))},
     ),
+    # Sections down a run of columns, as the map's lanes run, each body's
+    # first line its lead, kept with its head wherever a column ends.
+    "lead": Example(
+        '<div style="columns: 12rem 2; max-inline-size: 26rem">'
+        '{% section "Example lane" count=4 %}<p>Example two</p><p>Example three</p><p>Example four</p>'
+        "{% lead %}<p>Example one</p>{% endsection %}"
+        '{% section "Another example lane" count=2 %}<p>Example six</p>'
+        "{% lead %}<p>Example five</p>{% endsection %}</div>"
+    ),
     "fold-empty": Example(
         '{% section "Example dismissed" fold=True open=True %}{% empty %}Nothing example is dismissed.{% endsection %}'
     ),

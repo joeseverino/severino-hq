@@ -130,8 +130,8 @@ class ResourceFormViewTests(TestCase):
         from the hostname, and a thing being created is a thing you want applied.
         """
         response = self.client.post(
-            reverse("control_plane:create"),
-            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
+            reverse("control_plane:create") + "?kind=adguard.rewrite",
+            form_keyed({**REWRITE}),
         )
 
         resource = ManagedResource.objects.get()
@@ -146,16 +146,16 @@ class ResourceFormViewTests(TestCase):
     def test_a_new_declaration_is_fingerprinted(self):
         """Otherwise the next topology import reads the blank as a change."""
         self.client.post(
-            reverse("control_plane:create"),
-            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
+            reverse("control_plane:create") + "?kind=adguard.rewrite",
+            form_keyed({**REWRITE}),
         )
 
         self.assertTrue(ManagedResource.objects.get().desired_fingerprint)
 
     def test_editing_advances_the_generation_so_the_controller_reapplies(self):
         self.client.post(
-            reverse("control_plane:create"),
-            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
+            reverse("control_plane:create") + "?kind=adguard.rewrite",
+            form_keyed({**REWRITE}),
         )
         created = ManagedResource.objects.get()
 
@@ -170,10 +170,9 @@ class ResourceFormViewTests(TestCase):
 
     def test_an_invalid_spec_writes_nothing_and_says_why(self):
         response = self.client.post(
-            reverse("control_plane:create"),
+            reverse("control_plane:create") + "?kind=adguard.rewrite",
             form_keyed(
                 {
-                    "kind": "adguard.rewrite",
                     "domain": "app.example.com",
                     "answer": "",
                 }
@@ -192,8 +191,8 @@ class ResourceFormViewTests(TestCase):
         declare("app-example-com-dns", "adguard.rewrite", REWRITE)
 
         self.client.post(
-            reverse("control_plane:create"),
-            form_keyed({"kind": "adguard.rewrite", **REWRITE, "answer": "10.0.0.99"}),
+            reverse("control_plane:create") + "?kind=adguard.rewrite",
+            form_keyed({**REWRITE, "answer": "10.0.0.99"}),
         )
 
         self.assertTrue(ManagedResource.objects.filter(key="app-example-com-dns-2").exists())
@@ -259,14 +258,14 @@ class ResourceFormViewTests(TestCase):
         self.assertNotContains(response, "Name in HQ")
 
     def test_an_unknown_kind_is_not_found(self):
-        response = self.client.post(reverse("control_plane:create"), form_keyed({"kind": "example.nothing"}))
+        response = self.client.post(reverse("control_plane:create") + "?kind=example.nothing", form_keyed({}))
 
         self.assertEqual(response.status_code, 404)
 
     def test_saving_says_whether_it_added_or_updated(self):
         created = self.client.post(
-            reverse("control_plane:create"),
-            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
+            reverse("control_plane:create") + "?kind=adguard.rewrite",
+            form_keyed({**REWRITE}),
             follow=True,
         )
         key = ManagedResource.objects.get().key
@@ -287,8 +286,8 @@ class ResourceFormViewTests(TestCase):
         gap = write_gap("adguard.rewrite", {})
 
         response = self.client.post(
-            reverse("control_plane:create"),
-            form_keyed({"kind": "adguard.rewrite", **REWRITE}),
+            reverse("control_plane:create") + "?kind=adguard.rewrite",
+            form_keyed({**REWRITE}),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -311,10 +310,9 @@ class ResourceFormViewTests(TestCase):
         material = {"fullchain": "not a certificate", "private_key": "not a key"}
         with override_settings(SEVERINO_SEAL_PUBLIC_KEY=SEAL_PUBLIC_KEY):
             response = self.client.post(
-                reverse("control_plane:create"),
+                reverse("control_plane:create") + "?kind=tls.uploaded_certificate",
                 form_keyed(
                     {
-                        "kind": "tls.uploaded_certificate",
                         "certificate_name": "app.example.com",
                         "install_on": ["example-npm"],
                         **material,

@@ -171,6 +171,10 @@ class Part:
     # The templates the partial includes that draw a piece of it alone, which
     # write its classes too and are drawn wherever it is.
     pieces: tuple[str, ...] = ()
+    # The one page whose own drawing this part is, a job no other page has
+    # (the topology page's map): its rules stand only while that page is the
+    # one place that draws it (test_part_sheets.py).
+    drawing_of: str = ""
 
     def __post_init__(self) -> None:
         if not (self.name or self.partial):

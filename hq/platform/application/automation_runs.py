@@ -97,7 +97,7 @@ def operation_registry(generation: str | None = None) -> OperationRegistry:
 # The variant of a playbook's run command that runs it again as it ran.
 AGAIN = "again"
 HERE = "here"
-RUN_HERE = "Run a playbook here"
+RUN_HERE = "Run playbook"
 
 
 def capability_name(operation_id: str) -> str:

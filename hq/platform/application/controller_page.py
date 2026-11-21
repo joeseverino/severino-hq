@@ -72,14 +72,6 @@ class ControllerPage:
     asked: tuple[ForcedRead, ...]
 
     @property
-    def standing_tone(self) -> str:
-        """Whether it is arriving, as a tone: none before it ever has."""
-
-        if self.standing.silent:
-            return Tone.SERIOUS
-        return Tone.GOOD if self.standing.known else ""
-
-    @property
     def failing_tone(self) -> str:
         return Tone.ATTENTION if self.failing else ""
 

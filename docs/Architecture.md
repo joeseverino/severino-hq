@@ -1726,8 +1726,8 @@ proposal waits for a person while a change of it is neither adopted nor
 rejected (`Reviewed.pending`).
 
 The Playbooks page (`control_plane:playbooks`) is the catalog adopted now,
-each playbook linking its command page, with the commit last adopted at on
-the title's line. Refresh is followed while its scan runs, and the same line
+each playbook linking its command page, with the commit last adopted at
+under the title. Refresh is followed while its scan runs, and the same line
 says why the newest scan failed. While a commit waits, the table holds a row
 for every playbook, adopted or brought by the commit, its last column the
 change table's Status, and each changed row its own Adopt and Reject

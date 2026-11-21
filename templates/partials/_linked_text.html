@@ -1,5 +1,10 @@
 {% comment %}
-Free text with the names HQ knows in it as links (`application.where_it_runs.named_links`,
-as `text|named_links`). Line breaks are kept by the class, not by markup.
+Free text a person wrote (a record's notes, a message), with the names HQ
+knows in it as links and its line breaks kept by the class, not by markup:
+
+  {% include "partials/_linked_text.html" with parts=record.notes|named_links only %}
+
+`named_links` (`application.where_it_runs.named_links`) splits the text into
+its plain stretches and the links of the names in it.
 {% endcomment %}
 <p class="linked-text">{% for part in parts %}{% if part.url %}{% entity part %}{% else %}{{ part|breakable }}{% endif %}{% endfor %}</p>

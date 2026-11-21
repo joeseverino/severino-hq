@@ -107,20 +107,24 @@ class SectionPart:
         return f"{self.id or named or 'section'}-heading"
 
     def drawn(
-        self, *, body: str = "", aside: str = "", empty: str = "", foot: str = "", heading_id: str = ""
+        self, *, body: str = "", lead: str = "", aside: str = "", empty: str = "", foot: str = "", heading_id: str = ""
     ) -> dict[str, Any] | None:
-        """What the partial draws: the frame, then the head, then the body
-        and its foot or the empty line. None when there is neither, since
-        nothing empty takes space (``partials/_empty_state.html``'s rules)."""
+        """What the partial draws: the frame, then the head with the body's
+        lead, then the body and its foot or the empty line. None when there
+        is neither, since nothing empty takes space
+        (``partials/_empty_state.html``'s rules)."""
 
+        if lead and (self.fold or self.figure):
+            raise ValueError("A section's lead is drawn in its head, which a fold's toggle or a caption cannot hold.")
         empty = empty or self.empty
         heading_id = heading_id or self.heading_id
-        if not str(body).strip() and not empty:
+        if not str(body).strip() and not lead and not empty:
             return None
         return {
             "section": self,
             "heading_id": heading_id,
             "body": body,
+            "lead": lead,
             # A line given in code is text unless it is marked safe, as a
             # template's own output is.
             "aside": self._aside(aside or conditional_escape(self.aside)),

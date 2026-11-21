@@ -108,6 +108,9 @@
    line of inline boxes can fall a fraction of a pixel short of the width that
    line lays out at, which would wrap it at its own width. */
 .section-head > .section-aside { flex: 1 1 auto; text-align: end; }
+/* The body's lead ends the head on a row of its own, as far under the
+   heading as a body starts. */
+.section-head > .section-lead { flex: 1 0 100%; min-width: 0; margin-block-start: calc(var(--space-5) - var(--space-3)); }
 /* A block in it (a nav of links) is as wide as what it holds, at the end. */
 :where(.section-aside > *) { inline-size: fit-content; margin-inline-start: auto; }
 /* A bare figure counting what a heading heads stands in that heading (a
@@ -197,31 +200,6 @@
 .month-item.is-all-day::before { content: none; }
 .month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
 .month-more:hover { color: var(--accent); }
-/* A source's color alone (partials/_calendar_sources.html#swatch). */
-.calendar-sources { display: grid; gap: var(--space-1); }
-/* A source is a toggle ({% button %} with `post` and `pressed`): the whole line is
-   the button, its box drawn before the name and filled in its color when
-   checked, both at the line's start where a button would center them. What
-   it shows and how it failed stand under the name, past the box. */
-.calendar-sources > li { display: grid; --check: 14px; --check-gap: var(--space-3); --check-inset: var(--space-2); }
-.calendar-source {
-  display: flex;
-  align-items: center;
-  justify-content: start;
-  gap: var(--check-gap);
-  width: 100%;
-  padding: var(--space-1) var(--check-inset);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  font-size: var(--text-sm);
-  text-align: start;
-}
-.calendar-source::before { content: ""; flex: none; width: var(--check); height: var(--check); border-radius: var(--radius-sm); outline: 1.5px solid var(--slot); outline-offset: -1.5px; }
-.calendar-source[aria-pressed="true"]::before { background: var(--slot); }
-.calendar-source:hover { background: var(--bg-tint); }
-.calendar-source[aria-pressed="false"] { color: var(--muted); }
-:is(.calendar-source-note, .calendar-source-failure) { padding-inline-start: calc(var(--check-inset) + var(--check) + var(--check-gap)); color: var(--muted-2); font-size: var(--text-2xs); }
-.calendar-source-failure { color: var(--tone-mark); font-variant-numeric: tabular-nums; }
 /* Compact, as the dashboard shows it: where things are, not what. Bars are
    slivers and lines fold away; the day opens the calendar for the rest. */
 .month-grid.is-compact .month-day { height: 2.5rem; padding: var(--space-1); }

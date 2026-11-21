@@ -16,5 +16,5 @@ nothing in this template knows which fields those are.
   {% endif %}
   {% if field.help_text %}<p class="help"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|breakable }}</p>{% endif %}
   {% if field.field.change_effect %}<p class="help field-effect tone-attention">{{ field.field.change_effect|breakable }}</p>{% endif %}
-  {% if field.errors %}<ul class="errors"{% if field.auto_id %} id="{{ field.auto_id }}_error"{% endif %}>{% for e in field.errors %}<li>{{ e|breakable }}</li>{% endfor %}</ul>{% endif %}
+  {{ field.errors }}
 </div>

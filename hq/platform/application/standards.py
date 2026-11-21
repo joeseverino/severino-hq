@@ -198,6 +198,12 @@ class CheckResult:
         return ANSWER[self.state]
 
     @property
+    def group(self) -> str:
+        """The checks it is drawn among in a meter: those of its scope."""
+
+        return self.check.scope
+
+    @property
     def tone(self) -> str:
         if self.met:
             return Tone.NEUTRAL if self.reading.limited else Tone.GOOD

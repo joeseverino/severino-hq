@@ -1,5 +1,5 @@
-"""The Playbooks page: the adopted catalog, the commit it was adopted at on
-the title's line, and, while a newer scanned commit waits, a row for every
+"""The Playbooks page: the adopted catalog, the commit it was adopted at
+under the title, and, while a newer scanned commit waits, a row for every
 playbook with how the commit changes it and its own Adopt and Reject, and a
 person's View diff, Adopt all and Reject all; and the audit entry of the
 scan's read, which View diff opens, each drawn from what the estate stored."""

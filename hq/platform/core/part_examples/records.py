@@ -22,7 +22,6 @@ lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
-lazy from hq.platform.application.path_model import Certificate
 lazy from hq.platform.application.relationships import Relationships
 lazy from hq.platform.application.tone import Tone
 lazy from hq.platform.application.topology_model import RelationGroup, Relationship
@@ -698,6 +697,28 @@ REPOSITORY_POSTURES = Example(
 )
 
 
+# A share of the largest, then one too small to round up, which still shows.
+METER = Example(
+    '{% include "partials/_meter.html" with value=64 max=100 only %}'
+    '{% include "partials/_meter.html" with value=0.4 max=100 only %}'
+)
+METER_STATES = {
+    # Checks of two groups, each met, unmet or not read, as a repository's are.
+    "marks": Example(
+        '{% include "partials/_meter.html" with marks=marks label="4 of 5 checks pass; example is off" only %}',
+        {
+            "marks": (
+                {"tone": Tone.GOOD, "group": "every"},
+                {"tone": Tone.GOOD, "group": "every"},
+                {"tone": Tone.SERIOUS, "group": "every"},
+                {"tone": Tone.GOOD, "group": "public"},
+                {"tone": Tone.NEUTRAL, "group": "public"},
+            )
+        },
+    ),
+}
+
+
 CHANGE_STATES = {
     # A value and the one that replaces it: as words, and as a cell's own
     # identifiers, one pair linking outside HQ and one too long to share a
@@ -714,11 +735,6 @@ CHANGE_STATES = {
         {"old": "example:2026.1.0", "new": "example:2026.3.0"},
     ),
 }
-
-
-CERTIFICATE_MARK = Example(
-    context=lambda: {"certificate": Certificate("Proxy", name="app.example.com", issuer="Example CA")}
-)
 
 
 ICON = Example(context={"name": "check-circle"})

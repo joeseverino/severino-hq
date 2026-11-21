@@ -70,12 +70,14 @@ PAGE_HEAD = _part(
     "page_head",
     "A page's head: its trail, its title, its facts and its actions, the overflow of them in a menu.",
     *("is-column", "overflow-menu", "overflow-menu-copies", "overflow-menu-panel", "page-actions", "page-facts"),
-    *("page-head", "page-head-copy", "page-title-row", "page-trail", "page-trail-row"),
+    *("page-head", "page-head-copy", "page-name", "page-trail", "page-trail-row"),
     rules="""
-    **One head.** Trail, title, controls, lede, laid out the same at every width. The title and its
-    controls share a row (the title wraps before the controls move); the lede runs the full width
-    under both. Two controls stand beside the title at every width, the lead and the next the page
-    names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
+    **One head.** Trail, title, controls, lede, laid out the same at every width. The controls stand
+    at the head's top right, beside the trail and the title together, so the trail's line is as tall
+    as its words, or beside the title alone where there is no trail (the title wraps before the
+    controls move). Every line after the title has the head's whole width: what the page says about
+    its thing and the lede never share a line with the controls. Two controls stand there at every
+    width, the lead and the next the page names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
     the head) folds the second in too. The lead is chosen by what each control is for, never by where
     it stands: not a destructive one while another is offered, then one that can be pressed, then the
     page's primary (`head_actions`). A destructive verb (a stop) is a link to its confirmation, which
@@ -87,7 +89,8 @@ PAGE_HEAD = _part(
     how HQ works inside (a file path, a background mechanism). Never "What X may run: ...", which says
     the heading again.
 
-    A thing's state sits on its title's line (`page_aside`), as words. A page about a day (the
+    A thing's state is the line under its title (`page_aside`), as words, each of its parts (a
+    machine's addresses) moving to the next line whole. A page about a day (the
     dashboard) names it with `page_dateline`, drawn over the title where a trail stands. A head with
     an aside and a line of facts (`page_facts`) stacks its words in a column of their own: the trail
     or day, the title, the facts. The aside stands beside the whole column, as the dashboard's
@@ -133,7 +136,7 @@ READING_AGE = _part(
 WORK_QUEUE = _part(
     "work_queue",
     "What waits on the operator, each row what wants doing and why, or that nothing does.",
-    *("attention-clear", "attention-links", "attention-reason", "is-mark", "row-gist", "row-line"),
+    *("attention-clear", "attention-reason", "is-mark", "row-gist", "row-line"),
     pieces=("partials/_queue_entries.html", "partials/_queue_rows.html", "partials/_urgency_pill.html"),
     public=True,
     rules="""
@@ -239,9 +242,11 @@ TOPOLOGY_MAP = _part(
     "The map of how things connect, laid out and filtered by its own script, each node's edges stated from it.",
     *("topology-detail", "topology-kind-*", "topology-kind-mark", "topology-lane", "topology-map"),
     *("topology-node", "topology-node-*", "topology-node-degree", "topology-node-link", "topology-node-list"),
-    *("topology-node-select", "topology-node-title", "topology-workspace", "relation-arrow", "relation-kind"),
-    *("relation-link", "relation-list", "relation-other", "relation-reading", "relation-values", "relation-verb"),
+    *("topology-node-select", "topology-node-slot", "topology-node-title", "topology-workspace"),
+    *("relation-arrow", "relation-kind", "relation-link", "relation-list", "relation-other", "relation-reading"),
+    *("relation-values", "relation-verb"),
     pieces=("partials/_relation_list.html",),
+    drawing_of="control_plane/topology.html",
     rules="""
     **One map.** A graph is drawn by this part from what the map's view (`drawn`) hands it: the filter bar
     that narrows it, a lane of cards for each kind, and the one panel beside the lanes that holds the
@@ -251,6 +256,23 @@ TOPOLOGY_MAP = _part(
     `partials/_relationships.html` instead. The `graph/` examples draw both from one example graph.
     """,
     example=graph.TOPOLOGY_MAP,
+)
+
+METER = _part(
+    "meter",
+    "A proportion as a bar, or as a segment for each of what it counts.",
+    *("meter", "meter-break", "meter-mark", "meter-marks"),
+    public=True,
+    rules="""
+    **A proportion is a meter.** A share of a whole, or of the largest of several, is a `<meter>` of its
+    `value` against its `max`, which the browser draws from its value, so no template writes a width; a
+    share too small to round up still shows. Given `marks` (each with a `tone`, and a `group`), it is a
+    segment for each in its tone instead, a gap where the group changes, every segment one width, so a
+    column of meters lines each mark up under the same mark above. The segments are one control, its
+    `label` both what it says aloud and its tip.
+    """,
+    example=records.METER,
+    states=records.METER_STATES,
 )
 
 PARTS = (
@@ -328,19 +350,12 @@ PARTS = (
     _part(
         "calendar_sources",
         "The calendar's sources, each a toggle with its color swatch.",
-        *("calendar-source", "calendar-source-failure", "calendar-source-note", "calendar-sources"),
         draws=(CHART, MONTH_GRID),
         rules="""
-        Each source is a `{% button %}` with `post` and `pressed`, in its series color.
+        A `{% list %}` of the sources, each a menu row's `{% button %}` with `post` and `pressed`, its box
+        in its series color, or its swatch beside its name for a reader who may not choose.
         """,
         example=records.CALENDAR_SOURCES,
-    ),
-    _part(
-        "certificate_mark",
-        "A certificate's mark: whether it is in force or waits on its issue.",
-        "cert-mark",
-        "is-pending",
-        example=records.CERTIFICATE_MARK,
     ),
     _part(
         "change",
@@ -413,8 +428,9 @@ PARTS = (
     ),
     _part(
         "document_picture",
-        "A receipt's scan, held in its shape before it arrives.",
+        "A picture of a document (a scan, a photo of a receipt), held in a page's shape before it arrives.",
         "document-picture",
+        public=True,
         example=records.DOCUMENT_PICTURE,
         states=records.DOCUMENT_PICTURE_STATES,
     ),
@@ -567,6 +583,7 @@ PARTS = (
         "identity",
         "An account's picture, name and handle.",
         *("identity", "identity-name", "identity-picture", "identity-words"),
+        public=True,
         rules="""
         **An account is named by this part.** It draws its picture (a `data:` URI or an HQ path, never
         another host's address) and its name, with a state beside it drawn by `{% status %}`. Its handle
@@ -597,12 +614,12 @@ PARTS = (
     ),
     _part(
         "linked_text",
-        "Free text with the names HQ knows in it as links.",
+        "Free text a person wrote, with the names HQ knows in it as links.",
         "linked-text",
         rules="""
-        A person's free text with the names HQ knows in it (a project's deployment notes) is this part,
-        over the text's runs that `application.where_it_runs.named_links` finds: each name a link as every
-        mention is, and its line breaks kept.
+        Every free text a person wrote (a record's notes, a message sent through the contact form) is this
+        part, over the text's runs that `application.where_it_runs.named_links` finds: each name a link as
+        every mention is, and its line breaks kept.
         """,
         example=records.LINKED_TEXT,
     ),
@@ -710,12 +727,13 @@ PARTS = (
         "bar-label",
         "bar-list",
         "bar-row",
-        "bar-track",
         "bar-value",
+        draws=(METER,),
+        public=True,
         rules="""
         A ranked list of shares, as the pages and sources of a site's traffic are: each row its label and
         figure on one line over a bar of its size against the largest row's, so a long tail still reads
-        apart. The bar is a `<meter>`, and a label past its line is cut, whole on hover.
+        apart. The bar is `partials/_meter.html`'s, and a label past its line is cut, whole on hover.
         """,
         example=charts.SHARE_LIST,
     ),
@@ -723,11 +741,11 @@ PARTS = (
         "site_header",
         "The header every page opens with: the brand, the places, the search and the user's menu.",
         *("action-badge", "brand", "demo-flag", "global-search", "nav-group", "nav-group-button", "nav-group-label"),
-        *("nav-group-panel", "nav-toggle", "primary-nav", "search-key", "search-label", "site-header", "skip-link"),
+        *("nav-group-panel", "primary-nav", "search-key", "search-label", "site-header", "skip-link"),
         *("menu-identity", "menu-identity-picture", "menu-identity-when", "menu-identity-who", "menu-item"),
         *("menu-item-note", "menu-item-split", "menu-item-status", "menu-places", "menu-setting", "menu-settings"),
-        *("menu-theme", "menu-theme-label", "menu-theme-option", "menu-theme-options", "role-mark", "switch-knob"),
-        *("switch-track", "user-avatar", "user-menu", "user-menu-panel", "user-name"),
+        *("menu-theme", "menu-theme-label", "menu-theme-option", "menu-theme-options", "role-mark"),
+        *("user-avatar", "user-menu", "user-menu-panel", "user-name"),
         pieces=("partials/_user_menu.html",),
         rules="""
         **The header is one row.** When room runs out, the search field collapses to a button that opens
@@ -751,7 +769,7 @@ PARTS = (
     _part(
         "table_toolbar",
         "A list's toolbar: its filters, its sort, its columns and what is selected.",
-        *("filter-count", "table-filter-menu", "table-filter-options", "table-selection", "table-sort", "table-toggle"),
+        *("table-filter-menu", "table-filter-options", "table-selection", "table-sort", "table-toggle"),
         rules="""
         **A table's filter is a popover.** Its button names its panel with `popovertarget`. The panel
         (`popover`, its id `table-filter-<name>`) opens in the top layer, placed against the button by
@@ -775,6 +793,7 @@ PARTS = (
         "toggle_set",
         "A set of toggles that filter what a view shows.",
         "toggle-set",
+        public=True,
         rules="""
         No chip walls: a set of on-or-off choices is this part, checkboxes in a row of their own words
         under one hidden legend, named (`name=`) when Filter sends them and unnamed when the page's script
@@ -794,10 +813,11 @@ PARTS = (
         only where a controller will read what it asks for (`cadence.WorkerStanding.takes_reads`): one
         whose heartbeat says it reports to this HQ, and is not silent. Where none will, the page draws no
         ask and no note, so it never promises a refresh that cannot come. `page.html` draws the ask, and
-        its note says what it waits for at the end of the head's first line, in room of its own; a line
-        whose longest word or date leaves it none hides it. An unseen strut of each sentence HQ writes for
-        it word for word sizes its slot (`asks.REFRESHING`, `REFRESHED`, `NEWER_READING` and
-        `SHOW_NEWER`, which the script writes from the page). So those sentences are always whole, and the
+        its note ends the head's first line, in room of its own; a line whose longest word or date leaves
+        it none hides it. Nobody pressed the ask, so its note says nothing while the readings are under
+        way or once they land, which the page drawn again shows: it says only a failure, and the offer of
+        a newer reading it could not draw in place. An unseen strut of that offer, word for word, sizes
+        its slot (`asks.NEWER_READING` and `SHOW_NEWER`, which the script writes from the page), so the
         trail beside it never moves whatever the note says. Only a failure's sentence is cut, whole in its
         title. The dashboard names itself only when a reading its queue is drawn from is due
         (`visit_refresh.PAGES`), and the connection panel only when the tailnet, container or posture
@@ -823,19 +843,16 @@ PARTS = (
         """,
         states=pages.VISIT_REFRESH_STATES,
     ),
+    METER,
     Part(
         name="",
         partial="projects/_repository_postures.html",
         about="Each repository's checks as a meter of those met.",
-        classes=(
-            *("posture-access", "posture-meter", "posture-meter-break", "posture-repo-name"),
-            *("posture-repos", "posture-score"),
-        ),
-        draws=(MONTH_GRID,),
+        draws=(METER,),
         rules="""
-        Repositories against their standard: a row each of its name, a meter with a segment per check, its
-        score and who can reach it. The meter follows the name column, so one check sits in the same place
-        on every row.
+        Repositories against their standard, a table's row each: its name over a meter with a segment per
+        check, then its score and who can reach it. Every meter starts where its name does, so one check
+        sits in the same place on every row.
         """,
         example=records.REPOSITORY_POSTURES,
     ),

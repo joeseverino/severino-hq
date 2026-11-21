@@ -48,19 +48,13 @@ switches and theme they set, and the places and verbs of their session.
       <form action="{% url 'demo_mode' %}" method="post">
         {% write_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
-          <span>Demo data</span>
-          <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
-        </button>
+        {% button "Demo data" submit=True css="menu-item menu-setting" checked=request.showing_demo %}
       </form>
       <form action="{% url 'agent_access' %}" method="post">
         {% write_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
-        <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if agents_paused %}false{% else %}true{% endif %}">
-          <span>Agents allowed</span>
-          <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
-        </button>
+        {% if agents_paused %}{% button "Agents allowed" submit=True css="menu-item menu-setting" checked=False %}{% else %}{% button "Agents allowed" submit=True css="menu-item menu-setting" checked=True %}{% endif %}
       </form>
     </div>
     {% comment %}
@@ -72,8 +66,8 @@ switches and theme they set, and the places and verbs of their session.
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
       <span class="menu-theme-label" id="menu-theme-label">Theme</span>
       <span class="menu-theme-options" role="group" aria-labelledby="menu-theme-label">
-        {% for value, label in THEME_CHOICES %}
-        <button type="submit" name="theme" value="{{ value }}" class="menu-item menu-theme-option" aria-pressed="{% if THEME == value %}true{% else %}false{% endif %}" aria-label="{{ label }}" title="{{ label }}">{% if value == "light" %}{% include "partials/_icon.html" with name="sun" %}{% elif value == "dark" %}{% include "partials/_icon.html" with name="moon" %}{% else %}{% include "partials/_icon.html" with name="laptop" %}{% endif %}</button>
+        {% for value, label, icon in THEME_CHOICES %}
+        {% if THEME == value %}{% button "" submit=True name="theme" value=value css="menu-item menu-theme-option" icon=icon title=label pressed=True %}{% else %}{% button "" submit=True name="theme" value=value css="menu-item menu-theme-option" icon=icon title=label pressed=False %}{% endif %}
         {% endfor %}
       </span>
     </form>
@@ -94,7 +88,7 @@ switches and theme they set, and the places and verbs of their session.
       </a>
       <form action="{% url 'logout' %}" method="post">
         {% write_token %}
-        <button type="submit" class="menu-item">Sign out</button>
+        {% button "Sign out" submit=True css="menu-item" %}
       </form>
     </div>
   </div>

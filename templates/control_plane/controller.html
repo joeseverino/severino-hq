@@ -7,8 +7,8 @@ for it. Nothing here asks it anything.
 {% endcomment %}
 {% with standing=controller.standing %}
 {% card element="div" %}{% facts layout="band" label="Controller status" %}
-  {% fact "Controller" icon="activity" tone=controller.standing_tone %}
-    {% if not standing.known %}Never run{% elif standing.silent %}Not heard from for {{ standing.seen_at|when:"length" }}{% else %}Running{% endif %}
+  {% fact "Controller" icon="activity" %}
+    {% status standing.state dot=True ink="context" %}
   {% detail %}
     {% if not standing.known %}<small>No controller has connected to this HQ yet.</small>
     {% elif standing.silent %}<small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>

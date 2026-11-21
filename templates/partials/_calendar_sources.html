@@ -3,21 +3,22 @@ The calendar's list of sources, each a toggle that shows or hides it:
 
   {% include "partials/_calendar_sources.html" with sources=sources %}
 
-`sources` are application.calendar.SourceView. Each is its `choice`, a
-posting `{% button %}` with `pressed`, for a reader who may choose, the whole line the button, its box drawn before the name in the
-source's series color and filled while it is shown. What it shows and why it
-could not be read stand under the name, past the box. `#swatch` is a
-source's color alone, beside what of it a day holds:
+`sources` are application.calendar.SourceView. Each is its `choice`, a menu
+row's posting `{% button %}` with `pressed`, for a reader who may choose: its
+box drawn before the name in the source's series color, filled while it is
+shown. A reader who may not choose sees the source's swatch before its name.
+What it shows and why it could not be read stand under the name. `#swatch` is
+a source's color alone, beside what of it a day holds:
 
   {% include "partials/_calendar_sources.html#swatch" with source=source %}
 {% endcomment %}
 {% partialdef swatch %}<i class="swatch-key series-{{ source.slot }}" aria-hidden="true"></i>{% endpartialdef %}
-<ul class="calendar-sources">
+{% list %}
   {% for source in sources %}
     <li class="series-{{ source.slot }}">
-      {% if source.choice %}{% button source.label offer=source.choice css="calendar-source" pressed=source.shown %}{% else %}{% button source.label css="calendar-source" disabled=True %}{% endif %}
-      {% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}
-      {% if source.failure %}<small class="calendar-source-failure tone-attention">{{ source.failure|breakable }}</small>{% endif %}
+      {% if source.choice %}{% button source.label offer=source.choice look="menu" pressed=source.shown %}{% else %}<span>{% partial swatch %} {{ source.label|breakable }}</span>{% endif %}
+      {% if source.description %}<small>{% muted %}{{ source.description|breakable }}{% endmuted %}</small>{% endif %}
+      {% if source.failure %}<small>{% status source.failure tone="attention" pill=False %}</small>{% endif %}
     </li>
   {% endfor %}
-</ul>
+{% endlist %}

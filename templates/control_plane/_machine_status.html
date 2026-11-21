@@ -1,6 +1,7 @@
 {% comment %}
-A machine's state and addresses, on its title's line (`page_aside`), each a
-part of the line's list, which wraps whole.
+A machine's state and addresses, on the line under its name (`page_aside`),
+each a part of the line's list, which wraps whole. Its addresses are one part,
+a list of their own, so they move to the next line together.
 
 One state, as on the list. Presence decides when the tailnet reports the
 machine; each connection's own answer is under "Read through".
@@ -17,5 +18,5 @@ an SSH item for the same VPS) so the names fold together and the ones not
 chosen are said here rather than dropped.
 {% endcomment %}
 {% list kind="dots" muted=True %}
-  <li>{% status machine.state tone=machine.tone %}{% if machine.presence and not machine.presence.online and machine.presence.last_seen %} since {{ machine.presence.last_seen|when:"day" }}{% endif %}{% if is_this_device %}</li><li>{% status "This device" tone="good" title="You are viewing this page from this machine" %}{% endif %}{% if machine.role %}</li><li>{{ machine.role|breakable }}{% endif %}{% if not reached_links %}</li><li>no connection reads it{% if not machine.declaration %}; another record names it{% endif %}{% endif %}{% if machine.address and not machine.header_addresses %}</li><li><code>{{ machine.address|breakable }}</code>{% endif %}{% for reached in machine.header_addresses %}</li><li>{% muted %}{{ reached.label|breakable }}{% endmuted %} <code>{{ reached.address|breakable }}</code>{% if reached.holder %} {% muted %}{{ reached.holder|breakable }}{% endmuted %}{% endif %}{% endfor %}{% if machine.aliases %}</li><li>also known as {% for alias in machine.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</li>
+  <li>{% status machine.state tone=machine.tone %}{% if machine.presence and not machine.presence.online and machine.presence.last_seen %} since {{ machine.presence.last_seen|when:"day" }}{% endif %}{% if is_this_device %}</li><li>{% status "This device" tone="good" title="You are viewing this page from this machine" %}{% endif %}{% if machine.role %}</li><li>{{ machine.role|breakable }}{% endif %}{% if not reached_links %}</li><li>no connection reads it{% if not machine.declaration %}; another record names it{% endif %}{% endif %}{% if machine.address and not machine.header_addresses %}</li><li><code>{{ machine.address|breakable }}</code>{% endif %}{% if machine.header_addresses %}</li><li>{% list kind="dots" %}{% for reached in machine.header_addresses %}<li>{% muted %}{{ reached.label|breakable }}{% endmuted %} <code>{{ reached.address|breakable }}</code>{% if reached.holder %} {% muted %}{{ reached.holder|breakable }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endif %}{% if machine.aliases %}</li><li>also known as {% for alias in machine.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</li>
 {% endlist %}

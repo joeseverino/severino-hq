@@ -13,7 +13,6 @@ from hq.platform.application.markup_testing import select, texts
 from hq.platform.core.templatetags.value_tags import dot
 from hq.platform.core.testing import declare, operator
 
-from ..cadence import WorkerStanding
 from ..cadence_testing import controller_arrived
 from ..controller_page import controller_page
 from .commands import commands_on
@@ -42,15 +41,10 @@ class ControllerPageTests(TestCase):
         self.assertIsNone(page.swept_at)
         self.assertEqual(page.readings, ())
         self.assertEqual(page.queue, ())
-        self.assertEqual((page.standing_tone, page.failing_tone, page.overdue_tone, page.queue_tone), ("",) * 4)
+        self.assertEqual((page.failing_tone, page.overdue_tone, page.queue_tone), ("",) * 3)
 
-    def test_a_silent_controller_is_serious_one_arriving_good_and_late_sweeps_serious(self):
-        page = controller_page()
-        seen = timezone.now()
-
-        self.assertEqual(replace(page, standing=WorkerStanding(seen, silent=True)).standing_tone, "serious")
-        self.assertEqual(replace(page, standing=WorkerStanding(seen, silent=False)).standing_tone, "good")
-        self.assertEqual(replace(page, overdue=True).overdue_tone, "serious")
+    def test_late_sweeps_are_serious(self):
+        self.assertEqual(replace(controller_page(), overdue=True).overdue_tone, "serious")
 
     def test_a_controller_never_seen_is_given_its_start_steps_and_one_that_ran_is_not(self):
         from hq.platform.application import cadence
@@ -131,7 +125,6 @@ class ControllerPageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:controller"))
 
-        self.assertContains(response, "Not heard from for")
         self.assertContains(response, "Nothing has been read or changed since.")
         (named,) = select(response, "title", "adguard.rewrite")
         self.assertEqual(named.words, "Internal DNS record")

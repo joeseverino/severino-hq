@@ -1,9 +1,11 @@
 """Probes of controls drawn as controls: their words on one line, and one height to a row."""
 
+from hq.platform.application.pages import Page, PageAction
 from hq.platform.core.templatetags.table_tags import ROW_ACTIONS
-from hq.platform.core.tests.browser.probes import Check
+from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, TEXT_SHOWN
 from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 
 # A control drawn as one: a select, or a box the selector names that
 # paints an edge, a fill or a shadow. A bare button is a link set in a
@@ -121,9 +123,11 @@ ROW_WORDS = "30ch"
 # line, resolved in the words' own font, some text of which runs
 # onto a second line. A row in that shape reads a few words to a line beside a
 # column of buttons, where its buttons belong in the line beneath (a narrow
-# box, tables.css).
+# box, tables.css). A page head's controls (``heads``) are held to the same:
+# what the page says beside its title, its lede or its facts (``said``) on
+# more than one line beside them, under that line, has lost its room to them.
 ACTIONS_BESIDE_SQUEEZED_WORDS = (
-    "([cells, measure]) => {"
+    "([cells, measure, heads, said]) => {"
     + DESCRIBE
     + """
   const pressed = 'a[href], button, .btn, [role="button"], input:is([type=submit], [type=button])';
@@ -132,15 +136,19 @@ ACTIONS_BESIDE_SQUEEZED_WORDS = (
   const token = getComputedStyle(document.documentElement).getPropertyValue('--row-words').trim();
   if (token && token !== measure) found.push(`--row-words is ${token}, not ${measure}`);
   const range = document.createRange();
-  const wraps = (cell) => {
+  // Whether a box's words run onto a second line: one run broken across
+  // lines (``within``), or anywhere in it, a run of parts that wraps.
+  const wraps = (cell, within = true) => {
     const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    const all = new Set();
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (!node.textContent.trim() || !node.parentElement.checkVisibility()) continue;
       range.selectNodeContents(node);
       const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
-      if (tops.size > 1) return true;
+      if (within && tops.size > 1) return true;
+      tops.forEach((top) => all.add(top));
     }
-    return false;
+    return !within && all.size > 1;
   };
   const measureIn = (cell) => {
     const ruler = document.createElement('span');
@@ -170,6 +178,19 @@ ACTIONS_BESIDE_SQUEEZED_WORDS = (
     if (room + 1 < line && wraps(widest)) {
       const said = controls.map((el) => el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 24)).join(' / ');
       found.push(`${describe(cell)} stands "${said}" beside words wrapped in ${room.toFixed(1)}px, under their ${line.toFixed(1)}px line`);
+    }
+  }
+  for (const controls of document.querySelectorAll(heads)) {
+    if (!controls.checkVisibility()) continue;
+    read += 1;
+    const edge = box(controls);
+    for (const words of controls.parentElement.querySelectorAll(said)) {
+      const at = box(words);
+      if (!words.checkVisibility() || at.top >= edge.bottom - 1 || at.bottom <= edge.top + 1) continue;
+      const line = measureIn(words);
+      if (at.width + 1 < line && wraps(words, false)) {
+        found.push(`${describe(controls)} stands beside ${describe(words)} wrapped in ${at.width.toFixed(1)}px, under its ${line.toFixed(1)}px line`);
+      }
     }
   }
   return {read, found};
@@ -224,15 +245,53 @@ CONTROL_WORDS_IN_ONE_BOX = (
 )
 
 
+# A head's words beside its controls in the room they leave, a few to a line.
+_SQUEEZED_HEAD = (
+    '<header class="page-head" style="display: flex; flex-wrap: nowrap">'
+    '<div class="page-head-copy" style="display: block; flex: 1 1 0; order: 0">'
+    '<p class="page-lede">An example sentence that says what the state of this example thing means.</p></div>'
+    '<div class="page-actions" style="flex: none; order: 1">'
+    '<a class="btn" href="/example/">An example action of many words</a></div>'
+    "</header>"
+)
+
+# The page head as it draws on a phone, in the page's gutters, with a trail
+# and without: what it says beside its title, a sentence long, and its lead
+# control with the menu beside it.
+_HEAD_STATUS = {
+    "label": "Online",
+    "tone": "good",
+    "state": "example",
+    "detail": "An example sentence that says what the state of this example thing means.",
+}
+_HEADS = tuple(
+    Example(
+        '<div class="content">{% include "partials/_page_head.html" %}</div>',
+        width=PHONE_SCREEN[0],
+        values={
+            "page": Page(
+                title="example-host-01",
+                trail=trail,
+                actions=(PageAction("Example action", "/example/"), PageAction("Edit", "/example/edit/")),
+            ),
+            "page_aside": "control_plane/_record_status.html",
+            "status": _HEAD_STATUS,
+        },
+    )
+    for trail in ((("Examples", "/example/"),), ())
+)
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "row actions beside squeezed words": Check(
         (
             ACTIONS_BESIDE_SQUEEZED_WORDS,
-            [SELECTORS["row_actions_cell"], ROW_WORDS],
+            [SELECTORS["row_actions_cell"], ROW_WORDS, SELECTORS["head_actions"], SELECTORS["head_said"]],
         ),
-        reader_sees="a row's words squeezed a few to a line beside its buttons",
+        reader_sees="a row's or a head's words squeezed a few to a line beside its buttons",
         part=ROW_ACTIONS,
+        plants=(Plant(_SQUEEZED_HEAD, width=PHONE_SCREEN[0], finds=("stands beside",)),),
+        clear=_HEADS,
     ),
     "words swapped for a glyph": Check(
         (WORDS_SWAPPED_FOR_A_GLYPH, SELECTORS["pressed"]),

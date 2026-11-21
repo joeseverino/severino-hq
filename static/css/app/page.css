@@ -38,14 +38,28 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* A link's muted words take the link's color when it is pressed, as a muted link would. */
 a:is(:hover, :focus-visible) > .muted { color: inherit; }
 
-/* One head at every width. The copy steps aside (`display: contents`) so its
-   parts can be ordered: the trail on its own row, the title and the controls
-   sharing the next row while they fit (the browser decides, not a count of
-   controls), and the lede the full width under both. Actions wrap under the
-   title only when they cannot fit beside it. */
+/* One head at every width, on a grid: the trail, then the name, in the
+   first column, the controls beside both in the second, as tall as the two
+   lines together, so they set neither's height; everything after (what the
+   page says beside its title, the lede, the facts) spans the head's whole
+   width, never the room the controls leave. With no trail the controls
+   stand beside the name alone. The copy steps aside (`display: contents`)
+   so its parts are the grid's items. */
 /* A container, so its controls fold by the head's width (surfaces.css). */
-.page-head { container: page-head / inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
+.page-head { container: page-head / inline-size; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
+.page-head:has(> .page-actions) { grid-template-columns: minmax(0, 1fr) auto; }
 .page-head-copy { display: contents; }
+.page-head > *, .page-head-copy > * { grid-column: 1 / -1; min-width: 0; }
+.page-head-copy > :is(.page-trail-row, .page-name) { grid-column: 1; }
+.page-head > .page-actions { grid-column: 2; grid-row: 1 / span 2; }
+.page-head:not(:has(> .page-head-copy > .page-trail-row)) > .page-actions { grid-row: 1; }
+/* A phone's head leaves the trail too little room beside the controls for a
+   note's sentence, so there a trail holding a note takes the head's width and
+   the controls stand beside the name alone. */
+@container page-head (width < 30rem) {
+  .page-head-copy > .page-trail-row:has(> .visit-slot) { grid-column: 1 / -1; }
+  .page-head:has(> .page-head-copy > .page-trail-row > .visit-slot) > .page-actions { grid-row: 2; }
+}
 /* The head's first line: the trail, then at its end the note of a page about
    one thing (partials/_visit_refresh.html) in the room it keeps (cuts.css).
    A trail longer than the line wraps between its steps inside it, leaving the
@@ -54,26 +68,23 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .page-trail-row { display: flex; flex-wrap: wrap; align-items: baseline; }
 .page-trail-row:has(> .visit-slot)::after { content: ""; flex: 1000 0 0; inline-size: var(--space-6); max-inline-size: var(--space-6); }
 .page-trail-row > :not(.visit-slot) { flex: 1 1 0; }
-.page-head-copy > .page-trail-row { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
-/* The title yields width before the controls do: a long name wraps in its
-   own column at its spaces and seams. The controls take a row of their own
-   only when the title's widest word or identifier would not fit beside them,
-   never splitting it. */
-.page-head .page-title-row { flex: 1 1 0; order: 1; max-width: 100%; }
+.page-head-copy > .page-trail-row { margin-bottom: calc(-1 * var(--space-2)); }
+/* The name and what it is: a long name wraps in its own column at its spaces
+   and seams beside the controls. */
+.page-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 /* Its width is its whole name, so the controls give way rather than split it. */
 .page-head h1 .token { width: max-content; }
-.page-head > .page-actions { order: 2; }
-/* Full width so it always takes its own row, under the title and controls. */
-.page-head .page-lede { flex: 1 1 100%; order: 3; margin-bottom: 0; margin-top: calc(-1 * var(--space-1)); }
+.page-head .page-lede { margin-bottom: 0; margin-top: calc(-1 * var(--space-1)); }
 /* A line of facts is short things side by side, which read best on as few
    lines as fit, so it takes the head's width. */
-.page-head .page-facts { flex: 1 1 100%; order: 3; color: var(--muted); font-size: var(--text-sm); margin-top: calc(-1 * var(--space-1)); }
+.page-head .page-facts { color: var(--muted); font-size: var(--text-sm); margin-top: calc(-1 * var(--space-1)); }
 .page-head h1 { margin: 0; }
 .page-head p { margin: 0; }
 /* With an aside beside it and a line of facts (partials/_page_head.html), the
    copy is a column of its own: its lines stacked a small gap apart, as wide
    as its words, and the aside takes the rest of the head's line beside all of
    them, wrapping under the column only when it cannot fit. */
+.page-head:has(> .is-column) { display: flex; flex-wrap: wrap; }
 .page-head-copy.is-column { display: grid; align-content: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0; }
 .page-head-copy.is-column > * { margin: 0; }
 .page-trail { margin: 0; color: var(--muted); font-size: var(--text-xs); }
@@ -107,6 +118,12 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- clips the dot before a part that opens a line, never a part */
   overflow-x: clip;
 }
+/* A part that is a run of its own (a machine's addresses) moves to the next
+   line whole and wraps inside itself only where a line cannot hold it, its
+   dot beside it. A line list's rest (`line-rest`, cuts.css) is the same run
+   carried on, never a part of its own. */
+.dot-list > :has(> .dot-list):not(.line-rest) { display: flex; align-items: baseline; min-width: 0; }
+.dot-list > :not(.line-rest) > .dot-list { min-width: 0; }
 .dot-list > * + *::before {
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
@@ -181,12 +198,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 :root:has(.page-nav) { --page-nav-height: calc(var(--page-nav-link-size) + 2 * var(--space-4) + 1px); }
 /* Whatever a link lands on stops under the row, whatever draws it. */
 :where(.content [id]) { scroll-margin-block-start: var(--page-nav-height); }
-/* Most heads wrap their controls in .page-actions; list pages hang a single
-   control straight off the head. Both should sit at the far edge, otherwise
-   the same button lands beside the title on one page and against the right
-   margin on the next. */
-.page-head > .btn, .page-head > form { margin-left: auto; }
-.page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
 
 /* ── Buttons ────────────────────────────────────────────────────── */
 
@@ -420,9 +431,9 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 
 /* The sections' toggle belongs to the narrow layout only, where the
    sections leave the row; it and the queue's bell are a control square. */
-.nav-toggle { display: none; }
-.nav-toggle > svg { width: 15px; height: 12px; }
-.action-badge, .nav-toggle { inline-size: var(--control-size); padding: 0; }
+.site-header > [popovertarget="primary-navigation"] { display: none; }
+.site-header > [popovertarget="primary-navigation"] > svg { width: 15px; height: 12px; }
+.action-badge, .site-header > [popovertarget="primary-navigation"] { inline-size: var(--control-size); padding: 0; }
 /* The badge is one size whatever it counts, so the count arriving after the
    page (a fragment on every page but the two that count it) moves nothing in
    the bar: it is pinned to the corner, outside the flow. */
@@ -448,8 +459,8 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    Escape closes it. Open, it is the panel at any width, so a window widened
    with it open still shows a panel until it is dismissed. */
 @media (max-width: 1080px) {
-  .nav-toggle { display: inline-flex; grid-area: toggle; }
-  .nav-toggle:focus:not(:focus-visible) { outline: none; }
+  .site-header > [popovertarget="primary-navigation"] { display: inline-flex; grid-area: toggle; }
+  .site-header > [popovertarget="primary-navigation"]:focus:not(:focus-visible) { outline: none; }
   .primary-nav { display: none; grid-area: auto; }
 }
 .primary-nav:popover-open {

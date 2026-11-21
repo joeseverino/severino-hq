@@ -18,5 +18,5 @@ the input's aria-describedby names.
     <ul class="dropzone-files" data-dropzone-files hidden></ul>
     <template data-dropzone-file><li></li></template>
   </label>
-  {% if field.errors %}<ul class="errors"{% if field.auto_id %} id="{{ field.auto_id }}_error"{% endif %}>{% for error in field.errors %}<li>{{ error|breakable }}</li>{% endfor %}</ul>{% endif %}
+  {{ field.errors }}
 </div>

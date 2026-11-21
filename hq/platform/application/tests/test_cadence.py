@@ -494,7 +494,7 @@ class WorkerStandingTests(TestCase):
 
         self.assertFalse(standing.known)
         self.assertFalse(standing.silent)
-        self.assertEqual(standing.tone, "neutral")
+        self.assertEqual(standing.state, cadence.WorkerState.NOT_CONFIGURED)
 
     def test_a_reported_read_that_failed_is_an_arrival(self):
         """A failed first read stores no moment it was read, and only a
@@ -514,14 +514,14 @@ class WorkerStandingTests(TestCase):
 
         self.assertTrue(standing.known)
         self.assertFalse(standing.silent)
-        self.assertEqual(standing.tone, "good")
+        self.assertEqual(standing.state, cadence.WorkerState.ONLINE)
 
     def test_one_that_stopped_arriving_is_silent(self):
         cadence.note_controller()
         later = timezone.now() + cadence.CONTROLLER_SILENT_AFTER + timedelta(minutes=1)
 
         self.assertTrue(cadence.controller_standing(later).silent)
-        self.assertEqual(cadence.controller_standing(later).tone, "attention")
+        self.assertEqual(cadence.controller_standing(later).state, cadence.WorkerState.SILENT)
 
     def test_the_arrival_is_noted_on_the_claim_every_applying_run_makes(self):
         """An idle pass claims too, so a healthy controller with nothing to do

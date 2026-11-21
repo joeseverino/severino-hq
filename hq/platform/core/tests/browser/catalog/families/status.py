@@ -28,6 +28,16 @@ ENTRIES = {
         '<p>{% status "Up to date" tone="good" pill=False icon="check-circle" ink="context" %}</p>'
         "{% endsection %}"
     ),
+    # A mark alone after the name it stands for, its words said aloud, as a
+    # hop's certificate is: confirmed, then only declared.
+    "status/mark": Example(
+        '{% section "Example hops" %}'
+        '<p>example.com {% status "Example certificate, confirmed" tone="good" pill=False icon="check-circle"'
+        ' shown=False tip="Confirmed" %}</p>'
+        '<p>example.org {% status "Example certificate" tone="neutral" pill=False icon="check-circle"'
+        ' shown=False tip="Not confirmed yet" %}</p>'
+        "{% endsection %}"
+    ),
     # The names a record carries, as chips beside its name: each as written.
     "status/chip": Example(
         '{% section "Example project" %}<p><strong>example-app</strong> {% status "django" chip=True %}'

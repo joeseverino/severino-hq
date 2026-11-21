@@ -10,9 +10,10 @@ from hq.domains.control_plane.models import (
     DashboardMachine,
     ManagedResource,
 )
-from hq.platform.application import readings
+from hq.platform.application import cadence, readings
 from hq.platform.application.conditions import READY
 from hq.platform.application.report_testing import report_connections
+from hq.platform.core.models import UpstreamReading
 
 from . import doors, network, work
 from .names import (
@@ -325,11 +326,14 @@ _HOURS = (
 )
 
 
+_POINT = "40.0000,-90.0000"
+
+
 def _weather():
     """The dashboard's forecast, in the shape the controller's weather
     reading reports one."""
 
-    point = "40.0000,-90.0000"
+    point = _POINT
     DashboardConfiguration.objects.update_or_create(
         pk=1, defaults={"weather_point": point, "weather_label": "Fairview"}
     )
@@ -353,3 +357,15 @@ def _weather():
         {"point": point, "city": "Fairview", "state": "IL", "hours": hours},
         observed_at=observed,
     )
+
+
+def glance_asked():
+    """The machine's reading a day old and the forecast never read, each
+    with a refresh the dashboard asked for itself still under way."""
+
+    UpstreamReading.objects.filter(key=readings.machine_telemetry(MACHINE)).update(
+        observed_at=now() - timedelta(days=1)
+    )
+    UpstreamReading.objects.filter(key=readings.weather(_POINT)).delete()
+    machine = ManagedResource.objects.get(key=MACHINE)
+    cadence.ask(panels={f"machine-{machine.pk}": "Asked for a due reading", "weather": "Asked for a due reading"})

@@ -97,5 +97,5 @@ class ControllerTileTests(SignedInTestCase):
 
         response = self.client.get("/")
 
-        self.assertEqual(response.context["controller"].tone, "good")
+        self.assertEqual(response.context["controller"].state, cadence.WorkerState.ONLINE)
         self.assertNotContains(response, "Not configured")

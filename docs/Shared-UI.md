@@ -25,18 +25,23 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_cadence_matrix.html` | `matrix` | `compact`, `label` | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
 | `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`. |
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
+| `partials/_document_picture.html` | `alt`, `src` | nothing | A picture of a document (a scan, a photo of a receipt), held in a page's shape before it arrives. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
 | `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
 | `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
 | `partials/_icon.html` | `name` | nothing | One of the host's icons, by `name`, the height of the text beside it. |
+| `partials/_identity.html` | `name`, `tip`, `tone`, `url` | `about`, `badge`, `handle`, `picture` | An account's picture, name and handle. |
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
+| `partials/_meter.html` | `label`, `max`, `value` | `marks` | A proportion as a bar, or as a segment for each of what it counts. |
 | `partials/_reading_age.html` | nothing | `at`, `reading`, `unread` | When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none. |
 | `partials/_record_list.html` | `rows` | `empty`, `label`, `whole_rows` | A compact list of records, from `hq_sdk.ui.ListRow`. |
 | `partials/_row_field.html` | `field` | nothing | One field of a form whose fields stand one to a row of a table, in its row. |
+| `partials/_share_list.html` | `rows` | nothing | Ranked shares, each a bar against the largest. |
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
+| `partials/_toggle_set.html` | `legend`, `set` | `name`, `toggles` | A set of toggles that filter what a view shows. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 | `partials/_work_queue.html` | nothing | `empty`, `fold`, `items` | What waits on the operator, each row what wants doing and why, or that nothing does. |
 
@@ -67,7 +72,7 @@ and those that hold across parts in [Design](Design.md).
 | `{% row_group %}` | nothing | The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows. | `{% table_region "Example groups" %}<table class="data-table"><tbody>{% row_group "Example group" 3 %}<tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
 | `{% row_state %}` | nothing | How a row stands among the others, written in its `tr`: one that asks to be read first. | `{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table"><thead><tr>{% table_heading "From" "identifier" %}{% table_heading "Message" %}</tr></thead><tbody>{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td><td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}` |
 | `{% row_toggle %}` | nothing | The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings. | `{% table_region "Example toggles" %}<table class="data-table"><tbody><tr><td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}` |
-| `{% section %}` | `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
+| `{% section %}` | `lead`, `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
 | `{% status %}` | nothing | One short state, drawn in its tone and said in sentence case, the one way a page draws a state. | `{% status "Blocked" tone="attention" %}` |
 | `{% table_heading %}` | nothing | One column heading of a table: its kind, the rank it leaves by and its sort control. | `{% table_region "Example updates" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}{% table_heading "Updated" "status" drop=2 %}</tr></thead><tbody><tr><td>example-host</td><td>An hour ago</td></tr></tbody></table>{% endtable_region %}` |
 | `{% table_region %}` | nothing | The box a table fits, which draws what follows from its headings, and, with no rows, the one empty state in its place. | `{% table_region "Hosts" empty="No hosts yet." %}<table class="data-table"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody><tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
@@ -79,10 +84,13 @@ and those that hold across parts in [Design](Design.md).
 | --- | --- | --- | --- | --- |
 | `button` | `label`, first and unnamed | required |  | Its words. |
 | `button` | `arrow` | `False` |  | Ends with the arrow of a link onward. |
+| `button` | `checked` | `None` |  | A switch, its track drawn after its words, and which way it stands. |
 | `button` | `count` | `None` |  | A count of what it holds, after its words. |
 | `button` | `css` |  |  | Classes in place of its look, for a control not drawn as a button. |
 | `button` | `current` | `False` |  | It names the page being drawn. |
 | `button` | `disabled` | `False` |  | Neither a link nor a form, kept in the tab order. |
+| `button` | `expanded` | `None` |  | Shows or hides what it governs, and which it does now. |
+| `button` | `heard` |  |  | Its name aloud, where its words are a glyph or none and it has no title. |
 | `button` | `hit` | `False` |  | Drawn smaller than a target, so it asks for its hit area. |
 | `button` | `icon` |  |  | The icon its words open with. |
 | `button` | `look` |  |  | How it looks, its words from `ui.BUTTON_LOOKS`. |
@@ -225,6 +233,7 @@ and those that hold across parts in [Design](Design.md).
 | `status` | `icon` |  |  | Its words after an icon in its tone, beside `pill=False`. |
 | `status` | `ink` | `"tone"` | `tone`, `context` | Whose ink its words take beside a dot or an icon: its tone's or the text's. |
 | `status` | `pill` | `True` |  | A pill; with `False`, its words in its tone. |
+| `status` | `shown` | `True` |  | Its words shown; with `False`, its icon alone, the words said aloud. |
 | `status` | `tip` |  |  | What a press or a hover shows. |
 | `status` | `title` |  |  | Its `title`. |
 | `status` | `tone` |  |  | Its tone, or a subject's state in its own words and tone. |
@@ -257,7 +266,7 @@ and those that hold across parts in [Design](Design.md).
 
 Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `count`, `danger`, `data-table`, `date-col`, `errors`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
+Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `count`, `danger`, `data-table`, `date-col`, `eyebrow`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 
@@ -270,8 +279,12 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `icon` | An icon drawn by hand, where the icon part draws it. | `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img" |
 | `form` | A form that writes drawn by hand, where the form part draws it. | `{% include "partials/_form.html" %}`, or `partials/_page_action.html` of a PageAction.command |
 | `filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | `{% filter_bar search="..." %}``{% choices %}``{% select ... %}``{% endfilter_bar %}` |
+| `button` | A button drawn by hand, where the button tag draws every control that looks like one. | `{% button %}`, which takes a popover, a dialog command and each data_* hook |
+| `chip` | A chip, a badge, a count or an age drawn by hand, where the status part or a value filter draws it. | `{% status word chip=True %}`, a count by {{ n\|counted:"thing" }}, an age by {{ at\|ago }} |
+| `filter-choice` | A choice of several drawn as boxes by hand, where the toggle set part draws it. | `{% include "partials/_toggle_set.html" %}`, or `{% select %}` for one choice |
+| `form-control` | A form, a field or a label drawn by hand, where the form, field and filter bar parts draw it. | `{% include "partials/_form.html" %}` of a Django form, or `{% filter_bar %}` for what a list keeps |
 | `row-group` | A group of rows headed by hand, where the row group tag heads it. | `{% row_group label count %}` |
-| `list` | A list drawn by hand, where the list part draws it. | `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}` |
+| `list` | A list or a band of facts drawn by hand, where the list or the facts part draws it. | `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}`, or `{% facts %}` |
 | `record-link` | A link to a record's page drawn by hand, where the entity tag names the record by its model's page. | `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page |
 | `row-actions` | A row's actions drawn by hand, where the row actions part draws them. | `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell |
 | `run-state` | How work stands is drawn by hand, where the ask or the status part draws it. | an Ask (`partials/_ask.html`), or `{% status run.word tone=run.tone data_ask_label=True %}` |
@@ -320,7 +333,9 @@ Every control that looks like a button is `{% button label url look="primary com
 one writer of `.btn` (`ui.button_classes` for Python's parts): a link, with `outside=True` one out
 of HQ drawn as `{% outside_link %}` draws it, with an `offer` one that posts, with `submit=True`
 its form's own, and with neither and no url one a script acts on (`data_*`, `popovertarget`,
-`command`). Its words may open with an `icon`, close with a `count` or end with an `arrow`. A post
+`command`). Its words may open with an `icon`, close with a `count` or end with an `arrow`; one with
+a glyph or no words is named aloud by its `heard`, else its title. A `<button>` may be a toggle
+(`pressed`), a switch drawn with its track (`checked`) or a disclosure (`expanded`). A post
 is only ever an offer's: a `PageAction` from `PageAction.command`, which is None for a reader who
 may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has no way to draw a
 press its reader would be refused. `_page_action.html` draws one; a confirmation's is
@@ -670,7 +685,7 @@ under that label.
 A run of whole parts read across one line (a fact's links, a row's context line, a band's
 details) is `{% list kind="dots" %}`, each part an `<li>`, with `muted=True` for one said quietly.
 The stylesheet draws the dot in the gap before each part, so no template writes a separator and no
-line opens on one. The facts a page states on its title's line (a record's state, a machine's
+line opens on one. The facts a page states under its title (a record's state, a machine's
 addresses) are `{% list kind="dots" muted=True %}`, written by the template its view names as
 `page_aside`, where the stylesheet sets it small.
 
@@ -770,7 +785,8 @@ three. *Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_s
 
 ### partials/_calendar_sources.html (host only)
 
-Each source is a `{% button %}` with `post` and `pressed`, in its series color.
+A `{% list %}` of the sources, each a menu row's `{% button %}` with `post` and `pressed`, its box
+in its series color, or its swatch beside its name for a reader who may not choose.
 
 ### partials/_change.html (host only)
 
@@ -873,7 +889,7 @@ control, its label for a screen reader alone (the column's heading names it on t
 errors under it. A row's own buttons are posting `{% button %}`s, which post the page's own form,
 so they sit in this one.
 
-### partials/_identity.html (host only)
+### partials/_identity.html
 
 **An account is named by this part.** It draws its picture (a `data:` URI or an HQ path, never
 another host's address) and its name, with a state beside it drawn by `{% status %}`. Its handle
@@ -884,9 +900,18 @@ narrower.
 
 ### partials/_linked_text.html (host only)
 
-A person's free text with the names HQ knows in it (a project's deployment notes) is this part,
-over the text's runs that `application.where_it_runs.named_links` finds: each name a link as every
-mention is, and its line breaks kept.
+Every free text a person wrote (a record's notes, a message sent through the contact form) is this
+part, over the text's runs that `application.where_it_runs.named_links` finds: each name a link as
+every mention is, and its line breaks kept.
+
+### partials/_meter.html
+
+**A proportion is a meter.** A share of a whole, or of the largest of several, is a `<meter>` of its
+`value` against its `max`, which the browser draws from its value, so no template writes a width; a
+share too small to round up still shows. Given `marks` (each with a `tone`, and a `group`), it is a
+segment for each in its tone instead, a gap where the group changes, every segment one width, so a
+column of meters lines each mark up under the same mark above. The segments are one control, its
+`label` both what it says aloud and its tip.
 
 ### partials/_modal.html (host only)
 
@@ -919,10 +944,12 @@ which sends what it carries.
 
 ### partials/_page_head.html (host only)
 
-**One head.** Trail, title, controls, lede, laid out the same at every width. The title and its
-controls share a row (the title wraps before the controls move); the lede runs the full width
-under both. Two controls stand beside the title at every width, the lead and the next the page
-names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
+**One head.** Trail, title, controls, lede, laid out the same at every width. The controls stand
+at the head's top right, beside the trail and the title together, so the trail's line is as tall
+as its words, or beside the title alone where there is no trail (the title wraps before the
+controls move). Every line after the title has the head's whole width: what the page says about
+its thing and the lede never share a line with the controls. Two controls stand there at every
+width, the lead and the next the page names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
 the head) folds the second in too. The lead is chosen by what each control is for, never by where
 it stands: not a destructive one while another is offered, then one that can be pressed, then the
 page's primary (`head_actions`). A destructive verb (a stop) is a link to its confirmation, which
@@ -934,7 +961,8 @@ details. Never a table of contents of the page, a pointer to another page (link 
 how HQ works inside (a file path, a background mechanism). Never "What X may run: ...", which says
 the heading again.
 
-A thing's state sits on its title's line (`page_aside`), as words. A page about a day (the
+A thing's state is the line under its title (`page_aside`), as words, each of its parts (a
+machine's addresses) moving to the next line whole. A page about a day (the
 dashboard) names it with `page_dateline`, drawn over the title where a trail stands. A head with
 an aside and a line of facts (`page_facts`) stacks its words in a column of their own: the trail
 or day, the title, the facts. The aside stands beside the whole column, as the dashboard's
@@ -986,11 +1014,11 @@ chip (`{% status chip=True %}`) after its line. A list of places to go, as searc
 machines, pages and commands it found, is included `with whole_rows=True`. Each row is its title's
 link, stretched over the row, so the row is one target and its markup stays a link around a name.
 
-### partials/_share_list.html (host only)
+### partials/_share_list.html
 
 A ranked list of shares, as the pages and sources of a site's traffic are: each row its label and
 figure on one line over a bar of its size against the largest row's, so a long tail still reads
-apart. The bar is a `<meter>`, and a label past its line is cut, whole on hover.
+apart. The bar is `partials/_meter.html`'s, and a label past its line is cut, whole on hover.
 
 ### partials/_site_header.html (host only)
 
@@ -1013,7 +1041,7 @@ the viewport). The browser dismisses it on an outside press or Escape, and the f
 shows it again after a swap that replaces it, found by its id, so a ticked box leaves its menu
 open. No script places or closes it.
 
-### partials/_toggle_set.html (host only)
+### partials/_toggle_set.html
 
 No chip walls: a set of on-or-off choices is this part, checkboxes in a row of their own words
 under one hidden legend, named (`name=`) when Filter sends them and unnamed when the page's script
@@ -1035,10 +1063,11 @@ a record's page name which page they are as `page_visit` (`visit_refresh.page_vi
 only where a controller will read what it asks for (`cadence.WorkerStanding.takes_reads`): one
 whose heartbeat says it reports to this HQ, and is not silent. Where none will, the page draws no
 ask and no note, so it never promises a refresh that cannot come. `page.html` draws the ask, and
-its note says what it waits for at the end of the head's first line, in room of its own; a line
-whose longest word or date leaves it none hides it. An unseen strut of each sentence HQ writes for
-it word for word sizes its slot (`asks.REFRESHING`, `REFRESHED`, `NEWER_READING` and
-`SHOW_NEWER`, which the script writes from the page). So those sentences are always whole, and the
+its note ends the head's first line, in room of its own; a line whose longest word or date leaves
+it none hides it. Nobody pressed the ask, so its note says nothing while the readings are under
+way or once they land, which the page drawn again shows: it says only a failure, and the offer of
+a newer reading it could not draw in place. An unseen strut of that offer, word for word, sizes
+its slot (`asks.NEWER_READING` and `SHOW_NEWER`, which the script writes from the page), so the
 trail beside it never moves whatever the note says. Only a failure's sentence is cut, whole in its
 title. The dashboard names itself only when a reading its queue is drawn from is due
 (`visit_refresh.PAGES`), and the connection panel only when the tailnet, container or posture
@@ -1165,9 +1194,9 @@ A row draws it through `{% row_actions gap=... %}` and a form through its `gap`.
 
 ### projects/_repository_postures.html (host only)
 
-Repositories against their standard: a row each of its name, a meter with a segment per check, its
-score and who can reach it. The meter follows the name column, so one check sits in the same place
-on every row.
+Repositories against their standard, a table's row each: its name over a meter with a segment per
+check, then its score and who can reach it. Every meter starts where its name does, so one check
+sits in the same place on every row.
 
 ### row_actions
 
@@ -1285,6 +1314,13 @@ foot under the list. With no address the link is left out, so a page passes the 
 line that dates or sources a section goes beside its heading, not loose under it. A section whose
 rows are the latest of more names the rest as its `more_label` and `more_url`.
 
+`{% lead %}` is the start of the body, drawn in one box with the head, for a section whose body
+runs down columns: the head is kept whole, so it never ends a column with what it heads in the
+next. The body after it continues the same list (`{% section "Lane" %}the rest{% lead %}the
+first{% endsection %}`). The columns' container sets the space above each head as
+`--section-lead-above`, which the head holds as padding so every column starts level. A folded
+section's toggle and a figure's caption take none.
+
 `figure=True` draws the section as a `<figure>`, its head the `<figcaption>`, for a drawing (a
 chart, a calendar) whose title, line under it and legend are a section's head like any other. A
 section inside a section heads itself a level down inside the outer frame, and so does one inside
@@ -1357,7 +1393,8 @@ green, as parts of one `.dot-list`, so the sentence shares the state's line wher
 wraps under it where it does not. With `icon=` beside `pill=False` a mark (`partials/_icon.html`)
 leads those words in their tone. So a table cell says its state by its mark as well as its
 color, as a container's standing does ("1 serious" after a shield). With `ink="context"` only the
-mark is toned ("Up to date"). A first word holding a digit, a version, is said as written. A cell
+mark is toned ("Up to date"), and with `shown=False` the mark stands alone, its words said only
+to a screen reader, as a certificate's check after the name it serves is. A first word holding a digit, a version, is said as written. A cell
 that is a state carries its tone (`Cell(word, tone=...)`) and is drawn by it. *Catalog:*
 `status/icon`. *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
 `test_status_tags.py`, which reads every template root for a hand-written pill or a state's tone
@@ -1542,8 +1579,7 @@ and the byte budgets `ROW_BYTES` and `CHROME_BYTES`.
 
 A row's opening is its only disclosure. What is shown only once a row is open is marked
 `.row-more` (a word, a list item), or `.row-below` for a block, which opens on the line beneath
-the row at the table's width. The face that stands in for it while closed is `.row-less`. Never a
-`<details>` inside a cell.
+the row at the table's width. Never a `<details>` inside a cell.
 
 **A table is laid out before any script runs.** Nothing is measured to lay a table out:
 `tables.js` only sorts, selects and opens rows, and loads deferred (*Gate:*

@@ -346,13 +346,17 @@ def _panel(
     *,
     payload: dict[str, Any],
     observed_at: Any,
-    refreshing: bool,
+    pending: bool | None,
     refreshable: bool,
     subject: str = "",
 ) -> dict[str, Any]:
     """One panel as the glance template reads it, from its spec and its reading
     as words (``machine_words``, ``weather_words``). ``subject`` is what its
-    head names, where panels alike stand side by side."""
+    head names, where panels alike stand side by side.
+
+    ``pending`` is None while no reading is on its way, else whether a person
+    waits on it. Only that one is said to be refreshing: a refresh HQ asked for
+    itself keeps the last reading, or the empty state, until it lands."""
 
     shown = tuple(_glance_reading(metric, spec) for metric in payload.get("metrics", []))
     return {
@@ -367,9 +371,10 @@ def _panel(
         "link": {"label": spec.link[0], "url": spec.link[1]} if spec.link else None,
         "payload": payload,
         "observed_at": observed_at,
-        "refreshing": refreshing,
+        "pending": pending is not None,
+        "refreshing": bool(pending),
         "refreshable": refreshable,
-        "standing": _standing(payload, refreshing=refreshing),
+        "standing": _standing(payload, refreshing=bool(pending)),
         # A panel is colored only for what needs a look; a healthy one reads in ink.
         "tone": payload.get("status") if payload.get("status") in (Tone.ATTENTION, Tone.SERIOUS) else "",
         "readings": shown,
@@ -568,7 +573,8 @@ def dashboard_panels(
         [*(readings.machine_telemetry(resource.key) for resource in machine_resources), weather_key]
     )
     weather = stored.get(weather_key)
-    pending = set(DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list("panel_id", flat=True))
+    # Each panel a reading is on its way for, and whether a person waits on it.
+    pending = dict(DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list("panel_id", "awaited"))
     panels = []
     for resource in machine_resources:
         panel_id = f"machine-{resource.pk}"
@@ -592,7 +598,7 @@ def dashboard_panels(
                 payload=machine_words(machine) if machine else {},
                 observed_at=reading.observed_at if reading else None,
                 # A request nothing can answer is not a refresh in progress.
-                refreshing=panel_id in pending and resource.pk in routes,
+                pending=pending.get(panel_id) if resource.pk in routes else None,
                 refreshable=resource.pk in routes,
                 subject=name,
             )
@@ -606,7 +612,7 @@ def dashboard_panels(
                 specs["weather"],
                 payload=weather_words(forecast) if forecast else {},
                 observed_at=weather.observed_at if weather else None,
-                refreshing="weather" in pending and bool(routes),
+                pending=pending.get("weather") if routes else None,
                 # Weather rides with a machine's refresh, so it can be asked
                 # for only when a controller reaches one of them.
                 refreshable=bool(routes),
@@ -659,7 +665,7 @@ def glance_context(
         "dashboard_panels": panels,
         # The strip is asked again for as long as a reading is on its way, and
         # asks for the due ones itself when the page opens.
-        "dashboard_refreshing": any(panel.get("refreshing") for panel in panels),
+        "dashboard_refreshing": any(panel.get("pending") for panel in panels),
         "dashboard_due": any(panel.get("due") for panel in panels),
         "dashboard_glance_settings": configuration,
     }
@@ -715,8 +721,9 @@ class PanelsRefreshRequested(AskedAnswer):
     requested: Annotated[list[str], Describe("The panels asked to be read again, by id.")]
 
 
-def _ask_for(ids: list[str], *, why: str, message: str = "") -> PanelsRefreshRequested:
-    """Queue a reading of each panel in ``ids``, recorded once."""
+def _ask_for(ids: list[str], *, why: str, message: str = "", pressed: bool = False) -> PanelsRefreshRequested:
+    """Queue a reading of each panel in ``ids``, recorded once; ``pressed``
+    when a person asked and waits on it."""
 
     if ids:
         # Each panel by the name its head shows.
@@ -725,6 +732,7 @@ def _ask_for(ids: list[str], *, why: str, message: str = "") -> PanelsRefreshReq
                 panel_id: f"Asked for {why}: {name}" for panel_id, name in zip(ids, _panel_names(ids), strict=True)
             },
             doorbell="glance",
+            activity=pressed,
         )
     standing = Standing(QUEUED, REFRESHING) if ids else Standing()
     return {**Asked(standing, message=message).answer(), "requested": ids}
@@ -741,7 +749,9 @@ def request_dashboard_refresh(_command: DashboardRefreshCommand, *, principal: P
     ids = [f"machine-{machine.pk}" for machine in machines if machine.pk in routes]
     if ids and configuration.weather_point:
         ids.append("weather")
-    return _ask_for(ids, why="a fresh reading of the dashboard", message=command_spec(DASHBOARD_REFRESH).requested())
+    return _ask_for(
+        ids, why="a fresh reading of the dashboard", message=command_spec(DASHBOARD_REFRESH).requested(), pressed=True
+    )
 
 
 @transaction.atomic
@@ -757,7 +767,7 @@ def request_stale_panel_refresh(_command: DashboardRefreshCommand, *, principal:
     wanted = [
         str(panel["id"])
         for panel in dashboard_panels()
-        if panel.get("due") and panel.get("refreshable") and not panel.get("refreshing")
+        if panel.get("due") and panel.get("refreshable") and not panel.get("pending")
     ]
     # Posted as the page opens, which says nothing of it.
     return _ask_for(wanted, why="the dashboard's due readings")

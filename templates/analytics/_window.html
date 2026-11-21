@@ -1,4 +1,4 @@
-{% comment %}The window the readings cover, how they were sampled and how old they are, on the title's line (`page_aside`).{% endcomment %}
+{% comment %}The window the readings cover, how they were sampled and how old they are, under the title (`page_aside`).{% endcomment %}
 {% if latest %}{% list kind="dots" muted=True %}
   <li>{{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}</li>
   {% if totals.sample_interval > 1 %}<li>estimated from 1 in {{ totals.sample_interval|counted:"visit" }}</li>{% endif %}

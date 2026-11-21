@@ -88,6 +88,14 @@ def row_editor(
         # and values; Django offers no public way to draw them afresh.
         drawn._bound_fields_cache = {}
         drawn.initial = {**form.initial, **initial}
+        if form.is_bound:
+            # Each field's errors carry the id they were found under, which
+            # their list is drawn with and the control's aria-describedby
+            # names: the row's own, here.
+            drawn._errors = copy.copy(form.errors)
+            for name in drawn.fields.keys() & drawn._errors.keys():
+                drawn._errors[name] = drawn._errors[name].copy()
+                drawn._errors[name].field_id = drawn[name].auto_id
     return {
         "label": label,
         "slug": slug,

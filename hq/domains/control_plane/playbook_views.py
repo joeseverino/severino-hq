@@ -65,7 +65,7 @@ class PlaybooksView(PageMixin, TemplateView):
         refresh = capability_action_link(REFRESH, principal=self.principal)
         scanned, scan = self.sources.scanned, self.sources.scan
         # A page loaded while a scan is under way follows it, and one that
-        # has not started says so; one that ended is said on the title's line
+        # has not started says so; one that ended is said under the title
         # (``_playbooks_read.html``).
         unended = scan is not None and scan.state in UNENDED
         live = unended and scanned.live

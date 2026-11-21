@@ -387,8 +387,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a part the row never shows, a block or buttons moved to its open line; a meaning cut on its first line, `row-gist`, cuts.css), where a column of it has left or a narrow box has let a part go (above), and on an open row whose line is drawn (below), so a row opened narrow and widened offers no toggle that opens nothing. */
 .data-table .row-expand { display: none; }
 .data-table > tbody > tr:is([data-below], :has(.row-gist), .is-expanded:has(+ .row-detail > td > :not(.row-columns), + .row-detail > td > .row-columns > :not([data-drop]:not([data-holds])))) .row-expand { display: grid; }
-/* What a row shows only on its open line is never drawn on the row, and the face that stands in for it there (`row-less`) is not drawn on the line. */
-.data-table [data-kind] :is(.row-more, .line-rest), .row-detail .row-less { display: none; }
+/* What a row shows only on its open line is never drawn on the row. */
+.data-table [data-kind] :is(.row-more, .line-rest) { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
 .data-table > tbody > tr > .row-gutter { position: relative; }
 /* A table says a row of it can open (`data-rows-can-open`, table_cells), since a row's open line is drawn only as it opens unless it holds a block the server moved there. */

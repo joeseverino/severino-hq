@@ -262,7 +262,6 @@ class PublishAServiceTests(TestCase):
         response = self.client.post(
             reverse("control_plane:create") + "?kind=adguard.rewrite&hostname=new.example.com",
             {
-                "kind": "adguard.rewrite",
                 "domain": "new.example.com",
                 "answer": "10.0.0.7",
                 **form_keyed(),

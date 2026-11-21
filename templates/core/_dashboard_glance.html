@@ -14,6 +14,8 @@ its id, is shown again if it was open.
   Asking by hand is each panel's Refresh (glance.refresh_ask), an ask whose
   answer fetches the region, which then follows the reading while it is on its
   way. Its note is heard; the panel's own line says how its reading stands.
+  Only a reading a person asked for is said to be refreshing (glance._panel):
+  one the region asked for itself keeps the last reading until it lands.
   {% endcomment %}
   {% if dashboard_due %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% write_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
   {% facts layout="band" label="At a glance" %}
@@ -21,7 +23,7 @@ its id, is shown again if it was open.
     {% include "core/_dashboard_controller.html" with controller=controller only %}
     {% for panel in dashboard_panels %}
       {% firstof panel.subject panel.label as named %}
-      {% fact named icon=panel.icon id="glance-"|add:panel.id tone=panel.tone title=panel.lead.tip data_fragment_part=panel.id data_refreshing=panel.refreshing %}
+      {% fact named icon=panel.icon id="glance-"|add:panel.id tone=panel.tone title=panel.lead.tip data_fragment_part=panel.id %}
         {% present panel.lead %}{{ panel.lead.value|breakable }}{% if panel.lead.unit %} <small>{{ panel.lead.unit|breakable }}</small>{% endif %}{% endpresent %}
       {% detail %}
         {% comment %}Its age is said only when it is news: a current reading needs no age.{% endcomment %}
