@@ -204,7 +204,7 @@ ROW_ACTIONS = Part(
     page sets its table's cells otherwise. What can be done to a row's record ends the row as
     `Row(actions=)`, under a heading of kind `control`. Each is a `PageAction` drawn as a
     compact control with its middle on the first line's. A page never draws a button in a cell
-    (*Gate:* the `row-actions` shape). A row's controls stand side by side on one line,
+    (*Gate:* the `cell` shape). A row's controls stand side by side on one line,
     which their column asks for, and the words beside them wrap first; in a narrow box they take the
     row's last line. Every row's controls end on one edge, and each draws its edge of its own but the
     last, which is quiet only when it sets the row aside (`put_away`, a button). A cell of the row's

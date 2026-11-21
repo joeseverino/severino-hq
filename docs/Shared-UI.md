@@ -246,10 +246,8 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `chip` | A chip, a badge, a count or an age drawn by hand, where the status part or a value filter draws it. | `{% status word chip=True %}`, a count by {{ n\|counted:"thing" }}, an age by {{ at\|ago }} |
 | `filter-choice` | A choice of several drawn as boxes by hand, where the toggle set part draws it. | `{% include "partials/_toggle_set.html" %}`, or `{% select %}` for one choice |
 | `form-control` | A form, a field or a label drawn by hand, where the form, field and filter bar parts draw it. | `{% include "partials/_form.html" %}` of a Django form, or `{% filter_bar %}` for what a list keeps |
-| `row-group` | A group of rows headed by hand, where the row group tag heads it. | `{% row_group label count %}` |
 | `list` | A list or a band of facts drawn by hand, where the list or the facts part draws it. | `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}`, or `{% facts %}` |
 | `record-link` | A link to a record's page drawn by hand, where the entity tag names the record by its model's page. | `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page |
-| `row-actions` | A row's actions drawn by hand, where the row actions part draws them. | `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell |
 | `run-state` | How work stands is drawn by hand, where the ask or the status part draws it. | an Ask (`partials/_ask.html`), or `{% status run.word tone=run.tone data_ask_label=True %}` |
 | `empty-said-quietly` | An empty line drawn by hand, where the empty state part draws it. | `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}` |
 | `missing-value` | A missing value's mark drawn by an if, where the value's own tag or filter draws it. | {{ x\|or_empty }}, a value filter alone for a figure or a moment, or `{% present x %}` |
@@ -257,6 +255,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `split-count` | A count split from its words, where the counted filter writes them as one. | {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}` |
 | `split-figure` | A figure apart from its word, where a value filter writes them as one. | {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit, the figure and its word as one |
 | `stretched-shape` | A round shape or text inside a stretched drawing, which distorts it. | a dot as a zero-length line of class chart-dot, and a label in the unscaled svg.chart-labels layer |
+| `cell` | A table's cell drawn by hand, where a declared table draws each cell and every mark it reads. | `{% data_table table %}` of a DataTable its view declares |
 | `muted` | Muted words drawn by hand, where the muted tag draws them. | `{% muted %}`...`{% endmuted %}`, or `{% muted element="p" css="..." %}` for a paragraph |
 | `typed-mark` | A dot or an arrow typed as text, which a reader hears and a line may strand. | `{% dot %}` between two parts, a .dot-list for a run of parts, `{% arrow %}` after a link |
 | `figure-in-chip` | A figure inside a chip, which is a word. | the figure in a band of facts, a numeric column or a sentence |
@@ -1245,7 +1244,7 @@ A row reads from its first line: the toggle stands there, so every cell is set a
 page sets its table's cells otherwise. What can be done to a row's record ends the row as
 `Row(actions=)`, under a heading of kind `control`. Each is a `PageAction` drawn as a
 compact control with its middle on the first line's. A page never draws a button in a cell
-(*Gate:* the `row-actions` shape). A row's controls stand side by side on one line,
+(*Gate:* the `cell` shape). A row's controls stand side by side on one line,
 which their column asks for, and the words beside them wrap first; in a narrow box they take the
 row's last line. Every row's controls end on one edge, and each draws its edge of its own but the
 last, which is quiet only when it sets the row aside (`put_away`, a button). A cell of the row's
