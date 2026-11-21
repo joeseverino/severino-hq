@@ -724,7 +724,7 @@ DATA_TABLE = Example(
 def _every_kind() -> DataTable:
     """A table of every kind of cell: a group, a row that folds others under
     it with its count and a muted line, a readout, a cut line, a moment, an
-    amount, a state, free text, a part only a narrow box or the open line
+    amount, a state, one of whole parts, free text, a part only a narrow box or the open line
     shows, and the count of a fold's rest across the row; an entity named
     as code, a state drawn as ``status_pill`` draws it (a chip, an icon), a
     tip and a title, blocks kept for the open line, a declared part, a row's
@@ -755,7 +755,9 @@ def _every_kind() -> DataTable:
                 count=2,
                 lines=(Cell("Machine", muted=True, parts=(Cell("Online", dot=True, shows="narrow"),)),),
             ),
-            *head.cells[1:],
+            *head.cells[1:4],
+            Cell("Up 1 week,", parts=(Cell("healthy", muted=True, title="An example health check"),)),
+            *head.cells[5:],
         ),
     )
     rest = tables.Row((Cell("1 more change", "/example/rest/", name=True),), folded="example-fold", across=True)

@@ -106,11 +106,13 @@
 .data-table[data-columns="8"] { --columns: 8; }
 .data-table[data-columns="9"] { --columns: 9; }
 .data-table[data-columns="10"] { --columns: 10; }
-/* A short value's box is no box on the open line, unless it is the value's own list. */
-.cell-short:not(ul, ol) { display: contents; }
+/* A short value's box is no box on the open line, unless it is the value's own list, and nor is a state's. */
+.cell-short:not(ul, ol), .cell-state { display: contents; }
 /* A state keeps its line; one of several parts (`cell-part`) keeps it up to its share, as a short value does, and past it wraps only between them, its one track `fit-content()` of the share (below). A short value of words keeps its line up to its share; a longer one (past `table_layout.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
 .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long], :has(.cell-part)) { white-space: nowrap; }
-.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) > .stack-list:has(.cell-part) { display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
+.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) .stack-list:has(.cell-part) { display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
+/* A state's value is one box (`cell-state`, table_layout) holding one item, as wide as it says up to its share and never narrower than what it cannot break: its one track is `fit-content()` of the share, as a pill's is (below). So its column asks for its line up to its share at every width, and past it the value wraps where it may, between its parts or, in the narrowest box, its words. */
+.data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-state { display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; vertical-align: top; }
 /* The line is the words', so the cell's padding is added to it. */
 .data-table > tbody > tr:not(.row-detail) > :is(td, th):is([data-long], :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]):not([data-blank], :has(> .cell-short))) {
   box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share));
@@ -274,9 +276,10 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 @container table-region (width >= 20rem) { .row-columns > [data-drop="5"] [data-row-shows] { display: none; } }
 /* A table that keeps the gutter (below) gives the column that names its rows `--row-gutter` in place of a cell's pad: the toggle's 1.5rem more, as its two edges are a narrow cell's pad. So its held values wrap at 20rem plus that 1.5rem, written out since a container query reads no variable. */
 @container table-region (width < 21.5rem) { .data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp)) { --held-wraps: 1; } }
-/* The narrowest box wraps a held value between its words, so a key stands whole: a pill is as wide as its words up to its column's share, as a short value is, past it wraps between them inside its own paint, and is never narrower than its longest word: its one track is `fit-content()` of the share, which a grid sizes from its words in every engine. */
+/* The narrowest box wraps a held value between its words, so a key stands whole: a pill is as wide as its words up to its column's share, as a short value is, past it wraps between them inside its own paint, and is never narrower than its longest word: its one track is `fit-content()` of the share, which a grid sizes from its words in every engine. A state's box claims no line there, so its words wrap as the cell's do. */
 @container style(--held-wraps: 1) {
   .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) { white-space: normal; }
+  .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-state { inline-size: auto; }
   .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) .pill { white-space: normal; display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
 }
 @container table-region (width < 40rem) {

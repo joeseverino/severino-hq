@@ -320,6 +320,17 @@ def _body_marks(cell: CellFacts, kind: str, *, body: bool, toggled: bool) -> lis
         # fills its column, which a short value's box would narrow.
         elif cell.longest <= SHORT and cell.closes and not cell.folds and not cell.fields:
             _box(cell, kind, "cell-short")
+    # A state is one box (`cell-state`, tables.css) that asks its column for
+    # its line up to its share and wraps past it, where it holds one item: a
+    # cell no element of which was read (a declared one, drawn whole in it,
+    # or bare words).
+    elif (
+        body
+        and kind == "status"
+        and cell.closes
+        and not (cell.top_tag or cell.says_nothing or _long(cell) or cell.controls or cell.fields)
+    ):
+        cell.box = "cell-state"
     return marks
 
 

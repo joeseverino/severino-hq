@@ -36,6 +36,7 @@ _TAG_NAME = re.compile(r"<\w+")
 _BOXES = {
     "cell-clamp": '<div class="cell-clamp">',
     "cell-short": '<div class="cell-short">',
+    "cell-state": '<div class="cell-state">',
 }
 # The order a mark lists its roles in.
 _ROLES = ("name", "prose", "data")

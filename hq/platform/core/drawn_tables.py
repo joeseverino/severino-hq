@@ -49,6 +49,9 @@ class DrawnCell:
     # Saying nothing, it draws nothing, not the empty value's mark: a blank
     # cell, one in the foot beside a total, or one in a column of controls.
     quiet: bool = False
+    # Each value on its lines is whole (`cell-part`), so the state they say
+    # wraps only between them.
+    whole_parts: bool = False
 
 
 @dataclass(slots=True)
@@ -209,6 +212,7 @@ def _mark(row: DrawnRow, width: int) -> None:
         own = "select-column" if cell is row.select else "row-actions" if cell is row.actions else ""
         cell.attributes = _attributes(cell.facts, cell.role, own, cell.cell.sort)
         cell.box, cell.toggle, cell.named = cell.facts.box, cell.facts.toggle, cell.facts.named
+        cell.whole_parts = cell.box == "cell-state" and any(each.parts for each in (cell.cell, *cell.cell.lines))
     attributes = [*row.facts.marks]
     if row.row.id:
         attributes.append(format_html(' id="{}"', row.row.id))
@@ -258,10 +262,12 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         editor = row_editor(
             context, asked.form, asked.key, label=asked.label, action=asked.action, verb=asked.verb, **asked.initial
         )
-    # A run's parts past its lead ask its column for nothing (``line_list``).
+    # A run's parts past its lead ask its column for nothing, and it wraps
+    # between its parts, so its line is its longest part (``line_list``).
     parts = [part for part in cell.parts[: LINE_LEAD if cell.fit else None] if part.shows not in _OFF_LINE]
     runs = cell.fit and len(cell.parts) > LINE_LEAD
-    on_line = [_length(cell), *(_length(part, after=True) for part in parts)]
+    lengths = [_length(part, after=True) for part in parts]
+    on_line = [_length(cell), *([max(lengths, default=0)] if cell.fit else lengths)]
     line = sum(on_line) + (len(str(cell.count)) if cell.count is not None else 0) + cell.fold
     lines = [
         _length(each) + sum(_length(part, after=True) for part in each.parts if part.shows not in _OFF_LINE)
@@ -313,17 +319,15 @@ def _length(cell: Cell, *, after: bool = False) -> int:
 
 
 def _pieces(table: DataTable, context: Any) -> dict[Piece, SafeString]:
-    """Each piece a cell of the table draws, drawn by its part's partial."""
+    """Each piece a cell of the table draws, drawn by its part's partial. The
+    space a partial's file keeps around its markup is cut: a value starts and
+    ends at its words, so none stands after the dot that opens a run's part."""
 
     rows = [row for group in table.bodies for row in group.rows] + ([table.footer] if table.footer else [])
     request = context.get("request") if hasattr(context, "get") else None
-    return {
-        value.piece: render_to_string(value.piece.part.partial, dict(value.piece.context), request)
-        for row in rows
-        for cell in row.cells
-        for value in _values(cell)
-        if value.piece is not None
-    }
+    pieces = {value.piece for row in rows for cell in row.cells for value in _values(cell) if value.piece is not None}
+    drawn = {piece: render_to_string(piece.part.partial, dict(piece.context), request) for piece in pieces}
+    return {piece: mark_safe(markup.strip()) for piece, markup in drawn.items()}  # noqa: S308 - escaped by its own template
 
 
 def _values(cell: Cell) -> tuple[Cell, ...]:

@@ -55,7 +55,7 @@ def status_cell(container: Any, up: str) -> Cell:
 
     check = container.check
     up = up or container.status
-    said = Cell(f"{up}, {check}" if check else up, role="data", title=capfirst(check.said) if check else "")
+    said = Cell(f"{up},", parts=(Cell(str(check), muted=True, title=capfirst(check.said)),)) if check else Cell(up)
     return replace(Cell(status=StatusMark(container.state)), lines=(said,)) if not container.state.running else said
 
 

@@ -108,7 +108,7 @@
   }
   /* A list inside a clamp uses its inline line boxes. A flex item's padded
      rows can cross the clamp's last line and leave half a glyph visible. */
-  .cell-clamp .line-list { display: inline; }
+  .cell-clamp:not(.row-detail *) .line-list { display: inline; }
   .cell-clamp .tag { padding-block: 0; }
 }
 /* An identifier in a cell (a name, a host, an address, a key) wraps at the
@@ -131,8 +131,8 @@
 /* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css); a short value's box (`cell-short`, tables.css) is the cell's own. */
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]):not(.btn),
 .data-table > tbody > tr > [data-kind="identifier"] > .cell-short > :is(a[href], [tabindex]):not(.btn) { line-height: var(--target-min); }
-/* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. On a cell's detail line and the open line they are words of a sentence, held to the words and dots around them. */
-.data-table > tbody > tr:not(.row-detail) > td span[data-tip][tabindex]:not(.pill, .cell-detail *) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
+/* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. On a cell's detail line and the open line they are words of a sentence, held to the words and dots around them, as they are where a mark held to them follows (a dot, an arrow): a box ends a line wherever it may, so the mark after it would open the next. */
+.data-table > tbody > tr:not(.row-detail) > td span[data-tip][tabindex]:not(.pill, .cell-detail *, :has(+ span[aria-hidden="true"])) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
 /* An identifier's link, bare, and the link that is a row's bold name, stay text of their line, a target tall by their padding as a name's is. */
 .data-table > tbody > tr > [data-kind="identifier"] > a[href]:not(.btn),
 .data-table > tbody > tr > [data-kind="identifier"] > .cell-short > a[href]:not(.btn),
