@@ -281,6 +281,16 @@ def last_machine(hops: tuple[Hop, ...]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class Forward:
+    """An address a proxy forwards to, the machine it lands on and the
+    container that publishes it there, each "" where HQ places none."""
+
+    address: str
+    machine: str = ""
+    container: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class Route:
     """The hops from one DNS answer to what serves the name."""
 
@@ -344,6 +354,19 @@ class Route:
     @property
     def machine(self) -> str:
         return last_machine(self.hops)
+
+    @property
+    def forwards(self) -> tuple[Forward, ...]:
+        """Where each proxy on the route forwards to, in order; the last is
+        what answers the name."""
+
+        found: list[Forward] = []
+        for hop in self.hops:
+            if hop.step == "upstream":
+                found.append(Forward(hop.name))
+            elif found and hop.step in ("machine", "container"):
+                found[-1] = replace(found[-1], **{hop.step: hop.name})
+        return tuple(found)
 
     @property
     def unread(self) -> tuple[str, ...]:

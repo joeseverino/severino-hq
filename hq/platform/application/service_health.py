@@ -94,22 +94,22 @@ def _in_place(service: Any) -> Health:
     checked = capfirst(checked)
     if parts == [_PART_NOUNS["dns"]]:
         return Health(None, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")
-    behind = _behind_the_proxy(service)
-    if behind is None:
+    route = service.path.primary
+    end = route.forwards[-1] if route is not None and route.forwards else None
+    if end is None or not end.machine:
         return Health(None, "In place", ended(checked))
-    address, machine, container, reads_containers = behind
-    if container:
-        return _running(service.container, ended(f"{checked} and forward to {container} on {machine}"))
-    if reads_containers:
+    if end.container:
+        return _running(service.container, ended(f"{checked} and forward to {end.container} on {end.machine}"))
+    if reads_containers_on(end.machine):
         return Health(
             Tone.ATTENTION,
             "Nothing on that port",
-            f"{ended(checked)} The proxy forwards to {address}, and no container on {machine} publishes that port.",
+            f"{ended(checked)} The proxy forwards to {end.address}, and no container on {end.machine} publishes that port.",
         )
     return Health(
         None,
         "In place",
-        f"{ended(checked)} The proxy forwards to {ended(address)} HQ does not read what runs there.",
+        f"{ended(checked)} The proxy forwards to {ended(end.address)} HQ does not read what runs there.",
     )
 
 
@@ -139,23 +139,6 @@ def _as_last_read(found: Health, service: Any) -> Health:
         "Out of date",
         " ".join(part for part in (said, found.detail) if part),
     )
-
-
-def _behind_the_proxy(service: Any) -> tuple[str, str, str, bool] | None:
-    """``(address, machine, container, whether HQ reads that machine's containers)``
-    for where the proxy forwards, or None when no proxy forwards anywhere HQ can place."""
-
-    route = service.path.primary
-    hops = list(route.hops) if route is not None else []
-    upstream = next((index for index, hop in enumerate(hops) if hop.step == "upstream"), None)
-    if upstream is None:
-        return None
-    after = hops[upstream + 1 :]
-    machine = next((hop.name for hop in after if hop.step == "machine"), "")
-    if not machine:
-        return None
-    container = next((hop.name for hop in after if hop.step == "container"), "")
-    return hops[upstream].name, machine, container, reads_containers_on(machine)
 
 
 def _undeclared(service: Any) -> Health:

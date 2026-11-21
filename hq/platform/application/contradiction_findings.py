@@ -146,25 +146,18 @@ def _containers_by_place() -> dict[tuple[str, str], Mapping[str, Any]]:
 
 
 def _dead_ends(route, containers) -> list[tuple[str, str, str]]:
-    """``(machine, container, state)`` for each container the route ends at
-    that is not running, and ``(machine, "", address)`` where it forwards to a
+    """``(machine, container, state)`` for each container the route forwards
+    to that is not running, and ``(machine, "", address)`` where it ends at a
     port no container publishes on a machine whose containers HQ reads."""
 
     found = []
-    machine = forwarded = ""
-    for hop in route.hops:
-        if hop.step == "upstream":
-            machine, forwarded = "", hop.name
-        elif hop.step == "machine":
-            machine = hop.name
-        elif hop.step == "container":
-            forwarded = ""
-            record = containers.get((machine, hop.name))
-            state = str((record or {}).get("state", "") or "")
-            if record is not None and state and state != "running":
-                found.append((machine, hop.name, state))
-    if forwarded and machine and reads_containers_on(machine):
-        found.append((machine, "", forwarded))
+    for forward in route.forwards:
+        state = str((containers.get((forward.machine, forward.container)) or {}).get("state", "") or "")
+        if forward.container and state and state != "running":
+            found.append((forward.machine, forward.container, state))
+    end = route.forwards[-1] if route.forwards else None
+    if end is not None and end.machine and not end.container and reads_containers_on(end.machine):
+        found.append((end.machine, "", end.address))
     return found
 
 
