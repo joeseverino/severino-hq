@@ -106,6 +106,12 @@ def _route_approval(device: ManagedResource | None) -> PageAction | None:
     return PageAction.command(ACTION_CAPABILITY[OperationRequest.Action.APPROVE_ROUTES], device.key, refused=refusal)
 
 
+# The policy test's dialog, which the tailnet page's head and a machine's page open.
+POLICY_TEST = PageDialog(
+    "whatif", "Policy test", "control_plane/_whatif_form.html", lede="Check whether the policy allows a connection."
+)
+
+
 def whatif_context(request, default: str = "", *, target_default: str | None = None) -> dict:
     """Everything the reachability panel needs, wherever it is included.
 
@@ -126,6 +132,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
         "ports": ports(),
         "asked": asked,
         "whatif_action": request.path,
+        "policy_test": POLICY_TEST,
         "policy_edit": policy_edit(declaration()),
     }
     # Answered only when all three were given. A half-filled form is a question
@@ -162,12 +169,7 @@ class TailnetView(PageMixin, TemplateView):
                 "Policy test",
                 reverse("control_plane:tailnet"),
                 primary=True,
-                modal=PageDialog(
-                    "whatif",
-                    "Policy test",
-                    "control_plane/_whatif_form.html",
-                    lede="Check whether the policy allows a connection. Tailscale evaluates it.",
-                ),
+                modal=POLICY_TEST,
             ),
             *((edit,) if edit else ()),
             PageAction("All machines", reverse("control_plane:machines")),
