@@ -14,14 +14,14 @@ from dataclasses import dataclass
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from django.utils.timezone import now
-from pydantic import BeforeValidator, Field, IPvAnyAddress, StringConstraints
+from pydantic import Field, IPvAnyAddress, StringConstraints
 
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.core import outbound_allowed
 
 from .answer_fields import ObservedAt
-from .command_fields import Describe
+from .command_fields import Checked, Describe
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, command_adapter
 from .projection import iso
@@ -80,7 +80,7 @@ class AddressCommand:
 
     address: Annotated[
         IPvAnyAddress,
-        BeforeValidator(_stripped),
+        Checked(_stripped, mode="before"),
         Field(title="IP address"),
         Describe("", api="The IP address to look up.", examples=("1.1.1.1",)),
     ]

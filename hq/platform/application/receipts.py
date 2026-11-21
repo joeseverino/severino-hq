@@ -9,8 +9,7 @@ from typing import Annotated, Any, TypedDict
 
 from django.core.files.uploadedfile import SimpleUploadedFile, UploadedFile
 from django.db import transaction
-from pydantic import Base64Encoder, EncodedBytes, Field
-from pydantic_core import PydanticCustomError
+from pydantic import Field
 
 from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
@@ -25,7 +24,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.receipts.specs import ReceiptRecord, ReceiptRow
 
-from .command_fields import Day, Describe, Names, RequiredText, Upload, stored_in
+from .command_fields import Checked, Day, Describe, Names, Reason, RequiredText, Upload, stored_in
 from .entity_links import entity_link
 from .integration_specs import Kept, keeps
 from .projection import listing
@@ -66,16 +65,11 @@ class ReceiptMetadataCommand:
     related_asset: Annotated[ReceiptAsset, Field(title="Asset")] = None
 
 
-class _Base64(Base64Encoder):
-    """Base64 that refuses a character outside its alphabet, which the
-    standard decoder drops."""
+def _decoded(data: bytes) -> bytes:
+    """``data`` decoded from base64, refusing a character outside its
+    alphabet, which the standard decoder drops."""
 
-    @classmethod
-    def decode(cls, data: bytes) -> bytes:
-        try:
-            return base64.b64decode(data, validate=True)
-        except ValueError as error:
-            raise PydanticCustomError("base64_decode", "Input is not base64") from error
+    return base64.b64decode(data, validate=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,7 +85,8 @@ class ReceiptFile:
     content: Annotated[
         bytes,
         Field(max_length=MAX_RECEIPT_BASE64_CHARS),
-        EncodedBytes(_Base64),
+        Checked(_decoded, Reason("base64", "must be base64")),
+        Field(json_schema_extra={"format": "base64"}),
         Field(description="The file's bytes, base64-encoded."),
     ]
 

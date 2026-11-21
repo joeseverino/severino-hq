@@ -24,7 +24,7 @@ from pydantic import (
     model_validator,
 )
 
-from hq.platform.application.command_fields import NonEmpty
+from hq.platform.application.command_fields import NonEmpty, Reason, checked
 from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.labels import dotted
@@ -168,6 +168,7 @@ class ProviderModel(Closed):
     # discriminated union's discriminator, and this one matches every field.
     @field_validator("*", mode="after")
     @classmethod
+    @checked
     def _settle_line_endings(cls, value: Any) -> Any:
         """Store one newline, whatever the browser sent.
 
@@ -181,14 +182,20 @@ class ProviderModel(Closed):
         return value
 
 
+_INTERVAL_FITS = Reason("verification_interval", "must check no less often than its timeout")
+_LOCKED_AUTOMATIC = Reason("locked_automatic", "is locked, so it is never automatic")
+_LOCKED_REASON = Reason("locked_reason", "is locked, so it needs a reason")
+
+
 class ControllerVerification(ProviderModel):
     timeout_seconds: int = Field(ge=30, le=600)
     interval_seconds: int = Field(ge=1, le=30)
 
     @model_validator(mode="after")
+    @checked
     def interval_fits_timeout(self) -> ControllerVerification:
         if self.interval_seconds > self.timeout_seconds:
-            raise ValueError("verification interval must not exceed its timeout")
+            raise _INTERVAL_FITS.refused()
         return self
 
 
@@ -204,11 +211,12 @@ class ControllerActionPolicy(ProviderModel):
         return self.reason or "HQ cannot run this action."
 
     @model_validator(mode="after")
+    @checked
     def validate_mode(self) -> ControllerActionPolicy:
         if self.mode == "locked" and self.automatic:
-            raise ValueError("locked controller actions cannot be automatic")
+            raise _LOCKED_AUTOMATIC.refused()
         if self.mode == "locked" and not self.reason:
-            raise ValueError("locked controller actions require a reason")
+            raise _LOCKED_REASON.refused()
         return self
 
 

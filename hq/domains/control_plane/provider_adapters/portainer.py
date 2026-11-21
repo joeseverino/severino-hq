@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field, field_validator
 
-from hq.platform.application.command_fields import RequiredText
+from hq.platform.application.command_fields import RequiredText, checked
 from hq.platform.application.container_standard import CHECK_IDS
 from hq.platform.application.github_public import GitHubRepositoryURL
 from hq.platform.application.record_fields import one_of
@@ -100,6 +100,7 @@ class PortainerContainerSpec(ProviderModel):
 
     @field_validator("by_design")
     @classmethod
+    @checked
     def _reasons_trimmed(cls, value: dict[str, str]) -> dict[str, str]:
         return {check: reason.strip() for check, reason in value.items()}
 

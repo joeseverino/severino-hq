@@ -9,9 +9,10 @@ import json
 from typing import Annotated, Any
 from urllib.parse import urlparse
 
-from pydantic import AfterValidator, Field
+from pydantic import Field
 
 from .http_read import UNREACHABLE, fetch
+from .reasons import Checked, Reason
 lazy from .entity_links import https_url
 
 API = "https://api.github.com"
@@ -72,7 +73,7 @@ def github_repository(repository_url: str) -> tuple[str, str] | None:
 def _repository_url(value: str) -> str:
     value = value.strip().removesuffix("/")
     if value and github_repository(value) is None:
-        raise ValueError("Give a GitHub repository, like https://github.com/owner/repository.")
+        raise ValueError
     return value
 
 
@@ -81,5 +82,8 @@ def _repository_url(value: str) -> str:
 GitHubRepositoryURL = Annotated[
     str,
     Field(pattern=r"^(?:https://(?:www\.)?github\.com/[A-Za-z0-9-]+/[A-Za-z0-9_-][A-Za-z0-9_.-]*/?)?$"),
-    AfterValidator(_repository_url),
+    Checked(
+        _repository_url,
+        Reason("github_repository", "must be a GitHub repository, such as https://github.com/owner/repository"),
+    ),
 ]

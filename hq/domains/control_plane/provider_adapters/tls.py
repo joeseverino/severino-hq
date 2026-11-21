@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
-from hq.platform.application.command_fields import NonEmpty, RequiredText
+from hq.platform.application.command_fields import NonEmpty, Reason, RequiredText, checked
 from hq.platform.application.expiry import DEFAULT_RENEWAL_WINDOW_DAYS
 
 from ..connection_shapes import ACME
@@ -122,6 +122,12 @@ class TLSCertificateSpec(ProviderModel):
     )
 
 
+_DNS_NAMES = Reason("domains_dns_names", "must each be a DNS name")
+_DOMAINS_ONCE = Reason("domains_once", "must name each domain once")
+_CONSUMERS_ONCE = Reason("consumers_once", "must list each place it is installed once")
+_CPANEL_COVERED = Reason("cpanel_names_covered", "must install on cPanel only names among the certificate's domains")
+
+
 class ResolvedTLSCertificateSpec(ProviderModel):
     certificate_name: RequiredText = Field(max_length=160)
     domains: Annotated[list[str], NonEmpty()]
@@ -136,27 +142,28 @@ class ResolvedTLSCertificateSpec(ProviderModel):
 
     @field_validator("domains")
     @classmethod
+    @checked
     def normalize_domains(cls, domains: list[str]) -> list[str]:
         normalized = [normalized_hostname(domain) for domain in domains]
         if any(not domain or " " in domain for domain in normalized):
-            raise ValueError("Each domain must be a DNS name.")
+            raise _DNS_NAMES.refused()
         if len(normalized) != len(set(normalized)):
-            raise ValueError("Each domain can be listed only once.")
+            raise _DOMAINS_ONCE.refused()
         return normalized
 
     @model_validator(mode="after")
+    @checked
     def validate_consumers(self) -> ResolvedTLSCertificateSpec:
         identities = [(consumer.kind, consumer.name) for consumer in self.consumers]
         if len(identities) != len(set(identities)):
-            raise ValueError("Each place it is installed can be listed only once.")
+            raise _CONSUMERS_ONCE.refused()
 
         covered = set(self.domains)
         for consumer in self.consumers:
             if not isinstance(consumer, CPanelTLSConsumer):
                 continue
-            uncovered = [domain for domain in consumer.install_domains if not certificate_covers(domain, covered)]
-            if uncovered:
-                raise ValueError("These cPanel names are not among the certificate's domains: " + ", ".join(uncovered))
+            if any(not certificate_covers(domain, covered) for domain in consumer.install_domains):
+                raise _CPANEL_COVERED.refused()
         return self
 
 

@@ -36,14 +36,15 @@ from django.core.validators import (
 from django.db.models import CharField, DecimalField, F, FloatField, IntegerField, JSONField, Q, TextField
 from django.db.models.constants import LOOKUP_SEP
 from django.db.models.expressions import BaseExpression
-from pydantic import AfterValidator, Field, GetCoreSchemaHandler, GetJsonSchemaHandler, TypeAdapter
-from pydantic_core import CoreSchema, core_schema
+from pydantic import Field, GetCoreSchemaHandler, GetJsonSchemaHandler, TypeAdapter
+from pydantic_core import CoreSchema
 
 from hq.platform.core.rules import Rule
 
-from .command_fields import STORED_IN, Choices, NonEmpty
+from .command_fields import STORED_IN, Checked, Choices, NonEmpty
 from .domains import host_records, load
 from .json_schemas import json_schema
+from .reasons import declared_only
 
 if TYPE_CHECKING:
     from django.db.models import Model
@@ -293,7 +294,7 @@ def _column_rules(column: Any, *, empty: bool) -> tuple[Any, ...]:
             rules.append(Field(max_length=rule.limit_value))
         elif isinstance(rule, DecimalValidator):
             rules.append(Field(max_digits=rule.max_digits, decimal_places=rule.decimal_places))
-            rules.append(AfterValidator(partial(_to_places, rule.decimal_places)))
+            rules.append(Checked(partial(_to_places, rule.decimal_places)))
         elif isinstance(rule, URLValidator):
             pattern = url_pattern(rule.schemes)
             rules.append(Field(pattern=f"^$|{pattern}" if empty else pattern))
@@ -327,13 +328,14 @@ class StoredColumn:
         return TypeAdapter(Annotated[self.base, *self.rules])
 
     def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        held = self._held()
+        column = self._held()
+        declared_only(column.core_schema, f"A column of {self.base.__name__}")
 
         def check(value: Any) -> Any:
             # A null the field's own type admits is the column's to allow.
-            return value if value is None else held.validate_python(value)
+            return value if value is None else column.validate_python(value)
 
-        return core_schema.no_info_after_validator_function(check, handler(source))
+        return Checked(check).__get_pydantic_core_schema__(source, handler)
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
         plain = json_schema(TypeAdapter(self.base))

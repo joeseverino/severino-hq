@@ -17,6 +17,7 @@ from pydantic_core.core_schema import ErrorType
 
 from hq.platform.core.rules import RULE
 
+from .reasons import declared_words
 from .refusal_codes import Code
 from .ui import ended
 
@@ -24,22 +25,12 @@ from .ui import ended
 _NAMED = 5
 
 _PYDANTIC_TYPES = frozenset(get_args(ErrorType))
-# Built-in types whose ``msg`` can carry caller text: a validator's own words,
-# the offending tag, or a parser's complaint about a character.
-_OPAQUE = frozenset(
-    {
-        "assertion_error",
-        "get_attribute_error",
-        "json_invalid",
-        "union_tag_invalid",
-        "value_error",
-    }
-)
 _CHOICE = frozenset({"enum", "literal_error"})
 _ERROR_CLAUSE = re.compile(r"[,:] ")
+# Pydantic names its subject ("Input should be", "value is not"), which follows the field here.
 _SHOULD = re.compile(r"^\w+ should ")
+_IS = re.compile(r"^\w+ is ")
 _EXPECTED_SPLIT = re.compile(r",\s*|\s+or\s+")
-_OPAQUE_MSG = "Input is invalid"
 
 _DJANGO_REASONS = {
     "blank": "is required",
@@ -70,7 +61,7 @@ def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Input
         {
             "type": error.get("type", ""),
             "loc": list(error.get("loc", ())),
-            "msg": _safe_msg(error) or _OPAQUE_MSG,
+            "msg": _said(error),
         }
         for error in sent
     ]
@@ -135,19 +126,23 @@ def _path(loc: Sequence[Any]) -> str:
     return path
 
 
-def _safe_msg(error: Mapping[str, Any]) -> str:
-    """Pydantic's own text, when it cannot hold the input; otherwise empty."""
+def _said(error: Mapping[str, Any]) -> str:
+    """What an error says: a declared reason's words, or Pydantic's own."""
 
-    # Only a built-in type's text, never one whose text is the caller's or a
-    # validator's own.
     kind = error.get("type", "")
-    if kind not in _PYDANTIC_TYPES or kind in _OPAQUE:
-        return ""
+    msg = str(error.get("msg", ""))
+    declared = declared_words(kind)
+    if kind not in _PYDANTIC_TYPES and declared is not None:
+        return declared
     if kind in _CHOICE:
         # Only the declared choices, which may themselves hold ", ".
-        return str(error.get("msg", ""))
-    # Cut before the clause where a few built-in types quote the input.
-    return _ERROR_CLAUSE.split(str(error.get("msg", "")), maxsplit=1)[0]
+        return msg
+    if kind == "union_tag_invalid":
+        # The tag found is the caller's; the tags expected are the schema's.
+        context = error.get("ctx") or {}
+        return f"Input should have {context.get('discriminator', '')} one of {context.get('expected_tags', '')}"
+    # Cut before the clause where a parser names what it read.
+    return _ERROR_CLAUSE.split(msg, maxsplit=1)[0]
 
 
 def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> str:
@@ -174,9 +169,9 @@ def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> st
         return f"must be at most {context['le']}"
     if kind == "greater_than_equal" and "ge" in context:
         return f"must be at least {context['ge']}"
-    if msg and msg != _OPAQUE_MSG:
-        return _SHOULD.sub("must ", msg)
-    return "is invalid"
+    if kind == "json_invalid":
+        return "is not valid JSON"
+    return _IS.sub("is ", _SHOULD.sub("must ", msg)) if msg else "is invalid"
 
 
 def _django_reason(error: DjangoValidationError) -> str:

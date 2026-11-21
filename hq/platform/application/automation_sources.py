@@ -17,8 +17,6 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.text import Truncator
 from pydantic import (
-    AfterValidator,
-    BaseModel,
     ConfigDict,
     Field,
     StrictStr,
@@ -33,8 +31,8 @@ lazy from hq.platform.core.audit import audited_labels
 lazy from hq.platform.core.models import AuditLog
 
 from .automation_manifest import DottedName, ProcedureTerms
-from .command_fields import Describe, RequiredText
-from .contracts import Effect
+from .command_fields import Checked, Describe, Reason, RequiredText
+from .contracts import Closed, Effect
 from .integration_specs import CapabilitySpec
 from .resource_operations import OperationAsked
 from .security import Capability, Principal
@@ -83,18 +81,22 @@ WORKER_DUE = "Waiting for HQ's playbook worker."
 def _pattern(value: str) -> str:
     try:
         re.compile(value)
-    except re.error as exc:
-        raise ValueError(f"{value!r} is not a regular expression: {exc}") from None
+    except re.error:
+        raise ValueError from None
     return value
 
 
-class InputBound(BaseModel):
+class InputBound(Closed):
     """What Ansible's argument spec cannot say of a text input: the shape it
     must have and how long it may be."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    model_config = ConfigDict(frozen=True, strict=True)
 
-    pattern: Annotated[RequiredText, StringConstraints(max_length=500), AfterValidator(_pattern)]
+    pattern: Annotated[
+        RequiredText,
+        StringConstraints(max_length=500),
+        Checked(_pattern, Reason("input_pattern", "must be a regular expression")),
+    ]
     max_length: Annotated[int, Field(ge=1, le=4096)]
 
 

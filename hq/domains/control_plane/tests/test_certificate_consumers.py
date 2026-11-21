@@ -270,7 +270,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_recording_target_declares_no_name_to_check_it_at(self):
         """Nothing is served there, so a name typed here would never be probed."""
 
-        with self.assertRaisesRegex(ValueError, "serves nothing"):
+        with self.assertRaisesRegex(ValueError, "never serves"):
             TLSDeliveryTargetSpec(
                 kind="onepassword",
                 connection_ref="a-password-manager",
@@ -292,7 +292,7 @@ class PublishingFactsIsDeclaredAsAPlaceNotAsContentTests(TestCase):
     def test_a_vault_named_against_another_kind_of_target_is_refused(self):
         """Ignored, it would sit there looking configured and be read by nothing."""
 
-        with self.assertRaisesRegex(ValueError, "applies only to onepassword targets"):
+        with self.assertRaisesRegex(ValueError, "only a 1Password target takes"):
             TLSDeliveryTargetSpec(
                 kind="npm",
                 connection_ref="a-proxy",

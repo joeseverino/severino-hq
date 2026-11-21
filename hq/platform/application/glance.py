@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Max
-from pydantic import AfterValidator, BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from hq.domains.control_plane.glance_shapes import Hour, Machine, Weather
 from hq.domains.control_plane.models import (
@@ -23,7 +23,7 @@ from . import readings
 from .answer_fields import CallMessage
 from .asks import FAILED, REFRESHING, RUNNING, Standing
 from .card_items import Kpi
-from .command_fields import Describe, stored_in
+from .command_fields import Checked, Describe, Reason, stored_in
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .container_state import ContainerCount
 from .contracts import Effect
@@ -308,7 +308,7 @@ class DashboardSettingsCommand:
         # The schema says the form; the parser refuses outside it, naming the
         # coordinate that is wrong, which a pattern's refusal cannot.
         Field(title="Weather location", json_schema_extra={"pattern": POINT}),
-        AfterValidator(_a_point),
+        Checked(_a_point, Reason("point", "must be a latitude and longitude, in decimal degrees")),
         Describe("Where the weather is read for, as latitude, longitude; blank hides it."),
     ] = ""
     weather_label: Annotated[

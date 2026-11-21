@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict, Union
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from pydantic import ConfigDict, Field, TypeAdapter, ValidationInfo, ValidatorFunctionWrapHandler, WrapValidator
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationInfo, ValidatorFunctionWrapHandler
 lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.desired_state import advance_dependents, desired_fingerprint
@@ -29,7 +29,7 @@ from hq.domains.control_plane.providers import (
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
 from .adoption import Live, live_read, require_writable
-from .command_fields import Choices, Describe, stored_in
+from .command_fields import Checked, Choices, Describe, stored_in
 from .conditions import DEGRADED, DRIFTED, READY, holding
 from .integration_specs import Kept, command_adapter, keeps
 from .labels import lower_first
@@ -75,7 +75,7 @@ def _of_its_kind(spec: Any, validate: ValidatorFunctionWrapHandler, info: Valida
 
 
 type ManagedResourceSpec = Annotated[
-    dict[str, Any], WrapValidator(_of_its_kind), Describe("What HQ expects of it, in the shape its type takes.")
+    dict[str, Any], Checked(_of_its_kind, mode="wrap"), Describe("What HQ expects of it, in the shape its type takes.")
 ]
 
 

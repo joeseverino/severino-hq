@@ -650,6 +650,13 @@ class NoteCommand:
   `ReferenceField` of that name holds ([References](#references)), offered
   as the grouped picker the record's own form shows, with what this caller
   may name.
+- `Checked(check, Reason(kind, words))` holds the field to a rule of its own:
+  `check` returns the value or raises `ValueError`, and the refusal says the
+  reason's `words` after the field's name (`must be a host name`), never what
+  was sent. A model's own validator, beneath `model_validator`, is `@checked`
+  and raises a reason's `refused()`. Any other validator, a bare
+  `AfterValidator` or `field_validator` included, fails the command as HQ
+  builds it, since its words could repeat a caller's input.
 
 A marker writes itself into the field's schema through pydantic's
 `__get_pydantic_json_schema__`, so the schema every adapter reads carries it.

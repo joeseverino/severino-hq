@@ -72,6 +72,16 @@ POSTS = {
     # its JSON. A documentation address is answered by HQ itself, so the POST
     # asks no one and writes nothing.
     "address-read": Posted("command", ("lookup.address.read",), lambda: {"address": "192.0.2.1"}, status=200),
+    # A record its type's own rule refuses: the rule's declared reason over the form.
+    "target-vault-on-proxy": Posted(
+        "command",
+        ("infrastructure.resource.create",),
+        lambda: {
+            "key": "example-target",
+            "kind": "tls.delivery_target",
+            "spec": '{"kind": "npm", "connection_ref": "example-proxy", "name": "example", "vault": "Example"}',
+        },
+    ),
     # The one question that starts publishing a service, answered with no name.
     # A domain's failed-mail policy applied to more than all of its mail: the
     # error under the field, and the policy as sent.

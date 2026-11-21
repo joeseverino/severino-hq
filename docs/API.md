@@ -637,7 +637,9 @@ policy, on any endpoint, is recorded once in the audit log as `Denied`.
 An `invalid_input` message names every offending field and why, in one
 sentence: `project.create: name is required.`, or
 `example.decide: verdict must be one of applies, does_not_apply.` It gives field
-paths, expected types and declared choices, never a value the request carried.
+paths, expected types, declared choices and each rule's declared reason
+(`calendar.entry.create: starts_at must be a time of day with no offset.`),
+never a value the request carried.
 A field a command does not have is refused at any depth, as `extra_forbidden`
 at its path (`rules[0].scope is not a known field`), and its `input_schema` is
 closed at the same levels; only a part its type declares open takes any key.
