@@ -26,6 +26,7 @@ from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_gro
 from hq_sdk.testing import plain
 
 from .. import readings
+from ..asks import REFRESHING
 from ..capabilities import execute_capability
 from ..glance import (
     DASHBOARD_MACHINE,
@@ -331,25 +332,6 @@ class DashboardGlanceTests(TestCase):
                 html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [weather]})
                 self.assertEqual('data-reading-age="stale"' in html, stale)
 
-    def test_refresh_preserves_old_readings_and_explains_pending_state(self):
-        readings.record(
-            readings.machine_telemetry(self.machine.key),
-            reported_machine("app-server", host=HOST),
-            observed_at=timezone.now() - timedelta(days=5),
-        )
-        DashboardRefreshRequest.objects.create(panel_id=self.machine_request_id)
-
-        panels = dashboard_panels()
-        html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
-
-        # The reading stays up while it is replaced, marked as refreshing.
-        machine = next(panel for panel in panels if panel["id"] == self.machine_request_id)
-        self.assertTrue(machine["due"])
-        (part,) = select(html, "data-fragment-part", self.machine_request_id)
-        self.assertIn("data-refreshing", part.attrs)
-        self.assertIn("9%", part.text)
-        self.assertNotIn("Out of date", part.text)
-
     def test_with_no_machine_chosen_no_panel_is_drawn(self):
         # Get started's "Choose a machine" step asks instead; the header does
         # not repeat it.
@@ -645,7 +627,7 @@ class GlanceRenderingTests(TestCase):
         self.assertFalse(ProviderConnection.objects.exists())
         DashboardRefreshRequest.objects.create(panel_id="weather", requested_at=timezone.now())
         weather = next(p for p in dashboard_panels() if p["id"] == "weather")
-        self.assertEqual((weather["refreshable"], weather["refreshing"]), (False, False))
+        self.assertEqual((weather["refreshable"], weather["pending"]), (False, False))
 
     def test_each_panels_refresh_is_the_shared_ask_and_fetches_the_strip(self):
         panels = tuple({**panel, "ask": refresh_ask(panel["standing"])} for panel in dashboard_panels())
@@ -715,7 +697,7 @@ class GlanceEndpointTests(TestCase):
 
         self.assertEqual(catalog.call_count, 1)
 
-    def test_a_stale_post_requests_the_stale_panels_and_shows_them_refreshing(self):
+    def test_a_stale_post_requests_the_stale_panels_and_follows_them_unsaid(self):
         with doorbells() as rung:
             with self.captureOnCommitCallbacks(execute=True):
                 response = self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
@@ -726,17 +708,23 @@ class GlanceEndpointTests(TestCase):
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{self.machine.pk}"],
         )
+        # Nobody pressed for it: the region follows the reading, and the panel
+        # keeps the one it has without saying a refresh is under way.
+        self.assertTrue(select(response, "data-fragment-poll"))
         (part,) = select(response, "data-fragment-part", f"machine-{self.machine.pk}")
-        self.assertIn("data-refreshing", part.attrs)
+        self.assertNotIn(REFRESHING, part.text)
 
     def test_a_stale_post_asks_for_the_weather_never_read(self):
         # A point set and no forecast stored: the machine's reading is current.
         DashboardConfiguration.objects.create(weather_point="41.0000,-87.0000")
         readings.record(readings.machine_telemetry(self.machine.key), reported_machine("app-server", host=HOST))
 
-        self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
+        response = self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
 
         self.assertEqual(list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)), ["weather"])
+        # With no reading to keep, it shows its empty state.
+        (part,) = select(response, "data-fragment-part", "weather")
+        self.assertNotIn(REFRESHING, part.text)
 
     def test_a_stale_post_with_nothing_stale_requests_nothing(self):
         readings.record(readings.machine_telemetry(self.machine.key), reported_machine("app-server", host=HOST))

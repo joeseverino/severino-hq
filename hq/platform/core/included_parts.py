@@ -794,10 +794,11 @@ PARTS = (
         only where a controller will read what it asks for (`cadence.WorkerStanding.takes_reads`): one
         whose heartbeat says it reports to this HQ, and is not silent. Where none will, the page draws no
         ask and no note, so it never promises a refresh that cannot come. `page.html` draws the ask, and
-        its note says what it waits for at the end of the head's first line, in room of its own; a line
-        whose longest word or date leaves it none hides it. An unseen strut of each sentence HQ writes for
-        it word for word sizes its slot (`asks.REFRESHING`, `REFRESHED`, `NEWER_READING` and
-        `SHOW_NEWER`, which the script writes from the page). So those sentences are always whole, and the
+        its note ends the head's first line, in room of its own; a line whose longest word or date leaves
+        it none hides it. Nobody pressed the ask, so its note says nothing while the readings are under
+        way or once they land, which the page drawn again shows: it says only a failure, and the offer of
+        a newer reading it could not draw in place. An unseen strut of that offer, word for word, sizes
+        its slot (`asks.NEWER_READING` and `SHOW_NEWER`, which the script writes from the page), so the
         trail beside it never moves whatever the note says. Only a failure's sentence is cut, whole in its
         title. The dashboard names itself only when a reading its queue is drawn from is due
         (`visit_refresh.PAGES`), and the connection panel only when the tailnet, container or posture

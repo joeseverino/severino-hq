@@ -373,13 +373,6 @@ def refreshing():
 
 
 @answers(register)
-def refreshed():
-    """``{% refreshed %}``: what a reading says once it is in."""
-
-    return asks.REFRESHED
-
-
-@answers(register)
 def newer_reading():
     """``{% newer_reading %}``: what a page says of a newer reading it could
     not draw in place, before the link that loads it."""

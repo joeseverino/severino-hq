@@ -48,6 +48,9 @@
     document.addEventListener(type, () => { touched = true; }, { once: true, passive: true, capture: true }),
   );
   const showing = () => document.visibilityState === "visible";
+  // An ask nobody pressed (_visit_refresh.html) has nobody waiting on it, so
+  // it says only a failure: its result shows as the part it reads drawn again.
+  const unpressed = (control) => control.matches(".ask-quiet");
 
   // The server's short `moments.duration`, each figure held to its unit.
   const elapsed = (seconds) => {
@@ -144,7 +147,8 @@
     const line = lineOf(control);
     if (!line) return;
     const state = control.dataset.askState;
-    const said = state === "failed" ? text || word : state === "idle" ? "" : document.body.dataset.askRefreshing;
+    const said =
+      state === "failed" ? text || word : state === "idle" || unpressed(control) ? "" : document.body.dataset.askRefreshing;
     // Speaking for the work, the line takes its note's tone; speaking for its
     // reading again, the tone the server drew it with.
     if (!("drawnTone" in line.dataset)) line.dataset.drawnTone = toneOf(line);
@@ -232,7 +236,8 @@
     // Toned first, so the head's line echoing the note takes its new tone.
     const note = noteOf(control);
     if (note) retone(note, standing.tone || "");
-    say(control, standing.note || "", standing.label || "");
+    const silent = unpressed(control) && standing.state !== "failed";
+    say(control, silent ? "" : standing.note || "", silent ? "" : standing.label || "");
     tick(control);
     const label = control.querySelector("[data-ask-label]");
     if (label && standing.label) {

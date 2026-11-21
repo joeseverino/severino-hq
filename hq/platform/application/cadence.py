@@ -836,8 +836,9 @@ def ask(
     it commits. When it was asked.
 
     ``activity`` notes that a person asked, so the active cadence decides the
-    sweep. A kind HQ stores no reading of is refused, since nothing would
-    answer it and it would force sweeps until it expired.
+    sweep and a panel says its reading is under way. A kind HQ stores no
+    reading of is refused, since nothing would answer it and it would force
+    sweeps until it expired.
     """
 
     now = timezone.now()
@@ -852,7 +853,7 @@ def ask(
         asked = DashboardRefreshRequest.objects.select_for_update().in_bulk(list(panels), field_name="panel_id")
         for panel_id, said in panels.items():
             request = asked.get(panel_id) or DashboardRefreshRequest(panel_id=panel_id)
-            request.requested_at, request.completed_at = now, None
+            request.requested_at, request.completed_at, request.awaited = now, None, activity
             request.audit_said = said
             request.save()
     _ring_on_commit(doorbell)
