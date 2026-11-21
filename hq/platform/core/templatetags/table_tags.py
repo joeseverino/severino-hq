@@ -838,6 +838,8 @@ slotted(
         public=True,
         example=tags.DATA_TABLE,
         states=tags.DATA_TABLE_STATES,
+        # A row's open line, which the region draws in Python (`_open_line`) for a hand-drawn table.
+        classes=("row-detail", "row-columns"),
     ),
     library=register,
 )
