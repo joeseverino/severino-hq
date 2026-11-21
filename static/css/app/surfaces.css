@@ -260,13 +260,22 @@
 .section-edge { --surface-edge: 3px solid var(--tone-mark); }
 /* A figure's own margin is the browser's; the page's stacking gives it its room. */
 :where(figure.section) { margin: 0; }
-/* A heading is never left alone at the foot of a column or a printed page:
-   Chromium keeps the break after a flex head only when the head is whole. */
-.section > .section-head { margin-bottom: var(--space-5); break-inside: avoid; break-after: avoid; }
+/* A heading is never left alone at the foot of a printed page: Chromium
+   keeps the break after a flex head only when the head is whole. WebKit
+   keeps no break after anything, so a body that runs down columns starts in
+   the head as its lead, which the head's own box keeps with it. The body
+   after a lead continues its list, at the list's own spacing. */
+.section > .section-head {
+  margin-bottom: var(--space-5); break-inside: avoid; break-after: avoid;
+  &:has(> .section-lead) { margin-bottom: 0; }
+}
 /* A head inside the frame stands at the inset the body's words stand at. */
 .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)) > .section-head {
   margin: 0; padding: var(--section-head-pad, var(--space-4) var(--space-9));
   border-block-end: var(--section-head-rule, 1px solid var(--line));
+  /* A margin at a column's top stays there in WebKit, so the space a page
+     sets above a lead's head (--section-lead-above) is padding inside it. */
+  &:has(> .section-lead) { padding-block: var(--section-lead-above, var(--surface-inset, var(--space-4))) 0; border-block-end: 0; }
 }
 /* A section's heading line is one control tall, its words centered in it, so
    a control beside it (a button, a month's arrows) adds no height, and heads

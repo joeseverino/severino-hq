@@ -38,7 +38,7 @@ def _option(field: Field) -> Option:
 
 def _section() -> Part:
     named = {field.name: field for field in fields(SectionPart)}
-    parts = ("content", "aside", "empty", "foot")
+    parts = ("content", "lead", "aside", "empty", "foot")
     return Part(
         name="section",
         rules="""
@@ -63,6 +63,13 @@ def _section() -> Part:
         foot under the list. With no address the link is left out, so a page passes the one it has. A
         line that dates or sources a section goes beside its heading, not loose under it. A section whose
         rows are the latest of more names the rest as its `more_label` and `more_url`.
+
+        `{% lead %}` is the start of the body, drawn in one box with the head, for a section whose body
+        runs down columns: the head is kept whole, so it never ends a column with what it heads in the
+        next. The body after it continues the same list (`{% section "Lane" %}the rest{% lead %}the
+        first{% endsection %}`). The columns' container sets the space above each head as
+        `--section-lead-above`, which the head holds as padding so every column starts level. A folded
+        section's toggle and a figure's caption take none.
 
         `figure=True` draws the section as a `<figure>`, its head the `<figcaption>`, for a drawing (a
         chart, a calendar) whose title, line under it and legend are a section's head like any other. A
@@ -102,7 +109,7 @@ def _section() -> Part:
         `{{ part }}`. The part is the head, the frame and the spacing between, so a page states the
         content and never the spacing, the frame or the count's look.
         """,
-        classes=("section-aside", "section-body", "section-head", "section-lede"),
+        classes=("section-aside", "section-body", "section-head", "section-lead", "section-lede"),
         pieces=("partials/_section_head.html",),
         partial=SECTION_PARTIAL,
         about="A titled part of a page in its frame, its head on the page and its body in the frame.",
@@ -141,10 +148,12 @@ class SectionNode(TagHelperNode):
         part = SectionPart(heading=heading, level=level, data=data, **options)
         root[_LEVEL] = min(level + 1, LAST_LEVEL)
         try:
-            body, aside, empty, foot = (self._rendered(name, context) for name in SECTION.parts)
+            body, lead, aside, empty, foot = (self._rendered(name, context) for name in SECTION.parts)
         finally:
             root[_LEVEL] = level
-        values = part.drawn(body=body, aside=aside, empty=empty, foot=foot, heading_id=_unique(root, part.heading_id))
+        values = part.drawn(
+            body=body, lead=lead, aside=aside, empty=empty, foot=foot, heading_id=_unique(root, part.heading_id)
+        )
         if values is None:
             return ""
         return context.template.engine.get_template(SECTION.partial).render(context.new(values)).strip()

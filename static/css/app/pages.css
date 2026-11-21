@@ -24,25 +24,34 @@
     max-height: calc(100vh - var(--site-header-height)); overflow-y: auto; border-top: 0; border-left: 1px solid var(--line);
   }
 }
-/* The lanes run down columns as a list does, as many columns as fit, so a
-   short lane sits under the one before it instead of leaving a column of
-   empty map beside a long one. A lane stays whole in its column, as an
-   index's letter groups do, so its heading is never parted from its cards;
-   only a lane taller than a column breaks, between its cards. The page
-   scrolls; the map never does inside it. A lane with nothing in it, or
-   nothing the filter left, is not drawn. */
+/* The lanes run down balanced columns as a list does, as many columns as
+   fit, so however long one lane is the columns end together and none stands
+   empty. A lane breaks between its cards wherever a column ends, and a card
+   stays whole. A lane's first card is its section's lead, kept in one box
+   with its heading, since WebKit honors no break-after: avoid (WebKit bugs
+   5097 and 34155). The page scrolls; the map never does inside it. A lane
+   with nothing in it, or nothing the filter left, is not drawn. */
 .topology-map {
+  /* A card's shadow reaches this far below it; its slot holds it. */
+  --topology-shadow: 3px;
+  --topology-above: calc(var(--space-3) - var(--topology-shadow));
+  --section-lead-above: var(--topology-above);
   columns: 15rem; column-gap: var(--space-8);
-  padding: var(--space-5) var(--space-6); background: var(--surface-2);
+  padding: calc(var(--space-5) - var(--topology-above)) var(--space-6) var(--space-5); background: var(--surface-2);
   min-width: 0; max-width: 100%;
 }
-/* The space under a lane is its list's padding, so it stays in the lane's
-   column: a margin of the lane's own would follow it to the next column's
-   top in WebKit and set that lane lower than its neighbors. */
-.topology-lane { min-width: 0; break-inside: avoid; }
-.topology-node-list { padding-block-end: var(--space-6); }
+/* The space above a lane's heading and above each card is padding inside a
+   box that never breaks (the head, a card's slot), so every column starts
+   at the same height whatever starts it. A margin there is kept at a
+   column's top in WebKit, and space under a lane is carried to the next
+   column's top, wherever the column ends just there. A card's slot also
+   holds its shadow, which a column ending at the card would otherwise paint
+   at the next column's top. */
+.topology-lane { min-width: 0; }
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
-.topology-node-list > * { break-inside: avoid; }
+.topology-node-slot { padding-block-end: var(--topology-shadow); break-inside: avoid; }
+.topology-node-list > .topology-node-slot { padding-block-start: var(--topology-above); }
+.topology-node-slot:has(> .topology-node[hidden]) { display: none; }
 .topology-kind-mark { background: var(--muted); }
 .topology-kind-controller { background: var(--topology-controller); }
 .topology-kind-connection { background: var(--accent-2); }
@@ -50,7 +59,6 @@
 .topology-kind-resource { background: var(--topology-resource); }
 .topology-kind-target { background: var(--topology-target); }
 .topology-kind-dependency { background: var(--muted-2); }
-.topology-node-list > * + * { margin-top: var(--space-3); }
 /* A node's name is its identity, so it is never cut: it takes the card's
    whole width and wraps only at its seams or spaces. The count of its links
    stands at the end of the line under it, beside what kind of thing it is, so
