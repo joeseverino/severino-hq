@@ -3,7 +3,6 @@ draws it: each heading and cell's facts read off its declaration, laid out
 by ``table_layout.lay_out``, and every mark it gives written where the
 template draws the element it belongs to. No markup is read back."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,7 +12,7 @@ from django.utils.safestring import SafeString, mark_safe
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, column_kind
 from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.list_tags import LINE_LEAD
-from hq.platform.core.templatetags.table_tags import LINE_FRAME, table_heading
+from hq.platform.core.templatetags.table_tags import LINE_FRAME, data_attributes, table_heading
 from hq.platform.core.templatetags.value_tags import money, when_text
 from hq.platform.core.templatetags.write_tags import row_editor
 
@@ -112,7 +111,7 @@ def drawn(table: DataTable, context: Any) -> dict[str, Any]:
         "groups": groups,
         "footer": footer,
         "pieces": _pieces(table, context),
-        "marks": mark_safe("".join(laid.marks)) + _data(table.data),  # noqa: S308 - the layout's own attributes
+        "marks": mark_safe("".join(laid.marks)) + data_attributes(table.data),  # noqa: S308 - the layout's own attributes
         "rows": any(group.rows for group in groups),
         # The open line a region whose rows hold cells back draws once, which tables.js clones.
         "frame": mark_safe(LINE_FRAME) if laid.held else "",  # noqa: S308 - the region's own literal markup
@@ -217,7 +216,7 @@ def _mark(row: DrawnRow, width: int) -> None:
     if row.row.id:
         attributes.append(format_html(' id="{}"', row.row.id))
     # Each name is held to an attribute's (``Row``), so it is written as it is.
-    attributes.append(_data(row.row.data))
+    attributes.append(data_attributes(row.row.data))
     if row.row.folds:
         attributes.append(format_html(' id="{}" data-folds', row.row.folds))
     if row.row.folded:
@@ -233,12 +232,6 @@ def _mark(row: DrawnRow, width: int) -> None:
         row.detail, blocks, entries = row.facts.detail
         row.blocks = [moved.content for moved in blocks if isinstance(moved.content, Below)]
         row.entries = [moved.content for moved in entries if isinstance(moved.content, Below)]
-
-
-def _data(data: Mapping[str, str]) -> SafeString:
-    """Each ``data-`` attribute, its name held to an attribute's (``Row``)."""
-
-    return mark_safe("".join(format_html(f' data-{name}="{{}}"', value) for name, value in data.items()))  # noqa: S308 - each value escaped
 
 
 def _attributes(facts: CellFacts, role: str, own: str = "", sort: str = "") -> SafeString:

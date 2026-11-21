@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal
 
 from django.core.exceptions import FieldDoesNotExist
@@ -242,8 +243,13 @@ class Cell:
     below: tuple[Below, ...] = ()
     # A declared part drawn as its value.
     piece: Piece | None = None
+    # Each ``data-`` attribute a script or a test finds its value by, by its
+    # name after ``data-``: on its line's item, else around the value alone.
+    # Read-only, since ``field`` here names its field of the page's form.
+    data: Mapping[str, str] = MappingProxyType({})
 
     def __post_init__(self) -> None:
+        held_data(self.data, "A cell")
         values = [bool(self.text or self.url or self.link), self.moment is not None, self.amount is not None]
         values += [self.status is not None, self.piece is not None]
         if sum(values) + (self.field is not None) + (self.editor is not None) > 1:
@@ -355,6 +361,14 @@ class TableColumn:
 _DATA_NAME = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 
 
+def held_data(data: Mapping[str, str], whose: str) -> None:
+    """Refuse a ``data-`` attribute whose name an attribute cannot hold, so
+    every declaration's names are written as they are."""
+
+    if not all(_DATA_NAME.fullmatch(name) for name in data):
+        raise ValueError(f"{whose}'s data names are lowercase words joined by hyphens, never {sorted(data)!r}.")
+
+
 @dataclass(frozen=True, slots=True)
 class Row:
     """One row: its cells, what may be done to its record, the run evidence its
@@ -391,8 +405,7 @@ class Row:
     attention: bool = False
 
     def __post_init__(self) -> None:
-        if not all(_DATA_NAME.fullmatch(name) for name in self.data):
-            raise ValueError(f"A row's data names are lowercase words joined by hyphens, never {sorted(self.data)!r}.")
+        held_data(self.data, "A row")
 
     @property
     def controls(self) -> bool:
@@ -413,6 +426,12 @@ class Group:
     folds: str = ""
     href: str = ""
     attention: bool = False
+    # Its body's id and each ``data-`` attribute a script finds it by, as a row's are.
+    id: str = ""
+    data: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        held_data(self.data, "A group")
 
 
 @dataclass(frozen=True, slots=True)
@@ -440,10 +459,7 @@ class DataTable:
     data: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not all(_DATA_NAME.fullmatch(name) for name in self.data):
-            raise ValueError(
-                f"A table's data names are lowercase words joined by hyphens, never {sorted(self.data)!r}."
-            )
+        held_data(self.data, "A table")
         if self.rows and self.groups:
             raise ValueError("A table holds rows or groups of them, not both.")
         object.__setattr__(self, "columns", ranked(self.columns))

@@ -143,3 +143,17 @@ class TableRowTests(SimpleTestCase):
             cell for cell in elements(_render("{% data_table table %}", {"table": table}), "th") if cell.words == "a"
         ]
         self.assertEqual(header.attrs.get("scope"), "row")
+
+    def test_a_declared_hook_stands_on_what_it_finds(self):
+        """A group's hook is on its body, a line's on its item, and a value's
+        around that value alone, so a script reads its words and no others."""
+
+        from hq.platform.core.part_examples.tags import DATA_TABLE_STATES
+
+        html = _render("{% data_table table %}", DATA_TABLE_STATES["kinds"].context())
+        (group,) = select(html, "data-example", "group")
+        (line,) = select(html, "data-example", "zone")
+        (value,) = select(html, "data-example", "digits")
+        self.assertEqual((group.tag, group.attrs.get("id")), ("tbody", "example-group"))
+        self.assertEqual((line.tag, line.words), ("li", "example-zone"))
+        self.assertEqual(value.words, "…1234 ending in 1234")

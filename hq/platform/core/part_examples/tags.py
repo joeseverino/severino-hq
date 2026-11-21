@@ -775,7 +775,7 @@ def _every_kind() -> DataTable:
                 parts=(Cell(status=tables.StatusMark("Edge", chip=True)),),
                 below=(
                     tables.Below("", (Cell("An example note kept for the open line."),)),
-                    tables.Below("Also sees", (Cell("example-zone"), Cell("example-bucket"))),
+                    tables.Below("Also sees", (Cell("example-zone", data={"example": "zone"}), Cell("example-bucket"))),
                 ),
             ),
             replace(
@@ -790,7 +790,7 @@ def _every_kind() -> DataTable:
                 "an example note",
                 muted=True,
                 tip="What the note says in full",
-                parts=(Cell("…1234", muted=True, aloud="ending in 1234"),),
+                parts=(Cell("…1234", muted=True, aloud="ending in 1234", data={"example": "digits"}),),
             ),
         ),
         id="example-host-04",
@@ -814,6 +814,8 @@ def _every_kind() -> DataTable:
                 "Example group",
                 (head, row("example-host-02", folded="example-fold"), rest, blank, marked),
                 count=4,
+                id="example-group",
+                data={"example": "group"},
             ),
         ),
         footer=tables.Row((Cell("Total", name=True), Cell(), Cell(), Cell(amount=Decimal(39)), Cell(), Cell())),

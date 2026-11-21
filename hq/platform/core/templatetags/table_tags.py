@@ -657,6 +657,14 @@ def row_actions(
 
 
 @register.filter
+def data_attributes(data: Any) -> SafeString:
+    """Each ``data-`` attribute a declaration names (``tables.held_data``), as
+    the start tag it belongs to writes it."""
+
+    return mark_safe("".join(format_html(f' data-{name}="{{}}"', value) for name, value in data.items()))  # noqa: S308 - each value escaped, each name held
+
+
+@register.filter
 def chart_table(chart: Any) -> DataTable:
     """``{% data_table chart|chart_table %}``: what a chart (``ui.ChartDrawing``)
     draws, as a table read in its own order: a row per period or date, headed
