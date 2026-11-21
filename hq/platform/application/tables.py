@@ -435,8 +435,15 @@ class DataTable:
     # What ``{% table_region %}`` takes beside its label: its box, and what
     # it says with no rows.
     region: Mapping[str, Any] = field(default_factory=dict)
+    # Each ``data-`` attribute a script or a test finds the table by, by its
+    # name after ``data-``, as a row's are.
+    data: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if not all(_DATA_NAME.fullmatch(name) for name in self.data):
+            raise ValueError(
+                f"A table's data names are lowercase words joined by hyphens, never {sorted(self.data)!r}."
+            )
         if self.rows and self.groups:
             raise ValueError("A table holds rows or groups of them, not both.")
         object.__setattr__(self, "columns", ranked(self.columns))

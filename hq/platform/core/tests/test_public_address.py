@@ -146,7 +146,9 @@ class PublicAddressViewTests(TestCase):
             a_device("a-laptop", A_TAILNET_ADDRESS, direct_endpoint=f"{ADDRESS}:41641"),
             a_device("hq-host", "100.64.0.9", observer=True),
         )
-        panel = render_to_string("core/_connection_panel.html", {"connection": connection(a_request())})
+        panel = render_to_string(
+            "partials/_connection_peering.html#carriage", {"peering": connection(a_request()).peering}
+        )
         (region,) = select(panel, "data-fragment-load")
         readings.record(KEY, STORED)
 

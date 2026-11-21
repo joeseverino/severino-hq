@@ -218,12 +218,12 @@ class CarriageTests(TestCase):
         from django.template.loader import render_to_string
 
         public = self._connection(direct_endpoint=f"{self.PUBLIC}:41641")
-        markup = render_to_string("core/_connection_panel.html", {"connection": public})
+        markup = render_to_string("partials/_connection_peering.html#carriage", {"peering": public.peering})
         self.assertIn("data-peering-detail", markup)
         self.assertIn(f"address={self.PUBLIC}", markup)
 
         local = self._connection(direct_endpoint="10.9.9.9:41641")
-        markup = render_to_string("core/_connection_panel.html", {"connection": local})
+        markup = render_to_string("partials/_connection_peering.html#carriage", {"peering": local.peering})
         self.assertNotIn("data-peering-detail", markup)
 
 

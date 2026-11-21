@@ -441,6 +441,12 @@ A rule is read and changed where it sits, in its agent's column of the rules tab
 (`capability_policy.table`): a select in the rule's tone for whoever may save the rules, else the
 chosen words in that tone, and past the agent's grant the reason, muted, on one line.
 
+### core/_response_check.html (host only)
+
+A response header or policy directive is read from a real response once the Headers fold opens
+(connection.js), never from the settings meant to produce it. Until then its state says it is
+being read; the script shows the state drawn beside it, Sent or Enforced, or Absent.
+
 ### django/forms/field.html (host only)
 
 A field is the view's Django form field, drawn by this template, so its label, help, errors and

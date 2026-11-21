@@ -20,11 +20,13 @@ from .json_schemas import ObservedMoment
 from .labels import dotted, lower_first
 from .standards import Standing
 from .tone import Tone
+lazy from . import connection_tables
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
 
 if TYPE_CHECKING:
     from .standards import CheckResult
+    from .tables import DataTable
 
 
 # A hop's check in the words the hop shows.
@@ -237,6 +239,12 @@ class Hop:
     @property
     def icon(self) -> str:
         return _HOP_ICONS.get(self.step, "")
+
+    @property
+    def evidence_table(self) -> DataTable:
+        """What the request carried here, as the hop's table."""
+
+        return connection_tables.evidence(self)
 
     @property
     def standing(self) -> str:

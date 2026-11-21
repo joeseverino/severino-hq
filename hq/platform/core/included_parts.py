@@ -283,6 +283,18 @@ METER = _part(
     example=records.METER,
     states=records.METER_STATES,
 )
+RESPONSE_CHECK = Part(
+    name="",
+    partial="core/_response_check.html",
+    about="What HQ sent back, read by the browser: the name it fills with the value, or the state it shows.",
+    rules="""
+    A response header or policy directive is read from a real response once the Headers fold opens
+    (connection.js), never from the settings meant to produce it. Until then its state says it is
+    being read; the script shows the state drawn beside it, Sent or Enforced, or Absent.
+    """,
+    example=connection.RESPONSE_CHECK,
+)
+
 POLICY_SETTING = Part(
     name="",
     partial="core/_policy_setting.html",
@@ -298,6 +310,7 @@ POLICY_SETTING = Part(
 PARTS = (
     FIELD,
     POLICY_SETTING,
+    RESPONSE_CHECK,
     Part(
         name="",
         partial="django/forms/widgets/choice_cards.html",

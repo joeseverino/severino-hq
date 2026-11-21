@@ -46,6 +46,7 @@ from hq.platform.application.ui import PageNavigation, PageSection, counted
 from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, run_posted
 from hq.platform.core.web_refusals import refusal_response, refused
+lazy from hq.platform.application import connection_tables
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context
@@ -681,6 +682,7 @@ class ConnectionPageView(PageMixin, TemplateView):
         context["request_path"] = found
         context["connection"] = found.connection
         context["posture"] = estate_posture(connection_catalog(principal=web_principal(self.request.user)))
+        context["tables"] = connection_tables.panel(context["posture"], found)
         # Whoever opened the panel is looking at these readings now, so it
         # asks for those that are due once it is showing.
         context["ask_readings"] = worth_asking("page", "connection")
