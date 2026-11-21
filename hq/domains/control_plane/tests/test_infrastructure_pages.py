@@ -13,6 +13,7 @@ from hq.platform.application.action_links import read_link
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.finding_model import Finding
+from hq.platform.application.findings import finding_rules
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.markup_testing import actions, hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
@@ -210,6 +211,17 @@ class InfrastructureViewsTests(TestCase):
         links = hrefs(response)
         self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", links)
         self.assertIn(reverse("action_items"), links)
+
+    def test_checks_page_lists_every_rule_and_links_what_it_has_open(self):
+        declare("unswept-rewrite", "adguard.rewrite", {"domain": "unswept.example", "answer": "10.0.0.9"})
+
+        self.assertIn(reverse("control_plane:checks"), hrefs(self.client.get(reverse("control_plane:findings"))))
+        response = self.client.get(reverse("control_plane:checks"))
+
+        shown = text(response)
+        for rule in finding_rules():
+            self.assertIn(rule.name, shown)
+        self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", hrefs(response))
 
     def test_findings_render_only_offers_the_projection_authorized(self):
         subject = TopologyNode(

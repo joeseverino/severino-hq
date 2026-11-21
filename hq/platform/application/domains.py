@@ -472,6 +472,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 128,
                 "Infrastructure",
             ),
+            # Beside Findings: the rules every finding comes from.
+            NavigationItem("Checks", "control_plane:checks", "control_plane", 128, "Infrastructure"),
         ),
     ),
     DomainDescriptor(

@@ -20,6 +20,7 @@ from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingReme
 from .labels import lower_first
 from .moments import expiry_words, moment
 from .references import Kind
+from .thresholds import Threshold
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import ended
@@ -28,8 +29,8 @@ lazy from .topology_estate import machine_nodes, readers_of
 
 # A provider that renews on its own does so with thirty days left; a
 # certificate still inside three weeks of expiry missed that renewal.
-WARN_DAYS = 21
-SERIOUS_DAYS = 7
+WARN_DAYS = Threshold(21, "days")
+SERIOUS_DAYS = Threshold(7, "days")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +158,7 @@ def judged(found: Iterable[tuple[Any, HeldCertificate]], now: datetime) -> tuple
     )
     alike: dict[tuple[str, str, str], list[tuple[Any, HeldCertificate, int]]] = {}
     for node, certificate, days in held_now:
-        if days <= WARN_DAYS:
+        if days <= WARN_DAYS.value:
             alike.setdefault(_reads_as(certificate, days), []).append((node, certificate, days))
     findings = []
     for group in alike.values():
@@ -238,7 +239,7 @@ def _finding(node, certificate: HeldCertificate, days: int, apart: tuple[str, st
         part="|".join((kind, title, day, issuer, names)),
         # One that serves no name breaks nothing when it lapses: it is left
         # over, and the advice is to remove it, not renew it.
-        severity=Tone.SERIOUS if names and days <= SERIOUS_DAYS else Tone.ATTENTION,
+        severity=Tone.SERIOUS if names and days <= SERIOUS_DAYS.value else Tone.ATTENTION,
         explanation=_SERVING_EXPLANATION if names else _UNUSED_EXPLANATION,
         evidence=(
             ("Certificate", title),
@@ -277,7 +278,7 @@ def renewals_judged(found: Iterable[tuple[Any, Expiry]], now: datetime) -> tuple
             Finding(
                 rule="certificate-expiring",
                 subject=node.id,
-                severity=Tone.SERIOUS if days <= SERIOUS_DAYS else Tone.ATTENTION,
+                severity=Tone.SERIOUS if days <= SERIOUS_DAYS.value else Tone.ATTENTION,
                 title=f"{expiry.subject} {expiry_words(days)}",
                 explanation=f"Expires {ended(expiry_phrase(expiry.expires.isoformat()))} Renewal has not run; renew it.",
                 primary=opens("Open certificate", expiry.url),
@@ -309,9 +310,9 @@ RULES: tuple[FindingRule, ...] = (
         ),
         no_help_reason="HQ cannot renew this certificate.",
         bars={
-            Tone.SERIOUS: f"a certificate in use expires within {SERIOUS_DAYS} days",
-            Tone.ATTENTION: f"a certificate expires within {WARN_DAYS} days",
+            Tone.SERIOUS: f"a certificate in use expires within {SERIOUS_DAYS}",
+            Tone.ATTENTION: f"a certificate expires within {WARN_DAYS}",
         },
-        clears=f"the certificate runs more than {WARN_DAYS} days out",
+        clears=f"the certificate runs more than {WARN_DAYS} out",
     ),
 )

@@ -6,6 +6,7 @@ from typing import override
 from django.views.generic import TemplateView
 
 from hq.platform.application.dashboard import finding_rows, waiting
+from hq.platform.application.finding_checks import checks, tones
 from hq.platform.application.findings import coverage, estate_findings, finding_rules, rule_for
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
@@ -26,6 +27,7 @@ class FindingsView(PageMixin, TemplateView):
         return (
             PageAction("Needs you", reverse("action_items")),
             PageAction("Map", reverse("control_plane:topology")),
+            PageAction("Checks", reverse("control_plane:checks")),
         )
 
     @override
@@ -63,4 +65,25 @@ class FindingsView(PageMixin, TemplateView):
                 "waiting_elsewhere": waiting(principal, self.request.user.pk) if not raised and not active_rule else 0,
             }
         )
+        return context
+
+
+class ChecksView(PageMixin, TemplateView):
+    """Every rule the findings come from, with its bars and how many are open."""
+
+    template_name = "control_plane/checks.html"
+    page_title = "Checks"
+
+    @override
+    def get_page_lede(self):
+        return tones()
+
+    @override
+    def get_page_actions(self):
+        return (PageAction("Findings", reverse("control_plane:findings")),)
+
+    @override
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["checks"] = checks(web_principal(self.request.user))
         return context

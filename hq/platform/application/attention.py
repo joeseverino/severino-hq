@@ -50,7 +50,13 @@ def finding_why(finding: Finding, rule: FindingRule | None) -> str:
     if more:
         read += f" (and {more} more)"
     bar = rule.bars.get(finding.severity, "") if rule is not None else ""
-    return ended(f"{read}; {_RATED.get(finding.severity, _RATED[Tone.ATTENTION])} {bar}" if bar else read)
+    return ended(f"{read}; {rated(finding.severity, bar)}" if bar else read)
+
+
+def rated(severity: str, bar: str) -> str:
+    """A rule's ``bar`` as the clause its severity reads in: "urgent once free space is under 512 MB"."""
+
+    return f"{_RATED.get(Tone(severity), _RATED[Tone.ATTENTION])} {bar}"
 
 
 def raising_domains() -> frozenset[str]:
