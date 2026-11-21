@@ -802,7 +802,7 @@ def _every_kind() -> DataTable:
         data={"example": "host-04"},
         mark=RowMark("/example/pin/", True, "example-host-04", "favorites"),
         order=RowOrder("/example/move/", "example-host-04", True, False),
-        asks=(Ask("Refresh", "/example/read/", compact=True),),
+        asks=(Ask("Example read", "/example/read/", compact=True),),
     )
     return DataTable(
         "Example kinds",
