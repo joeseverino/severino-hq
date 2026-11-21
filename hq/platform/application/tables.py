@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
@@ -15,8 +15,9 @@ from django.db.models import Model
 
 from hq.platform.core.table_layout import SAYS_NOTHING, leaving_order
 lazy from hq.platform.core.included_parts import METER, READING_AGE
-lazy from hq.platform.core.templatetags import status_tags, table_tags
+lazy from hq.platform.core.templatetags import status_tags
 
+from .describe import Describe
 from .display_words import QUOTED, display
 lazy from .freshness import last_read
 
@@ -257,7 +258,11 @@ class Cell:
 
     def __post_init__(self) -> None:
         held_data(self.data, "A cell")
-        values = [bool(self.text or self.quoted or self.url or self.link), self.moment is not None, self.amount is not None]
+        values = [
+            bool(self.text or self.quoted or self.url or self.link),
+            self.moment is not None,
+            self.amount is not None,
+        ]
         values += [self.status is not None, self.piece is not None]
         if sum(values) + (self.field is not None) + (self.editor is not None) > 1:
             raise ValueError(
@@ -402,7 +407,7 @@ class Row:
     id: str = ""
     data: Mapping[str, str] = field(default_factory=dict)
     # The reader's own mark on its record and the pair that moves it in the
-    # reader's order, first of its controls (``{% row_actions %}``).
+    # reader's order, first of its controls (``partials/_row_actions.html``).
     mark: RowMark | None = None
     order: RowOrder | None = None
     # What stands for its actions where the connection cannot make them (a
@@ -427,7 +432,7 @@ class Row:
 
 @dataclass(frozen=True, slots=True)
 class Group:
-    """Rows under one heading (``{% row_group %}``): its name, how many, the
+    """Rows under one heading (``partials/_row_group.html``): its name, how many, the
     id its rows fold under when it starts folded away, the page they are
     dealt with on together, and whether a reader should weigh it first."""
 
@@ -443,6 +448,27 @@ class Group:
 
     def __post_init__(self) -> None:
         held_data(self.data, "A group")
+
+
+def box(
+    label: Annotated[str, Describe("What the table holds, the name its box is a stop by.")],
+    *,
+    css: Annotated[str, Describe("The classes of where it stands.")] = "",
+    chart: Annotated[bool, Describe("A chart's table, read whole in the chart's order and scrolled.")] = False,
+    pane: Annotated[bool, Describe("A box of its own height, which scrolls.")] = False,
+    empty: Annotated[str, Describe("With no rows, what is missing.")] = "",
+    remedy: Annotated[Any, Describe("With no rows, what would fill it: a `label` and a `url`.")] = None,
+    action_url: Annotated[str, Describe("With no rows, where the link that fills it leads.")] = "",
+    action_label: Annotated[str, Describe("That link's label.")] = "",
+    filtered: Annotated[bool, Describe("Its own search narrows it, so no rows says nothing matches.")] = False,
+    clear: Annotated[str, Describe("The way back from that search.")] = "",
+) -> None:
+    """The box a table stands in, named by ``label`` (``data_table``'s rules):
+    the options ``DataTable.region`` binds."""
+
+
+# The options a table's box takes, to which ``DataTable.region`` is bound.
+REGION = inspect.signature(box)
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,8 +491,8 @@ class DataTable:
     headed: bool = True
     # The row of its totals, drawn last, in its ``tfoot``.
     footer: Row | None = None
-    # What ``{% table_region %}`` takes beside its label: its box, and what
-    # it says with no rows.
+    # What its box takes beside its label (``box``): where it stands, and
+    # what it says with no rows.
     region: Mapping[str, Any] = field(default_factory=dict)
     # Each ``data-`` attribute a script or a test finds the table by, by its
     # name after ``data-``, as a row's are.
@@ -477,9 +503,7 @@ class DataTable:
         if self.rows and self.groups:
             raise ValueError("A table holds rows or groups of them, not both.")
         object.__setattr__(self, "columns", ranked(self.columns))
-        if {"declared", "compare"} & set(self.region):
-            raise ValueError("A declared table's region is declared already, and a change's is the change table's.")
-        bound = table_tags.REGION.bind(self.label, **self.region)
+        bound = REGION.bind(self.label, **self.region)
         bound.apply_defaults()
         object.__setattr__(self, "region", {name: value for name, value in bound.arguments.items() if name != "label"})
 

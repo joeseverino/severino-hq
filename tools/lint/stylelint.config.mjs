@@ -183,7 +183,7 @@ const tableHeld = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", 
 // A primitive looks one way, drawn in the sheets that draw it, so a page
 // built from it looks like every other (`hq/restyled-primitive`). Each is
 // the classes that name it, a table its own elements too, and those sheets.
-// The table's are where it is drawn (`table_region`'s rules, docs/Shared-UI.md),
+// The table's are where it is drawn (`data_table`'s rules, docs/Shared-UI.md),
 // and its parts are what its rules tell a cell's parts apart by.
 const primitives = [
   {
@@ -209,7 +209,7 @@ const [table] = primitives;
 const tablePrimitive = table.sheets.map(sheet);
 
 // What the table primitive's rules tell a cell's parts apart by: the role the
-// region marks on each (`data-cell`, table_tags.mark_cells) and the parts the
+// declared table marks on each (`data-cell`, table_layout) and the parts the
 // primitive draws, never a page's class or what a cell leads with. A table a
 // page writes later then sets as every other does, with nothing added here.
 const cell = "(?:^|[\\s>+~(,])(?:td|th)(?![-\\w])|\\.row-(?:detail|columns)(?![-\\w])";
@@ -339,7 +339,7 @@ export default {
         "selector-disallowed-list": selectorRule(
           cellRoles,
           (selector) =>
-            `"${selector}" tells a cell's part by a page's class or its tags: key it on its role (\`[data-cell~=name|prose|data]\`, table_tags.mark_cells) or a part the table primitive draws`,
+            `"${selector}" tells a cell's part by a page's class or its tags: key it on its role (\`[data-cell~=name|prose|data]\`, table_layout) or a part the table primitive draws`,
         ),
       },
     },

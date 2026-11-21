@@ -37,7 +37,7 @@ OUTSIDE = {
     "templates/example/_own.html": "{% load example_tags %}{{ value|doubled }}{% lorem 1 w %}",
     "templates/example/tags.html": (
         "{% load nav_tags %}\n{% problems_about %}\n{{ value|readable }}\n{{ count|counted }}\n"
-        '{% table_heading "Go" color="red" %}\n{% present first second %}x{% endpresent %}'
+        '{% data_table rows color="red" %}\n{% present first second %}x{% endpresent %}'
     ),
     "templates/example/markup.html": (
         '<div class="compact invented {{ chosen }}">\n<p data-secret>x</p><svg data-chart></svg></div>\n'
@@ -53,7 +53,7 @@ OUTSIDE = {
         '{% card %}{% section "A" %}B{% aside %}C{% endsection %}{% aside %}C{% endcard %}\n'
         "{% aside %}D\n"
         '{% card css="nowrap invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
-        '{% button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
+        '{% button "Go" url css="invented-button" %}\n{% card css="invented-note" %}{% endcard %}\n'
         '{% facts %}{% fact "A" value=n %}{% detail %}B{% endfacts %}'
     ),
     "templatetags/example_tags.py": (

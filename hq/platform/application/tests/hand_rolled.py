@@ -8,7 +8,6 @@ holds a change to the reader to the check at a ref.
 import inspect
 
 from hq.platform.core.stylesheets import STATIC
-from hq.platform.core.table_cells import ROLE_CLASSES
 from hq.platform.core.template_contract import class_words, parts, public_classes
 
 # The host's own templates, which no extension's check reads.
@@ -28,7 +27,7 @@ def hand_rolled_classes() -> set[tuple[str, str]]:
     for part in parts():
         for name in part.files():
             written[name] = written.get(name, frozenset()) | part.written()
-    shared = public_classes() | set(ROLE_CLASSES)
+    shared = public_classes()
     return {
         (name, word)
         for name, text in _templates().items()

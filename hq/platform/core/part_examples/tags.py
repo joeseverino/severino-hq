@@ -10,7 +10,7 @@ lazy from django import forms
 lazy from django.contrib.auth import get_user_model
 lazy from django.test import RequestFactory
 
-from hq.platform.core.part_examples import DRAWN_AT
+from hq.platform.core.part_examples import DRAWN_AT, table
 from hq.platform.core.template_parts import Example
 lazy from hq.domains.control_plane.models import ApprovalRequest
 lazy from hq.domains.jobs.models import JobState
@@ -148,7 +148,7 @@ def _approval(state, decided_by=NOBODY, **decided):
     }
 
 
-def _arranged_rows():
+def _arranged_rows() -> DataTable:
     """Services as the services table arranges them: three favorites, in the
     order kept, and one that is not."""
 
@@ -157,27 +157,38 @@ def _arranged_rows():
         (name, RowMark("/example/pin/", True, name, "favorites"), RowOrder("/example/move/", name, at > 0, at < 2))
         for at, name in enumerate(names)
     ]
-    return [*favorites, ("shop.example.com", RowMark("/example/pin/", False, "shop.example.com", "favorites"), None)]
+    arranged = [
+        *favorites,
+        ("shop.example.com", RowMark("/example/pin/", False, "shop.example.com", "favorites"), None),
+    ]
+    rows = tuple(
+        tables.Row((Cell(name, name=True), Cell("Example network")), mark=mark, order=order)
+        for name, mark, order in arranged
+    )
+    return DataTable("Example services", (TableColumn("Service", kind="identifier"), TableColumn("Open to")), rows)
 
 
 class _ExampleDistance(forms.Form):
     distance_miles = forms.DecimalField(label="Example miles", min_value=0)
 
 
-# A table whose rows each open an editor under them (`row_editor`).
+# A table whose rows each open an editor under them (`Cell(editor=)`).
 def _edited_rows(name, first, second):
-    """A table named ``name`` whose rows ``first`` and ``second`` each open an editor."""
+    """A section holding a table named ``name`` whose rows ``first`` and ``second`` each open an editor."""
 
-    return (
-        f'{{% section "{name}" %}}{{% table_region "{name}" %}}<table class="data-table"><thead><tr>'
-        '{% table_heading "Run" "identifier" %}{% table_heading "Miles" "numeric" %}'
-        '{% table_heading "Distance check" "control" %}</tr></thead><tbody>'
-        f'<tr><td>{first}</td><td>3.10</td><td>{{% row_editor form "{first}" label="Correct distance" '
-        'action="/example/distance/" verb="Save distance" distance_miles="3.10" %}</td></tr>'
-        f'<tr><td>{second}</td><td>5.00</td><td>{{% row_editor form "{second}" label="Correct distance" '
-        'action="/example/distance/" verb="Save distance" distance_miles="5.00" %}</td></tr>'
-        "</tbody></table>{% endtable_region %}{% endsection %}"
-    )
+    def context():
+        form = _ExampleDistance()
+
+        def row(key, miles):
+            editor = tables.RowEditor(
+                form, key, "Correct distance", "/example/distance/", "Save distance", {"distance_miles": miles}
+            )
+            return (key, Cell(miles), Cell(editor=editor))
+
+        columns = ("Run", TableColumn("Miles", kind="numeric"), TableColumn("Distance check", kind="control"))
+        return {"table": table(name, columns, row(first, "3.10"), row(second, "5.00"))}
+
+    return f'{{% section "{name}" %}}{{% data_table table %}}{{% endsection %}}', context
 
 
 def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "") -> dict:
@@ -367,13 +378,26 @@ PAGE_ACTION_STATES = {
     # the hyphenated part is a box of its own (`breakable`), set on the line of
     # the words before it.
     "in-rows": Example(
-        '{% table_region "Example plans" %}<table class="data-table"><tbody>{% for action in actions %}<tr><td>'
-        '{% include "partials/_action_links.html" with actions=action only %}</td></tr>{% endfor %}</tbody></table>'
-        "{% endtable_region %}",
+        "{% data_table table %}",
+        lambda: {
+            "table": DataTable(
+                "Example plans",
+                (TableColumn("Container"),),
+                tuple(
+                    tables.Row((Cell(name),), actions=(PageAction(f"Upgrade plan for {name}", f"/example/{name}/"),))
+                    for name in ("example", "example-app")
+                ),
+                headed=False,
+            )
+        },
+    ),
+    # The same buttons as a map's node lists them, outside a table.
+    "in-a-node": Example(
+        '<span class="row-actions">{% include "partials/_action_links.html" with actions=actions only %}</span>',
         lambda: {
             "actions": (
-                (PageAction("Upgrade plan for example", "/example/"),),
-                (PageAction("Upgrade plan for example-app", "/example/app/"),),
+                PageAction("Upgrade plan for example", "/example/"),
+                PageAction("Upgrade plan for example-app", "/example/app/"),
             )
         },
     ),
@@ -405,12 +429,32 @@ WRITE_GAP = Example(
 WRITE_GAP_STATES = {
     # In a row's controls, as a list of messages draws it beside what each says.
     "in-a-row": Example(
-        '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "From" "identifier" %}{% table_heading "Subject" %}{% table_heading "Received" "status" %}'
-        '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead><tbody><tr><td>example-01</td>'
-        "<td>An example subject a reader asked about the example service</td><td>2 hours ago</td>"
-        "{% row_actions gap=gap %}</tr></tbody></table>{% endtable_region %}{% endsection %}",
-        _gap,
+        '{% section "Example messages" %}{% data_table table %}{% endsection %}',
+        lambda: {
+            "table": DataTable(
+                "Example messages",
+                (
+                    TableColumn("From", kind="identifier"),
+                    TableColumn("Subject"),
+                    TableColumn("Received", kind="status"),
+                ),
+                (
+                    tables.Row(
+                        tuple(
+                            map(
+                                Cell,
+                                (
+                                    "example-01",
+                                    "An example subject a reader asked about the example service",
+                                    "2 hours ago",
+                                ),
+                            )
+                        ),
+                        gap=_gap()["gap"],
+                    ),
+                ),
+            )
+        },
     ),
 }
 
@@ -437,14 +481,24 @@ APPROVAL_CARD_STATES = {
 # a machine's page and a procedure's page draw it: a run with every field,
 # one with none, one whose names and messages run long, and one with many
 # tasks that stated readings.
+# A run's own page: its evidence as its facts.
 RUN_EVIDENCE = Example(
-    '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Playbook" %}{% table_heading "State" "status" %}'
-    '{% table_heading "Result" %}</tr></thead><tbody>'
-    "{% for title, word, tone, note, evidence in runs %}<tr><td><strong>{{ title }}</strong></td>"
-    "<td>{% status word tone=tone %}</td><td>{{ note }}{% run_evidence evidence %}</td></tr>{% endfor %}"
-    "</tbody></table>{% endtable_region %}{% endsection %}",
-    context=lambda: {"runs": _example_runs()},
+    '{% facts %}{% run_evidence evidence layout="facts" %}{% endfacts %}',
+    context=lambda: {"evidence": _example_runs()[0][4]},
+)
+# In each run's row of a declared table, its open line.
+RUN_EVIDENCE_IN_ROWS = Example(
+    '{% section "Example runs" %}{% data_table table %}{% endsection %}',
+    context=lambda: {
+        "table": DataTable(
+            "Example runs",
+            (TableColumn("Playbook"), TableColumn("State", kind="status"), TableColumn("Result")),
+            tuple(
+                tables.Row((Cell(title, name=True), Cell(word, tone=tone), Cell(note)), evidence=evidence)
+                for title, word, tone, note, evidence in _example_runs()
+            ),
+        )
+    },
 )
 
 
@@ -652,7 +706,7 @@ CHECK_LADDER_STATES = {
 ROW_EDITOR = Example(
     '{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" %}',
     context=lambda: {
-        "form": ROW_EDITOR_STATES["states"].given()["form"],
+        "form": _ExampleDistance(),
         "row": {"pk": 1, "edit_url": "/example/1/"},
     },
     address="/example/",
@@ -663,13 +717,11 @@ ROW_EDITOR_STATES = {
     # A row's editor: the way in, closed, and the address that opens the
     # first row's form in the line beneath it.
     "states": Example(
-        _edited_rows("Example runs to correct", "example-01", "example-02"),
-        lambda: {"form": _ExampleDistance()},
+        *_edited_rows("Example runs to correct", "example-01", "example-02"),
         address="/example/runs/",
     ),
     "open": Example(
-        _edited_rows("Example runs corrected", "example-11", "example-12"),
-        lambda: {"form": _ExampleDistance()},
+        *_edited_rows("Example runs corrected", "example-11", "example-12"),
         address="/example/runs/?edit=example-11",
     ),
 }
@@ -677,16 +729,24 @@ ROW_EDITOR_STATES = {
 
 # A row's actions: one that posts a value, and one that deletes.
 ROW_ACTIONS = Example(
-    '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
-    "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}",
+    "{% data_table table %}",
     lambda: {
-        "row": {
-            "name": "example-01",
-            "actions": (
-                PageAction._built(label="Read", url="/example/1/status/", method="post", value="read", field="status"),
-                PageAction._built(label="Delete", url="/example/1/delete/", danger=True),
+        "table": DataTable(
+            "Example actions",
+            (TableColumn("Name"),),
+            (
+                tables.Row(
+                    (Cell("example-01"),),
+                    actions=(
+                        PageAction._built(
+                            label="Read", url="/example/1/status/", method="post", value="read", field="status"
+                        ),
+                        PageAction._built(label="Delete", url="/example/1/delete/", danger=True),
+                    ),
+                ),
             ),
-        }
+            headed=False,
+        )
     },
 )
 ROW_ACTIONS_STATES = {
@@ -694,13 +754,8 @@ ROW_ACTIONS_STATES = {
     # that moves them (the first with no way up, the last with no way down),
     # and a row that is not one, which draws its star alone.
     "arrangement": Example(
-        '{% section "Example services" %}{% table_region "Example services" %}<table class="data-table"><thead>'
-        '<tr>{% table_heading "Service" "identifier" %}{% table_heading "Open to" %}'
-        '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead>'
-        "<tbody>{% for name, mark, order in rows %}<tr><td><strong>{{ name }}</strong></td>"
-        "<td>Example network</td>{% row_actions mark=mark order=order %}</tr>{% endfor %}"
-        "</tbody></table>{% endtable_region %}{% endsection %}",
-        lambda: {"rows": _arranged_rows()},
+        '{% section "Example services" %}{% data_table table %}{% endsection %}',
+        lambda: {"table": _arranged_rows()},
     ),
 }
 
@@ -716,6 +771,39 @@ DATA_TABLE = Example(
                 TableColumn("Cost", kind="numeric", cell=lambda name: Cell(amount=Decimal(len(name)))),
             ),
             ("example-host-01", "example-host-two"),
+        )
+    },
+)
+
+
+TABLE_HEADING = Example(
+    "{% data_table table %}",
+    context=lambda: {
+        "table": table(
+            "Example updates",
+            ("Name", TableColumn("Updated", kind="status", drop=2)),
+            ("example-host", "An hour ago"),
+        )
+    },
+)
+ROW_GROUP = Example(
+    "{% data_table table %}",
+    context=lambda: {
+        "table": DataTable(
+            "Example groups",
+            (TableColumn("Host"),),
+            groups=(tables.Group("Example group", (tables.Row((Cell("example-host"),)),), count=3),),
+        )
+    },
+)
+ROW_SELECT = Example(
+    "{% data_table table %}",
+    context=lambda: {
+        "table": DataTable(
+            "Example selections",
+            (TableColumn("Name", kind="identifier"), TableColumn("State", kind="status")),
+            (tables.Row((Cell("example-01"), Cell("Online", tone="good")), key=1),),
+            selectable=True,
         )
     },
 )
@@ -889,7 +977,13 @@ PAGE_MAIN = Example("{% page_main %}<h1>Example page</h1><p>An example line.</p>
 
 
 ROW_TOGGLE = Example(
-    '{% table_region "Example toggles" %}<table class="data-table"><tbody><tr>'
-    "<td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}",
-    context={"row": {"name": "example-host-01"}},
+    "{% data_table table %}",
+    context=lambda: {
+        "table": DataTable(
+            "Example toggles",
+            (TableColumn("Host"),),
+            (tables.Row((Cell("example-host-01", lines=(Cell("An example note", shows="more"),)),)),),
+            headed=False,
+        )
+    },
 )

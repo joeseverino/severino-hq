@@ -9,187 +9,12 @@ sources it refuses and keeps, which one test walks.
 """
 
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from functools import cached_property
-from html.parser import HTMLParser
-from typing import override
 
-from django.template.base import Lexer, TokenType, tag_re
+from django.template.base import Lexer, TokenType
 
-# A template comment, which no page receives, and a template tag or value.
-_COMMENT_TAG = re.compile(r"\{%-?\s*(end)?comment\b.*?%\}", re.DOTALL)
-_DJANGO = re.compile(r"\{%.*?%\}|\{\{.*?\}\}", re.DOTALL)
-# A `{#` its line never closes, which Django prints as text.
-OPEN_COMMENT = re.compile(r"\{#(?![^\n]*#\})")
-# An element's start tag, read where template tags are masked; an HTML
-# comment or an end tag, which bound a run of text too.
-_START = re.compile(r"<([a-zA-Z][\w-]*)\b[^<>]*>")
-_BOUND = re.compile(r"<!--.*?-->|</?[a-zA-Z][^<>]*>", re.DOTALL)
-_RAW = re.compile(r"<(script|style)\b[^<>]*>.*?</\1\s*>", re.DOTALL | re.IGNORECASE)
-_ENTITY = re.compile(r"&(?:#\d+|#x[0-9a-fA-F]+|\w+);")
-
-
-def _blank(text: str) -> str:
-    return re.sub(r"[^\n]", " ", text)
-
-
-class Source:
-    """A template's source as its shapes read it: its comments blanked, so a
-    position is still its line, and its start tags and runs of text found
-    with every template tag and value masked."""
-
-    def __init__(self, source: str) -> None:
-        pieces, commented = [], False
-        for index, piece in enumerate(tag_re.split(source)):
-            if index % 2:
-                if piece.startswith("{#"):
-                    piece = _blank(piece)
-                elif match := _COMMENT_TAG.fullmatch(piece):
-                    commented, piece = not match.group(1), _blank(piece)
-            pieces.append(_blank(piece) if commented else piece)
-        self.text = "".join(pieces)
-        self.masked = _DJANGO.sub(lambda match: re.sub(r"[^\n]", "\0", match.group()), self.text)
-
-    def line(self, at: int) -> int:
-        return self.text.count("\n", 0, at) + 1
-
-    @cached_property
-    def tags(self) -> list[tuple[str, int, int]]:
-        """Each start tag: its element's name, lowercased, and its span."""
-
-        return [(match.group(1).lower(), *match.span()) for match in _START.finditer(self.masked)]
-
-    @cached_property
-    def runs(self) -> list[list[tuple[int, str]]]:
-        """Each run of text between two tags, outside a script or a style,
-        as its pieces split at each entity: a piece's position and its text,
-        stripped; an entity is a piece of its own."""
-
-        masked = _RAW.sub(lambda match: _blank(match.group()), self.masked)
-        bounds = [match.span() for match in _BOUND.finditer(masked)]
-        found = []
-        for start, end in zip(
-            [0, *(end for _, end in bounds)], [*(start for start, _ in bounds), len(masked)], strict=True
-        ):
-            pieces, at = [], start
-            for part in re.split(f"({_ENTITY.pattern})", self.text[start:end]):
-                if stripped := part.strip():
-                    pieces.append((at + part.index(stripped[0]), stripped))
-                at += len(part)
-            if pieces:
-                found.append(pieces)
-        return found
-
-    def at(self, line: int) -> int:
-        """Where the line ``line`` starts."""
-
-        return sum(len(each) + 1 for each in self.text.split("\n")[: line - 1])
-
-    @cached_property
-    def marked(self) -> tuple[str, list[str]]:
-        """The source with each template tag dropped, its lines kept, and each
-        value marked by its place among the values, with the values."""
-
-        values: list[str] = []
-
-        def mark(match: re.Match[str]) -> str:
-            if match.group().startswith("{%"):
-                return "\n" * match.group().count("\n")
-            values.append(match.group()[2:-2].strip())
-            return f"\0{len(values) - 1}\0"
-
-        return _DJANGO.sub(mark, self.text), values
-
-    def walked(self, visit: Callable[[list[tuple[str, dict]], str], Iterator[int]]) -> Iterator[int]:
-        """Each place ``visit`` finds in a run of text, given the elements
-        open around it, both sides of each condition read."""
-
-        walk = _Walk(visit)
-        walk.feed(self.marked[0])
-        walk.close()
-        return (self.at(line) for line in walk.seen)
-
-
-_VOID = frozenset(
-    ("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr")
-)
-
-
-class _Walk(HTMLParser):
-    def __init__(self, visit: Callable[[list[tuple[str, dict]], str], Iterator[int]]) -> None:
-        super().__init__(convert_charrefs=True)
-        self.open: list[tuple[str, dict]] = []
-        self.visit = visit
-        self.seen: list[int] = []
-
-    @override
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag not in _VOID:
-            self.open.append((tag, dict(attrs)))
-
-    @override
-    def handle_endtag(self, tag: str) -> None:
-        for at in range(len(self.open) - 1, -1, -1):
-            if self.open[at][0] == tag:
-                del self.open[at:]
-                return
-
-    @override
-    def handle_data(self, data: str) -> None:
-        line = self.getpos()[0]
-        self.seen += [line + data.count("\n", 0, offset) for offset in self.visit(self.open, data)]
-
-
-type Find = Callable[[Source], Iterator[int]]
-
-
-def matched(pattern: str, flags: int = 0) -> Find:
-    """Each match of ``pattern`` in the source."""
-
-    compiled = re.compile(pattern, flags)
-    return lambda source: (match.start() for match in compiled.finditer(source.text))
-
-
-def tagged(name: str, attributes: str = "", *, without: str = "") -> Find:
-    """Each start tag of an element whose name is ``name``, holding
-    ``attributes`` and not ``without`` where given, each a pattern over the
-    tag as written."""
-
-    named, holding, lacking = re.compile(f"(?:{name})"), re.compile(attributes), re.compile(without)
-
-    def find(source: Source) -> Iterator[int]:
-        for element, start, end in source.tags:
-            written = source.text[start:end]
-            if named.fullmatch(element) and holding.search(written) and not (without and lacking.search(written)):
-                yield start
-
-    return find
-
-
-def within(name: str, pattern: str) -> Find:
-    """Each element ``name`` whose content up to its end tag holds ``pattern``."""
-
-    held = re.compile(pattern)
-
-    def find(source: Source) -> Iterator[int]:
-        for element, start, end in source.tags:
-            if element == name:
-                closing = source.masked.find(f"</{name}", end)
-                if held.search(source.text, end, len(source.text) if closing < 0 else closing):
-                    yield start
-
-    return find
-
-
-def _outside_a_region(source: Source) -> Iterator[int]:
-    regions = [(match.start(), match.group(1)) for match in re.finditer(r"\{%\s*(end)?table_region\b", source.text)]
-    for element, start, _ in source.tags:
-        if element == "table":
-            before = [opened for at, opened in regions if at < start]
-            if not before or before[-1]:
-                yield start
-
+from .template_source import OPEN_COMMENT, Find, Source, blank, matched, tagged, within
 
 _DOTS, _ARROWS = "·•", "→←↗↑↓›‹»«"
 
@@ -269,7 +94,7 @@ _COUNT_IN_PARENTHESES = re.compile(r"\(\{\{[^}]*\|length\s*\}\}\)")
 def _cut_counts(source: Source) -> Iterator[int]:
     """Each bare count standing apart from the words it counts."""
 
-    text = re.sub(r"<option\b.*?</option>", lambda match: _blank(match.group()), source.text, flags=re.DOTALL)
+    text = re.sub(r"<option\b.*?</option>", lambda match: blank(match.group()), source.text, flags=re.DOTALL)
     for match in _ALONE_AFTER_HEADING.finditer(text):
         name, *filters = (part.strip().partition(":")[0] for part in match.group(1).split("|"))
         if "counted" not in filters and ("length" in filters or re.search(r"(?:^|[._])count$", name)):
@@ -326,7 +151,7 @@ _UNSEEN = re.compile(r'<span class="visually-hidden">.*?</span>', re.DOTALL)
 def _stranded_marks(source: Source) -> Iterator[int]:
     """Each mark written past a value's closing tag or branch, or after a tag's value, out of its hold's reach."""
 
-    seen = _UNSEEN.sub(lambda match: _blank(match.group()), source.text)
+    seen = _UNSEEN.sub(lambda match: blank(match.group()), source.text)
     return (match.start() for match in _STRANDED.finditer(seen))
 
 
@@ -657,14 +482,6 @@ SHAPES = (
         keeps=("{% status run.word tone=run.tone data_ask_label=True %}",),
     ),
     Shape(
-        name="change-table",
-        said="A before-and-after table drawn by hand, where the change table part draws it.",
-        instead="{% change_table preview %} of an approval_review.ChangePreview",
-        find=matched(r"\{%\s*table_region\b[^%]*\bcompare="),
-        refuses=('{% table_region "A" compare=True %}{% endtable_region %}',),
-        drawn_by={"partials/_change_table.html": "the change table part itself"},
-    ),
-    Shape(
         name="empty-said-quietly",
         said="An empty line drawn by hand, where the empty state part draws it.",
         instead='{% include "partials/_empty_state.html" with message="..." %}, or a {% section %}\'s {% empty %}',
@@ -729,18 +546,6 @@ SHAPES = (
         keeps=('<svg><circle r="1"></circle></svg>',),
     ),
     Shape(
-        name="table",
-        said="A table drawn outside its region.",
-        instead='{% table_region "Label" %} around its <table class="data-table">',
-        find=_outside_a_region,
-        refuses=('{% table_region "A" %}<table></table>{% endtable_region %}<table></table>',),
-        keeps=('{% table_region "A" %}<div><table></table></div>{% endtable_region %}',),
-        drawn_by={
-            "partials/_activity_calendar.html": "a month drawn as a grid, a chart part",
-            "partials/_month_grid.html": "a month drawn as a grid of days, not a data table",
-        },
-    ),
-    Shape(
         name="muted",
         said="Muted words drawn by hand, where the muted tag draws them.",
         instead='{% muted %}...{% endmuted %}, or {% muted element="p" css="..." %} for a paragraph',
@@ -771,7 +576,7 @@ SHAPES = (
     Shape(
         name="counted-fold",
         said="A list folded at a count, which hides parts its line has room for.",
-        instead="{% line_list %}, which shows as many parts as the line holds",
+        instead="a Cell(fit=True) of the parts, which shows as many as the line holds",
         find=_counted_folds,
         refuses=(
             '{% for x in xs %}{% if forloop.counter > 3 %}<span class="row-more">{{ x }}</span>{% endif %}{% endfor %}',

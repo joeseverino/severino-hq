@@ -30,9 +30,9 @@ class SelectorHeldTests(SimpleTestCase):
         from hq.platform.core.template_contract import parts
         from hq.platform.core.tests.browser.selectors import SELECTORS, Unmatched, css
 
-        page = _Page("/part/table-region/", {})
+        page = _Page("/part/data-table/", {})
         self.assertEqual(css(page, [SELECTORS["table_scroll"], "x"]), [".table-scroll", "x"])
-        region = next(part for part in parts() if part.name == "table_region")
+        region = next(part for part in parts() if part.name == "data_table")
         with self.assertRaises(Unmatched):
             css(page, SELECTORS["table_scroll"], drawn=lambda: region)
 

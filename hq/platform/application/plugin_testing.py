@@ -8,7 +8,6 @@ import, no database, no second repository, only "something else is installed".
 """
 
 import os
-import re
 import sys
 import types
 from collections.abc import Iterable, Iterator, Mapping
@@ -19,13 +18,7 @@ from functools import partial
 from typing import Any
 from unittest import mock
 
-lazy from django.template import engines
-lazy from django.template.base import TextNode, Variable
-lazy from django.template.defaulttags import IfNode
-lazy from django.template.library import TagHelperNode
 lazy from django.utils import timezone
-
-lazy from hq.platform.core.templatetags import table_tags
 
 from .finding_model import Finding
 from .plugins import (
@@ -46,82 +39,6 @@ lazy from .web_writes import RETRY_KEY_FIELD, new_key
 # Deliberately not a name any real extension would take. A synthetic sibling
 # that collided with a real id would silently displace it.
 SIBLING_PREFIX = "example."
-
-
-_OPEN, _CLOSE = "\x00region\x00", "\x00/region\x00"
-_HEADING, _DROPPED_HEADING = "\x00heading\x00", "\x00heading-drops\x00"
-_TABLE = re.compile(r'<table\b[^>]*\bclass="[^"]*\bdata-table\b')
-_ANY_TABLE = re.compile(r"<table\b[^>]*>")
-_HEAD = re.compile(r"<thead\b.*?</thead>", re.DOTALL)
-_HAND_HEADING = re.compile(r"<th[\s>]")
-
-
-def _heading_marker(node) -> str:
-    """A heading, marked when it is given a literal drop rank."""
-
-    drop = node.kwargs.get("drop")
-    literal = drop.var.literal if drop is not None and isinstance(drop.var, Variable) else None
-    return _DROPPED_HEADING if literal else _HEADING
-
-
-def _flatten(nodelist, out: list[str]) -> list[str]:
-    """The template's markup in source order, every branch included, with the
-    table tags standing as markers."""
-
-    for node in nodelist:
-        if isinstance(node, TextNode):
-            out.append(node.s)
-        elif isinstance(node, table_tags.RegionNode):
-            out.append(_OPEN)
-            _flatten(node.nodelist, out)
-            out.append(_CLOSE)
-        elif isinstance(node, TagHelperNode) and node.func is table_tags.table_heading:
-            out.append(_HEADING if "select_all" in node.kwargs else _heading_marker(node))
-        elif isinstance(node, IfNode):
-            for _condition, branch in node.conditions_nodelists:
-                _flatten(branch, out)
-        else:
-            for attribute in node.child_nodelists:
-                _flatten(getattr(node, attribute, None) or (), out)
-    return out
-
-
-def _unshared_tables(markup: str) -> list[str]:
-    """A region or heading around a table without the shared table's class,
-    whose sort controls and fit the stylesheet then never draws."""
-
-    problems = []
-    for table in _ANY_TABLE.finditer(markup):
-        before = markup[: table.start()]
-        if before.count(_OPEN) > before.count(_CLOSE) and not _TABLE.match(table.group()):
-            problems.append('a table in {% table_region %} without class="data-table"')
-    for heading in re.finditer(f"{_HEADING}|{_DROPPED_HEADING}", markup):
-        opened = markup.rfind("<table", 0, heading.start())
-        if opened < 0 or markup.rfind("</table>", 0, heading.start()) > opened or not _TABLE.match(markup, opened):
-            problems.append('a {% table_heading %} outside a table with class="data-table"')
-    return problems
-
-
-def table_problems(source: str) -> list[str]:
-    """What keeps a template's tables off the contract, past a table outside
-    its region (the table shape of hand_drawn.SHAPES): a heading written by hand, a
-    region written by hand, a dropped name column, and a region or heading
-    around a table the shared stylesheet does not draw."""
-
-    markup = "".join(_flatten(engines["django"].from_string(source).template.nodelist, []))
-    problems = []
-    if re.search(r'class="[^"]*\btable-scroll\b', markup):
-        problems.append("a scroll region written by hand")
-    problems.extend(_unshared_tables(markup))
-    for table in _TABLE.finditer(markup):
-        body = markup[table.start() : markup.find("</table>", table.start())]
-        for head in _HEAD.findall(body):
-            if _HAND_HEADING.search(head):
-                problems.append("a heading not drawn by {% table_heading %}")
-            first = re.search(f"{_HEADING}|{_DROPPED_HEADING}", head)
-            if first and first.group() == _DROPPED_HEADING:
-                problems.append("a drop rank on the column that names each row")
-    return problems
 
 
 def sibling(

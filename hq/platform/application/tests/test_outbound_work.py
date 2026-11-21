@@ -64,10 +64,14 @@ def calls_out(request):
 
 
 def entries_shown(page) -> list[str]:
-    """The registry's entries as the example's page lists them, one item each."""
+    """The registry's entries as the example's page lists them, one item each, on
+    the rows' own lines."""
 
     return [
-        item.words for item in elements(page.content.decode(), "li") if any(cell.tag == "td" for cell in item.ancestors)
+        item.words
+        for item in elements(page.content.decode(), "li")
+        if any(cell.tag == "td" for cell in item.ancestors)
+        and not any("row-detail" in up.classes for up in item.ancestors)
     ]
 
 

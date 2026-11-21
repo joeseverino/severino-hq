@@ -9,7 +9,9 @@ from typing import Any
 
 from django.utils.html import escape
 from django.utils.safestring import SafeString, mark_safe
+from django.utils.text import slugify
 
+from hq.platform.application.asks import IDLE
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, column_kind
 from hq.platform.core.held_values import format_html
@@ -35,7 +37,7 @@ from hq.platform.core.templatetags.write_tags import row_editor
 from .table_layout import GIST, SAYS_NOTHING, CellFacts, Moved, RowFacts, TableFacts, lay_out
 
 # The class a value that shows only part of the time is drawn in, which the
-# region reads (``table_cells._OFF_LINE``, ``table_layout.HELD``).
+# open line reads (``table_layout.HELD``).
 SHOWN = {"more": "row-more", "narrow": "narrow-only", "narrow-more": "narrow-more", "gist": GIST}
 # The classes of a column its cells carry too: a moment keeps its line (tables.css).
 _CELL_CLASSES = frozenset({"date-col"})
@@ -99,7 +101,7 @@ class DrawnGroup:
     across: int
 
 
-def drawn(table: DataTable, context: Any) -> dict[str, Any]:
+def drawn(table: DataTable, context: Any, *, empty: str = "") -> dict[str, Any]:
     """What ``_data_table.html`` draws of ``table``."""
 
     headings = _headings(table)
@@ -126,15 +128,57 @@ def drawn(table: DataTable, context: Any) -> dict[str, Any]:
     if footer:
         _mark(footer, width, drawing)
     sorting = {"table": {"selected_sort": table.sorted_by or ""}}
+    rows = any(group.rows for group in groups)
     return {
+        "box": _box(table, groups) if rows else "",
+        "empty": "" if rows else _empty(table, empty),
         "table": table,
         "headings": [_heading(sorting, column, facts, laid) for column, facts in headings] if table.headed else [],
         "groups": groups,
         "footer": footer,
         "marks": mark_safe("".join(laid.marks)) + data_attributes(table.data),  # noqa: S308 - the layout's own attributes
-        "rows": any(group.rows for group in groups),
-        # The open line a region whose rows hold cells back draws once, which tables.js clones.
-        "frame": mark_safe(LINE_FRAME) if laid.held else "",  # noqa: S308 - the region's own literal markup
+        "rows": rows,
+        # The open line a table whose rows hold cells back draws once, which tables.js clones.
+        "frame": mark_safe(LINE_FRAME) if laid.held else "",  # noqa: S308 - the table's own literal markup
+    }
+
+
+def _box(table: DataTable, groups: list[DrawnGroup]) -> SafeString:
+    """The attributes of the box a table fits past its classes (``data_table``'s rules).
+
+    A box that scrolls is a stop for the keyboard, named so the stop says what
+    it holds: a group and no landmark, since a landmark around it (its
+    section, its card) already has its place in the page's outline. A table
+    whose rows open an editor is a region of the page's own, found by its id
+    in the page that answers it.
+    """
+
+    region = table.region
+    edits = any(cell.editor for group in groups for row in group.rows for cell in row.row.cells)
+    return format_html(
+        "{}{}{}",
+        format_html(' role="group" aria-label="{}" tabindex="0"', table.label)
+        if region["pane"] or region["chart"]
+        else "",
+        mark_safe(" data-chart") if region["chart"] else "",
+        format_html(' id="table-{}" data-fragment=""', slugify(table.label)) if edits else "",
+    )
+
+
+def _empty(table: DataTable, empty: str) -> dict[str, Any]:
+    """What a table with no rows says in their place: that its filter emptied
+    it, or what is missing and what would fill it. What would fill it
+    (``page.remedy`` reads the database) is asked only here."""
+
+    region = table.region
+    if region["filtered"]:
+        return {"message": "Nothing matches.", "action_url": region["clear"], "action_label": "Clear filters"}
+    remedy = region["remedy"]
+    return {
+        "message": empty or region["empty"] or f"{table.label}: none yet.",
+        "remedy": remedy() if callable(remedy) else remedy,
+        "action_url": region["action_url"],
+        "action_label": region["action_label"],
     }
 
 
@@ -207,6 +251,15 @@ def _row(table: DataTable, row: Row, context: Any, width: int) -> DrawnRow:
     if table.has_actions:
         drawn_row.actions = DrawnCell(Cell(), _actions(row))
         drawn_row.facts.cells.append(drawn_row.actions.facts)
+        # An ask shows its state's word alone in the row, so its open line
+        # says the word and the sentence, where ask.js keeps them (``_ask.html``).
+        drawn_row.actions.facts.moved += [
+            Moved(
+                "below", ask.label, Below(ask.label, (Cell(f"{said.label}: {said.note}", data={"ask-why": ask.url}),))
+            )
+            for ask in row.asks
+            if (said := ask.standing).state != IDLE and said.note
+        ]
     if row.evidence and drawn_row.facts.cells:
         drawn_row.facts.cells[-1].moved.append(Moved("below", "evidence", row.evidence))
     drawn_row.editor = next((cell.editor for cell in cells if cell.editor and cell.editor["open"]), None)
@@ -315,11 +368,9 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         names=int(cell.name),
         row_header=cell.header,
         parted=any(part.role for part in (*cell.parts, *cell.lines)),
-        toggled=cell.fold,
         folds=cell.fold,
         tops=tops,
         said=[not cell.says_nothing] + [True] * (len(tops) - 1),
-        loose=False,
     )
     # A role whose words are one link is that link's, which no rule for a link among words reaches.
     role = "" if _linked(cell) else cell.role

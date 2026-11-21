@@ -150,9 +150,11 @@ _S = Selector
 
 # Every class, id and attribute a check queries, CSS only (no `xpath=`).
 _DECLARED = {
-    # A row's actions cell ({% row_actions %}) and any cell of a column of
+    # A row's actions cell (partials/_row_actions.html) and any cell of a column of
     # controls, whose controls sit on the row's first line.
-    "row_actions_cell": _S('main td.row-actions, main td[data-kind="control"]', "row_actions", optional=True),
+    "row_actions_cell": _S(
+        'main td.row-actions, main td[data-kind="control"]', "partials/_row_actions.html", optional=True
+    ),
     # A device on the Agents page waiting for the reader's approval.
     "device_prompt": _S("[data-prompt]"),
     # An agent's update streams: a full set warned of in its row's cell, and
@@ -186,14 +188,14 @@ _DECLARED = {
     "content": _S("#content", "page_main", optional=True),
     # A family's toggle, and the row toggle, which a list may draw none of.
     "decision_family": _S("[data-queue-family] [data-fold-toggle]", "partials/_work_queue.html"),
-    "row_toggle": _S("[data-row-toggle]", "row_toggle", optional=True),
+    "row_toggle": _S("[data-row-toggle]", "partials/_row_toggle.html", optional=True),
     # A fold of rows' toggle, and a row's own, as a reader presses them.
     "row_fold": _S("main [data-fold-toggle]", optional=True),
-    "row_opener": _S("main [data-row-toggle]:not([data-fold-toggle])", "row_toggle", optional=True),
+    "row_opener": _S("main [data-row-toggle]:not([data-fold-toggle])", "partials/_row_toggle.html", optional=True),
     # A table's own rows of records, the lines beneath them left out.
     "own_records": _S(":scope > tbody > tr:not(.row-detail)", optional=True),
     # Read inside one row of the queue, so it names nothing above the row's own cell.
-    "decision_controls": _S("td.row-actions :is(a, button):not([hidden])", "row_actions"),
+    "decision_controls": _S("td.row-actions :is(a, button):not([hidden])", "partials/_row_actions.html"),
     "decision_title": _S("[data-attention-title]", "partials/_work_queue.html"),
     "decision_steps": _S(".step-list", "steps"),
     # What an item means, after its title.
@@ -208,11 +210,11 @@ _DECLARED = {
     # line.
     "name_box": _S("main td :is(.token[data-sole], .cell-line):not(code *):has(.whole)", "cell_line"),
     "part": _S(".whole"),
-    "decision_actions": _S("[data-attention-item] > td.row-actions", "row_actions"),
+    "decision_actions": _S("[data-attention-item] > td.row-actions", "partials/_row_actions.html"),
     # The queue's table, and its cells of what is wrong and of its buttons.
     "queue_table": _S(".data-table:has(> tbody > tr[data-attention-item])", "partials/_work_queue.html"),
     "queue_what": _S("[data-attention-item] > .row-gutter", "partials/_work_queue.html"),
-    "queue_act": _S("[data-attention-item] > td.row-actions", "row_actions"),
+    "queue_act": _S("[data-attention-item] > td.row-actions", "partials/_row_actions.html"),
     # A list page's controls: its search, the button that opens a filter's
     # panel, the panel and a box in one, a toggle beside them, a heading that
     # sorts on the server, and the results they change: the rows, never the
@@ -227,7 +229,7 @@ _DECLARED = {
     "table_toggle": _S("[data-table-toolbar] .table-toggle input:not([inert] *)", "partials/_table_toolbar.html"),
     "table_rows": _S("main .data-table > tbody > tr:not(.row-detail)", "data_table"),
     "table_empty": _S("main [data-empty-state]", "partials/_empty_state.html"),
-    "sort_link": _S("main a.table-sort-link", "table_heading"),
+    "sort_link": _S("main a.table-sort-link", "partials/_table_heading.html"),
     # The Filters control a filter bar folds its choices behind, where its
     # row has no room for them.
     "filter_fold": _S("form.filter-bar [data-filter-bar-fold]", "filter_bar", optional=True),
@@ -278,7 +280,7 @@ _DECLARED = {
     "head_actions": _S(".page-head > .page-actions", optional=True),
     "head_said": _S(".page-head-copy > :not(.page-trail-row, .page-name), .page-name > :not(h1, .pill)", optional=True),
     # The box built to scroll a table sideways.
-    "table_scroll": _S(".table-scroll", "table_region", optional=True),
+    "table_scroll": _S(".table-scroll", "data_table", optional=True),
     # The boxes allowed to scroll sideways: a table's, a block of code, whose
     # lines are as written, and a page's map of its sections, one row of
     # links at every width as a row of tabs is, so a section added never

@@ -87,7 +87,7 @@ WRITE_GAP = _part(
     rules="""
     Every page that would offer a change its connection cannot make offers this instead: what the change
     needs, linked to the setup step that gives it, with the whole reason as its title (`data-write-gap`).
-    A row draws it through `{% row_actions gap=... %}` and a form through its `gap`.
+    A row draws it through `Row(gap=)` and a form through its `gap`.
     """,
     example=tags.WRITE_GAP,
     states=tags.WRITE_GAP_STATES,

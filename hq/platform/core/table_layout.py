@@ -1,8 +1,7 @@
 """What the stylesheet reads off a table, decided from what each cell holds.
 
 A table's facts (``RowFacts`` of ``CellFacts``) come from its declaration
-(``tables.DataTable``) or, for a table written by hand, from its markup
-(``table_cells.Cells``). ``lay_out`` decides from them every mark the
+(``tables.DataTable``, by ``drawn_tables``). ``lay_out`` decides from them every mark the
 stylesheet reads: blank cells and columns, each column's kind and the width
 it leaves at, clamped and short values, the row's name, the gutter and its
 toggles, and each row's open line. The stylesheet never reads a cell's
@@ -49,22 +48,17 @@ STATES_LEAVE = RANKS + 1
 # How many columns at most a table's share is counted over (`data-columns`),
 # one rule each in tables.css.
 COUNTED = 10
-# The elements that are a block of their own, so a value said by one alone is
-# its own short value's box (tables.css).
-LISTS = frozenset({"ul", "ol"})
 
 
 @dataclass(slots=True)
 class Moved:
     """What a cell moves to its row's open line: a block kept beneath the
-    row (``below``) or the row's editor (``editor``), by its label.
-    ``finished`` once all of it is known; ``content`` is what is drawn there,
-    its span in a table read from its markup."""
+    row (``below``) or the row's editor (``editor``), by its label, and
+    ``content``, what is drawn there."""
 
     kind: str
     label: str | None
     content: Any = None
-    finished: bool = True
 
 
 @dataclass(slots=True)
@@ -78,8 +72,6 @@ class CellFacts:
     kind: str = ""
     drop: int = 0
     row_header: bool = False
-    # Whether it closes with its own end tag, which a declared cell always does.
-    closes: bool = True
     says_nothing: bool = True
     # The characters on its longest line, spaces collapsed.
     longest: int = 0
@@ -94,26 +86,19 @@ class CellFacts:
     names: int = 0
     # Whether what it shows on its row's line carries a part's role (`data-cell`).
     parted: bool = False
-    # Whether it holds a row's toggle, and one that opens a folded group.
-    toggled: bool = False
+    # Whether it holds the toggle that opens a folded group.
     folds: bool = False
-    # Whether each element at its top is a pill, whether each says a word,
-    # and whether text stands there beside them: a cell said by its pills
-    # alone is what a row is (`states`).
+    # Whether each value it shows is a pill, and whether each says a word: a
+    # cell said by its pills alone is what a row is (`states`).
     tops: list[bool] = field(default_factory=list)
     said: list[bool] = field(default_factory=list)
-    loose: bool = False
-    # Its first element at its top, and whether a class can go on it.
-    top_tag: str = ""
-    top_classed: bool = False
 
     # What the layout gives it: what is written in its start tag, the classes
-    # added to its own, the classes added to its top element, the box its
-    # value is held in, the toggle drawn last in it (whether its row is drawn
-    # open), and whether its leading bold names the row.
+    # added to its own, the box its value is held in, the toggle drawn last
+    # in it (whether its row is drawn open), and whether its leading bold
+    # names the row.
     marks: list[str] = field(default_factory=list)
     added: list[str] = field(default_factory=list)
-    top_added: list[str] = field(default_factory=list)
     box: str = ""
     toggle: bool | None = None
     named: bool = False
@@ -121,7 +106,7 @@ class CellFacts:
     @property
     def states(self) -> bool:
         pills = [pill for pill, said in zip(self.tops, self.said, strict=True) if pill or said]
-        return bool(pills) and all(pills) and not self.loose
+        return bool(pills) and all(pills)
 
 
 @dataclass(slots=True)
@@ -130,10 +115,7 @@ class RowFacts:
     open line (the blocks it shows whole, then each labeled entry)."""
 
     section: str
-    group: bool = False
     cells: list[CellFacts] = field(default_factory=list)
-    # Whether its end tag was read, after which its open line goes.
-    ends: bool = True
     marks: list[str] = field(default_factory=list)
     added: list[str] = field(default_factory=list)
     detail: tuple[int, list[Moved], list[Moved]] | None = None
@@ -143,7 +125,7 @@ class RowFacts:
 class TableFacts:
     """What the layout gives a table: what its start tag says, whether its
     rows sort on the page, whether a row holds back a cell tables.js copies
-    onto its open line (so the region draws the frame it clones), and the
+    onto its open line (so the table draws the frame it clones), and the
     level each column leaves at."""
 
     marks: list[str] = field(default_factory=list)
@@ -160,7 +142,7 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
 
     table = TableFacts()
     heads = [row.cells for row in rows if row.section == "thead"]
-    records = [row for row in rows if row.section == "tbody" and not row.group]
+    records = [row for row in rows if row.section == "tbody"]
     kinds = _kinds(heads, records)
     # A table of row headers and no headings is a list of labels and
     # values: no column names its rows.
@@ -227,14 +209,9 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
     # A table with no headings keeps it in its first column, where each row is named.
     holds = any(_holds_back(row, kinds, named) for row in records)
     gutter = (named if levels or holds else None) if heads else (0 if holds else None)
-    if heads and any(cell.toggled and not cell.folds for row in records for cell in row.cells):
-        raise ValueError("A row's toggle in a table with headings is the region's to draw.")
     opens = False
     table.sorts = sorts and _sorts(records)
     for row in rows:
-        if row.group:
-            _span(row, width)
-            continue
         # A value is clamped only where its row's toggle opens it whole.
         toggle_cell = None if gutter is None else _at_place(row.cells, gutter)
         toggled = toggle_cell is not None and not toggle_cell.folds
@@ -244,7 +221,7 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
         _name(row, kinds, named)
         if gutter is not None:
             _gutter(row, gutter)
-        if row.section == "tbody" and row.ends:
+        if row.section == "tbody":
             shown, held = _detail(row, width, levels)
             opens = opens or shown
             table.held = table.held or held
@@ -265,9 +242,7 @@ def _gutter(row: RowFacts, place: int) -> None:
         cell.added.append("row-gutter")
     if row.section != "tbody" or cell.folds:
         return
-    if not cell.closes:
-        raise ValueError("A cell in the gutter closes with its own end tag, before which its toggle goes.")
-    cell.toggle = any(_finished(each, "editor") for each in row.cells)
+    cell.toggle = any(_moved(each, "editor") for each in row.cells)
 
 
 def _mark_cells(
@@ -313,40 +288,29 @@ def _body_marks(cell: CellFacts, kind: str, *, body: bool, toggled: bool) -> lis
         marks.append(" data-long")
     if body and _words(cell, kind) and not cell.says_nothing:
         if _long(cell):
-            if toggled and cell.closes and _clamps(kind):
+            if toggled and _clamps(kind):
                 _box(cell, kind, "cell-clamp")
         # A fold's toggle is drawn before its head's value, which the
         # value's span (ended at a toggle) would leave out, and a field
         # fills its column, which a short value's box would narrow, as it
         # would the room a gist takes on its line.
-        elif cell.longest <= SHORT and cell.closes and not (cell.folds or cell.fields or GIST in cell.holds):
+        elif cell.longest <= SHORT and not (cell.folds or cell.fields or GIST in cell.holds):
             _box(cell, kind, "cell-short")
     # A state is one box (`cell-state`, tables.css) that asks its column for
     # its line up to its share and wraps past it, where it holds one item: a
-    # cell no element of which was read (a declared one, drawn whole in it,
-    # or bare words).
-    elif (
-        body
-        and kind == "status"
-        and cell.closes
-        and not (cell.top_tag or cell.says_nothing or _long(cell) or cell.controls or cell.fields)
-    ):
+    # value drawn whole in it.
+    elif body and kind == "status" and not (cell.says_nothing or _long(cell) or cell.controls or cell.fields):
         cell.box = "cell-state"
     return marks
 
 
 def _box(cell: CellFacts, kind: str, mark: str) -> None:
-    """Hold the cell's value in its clamp or its short value's box, the
-    region's own box only where no element of the cell can be it. A clamp
-    holds each part with a role on its own (cuts.css), so around parts
-    the cell is the clamp; a value that is one list (a block of its own)
-    is its own short value's box."""
+    """Hold the cell's value in its clamp or its short value's box. A
+    clamp holds each part with a role on its own (cuts.css), so around
+    parts the cell is the clamp."""
 
-    sole = len(cell.tops) == 1 and not cell.loose and cell.top_classed
     if mark == "cell-clamp" and (cell.parted or (cell.names and kind not in _HELD_KINDS)):
         cell.added.append(mark)
-    elif mark == "cell-short" and sole and cell.top_tag in LISTS:
-        cell.top_added.append(mark)
     else:
         cell.box = mark
 
@@ -373,11 +337,11 @@ def _detail(row: RowFacts, width: int, levels: dict[int, int]) -> tuple[bool, bo
     entries: list[Moved] = []
     always = opens = held = False
     for at, cell in _placed(row):
-        if cell.spans or not cell.closes:
+        if cell.spans:
             continue
         # The row's editor leads its line, moved there: its ids are its own.
-        blocks[:0] = _finished(cell, "editor")
-        moved = _finished(cell, "below")
+        blocks[:0] = _moved(cell, "editor")
+        moved = _moved(cell, "below")
         blocks += [part for part in moved if not part.label]
         entries += [part for part in moved if part.label]
         shown = bool(cell.holds & {"row-more", "line-rest"}) and not cell.says_nothing
@@ -394,18 +358,10 @@ def _detail(row: RowFacts, width: int, levels: dict[int, int]) -> tuple[bool, bo
         row.marks.append(" data-below")
     if blocks or entries:
         row.detail = (width, blocks, entries)
-    if any(_finished(cell, "editor") for cell in row.cells):
+    if any(_moved(cell, "editor") for cell in row.cells):
         # The row is open: its editor stands open on the line beneath it.
         row.added.append("is-expanded")
     return opens, held
-
-
-def _span(row: RowFacts, width: int) -> None:
-    """A group's heading row spans every column its table declares."""
-
-    for cell in row.cells:
-        if width and not cell.spans:
-            cell.marks.append(f' colspan="{width}"')
 
 
 def _long(cell: CellFacts) -> bool:
@@ -423,7 +379,7 @@ def _row_controls(row: RowFacts, kinds: dict[int, str], named: int) -> list[tupl
 
     found = []
     for at, cell in _placed(row):
-        if at == named or cell.spans or "select-column" in cell.classes or not cell.closes:
+        if at == named or cell.spans or "select-column" in cell.classes:
             continue
         controls = "control" in (kinds.get(at), cell.kind) or "row-actions" in cell.classes
         if controls and not cell.fields and (cell.controls or not cell.says_nothing):
@@ -516,10 +472,10 @@ def _holds_back(row: RowFacts, kinds: dict[int, str], named: int) -> bool:
     moved there, its editor, or a fold."""
 
     for at, cell in _placed(row):
-        if cell.folds or cell.holds & (HELD | {GIST}) or _finished(cell, "below") or _finished(cell, "editor"):
+        if cell.folds or cell.holds & (HELD | {GIST}) or _moved(cell, "below") or _moved(cell, "editor"):
             return True
         kind = _kind_at(at, kinds, named)
-        if not cell.spans and cell.closes and _long(cell) and _words(cell, kind) and _clamps(kind):
+        if not cell.spans and _long(cell) and _words(cell, kind) and _clamps(kind):
             return True
     return False
 
@@ -543,10 +499,10 @@ def _at_place(cells: list[CellFacts], place: int) -> CellFacts | None:
     return None
 
 
-def _finished(cell: CellFacts, kind: str) -> list[Moved]:
-    """Each part of ``kind`` the cell moves whose end was read."""
+def _moved(cell: CellFacts, kind: str) -> list[Moved]:
+    """Each part of ``kind`` the cell moves to its row's open line."""
 
-    return [part for part in cell.moved if part.finished and part.kind == kind]
+    return [part for part in cell.moved if part.kind == kind]
 
 
 def _kinds(heads: list[list[CellFacts]], body: list[RowFacts]) -> dict[int, str]:

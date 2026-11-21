@@ -18,9 +18,9 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core import included_parts
-from hq.platform.core.hand_drawn import Source
 from hq.platform.core.template_contract import FRAMES, parts
 from hq.platform.core.template_parts import Part
+from hq.platform.core.template_source import Source
 from hq.platform.core.tests.css_usage import blocks_of, named
 
 ROOT = Path(__file__).resolve().parents[4]

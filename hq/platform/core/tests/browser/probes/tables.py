@@ -2,7 +2,9 @@
 
 import json
 
-from hq.platform.core.templatetags.table_tags import TABLE_REGION
+from hq.platform.application.tables import Below, Cell, DataTable, Piece, Row, TableColumn
+from hq.platform.core import included_parts
+from hq.platform.core.templatetags.table_tags import DATA_TABLE
 from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.probes.shifts import PROBE_MOVES
@@ -837,13 +839,16 @@ OPEN_LINES_OUTDENTED = (
 }"""
 )
 
-# A row whose words hold a block for its open line, set in as far as `inset`.
-_OPEN_LINE_TABLE = (
-    '{{% table_region "Open lines" %}}<table class="data-table"><thead><tr>'
-    '{{% table_heading "Item" %}}{{% table_heading "State" "status" %}}</tr></thead><tbody>'
-    '<tr><td class="row-gutter"{inset}>Example item<p class="row-below">Example note under the item.</p></td>'
-    '<td><span class="pill">Up</span></td></tr></tbody></table>{{% endtable_region %}}'
-)
+
+# A row whose words hold a block for its open line.
+def _open_lines() -> DataTable:
+    item = Cell("Example item", below=(Below("", (Cell("Example note under the item."),)),))
+    columns = (TableColumn("Item"), TableColumn("State", kind="status"))
+    return DataTable("Open lines", columns, (Row((item, Cell("Up", tone="good"))),))
+
+
+# The row's words set in further than its open line.
+_INSET_THE_WORDS = "() => { document.querySelector('main tbody td.row-gutter').style.paddingInlineStart = '60px'; }"
 
 # Nothing reaches past the content's side gutter: drawn there, it touches the
 # edge of the screen. `text` also holds every line of text to the box that
@@ -955,108 +960,161 @@ COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 # row's value is that long too. In the third a run of parts (`line_list`)
 # holds only the parts that size its column, and another holds a rest past
 # them.
-ROW_TOGGLE_TABLES = """
-{% table_region "Dropping" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
-<tr data-probe="dropped"><td>Dropped</td><td>Short</td>
-<td><span style="display: inline-block; inline-size: 30rem">Something too wide for a phone to keep</span></td></tr>
-<tr data-probe="dropped-blank"><td>Blank</td><td>Short</td><td>–</td></tr>
-<tr data-probe="screen-reader"><td>Chest</td>
-<td><span class="cadence-mark is-hit" aria-hidden="true"></span>
-<span class="visually-hidden">One session in the week of Aug 10, said in full</span></td><td>–</td></tr>
-<tr data-probe="cut"><td>Name</td>
-<td>a value far too long to show whole on one line of its column</td><td>–</td></tr>
-</tbody></table>{% endtable_region %}
-{% table_region "Folding" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}</tr></thead><tbody>
-<tr data-probe="folded"><td>Folded</td>
-<td><span class="tag">One</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
-<tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
-<td>a value far too long to show whole on one line of its column</td></tr>
-</tbody></table>{% endtable_region %}
-{% table_region "Lining" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" %}{% table_heading "Parts" css="key-col" %}</tr></thead><tbody>
-<tr data-probe="line-fits"><td>Fits</td>
-<td>{% line_list fits as part %}<span class="tag">{{ part }}</span>{% endline_list %}</td></tr>
-<tr data-probe="line-cut"><td>Cut</td>
-<td><div style="max-width: 9rem">{% line_list many as part %}<span class="tag">{{ part }}</span>{% endline_list %}</div></td></tr>
-</tbody></table>{% endtable_region %}"""
+ROW_TOGGLE_TABLES = "{% data_table dropping %}{% data_table folding %}{% data_table lining %}"
+_LONG = "a value far too long to show whole on one line of its column"
 
-ROW_TOGGLE_VALUES = {
-    "fits": ("One", "Two", "Three"),
-    "many": ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"),
-}
+
+def _probed(probe: str, *cells: Cell | str) -> Row:
+    return Row(tuple(each if isinstance(each, Cell) else Cell(each) for each in cells), data={"probe": probe})
+
+
+def row_toggle_values() -> dict[str, DataTable]:
+    """The three tables ``ROW_TOGGLE_TABLES`` draws."""
+
+    said = {"hit": True, "count": 1, "said": "One session in the week of Aug 10, said in full"}
+    mark = Cell(piece=Piece(included_parts.CADENCE_MARK, {"week": said}, words=""))
+    kept = TableColumn("Value", css="key-col")
+    return {
+        "dropping": DataTable(
+            "Dropping",
+            (TableColumn("Name"), kept, TableColumn("Note", drop=1)),
+            (
+                _probed("dropped", "Dropped", "Short", "Something too wide for a phone to keep"),
+                _probed("dropped-blank", "Blank", "Short", "–"),
+                _probed("screen-reader", "Chest", mark, "–"),
+                _probed("cut", "Name", _LONG, "–"),
+            ),
+        ),
+        "folding": DataTable(
+            "Folding",
+            (TableColumn("Name"), kept),
+            (
+                _probed("folded", "Folded", Cell("One", parts=(Cell("Two", shows="more"),))),
+                _probed("cut-in-a-kept-gutter", "Name", _LONG),
+            ),
+        ),
+        "lining": DataTable(
+            "Lining",
+            (TableColumn("Name"), TableColumn("Parts", css="key-col")),
+            (
+                _probed(
+                    "line-fits", "Fits", Cell(fit=True, parts=tuple(Cell(part) for part in ("One", "Two", "Three")))
+                ),
+                _probed(
+                    "line-cut",
+                    "Cut",
+                    Cell(
+                        fit=True,
+                        parts=tuple(
+                            Cell(part) for part in ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight")
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    }
+
 
 # A table of cut values, their column kept on the row as a key, each the
-# word its row is probed by then more: one with no title, one carrying its whole text as a title, one longer than a
-# line of its column in a row that opens, two past the line a clamp ends with an ellipsis (a block and a
-# link set in its line, as a cell's name is), one cut where no ellipsis can
-# land, a box of words around a box of its own, and a name's chip in the muted
-# line under a row's name, as a unit's page drew one, which draws its own. The
-# first table's columns all stay, so its rows hold nothing back and cannot
-# open; the third stands in a table of its own whose row opens for its long
-# value, offering its toggle. A note wider
-# than a phone puts each table in a narrow box there, where a row that cannot
-# open breaks the chip whole; a wide box shows each titled value whole on
-# hover, and a cut with no ellipsis tells no one to hover.
-_CUT = (
-    '<div style="max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"{}>'
-    "{} value far too long to fit</div>"
-)
+# word its row is probed by then more: one with no title, one carrying its
+# whole text as a title, two past the line a clamp ends with an ellipsis (a
+# block and a link set in its line, as a cell's name is), one cut where no
+# ellipsis can land, and a name's chip in the muted line under a row's name,
+# as a unit's page drew one, which draws its own. The first table's columns
+# all stay, so its rows hold nothing back and cannot open; the second's row
+# opens for its long value, offering its toggle. A note wider than a phone
+# puts each table in a narrow box there, where a row that cannot open breaks
+# the chip whole; a wide box shows each titled value whole on hover, and a
+# cut with no ellipsis tells no one to hover. Each cut is the style
+# ``_CUT_THEM`` gives the value its name marks.
 _CHIP = "chip-" + "-".join(["example-unit-name-long-enough-to-be-cut"] * 4) + ".timer"
-_NOTE = '<td><span style="display: inline-block; inline-size: 30rem">A note wider than a phone</span></td>'
-_CUT_TABLE = (
-    '{% load value_tags %}{% table_region "Cuts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" css="key-col" %}'
-    "</tr></thead><tbody>"
-    + "".join(
-        f"<tr><td>{name.title()}</td><td>{_CUT.format(title.format(name), name)}</td>{_NOTE}</tr>"
-        for name, title in (("untitled", ""), ("titled", ' title="{} value far too long to fit"'))
+_CUT_TABLE = "{% data_table cuts %}{% data_table opening %}"
+
+
+def _cut_values() -> dict[str, DataTable]:
+    def cut(name: str, **options) -> Cell:
+        return Cell(f"{name} value far too long to fit", data={"cut": name}, **options)
+
+    note = Cell("A note wider than a phone", data={"note": "wide"})
+    columns = (TableColumn("Name"), TableColumn("Value", css="key-col"), TableColumn("Note", css="key-col"))
+    rows = (
+        ("Untitled", cut("untitled")),
+        ("Titled", cut("titled", title="titled value far too long to fit")),
+        ("Clamped", cut("clamped")),
+        ("Inline", cut("inline", url="#")),
+        ("Unmarked", cut("unmarked")),
+        (Cell("Chip", lines=(Cell(_CHIP, readout=True, muted=True),)), Cell("Short")),
     )
-    + '<tr><td>Clamped</td><td><div style="display: -webkit-box; -webkit-box-orient: vertical; '
-    '-webkit-line-clamp: 1; overflow: hidden; max-width: 80px">clamped value far too long for its one line'
-    f"</div></td>{_NOTE}</tr>"
-    + '<tr><td>Inline</td><td><a href="#" style="display: -webkit-inline-box; -webkit-box-orient: '
-    'vertical; -webkit-line-clamp: 1; overflow: hidden; max-width: 80px">inline value far too long to fit on its one '
-    f"line</a></td>{_NOTE}</tr>" + '<tr><td>Unmarked</td><td><div style="max-width: 40px; overflow: hidden; '
-    'text-overflow: ellipsis; white-space: nowrap"><span style="display: inline-block">unmarked value far too long '
-    f"to fit</span></div></td>{_NOTE}</tr>"
-    + f'<tr><td>Chip<br><span class="muted"><code>{{{{ chip|breakable }}}}</code></span></td><td>Short</td>{_NOTE}</tr>'
-    + "</tbody></table>{% endtable_region %}"
-    + '{% table_region "Opening" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "Note" %}</tr></thead><tbody>'
-    + f"<tr><td>Opens</td><td>opens value far too long to show whole on one line of its column</td>{_NOTE}</tr>"
-    "</tbody></table>{% endtable_region %}"
-)
+    opening = (TableColumn("Name"), TableColumn("Value", css="key-col"), TableColumn("Note"))
+    return {
+        "cuts": DataTable(
+            "Cuts",
+            columns,
+            tuple(Row((name if isinstance(name, Cell) else Cell(name), value, note)) for name, value in rows),
+        ),
+        "opening": DataTable(
+            "Opening",
+            opening,
+            (Row((Cell("Opens"), Cell("opens value far too long to show whole on one line of its column"), note)),),
+        ),
+    }
+
+
+_CUT_THEM = """() => {
+  const ellipsis = 'max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap';
+  const clamp = '-webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; max-width: 80px';
+  const styles = {
+    untitled: `display: block; ${ellipsis}`,
+    titled: `display: block; ${ellipsis}`,
+    clamped: `display: -webkit-box; ${clamp}`,
+    inline: `display: -webkit-inline-box; ${clamp}`,
+    unmarked: `display: block; ${ellipsis}`,
+  };
+  for (const value of document.querySelectorAll('main [data-cut]')) {
+    value.style.cssText = styles[value.dataset.cut];
+    if (value.dataset.cut !== 'unmarked') continue;
+    const words = document.createElement('span');
+    words.style.display = 'inline-block';
+    words.append(...value.childNodes);
+    value.append(words);
+  }
+  for (const note of document.querySelectorAll('main [data-note]')) note.style.cssText = 'display: inline-block; inline-size: 30rem';
+}"""
 
 # Two rows whose open line draws nothing (their state has not left): one the
-# region clamps, which opening releases in place, and one with a short value.
-_CLAMP_TABLE = (
-    '{% table_region "Clamps" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" %}{% table_heading "Value" css="key-col" %}{% table_heading "State" "status" %}'
-    "</tr></thead><tbody>"
-    "<tr><td>Clamped</td><td>"
-    + " ".join(["a value that runs well past the three lines its clamp holds"] * 6)
-    + '</td><td><span class="pill">Up</span></td></tr>'
-    '<tr data-probe="plain"><td>Plain</td><td>Short</td><td><span class="pill">Up</span></td></tr>'
-    "</tbody></table>{% endtable_region %}"
-)
+# table clamps, which opening releases in place, and one with a short value.
+_CLAMP_TABLE = "{% data_table clamps %}"
+
+
+def _clamp_values() -> dict[str, DataTable]:
+    up = Cell("Up", tone="good")
+    columns = (TableColumn("Name"), TableColumn("Value", css="key-col"), TableColumn("State", kind="status"))
+    clamped = " ".join(["a value that runs well past the three lines its clamp holds"] * 6)
+    rows = (Row((Cell("Clamped"), Cell(clamped), up)), Row((Cell("Plain"), Cell("Short"), up), data={"probe": "plain"}))
+    return {"clamps": DataTable("Clamps", columns, rows)}
+
 
 # A heading longer than its figures beside a column of room: sorted where two
 # rows are, plain where one is, and squeezed by a width of its own.
-_FIGURES = "<tr><td>example-01</td><td>160 bpm</td></tr>"
-_HEADING_TABLE = (
-    '{{% table_region "Headings" %}}<table class="data-table"><thead><tr>{{% table_heading "Name" "identifier" %}}'
-    "{heading}</tr></thead><tbody>{rows}</tbody></table>{{% endtable_region %}}"
-)
-_HEADED = "".join(
-    _HEADING_TABLE.format(heading='{% table_heading "Average heart rate" "numeric" %}', rows=rows)
-    for rows in (_FIGURES * 2, _FIGURES)
-)
-_SQUEEZED = _HEADING_TABLE.format(
-    heading='<th data-kind="numeric"><span style="display: inline-block; max-inline-size: 4em; white-space: normal">Average heart rate</span></th>',
-    rows=_FIGURES * 2,
-)
+_HEADED = "{% data_table two %}{% data_table one %}"
+
+
+def _headed_values() -> dict[str, DataTable]:
+    columns = (TableColumn("Name", kind="identifier"), TableColumn("Average heart rate", kind="numeric"))
+    figures = Row((Cell("example-01"), Cell("160 bpm")))
+    return {
+        "two": DataTable("Headings", columns, (figures, figures)),
+        "one": DataTable("Headings", columns, (figures,)),
+    }
+
+
+_SQUEEZE_THE_HEADING = """() => {
+  const heading = document.querySelectorAll('main thead th')[1];
+  const words = document.createElement('span');
+  words.style.cssText = 'display: inline-block; max-inline-size: 4em; white-space: normal';
+  words.textContent = 'Average heart rate';
+  heading.replaceChildren(words);
+}"""
 
 # A band held to one column whose two short cells fit side by side.
 _STACKED = (
@@ -1071,27 +1129,29 @@ _FIVE_IN_A_DIALOG = (
     + "{% endfacts %}</div>"
 )
 
-# The chip's name is a value the page prints, as a template's is: a literal is
-# already safe, so `breakable` would pass it as plain words, which wrap.
-_CUT_VALUES = {"chip": _CHIP}
-
 # A panel shown from a cell, as an item's origin is: a key and a source too
 # long for the cell, which the panel has the room to show whole.
-_POPOVER_IN_A_CELL = """{% load value_tags %}
-{% table_region "Origins" %}<table class="data-table"><thead><tr>
-{% table_heading "Item" %}{% table_heading "Urgency" %}</tr></thead><tbody>
-<tr><td class="row-gutter">Example item</td><td><span class="pill">Urgent</span>
+_POPOVER_IN_A_CELL = """{% load value_tags %}{% data_table origins %}
 <div class="modal origin-panel" id="example-origin" popover><div class="modal-panel">{% facts %}
-{% fact "From" value=source %}{% fact "Key" %}<code>{{ key|breakable }}</code>{% endfact %}{% endfacts %}</div></div></td></tr>
-</tbody></table>{% endtable_region %}"""
+{% fact "From" value=source %}{% fact "Key" %}<code>{{ key|breakable }}</code>{% endfact %}{% endfacts %}</div></div>"""
 
-_POPOVER_VALUES = {
-    "key": "example.approvals:approval:d7f2b3ed-186d-402a-9c5e-1f0b2a3c4d5e",
-    "source": "an-example-source-with-a-deliberately-long-name",
-}
 
-# A shown popover, as a reader shows one.
-_SHOW_POPOVER = "() => document.querySelector('main [popover]').showPopover()"
+def _popover_values() -> dict[str, object]:
+    columns = (TableColumn("Item"), TableColumn("Urgency"))
+    row = Row((Cell("Example item"), Cell("Urgent", tone="attention", data={"origin": "example-origin"})))
+    return {
+        "origins": DataTable("Origins", columns, (row,)),
+        "key": "example.approvals:approval:d7f2b3ed-186d-402a-9c5e-1f0b2a3c4d5e",
+        "source": "an-example-source-with-a-deliberately-long-name",
+    }
+
+
+# The panel moved into the cell it is shown from, then shown, as a reader shows one.
+_SHOW_POPOVER = """() => {
+  const panel = document.getElementById('example-origin');
+  document.querySelector('main [data-origin]').closest('td').append(panel);
+  panel.showPopover();
+}"""
 
 # Every row's toggle pressed.
 _OPEN_EVERY_ROW = "() => document.querySelectorAll('main [data-row-toggle]').forEach((toggle) => toggle.click())"
@@ -1146,13 +1206,13 @@ CHECKS = {
         (TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
         table=True,
         reader_sees="a table running past its box",
-        part=TABLE_REGION,
+        part=DATA_TABLE,
     ),
     "unseen columns": Check(
         (UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
         table=True,
         reader_sees="a column cut off where nothing scrolls to it",
-        part=TABLE_REGION,
+        part=DATA_TABLE,
     ),
     "cut beside room": Check(
         (CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True, reader_sees="a value cut while its row has room to show it"
@@ -1161,8 +1221,11 @@ CHECKS = {
         ROOM_UNSHARED,
         table=True,
         reader_sees="words a few to a line beside a column holding room it does not need, or a band's cells one to a row",
-        plants=(Plant(_SQUEEZED, finds=("wraps its heading",)), Plant(_STACKED, finds=("one to a row",))),
-        clear=(Example(_HEADED), Example(_FIVE_IN_A_DIALOG)),
+        plants=(
+            Plant(_HEADED, values=_headed_values(), setup=_SQUEEZE_THE_HEADING, finds=("wraps its heading",)),
+            Plant(_STACKED, finds=("one to a row",)),
+        ),
+        clear=(Example(_HEADED, values=_headed_values()), Example(_FIVE_IN_A_DIALOG)),
     ),
     "empty panels": Check(EMPTY_PANELS, table=True, reader_sees="a panel in a table with nothing in it"),
     "rows unruled": Check(ROWS_UNRULED, table=True, reader_sees="two rows with no rule between them"),
@@ -1181,21 +1244,23 @@ CHECKS = {
                 _CUT_TABLE,
                 width=PHONE_SCREEN[0],
                 scripted=True,
-                values=_CUT_VALUES,
+                values=_cut_values(),
+                setup=_CUT_THEM,
                 finds=('"untitled', '"titled', '"clamped', '"inline', '"unmarked'),
             ),
             Plant(
                 _CUT_TABLE,
                 width=1280,
                 scripted=True,
-                values=_CUT_VALUES,
+                values=_cut_values(),
+                setup=_CUT_THEM,
                 finds=('"untitled', '"clamped', '"inline', '"unmarked'),
             ),
         ),
         # A panel shown from a cell is no part of the column, so what it
         # holds reads whole however narrow the cell.
         clear=tuple(
-            Example(_POPOVER_IN_A_CELL, width=width, scripted=True, values=_POPOVER_VALUES, setup=_SHOW_POPOVER)
+            Example(_POPOVER_IN_A_CELL, width=width, scripted=True, values=_popover_values(), setup=_SHOW_POPOVER)
             for width in (PHONE_SCREEN[0], WIDE)
         ),
     ),
@@ -1215,6 +1280,7 @@ CHECKS = {
                 _CLAMP_TABLE,
                 width=PHONE_SCREEN[0],
                 scripted=True,
+                values=_clamp_values(),
                 setup=_OPEN_EVERY_ROW_AND_SAY_BELOW,
                 premise=(_EXPANDED, 2),
                 finds=("opens a line with nothing drawn",),
@@ -1225,6 +1291,7 @@ CHECKS = {
                 _CLAMP_TABLE,
                 width=PHONE_SCREEN[0],
                 scripted=True,
+                values=_clamp_values(),
                 setup=_OPEN_EVERY_ROW,
                 premise=(_EXPANDED, 2),
             ),
@@ -1233,7 +1300,7 @@ CHECKS = {
     "table promises": Check(
         (TABLE_PROMISES, SELECTORS["table_scroll"]),
         reader_sees="a table's heading row scrolling away, or a cell across its row stopping short",
-        part=TABLE_REGION,
+        part=DATA_TABLE,
     ),
     "whole parts moved by opening": Check(
         (WHOLE_PARTS_MOVED_BY_OPENING, SELECTORS["table_scroll"]),
@@ -1249,13 +1316,16 @@ CHECKS = {
         reader_sees="what an opened row holds starting left of the row's own words",
         plants=(
             Plant(
-                _OPEN_LINE_TABLE.format(inset=' style="padding-inline-start: 60px"'),
+                "{% data_table lines %}",
                 scripted=True,
-                setup=_OPEN_EVERY_ROW,
+                values={"lines": _open_lines()},
+                setup=f"() => {{ ({_INSET_THE_WORDS})(); ({_OPEN_EVERY_ROW})(); }}",
                 finds=("left of its row's words",),
             ),
         ),
-        clear=(Example(_OPEN_LINE_TABLE.format(inset=""), scripted=True, setup=_OPEN_EVERY_ROW),),
+        clear=(
+            Example("{% data_table lines %}", scripted=True, values={"lines": _open_lines()}, setup=_OPEN_EVERY_ROW),
+        ),
     ),
     # Every box and every line of text, not only a card's or code's.
     "gutter": Check((PAST_THE_GUTTER, ["*", True]), reader_sees="content past the page's gutter"),

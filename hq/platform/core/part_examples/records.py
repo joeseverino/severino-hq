@@ -7,7 +7,7 @@ lazy from datetime import UTC, date, datetime, timedelta
 lazy from django.core.paginator import Paginator
 lazy from django.templatetags.static import static
 
-from hq.platform.core.part_examples import DRAWN_AT, NARROW, runs
+from hq.platform.core.part_examples import DRAWN_AT, NARROW, runs, table
 from hq.platform.core.template_parts import Example
 lazy from hq.platform.application.action_links import read_link
 lazy from hq.platform.application.approvals import DECISIONS, _decision_link
@@ -22,8 +22,10 @@ lazy from hq.platform.application.finding_steps import Do, Run
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
 lazy from hq.platform.application.relationships import Relationships
+lazy from hq.platform.application.tables import Cell, Piece, TableColumn
 lazy from hq.platform.application.tone import Tone
 lazy from hq.platform.application.topology_model import RelationGroup, Relationship
+lazy from hq.platform.core import included_parts
 
 
 def _holding(entry: CalendarEvent) -> Callable[[date, date], tuple[CalendarEvent, ...]]:
@@ -82,6 +84,26 @@ def _paged(number):
 
     paginator = Paginator(range(60), 20)
     return {"is_paginated": True, "paginator": paginator, "page_obj": paginator.page(number)}
+
+
+def _images():
+    """Images each told as the change it made: one that links its release notes,
+    and one whose note runs long."""
+
+    def change(old, new, url=""):
+        words = f"{old} to {new}"
+        return Cell(piece=Piece(included_parts.CHANGE, {"from": old, "to": new, "url": url, "code": True}, words=words))
+
+    return table(
+        "Example images",
+        (TableColumn("Name", kind="identifier"), "Image", "Note"),
+        ("example-01", change("example:1.2", "example:1.4", "https://example.com/releases/"), "An example release"),
+        (
+            "example-02",
+            change("example:2026.1.0", "example:2026.3.0"),
+            "Restarted once the example update was pulled from the example registry",
+        ),
+    )
 
 
 def _toolbar():
@@ -523,11 +545,14 @@ DOTS = Example(context=lambda: {"dots": runs()})
 DOTS_STATES = {
     # A history in a table's cell.
     "in-a-row": Example(
-        '{% section "Example work" %}{% table_region "Example work" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" "identifier" %}{% table_heading "Runs" %}</tr></thead><tbody>'
-        '<tr><td>example.read</td><td>{% include "partials/_dots.html" with dots=runs only %}</td></tr>'
-        "</tbody></table>{% endtable_region %}{% endsection %}",
-        lambda: {"runs": runs()},
+        '{% section "Example work" %}{% data_table table %}{% endsection %}',
+        lambda: {
+            "table": table(
+                "Example work",
+                (TableColumn("Name", kind="identifier"), "Runs"),
+                ("example.read", Cell(piece=Piece(included_parts.DOTS, {"dots": runs()}, words="Example runs"))),
+            )
+        },
     ),
 }
 
@@ -535,10 +560,8 @@ DOTS_STATES = {
 PAGINATION_STATES = {
     # A list's pages, at a middle page, and on the first, which has none before it.
     "states": Example(
-        '{% section "Example events" %}{% table_region "Example events" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Event" %}</tr></thead><tbody><tr><td>Example event</td></tr></tbody></table>'
-        '{% endtable_region %}{% include "partials/_pagination.html" %}{% endsection %}',
-        lambda: _paged(2),
+        '{% section "Example events" %}{% data_table table %}{% include "partials/_pagination.html" %}{% endsection %}',
+        lambda: {**_paged(2), "table": table("Example events", ("Event",), ("Example event",))},
         address="/example/events/?q=example&page=2",
     ),
     "first": Example(
@@ -556,11 +579,16 @@ TABLE_TOOLBAR_STATES = {
     # A list's toolbar over its table: a search with words in it, a filter
     # with some of its options chosen, a toggle and a sort.
     "states": Example(
-        '{% include "partials/_table_toolbar.html" %}{% table_region "Example hosts" %}<table class="data-table">'
-        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "State" "status" %}</tr></thead>'
-        "<tbody><tr><td>example-01</td><td>Online</td></tr><tr><td>example-02</td><td>Offline</td></tr>"
-        "</tbody></table>{% endtable_region %}",
-        lambda: {"table": _toolbar()},
+        '{% include "partials/_table_toolbar.html" %}{% data_table hosts %}',
+        lambda: {
+            "table": _toolbar(),
+            "hosts": table(
+                "Example hosts",
+                (TableColumn("Name", kind="identifier"), TableColumn("State", kind="status")),
+                ("example-01", "Online"),
+                ("example-02", "Offline"),
+            ),
+        },
         address="/example/hosts/?q=example&kind=machine&stale=1",
     ),
 }
@@ -687,14 +715,8 @@ CHANGE_STATES = {
     # line with its old value beside a note that asks for its whole length.
     "states": Example(
         '{% section "Example versions" %}<p>{% include "partials/_change.html" with from="1.2" to="1.4" %}</p>'
-        '{% table_region "Example images" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" "identifier" %}{% table_heading "Image" %}{% table_heading "Note" %}</tr></thead>'
-        '<tbody><tr><td>example-01</td><td>{% include "partials/_change.html" with from="example:1.2" '
-        'to="example:1.4" url="https://example.com/releases/" code=True %}</td><td>An example release</td></tr>'
-        '<tr><td>example-02</td><td>{% include "partials/_change.html" with from=old to=new code=True %}'
-        "</td><td>Restarted once the example update was pulled from the example registry</td></tr></tbody>"
-        "</table>{% endtable_region %}{% endsection %}",
-        {"old": "example:2026.1.0", "new": "example:2026.3.0"},
+        "{% data_table table %}{% endsection %}",
+        lambda: {"table": _images()},
     ),
 }
 

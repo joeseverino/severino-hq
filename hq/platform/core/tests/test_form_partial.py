@@ -6,6 +6,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import all_elements, elements, select, with_class
+from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 
 FORM = "partials/_form.html"
@@ -167,22 +168,18 @@ class ExampleRowsForm(forms.Form):
             )
 
 
-ROWS_TABLE = (
-    '{% table_region "Accounts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Account" "identifier" %}{% table_heading "Group" "control" %}</tr></thead><tbody>'
-    "{% for name, field in rows %}<tr><td><strong>{{ name }}</strong></td>"
-    '<td>{% include "partials/_row_field.html" with field=field only %}</td></tr>{% endfor %}'
-    "</tbody></table>{% endtable_region %}"
-)
-
-
 class FormTableTests(SimpleTestCase):
     """A form whose fields stand one to a row of a table (`table_body`)."""
 
     def draw(self, form):
         rows = [("Example checking", form["group-1"]), ("Example savings", form["group-2"])]
-        table = engines["django"].engine.from_string(ROWS_TABLE)
-        context = {"form": form, "table_body": table, "rows": rows, "verb": "Save groups", "bar": True}
+        accounts = DataTable(
+            "Accounts",
+            (TableColumn("Account", kind="identifier"), TableColumn("Group", kind="control")),
+            tuple(Row((Cell(name, name=True), Cell(field=field))) for name, field in rows),
+        )
+        table = engines["django"].engine.from_string("{% data_table accounts %}")
+        context = {"form": form, "table_body": table, "accounts": accounts, "verb": "Save groups", "bar": True}
         return render_to_string(FORM, context)
 
     def test_the_table_is_the_forms_body_with_its_closing_row_under_it(self):

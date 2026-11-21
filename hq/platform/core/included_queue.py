@@ -19,7 +19,7 @@ WORK_QUEUE = _part(
     attention list all use one projection (`hq/platform/application/decisions.py`). They draw it as
     one declared table (its rows `queue_table`). A page never draws a list of its own (the
     `list` shape of `hand_drawn.SHAPES`). A row is a table row as any other: its words in the cell that names
-    it, what it offers in `{% row_actions %}`, so it stands at the table's own density and gives way
+    it, what it offers in its actions (`Row(actions=)`), so it stands at the table's own density and gives way
     as every table does. It reads, in order:
 
     - its first line (`row-line`): the title and, only when it is urgent, the word "Urgent" after it

@@ -10,6 +10,8 @@ from django.template.loader import render_to_string
 
 from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
+from hq.platform.application.pages import PageAction
+from hq.platform.application.tables import Cell, DataTable, Group, Row, TableColumn
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
 from hq.platform.core.test_runner import browser_engine
@@ -30,10 +32,10 @@ from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFT
 from hq.platform.core.tests.browser.probes.tables import (
     COLUMNS_SHOWN,
     ROW_TOGGLE_TABLES,
-    ROW_TOGGLE_VALUES,
     ROW_TOGGLES,
     SORT_BY,
     TABLES_THAT_DO_NOT_FIT,
+    row_toggle_values,
 )
 from hq.platform.core.tests.browser.probes.text import (
     OVERLAPPING_TEXT,
@@ -105,11 +107,12 @@ _HELD_BENEATH = "(row, selector) => Boolean(row.nextElementSibling?.querySelecto
 
 # A table whose one cell holds a phrase, which a probe measures beside a
 # one-line twin it puts in place and takes away.
-_ANSWERING_TABLE = (
-    '{% table_region "Answering" %}<table class="data-table"><thead><tr>{% table_heading "State" "status" %}'
-    '</tr></thead><tbody><tr><td><span class="pill">Example running</span></td></tr></tbody></table>'
-    "{% endtable_region %}"
-)
+def _answering() -> str:
+    state = DataTable(
+        "Answering", (TableColumn("State", kind="status"),), (Row((Cell("Example running", tone="good"),)),)
+    )
+    return probe("{% data_table table %}", table=state)
+
 
 # A page script that squeezes the phrase in a cell whose content changed
 # until each word breaks, which the survey would find.
@@ -349,12 +352,28 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {
             **self.pages,
             "fold-probe": probe(
-                '{% table_region "Folding" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" %}{% table_heading "Value" %}</tr></thead><tbody>'
-                '{% row_group "Example group" 1 folds="example-fold" %}'
-                '<tr id="example-cut" data-folded="example-fold"><td>Name</td>'
-                "<td>a value far too long to show whole on one line of its column</td>"
-                "</tr></tbody></table>{% endtable_region %}"
+                "{% data_table table %}",
+                table=DataTable(
+                    "Folding",
+                    (TableColumn("Name"), TableColumn("Value")),
+                    groups=(
+                        Group(
+                            "Example group",
+                            (
+                                Row(
+                                    (
+                                        Cell("Name"),
+                                        Cell("a value far too long to show whole on one line of its column"),
+                                    ),
+                                    id="example-cut",
+                                    folded="example-fold",
+                                ),
+                            ),
+                            count=1,
+                            folds="example-fold",
+                        ),
+                    ),
+                ),
             ),
         }
         self.open("fold-probe", PHONE_SCREEN[0])
@@ -572,14 +591,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {
             **self.pages,
             "ask-probe": probe(
-                '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
-                "<tr><td>A</td>"
-                '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
+                "{% data_table table %}"
                 "<div data-example-region><p>An example line.</p></div>"
                 '<form id="hq-post" method="post" hidden></form>'
                 '{% include "scripts/fragment.html" %}{% include "scripts/ask.html" %}',
-                ask=failed,
+                table=DataTable("Things", (TableColumn("Name"),), (Row((Cell("A"),), asks=(failed,)),)),
             ),
             "example/ask": json.dumps(Standing(asks.DONE).as_json()),
         }
@@ -592,22 +608,28 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_an_ask_among_a_rows_actions_keeps_them_on_one_line(self):
-        """An ask before another of a row's actions leaves that action on the
-        row's first line beside it at every width, and in a wide box what the
+        """An ask beside another of a row's actions leaves that action on the
+        row's first line with it at every width, and in a wide box what the
         ask says once pressed comes on the line the cell keeps under them, so
         the row grows no taller."""
 
         self.pages = {
             **self.pages,
             "ask-actions-probe": probe(
-                '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
-                '<tr><td>A</td><td class="row-actions">{% include "partials/_ask.html" with ask=ask %}'
-                '<a class="btn ghost compact" href="/example/remove/">Remove</a></td></tr></tbody></table>'
-                "{% endtable_region %}"
+                "{% data_table table %}"
                 '<form id="hq-post" method="post" hidden></form>'
                 '{% include "scripts/fragment.html" %}{% include "scripts/ask.html" %}',
-                ask=Ask("Refresh", "/example/ask/", title="Read the example again.", compact=True),
+                table=DataTable(
+                    "Things",
+                    (TableColumn("Name"),),
+                    (
+                        Row(
+                            (Cell("A"),),
+                            actions=(PageAction("Remove", "/example/remove/"),),
+                            asks=(Ask("Refresh", "/example/ask/", title="Read the example again.", compact=True),),
+                        ),
+                    ),
+                ),
             ),
             "example/ask": json.dumps(Standing(asks.FAILED, "The example could not be read.").as_json()),
         }
@@ -661,19 +683,15 @@ class ComponentLayoutTests(LayoutBrowserTests):
         name, "Created" a record in a cell of free text) stays on the line
         the name opens, never alone above it."""
 
-        from hq.platform.core.templatetags.value_tags import breakable
-
-        host = breakable("example-primary-container-host-with-a-long-name")
-        record = breakable("an-example-proxy-host-with-a-deliberately-long-name")
+        host = "example-primary-container-host-with-a-long-name"
+        record = "an-example-proxy-host-with-a-deliberately-long-name"
+        name = Cell("example.com", name=True, lines=(Cell("on", muted=True, parts=(Cell(host, url="#"),)),))
+        change = Cell(f"Created {record} from a request", role="data")
         self.pages = {
             **self.pages,
             "word-before-a-name-probe": probe(
-                '<div style="inline-size: 26rem">{% table_region "Changes" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Name" %}{% table_heading "Change" %}</tr></thead><tbody><tr>'
-                "<td><strong>example.com</strong><br>"
-                f'<span class="muted">on <a href="#" data-entity="Machine">{host}</a></span></td>'
-                f'<td class="cell-data">Created {record} from a request</td>'
-                "</tr></tbody></table>{% endtable_region %}</div>"
+                '<div style="inline-size: 26rem">{% data_table table %}</div>',
+                table=DataTable("Changes", (TableColumn("Name"), TableColumn("Change")), (Row((name, change)),)),
             ),
         }
         # A box that wraps each name, where the column of free text leaves for
@@ -683,7 +701,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         lines = self.page.evaluate(
             """() => [
               // The line under the row's name, and the free text on its open line.
-              document.querySelector('main tbody td br').nextElementSibling,
+              document.querySelector('main tbody td .stack-list > li'),
               [...document.querySelectorAll('main .row-detail .token')].map((name) => name.parentElement)
                 .find((box) => box.textContent.includes('from a request')),
             ].map((box) => {
@@ -693,7 +711,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
               const words = document.createRange();
               words.selectNodeContents(first);
               const word = [...words.getClientRects()].find((r) => r.width);
-              const name = [...box.querySelector('[data-entity], .token').getClientRects()].find((r) => r.width);
+              const name = [...box.querySelector('a, .token').getClientRects()].find((r) => r.width);
               return [first.data.trim(), Math.abs(word.top - name.top) < word.height / 2];
             })"""
         )
@@ -782,7 +800,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         withholds. Nothing is measured: the server and the region decide.
         """
 
-        self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES, **ROW_TOGGLE_VALUES)}
+        self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES, **row_toggle_values())}
         shown_at = {
             PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
             1280: {"folded", "line-cut"},
@@ -941,12 +959,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         on a page without the header a stuck heading is at the window's top,
         over no row that a header would have hidden."""
 
-        rows = "".join(f"<tr><td>Example {index}</td></tr>" for index in range(60))
+        rows = tuple(Row((Cell(f"Example {index}"),)) for index in range(60))
         self.pages = {
             **self.pages,
             "headerless-probe": probe(
-                '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}</tr></thead>'
-                f"<tbody>{rows}</tbody></table>{{% endtable_region %}}"
+                "{% data_table table %}", table=DataTable("Things", (TableColumn("Name"),), rows)
             ),
         }
         self.open("headerless-probe", WIDE)
@@ -992,29 +1009,22 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_name_a_cell_cuts_is_drawn_whole_on_its_line_where_its_cell_has_room(self):
         """A one-token name in a box of its own (a bare name, a cell's line,
-        a link, a name an icon opens), in a cell with room to spare, draws
+        a link), in a cell with room to spare, draws
         every part on its one line uncut, in a box at least as wide as what it
         draws, read in every engine at each density a screen has."""
 
-        from hq.platform.core.templatetags.value_tags import breakable, cell_line
-
         shapes = ("example-connect", "example2-proxy", "example2-proxy-web", "example-id", "example-hq", "example-a1")
         names = [f"/opt/apps/{name}" for name in shapes]
-        icon = render_to_string("partials/_icon.html", {"name": "deploy"}).strip()
         cells = [
-            *(breakable(name) for name in names),
-            *(cell_line(name) for name in names),
-            *(f'<a data-entity href="/example/">{breakable(name)}</a>' for name in names),
-            *(f"{icon} {breakable(name)}" for name in [*names, "2024.12.1-ubu2404-ls48"]),
+            *(Cell(name) for name in [*names, "2024.12.1-ubu2404-ls48"]),
+            *(Cell(name, cut=True) for name in names),
+            *(Cell(name, url="/example/") for name in names),
         ]
-        rows = "".join(f"<tr><td>{cell}</td><td>Example</td></tr>" for cell in cells)
+        columns = (TableColumn("Directory", kind="identifier"), TableColumn("State", kind="status"))
+        rows = tuple(Row((cell, Cell("Example"))) for cell in cells)
         self.pages = {
             **self.pages,
-            "name-room-probe": probe(
-                '{% table_region "Directories" %}<table class="data-table"><thead><tr>'
-                '{% table_heading "Directory" "identifier" %}{% table_heading "State" "status" %}</tr>'
-                f"</thead><tbody>{rows}</tbody></table>{{% endtable_region %}}"
-            ),
+            "name-room-probe": probe("{% data_table table %}", table=DataTable("Directories", columns, rows)),
         }
         short = """([boxes, whole]) => {
           const found = [];
@@ -1077,7 +1087,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         place and take away to measure, so a second survey judges the page
         the first did. A change from outside the probes is heard and found."""
 
-        self.pages = {**self.pages, "answering-probe": probe(_ANSWERING_TABLE)}
+        self.pages = {**self.pages, "answering-probe": _answering()}
         self.open("answering-probe", PHONE_SCREEN[0])
         self.page.evaluate(_SQUEEZE_WHAT_CHANGES)
         first = self.findings("answering-probe", PHONE_SCREEN[0])
@@ -1093,7 +1103,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         measures the copy it put in place, and a change made outside a trip of
         probes is heard."""
 
-        self.pages = {**self.pages, "answering-probe": probe(_ANSWERING_TABLE)}
+        self.pages = {**self.pages, "answering-probe": _answering()}
         self.open("answering-probe", PHONE_SCREEN[0])
         self.page.evaluate(_COUNT_WHAT_IS_HEARD)
         (measured,) = self.read([(_MEASURE_A_COPY, None)])

@@ -10,7 +10,7 @@ Working… while it is sent. `form` is the Django form; a page whose fields are
 more than the form's own loop (a dropzone, a field shown only for a value)
 names the template that draws them as `fields`, drawn with the page's
 context. A form whose fields stand one to a row of a table names the template
-that draws that table (its `table_region`, each row's control drawn by
+that draws that table (its `{% data_table %}`, each row's control drawn by
 partials/_row_field.html) as `table_body`: the form draws its hidden fields
 and lays out no fields of its own (no `.form`), so the table reaches its
 frame's sides as a table section's does, and its closing row sits under the

@@ -62,5 +62,5 @@ class ParallelBrowserGateTests(SimpleTestCase):
             parent.addFindings(probe, *event[2:])
         parent.stopTestRun()
         ((_, defect),) = parent.failures
-        for said in ("table_region", "example/two at 402px", "example/two at 820px"):
+        for said in ("data_table", "example/two at 402px", "example/two at 820px"):
             self.assertIn(said, defect)

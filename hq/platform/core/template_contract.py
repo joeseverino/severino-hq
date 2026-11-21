@@ -27,7 +27,6 @@ lazy from hq.platform.core.hand_drawn import SHAPES
 lazy from hq.platform.core.included_parts import PARTS
 lazy from hq.platform.core.interface_text import TEMPLATE_COMMENT
 lazy from hq.platform.core.stylesheets import stylesheet
-lazy from hq.platform.core.table_cells import ROLE_CLASSES
 lazy from hq.platform.core.template_parts import Part
 lazy from hq.platform.core.templatetags.value_tags import PresentNode
 
@@ -80,13 +79,11 @@ LIBRARIES = ("static",)
 # missing from both is the host's to add, never the extension's to invent.
 CLASSES = (
     "actions-col",
-    "cell-data",
     "cell-part",
     "cell-whole",
     "compact",
     "count",
     "danger",
-    "data-table",
     "date-col",
     "eyebrow",
     "ghost",
@@ -556,9 +553,7 @@ def _django(engine: Any) -> dict[str, Any]:
 
 
 def _defined_classes() -> set[str]:
-    # A class that declares a part's role in a table is read by the region,
-    # which marks the part for the stylesheet (table_tags.mark_cells).
-    return set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet())) | set(ROLE_CLASSES)
+    return set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet()))
 
 
 def _scripts() -> str:

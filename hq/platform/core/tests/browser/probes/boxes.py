@@ -1,7 +1,7 @@
 """Probes of boxes: what escapes the page, frames, overlaps, targets, the map and the chrome's insets."""
 
 from hq.platform.core.included_parts import TOPOLOGY_MAP
-from hq.platform.core.templatetags.table_tags import TABLE_REGION
+from hq.platform.core.templatetags.table_tags import DATA_TABLE
 from hq.platform.core.tests.browser.probes import Check, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -623,7 +623,7 @@ CHECKS = {
     "frames short of their box": Check(
         (NARROW_FRAMES, SELECTORS["table_scroll"]),
         reader_sees="a table's frame ending short of the box it heads",
-        part=TABLE_REGION,
+        part=DATA_TABLE,
     ),
     "map": Check(
         (MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]]),

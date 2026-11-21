@@ -7,6 +7,7 @@ from hq.platform.core.included_actions import APPROVAL_CARD, ASK, PAGE_ACTION, W
 from hq.platform.core.included_queue import ICON_LINKS, INSIGHT_FACTS, OPERATOR_STEPS, ORIGIN_PANEL, WORK_QUEUE
 from hq.platform.core.part_examples import charts, connection, forms, graph, pages, records, tags
 from hq.platform.core.template_parts import Part, included as _part
+from hq.platform.core.templatetags.table_tags import ROW_ACTIONS, ROW_GROUP, ROW_SELECT, ROW_TOGGLE, TABLE_HEADING
 
 FIELD = Part(
     name="",
@@ -288,6 +289,11 @@ PARTS = (
         through the form's own loop, so no page writes its markup.
         """,
     ),
+    TABLE_HEADING,
+    ROW_GROUP,
+    ROW_ACTIONS,
+    ROW_SELECT,
+    ROW_TOGGLE,
     CHART,
     CADENCE,
     CADENCE_MARK,
@@ -519,8 +525,8 @@ PARTS = (
         `form/lookup`, and `form/lookup-help` with its help and an error.
 
         A form whose fields stand one to a row of a table (a group chosen for each record, a verdict for
-        each request) is the same partial with `table_body` naming the template that draws the table, in
-        its `table_region`. The form lays out no fields of its own, so it adds no box: the table reaches
+        each request) is the same partial with `table_body` naming the template that draws the table, its
+        `{% data_table %}`. The form lays out no fields of its own, so it adds no box: the table reaches
         its section's sides as a table section's does, and the closing row stands under it. The page draws
         it inside the one section that heads what it saves, never with sections of its body standing
         alone, so the closing row is framed with every field it sends. The form
