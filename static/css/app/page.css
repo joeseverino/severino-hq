@@ -527,8 +527,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    as much as from the top, so alone it is centered in a square control, and
    the name's own padding gives it the room a button's words have. */
 .user-menu { --mark-inset: calc((var(--control-size) - 2px - 22px) / 2); position: relative; grid-area: user; justify-self: stretch; max-inline-size: calc(4 * var(--control-size)); }
-.user-menu > button { padding-inline: var(--mark-inset); }
-.user-menu .user-name { padding-inline-start: calc(var(--space-5) - var(--mark-inset)); }
 /* Each fills the control's one line exactly, so the line after it starts
    below the control's edge and is not shown. */
 .user-menu > button > * { flex: none; height: calc(var(--control-size) - 2px); }

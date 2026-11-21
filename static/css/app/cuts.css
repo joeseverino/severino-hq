@@ -65,13 +65,14 @@
   place-content: flex-start center;
   align-items: stretch;
   gap: 0 var(--space-3);
+  padding-inline: var(--mark-inset);
   white-space: nowrap; overflow: hidden;
 }
 /* The name asks for only a few characters of the line and takes what there
    is, up to its own length: a long one is cut short beside the mark rather
    than wrapping away and leaving the control wide and empty. Only when not
    even those few characters fit does it leave the line. */
-.user-menu .user-name { flex: 1 1 5ch; min-width: 0; max-width: max-content; line-height: calc(var(--control-size) - 2px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-menu .user-name { flex: 1 1 5ch; min-width: 0; max-width: max-content; padding-inline-start: calc(var(--space-5) - var(--mark-inset)); line-height: calc(var(--control-size) - 2px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .menu-identity-who strong { color: var(--ink); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* What a row's status says in a word, after its mark, and light. */
 .menu-item-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
