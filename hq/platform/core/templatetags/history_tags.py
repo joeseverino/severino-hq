@@ -57,7 +57,6 @@ HISTORY_TABLE = Part(
     `history.COLUMNS`, without who did each where `hide_who` is set.
     """,
     partial="partials/_history_table.html",
-    pieces=("partials/_history_row.html",),
     function=history_table,
     example=Example('{% history_table "Example history" groups %}', _example),
 )

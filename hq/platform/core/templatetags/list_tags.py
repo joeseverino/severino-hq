@@ -224,7 +224,7 @@ class LineListNode(template.Node):
         # Parts already rendered and escaped by their own template.
         parts = mark_safe(self._parts(context, lead))  # noqa: S308 - rendered and escaped already
         tail = mark_safe(self._parts(context, rest))  # noqa: S308 - rendered and escaped already
-        # The rest shows only on the row's open line (table_cells._HELD).
+        # The rest shows only on the row's open line (table_layout.HELD).
         if kind:
             css = KINDS[kind].css
             more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
