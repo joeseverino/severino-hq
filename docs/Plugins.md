@@ -876,38 +876,41 @@ declared. `page_trail` holds the trail's crumbs from `PLUGIN_API_VERSION` 7.
 A block a frame does not list is the host's. An override of it is refused,
 rather than silently ignored the day the frame stops rendering it.
 
-A data table is declared through the table tags, so its shape is in the HTML on
-first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in the box it
-fits, which takes the label as its name only when it scrolls. The region derives the width its columns leave at, by rank,
-from what each column holds (`table_region` in [Shared UI](Shared-UI.md#each-parts-rules)). It draws the empty state in
-place of tables with no row beneath their heads; an `{% if %}` around the
-region says what is missing in the page's own words.
+A data table is declared whole in the view, as an `hq_sdk.tables.DataTable`
+of `TableColumn`s and `Row`s of `Cell`s, and drawn by `{% data_table table %}`,
+so its shape is in the HTML on first paint. No template writes a `<td>` or a
+`<th>`: HQ's template loaders refuse one, as they do each shape the table at
+the end of this section names.
 
-Each column heading is `{% table_heading "Name" "identifier" %}`:
+```python
+def _row(note: Note) -> Row:
+    filed = Cell(f"filed as {note.slug}", shows="more", dot=True)
+    return Row((Cell.of(record_link(note)), Cell(moment=note.written_on, form="day", parts=(filed,))))
 
-| Argument | What it says |
-| --- | --- |
-| The kind | `prose`, `identifier`, `numeric`, `status` or `control`, following from `date-col` or `actions-col` when left out; a `numeric` column's cells align under it with nothing written on them |
-| `drop=` | the order a narrow table lets it go in, never on the column that names the row or a `key-col` |
-| `sort=` | a list sorted on the server |
-| `local_sort=True` | a list sorted on the page, its control drawn only where the table holds two rows to sort |
 
-Where a row can hold anything back (a column that leaves, a long value, a part
-only its open line shows), the region draws each row's toggle, last in the
-cell that names it, and refuses one written there by hand; only a table with
-no headings ends its naming cell with `{% row_toggle %}`. The stylesheet shows
-the toggle only where the row holds something back.
+notes = DataTable("Notes", (TableColumn("Note"), TableColumn("Written")), tuple(map(_row, Note.objects.all())))
+```
 
-A row edited on the page holds `{% row_editor form row.pk label="Correct
-distance" action=url verb="Save distance" distance_miles=row.miles %}` in its
-cell. It draws a link to the page with that row's editor open (`?edit=<key>`).
-On that page the region moves the form into the line beneath the row and
-opens the row, with script or without. `form` is the one form the view
-declares for the table. It is drawn for the open row alone, with the values
-given by field name, or as it was sent when it is bound, and its ids carry
-the row's key. With script the link, the form and its Cancel are answered in the
-table's region. The form posts `next`, the page with the editor closed, for
-the view to return to.
+The table derives the width each column leaves at, by rank, from what it
+holds (`TableColumn(kind=)`: `prose`, `identifier`, `numeric`, `status` or
+`control`), unless one says `drop=`; the column that names the row and a
+`key-col` never leave. A cell says what it holds (a link, an entity, a
+moment, an amount, a state), what follows it on its line (`parts`, each after
+a space or its `dot`) and its lines beneath (`lines`); `shows="more"` keeps a
+part for the row's open line. Where a row holds anything back, the table
+draws its toggle. `region` says what it draws with no rows (`empty`) and the
+box it fits; a table's `rows` or its `groups` of rows stand under its headings.
+
+A row edited on the page declares its editor on the cell
+(`Cell(editor=RowEditor(form, row.pk, label="Correct distance", action=url,
+verb="Save distance", initial={"distance_miles": row.miles}))`). It draws a link
+to the page with that row's editor open (`?edit=<key>`). On that page the
+table moves the form into the line beneath the row and opens the row, with
+script or without. `form` is the one form the view declares for the table. It
+is drawn for the open row alone, with the values given by field name, or as
+it was sent when it is bound, and its ids carry the row's key. With script
+the link, the form and its Cancel are answered in the table's region. The
+form posts `next`, the page with the editor closed, for the view to return to.
 
 A state is `{% status label tone=... %}`, a pill said in sentence case; with
 `pill=False` it is the label in its tone alone, as a figure that says which
@@ -1111,8 +1114,8 @@ in its template:
 HQ draws the one empty state, and the "nothing matches" state of a filtered
 list, from those.
 
-Wrap a `.data-table` in `.table-scroll`. HQ keeps its headings visible through
-long result sets with sticky cells, and the table stays the one semantic and
+The table `{% data_table %}` draws keeps its headings visible through long
+result sets with sticky cells, and the table stays the one semantic and
 interactive source.
 
 ### What a template prints

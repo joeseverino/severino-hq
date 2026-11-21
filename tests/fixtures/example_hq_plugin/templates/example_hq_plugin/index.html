@@ -1,21 +1,8 @@
 {% extends "page.html" %}
 {% block page %}
 {% card element="div" %}{% facts layout="band" size="large" items=example_metrics label="Notes summary" %}{% endcard %}
-{% section "Notes" id="example-notes" count=notes|length %}
-  {% table_region "Notes" %}
-    <table class="data-table">
-      <thead><tr>{% table_heading "Note" "identifier" %}{% table_heading "The registry lists" %}{% table_heading "Look up" "control" hidden=True %}</tr></thead>
-      <tbody>
-        {% for note in notes %}
-        <tr>
-          <td>{% present note.slug %}<code>{{ note.slug }}</code>{% endpresent %}</td>
-          <td>{% if note.entries %}{% list kind="dots" %}{% for entry in note.entries %}<li>{{ entry }}</li>{% endfor %}{% endlist %}{% else %}{% muted %}Not looked up{% endmuted %}{% endif %}</td>
-          <td>{% include "partials/_ask.html" with ask=note.lookup %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endtable_region %}
+{% section "Notes" id="example-notes" count=notes.rows|length %}
+  {% data_table notes %}
   {% list kind="prose" numbered=True %}<li>An example note is looked up in the registry.</li><li>Its entries are listed beside it.</li>{% endlist %}
 {% endsection %}
 {% endblock %}

@@ -26,7 +26,7 @@ from hq.platform.core.table_cells import (
     Position,
     Span,
 )
-from hq.platform.core.template_parts import Example, Part, slotted
+from hq.platform.core.template_parts import Example, Part, answers, slotted
 lazy from hq.platform.core.drawn_tables import drawn
 
 register = template.Library()
@@ -676,6 +676,14 @@ def chart_table(chart: Any) -> DataTable:
     )
     rows = tuple(Row((Cell(row.label, header=True), *map(Cell, row.cells))) for row in chart.table_rows)
     return DataTable(chart.title, columns, rows, region={"chart": True})
+
+
+@answers(register)
+def cadence_table(matrix: Any, *, label: str = "", compact: bool = False) -> DataTable:
+    """``{% cadence_table matrix label=... compact=... as table %}``: a
+    cadence matrix as its table of marks (``CadenceMatrix.table``)."""
+
+    return matrix.table(label or "", compact=bool(compact))
 
 
 def data_table(

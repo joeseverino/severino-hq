@@ -56,7 +56,7 @@ lazy from hq.platform.application.request_path import request_path
 lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
-from . import design_gallery
+from . import agent_tables, design_gallery
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
 lazy from .network import client_ip
@@ -356,8 +356,9 @@ class AgentPolicyView(PageMixin, TemplateView):
         # The endpoint is read for its own part, or for the whole page asked
         # with it open; another part asked at that address draws without it.
         if part == self.ENDPOINT_PART or (not part and "endpoint" in self.request.GET):
-            context["endpoint"] = listing.endpoint()
+            context["endpoint"] = endpoint = listing.endpoint()
             context["endpoint_read"] = True
+            context["offers"] = agent_tables.offers(endpoint) if endpoint else None
         if part == self.ENDPOINT_PART:
             return context
         # The rules are drawn as a form only for whoever may save them, and
@@ -369,17 +370,17 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["standings"] = standings = agent_activity.standings(self.request.user)
         # Each row with what may be done to it, which returns to this view.
         here = self.request.get_full_path()
-        context["agent_rows"] = [(standing, agent_actions(standing, here)) for standing in standings]
-        context["prompts"] = [
-            (prompt, device_actions(prompt.device, here)) for prompt in agent_activity.prompts(standings)
-        ]
+        context["agents"] = agent_tables.agents([(standing, agent_actions(standing, here)) for standing in standings])
+        prompts = [(prompt, device_actions(prompt.device, here)) for prompt in agent_activity.prompts(standings)]
+        context["prompts"] = agent_tables.prompts(prompts) if prompts else None
         # The steps for adding an agent start open until one has connected.
         context["setup_open"] = not standings
-        context["device_groups"] = [
+        device_groups = [
             (standing, [(device, device_actions(device, here)) for device in standing.devices])
             for standing in standings
             if standing.devices
         ]
+        context["device_groups"] = agent_tables.devices(device_groups) if device_groups else None
         context["recent_days"] = agent_activity.RECENT.days
         # Each agent's latest events, drawn as the audit log draws its rows.
         context["agent_events"] = tuple(
@@ -394,7 +395,8 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
-        context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
+        own = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
+        context["devices"] = agent_tables.own_devices(own)
         context["access_action"] = access_action(agent_access.agents_paused())
         if runs_here(SET_OWN_DEVICE):
             context["device_form"] = own_device_form(initial={"next": here})

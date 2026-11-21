@@ -224,7 +224,9 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
     # value a narrow box clamps, a part only the open line shows, a fold)
     # keeps the gutter in the column that names each row, so every such
     # row carries the toggle that opens what left.
-    gutter = named if heads and (levels or any(_holds_back(row, kinds, named) for row in records)) else None
+    # A table with no headings keeps it in its first column, where each row is named.
+    holds = any(_holds_back(row, kinds, named) for row in records)
+    gutter = (named if levels or holds else None) if heads else (0 if holds else None)
     if heads and any(cell.toggled and not cell.folds for row in records for cell in row.cells):
         raise ValueError("A row's toggle in a table with headings is the region's to draw.")
     opens = False
@@ -242,10 +244,6 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
         _name(row, kinds, named)
         if gutter is not None:
             _gutter(row, gutter)
-        elif row.section == "tbody" and not any(cell.toggled for cell in row.cells) and _moves(row):
-            # What a row of a table with no headings moves to its open
-            # line is reached by its toggle, which its first cell holds.
-            _gutter(row, 0)
         if row.section == "tbody" and row.ends:
             shown, held = _detail(row, width, levels)
             opens = opens or shown
@@ -319,8 +317,9 @@ def _body_marks(cell: CellFacts, kind: str, *, body: bool, toggled: bool) -> lis
                 _box(cell, kind, "cell-clamp")
         # A fold's toggle is drawn before its head's value, which the
         # value's span (ended at a toggle) would leave out, and a field
-        # fills its column, which a short value's box would narrow.
-        elif cell.longest <= SHORT and cell.closes and not cell.folds and not cell.fields:
+        # fills its column, which a short value's box would narrow, as it
+        # would the room a gist takes on its line.
+        elif cell.longest <= SHORT and cell.closes and not (cell.folds or cell.fields or GIST in cell.holds):
             _box(cell, kind, "cell-short")
     # A state is one box (`cell-state`, tables.css) that asks its column for
     # its line up to its share and wraps past it, where it holds one item: a
@@ -548,12 +547,6 @@ def _finished(cell: CellFacts, kind: str) -> list[Moved]:
     """Each part of ``kind`` the cell moves whose end was read."""
 
     return [part for part in cell.moved if part.finished and part.kind == kind]
-
-
-def _moves(row: RowFacts) -> bool:
-    """Whether the row moves a part to its open line (`row-below`)."""
-
-    return any(_finished(cell, "below") for cell in row.cells)
 
 
 def _kinds(heads: list[list[CellFacts]], body: list[RowFacts]) -> dict[int, str]:

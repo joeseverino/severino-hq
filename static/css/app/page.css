@@ -108,7 +108,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    run inside a line of text (a summary, a statement) is a span of spans, the
    same run in phrasing content where a list is not allowed. */
 /* A run of links wraps onto lines a target tall (`--target-min`), so a link is never pressed for the one above it; in a table the row keeps its height, and a cell spaces its own links (figures.css). */
-.dot-list:has(a):not(td *) { line-height: var(--target-min); }
+.dot-list:has(a):not(td *, th *) { line-height: var(--target-min); }
 /* The dot stands in the gap before its part, so where the run wraps, the dot
    that would open a line lies outside the run and is clipped: a line never
    starts with a separator. */

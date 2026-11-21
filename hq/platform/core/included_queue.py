@@ -8,8 +8,8 @@ from hq.platform.core.template_parts import included as _part
 WORK_QUEUE = _part(
     "work_queue",
     "What waits on the operator, each row what wants doing and why, or that nothing does.",
-    *("attention-clear", "attention-reason", "is-mark", "row-gist", "row-line"),
-    pieces=("partials/_queue_entries.html", "partials/_queue_rows.html", "partials/_urgency_pill.html"),
+    *("attention-clear", "is-mark"),
+    pieces=("partials/_urgency_pill.html",),
     public=True,
     rules="""
     **A queue row says what is wrong and holds what fixes it.** The queue is named "Needs you"
@@ -17,7 +17,7 @@ WORK_QUEUE = _part(
     buttons share one edge. The queue page, the findings page, the dashboard's short queue, a thing's
     problems, the checks a subject does not meet, the steps a request contradicts and a domain's own
     attention list all use one projection (`hq/platform/application/decisions.py`). They draw it as
-    one table (its rows `partials/_queue_rows.html`). A page never draws a list of its own (the
+    one declared table (its rows `queue_table`). A page never draws a list of its own (the
     `list` shape of `hand_drawn.SHAPES`). A row is a table row as any other: its words in the cell that names
     it, what it offers in `{% row_actions %}`, so it stands at the table's own density and gives way
     as every table does. It reads, in order:
@@ -63,7 +63,7 @@ WORK_QUEUE = _part(
     open.
 
     Several items of one family (`Insight(family=...)`) fold under a row saying how bad, what kind
-    and how many, which opens to their rows: on the queue page (`partials/_queue_entries.html`) and
+    and how many, which opens to their rows: on the queue page (`queue_table`) and
     wherever a thing's problems are drawn (`fold`). The findings page keeps each row its own, its
     filter being by rule.
 

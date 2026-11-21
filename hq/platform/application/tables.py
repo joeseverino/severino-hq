@@ -17,7 +17,7 @@ from hq.platform.core.table_layout import SAYS_NOTHING, leaving_order
 lazy from hq.platform.core.included_parts import METER, READING_AGE
 lazy from hq.platform.core.templatetags import status_tags, table_tags
 
-from .display_words import display
+from .display_words import QUOTED, display
 lazy from .freshness import last_read
 
 if TYPE_CHECKING:
@@ -207,10 +207,16 @@ class Cell:
     # its box cuts, read whole on a press (``{% cell_line %}``).
     readout: bool = False
     cut: bool = False
+    # A record's own words in place of ``text``, shown as written, each
+    # backticked span code (``code_spans``): a server's own description.
+    quoted: str = field(default="", metadata=QUOTED)
     # Words after it, inside its link and its bold: what follows a key that
     # names the row ("and 3 more").
     after: str = ""
     shows: Shows = ""
+    # Its line is its row's title, bold, each mark after it a box of its own
+    # (`row-line`), as a line holding a gist always is.
+    lead: bool = False
     # A moment, drawn as ``when`` draws it in ``form``, or an amount of money.
     moment: datetime | date | None = None
     form: str = ""
@@ -251,7 +257,7 @@ class Cell:
 
     def __post_init__(self) -> None:
         held_data(self.data, "A cell")
-        values = [bool(self.text or self.url or self.link), self.moment is not None, self.amount is not None]
+        values = [bool(self.text or self.quoted or self.url or self.link), self.moment is not None, self.amount is not None]
         values += [self.status is not None, self.piece is not None]
         if sum(values) + (self.field is not None) + (self.editor is not None) > 1:
             raise ValueError(
@@ -303,7 +309,7 @@ class Cell:
         """Whether it shows nothing: no value, nothing after it, nothing beneath."""
 
         return (
-            not (self.url or self.link or not SAYS_NOTHING.fullmatch(self.text))
+            not (self.url or self.link or self.quoted or not SAYS_NOTHING.fullmatch(self.text))
             and self.moment is None
             and self.amount is None
             and self.count is None
@@ -454,6 +460,9 @@ class DataTable:
     sorted_by: str | None = None
     # Its rows stand in an order of their own, which no heading changes.
     keeps_order: bool = False
+    # False for a table whose rows are the rest of what a part says (the
+    # queue): no heading names its columns, which its rows declare.
+    headed: bool = True
     # The row of its totals, drawn last, in its ``tfoot``.
     footer: Row | None = None
     # What ``{% table_region %}`` takes beside its label: its box, and what

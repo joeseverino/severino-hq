@@ -15,7 +15,7 @@ from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece,
 from hq.platform.core.held_values import format_html
 from hq.platform.core.template_parts import enclosed
 from hq.platform.core.templatetags.frame_tags import muted
-from hq.platform.core.templatetags.line_breaks import breakable
+from hq.platform.core.templatetags.line_breaks import breakable, code_spans
 from hq.platform.core.templatetags.list_tags import LINE_LEAD, LIST, line_run
 from hq.platform.core.templatetags.status_tags import status
 from hq.platform.core.templatetags.table_tags import LINE_FRAME, data_attributes, table_heading
@@ -110,7 +110,7 @@ def drawn(table: DataTable, context: Any) -> dict[str, Any]:
     footer = _row(table, table.footer, context, width) if table.footer else None
     if footer:
         footer.facts.section = "tfoot"
-    facts = [RowFacts("thead", cells=[facts for _, facts in headings])]
+    facts = [RowFacts("thead", cells=[facts for _, facts in headings])] if table.headed else []
     facts += [row.facts for group in groups for row in group.rows]
     facts += [footer.facts] if footer else []
     laid = lay_out(facts, sorts=table.sorted_by is None and not table.keeps_order and not table.region["chart"])
@@ -128,7 +128,7 @@ def drawn(table: DataTable, context: Any) -> dict[str, Any]:
     sorting = {"table": {"selected_sort": table.sorted_by or ""}}
     return {
         "table": table,
-        "headings": [_heading(sorting, column, facts, laid) for column, facts in headings],
+        "headings": [_heading(sorting, column, facts, laid) for column, facts in headings] if table.headed else [],
         "groups": groups,
         "footer": footer,
         "marks": mark_safe("".join(laid.marks)) + data_attributes(table.data),  # noqa: S308 - the layout's own attributes
@@ -321,7 +321,15 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         said=[not cell.says_nothing] + [True] * (len(tops) - 1),
         loose=False,
     )
-    return DrawnCell(cell, facts, role=cell.role, editor=editor, quiet=cell.blank)
+    # A role whose words are one link is that link's, which no rule for a link among words reaches.
+    role = "" if _linked(cell) else cell.role
+    return DrawnCell(cell, facts, role=role, editor=editor, quiet=cell.blank)
+
+
+def _linked(value: Cell) -> bool:
+    """Whether a value's words are one plain link of HQ's."""
+
+    return bool(value.url) and not (value.link or value.external or value.tone or value.cut or value.name)
 
 
 def _length(cell: Cell, *, after: bool = False) -> int:
@@ -337,7 +345,7 @@ def _length(cell: Cell, *, after: bool = False) -> int:
     elif cell.amount is not None:
         words = str(money(cell.amount))
     else:
-        words = (cell.link.label if cell.link else cell.text) + cell.after
+        words = (cell.link.label if cell.link else cell.text or cell.quoted) + cell.after
     shown = 0 if SAYS_NOTHING.fullmatch(words) else len(" ".join(words.split()))
     return shown + (_DOT if cell.dot else int(after))
 
@@ -421,7 +429,7 @@ def _content(cell: DrawnCell, drawing: _Drawing) -> SafeString:
     else:
         drawn += [_after(part, cell, drawing) for part in value.parts]
     # A gist takes the room its line leaves (cuts.css), so the line is a box of its own.
-    if any(each.shows == "gist" for each in (value, *value.parts)):
+    if value.lead or any(each.shows == "gist" for each in (value, *value.parts)):
         drawn = [_safe('<div class="row-line">', *drawn, "</div>")]
     if value.lines:
         drawn.append(_block(value.lines, cell, drawing))
@@ -429,11 +437,20 @@ def _content(cell: DrawnCell, drawing: _Drawing) -> SafeString:
 
 
 def _block(lines: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing) -> SafeString:
-    """Lines read down, each one value and its parts, a muted one muted whole."""
+    """Lines read down, each one value and its parts, a muted one muted whole;
+    a ``fit`` line is a dots list of its own, each part an item."""
 
+    blocks: list[SafeString] = []
     items = []
     for line in lines:
         if line.says_nothing:
+            continue
+        if line.fit:
+            if items:
+                blocks.append(enclosed(LIST, _safe(*items)))
+                items = []
+            run = _safe(*(_safe("<li>", _value(part, cell, drawing, own=False), "</li>") for part in line.parts))
+            blocks.append(enclosed(LIST, run, kind="dots", muted=line.muted))
             continue
         shown = f' class="{SHOWN[line.shows]}"' if line.shows else ""
         drawn = _value(line, cell, drawing, own=False, whole=True, hushed=line.muted)
@@ -441,7 +458,9 @@ def _block(lines: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing) -
         items.append(
             _safe("<li", shown, data_attributes(line.data), ">", muted(drawn) if line.muted else drawn, "</li>")
         )
-    return enclosed(LIST, _safe(*items))
+    if items or not blocks:
+        blocks.append(enclosed(LIST, _safe(*items)))
+    return _safe(*blocks)
 
 
 def _after(part: Cell, cell: DrawnCell | None, drawing: _Drawing, *, hushed: bool = False) -> SafeString:
@@ -490,7 +509,7 @@ def _value(
         drawn = _safe('<span class="', SHOWN[value.shows], '">', drawn, "</span>")
     if value.count is not None:
         drawn = _safe(drawn, ' <span class="count">', breakable(value.count), "</span>")
-    if value.data and not (whole or gist):
+    if value.data and not (whole or gist or (value.role and _linked(value))):
         drawn = _safe("<span", data_attributes(value.data), ">", drawn, "</span>")
     return drawn
 
@@ -504,6 +523,9 @@ def _named(value: Cell, cell: DrawnCell | None, drawing: _Drawing, *, own: bool)
         return _safe(format_html('<a href="{}">', value.url), "<strong", names, ">", _text(value), "</strong></a>")
     if value.name:
         return _safe("<strong", names, ">", _words(value, cell, drawing), "</strong>")
+    if value.role and _linked(value):
+        opened = format_html('<a data-cell="{}" href="{}"', value.role, value.url)
+        return _safe(opened, data_attributes(value.data), ">", _text(value), "</a>")
     if value.role and not own:
         return _safe(format_html('<span data-cell="{}">', value.role), _words(value, cell, drawing), "</span>")
     return _words(value, cell, drawing)
@@ -534,7 +556,7 @@ def _words(value: Cell, cell: DrawnCell | None, drawing: _Drawing) -> SafeString
         return when(value.moment, value.form)
     if value.amount is not None:
         return breakable(money(value.amount))
-    if value.text:
+    if value.text or value.quoted:
         return _text(value)
     if cell is not None and cell.cell.says_nothing and not cell.quiet:
         return empty_value()
@@ -542,4 +564,5 @@ def _words(value: Cell, cell: DrawnCell | None, drawing: _Drawing) -> SafeString
 
 
 def _text(value: Cell) -> SafeString:
-    return _safe(readout(value.text) if value.readout else breakable(value.text), breakable(value.after))
+    said = code_spans(value.quoted) if value.quoted else readout(value.text) if value.readout else breakable(value.text)
+    return _safe(said, breakable(value.after))

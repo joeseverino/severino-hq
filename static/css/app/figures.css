@@ -418,9 +418,9 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 /* A list read down (`{% list %}`): items read down, each its parts inline. */
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
 /* In a table's cell its items are the cell's own lines, read at the row's rhythm: one that opens the cell starts on the row's first line, and one that holds something to press is a target tall, so links one to a line are a target apart. Each wraps as its cell does, so a state's lines keep theirs as the state does (tables.css), where a list's items in a cell otherwise wrap. */
-.data-table td .stack-list { gap: 0; margin: 0; }
-.data-table td .stack-list > li { text-wrap-mode: inherit; }
-.data-table td .stack-list > li:has(a[href], [tabindex]) { line-height: var(--target-min); }
+.data-table :is(td, th) .stack-list { gap: 0; margin: 0; }
+.data-table :is(td, th) .stack-list > li { text-wrap-mode: inherit; }
+.data-table :is(td, th) .stack-list > li:has(a[href], [tabindex]) { line-height: var(--target-min); }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
 

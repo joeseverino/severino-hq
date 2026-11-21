@@ -48,6 +48,12 @@ CADENCE = _part(
     public=True,
     example=charts.CADENCE,
 )
+CADENCE_MARK = _part(
+    "cadence_mark",
+    "One period of a cadence matrix's row, given `week`: its mark and what it says.",
+    draws=(CADENCE,),
+    example=charts.CADENCE_MARK,
+)
 MONTH_GRID = _part(
     "month_grid",
     "A calendar month as a grid of weeks, each day its events, a span across the days it covers.",
@@ -284,6 +290,7 @@ PARTS = (
     ),
     CHART,
     CADENCE,
+    CADENCE_MARK,
     MONTH_GRID,
     WEEK_PLAN,
     ASK,
@@ -320,8 +327,7 @@ PARTS = (
     _part(
         "cadence_matrix",
         "Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`.",
-        *("cadence-cell", "cadence-detail", "cadence-period", "cadence-total"),
-        draws=(CADENCE,),
+        draws=(CADENCE, CADENCE_MARK),
         public=True,
         example=charts.CADENCE_MATRIX,
     ),

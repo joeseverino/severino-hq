@@ -22,7 +22,7 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_allocation.html` | `allocation` | `legend`, `stacked` | Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`. |
 | `partials/_ask.html` | `ask` | `extra`, `heard` | A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`. |
 | `partials/_cadence.html` | `cadence` | nothing | Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`. |
-| `partials/_cadence_matrix.html` | `matrix` | `compact`, `label` | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
+| `partials/_cadence_matrix.html` | `compact`, `label`, `matrix` | nothing | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
 | `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`. |
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
 | `partials/_document_picture.html` | `alt`, `src` | nothing | A picture of a document (a scan, a photo of a receipt), held in a page's shape before it arrives. |
@@ -43,7 +43,7 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_toggle_set.html` | `legend`, `set` | `name`, `toggles` | A set of toggles that filter what a view shows. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
-| `partials/_work_queue.html` | nothing | `empty`, `fold`, `items` | What waits on the operator, each row what wants doing and why, or that nothing does. |
+| `partials/_work_queue.html` | `fold`, `glance`, `grouped`, `here`, `triage` | `empty`, `items` | What waits on the operator, each row what wants doing and why, or that nothing does. |
 
 | Tag | Later parts | What it is | Written |
 | --- | --- | --- | --- |
@@ -1143,7 +1143,7 @@ wherever it appears. Every list of problems is drawn by it, so every row's urgen
 buttons share one edge. The queue page, the findings page, the dashboard's short queue, a thing's
 problems, the checks a subject does not meet, the steps a request contradicts and a domain's own
 attention list all use one projection (`hq/platform/application/decisions.py`). They draw it as
-one table (its rows `partials/_queue_rows.html`). A page never draws a list of its own (the
+one declared table (its rows `queue_table`). A page never draws a list of its own (the
 `list` shape of `hand_drawn.SHAPES`). A row is a table row as any other: its words in the cell that names
 it, what it offers in `{% row_actions %}`, so it stands at the table's own density and gives way
 as every table does. It reads, in order:
@@ -1189,7 +1189,7 @@ A dismissed row is its title and the way back. A link to a row (`/action-items/#
 open.
 
 Several items of one family (`Insight(family=...)`) fold under a row saying how bad, what kind
-and how many, which opens to their rows: on the queue page (`partials/_queue_entries.html`) and
+and how many, which opens to their rows: on the queue page (`queue_table`) and
 wherever a thing's problems are drawn (`fold`). The findings page keeps each row its own, its
 filter being by rule.
 
