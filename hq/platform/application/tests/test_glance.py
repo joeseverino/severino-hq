@@ -317,30 +317,17 @@ class DashboardGlanceTests(TestCase):
         # The glance reads the one machine it was asked about, never the rest.
         assert_subject_cost_does_not_grow(self, sizes=(1, 20), arrange=arrange, draw=lambda _count: dashboard_panels())
 
-    def test_a_reading_ages_into_due_and_is_out_of_date_only_when_its_ask_goes_unanswered(self):
-        """Due at one refresh interval, however old; out of date only once a
-        refresh asked for is not answered in time, or the last one failed."""
-
+    def test_a_panel_whose_refresh_goes_unanswered_is_drawn_out_of_date(self):
+        # When a reading is due or out of date is test_freshness's.
         now = timezone.now()
-        within = cadence(DASHBOARD_GLANCE).stale_after
-        for age, asked, failed, due, stale in (
-            (timedelta(minutes=4), None, False, False, False),
-            (timedelta(minutes=5), None, False, True, False),
-            (timedelta(days=20), None, False, True, False),
-            (timedelta(days=20), within / 2, False, True, False),
-            (timedelta(days=20), within, False, True, True),
-            (timedelta(minutes=1), None, True, True, True),
-        ):
-            with self.subTest(age=age, asked=asked, failed=failed):
-                DashboardRefreshRequest.objects.all().delete()
-                if asked is not None:
-                    DashboardRefreshRequest.objects.create(panel_id="weather", requested_at=now - asked)
-                reading = {**CLEAR, "refresh_failed": "timeout"} if failed else CLEAR
-                readings.record(readings.weather(POINT), reading, observed_at=now - age)
-                weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
-                html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [weather]})
-                self.assertEqual((weather["due"], weather["outdated"]), (due, stale))
-                self.assertEqual('data-reading-age="stale"' in html, stale)
+        DashboardRefreshRequest.objects.create(
+            panel_id="weather", requested_at=now - cadence(DASHBOARD_GLANCE).stale_after
+        )
+        readings.record(readings.weather(POINT), CLEAR, observed_at=now - timedelta(days=1))
+        weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
+        html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [weather]})
+
+        self.assertIn('data-reading-age="stale"', html)
 
     def test_with_no_machine_chosen_no_panel_is_drawn(self):
         # Get started's "Choose a machine" step asks instead; the header does

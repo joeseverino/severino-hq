@@ -488,16 +488,12 @@ class StaleGlanceTests(TestCase):
         # Aged while nobody looked: shown with its age, in its place.
         panels = dashboard_panels()
         self.assertEqual(panels[0]["id"], machine)
-        self.assertFalse(any(panel["outdated"] for panel in panels))
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
         self.assertTrue(elements(html, "time"))
 
         # Its refresh went unanswered: out of date, and it steps aside.
         DashboardRefreshRequest.objects.create(panel_id=machine, requested_at=timezone.now() - timedelta(minutes=5))
-        panels = dashboard_panels()
-        self.assertEqual([panel["id"] for panel in panels][-1], machine)
-        self.assertTrue(panels[-1]["outdated"])
-        self.assertFalse(panels[0]["outdated"])
+        self.assertEqual([panel["id"] for panel in dashboard_panels()][-1], machine)
 
 
 class ActionItemTests(TestCase):
