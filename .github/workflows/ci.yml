@@ -25,7 +25,9 @@ on:
 permissions:
   contents: read
 
-# A run restores the caches and saves none; a job that saves says so.
+# A pull request's run would save by default, into its own scope; here it
+# only restores, and compose.yml, called from it, gets no more. Caches saves
+# on a push.
 cache-mode: read
 
 concurrency:
@@ -301,7 +303,7 @@ jobs:
   caches:
     name: Caches
     if: github.event_name == 'push'
-    # The one job of a push that saves; a pull request's runs only restore.
+    # Above the run's read, so a push saves here alone.
     cache-mode: write
     runs-on: ubuntu-26.04
     timeout-minutes: 20

@@ -17,14 +17,9 @@ on:
 permissions:
   contents: read
 
-# A run restores the caches and saves none; a job that saves says so.
-cache-mode: read
-
 jobs:
   fuzz:
     name: Fuzz
-    # Saves the corpus it learned.
-    cache-mode: write
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:

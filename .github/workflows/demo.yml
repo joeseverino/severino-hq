@@ -14,9 +14,6 @@ on:
 permissions:
   contents: read
 
-# A run restores the caches and saves none; a job that saves says so.
-cache-mode: read
-
 # One publish at a time; a newer push waits for the current one.
 concurrency:
   group: demo
