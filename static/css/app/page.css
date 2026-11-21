@@ -39,10 +39,10 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 a:is(:hover, :focus-visible) > .muted { color: inherit; }
 
 /* One head at every width. The copy steps aside (`display: contents`) so its
-   parts can be ordered: the trail on its own row, the title and the controls
-   sharing the next row while they fit (the browser decides, not a count of
-   controls), and the lede the full width under both. Actions wrap under the
-   title only when they cannot fit beside it. */
+   parts can be ordered: the controls end the head's first line, the trail's
+   where it has one, the name's where not, and everything after that line
+   (the title, what the page says beside it, the lede) has the head's whole
+   width, never the room the controls leave. */
 /* A container, so its controls fold by the head's width (surfaces.css). */
 .page-head { container: page-head / inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
 .page-head-copy { display: contents; }
@@ -54,15 +54,22 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .page-trail-row { display: flex; flex-wrap: wrap; align-items: baseline; }
 .page-trail-row:has(> .visit-slot)::after { content: ""; flex: 1000 0 0; inline-size: var(--space-6); max-inline-size: var(--space-6); }
 .page-trail-row > :not(.visit-slot) { flex: 1 1 0; }
-.page-head-copy > .page-trail-row { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
-/* The title yields width before the controls do: a long name wraps in its
-   own column at its spaces and seams. The controls take a row of their own
-   only when the title's widest word or identifier would not fit beside them,
-   never splitting it. */
-.page-head .page-title-row { flex: 1 1 0; order: 1; max-width: 100%; }
+/* The trail yields width to the controls beside it, wrapping between its steps. */
+.page-head-copy > .page-trail-row { flex: 1 1 0; order: 0; min-width: 0; margin-bottom: calc(-1 * var(--space-2)); }
+.page-head > .page-actions { order: 0; }
+/* Under the trail, the title's line takes a line of its own. */
+.page-head .page-title-row { flex: 1 1 100%; order: 1; }
+/* With no trail, the name ends that first line beside the controls, and what
+   the page says beside the title takes the line under both. The name yields
+   width before the controls do: a long one wraps in its own column at its
+   spaces and seams, and the controls take a row of their own only when its
+   widest word or identifier would not fit beside them, never splitting it. */
+.page-head-copy:not(.is-column) > .page-title-row:first-child { display: contents; }
+.page-head-copy:not(.is-column) > .page-title-row:first-child > * { flex: 1 1 100%; order: 2; }
+.page-head-copy:not(.is-column) > .page-title-row:first-child > .page-name { flex: 1 1 0; order: 0; max-width: 100%; }
+.page-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 /* Its width is its whole name, so the controls give way rather than split it. */
 .page-head h1 .token { width: max-content; }
-.page-head > .page-actions { order: 2; }
 /* Full width so it always takes its own row, under the title and controls. */
 .page-head .page-lede { flex: 1 1 100%; order: 3; margin-bottom: 0; margin-top: calc(-1 * var(--space-1)); }
 /* A line of facts is short things side by side, which read best on as few
@@ -181,12 +188,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 :root:has(.page-nav) { --page-nav-height: calc(var(--page-nav-link-size) + 2 * var(--space-4) + 1px); }
 /* Whatever a link lands on stops under the row, whatever draws it. */
 :where(.content [id]) { scroll-margin-block-start: var(--page-nav-height); }
-/* Most heads wrap their controls in .page-actions; list pages hang a single
-   control straight off the head. Both should sit at the far edge, otherwise
-   the same button lands beside the title on one page and against the right
-   margin on the next. */
-.page-head > .btn, .page-head > form { margin-left: auto; }
-.page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
 
 /* ── Buttons ────────────────────────────────────────────────────── */
 

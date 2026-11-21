@@ -20,8 +20,7 @@ and what needs you; with no facts line, the aside stays on the title's line.
   <div class="page-head-copy{% if page_aside and page_facts %} is-column{% endif %}">
     {% if page.trail or page_dateline or page_visit %}<div class="page-trail-row">{% if page.trail %}<div class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</div>{% elif page_dateline %}<p class="eyebrow">{{ page_dateline|when:"dateline" }}</p>{% endif %}{% if page_visit %}{% include "partials/_visit_refresh.html#note" %}{% endif %}</div>{% endif %}
     <div class="page-title-row">
-      <h1>{{ page.title|breakable }}</h1>
-      {% for badge in page_badges %}{% status badge.label tone=badge.tone title=badge.title %}{% endfor %}
+      <div class="page-name"><h1>{{ page.title|breakable }}</h1>{% for badge in page_badges %}{% status badge.label tone=badge.tone title=badge.title %}{% endfor %}</div>
       {% if page_aside and not page_facts %}{% include page_aside %}{% endif %}
     </div>
     {% if page.lede %}<p class="page-lede">{{ page.lede|breakable }}</p>{% endif %}
@@ -34,8 +33,8 @@ and what needs you; with no facts line, the aside stays on the title's line.
     `page_beside` names, where a decision takes several side by side), and a
     menu holding a copy of each of those but the lead, then every other one.
     The stylesheet shows the copies only where the head is too narrow for the
-    controls beside its title, and folds those in. So a head is always one
-    short line: a toolbar wrapped between a title and its lede reads as neither.
+    controls, and folds those in. They end the head's first line (page.css),
+    so a toolbar never stands between a title and its lede.
     {% endcomment %}
     {% head_split page.actions as split %}
     <div class="page-actions"{% if split.0|length > 2 %} data-many{% endif %}>

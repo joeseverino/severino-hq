@@ -70,11 +70,12 @@ PAGE_HEAD = _part(
     "page_head",
     "A page's head: its trail, its title, its facts and its actions, the overflow of them in a menu.",
     *("is-column", "overflow-menu", "overflow-menu-copies", "overflow-menu-panel", "page-actions", "page-facts"),
-    *("page-head", "page-head-copy", "page-title-row", "page-trail", "page-trail-row"),
+    *("page-head", "page-head-copy", "page-name", "page-title-row", "page-trail", "page-trail-row"),
     rules="""
-    **One head.** Trail, title, controls, lede, laid out the same at every width. The title and its
-    controls share a row (the title wraps before the controls move); the lede runs the full width
-    under both. Two controls stand beside the title at every width, the lead and the next the page
+    **One head.** Trail, title, controls, lede, laid out the same at every width. The controls end
+    the head's first line, beside the trail, or beside the title where there is no trail (the title
+    wraps before the controls move). Every line after it has the head's whole width: what the page
+    says beside its title and the lede never share a line with the controls. Two controls stand beside the title at every width, the lead and the next the page
     names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
     the head) folds the second in too. The lead is chosen by what each control is for, never by where
     it stands: not a destructive one while another is offered, then one that can be pressed, then the

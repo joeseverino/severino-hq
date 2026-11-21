@@ -385,7 +385,7 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) :is(.fact-value, .fact-label) { color: var(--ink); }
 
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
-.page-title-row > h1 { margin: 0; max-width: 100%; }
+.page-name > h1 { margin: 0; max-width: 100%; }
 /* The line of facts a page states on its title's line (`page_aside`), a quiet dot list, is set small. */
 :is(.page-head, .page-title-row) > .dot-list { font-size: var(--text-sm); }
 
