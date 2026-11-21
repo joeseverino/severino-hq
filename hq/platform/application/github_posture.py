@@ -86,13 +86,26 @@ def _setting(name: str, *, expected: Any) -> Callable[[Repository], Reading]:
     return _on_access(lambda _repo, access: access.get(name) == expected)
 
 
-def _no_variables(repo: Repository) -> Reading:
-    variables = repo.record.get("variables")
-    return (
-        Reading.unavailable("Its Actions variables have not been read")
-        if variables is None
-        else Reading.judged(not variables)
-    )
+# A variable is public configuration, printed unmasked; one named for a
+# credential is a secret kept in the wrong place. A name that says it is public
+# (a site key, a publishable key) is what it says.
+_SECRET_WORDS = frozenset({"TOKEN", "SECRET", "PASSWORD", "PASSPHRASE", "PRIVATE", "CREDENTIAL", "CREDENTIALS", "KEY"})
+_PUBLIC_WORDS = frozenset({"PUBLIC", "PUBLISHABLE"})
+
+
+def _secret_named(name: str) -> bool:
+    words = set(name.upper().replace("-", "_").split("_"))
+    return name in WIRED_SECRETS or (bool(words & _SECRET_WORDS) and not words & _PUBLIC_WORDS)
+
+
+def _secrets_in_variables(repo: Repository) -> tuple[str, ...]:
+    return tuple(name for name in repo.record.get("variables") or () if _secret_named(name))
+
+
+def _no_secret_variables(repo: Repository) -> Reading:
+    if repo.record.get("variables") is None:
+        return Reading.unavailable("Its Actions variables have not been read")
+    return Reading.judged(not _secrets_in_variables(repo))
 
 
 def _rule(name: str) -> Callable[[Repository], Reading]:
@@ -197,14 +210,15 @@ STANDARD: tuple[Check, ...] = (
         breaks=({"access": {"vulnerability_alerts": False}},),
     ),
     Check(
-        "no-variables",
-        "No Actions variables",
+        "no-secret-variables",
+        "No secret is kept in an Actions variable",
         BOTH,
-        _no_variables,
-        "A variable is state outside the repository that changes what a build does.",
-        "Move it into the workflow or a secret, or delete it.",
-        unmet="Actions variables are set",
-        breaks=({"variables": ["DEPLOY_TARGET"]}, {"variables": [APP_CLIENT_ID]}),
+        _no_secret_variables,
+        "A variable's value is printed unmasked in workflow logs; a secret's is masked.",
+        "Copy it into a secret of the same name, then delete the variable once its workflows read the secret.",
+        unmet="A secret is kept in an Actions variable",
+        breaks=({"variables": ["DEPLOY_TOKEN"]}, {"variables": [APP_CLIENT_ID]}),
+        keeps=({"variables": ["DEPLOY_TARGET", "PUBLIC_SITE_KEY"]},),
     ),
     Check(
         "pull-request-required",
@@ -315,15 +329,12 @@ def _idle_keys(repo: Repository) -> Runs:
 
 
 def _variables(repo: Repository) -> Runs:
-    """Each variable's commands. One the host's wiring declares as a secret moves
-    into a secret first, and goes only once the workflows read the secret."""
+    """Each secret kept as a variable moves into a secret first, and the variable
+    goes only once the workflows read the secret, so no step breaks a build."""
 
     runs: list[tuple[str, str]] = []
-    for name in repo.record.get("variables") or ():
+    for name in _secrets_in_variables(repo):
         delete = f"gh variable delete {name} -R {repo.name}"
-        if name not in WIRED_SECRETS:
-            runs.append((f"{repo.short}: delete {name}", delete))
-            continue
         runs += [
             (
                 f"{repo.short}: 1. copy {name} into a secret of the same name",
@@ -435,7 +446,7 @@ COMMANDS: dict[str, Callable[[Repository], Runs]] = {
     "token-read-only": _setting("-f default_workflow_permissions=read", path="/actions/permissions/workflow"),
     "token-no-approvals": _setting("-F can_approve_pull_request_reviews=false", path="/actions/permissions/workflow"),
     "vulnerability-alerts": _setting(path="/vulnerability-alerts"),
-    "no-variables": _variables,
+    "no-secret-variables": _variables,
     "pull-request-required": _ruleset(
         "Require a pull request",
         {

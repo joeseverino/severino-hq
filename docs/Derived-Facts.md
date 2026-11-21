@@ -809,7 +809,8 @@ Dependabot, secret scanning; `ALERT_PAGES`), the worst first.
 derived from the same record. Every repository is held to this: only you have
 access, deploy keys read-only and in use, a read-only workflow token that
 approves nothing, actions pinned to a commit, vulnerability alerts on, and no
-Actions variables. A public one is also held to what GitHub gives it besides:
+secret kept in an Actions variable (a name that says it holds a credential and
+not that it is public). A public one is also held to what GitHub gives it besides:
 pull requests required, the default branch protected from force pushes and
 deletion, secret scanning, push protection, code scanning. What a plan does
 not offer is "not available", never a failure. The queue holds one item per
