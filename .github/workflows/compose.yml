@@ -65,6 +65,9 @@ on:
 permissions:
   contents: read
 
+# A run restores the caches and saves none; a job that saves says so.
+cache-mode: read
+
 concurrency:
   # Never two compositions at once *for the same target*: they would race for
   # the same image tag and the deploy that finished second would silently win.
@@ -201,6 +204,9 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
+    # Saves the vulnerability database on a dispatch; called from a pull
+    # request's CI, it has only the read its caller grants.
+    cache-mode: write
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:

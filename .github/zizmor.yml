@@ -2,8 +2,8 @@
 # finding that is a deliberate choice, with the reason beside it; one
 # confined to a step is ignored by a comment on that step's line instead.
 rules:
-  # actions/cache saves on every run, a pull request's too; a cache is written
-  # by actions/cache/save, on the default branch alone (CacheWriterTests).
+  # actions/cache saves on every run; a job that saves declares
+  # `cache-mode: write` and uses actions/cache/save.
   forbidden-uses:
     config:
       deny:

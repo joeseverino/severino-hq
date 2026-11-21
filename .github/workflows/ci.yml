@@ -25,6 +25,9 @@ on:
 permissions:
   contents: read
 
+# A run restores the caches and saves none; a job that saves says so.
+cache-mode: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -298,6 +301,8 @@ jobs:
   caches:
     name: Caches
     if: github.event_name == 'push'
+    # The one job of a push that saves; a pull request's runs only restore.
+    cache-mode: write
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:

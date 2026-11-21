@@ -51,6 +51,9 @@ on:
 permissions:
   contents: read
 
+# A run restores the caches and saves none; a job that saves says so.
+cache-mode: read
+
 env:
   HOST_REPOSITORY: joeseverino/severino-hq
   PYTHONUNBUFFERED: "1"
@@ -58,6 +61,8 @@ env:
 jobs:
   test:
     name: Python ${{ matrix.python }}
+    # Saves the downloads it missed, within what its caller grants.
+    cache-mode: write
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
