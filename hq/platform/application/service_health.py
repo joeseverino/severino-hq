@@ -28,12 +28,21 @@ class Health:
     state: Tone | None
     label: str
     detail: str = ""
+    # Each part of a label that counts several kinds, in its own tone, so a
+    # row says them as separate states that wrap between them.
+    counts: tuple[tuple[Tone, str], ...] = ()
 
     @property
     def tone(self) -> Tone:
         """The state as a tone: no health reading is neutral."""
 
         return self.state or Tone.NEUTRAL
+
+    @property
+    def parts(self) -> tuple[tuple[Tone, str], ...]:
+        """The states a row draws: each count, or the label alone."""
+
+        return self.counts or ((self.tone, self.label),)
 
 
 def service_health(service: Any, *, own_findings: bool = True) -> Health:
@@ -165,12 +174,13 @@ def _with_own_findings(found: Health) -> Health:
     check passing" drawn in the attention tone would contradict itself.
     """
 
-    tone, said = hq_context.status(read_once("service_health.hq_problems", _hq_problems))
+    problems = read_once("service_health.hq_problems", _hq_problems)
+    tone, said = hq_context.status(problems)
     if not tone.acted_on:
         return found
     if found.state in (Tone.ATTENTION, Tone.SERIOUS):
         return Health(Tone.worst((found.state, tone)), found.label, " ".join(filter(None, (found.detail, ended(said)))))
-    return Health(tone, said, found.detail)
+    return Health(tone, said, found.detail, counts=hq_context.counts(problems))
 
 
 def _hq_problems() -> tuple[Any, ...]:

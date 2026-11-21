@@ -82,7 +82,7 @@ sizes and counts, so the service's name keeps its column's whole line.
             {% endif %}
           </td>
           {% if show_service_projects %}<td>{% present service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% endpresent %}</td>{% endif %}
-          <td>{% status service.status_label tone=service.tone title=service.health.detail %}</td>
+          <td>{% list %}<li>{% for tone, words in service.health.parts %}{% status words tone=tone title=service.health.detail css="cell-part" %}{% if not forloop.last %} {% endif %}{% endfor %}</li>{% endlist %}</td>
           {% row_actions mark=mark order=order %}
         </tr>
       {% endfor %}

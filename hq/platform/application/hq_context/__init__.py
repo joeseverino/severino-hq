@@ -158,11 +158,18 @@ def status(problems: Iterable[Mapping[str, Any]]) -> tuple[Tone, str]:
     """How HQ is doing, in the tone of its worst problem someone has to act on,
     with how many of each kind are open: "1 urgent · 1 needs attention"."""
 
-    tones = [tone for item in problems if (tone := Tone(item["status"])).acted_on]
-    if not tones:
+    found = counts(problems)
+    if not found:
         return Tone.GOOD, "Running"
-    counts = [(tone, tones.count(tone)) for tone in Tone if tone in tones]
-    return counts[0][0], dotted(*(f"{count} {tone.urgency.lower()}" for tone, count in counts))
+    return found[0][0], dotted(*(words for _, words in found))
+
+
+def counts(problems: Iterable[Mapping[str, Any]]) -> tuple[tuple[Tone, str], ...]:
+    """How many open problems of each tone someone has to act on, worst first,
+    each in its words: ``(Tone.SERIOUS, "1 urgent")``."""
+
+    tones = [tone for item in problems if (tone := Tone(item["status"])).acted_on]
+    return tuple((tone, f"{tones.count(tone)} {tone.urgency.lower()}") for tone in Tone if tone in tones)
 
 
 def _worse(tile: Tile, problems: Iterable[Mapping[str, Any]]) -> Tile:
