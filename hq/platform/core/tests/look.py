@@ -52,6 +52,7 @@ from hq.platform.core.tests.browser.stress import stress_pages
 from hq.platform.core.tests.browser.survey import (
     BUSY,
     CLOSE_OPENED,
+    drawn_by,
     open_every_fold,
     palette_probes,
     survey_checks,
@@ -86,6 +87,7 @@ from hq.platform.core.tests.look_report import (
     Measured,
     beside,
     closing,
+    defects,
     drawn_only_here,
     failed_pages,
     found_lines,
@@ -1594,9 +1596,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             printed = [f"Page by page: {_shown(kept)}", *said, *printed]
             if self.base is not None and (alone := drawn_only_here(self.base, found)):
                 printed.append(f"{', '.join(alone)}: {DRAWN_ONLY_HERE.format(ref)}")
-            # A line for each page with something new or found, then the
-            # verdict: what the look's failure says, which a gate shows.
-            pages = said[:-1] or found_lines(found, lambda name, width: _shown(_shot(name, width).with_suffix(".txt")))
+            # A line for each new finding, or each defect with every page and
+            # width it was found at, then the verdict: what the look's failure
+            # says, which a gate shows.
+            pages = said[:-1] or defects(found, rule, drawn_by)
             failed = [*pages, said[-1]] * rule_failed + failed
             if not self.judged_at and not self.undrawn:
                 failed.append(nothing := JUDGED_NOTHING.format(rule))

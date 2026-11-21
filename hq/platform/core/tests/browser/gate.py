@@ -28,6 +28,7 @@ from django.urls import reverse
 from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.core import verdicts
 from hq.platform.core.csp_views import _blocked, _csp_violations, _directive
 from hq.platform.core.run_report import Cost, tally
 from hq.platform.core.speculation import rules_document
@@ -61,6 +62,7 @@ from hq.platform.core.tests.browser.shards import share, sweeps
 from hq.platform.core.tests.browser.shots import shoot_page
 from hq.platform.core.tests.browser.survey import (
     CHECKS,
+    drawn_by,
     findings_of,
     geometry_probes,
     palette_probes,
@@ -138,7 +140,9 @@ def pickles_beside(test, value):
 
 class _Watched:
     """A test's result, marking the test ``failed`` when it fails outside a
-    subtest, and having a failed subtest's page shot as it fails.
+    subtest, having a failed subtest's page shot as it fails, and handing a
+    subtest's findings to the run, which fails once per defect
+    (`run_report.Findings`), in place of the subtest's own failure.
 
     A parallel worker's result keeps no list of failures to look in: it
     sends each one to the parent as it happens. The mark is a plain flag on
@@ -161,9 +165,13 @@ class _Watched:
         self.result.addFailure(test, err)
 
     def addSubTest(self, test, subtest, err):
-        # Reported as the subtest ends, so the page is still the one it failed on.
-        if err is not None and (err := self.test.as_reported(subtest.params, err)) is not None:
+        # Shot as the subtest ends, so the page is still the one it failed on.
+        found = self.test.recorded(subtest.params, err) if hasattr(self.result, "addFindings") else None
+        if err is not None and (found is None or found[1]):
             self.test.subtest_failed(subtest.params)
+        if found is not None:
+            self.result.addFindings(test, found[0])
+            err = None
         self.result.addSubTest(test, subtest, err)
 
 
@@ -501,14 +509,6 @@ def findings_in(said, check):
     return None
 
 
-def signature(check, finding):
-    """What a finding says, its measures aside: the same defect at another
-    width or on another load differs only in its numbers."""
-
-    said = finding if isinstance(finding, str) else json.dumps(finding, sort_keys=True)
-    return check, re.sub(r"\d+", "#", said)
-
-
 class BrowserGate(SimpleTestCase):
     """A browser over pages rendered once, every request answered locally.
 
@@ -801,17 +801,12 @@ class BrowserGate(SimpleTestCase):
         self.failed = False
         self.failures = None
         self.costs: dict[str, dict[str, Cost]] = {}
-        # Each finding a failed subtest reported, by its signature, with
-        # every place it was found.
-        self.places: dict[tuple[str, str], tuple[str, list[str]]] = {}
+        # What each finding says, measures aside, once its page is shot.
+        self.shot: set[tuple[str, str]] = set()
         # _Watched stands in for the result, passing on what it does not keep.
         ran = super().run(result if result is None else cast(TestResult, _Watched(result, self)))
         if result is not None and self.costs and (keep := getattr(result, "addCosts", None)):
             keep(self, self.costs)
-        if again := [(said, places) for said, places in self.places.values() if len(places) > 1]:
-            print(f"{self.id()}: each finding reported once, at its first place, and found again:")
-            for said, places in again:
-                print(f"  {said}\n    at {', '.join(places)}")
         return ran
 
     @override
@@ -843,7 +838,7 @@ class BrowserGate(SimpleTestCase):
         """As unittest's, but what was to be found empty and was not fails
         as its findings, whole, in JSON: a rule's ``assertEqual(found, [])``
         says every finding, never unittest's shortened repr, and the subtest
-        that fails reads them by check (``as_reported``)."""
+        that fails hands them to the run by check (``recorded``)."""
 
         if msg is None and second in ([], {}) and first != second and isinstance(first, list | dict):
             self.fail(json.dumps(first, indent=1, default=str))
@@ -864,37 +859,28 @@ class BrowserGate(SimpleTestCase):
         rest = ", ".join(f"{key}={value}" for key, value in params.items() if key not in ("page", "width", "rule"))
         return ", ".join(part for part in (place, rest) if part) or self.id()
 
-    def as_reported(self, params, err):
-        """A failed subtest's error as it is reported: each finding the test
-        already reported dropped, the place it was found again kept for the
-        test's closing lines, and the look that finds the rest again added.
-        None when nothing is left to report."""
+    def recorded(self, params, err):
+        """A failed subtest's findings as the run records them, each with
+        where it was found (the engine, the class, the page, the width and
+        the state), the Part that draws what it names and the look that finds
+        it again, and whether any is new to this test, so its page is shot;
+        None for a subtest that passed or failed saying no findings."""
 
-        kind, value, trace = err
-        said = str(value)
-        rule = params.get("rule") or "findings"
-        place = self.where_found(params)
-        found = findings_in(said, rule)
-        new: dict[str, list] = {}
-        for check, lines in (found or {rule: [said]}).items():
-            for line in lines:
-                key = signature(check, line)
-                if key in self.places:
-                    self.places[key][1].append(place)
-                else:
-                    self.places[key] = (f"{check}: {line}", [place])
-                    new.setdefault(check, []).append(line)
-        if not new:
+        if err is None or not issubclass(err[0], self.failureException):
             return None
-        if found is not None:
-            said = json.dumps(new.get(rule, []) if isinstance(json.loads(said), list) else new, indent=1)
-        if command := self.rerun(params, new):
-            said += f"\n\nFound again by: {command}"
-        if len(value.args) == 1 and str(value) == value.args[0]:
-            value.args = (said,)
-        else:
-            print(said)
-        return kind, value, trace
+        rule = params.get("rule") or "findings"
+        if not (found := findings_in(str(err[1]), rule)) or not any(found.values()):
+            return None
+        place = f"{browser_engine()} {type(self).__name__}: {self.where_found(params)}"
+        again = self.rerun(params, found)
+        findings = [
+            verdicts.Finding(check, said, place, *drawn_by(check, said), self.id(), again)
+            for check, lines in found.items()
+            for said in (line if isinstance(line, str) else json.dumps(line, sort_keys=True) for line in lines)
+        ]
+        new = {verdicts.signature(finding.check, finding.said) for finding in findings} - self.shot
+        self.shot |= new
+        return findings, bool(new)
 
     def rerun(self, params, checks=()):
         """The `dev:look` that draws a failed subtest's page as it was drawn

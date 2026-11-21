@@ -1,5 +1,6 @@
 """What a test run reports: each failed test for the gate running it, each
-class's time, and the results a parallel worker sends its parent."""
+class's time, each layout defect once, and the results a parallel worker
+sends its parent."""
 
 import json
 import os
@@ -17,7 +18,7 @@ from typing import override
 
 from django.test.runner import RemoteTestResult, RemoteTestRunner
 
-from hq.platform.core import stalls
+from hq.platform.core import stalls, verdicts
 from hq.platform.core.isolation_testing import CompositionIsolation, fresh
 from hq.platform.core.stalls import StallMarks
 
@@ -127,8 +128,49 @@ class Costs:
                 tally(kept.setdefault(ledger, {}), row, cost)
 
 
+class Defect(unittest.TestCase):
+    """One layout defect as the run's failure, under the test that first
+    found it, so a gate's closing line names a test it can run again."""
+
+    def __init__(self, verdict: verdicts.Verdict):
+        super().__init__()
+        self.verdict = verdict
+
+    @override
+    def id(self) -> str:
+        return self.verdict.first.test or "layout defect"
+
+    @override
+    def __str__(self) -> str:
+        return self.verdict.head()
+
+    @override
+    def shortDescription(self) -> None:
+        return None
+
+
+class Findings:
+    """Each finding the run's browser tests recorded, failed once per defect
+    as the run stops (``verdicts``), before its failures are printed; a share
+    of a split run writes them to the folder its verdict reads instead."""
+
+    def addFindings(self, test, findings):
+        vars(self).setdefault("findings", []).extend(findings)
+
+    def stopTestRun(self):
+        super().stopTestRun()
+        if not (found := vars(self).pop("findings", [])):
+            return
+        if folder := os.environ.get(verdicts.FOLDER):
+            path = verdicts.write(folder, found)
+            print(f"{len(verdicts.verdicts(found))} layout defects, for the verdict over every share: {path}")
+            return
+        for verdict in verdicts.verdicts(found):
+            self.addFailure(Defect(verdict), (AssertionError, AssertionError(str(verdict)), None))
+
+
 class CompositionTextResult(
-    FailureRecord, StallMarks, CompositionIsolation, ClassTimes, Costs, unittest.TextTestResult
+    FailureRecord, StallMarks, CompositionIsolation, ClassTimes, Costs, Findings, unittest.TextTestResult
 ):
     pass
 
@@ -213,6 +255,9 @@ class CompositionRemoteResult(StallMarks, CompositionIsolation, RemoteTestResult
 
     def addCosts(self, _test, costs):
         self.events.append(("addCosts", self.test_index, costs))
+
+    def addFindings(self, _test, findings):
+        self.events.append(("addFindings", self.test_index, findings))
 
 
 class CompositionRemoteRunner(RemoteTestRunner):

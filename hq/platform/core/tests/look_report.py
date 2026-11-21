@@ -2,11 +2,14 @@
 verdict, and how they are matched against a base's, so a finding is new for
 what a change drew and never for which run drew it."""
 
+import json
 import math
 import re
 from collections import Counter
 from collections.abc import Callable
 from itertools import groupby, zip_longest
+
+from hq.platform.core.verdicts import Finding, verdicts
 
 # What a look found, by page and width, each finding a line.
 type Found = dict[tuple[str, int], list[str]]
@@ -60,6 +63,38 @@ def found_lines(found: Found, report: Callable[[str, int], str] | None = None) -
         for (name, width), said in found.items()
         if said
     ]
+
+
+def defects(found: Found, rule: str, drawn_by: Callable[[str, str], tuple[str, str]]) -> list[str]:
+    """What a look found as one verdict per defect (`verdicts`), each with
+    every page and width it was found at; a survey's finding opens with its
+    check's name."""
+
+    every = [
+        Finding(check, line, f"{name} at {width}", *drawn_by(check, line))
+        for (name, width), said in found.items()
+        for check, line in _by_check(rule, said)
+    ]
+    return [str(verdict) for verdict in verdicts(every)]
+
+
+def _by_check(rule: str, said: list[str]) -> list[tuple[str, str]]:
+    """Each finding a look said with its check: a rule that fails as findings
+    do says them in JSON, by check or as its own list."""
+
+    try:
+        found = json.loads("\n".join(said))
+    except ValueError:
+        found = None
+    if isinstance(found, list):
+        found = {rule: found}
+    if isinstance(found, dict):
+        return [
+            (check, line if isinstance(line, str) else json.dumps(line, sort_keys=True))
+            for check, lines in found.items()
+            for line in lines
+        ]
+    return [(line.partition(": ")[0] if rule == "survey" else rule, line) for line in said]
 
 
 # What a finding names that is drawn anew on every run, so no fact of the

@@ -4,12 +4,13 @@ import json
 from time import perf_counter
 from typing import override
 
-from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate, signature
+from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE
 from hq.platform.core.tests.browser.probes.tables import CELLS, TABLES_THAT_DO_NOT_FIT
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.stress import stress_estate
 from hq.platform.core.tests.browser.survey import CLOSE_OPENED, open_every_fold
+from hq.platform.core.verdicts import signature
 
 # A key that changes nothing, pressed before a batch a gate opens, so the
 # browser takes what the batch moves as the reader's own doing (`as_a_reader`).
