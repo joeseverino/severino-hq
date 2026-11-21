@@ -78,13 +78,15 @@ def stored(*records: Mapping[str, Any], **fields: Any) -> Stored:
 class Raised:
     """What one finding says that tells it apart: its title, its severity
     (its rule's, unless given) and the commands HQ offers to run, and, where
-    an example is about them, its evidence and what a person does about it."""
+    an example is about them, its evidence, what a person does about it and
+    the label and address of what its card leads with."""
 
     title: str
     severity: Tone | None = None
     presses: tuple[str, ...] = ()
     evidence: tuple[tuple[str, str], ...] | None = None
     steps: tuple[Run | Do, ...] | None = None
+    primary: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

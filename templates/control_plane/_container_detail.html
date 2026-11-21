@@ -13,9 +13,9 @@ standard, with what it uses beside its limits. Each said once; the band above ha
       {% list kind="dots" %}<li><small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}</small></li>{% if plan.release.published %}<li><small>released {{ plan.release.published|when_text:"ago" }}</small></li>{% endif %}{% endlist %}
     {% endfact %}
     {% fact "Fixes" icon="shield" tone=plan.fixes_tone %}
-      {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
+      {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.known_vulnerabilities %}None of {{ item.standing.known_vulnerabilities|length|breakable }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
     {% detail %}
-      {% if plan.fixes %}{% list kind="dots" %}{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% else %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
+      {% if plan.fixes %}{% list kind="dots" %}{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% elif not item.standing.known_vulnerabilities %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
     {% endfact %}
     {% fact "Data" icon="layers" tone=plan.data_tone %}
       {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}

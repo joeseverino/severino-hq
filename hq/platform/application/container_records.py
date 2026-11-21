@@ -120,6 +120,13 @@ UpgradeRow = TypedDict(
     {
         "address": Annotated[str, Describe("The container's `machine:container`, which a read of one names it by.")],
         "viable": Annotated[bool, Describe("Whether nothing blocks it: true when `blockers` is empty.")],
+        "recommended": Annotated[
+            bool,
+            Describe(
+                "Whether the move is worth making: the new version brings no known vulnerability of its own and, "
+                "where the running one has some, fixes at least one."
+            ),
+        ],
         "risk": Annotated[
             str, Describe(ended(f"How likely the upgrade is to go wrong: {listed((LOW, MEDIUM, HIGH))}"))
         ],
@@ -165,9 +172,17 @@ class UpgradeRecord(UpgradeRow):
     release: Annotated[ReleasePart | None, Describe("The release of the version it moves to; null for none.")]
     fixes: Annotated[
         list[AdvisoryPart],
-        Describe("The advisories and vulnerabilities against what runs that the new version is clear of."),
+        Describe(
+            "Of the running version's known vulnerabilities (its advisories and its serious package findings that "
+            "have a fix), those the new version is clear of."
+        ),
     ]
-    introduces: Annotated[list[AdvisoryPart], Describe("Any serious vulnerability the new version would bring.")]
+    introduces: Annotated[
+        list[AdvisoryPart],
+        Describe(
+            "What the new version would bring of its own: an advisory against it alone, or a serious package finding."
+        ),
+    ]
     stateful: Annotated[bool, Describe("Whether it keeps data in writable mounts, which `data` lists.")]
     data: Annotated[
         list[MountPart],

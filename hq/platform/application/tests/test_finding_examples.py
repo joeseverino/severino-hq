@@ -112,7 +112,7 @@ def _entered(held: object) -> AbstractContextManager[object]:
 
 def said(finding: Finding, raised: Raised | None = None) -> tuple[Any, ...]:
     """What ``finding`` says, in the terms ``raised`` states it in: its
-    evidence and steps only where ``raised`` names them."""
+    evidence, steps and lead only where ``raised`` names them."""
 
     told = tuple(step for step in finding.steps if not isinstance(step, Press))
     presses = tuple(press.capability for press in finding.presses)
@@ -122,13 +122,21 @@ def said(finding: Finding, raised: Raised | None = None) -> tuple[Any, ...]:
         presses,
         finding.evidence if raised is None or raised.evidence is not None else None,
         told if raised is None or raised.steps is not None else None,
+        (finding.primary.label, finding.primary.url) if finding.primary and raised and raised.primary else None,
     )
 
 
 def stated(rule: FindingRule, raised: Raised) -> tuple[Any, ...]:
     """What an example says a finding says, its rule's severity where it leaves it out."""
 
-    return (raised.title, raised.severity or rule.severity, raised.presses, raised.evidence, raised.steps)
+    return (
+        raised.title,
+        raised.severity or rule.severity,
+        raised.presses,
+        raised.evidence,
+        raised.steps,
+        raised.primary,
+    )
 
 
 @skipUnless(TIME_MACHINE, "the clock is held by time_machine, a development tool")

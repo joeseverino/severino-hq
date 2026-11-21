@@ -2630,6 +2630,7 @@
             "enum": [
               "address",
               "viable",
+              "recommended",
               "risk",
               "change",
               "from",
@@ -30190,7 +30191,7 @@
             "type": "array"
           },
           "fixes": {
-            "description": "The advisories and vulnerabilities against what runs that the new version is clear of.",
+            "description": "Of the running version's known vulnerabilities (its advisories and its serious package findings that have a fix), those the new version is clear of.",
             "items": {
               "$ref": "#/components/schemas/AdvisoryPart"
             },
@@ -30200,7 +30201,7 @@
             "$ref": "#/components/schemas/UpgradeRow/properties/from"
           },
           "introduces": {
-            "description": "Any serious vulnerability the new version would bring.",
+            "description": "What the new version would bring of its own: an advisory against it alone, or a serious package finding.",
             "items": {
               "$ref": "#/components/schemas/AdvisoryPart"
             },
@@ -30212,6 +30213,9 @@
               "$ref": "#/components/schemas/Blocker"
             },
             "type": "array"
+          },
+          "recommended": {
+            "$ref": "#/components/schemas/UpgradeRow/properties/recommended"
           },
           "release": {
             "anyOf": [
@@ -30256,6 +30260,7 @@
         "required": [
           "address",
           "viable",
+          "recommended",
           "risk",
           "change",
           "from",
@@ -30323,7 +30328,7 @@
             "type": "array"
           },
           "fixes": {
-            "description": "The advisories and vulnerabilities against what runs that the new version is clear of.",
+            "description": "Of the running version's known vulnerabilities (its advisories and its serious package findings that have a fix), those the new version is clear of.",
             "items": {
               "$ref": "#/components/schemas/AdvisoryPartPartial"
             },
@@ -30333,7 +30338,7 @@
             "$ref": "#/components/schemas/UpgradeRowPartial/properties/from"
           },
           "introduces": {
-            "description": "Any serious vulnerability the new version would bring.",
+            "description": "What the new version would bring of its own: an advisory against it alone, or a serious package finding.",
             "items": {
               "$ref": "#/components/schemas/AdvisoryPartPartial"
             },
@@ -30345,6 +30350,9 @@
               "$ref": "#/components/schemas/BlockerPartial"
             },
             "type": "array"
+          },
+          "recommended": {
+            "$ref": "#/components/schemas/UpgradeRowPartial/properties/recommended"
           },
           "release": {
             "anyOf": [
@@ -30422,6 +30430,10 @@
             "$ref": "#/components/schemas/ImageAt",
             "description": "The image it runs now."
           },
+          "recommended": {
+            "description": "Whether the move is worth making: the new version brings no known vulnerability of its own and, where the running one has some, fixes at least one.",
+            "type": "boolean"
+          },
           "risk": {
             "description": "How likely the upgrade is to go wrong: `low`, `medium` or `high`.",
             "type": "string"
@@ -30438,6 +30450,7 @@
         "required": [
           "address",
           "viable",
+          "recommended",
           "risk",
           "change",
           "from",
@@ -30465,6 +30478,9 @@
           "from": {
             "$ref": "#/components/schemas/ImageAtPartial",
             "description": "The image it runs now."
+          },
+          "recommended": {
+            "$ref": "#/components/schemas/UpgradeRow/properties/recommended"
           },
           "risk": {
             "$ref": "#/components/schemas/UpgradeRow/properties/risk"

@@ -5,6 +5,7 @@ from django.utils import timezone
 from hq.platform.core.testing import declare
 
 from ...exposure import OPEN, PRIVATE
+from ...finding_steps import Do
 from ...tone import Tone
 from ..test_container_standard import KEPT, runtime
 from ..test_containers import HIGH, estate, exposed, inventory, running
@@ -59,15 +60,43 @@ def pinned(title: str, pin: str) -> Raised:
 
 
 ADVISED = "ghcr.io/example/app:v1.2.0 has 1 known vulnerability"
+# The target, v1.3.0, is still affected by one; affected by the other alone.
+UNFIXED = {**HIGH, "id": "GHSA-unfixed", "vulnerabilities": [["< 2.0.0", ""]]}
+BROUGHT = {**HIGH, "id": "GHSA-brought", "vulnerabilities": [[">= 1.3.0", ""]]}
+SET_APP = Do(
+    "On example-box, set the image of app to ghcr.io/example/app:v1.3.0 where it is defined, then start it again."
+)
+PLANNED, LISTED = "/infrastructure/example-box-app/#upgrade", "/infrastructure/containers/"
 # proxy, started from the newest tag its registry holds, by digest.
 NEWEST = started(f"{PROXY}:1.13.1@{DIGEST}", f"{PROXY}@{DIGEST}")
+
+
+def held(why: str, primary=("Open containers", LISTED), **said) -> Example:
+    """A vulnerable app the internet reaches with no move worth making: said,
+    not urged, and no step makes one."""
+
+    steps = (Do("Move the container to a release that fixes it, once one does."),)
+    return box(reach=OPEN, raises=(Raised(title=f"{ADVISED}, and {why}", primary=primary, steps=steps),), **said)
+
 
 EXAMPLES = (
     Examples(
         "container-image-advisory",
         fires=(
             # As urgent as what reaches it: where HQ does not know what reaches it, as if anyone may.
-            box(advisories=[HIGH], raises=(Raised(title=ADVISED, severity=Tone.SERIOUS),)),
+            # A watched one leads with the move its plan recommends, on its page, and says how to make it.
+            box(
+                advisories=[HIGH],
+                declared={"app": {}},
+                raises=(
+                    Raised(
+                        title=ADVISED,
+                        severity=Tone.SERIOUS,
+                        primary=("Upgrade to v1.3.0 (fixes 1)", PLANNED),
+                        steps=(SET_APP,),
+                    ),
+                ),
+            ),
             box(advisories=[HIGH], reach=OPEN, raises=(Raised(title=ADVISED, severity=Tone.SERIOUS),)),
             box(advisories=[HIGH], reach=PRIVATE, raises=(ADVISED,)),
             box(advisories=[HIGH], reach=UNROUTED, raises=(Raised(title=ADVISED, severity=Tone.NEUTRAL),)),
@@ -77,19 +106,32 @@ EXAMPLES = (
                 reach=OPEN,
                 raises=(Raised(title="ghcr.io/example/app:v1.2.0 has 3 known vulnerabilities", severity=Tone.SERIOUS),),
             ),
-            # One no release fixes yet is said, not urged.
-            box(
-                advisories=[HIGH],
-                app_tags=("v1.2.0",),
-                reach=OPEN,
-                raises=(f"{ADVISED}, and no release fixes it yet",),
+            held("no release fixes it yet", advisories=[HIGH], app_tags=("v1.2.0",)),
+            held("v1.3.0 is not known to fix it", advisories=[UNFIXED]),
+            # Whatever it fixes, a release that brings its own is no move to make.
+            held(
+                "v1.3.0 has a known vulnerability of its own",
+                ("Upgrade plan", PLANNED),
+                advisories=[HIGH, BROUGHT],
+                declared={"app": {}},
             ),
         ),
-        quiet=(box(),),
+        # A version no release fixes is said only where the internet may reach it.
+        quiet=(box(), box(advisories=[UNFIXED], reach=PRIVATE)),
     ),
     Examples(
         "container-image-update",
-        fires=(box(raises=("example/kuma:1 has an update", "ghcr.io/example/app:v1.2.0 has an update")),),
+        fires=(
+            # A major move says so where the card leads.
+            box(
+                raises=(
+                    Raised(title="example/kuma:1 has an update", primary=("Upgrade to 2 (major)", LISTED)),
+                    Raised(title="ghcr.io/example/app:v1.2.0 has an update", steps=(SET_APP,)),
+                )
+            ),
+            # A newer release that brings a vulnerability is no update to make.
+            box(advisories=[BROUGHT], raises=("example/kuma:1 has an update",)),
+        ),
         quiet=(NEWEST,),
     ),
     Examples(

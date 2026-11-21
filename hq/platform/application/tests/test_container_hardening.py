@@ -10,11 +10,10 @@ from hq.platform.core.testing import operator
 from ..attention import infrastructure
 from ..containers import containers
 from ..derivation_testing import uncached
-from ..exposure import OPEN, PRIVATE
 from ..findings import finding_key, rule_of
 from ..pages import command_reach
 from .test_container_standard import KEPT, runtime
-from .test_containers import HIGH, container, estate, exposed, inventory
+from .test_containers import container, estate, inventory
 
 SOCKET = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
 
@@ -304,51 +303,3 @@ class FindingHelpTests(TestCase):
 
         self.assertTrue(any(link.url.endswith("/example-box-web/#hardening") for link in item.pages))
         self.assertIn(item.subject_link.url, {link.url for link in item.pages})
-
-    def test_an_advisory_says_which_upgrade_clears_it_and_why_it_cannot_run_yet(self):
-        estate(advisories=[HIGH])
-        container("app")
-
-        item = self.items()["container-image-advisory", "app"]
-
-        (said,) = item.steps
-        self.assertIn("ghcr.io/example/app:v1.3.0", said.text)
-        self.assertEqual(item.no_help_reason, "HQ cannot apply an update itself yet.")
-        self.assertTrue(item.primary.url.endswith("/example-box-app/#upgrade"))
-
-    def test_a_watched_update_leads_with_its_upgrade_plan(self):
-        estate()
-        container("kuma")
-
-        item = self.items()["container-image-update", "kuma"]
-
-        self.assertEqual(item.primary.label, "Upgrade plan")
-        self.assertTrue(item.primary.url.endswith("/example-box-kuma/#upgrade"))
-        self.assertIn(reverse("control_plane:containers"), [link.url for link in item.pages])
-
-    def test_an_unwatched_advisory_is_updated_by_hand_with_no_plan(self):
-        estate(advisories=[HIGH])
-
-        item = self.items()["container-image-advisory", "app"]
-
-        # Adopting plans an upgrade but does not clear the advisory, so it is
-        # no remedy here; the card still says how to move the image by hand.
-        self.assertEqual(self.remedies(item), [])
-        self.assertIn("ghcr.io/example/app:v1.3.0", item.steps[0].text)
-        self.assertFalse(any(link.url.endswith("#upgrade") for link in item.pages))
-
-    def test_a_private_advisory_no_release_fixes_is_not_an_action_item(self):
-        estate(advisories=[HIGH], app_tags=("v1.2.0",))
-
-        with exposed(PRIVATE):
-            self.assertNotIn(("container-image-advisory", "app"), self.items())
-        with exposed(OPEN):
-            self.assertIn(("container-image-advisory", "app"), self.items())
-
-    def test_an_advisory_no_release_fixes_offers_no_upgrade(self):
-        estate(advisories=[HIGH], app_tags=("v1.2.0",))
-
-        item = self.items()["container-image-advisory", "app"]
-
-        self.assertEqual(self.remedies(item), [])
-        self.assertFalse(any("#upgrade" in link.url for link in item.pages))

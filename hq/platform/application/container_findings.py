@@ -31,8 +31,7 @@ from .finding_model import (
     opens,
 )
 from .finding_steps import Do, Run
-from .images import version
-from .lists import split_list
+from .images import fixed_in
 from .projection import read_once
 from .references import Kind
 from .standard_findings import Help, Measured, Per, Standard
@@ -41,7 +40,7 @@ from .tone import Tone
 from .ui import ended
 from .workflow_contracts import ActionLink
 lazy from .topology_estate import machine_nodes
-lazy from .upgrades import OVERRIDES, plan_for
+lazy from .upgrades import HIGH, MAJOR, OVERRIDES, Plan, plan_for
 
 # Why an update is a person's to apply.
 BY_HAND = "HQ cannot apply an update itself yet."
@@ -79,28 +78,35 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
     once however many of its containers run it."""
 
     standing = running[0].standing
+    plan = plan_for(_lead(running))
     if standing.state == VULNERABLE:
         if needs_you(standing, running):
-            yield _advisory(running, subject)
-    elif standing.newer:
+            yield _advisory(running, subject, plan)
+    elif plan is not None and plan.recommended:
         yield _found(
             running,
             subject,
             rule=UPDATE,
             severity=Tone.ATTENTION,
             title=f"{standing.label} has an update",
-            explanation=ended(f"{standing.label} to {standing.latest}") + _running_as(running) + _brings(running),
+            explanation=ended(f"{standing.label} to {standing.latest}") + _running_as(running) + _risk(plan),
+            **_upgrade(running, plan),
         )
     if by_tag := [item for item in running if _unpinned(item.standing)]:
         yield _unpinned_finding(by_tag, subject)
 
 
 def needs_you(standing: ImageStanding, running: list[Container]) -> bool:
-    """Whether a version asks something of you: a newer release to move to, or,
-    with none, the internet may reach it. Otherwise its page says what is
-    known and there is nothing to do yet."""
+    """Whether a version asks something of you: an upgrade its plan
+    recommends, or, a vulnerable one with none, the internet may reach it.
+    Otherwise its page says what is known and there is nothing to do yet."""
 
-    return bool(standing.newer) or any(exposure_of_container(item).level in (OPEN, UNKNOWN) for item in running)
+    plan = plan_for(_lead(running))
+    if plan is not None and plan.recommended:
+        return True
+    return standing.state == VULNERABLE and any(
+        exposure_of_container(item).level in (OPEN, UNKNOWN) for item in running
+    )
 
 
 def _names(running: list[Container]) -> str:
@@ -119,16 +125,14 @@ def _lead(running: list[Container]) -> Container:
 
 def _found(running: list[Container], subject: str, **said: Any) -> Finding:
     """A finding about one image on one machine: each container that runs it,
-    how to update them by hand, where the upgrade is planned, and the
-    containers page, which helps whatever the card leads with."""
+    what the card leads with and the steps it gives, and the containers page,
+    which helps whatever the card leads with."""
 
-    primary = said.pop("primary", None) or _plan(_lead(running))
-    steps = said.pop("steps", None) or _by_hand(running)
+    primary = said.pop("primary")
     containers = _containers()
     return Finding(
         subject=subject,
         part=running[0].standing.label,
-        steps=steps,
         evidence=(*(("Container", item.running.name) for item in running), *said.pop("evidence", ())),
         **_read(running),
         primary=primary,
@@ -151,41 +155,61 @@ def _read(running: list[Container], *, standing: bool = True) -> dict[str, Any]:
     return {"observed_at": at, "reads": kind}
 
 
-def _upgrade_action(running: list[Container]) -> ActionLink:
-    """What an advisory card leads with: the upgrade its plan names, on the
-    page that plans it, or that no release fixes it yet."""
+def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
+    """What a card about moving ``running`` on leads with and the steps it
+    gives, from the one decision its plan makes (``Plan.recommended``): the
+    move and how to make it by hand, or the page that plans it and no step to
+    make a move the card says is not worth making."""
 
-    item = _lead(running)
-    plan = plan_for(item)
+    lead = _lead(running)
+    # HQ plans only what it watches; the containers page stands in for any other.
+    page = opens("Upgrade plan", f"{lead.url}#upgrade") if plan is not None and lead.running.watcher else _containers()
+    if plan is None or not plan.recommended:
+        return {"primary": page, "steps": ()}
+    said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
+    label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
+    return {"primary": opens(label, page.url), "steps": _by_hand(running, plan)}
+
+
+def _held_back(standing: ImageStanding, plan: Plan | None) -> str:
+    """Why a vulnerable version has no upgrade to make, as the end of its title."""
+
+    them = "it" if len(standing.known_vulnerabilities) == 1 else "them"
     if plan is None:
-        return opens("No fixed release to upgrade to yet", reverse("control_plane:containers"))
-    known = len(item.standing.advisories) or len(item.standing.urgent)
-    label = (
-        f"Upgrade to {plan.target_tag} (fixes {len(plan.fixes)})"
-        if plan.fixes
-        else f"{plan.target_tag} is available, but is not known to fix {'it' if known == 1 else 'them'}"
-    )
-    return opens(label, f"{item.url}#upgrade" if item.running.watcher else reverse("control_plane:containers"))
+        return f", and no release fixes {them} yet"
+    if plan.introduces:
+        return f", and {plan.target_tag} has a known vulnerability of its own"
+    if not plan.recommended:
+        return f", and {plan.target_tag} is not known to fix {them}"
+    return ""
 
 
-def _advisory(running: list[Container], subject: str) -> Finding:
-    """One upgrade however many advisories; none yet if no release fixes them."""
+def _risk(plan: Plan) -> str:
+    """The upgrade's risk, where it is high enough to weigh before moving."""
+
+    return f" {plan.risk_said}" if plan.risk == HIGH else ""
+
+
+def _advisory(running: list[Container], subject: str, plan: Plan | None) -> Finding:
+    """One upgrade however many advisories; none while no release fixes them."""
 
     standing = running[0].standing
-    fixed = _fixed_in(standing)
-    waiting = not standing.newer
+    fixed = fixed_in(
+        patched for advisory in standing.advisories for _vulnerable, patched in advisory.get("vulnerabilities") or ()
+    )
+    held = _held_back(standing, plan)
     level, reached = _reach(running)
-    fixed_in = f" {ended(f'Fixed in {fixed}')}" if fixed else ""
+    fixed_in_words = f" {ended(f'Fixed in {fixed}')}" if fixed else ""
     return _found(
         running,
         subject,
         rule=ADVISORY,
-        primary=_upgrade_action(running),
-        severity=status_at(Tone.SERIOUS if standing.serious and not waiting else Tone.ATTENTION, level),
-        title=f"{standing.label} has {standing.summary}" + (", and no release fixes it yet" if waiting else ""),
-        explanation=f"Worst severity: {ended(standing.worst)}{_running_as(running)}{fixed_in}"
-        + _brings(running)
+        severity=status_at(Tone.SERIOUS if standing.serious and not held else Tone.ATTENTION, level),
+        title=f"{standing.label} has {standing.summary}{held}",
+        explanation=f"Worst severity: {ended(standing.worst)}{_running_as(running)}{fixed_in_words}"
+        + (_risk(plan) if plan is not None and plan.recommended else "")
         + f" {reached}",
+        **_upgrade(running, plan),
     )
 
 
@@ -219,20 +243,10 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
     )
 
 
-def _brings(running: list[Container]) -> str:
-    """What a new version would bring that is worth knowing before moving to it."""
+def _by_hand(running: list[Container], plan: Plan) -> tuple[Run | Do, ...]:
+    """How the image is moved to the plan's target today, on its machine: one
+    step for each compose project that runs it."""
 
-    plan = plan_for(_lead(running))
-    return f" {plan.target_tag} has a known vulnerability of its own." if plan is not None and plan.introduces else ""
-
-
-def _by_hand(running: list[Container]) -> tuple[Run | Do, ...]:
-    """How the image is updated today, on its machine: one step for each
-    compose project that runs it."""
-
-    plan = plan_for(_lead(running))
-    if plan is None:
-        return ()
     standing = running[0].standing
     if standing.repository is not None:
         return (
@@ -279,15 +293,6 @@ def _sets_image(files: tuple[str, ...]) -> str:
     one, since compose reads that last, else its compose file."""
 
     return next((path for path in files if path.rsplit("/", 1)[-1] in OVERRIDES), files[0])
-
-
-def _plan(item: Container) -> ActionLink:
-    """Its upgrade plan, for a container HQ watches, since HQ plans only
-    those; the containers page for any other."""
-
-    if plan_for(item) is None or not item.running.watcher:
-        return _containers()
-    return opens("Upgrade plan", f"{item.url}#upgrade")
 
 
 def _adopt(item: Container, intent: str) -> FindingRemedy:
@@ -381,16 +386,6 @@ def socket_holder_link(item: Container) -> ActionLink:
         intent=SOCKET_HOLDER_INTENT,
         reason="This container is meant to control Docker. Stop warning about it.",
     )
-
-
-def _fixed_in(standing: ImageStanding) -> str:
-    fixes = {
-        fixed
-        for advisory in standing.advisories
-        for _vulnerable, patched in advisory.get("vulnerabilities") or ()
-        for fixed in split_list(str(patched))
-    }
-    return ", ".join(sorted(fixes, key=version)) if fixes else ""
 
 
 # Only its serious checks are raised; the rest wait on the container's page.

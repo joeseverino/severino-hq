@@ -120,6 +120,15 @@ def _reading(owner) -> None:
     apps.get_model("control_plane", "ProviderConnection").objects.update(manages=False)
 
 
+def _advised(owner) -> None:
+    """The example estate with advisories against what runs and newer
+    releases, so each upgrade a card can offer, or say is not worth making,
+    is drawn."""
+
+    _estate(owner)
+    example_estate.docker.advised()
+
+
 def _rescanned(owner) -> None:
     """The example estate once a later Refresh found the commit adopted, so
     the procedures page has nothing to adopt."""
@@ -208,6 +217,7 @@ SEEDS: dict[str, Seed] = {
     "standard": Seed(_estate, _SET_UP),
     "reading": Seed(_reading, _SET_UP),
     "read-empty": Seed(_read_empty, _SET_UP),
+    "advised": Seed(_advised, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
     "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),

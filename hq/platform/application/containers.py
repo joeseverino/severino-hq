@@ -288,8 +288,10 @@ class ImageStanding(ImageStandingWords):
     moved_to: str = ""
     # The upstream release matching the newest of those, when one does.
     release: Mapping[str, Any] | None = None
-    # Advisories that apply to this version, worst first.
+    # Advisories that apply to this version, worst first, and to the newest
+    # of those newer ones.
     advisories: tuple[Mapping[str, Any], ...] = ()
+    target_advisories: tuple[Mapping[str, Any], ...] = ()
     # Advisories whose ranges could not be read against this version.
     unmatched: int = 0
     # The GitHub repository it is built from, as a URL, and how that is known.
@@ -370,8 +372,19 @@ class ImageStanding(ImageStandingWords):
         return tuple(item for item in self.findings if item.get("fixed") and item.get("severity") in SERIOUS)
 
     @property
+    def known_vulnerabilities(self) -> tuple[Mapping[str, Any], ...]:
+        """What makes it vulnerable, each once by its id: its advisories, then
+        its urgent package findings. A title counts these, and an upgrade
+        says which of these it fixes, so both count one thing. Worst first."""
+
+        found: dict[str, Mapping[str, Any]] = {}
+        for item in (*self.advisories, *self.urgent):
+            found.setdefault(str(item.get("id", "")), item)
+        return ranked(found.values())
+
+    @property
     def state(self) -> str:
-        if self.advisories or self.urgent:
+        if self.known_vulnerabilities:
             return VULNERABLE
         if self.newer:
             return BEHIND
@@ -392,8 +405,8 @@ class ImageStanding(ImageStandingWords):
 
     @property
     def worst(self) -> str:
-        levels = [str(item.get("severity", "")) for item in (*self.advisories[:1], *self.urgent[:1])]
-        return ranked([{"severity": level} for level in levels])[0]["severity"] if levels else ""
+        found = self.known_vulnerabilities
+        return str(found[0].get("severity", "")) if found else ""
 
     @property
     def serious(self) -> bool:
@@ -441,9 +454,9 @@ class ImageStanding(ImageStandingWords):
 
         state = self.state
         if state == VULNERABLE and self.advisories:
-            return counted(len(self.advisories), "known vulnerability", "known vulnerabilities")
+            return counted(len(self.known_vulnerabilities), "known vulnerability", "known vulnerabilities")
         if state == VULNERABLE:
-            return counted(len(self.urgent), "serious vulnerability", "serious vulnerabilities")
+            return counted(len(self.known_vulnerabilities), "serious vulnerability", "serious vulnerabilities")
         if state == BEHIND:
             return f"{self.latest} available"
         if state == CURRENT and self.repository is not None:
@@ -707,6 +720,7 @@ def _standing(reference: str, host: str, container: str) -> ImageStanding:
         moved_to=_moved_to(tag, digest, published),
         release=_release(later[0], upstream) if later else None,
         advisories=matched,
+        target_advisories=_advisories(later[0], upstream)[0] if later else (),
         unmatched=unmatched,
         source=f"https://github.com/{upstream_name}" if upstream_name else "",
         source_from=source_from,

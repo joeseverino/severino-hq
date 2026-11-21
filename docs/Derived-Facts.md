@@ -770,8 +770,12 @@ failed.
 something newer published, and changes nothing. A plan holds:
 
 - the target by digest, and the size of the move;
-- the advisories and package vulnerabilities it clears or would bring (the two
-  digests' OSV readings compared);
+- which of the running version's known vulnerabilities (its advisories and
+  its urgent package findings, the set its title counts) it clears, and what
+  it would bring of its own (the two digests' OSV readings compared);
+- whether the move is recommended: it brings nothing of its own and, where
+  the running version is vulnerable, fixes something. A finding's title, its
+  action and its steps all read that one answer;
 - the writable mounts that would be snapshotted;
 - what would verify it (its health check, a request to each name it serves);
 - the steps;
