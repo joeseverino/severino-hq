@@ -342,6 +342,27 @@ class ProblemTests(TestCase):
         tones = {tile.label: tile.tone for tile in found.tiles}
         self.assertEqual((tones["Runs on"], tones["Release"]), ("serious", "attention"))
 
+    def test_its_service_stands_as_its_record_does(self):
+        from ..service_list import get_service
+
+        estate()
+        # A container no compose project started, on HQ's machine: a problem about that container, not HQ.
+        store(
+            "portainer.container",
+            running("app", IMAGE, "0123456789ab"),
+            {**running("stray", "example/x:1"), "stack": ""},
+        )
+        store(
+            "github.repository",
+            repository(deployments=[{"environment": "production", "sha": HEAD}], alerts={"code_scanning": {"high": 1}}),
+        )
+        first, second = own("192.0.2.44")
+        with first, second:
+            found = hq_context(principal=cli_principal())
+            service = get_service("hq.example.com")
+
+        self.assertEqual((service["status"], service["status_label"]), found.status)
+
 
 @SITE
 class PageTests(TestCase):

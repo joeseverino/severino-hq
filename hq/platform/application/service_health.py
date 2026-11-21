@@ -1,8 +1,8 @@
 """One health rule for every service: the list's State, the page's Health, the API.
 
 A declared service is as healthy as its parts. HQ's own name is up while it
-answers the request asking, and needs attention when a finding names HQ's
-machine, its service or a controller. A name nothing declares reads as what
+answers the request asking, and stands as the ``hq`` record does when a
+problem about HQ needs acting on (``hq_context.hq_problems``). A name nothing declares reads as what
 the readings observing it say, and whether a DNS record names it.
 """
 
@@ -14,12 +14,9 @@ from django.utils.text import capfirst, get_text_list
 from hq.platform.application.labels import dotted
 
 from .projection import read_once
-from .references import Kind
 from .tone import Tone
 from .ui import counted, ended
-lazy from . import connections
-lazy from .findings import estate_findings
-lazy from .hq_self import hq_service
+lazy from . import hq_context
 lazy from .moments import ago
 lazy from .security import INTERNAL_INTERFACE, Capability, Principal
 lazy from .whereabouts import reads_containers_on
@@ -178,37 +175,21 @@ def _dns_state(gap: str) -> str:
 
 
 def _with_own_findings(found: Health) -> Health:
-    """HQ's health, worsened to attention by each finding about HQ itself.
+    """HQ's health, worsened by the problems about HQ itself, in the words the
+    ``hq`` record says them.
 
-    A word that is not already a problem gives way to the count: "Health
+    A word that is not already a problem gives way to that count: "Health
     check passing" drawn in the attention tone would contradict itself.
     """
 
-    own = hq_findings()
-    if not own:
+    tone, said = hq_context.status(read_once("service_health.hq_problems", _hq_problems))
+    if not tone.acted_on:
         return found
     if found.state in (Tone.ATTENTION, Tone.SERIOUS):
-        about = counted(len(own), "open problem is about HQ", "open problems are about HQ")
-        return Health(found.state, found.label, " ".join(part for part in (found.detail, ended(about)) if part))
-    return Health(Tone.ATTENTION, counted(len(own), "open problem", "open problems"), found.detail)
+        return Health(Tone.worst((found.state, tone)), found.label, " ".join(filter(None, (found.detail, ended(said)))))
+    return Health(tone, said, found.detail)
 
 
-def hq_findings() -> tuple[Any, ...]:
-    """Findings whose subject is HQ's machine, one of its names, or a controller."""
-
-    return read_once("service_health.hq_findings", _hq_findings)
-
-
-def _hq_findings() -> tuple[Any, ...]:
-    own = hq_service(catalog=connections.machines_once())
-    if own is None:
-        return ()
-    subjects = {Kind.SERVICE.of(name) for name in own.hostnames}
-    if own.machine:
-        subjects.add(Kind.MACHINE.of(own.machine))
+def _hq_problems() -> tuple[Any, ...]:
     reader = Principal("hq-health", INTERNAL_INTERFACE, frozenset({Capability.READ}))
-    return tuple(
-        finding
-        for finding in estate_findings(principal=reader)
-        if finding.subject in subjects or Kind.CONTROLLER.identity_in(finding.subject)
-    )
+    return hq_context.hq_problems(reader)

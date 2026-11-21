@@ -21,10 +21,10 @@ from .band import Tile
 from .release_part import Release, release, release_json, release_tile, repository as repository_of
 from .sight_part import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
 from .work_part import Renderer, Work, WorkUnit, work, work_json
-lazy from .. import hq_self, request_context, service_health
+lazy from .. import hq_self, request_context
 lazy from ..entity_links import entity_link
 lazy from ..estate_records import Problem
-lazy from ..findings import finding_key
+lazy from ..findings import estate_findings, finding_key
 lazy from ..hq_self import hq_hostnames, own_machine, serving, site_label
 lazy from ..problems import About, grouped, problems_by_part
 lazy from ..request_path import request_path
@@ -77,14 +77,13 @@ def hq_context(request: Any = None, *, principal: Principal) -> HQContext:
 
 
 def _context(request: Any, principal: Principal) -> HQContext:
-    container = hq_self.own_container()
-    machine = container.machine if container is not None else own_machine()
+    container, machine = _where_it_runs()
     path = request_path(request) if request is not None else None
     found = _problems(machine, container, principal, reached=path is not None)
     problems = tuple(item for _, item in found)
     return HQContext(
         label=site_label() or "HQ",
-        status=_status(problems),
+        status=status(problems),
         release=release(container),
         machine=machine,
         container=container,
@@ -96,7 +95,20 @@ def _context(request: Any, principal: Principal) -> HQContext:
     )
 
 
+def _where_it_runs() -> tuple[Any, Any]:
+    container = hq_self.own_container()
+    return container, container.machine if container is not None else own_machine()
+
+
 # ----- Problems ------------------------------------------------------------------
+
+
+def hq_problems(principal: Principal) -> tuple[Mapping[str, Any], ...]:
+    """The open problems about HQ that ``principal`` may read: the ones this
+    record lists, which HQ's own service's health reads too."""
+
+    container, machine = _where_it_runs()
+    return tuple(item for _, item in _problems(machine, container, principal, reached=False))
 
 
 RELEASE, WHERE, REACH, SIGHT = "release", "where", "reach", "sight"
@@ -119,7 +131,9 @@ def _problems(
     names = [entity_link("service", name).url for name in hq_hostnames()]
     # A controller has no page of its own, so its findings are found by key.
     keys = [
-        finding_key(finding) for finding in service_health.hq_findings() if Kind.CONTROLLER.identity_in(finding.subject)
+        finding_key(finding)
+        for finding in estate_findings(principal=principal)
+        if Kind.CONTROLLER.identity_in(finding.subject)
     ]
     repository = repository_of(container)
     return problems_by_part(
@@ -140,16 +154,15 @@ def _parts(container: Any) -> tuple[str, ...]:
     return (container.running.name, container.standing.label) if container is not None else ()
 
 
-def _status(problems: Iterable[Mapping[str, Any]]) -> tuple[Tone, str]:
-    """How HQ is doing, in the tone of its worst problem, with how many of each
-    kind are open: "1 urgent · 1 needs attention"."""
+def status(problems: Iterable[Mapping[str, Any]]) -> tuple[Tone, str]:
+    """How HQ is doing, in the tone of its worst problem someone has to act on,
+    with how many of each kind are open: "1 urgent · 1 needs attention"."""
 
-    tones = [Tone(item["status"]) for item in problems]
+    tones = [tone for item in problems if (tone := Tone(item["status"])).acted_on]
     if not tones:
         return Tone.GOOD, "Running"
-    counts = [(tone, tones.count(tone)) for tone in Tone if tone is not Tone.GOOD and tone in tones]
-    summary = dotted(*(f"{count} {tone.urgency.lower()}" for tone, count in counts))
-    return counts[0][0] if counts else Tone.ATTENTION, summary or "Needs attention"
+    counts = [(tone, tones.count(tone)) for tone in Tone if tone in tones]
+    return counts[0][0], dotted(*(f"{count} {tone.urgency.lower()}" for tone, count in counts))
 
 
 def _worse(tile: Tile, problems: Iterable[Mapping[str, Any]]) -> Tile:
