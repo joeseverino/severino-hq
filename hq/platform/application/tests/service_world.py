@@ -4,6 +4,8 @@ Every hostname here is under ``example.com`` or ``example.test``. This repositor
 is public, and a fixture is documentation whether or not it was meant to be.
 """
 
+from django.utils import timezone
+
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.core.testing import declare
 
@@ -35,7 +37,9 @@ def declare_world(*, containers: bool = False):
 
 def healthy(resource: ManagedResource) -> ManagedResource:
     resource.conditions = [{"type": "Ready", "status": True, "reason": "", "message": ""}]
-    resource.save(update_fields=["conditions"])
+    resource.last_observed_at = timezone.now()
+    resource.observed_generation = resource.generation
+    resource.save(update_fields=["conditions", "last_observed_at", "observed_generation"])
     return resource
 
 

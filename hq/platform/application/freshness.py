@@ -32,6 +32,8 @@ NEVER = "never"
 
 # What every page calls the moment its reading was taken.
 LAST_READ = "Last read"
+# What every page calls a reading past its kind's tolerance.
+OUT_OF_DATE = "Out of date"
 
 
 def last_read(at: datetime | str) -> str:
@@ -220,7 +222,7 @@ class Freshness:
         return {
             CURRENT: "Current",
             DUE: "Current",
-            STALE: "Out of date",
+            STALE: OUT_OF_DATE,
             NEVER: "No reading yet",
         }[self.state]
 

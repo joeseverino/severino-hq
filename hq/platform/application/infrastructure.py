@@ -42,8 +42,11 @@ lazy from .asks import APPLIES_SHORTLY
 lazy from .cadence import ask, swept
 lazy from .capabilities import Consented, consent
 lazy from .delivery_progress import deploying_label
+lazy from .facts import kinds_read
+lazy from .freshness import OUT_OF_DATE, behind, cadence, freshness
 lazy from .locate import names_by_connection
 lazy from .managed_records import HealthPart, ManagedResourceItem
+lazy from .moments import duration
 lazy from .resource_capabilities import kind_converges
 lazy from .resource_operations import OperationItem, ResourceSaved, queue_reconcile
 
@@ -282,8 +285,14 @@ class ResourceState(Toned):
     (``resource_health``'s label)."""
 
     HEALTHY = "healthy", Tone.GOOD
-    # Nothing converges its kind, so it is as declared.
-    DECLARED = "declared", Tone.GOOD
+    # Nothing converges its kind, so HQ holds it as declared and checks nothing.
+    DECLARED = "declared", Tone.NEUTRAL
+    # Switched off, so HQ neither applies nor checks it.
+    OFF = "off", Tone.NEUTRAL
+    # A sweep read the others of its kind since it last found this one.
+    UNSEEN = "unseen", Tone.NEUTRAL
+    # Found as declared, on a reading older than its kind's cadence allows.
+    STALE = "stale", Tone.ATTENTION
     PENDING = "pending", Tone.ATTENTION
     DRIFTED = "drifted", Tone.SERIOUS
     DEGRADED = "degraded", Tone.SERIOUS
@@ -298,12 +307,13 @@ class RecordState(Toned):
     (``resource_context.record_status``), in the word ``data-record-status``
     says, beside the tone its label and detail are drawn in."""
 
-    OFF = "off", Tone.NEUTRAL
+    OFF = ResourceState.OFF
     DRIFTED = ResourceState.DRIFTED
     DEPLOYING = ResourceState.DEPLOYING
     DEGRADED = ResourceState.DEGRADED
     PENDING = ResourceState.PENDING
-    UNSEEN = "unseen", Tone.NEUTRAL
+    UNSEEN = ResourceState.UNSEEN
+    STALE = ResourceState.STALE
     WORKING = "working", Tone.GOOD
     RECORDED = "recorded", Tone.NEUTRAL
     UNREAD = "unread", Tone.NEUTRAL
@@ -318,45 +328,49 @@ NOT_READ_LABEL = "Not read yet"
 
 
 def resource_health(resource: ManagedResource) -> HealthPart:
+    """What HQ last found of a record, judged by how old that reading is: a
+    record switched off is checked by nothing, and one found as declared is
+    working only while its kind's cadence (``freshness``) holds the reading
+    current and no sweep has read its siblings without it."""
+
+    if not resource.enabled:
+        return _health(ResourceState.OFF, "Switched off in HQ", message="HQ does not apply or check it.")
     active = {condition.get("type"): condition for condition in holding(resource.conditions)}
     for condition_type, state, label in (
         (DRIFTED, ResourceState.DRIFTED, DRIFT_LABEL),
         (DEGRADED, ResourceState.DEGRADED, "Has a problem"),
-        (READY, ResourceState.HEALTHY, "Working"),
     ):
         if condition_type in active:
             condition = active[condition_type]
             deploying = deploying_label(resource) if state is ResourceState.DEGRADED else ""
-            return {
-                "state": ResourceState.DEPLOYING if deploying else state,
-                "label": deploying or label,
-                "reason": condition.get("reason", ""),
-                "message": condition.get("message", ""),
-            }
-    # Nothing converges this kind, so "not reported" would never change.
-    if not kind_converges(resource.kind):
-        return {
-            "state": ResourceState.DECLARED,
-            "label": "Not checked",
-            "reason": "",
-            "message": "",
-        }
+            return _health(
+                ResourceState.DEPLOYING if deploying else state,
+                deploying or label,
+                condition.get("reason", ""),
+                condition.get("message", ""),
+            )
     # HQ has asked for something the controller has not confirmed yet. That is
     # the normal state of a resource between being declared and being applied,
     # not a fault: the model already says so by carrying two generations.
-    if resource.observed_generation != resource.generation:
-        return {
-            "state": ResourceState.PENDING,
-            "label": "Change waiting to apply",
-            "reason": "",
-            "message": "",
-        }
-    return {
-        "state": ResourceState.UNKNOWN,
-        "label": NOT_READ_LABEL,
-        "reason": "",
-        "message": "HQ has not read it yet.",
-    }
+    converges = kind_converges(resource.kind)
+    if converges and resource.observed_generation != resource.generation:
+        return _health(ResourceState.PENDING, "Change waiting to apply")
+    read_at = resource.last_observed_at
+    if behind(read_at, kinds_read().get(resource.kind)):
+        return _health(ResourceState.UNSEEN, "Not found lately", message="The others of its type have been read since.")
+    if (ready := active.get(READY)) is not None:
+        if read_at is None or freshness(resource.kind, read_at).stale:
+            said = f"HQ reads it every {duration(cadence(resource.kind).every)}."
+            return _health(ResourceState.STALE, OUT_OF_DATE, ready.get("reason", ""), said)
+        return _health(ResourceState.HEALTHY, "Working", ready.get("reason", ""), ready.get("message", ""))
+    # Nothing converges this kind, so "not reported" would never change.
+    if not converges:
+        return _health(ResourceState.DECLARED, "Not checked")
+    return _health(ResourceState.UNKNOWN, NOT_READ_LABEL, message="HQ has not read it yet.")
+
+
+def _health(state: ResourceState, label: str, reason: str = "", message: str = "") -> HealthPart:
+    return {"state": state, "label": label, "reason": reason, "message": message}
 
 
 def controller_contract(resource: ManagedResource) -> dict[str, Any]:

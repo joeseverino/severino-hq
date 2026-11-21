@@ -23,7 +23,6 @@ from .asks import APPLIES_SHORTLY
 from .display_words import as_members
 from .entity_links import entity_link, kind_label, record_name
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
-from .freshness import behind
 from .infrastructure import (
     RecordState,
     ResourceState,
@@ -42,7 +41,6 @@ lazy from . import machines
 lazy from .approvals import pending
 lazy from .conditions import DEGRADED, DRIFTED, held_since
 lazy from .connections import connection_readings
-lazy from .facts import kinds_read
 lazy from .managed_records import ManagedResourceListed, ManagedResourceRecord
 lazy from .projection import iso, page_of, read_once
 lazy from .security import internal_principal
@@ -168,9 +166,10 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
     """A record that is switched off, changed outside HQ, or reporting a problem."""
 
     read_at = resource.last_observed_at
-    if not resource.enabled:
-        return RecordStatus(RecordState.OFF, "Switched off in HQ", "HQ does not apply or check it.", None, read_at)
-    if health["state"] == ResourceState.DRIFTED:
+    state = ResourceState(health["state"])
+    if state is ResourceState.OFF:
+        return RecordStatus(RecordState.OFF, health["label"], health["message"], None, read_at)
+    if state is ResourceState.DRIFTED:
         return RecordStatus(
             RecordState.DRIFTED,
             health["label"],
@@ -178,17 +177,9 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
             held_since(resource.conditions, DRIFTED),
             read_at,
         )
-    if health["state"] == ResourceState.DEPLOYING:
+    if state in (ResourceState.DEPLOYING, ResourceState.DEGRADED):
         return RecordStatus(
-            RecordState.DEPLOYING,
-            health["label"],
-            health["message"],
-            held_since(resource.conditions, DEGRADED),
-            read_at,
-        )
-    if health["state"] == ResourceState.DEGRADED:
-        return RecordStatus(
-            RecordState.DEGRADED,
+            RecordState(state),
             health["label"],
             health["message"],
             held_since(resource.conditions, DEGRADED),
@@ -198,8 +189,8 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
 
 
 def record_status(resource, *, health: dict[str, str] | None = None) -> RecordStatus:
-    """Where one record stands; one last seen well before its kind's last
-    read was missing from that read."""
+    """Where one record stands: its health (``resource_health``) in the words
+    its page says it."""
 
     health = health or resource_health(resource)
     fault = _fault_status(resource, health)
@@ -207,23 +198,18 @@ def record_status(resource, *, health: dict[str, str] | None = None) -> RecordSt
         return fault
     read_at = resource.last_observed_at
     applies, automatically = _reconciles(resource.kind)
-    if applies and resource.observed_generation != resource.generation:
+    state = ResourceState(health["state"])
+    if state is ResourceState.PENDING:
         return RecordStatus(
             RecordState.PENDING,
-            "Change waiting to apply",
+            health["label"],
             APPLIES_SHORTLY if automatically else f"Press {OperationRequest.Action.RECONCILE.label} to apply it.",
             None,
             read_at,
         )
-    if behind(read_at, kinds_read().get(resource.kind)):
-        return RecordStatus(
-            RecordState.UNSEEN,
-            "Not found lately",
-            "The others of its type have been read since.",
-            None,
-            read_at,
-        )
-    if health["state"] == ResourceState.HEALTHY:
+    if state in (ResourceState.UNSEEN, ResourceState.STALE):
+        return RecordStatus(RecordState(state), health["label"], health["message"], None, read_at)
+    if state is ResourceState.HEALTHY:
         return RecordStatus(
             RecordState.WORKING,
             health["label"],

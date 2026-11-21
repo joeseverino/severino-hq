@@ -237,13 +237,12 @@ class RecordedResponsibilityTests(TestCase):
     """
 
     def test_a_domain_is_recorded_rather_than_unobserved(self):
-        from hq.platform.application.infrastructure import resource_health
+        from hq.platform.application.infrastructure import ResourceState, resource_health
 
         resource = declare("a-domain", "cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns-account"})
 
-        health = resource_health(resource)
-        self.assertEqual(health["state"], "declared")
-        self.assertEqual(health["message"], "")
+        # Recorded, and never good: nothing checks it.
+        self.assertEqual(ResourceState(resource_health(resource)["state"]).tone, "neutral")
 
     def test_it_does_not_reach_the_attention_queue(self):
         from hq.platform.application.attention import infrastructure
