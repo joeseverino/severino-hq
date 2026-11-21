@@ -160,7 +160,8 @@ def panel_specs(
             icon="server",
             short_labels=(("Containers", "containers"), ("Docker storage", "Storage")),
             lead=("Containers", "CPU"),
-            caption=("CPU", "Memory"),
+            # Storage under either name: Docker's own, or the host's disk.
+            caption=("CPU", "Memory", "Docker storage", "Storage"),
             link=("Containers", reverse("control_plane:containers")),
         )
     ]
@@ -377,6 +378,7 @@ def _panel(
         "standing": _standing(payload, refreshing=awaited),
         "due": found.due,
         "outdated": found.stale,
+        "unanswered": found.unanswered,
         "freshness": found,
         # A panel is colored only for what needs a look; a healthy one reads in ink.
         "tone": payload.get("status") if payload.get("status") in (Tone.ATTENTION, Tone.SERIOUS) else "",
@@ -653,9 +655,10 @@ def glance_context(
         panels = tuple({**panel, "ask": refresh_ask(panel["standing"])} for panel in panels)
     return {
         "dashboard_panels": panels,
-        # The strip is asked again for as long as a reading is on its way, and
-        # asks for the due ones itself when the page opens.
-        "dashboard_refreshing": any(panel.get("pending") for panel in panels),
+        # The strip is asked again for as long as a reading is on its way,
+        # until its ask goes unanswered, and asks for the due ones itself when
+        # the page opens.
+        "dashboard_refreshing": any(panel["pending"] and not panel["unanswered"] for panel in panels),
         "dashboard_due": any(panel.get("due") for panel in panels),
         "dashboard_glance_settings": configuration,
     }

@@ -28,6 +28,7 @@ from hq_sdk.testing import plain
 from .. import readings
 from ..asks import REFRESHING
 from ..capabilities import execute_capability
+from ..freshness import DASHBOARD_GLANCE, cadence
 from ..glance import (
     DASHBOARD_MACHINE,
     DASHBOARD_SETTINGS,
@@ -74,7 +75,10 @@ class DashboardGlanceTests(TestCase):
         panel = self.machine_panel()
 
         self.assertEqual((panel["lead"]["label"], panel["lead"]["value"]), ("Containers", "3"))
-        self.assertEqual({(m["label"], m["value"]) for m in panel["caption"]}, {("CPU", "37%"), ("Memory", "25%")})
+        self.assertEqual(
+            {(m["label"], m["value"]) for m in panel["caption"]},
+            {("CPU", "37%"), ("Memory", "25%"), ("Docker storage", "3.0 GB")},
+        )
         shown = text(render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [panel]}))
         self.assertIn("2.0 GB of 8.0 GB", shown)
         self.assertIn("4 cores", shown)
@@ -305,28 +309,29 @@ class DashboardGlanceTests(TestCase):
         # The glance reads the one machine it was asked about, never the rest.
         assert_subject_cost_does_not_grow(self, sizes=(1, 20), arrange=arrange, draw=lambda _count: dashboard_panels())
 
-    def test_snapshot_age_is_explicit_at_the_freshness_boundary(self):
-        """Due at one refresh interval; out of date only past the tolerance.
-
-        A seven-minute-old reading is asked for again and is still current.
-        """
+    def test_a_reading_ages_into_due_and_is_out_of_date_only_when_its_ask_goes_unanswered(self):
+        """Due at one refresh interval, however old; out of date only once a
+        refresh asked for is not answered in time, or the last one failed."""
 
         now = timezone.now()
-        for age, due, stale in (
-            (4, False, False),
-            (5, True, False),
-            (7, True, False),
-            (15, True, True),
+        within = cadence(DASHBOARD_GLANCE).stale_after
+        for age, asked, failed, due, stale in (
+            (timedelta(minutes=4), None, False, False, False),
+            (timedelta(minutes=5), None, False, True, False),
+            (timedelta(days=20), None, False, True, False),
+            (timedelta(days=20), within / 2, False, True, False),
+            (timedelta(days=20), within, False, True, True),
+            (timedelta(minutes=1), None, True, True, True),
         ):
-            with self.subTest(age=age):
-                readings.record(readings.weather(POINT), CLEAR, observed_at=now - timedelta(minutes=age))
-                with patch("hq.platform.application.glance.timezone.now", return_value=now):
-                    panels = dashboard_panels()
-                weather = next(panel for panel in panels if panel["id"] == "weather")
-                self.assertEqual(weather["due"], due)
-                self.assertEqual(weather["outdated"], stale)
-                self.assertEqual(weather["payload"]["status"], "good")
+            with self.subTest(age=age, asked=asked, failed=failed):
+                DashboardRefreshRequest.objects.all().delete()
+                if asked is not None:
+                    DashboardRefreshRequest.objects.create(panel_id="weather", requested_at=now - asked)
+                reading = {**CLEAR, "refresh_failed": "timeout"} if failed else CLEAR
+                readings.record(readings.weather(POINT), reading, observed_at=now - age)
+                weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
                 html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [weather]})
+                self.assertEqual((weather["due"], weather["outdated"]), (due, stale))
                 self.assertEqual('data-reading-age="stale"' in html, stale)
 
     def test_with_no_machine_chosen_no_panel_is_drawn(self):
@@ -671,12 +676,12 @@ class GlanceEndpointTests(TestCase):
             observed_at=timezone.now() - timedelta(hours=1),
         )
 
-    def test_a_get_on_a_stale_glance_requests_nothing(self):
+    def test_a_get_on_a_due_glance_requests_nothing(self):
         with patch("hq.platform.application.cadence._ring") as doorbell:
             response = self.client.get(reverse("dashboard_glance"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-reading-age="stale"')
+        self.assertContains(response, 'data-reading-age="due"')
         self.assertFalse(DashboardRefreshRequest.objects.exists())
         doorbell.assert_not_called()
 
@@ -710,6 +715,33 @@ class GlanceEndpointTests(TestCase):
         self.assertTrue(select(response, "data-fragment-poll"))
         (part,) = select(response, "data-fragment-part", f"machine-{self.machine.pk}")
         self.assertNotIn(REFRESHING, part.text)
+
+    def test_a_stale_post_asks_again_only_for_an_ask_that_went_unanswered(self):
+        panel = f"machine-{self.machine.pk}"
+        within = cadence(DASHBOARD_GLANCE).stale_after
+        for waited, asked_again in ((within / 2, False), (within, True)):
+            with self.subTest(waited=waited):
+                asked = timezone.now() - waited
+                DashboardRefreshRequest.objects.update_or_create(
+                    panel_id=panel, defaults={"requested_at": asked, "completed_at": None}
+                )
+
+                response = self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
+
+                self.assertEqual(DashboardRefreshRequest.objects.get(panel_id=panel).requested_at > asked, asked_again)
+                # Followed while it is on its way again.
+                self.assertTrue(select(response, "data-fragment-poll"))
+
+    def test_an_ask_left_unanswered_is_followed_no_longer(self):
+        DashboardRefreshRequest.objects.create(
+            panel_id=f"machine-{self.machine.pk}",
+            requested_at=timezone.now() - cadence(DASHBOARD_GLANCE).stale_after,
+        )
+
+        response = self.client.get(reverse("dashboard_glance"))
+
+        self.assertFalse(select(response, "data-fragment-poll"))
+        self.assertContains(response, 'data-reading-age="stale"')
 
     def test_a_stale_post_asks_for_the_weather_never_read(self):
         # A point set and no forecast stored: the machine's reading is current.

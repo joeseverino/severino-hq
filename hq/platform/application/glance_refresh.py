@@ -115,14 +115,15 @@ def request_stale_panel_refresh(_command: DashboardRefreshCommand, *, principal:
 
     The dashboard posts this when it opens on a due reading. Only panels that
     are due, refreshable and not already waiting on a refresh are asked for,
-    so repeat views of one card ask once.
+    so repeat views of one card ask once; one whose ask went unanswered is
+    asked again, so a refresh that never reached a reader is not the last.
     """
 
     del principal
     wanted = [
         str(panel["id"])
         for panel in dashboard_panels()
-        if panel.get("due") and panel.get("refreshable") and not panel.get("pending")
+        if panel["due"] and panel["refreshable"] and (not panel["pending"] or panel["unanswered"])
     ]
     # Posted as the page opens, which says nothing of it.
     return _ask_for(wanted, why="the dashboard's due readings")

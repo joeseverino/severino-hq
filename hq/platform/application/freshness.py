@@ -184,6 +184,8 @@ class Freshness:
     state: str
     observed_at: datetime | None
     stale_after: timedelta
+    # An ask for a reading taken on open went unanswered, so asking again is due.
+    unanswered: bool = False
 
     @property
     def due(self) -> bool:
@@ -220,19 +222,16 @@ def freshness(
     """
 
     found = cadence(kind)
+    unanswered = found.on_open and asked_at is not None and reached(asked_at + found.stale_after, now=now)
     if observed_at is None:
-        return Freshness(NEVER, None, found.stale_after)
-    if found.on_open:
-        stale = failed or (asked_at is not None and reached(asked_at + found.stale_after, now=now))
-    else:
-        stale = reached(observed_at + found.stale_after, now=now)
-    if stale:
+        return Freshness(NEVER, None, found.stale_after, unanswered)
+    if (failed or unanswered) if found.on_open else reached(observed_at + found.stale_after, now=now):
         state = STALE
     elif reached(observed_at + found.every, now=now):
         state = DUE
     else:
         state = CURRENT
-    return Freshness(state, observed_at, found.stale_after)
+    return Freshness(state, observed_at, found.stale_after, unanswered)
 
 
 # How far behind its own kind's newest reading a record may fall before the
