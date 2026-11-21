@@ -730,7 +730,10 @@ def _every_kind() -> DataTable:
     """A table of every kind of cell: a group, a row that folds others under
     it with its count and a muted line, a readout, a cut line, a moment, an
     amount, a state, free text, a part only a narrow box or the open line
-    shows, and the count of a fold's rest across the row."""
+    shows, and the count of a fold's rest across the row; a state drawn as
+    ``status_pill`` draws it (a chip, an icon), a tip and a title, blocks
+    kept for the open line, a declared part, a row's id, data, mark and
+    order, a total in the foot, and a region of its own height."""
 
     from hq.platform.application import tables
 
@@ -760,6 +763,36 @@ def _every_kind() -> DataTable:
         ),
     )
     rest = tables.Row((Cell("1 more change", "/example/rest/", name=True),), folded="example-fold", across=True)
+    from hq.platform.core.included_parts import READING_AGE
+
+    marked = tables.Row(
+        (
+            Cell(
+                "example-host-04",
+                name=True,
+                title="An example host",
+                parts=(Cell(status=tables.StatusMark("Edge", chip=True)),),
+                below=(
+                    tables.Below("", (Cell("An example note kept for the open line."),)),
+                    tables.Below("Also sees", (Cell("example-zone"), Cell("example-bucket"))),
+                ),
+            ),
+            Cell("example.com", readout=True, tip="Locked to an example digest"),
+            Cell(piece=tables.Piece(READING_AGE, {"at": DRAWN_AT - timedelta(days=1)}, words="Last read a day ago")),
+            Cell(amount=Decimal(3)),
+            Cell(status=tables.StatusMark("Update", tone="attention", pill=False, icon="deploy", tip="1.4.2")),
+            Cell(
+                "an example note",
+                muted=True,
+                tip="What the note says in full",
+                parts=(Cell("…1234", muted=True, aloud="ending in 1234"),),
+            ),
+        ),
+        id="example-host-04",
+        data={"example": "host-04"},
+        mark=RowMark("/example/pin/", True, "example-host-04", "favorites"),
+        order=RowOrder("/example/move/", "example-host-04", True, False),
+    )
     return DataTable(
         "Example kinds",
         (
@@ -773,10 +806,12 @@ def _every_kind() -> DataTable:
         groups=(
             tables.Group(
                 "Example group",
-                (head, row("example-host-02", folded="example-fold"), rest, row("example-host-03")),
-                count=3,
+                (head, row("example-host-02", folded="example-fold"), rest, row("example-host-03"), marked),
+                count=4,
             ),
         ),
+        footer=tables.Row((Cell("Total", name=True), Cell(), Cell(), Cell(amount=Decimal(39)), Cell(), Cell())),
+        region={"pane": True},
     )
 
 

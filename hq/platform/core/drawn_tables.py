@@ -6,9 +6,10 @@ template draws the element it belongs to. No markup is read back."""
 from dataclasses import dataclass, field
 from typing import Any
 
+from django.template.loader import render_to_string
 from django.utils.safestring import SafeString, mark_safe
 
-from hq.platform.application.tables import Cell, DataTable, Group, Row, column_kind
+from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, column_kind
 from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.table_tags import LINE_FRAME, table_heading
 from hq.platform.core.templatetags.value_tags import money, when_text
@@ -55,6 +56,9 @@ class DrawnRow:
     # whether it lists the row's run evidence.
     detail: int = 0
     editor: dict[str, Any] | None = None
+    # The blocks its cells keep for its open line, whole and then each under its label.
+    blocks: list[Below] = field(default_factory=list)
+    entries: list[Below] = field(default_factory=list)
     # A cell for its tick-box and one for its actions, each with its marks.
     select: DrawnCell | None = None
     actions: DrawnCell | None = None
@@ -77,9 +81,13 @@ def drawn(table: DataTable, context: Any) -> dict[str, Any]:
     groups = [
         DrawnGroup(group, [_row(table, row, context, width) for row in group.rows], width) for group in table.bodies
     ]
+    footer = _row(table, table.footer, context, width) if table.footer else None
+    if footer:
+        footer.facts.section = "tfoot"
     facts = [RowFacts("thead", cells=[facts for _, facts in headings])]
     facts += [row.facts for group in groups for row in group.rows]
-    laid = lay_out(facts, sorts=table.sorted_by is None)
+    facts += [footer.facts] if footer else []
+    laid = lay_out(facts, sorts=table.sorted_by is None and not table.keeps_order and not table.region["chart"])
     # A row across the table stands in the gutter its names keep, holding no toggle.
     gutter = any("row-gutter" in facts.added for _, facts in headings)
     for group in groups:
@@ -87,11 +95,15 @@ def drawn(table: DataTable, context: Any) -> dict[str, Any]:
             if row.row.across and gutter:
                 row.cells[0].facts.added.append("row-gutter")
             _mark(row, width)
+    if footer:
+        _mark(footer, width)
     sorting = {"table": {"selected_sort": table.sorted_by or ""}}
     return {
         "table": table,
         "headings": [_heading(sorting, column, facts, laid) for column, facts in headings],
         "groups": groups,
+        "footer": footer,
+        "pieces": _pieces(table, context),
         "marks": mark_safe("".join(laid.marks)),  # noqa: S308 - the layout's own attributes
         "rows": any(group.rows for group in groups),
         # The open line a region whose rows hold cells back draws once, which tables.js clones.
@@ -170,7 +182,7 @@ def _row(table: DataTable, row: Row, context: Any, width: int) -> DrawnRow:
 
 def _actions(row: Row) -> CellFacts:
     return CellFacts(
-        classes=("row-actions",), says_nothing=not row.actions, controls=bool(row.actions), presses=bool(row.actions)
+        classes=("row-actions",), says_nothing=not row.controls, controls=row.controls, presses=row.controls
     )
 
 
@@ -182,9 +194,15 @@ def _mark(row: DrawnRow, width: int) -> None:
             continue
         if row.row.across:
             cell.facts.marks.insert(0, f' colspan="{width}"')
-        cell.attributes = _attributes(cell.facts, cell.role)
+        # The tick-box's and the actions' partials write their own class.
+        own = "select-column" if cell is row.select else "row-actions" if cell is row.actions else ""
+        cell.attributes = _attributes(cell.facts, cell.role, own)
         cell.box, cell.toggle, cell.named = cell.facts.box, cell.facts.toggle, cell.facts.named
     attributes = [*row.facts.marks]
+    if row.row.id:
+        attributes.append(format_html(' id="{}"', row.row.id))
+    # Each name is held to an attribute's (``Row``), so it is written as it is.
+    attributes += [format_html(f' data-{name}="{{}}"', value) for name, value in row.row.data.items()]
     if row.row.folds:
         attributes.append(format_html(' id="{}" data-folds', row.row.folds))
     if row.row.folded:
@@ -195,11 +213,13 @@ def _mark(row: DrawnRow, width: int) -> None:
         attributes.insert(0, format_html(' class="{}"', " ".join(row.facts.added)))
     row.attributes = mark_safe("".join(attributes))  # noqa: S308 - each piece escaped above or the layout's own
     if row.facts.detail:
-        row.detail = row.facts.detail[0]
+        row.detail, blocks, entries = row.facts.detail
+        row.blocks = [moved.content for moved in blocks if isinstance(moved.content, Below)]
+        row.entries = [moved.content for moved in entries if isinstance(moved.content, Below)]
 
 
-def _attributes(facts: CellFacts, role: str) -> SafeString:
-    classes = [*facts.classes, *facts.added]
+def _attributes(facts: CellFacts, role: str, own: str = "") -> SafeString:
+    classes = [name for name in (*facts.classes, *facts.added) if name != own]
     return format_html(
         "{}{}{}",
         format_html(' class="{}"', " ".join(classes)) if classes else "",
@@ -218,16 +238,24 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
             context, asked.form, asked.key, label=asked.label, action=asked.action, verb=asked.verb, **asked.initial
         )
     parts = [part for part in cell.parts if part.shows not in _OFF_LINE]
-    on_line = [_length(cell), *(_length(part) for part in parts)]
+    on_line = [_length(cell), *(_length(part, after=True) for part in parts)]
     line = sum(on_line) + (len(str(cell.count)) if cell.count is not None else 0) + cell.fold
-    lines = [sum(_length(part) for part in (each, *each.parts) if part.shows not in _OFF_LINE) for each in cell.lines]
-    tops = [bool(cell.tone)] + [False] * (len(cell.parts) + bool(cell.lines) + (cell.count is not None) + cell.fold)
+    lines = [
+        _length(each) + sum(_length(part, after=True) for part in each.parts if part.shows not in _OFF_LINE)
+        for each in cell.lines
+        if each.shows not in _OFF_LINE
+    ]
+    tops = [bool(cell.tone or cell.status)] + [False] * (
+        len(cell.parts) + bool(cell.lines) + (cell.count is not None) + cell.fold
+    )
     facts = CellFacts(
         says_nothing=cell.says_nothing,
         longest=max([line, *lines]),
         controls=bool(cell.url or (cell.link and cell.link.url) or cell.fold or cell.field is not None or editor),
         fields=cell.field is not None,
-        moved=[Moved("editor", None, editor)] if editor and editor["open"] else [],
+        moved=[Moved("editor", None, editor)]
+        if editor and editor["open"]
+        else [] + [Moved("below", block.label or None, block) for block in cell.below],
         holds={SHOWN[part.shows] for part in (cell, *cell.parts, *cell.lines) if part.shows in ("more", "narrow-more")},
         names=int(cell.name),
         parted=any(part.role for part in (*cell.parts, *cell.lines)),
@@ -240,14 +268,40 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
     return DrawnCell(cell, facts, role=cell.role, editor=editor)
 
 
-def _length(cell: Cell) -> int:
-    """The characters a value shows on its line, spaces collapsed."""
+def _length(cell: Cell, *, after: bool = False) -> int:
+    """The characters a value shows on its line, spaces collapsed, and the
+    space before it that a part ``after`` another takes where it has no dot."""
 
-    if cell.moment is not None:
+    if cell.status is not None:
+        words = cell.status.words
+    elif cell.piece is not None:
+        words = cell.piece.words
+    elif cell.moment is not None:
         words = when_text(cell.moment, cell.form if cell.form != "mark" else "")
     elif cell.amount is not None:
         words = str(money(cell.amount))
     else:
         words = (cell.link.label if cell.link else cell.text) + cell.after
     shown = 0 if SAYS_NOTHING.fullmatch(words) else len(" ".join(words.split()))
-    return shown + (_DOT if cell.dot else 0)
+    return shown + (_DOT if cell.dot else int(after))
+
+
+def _pieces(table: DataTable, context: Any) -> dict[Piece, SafeString]:
+    """Each piece a cell of the table draws, drawn by its part's partial."""
+
+    rows = [row for group in table.bodies for row in group.rows] + ([table.footer] if table.footer else [])
+    request = context.get("request") if hasattr(context, "get") else None
+    return {
+        value.piece: render_to_string(value.piece.part.partial, dict(value.piece.context), request)
+        for row in rows
+        for cell in row.cells
+        for value in _values(cell)
+        if value.piece is not None
+    }
+
+
+def _values(cell: Cell) -> tuple[Cell, ...]:
+    """The cell, and each value it holds on its line, beneath it and below it."""
+
+    lines = (*cell.lines, *(line for block in cell.below for line in block.lines))
+    return (cell, *cell.parts, *lines, *(part for line in lines for part in line.parts))

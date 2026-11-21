@@ -269,6 +269,10 @@ def _region(
     }
 
 
+# The options a region takes, to which a declared table's are bound (``DataTable.region``).
+REGION = inspect.signature(_region)
+
+
 class RegionNode(template.Node):
     """``{% table_region %}``: what it encloses, in its region."""
 

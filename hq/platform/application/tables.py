@@ -1,5 +1,7 @@
 """A table's columns and cells: how each column sets, sorts and leaves a narrow box."""
 
+import inspect
+import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
@@ -11,12 +13,15 @@ from django.db import models
 from django.db.models import Model
 
 from hq.platform.core.table_layout import SAYS_NOTHING, leaving_order
+lazy from hq.platform.core.templatetags import status_tags, table_tags
 
 from .display_words import display
 
 if TYPE_CHECKING:
+    from hq.platform.core.template_parts import Part
+
     from .entity_links import EntityLink
-    from .pages import PageAction
+    from .pages import PageAction, RowMark, RowOrder
     from .tone import Toned
     from .work_runs import RunEvidence
 
@@ -107,6 +112,56 @@ type Shows = Literal["", "more", "narrow", "narrow-more"]
 type Role = Literal["", "data", "prose"]
 
 
+@dataclass(frozen=True, slots=True, init=False)
+class StatusMark:
+    """A state drawn as ``status_pill`` draws it, given its own arguments,
+    which are bound to its signature when the mark is made."""
+
+    parts: tuple[Any, ...]
+    options: Mapping[str, Any]
+
+    def __init__(self, *parts: Any, **options: Any) -> None:
+        bound = inspect.signature(status_tags.status_pill).bind(*parts, **options)
+        object.__setattr__(self, "parts", tuple(bound.arguments.get("parts", ())))
+        given = {name: value for name, value in bound.arguments.items() if name not in ("parts", "data")}
+        object.__setattr__(self, "options", {**given, **bound.arguments.get("data", {})})
+
+    @property
+    def words(self) -> str:
+        """What it says on its line: its words, or nothing for a mark alone."""
+
+        if self.options.get("shown", True) is False:
+            return ""
+        return " ".join(str(getattr(part, "label", part)) for part in self.parts if part not in (None, ""))
+
+    def __html__(self) -> str:
+        return status_tags.status_pill(*self.parts, **self.options)
+
+
+@dataclass(frozen=True, slots=True)
+class Below:
+    """A block its row shows only on its open line: under its label, or,
+    with none, whole before the labeled ones. Each line one value."""
+
+    label: str
+    lines: tuple[Cell, ...]
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class Piece:
+    """A declared part's partial drawn as a cell's value, given its variables.
+    ``words`` are what it says on its line, which the layout reads for its
+    length and emptiness, never its drawing."""
+
+    part: Part
+    context: Mapping[str, Any]
+    words: str
+
+    def __post_init__(self) -> None:
+        if not self.part.partial:
+            raise ValueError("A piece is a declared part's partial.")
+
+
 @display
 class Cell:
     """One cell of a table, said once: its value, drawn by what it is (words,
@@ -155,13 +210,28 @@ class Cell:
     editor: RowEditor | None = None
     # The value it sorts by on the page, where its words are not it.
     sort: str = ""
+    # A state drawn as ``status_pill`` draws it, standing in for its words.
+    status: StatusMark | None = None
+    # What a press or a hover shows of it, and its ``title``.
+    tip: str = ""
+    title: str = ""
+    # What a screen reader hears in place of its words ("ending in 1234").
+    aloud: str = ""
+    # The blocks its row shows only on its open line.
+    below: tuple[Below, ...] = ()
+    # A declared part drawn as its value.
+    piece: Piece | None = None
 
     def __post_init__(self) -> None:
         values = [bool(self.text or self.url or self.link), self.moment is not None, self.amount is not None]
+        values += [self.status is not None, self.piece is not None]
         if sum(values) + (self.field is not None) + (self.editor is not None) > 1:
-            raise ValueError("A cell's value is one of words, a moment, an amount, a field or an editor.")
-        nested = [part.parts for part in self.parts] + [part.lines for part in (*self.parts, *self.lines)]
-        held = [part.fold or part.field is not None or part.editor is not None for part in (*self.parts, *self.lines)]
+            raise ValueError(
+                "A cell's value is one of words, a moment, an amount, a state, a piece, a field or an editor."
+            )
+        within = (*self.parts, *self.lines, *(line for block in self.below for line in block.lines))
+        nested = [part.parts for part in self.parts] + [part.lines or part.below for part in within]
+        held = [part.fold or part.field is not None or part.editor is not None for part in within]
         if any(nested) or any(held):
             raise ValueError("A cell's parts are each one value, and each of its lines one value and its parts.")
 
@@ -186,6 +256,8 @@ class Cell:
             and self.moment is None
             and self.amount is None
             and self.count is None
+            and not (self.status and self.status.parts)
+            and not (self.piece and not SAYS_NOTHING.fullmatch(self.piece.words))
             and not (self.fold or self.field is not None or self.editor is not None)
             and all(part.says_nothing for part in (*self.parts, *self.lines))
         )
@@ -232,6 +304,10 @@ class TableColumn:
         check_drop(self.drop, self.css, self.label)
 
 
+# A ``data-`` attribute's name after ``data-``.
+_DATA_NAME = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
+
+
 @dataclass(frozen=True, slots=True)
 class Row:
     """One row: its cells, what may be done to its record, the run evidence its
@@ -249,6 +325,24 @@ class Row:
     emphasized: bool = False
     # Its one cell spans every column: the count of a fold's rest.
     across: bool = False
+    # Its id, which a link to the row names, and each ``data-`` attribute a
+    # script finds it by, by its name after ``data-``.
+    id: str = ""
+    data: Mapping[str, str] = field(default_factory=dict)
+    # The reader's own mark on its record and the pair that moves it in the
+    # reader's order, first of its controls (``{% row_actions %}``).
+    mark: RowMark | None = None
+    order: RowOrder | None = None
+
+    def __post_init__(self) -> None:
+        if not all(_DATA_NAME.fullmatch(name) for name in self.data):
+            raise ValueError(f"A row's data names are lowercase words joined by hyphens, never {sorted(self.data)!r}.")
+
+    @property
+    def controls(self) -> bool:
+        """Whether it ends with a cell of controls."""
+
+        return bool(self.actions or self.mark or self.order)
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,11 +372,23 @@ class DataTable:
     groups: tuple[Group, ...] = ()
     selectable: bool = False
     sorted_by: str | None = None
+    # Its rows stand in an order of their own, which no heading changes.
+    keeps_order: bool = False
+    # The row of its totals, drawn last, in its ``tfoot``.
+    footer: Row | None = None
+    # What ``{% table_region %}`` takes beside its label: its box, and what
+    # it says with no rows.
+    region: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.rows and self.groups:
             raise ValueError("A table holds rows or groups of them, not both.")
         object.__setattr__(self, "columns", ranked(self.columns))
+        if {"declared", "compare"} & set(self.region):
+            raise ValueError("A declared table's region is declared already, and a change's is the change table's.")
+        bound = table_tags.REGION.bind(self.label, **self.region)
+        bound.apply_defaults()
+        object.__setattr__(self, "region", {name: value for name, value in bound.arguments.items() if name != "label"})
 
     @classmethod
     def of(cls, label: str, columns: tuple[TableColumn, ...], records: Iterable[Any], **options: Any) -> DataTable:
@@ -298,4 +404,4 @@ class DataTable:
 
     @property
     def has_actions(self) -> bool:
-        return any(row.actions for group in self.bodies for row in group.rows)
+        return any(row.controls for group in self.bodies for row in group.rows)
