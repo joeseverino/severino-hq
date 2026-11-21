@@ -250,7 +250,8 @@ _SQUEEZED_HEAD = (
     '<header class="page-head" style="display: flex; flex-wrap: nowrap">'
     '<div class="page-head-copy" style="display: block; flex: 1 1 0; order: 0">'
     '<p class="page-lede">An example sentence that says what the state of this example thing means.</p></div>'
-    '<div class="page-actions" style="flex: none; order: 1"><a class="btn" href="/example/">Example action here</a></div>'
+    '<div class="page-actions" style="flex: none; order: 1">'
+    '<a class="btn" href="/example/">An example action of many words</a></div>'
     "</header>"
 )
 
