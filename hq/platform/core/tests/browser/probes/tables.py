@@ -407,6 +407,10 @@ CUT_BESIDE_ROOM = (
 # beside it, and a column needs the most its cells do; a cell drawn across
 # the row or stacked beneath it asks no column for anything. A short value
 # holds its line up to its share, then wraps as the table contract allows.
+# A band (`data-band`) is held to the same: its cells stacked one to a row
+# while as many of them as its count puts on a row, each as wide as its
+# words, fit side by side, a cell drawn across the band (a band read as a
+# list) asking for no column.
 ROOM_UNSHARED = (
     "() => {"
     + DESCRIBE
@@ -478,6 +482,33 @@ ROOM_UNSHARED = (
       if (!room || room[1] < short) continue;
       const words = cell.parentElement.parentElement === table.tHead ? 'its heading' : `"${cell.innerText.trim().replace(/\\s+/g, ' ').slice(0, 24)}"`;
       found.push(`${describe(table)}: ${columns.get(cell.cellIndex).name || 'a column'} wraps ${words} in ${Math.round(asks - short)}px of its ${Math.round(asks)}px line while ${room[0] || 'a column'} holds ${Math.round(room[1])}px past its needs`);
+    }
+  }
+  for (const band of document.querySelectorAll('main [data-band]')) {
+    if (!band.checkVisibility() || getComputedStyle(band).display !== 'grid') continue;
+    const cells = [...band.children].filter((cell) => cell.checkVisibility() && getComputedStyle(cell).gridColumnEnd !== '-1');
+    if (cells.length < 2 || new Set(cells.map((cell) => Math.round(cell.getBoundingClientRect().left))).size > 1) continue;
+    // Each cell as wide as its words, laid out again unseen in the band: a
+    // band and a headline cell contain their width (`container`), which a
+    // copy of the whole would measure as nothing.
+    const widths = cells.map((cell) => {
+      const ruler = cell.cloneNode(true);
+      ruler.setAttribute('aria-hidden', 'true');
+      ruler.style.cssText += '; position: absolute; visibility: hidden; inset: 0 auto auto 0; inline-size: max-content; container-type: normal';
+      band.append(ruler);
+      const width = ruler.getBoundingClientRect().width;
+      ruler.remove();
+      return width;
+    }).sort((a, b) => b - a);
+    // The fewest a row holds past one, as the counted rows give them
+    // (figures.css): two of an even count or of seven and more, else three,
+    // since three and five never leave one alone on a row.
+    const fewest = cells.length % 2 === 0 || cells.length >= 7 ? 2 : 3;
+    const gap = parseFloat(getComputedStyle(band).columnGap) || 0;
+    const room = band.getBoundingClientRect().width;
+    const takes = widths.slice(0, fewest).reduce((sum, width) => sum + width, 0) + (fewest - 1) * gap;
+    if (widths.length >= fewest && takes < room) {
+      found.push(`${describe(band)} stacks its ${cells.length} cells one to a row in ${Math.round(room)}px, where ${fewest} take ${Math.round(takes)}px`);
     }
   }
   return [...new Set(found)];
@@ -1027,6 +1058,19 @@ _SQUEEZED = _HEADING_TABLE.format(
     rows=_FIGURES * 2,
 )
 
+# A band held to one column whose two short cells fit side by side.
+_STACKED = (
+    '<dl data-band style="display: grid; grid-template-columns: 100%; inline-size: 600px">'
+    "<div><dt>Example</dt><dd>3</dd></div><div><dt>Example</dt><dd>4</dd></div></dl>"
+)
+# Five facts in a band as wide as the shared dialog holds one (forms.css),
+# as a saved copy's About dialog draws its pages to try.
+_FIVE_IN_A_DIALOG = (
+    '<div style="inline-size: 440px">{% facts layout="band" %}'
+    + "".join(f'{{% fact "Example {n}" value="An example page" url="/example/" icon="search" %}}' for n in range(1, 6))
+    + "{% endfacts %}</div>"
+)
+
 # The chip's name is a value the page prints, as a template's is: a literal is
 # already safe, so `breakable` would pass it as plain words, which wrap.
 _CUT_VALUES = {"chip": _CHIP}
@@ -1116,9 +1160,9 @@ CHECKS = {
     "room unshared": Check(
         ROOM_UNSHARED,
         table=True,
-        reader_sees="words a few to a line beside a column holding room it does not need",
-        plants=(Plant(_SQUEEZED, finds=("wraps its heading",)),),
-        clear=(Example(_HEADED),),
+        reader_sees="words a few to a line beside a column holding room it does not need, or a band's cells one to a row",
+        plants=(Plant(_SQUEEZED, finds=("wraps its heading",)), Plant(_STACKED, finds=("one to a row",))),
+        clear=(Example(_HEADED), Example(_FIVE_IN_A_DIALOG)),
     ),
     "empty panels": Check(EMPTY_PANELS, table=True, reader_sees="a panel in a table with nothing in it"),
     "rows unruled": Check(ROWS_UNRULED, table=True, reader_sees="two rows with no rule between them"),
