@@ -10,7 +10,7 @@
   {% fact "Safe for AI export" %}{% if safe_for_ai_export %}Yes{% else %}<strong>No</strong>{% endif %}{% endfact %}
 {% endfacts %}{% endcard %}
 
-{% if record.notes %}{% section "Index notes" %}<p>{{ record.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
+{% if record.notes %}{% section "Index notes" %}{% include "partials/_linked_text.html" with parts=record.notes|named_links only %}{% endsection %}{% endif %}
 
 {% include "partials/_related.html" with groups=related %}
 {% endlayout %}

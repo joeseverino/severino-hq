@@ -339,13 +339,6 @@ PARTS = (
         example=records.CALENDAR_SOURCES,
     ),
     _part(
-        "certificate_mark",
-        "A certificate's mark: whether it is in force or waits on its issue.",
-        "cert-mark",
-        "is-pending",
-        example=records.CERTIFICATE_MARK,
-    ),
-    _part(
         "change",
         "One value changed: what it was, an arrow, what it is.",
         "change",
@@ -600,12 +593,12 @@ PARTS = (
     ),
     _part(
         "linked_text",
-        "Free text with the names HQ knows in it as links.",
+        "Free text a person wrote, with the names HQ knows in it as links.",
         "linked-text",
         rules="""
-        A person's free text with the names HQ knows in it (a project's deployment notes) is this part,
-        over the text's runs that `application.where_it_runs.named_links` finds: each name a link as every
-        mention is, and its line breaks kept.
+        Every free text a person wrote (a record's notes, a message sent through the contact form) is this
+        part, over the text's runs that `application.where_it_runs.named_links` finds: each name a link as
+        every mention is, and its line breaks kept.
         """,
         example=records.LINKED_TEXT,
     ),

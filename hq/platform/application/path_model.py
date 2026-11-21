@@ -159,6 +159,13 @@ class Certificate:
         return f"confirmed on this site {ago(when)}" if when else "confirmed on this site"
 
     @property
+    def confirmed_on(self) -> str:
+        """The name a browser on it may add that it trusts the certificate too,
+        once the controller confirmed it."""
+
+        return self.serves if self.verified_fingerprint else ""
+
+    @property
     def tip(self) -> str:
         """The hover card: the verdict, then which certificate, who, how long."""
 

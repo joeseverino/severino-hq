@@ -17,7 +17,7 @@
   {% if asset.serial_number %}{% fact "Serial" %}<code>{{ asset.serial_number|breakable }}</code>{% endfact %}{% endif %}
   {% if asset.warranty_date %}{% fact "Warranty until" %}{{ asset.warranty_date|when }}{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
-{% if asset.notes %}{% section "Notes" %}<p>{{ asset.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
+{% if asset.notes %}{% section "Notes" %}{% include "partials/_linked_text.html" with parts=asset.notes|named_links only %}{% endsection %}{% endif %}
 {% include "partials/_related.html" with groups=related %}
 {% endlayout %}
 {% endblock %}

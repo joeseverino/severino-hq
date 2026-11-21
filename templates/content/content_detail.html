@@ -22,7 +22,7 @@
   {% endsection %}
 {% endif %}
 
-{% if item.notes %}{% section "Notes" %}<p>{{ item.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
+{% if item.notes %}{% section "Notes" %}{% include "partials/_linked_text.html" with parts=item.notes|named_links only %}{% endsection %}{% endif %}
 
 {% include "partials/_related.html" with groups=related %}
 {% endlayout %}

@@ -22,7 +22,6 @@ lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
-lazy from hq.platform.application.path_model import Certificate
 lazy from hq.platform.application.relationships import Relationships
 lazy from hq.platform.application.tone import Tone
 lazy from hq.platform.application.topology_model import RelationGroup, Relationship
@@ -714,11 +713,6 @@ CHANGE_STATES = {
         {"old": "example:2026.1.0", "new": "example:2026.3.0"},
     ),
 }
-
-
-CERTIFICATE_MARK = Example(
-    context=lambda: {"certificate": Certificate("Proxy", name="app.example.com", issuer="Example CA")}
-)
 
 
 ICON = Example(context={"name": "check-circle"})

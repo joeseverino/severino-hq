@@ -15,7 +15,7 @@
   {% if about %}{% fact "For" %}<span class="prose">{{ about.kind_label|breakable }} {% entity about %}</span>{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
 
-{% if expense.notes %}{% section "Notes" %}<p>{{ expense.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
+{% if expense.notes %}{% section "Notes" %}{% include "partials/_linked_text.html" with parts=expense.notes|named_links only %}{% endsection %}{% endif %}
 
 {% if not receipted %}
   {% url 'receipts:create' as upload_url %}{% with_query upload_url related_expense=expense.id as upload_url %}

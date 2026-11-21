@@ -22,7 +22,7 @@ opening a day ask this page for the `calendar` part and take it in place.
             {% if entry.object.location or entry.repeat %}{% muted element="p" %}{% if entry.object.location %}{{ entry.object.location|breakable }}{% endif %}{% if entry.object.location and entry.repeat %}{% dot %}{% endif %}{{ entry.repeat|breakable }}{% endmuted %}{% endif %}
             {% if entry.about %}{% muted element="p" %}About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}{% endmuted %}{% endif %}
             {% if entry.next %}{% muted element="p" %}Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}{% endif %}
-            {% if entry.object.notes %}<p>{{ entry.object.notes|breakable|linebreaksbr }}</p>{% endif %}
+            {% if entry.object.notes %}{% include "partials/_linked_text.html" with parts=entry.object.notes|named_links only %}{% endif %}
             {% button_row %}{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}{% endbutton_row %}
           {% endsection %}
         {% endif %}

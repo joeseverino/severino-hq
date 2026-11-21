@@ -77,14 +77,17 @@ def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool, ink: Ink) -> st
     return f"pill {toned}"
 
 
-def _refuse_mixed(*, tone: str, pill: bool, chip: bool, dot: bool, ink: str, icon: str) -> None:
+def _refuse_mixed(*, tone: str, pill: bool, chip: bool, dot: bool, ink: str, icon: str, shown: bool) -> None:
     """Refuse options no one form takes together: a toned chip, a mark beside
-    a pill or a dot, context ink with neither a dot nor a mark."""
+    a pill or a dot, context ink with neither a dot nor a mark, unshown words
+    with no mark to stand for them."""
 
     if chip and (tone or not pill or dot):
         raise ValueError("A chip is a neutral name, never a state: it takes no tone, no pill=False and no dot.")
     if icon and (pill or dot or chip):
         raise ValueError("An icon stands where a dot would, before a state's words: only beside pill=False.")
+    if not shown and not icon:
+        raise ValueError("A state's words go unshown only where its icon stands for them: shown=False beside icon=.")
     if ink not in INKS or (ink == "context" and not (dot or icon)):
         raise ValueError(
             f'ink is one of {", ".join(sorted(INKS))}, and "context" only beside dot=True or an icon; got {ink!r}.'
@@ -103,6 +106,7 @@ def status_pill(
     dot: bool = False,
     ink: Ink = "tone",
     icon: str = "",
+    shown: bool = True,
     **data: object,
 ) -> SafeString:
     """The pill for a state: ``parts`` its words, the first in sentence case; ``tone`` its color, a ``Toned``'s own.
@@ -110,17 +114,20 @@ def status_pill(
     ``pill=False`` draws the words in that color alone, ``dot=True`` after a
     steady dot, ``icon`` after a mark (partials/_icon.html), and
     ``ink="context"`` leaves the words in the surrounding ink so only the dot
-    or mark is toned. ``chip=True`` draws a record's name in no tone and its
-    own case.
+    or mark is toned. ``shown=False`` beside an icon draws the mark alone,
+    its words said only to a screen reader. ``chip=True`` draws a record's
+    name in no tone and its own case.
     """
 
     if not tone and parts and isinstance(parts[0], Toned):
         tone = parts[0]
-    _refuse_mixed(tone=tone, pill=pill, chip=chip, dot=dot, ink=ink, icon=icon)
+    _refuse_mixed(tone=tone, pill=pill, chip=chip, dot=dot, ink=ink, icon=icon, shown=shown)
     words = [str(part.label if isinstance(part, Toned) else part) for part in parts if part not in (None, "")]
     if words and not chip:
         words[0] = sentence(words[0])
     label = mark_safe(" ".join(str(breakable(word)) for word in words))  # noqa: S308 - each word is escaped by breakable
+    if not shown:
+        label = format_html('<span class="visually-hidden">{}</span>', label)
     if icon:
         mark = render_to_string("partials/_icon.html", {"name": icon}).strip()
         label = mark_safe(f"{mark} {label}")  # noqa: S308 - the icon part's own markup, and the escaped words
@@ -211,6 +218,7 @@ def status(
         Ink, Describe("Whose ink its words take beside a dot or an icon: its tone's or the text's.")
     ] = "tone",
     icon: Annotated[str, Describe("Its words after an icon in its tone, beside `pill=False`.")] = "",
+    shown: Annotated[bool, Describe("Its words shown; with `False`, its icon alone, the words said aloud.")] = True,
     **data: Annotated[Any, Describe("Each a `data-` attribute.")],
 ):
     """``{% status "Blocked" tone="attention" %}``: a state as a pill in a
@@ -234,6 +242,7 @@ def status(
         dot=bool(dot),
         ink=ink,
         icon=str(icon or ""),
+        shown=bool(shown),
         **data,
     )
 
@@ -259,7 +268,8 @@ slotted(
         wraps under it where it does not. With `icon=` beside `pill=False` a mark (`partials/_icon.html`)
         leads those words in their tone. So a table cell says its state by its mark as well as its
         color, as a container's standing does ("1 serious" after a shield). With `ink="context"` only the
-        mark is toned ("Up to date"). A first word holding a digit, a version, is said as written. A cell
+        mark is toned ("Up to date"), and with `shown=False` the mark stands alone, its words said only
+        to a screen reader, as a certificate's check after the name it serves is. A first word holding a digit, a version, is said as written. A cell
         that is a state carries its tone (`Cell(word, tone=...)`) and is drawn by it. *Catalog:*
         `status/icon`. *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
         `test_status_tags.py`, which reads every template root for a hand-written pill or a state's tone

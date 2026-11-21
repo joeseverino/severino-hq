@@ -12,7 +12,7 @@
     {% fact "Name" value=submission.name %}
     {% fact "Email" %}<a href="{{ reply_href }}">{{ submission.email|breakable }}</a>{% endfact %}
   {% endfacts %}
-  <p>{{ submission.message|breakable|linebreaksbr }}</p>
+  {% include "partials/_linked_text.html" with parts=submission.message|named_links only %}
 {% aside %}{% status state %}{% if submission.pending %} {% waiting as waits %}{% status waits tone="attention" %}{% endif %}
 {% endsection %}
 

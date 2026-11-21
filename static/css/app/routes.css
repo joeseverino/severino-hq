@@ -1,14 +1,9 @@
-/* Routes and connections: a hop's certificate, the connections table, messages
-   and the dashboard's links. */
+/* Routes and connections: free text with its names linked, the connections
+   table, messages and the dashboard's links. */
 
 @layer components {
 
-/* A hop's certificate: a check in a circle after its name, in the name's color
-   once the controller has verified it, faint until then. It opens its tip, so
-   the check sits in a box a target square (`--target-min`). */
-.cert-mark { display: inline-grid; place-items: center; inline-size: var(--target-min); block-size: var(--target-min); margin-left: .1em; font-size: 1.15em; color: var(--accent-2); vertical-align: middle; cursor: default; }
-.cert-mark.is-pending { color: var(--muted-2); }
-/* A note with the names in it as links. */
+/* Free text a person wrote (partials/_linked_text.html), its line breaks kept. */
 .linked-text { white-space: pre-line; overflow-wrap: anywhere; }
 kbd {
   border-bottom-width: 2px;

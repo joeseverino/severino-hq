@@ -228,6 +228,7 @@ and those that hold across parts in [Design](Design.md).
 | `status` | `icon` |  |  | Its words after an icon in its tone, beside `pill=False`. |
 | `status` | `ink` | `"tone"` | `tone`, `context` | Whose ink its words take beside a dot or an icon: its tone's or the text's. |
 | `status` | `pill` | `True` |  | A pill; with `False`, its words in its tone. |
+| `status` | `shown` | `True` |  | Its words shown; with `False`, its icon alone, the words said aloud. |
 | `status` | `tip` |  |  | What a press or a hover shows. |
 | `status` | `title` |  |  | Its `title`. |
 | `status` | `tone` |  |  | Its tone, or a subject's state in its own words and tone. |
@@ -893,9 +894,9 @@ narrower.
 
 ### partials/_linked_text.html (host only)
 
-A person's free text with the names HQ knows in it (a project's deployment notes) is this part,
-over the text's runs that `application.where_it_runs.named_links` finds: each name a link as every
-mention is, and its line breaks kept.
+Every free text a person wrote (a record's notes, a message sent through the contact form) is this
+part, over the text's runs that `application.where_it_runs.named_links` finds: each name a link as
+every mention is, and its line breaks kept.
 
 ### partials/_modal.html (host only)
 
@@ -1370,7 +1371,8 @@ green, as parts of one `.dot-list`, so the sentence shares the state's line wher
 wraps under it where it does not. With `icon=` beside `pill=False` a mark (`partials/_icon.html`)
 leads those words in their tone. So a table cell says its state by its mark as well as its
 color, as a container's standing does ("1 serious" after a shield). With `ink="context"` only the
-mark is toned ("Up to date"). A first word holding a digit, a version, is said as written. A cell
+mark is toned ("Up to date"), and with `shown=False` the mark stands alone, its words said only
+to a screen reader, as a certificate's check after the name it serves is. A first word holding a digit, a version, is said as written. A cell
 that is a state carries its tone (`Cell(word, tone=...)`) and is drawn by it. *Catalog:*
 `status/icon`. *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
 `test_status_tags.py`, which reads every template root for a hand-written pill or a state's tone
