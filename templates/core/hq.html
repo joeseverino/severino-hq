@@ -39,7 +39,7 @@ uptime and how the request came.
     {% fact "Container" %}{% include "partials/_empty_state.html" with message="No container HQ reads is known to be HQ's." inline=True %}{% endfact %}
     {% endif %}
     {% if work.services %}
-    {% fact "Kept running by" %}{% list %}{% for job in work.services %}<li>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}{% if job.last_run %} {% muted %}since {{ job.last_run|when:"ago" }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}
+    {% fact "Kept running by" %}{% list %}{% for job in work.services %}<li>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}{% if job.last_run %} {% muted %}{{ job.last_run|when:"since" }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}
     {% endif %}
   {% endfacts %}
 {% endsection %}

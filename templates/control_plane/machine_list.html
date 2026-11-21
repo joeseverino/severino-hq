@@ -46,7 +46,7 @@ anyway, and would go on meaning nothing after it stopped being.
             One state. Presence decides when the tailnet reports the machine;
             the connection that sees it is in "Read through".
             {% endcomment %}
-            {% list %}<li>{% status machine.state tone=machine.tone %}</li>{% if machine.presence and not machine.presence.online and machine.presence.last_seen %}<li>{% muted css="cell-part" %}since {{ machine.presence.last_seen|when:"day" }}{% endmuted %}</li>{% endif %}{% endlist %}
+            {% list %}<li>{% status machine.state tone=machine.tone %}</li>{% if machine.presence and not machine.presence.online and machine.presence.last_seen %}<li>{% muted css="cell-part" %}{{ machine.presence.last_seen|when:"since" }}{% endmuted %}</li>{% endif %}{% endlist %}
           </td>
         </tr>
       {% endfor %}

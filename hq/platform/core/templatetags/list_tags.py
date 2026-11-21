@@ -87,10 +87,10 @@ def _title_line() -> dict:
         "page": Page(title="example-host-01"),
         "page_aside": Template(
             '{% list kind="dots" muted=True data_example="example" %}'
-            '<li>{% status "Online" tone="good" %} since 3 days ago</li>'
+            '<li>{% status "Online" tone="good" %} since Oct 3</li>'
             "<li>example role</li><li><code>192.0.2.10</code></li>"
             "<li>also known as <code>example-host-01.example.com</code></li>"
-            '<li><strong>{% status "Out of date" tone="attention" pill=False %}</strong> since 2 hours ago</li>'
+            '<li><strong>{% status "Out of date" tone="attention" pill=False %}</strong> since 9:29 AM</li>'
             '<li>{% status "An example sentence that says what the state means." tone="attention" pill=False %}</li>'
             "{% endlist %}"
         ),

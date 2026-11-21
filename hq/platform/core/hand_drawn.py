@@ -790,6 +790,14 @@ SHAPES = (
         ),
     ),
     Shape(
+        name="since",
+        said='A "since" written before a moment, which reads "since 3 days ago" beside an age.',
+        instead='{{ at|when:"since" }}, which says its own "since"',
+        find=matched(r"\bsince\s+\{\{[^}]*\|when\b"),
+        refuses=('Online since {{ at|when:"ago" }}',),
+        keeps=('Online {{ at|when:"since" }}',),
+    ),
+    Shape(
         name="plural",
         said="A word chosen by a count of one, which the count's own filter agrees.",
         instead='{{ n|counted:"one,many" }}, or {{ n|agreed:"one,many" }} for the words alone',
