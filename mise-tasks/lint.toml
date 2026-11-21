@@ -62,6 +62,12 @@ extends = "hk"
 vars = { step = "prose" }
 depends = ["setup:lint-tools"]
 
+["lint:file-lines"]
+description = "No source file is longer than the ceiling mise.toml declares (SEVERINO_FILE_LINE_*), which also names the files it holds"
+hide = true
+extends = "hk"
+vars = { step = "file-lines" }
+
 ["lint:task-modes"]
 description = "Every file task under mise-tasks/ is executable, so mise runs it rather than hiding it"
 hide = true

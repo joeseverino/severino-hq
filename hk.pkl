@@ -59,6 +59,16 @@ hooks {
         glob = List("tools/lint/vale/**", "hq/platform/core/plain_words.py", "hq/platform/core/interface_text.py") + toolchain
         check = "uv run python -m hq.platform.core.plain_words --whole"
       }
+      // mise.toml's SEVERINO_FILE_LINE_* say which files the ceiling holds, so
+      // the step is handed every file and keeps those.
+      ["file-lines"] {
+        glob = List("**/*")
+        check = "uv run python -m tools.file_lines {{files}}"
+      }
+      ["file-lines-whole"] {
+        glob = List("tools/file_lines.py") + toolchain
+        check = "uv run python -m tools.file_lines"
+      }
       // mise runs a file under mise-tasks/ only when it is executable, and
       // hides one that is not; each starts with a shebang.
       ["task-modes"] {

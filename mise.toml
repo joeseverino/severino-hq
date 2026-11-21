@@ -53,7 +53,7 @@ _.file = "tools/pipeline/toolchain.env"
 # The npm tools setup:lint-tools installs run by name.
 _.path = "tools/lint/node_modules/.bin"
 SEVERINO_LOG_LEVEL = "CRITICAL"
-# The source-file ceiling, read by FileSizeTests and by the brief check that
+# The source-file ceiling, read by lint:file-lines and by the brief check that
 # warns a file near it at launch. Globs are space-separated, from the repo root
 # (Python's PurePath.full_match); HELD names the files the ceiling covers, and
 # one of those is exempt when one of EXEMPT matches and none of COUNTED does (a
