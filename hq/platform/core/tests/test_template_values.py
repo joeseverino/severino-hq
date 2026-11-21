@@ -32,6 +32,7 @@ from hq.platform.core.templatetags.value_tags import breakable, entity, readable
 # to hold.
 WORDS_ONLY = {
     **WORDED_FIGURES,
+    "agreed": "the words a count agrees, as counted says them",
     "length": "a number",
     "floatformat": "a number",
     "pluralize": "a suffix",

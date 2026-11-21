@@ -109,7 +109,8 @@ procedures of the commit of its repository"): name the thing once, by what
 owns it ("the playbooks you adopted"). The reader is "you" when the reader
 acts, and anyone else is named or named by role ("an admin", "the agent"),
 never "a person" or "someone". A count agrees with its noun through
-`counted`, never "account(s)". No sentence praises ("seamless", "blazing
+`counted`, never "account(s)", and words that agree with a count said
+elsewhere ("fix them") through `agreed`. No sentence praises ("seamless", "blazing
 fast") or knocks down a reading nobody held ("not X, but Y"): say what the
 thing does. What an agent or a client's author reads (an API or MCP
 description, an error) is held to the same. A comment says what the code does

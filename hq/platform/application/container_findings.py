@@ -37,7 +37,7 @@ from .references import Kind
 from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
-from .ui import ended
+from .ui import agreed, ended
 from .workflow_contracts import ActionLink
 lazy from .topology_estate import machine_nodes
 lazy from .upgrades import HIGH, MAJOR, OVERRIDES, Plan, plan_for
@@ -174,7 +174,7 @@ def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:
     """Why a vulnerable version has no upgrade to make, as the end of its title."""
 
-    them = "it" if len(standing.known_vulnerabilities) == 1 else "them"
+    them = agreed(len(standing.known_vulnerabilities), "it", "them")
     if plan is None:
         return f", and no release fixes {them} yet"
     if plan.introduces:

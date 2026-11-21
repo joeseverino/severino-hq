@@ -15,7 +15,7 @@ from hq.platform.application.labels import dotted
 
 from .projection import read_once
 from .tone import Tone
-from .ui import counted, ended
+from .ui import agreed, counted, ended
 lazy from . import hq_context
 lazy from .moments import ago
 lazy from .security import INTERNAL_INTERFACE, Capability, Principal
@@ -90,7 +90,7 @@ def _in_place(service: Any) -> Health:
         for facet in service.facets
         if any(claim in service.declared_claims for claim in facet.claims)
     ]
-    checked = f"{get_text_list(parts, 'and')} {'is' if len(parts) == 1 else 'are'} in place" if parts else ""
+    checked = f"{get_text_list(parts, 'and')} {agreed(len(parts), 'is', 'are')} in place" if parts else ""
     checked = capfirst(checked)
     if parts == [_PART_NOUNS["dns"]]:
         return Health(None, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")

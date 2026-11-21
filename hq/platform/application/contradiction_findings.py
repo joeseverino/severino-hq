@@ -32,7 +32,7 @@ from .finding_model import (
 from .finding_steps import Do, told
 from .references import Kind
 from .tone import Tone
-from .ui import counted, ended
+from .ui import agreed, counted, ended
 lazy from . import exposure, zones
 lazy from .containers import containers
 lazy from .facts import inventory_records
@@ -316,7 +316,7 @@ def _unfronted_ports(_estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=Kind.MACHINE.of(machine.name),
                 part=item.running.name,
                 title=f"{item.running.name} on {machine.name} is open to the internet on "
-                f"{'port' if len(open_ports) == 1 else 'ports'} "
+                f"{agreed(len(open_ports), 'port')} "
                 f"{', '.join(str(port) for port in open_ports)}",
                 severity=Tone.SERIOUS,
                 explanation="It answered a test from outside your network, with no proxy in front.",

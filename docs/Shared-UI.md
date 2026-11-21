@@ -302,6 +302,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `figure-in-chip` | A figure inside a chip, which is a word. | the figure in a band of facts, a numeric column or a sentence |
 | `counted-fold` | A list folded at a count, which hides parts its line has room for. | `{% line_list %}`, which shows as many parts as the line holds |
 | `cut-count` | A count cut off from the words it counts. | `<h2>`Words `<span class="count">`N`</span>``</h2>`, or {{ n\|counted:"thing" }} |
+| `plural` | A word chosen by a count of one, which the count's own filter agrees. | {{ n\|counted:"one,many" }}, or {{ n\|agreed:"one,many" }} for the words alone |
 | `code-block` | A code block a keyboard cannot reach, though it scrolls in its own box. | `<pre tabindex="0">` |
 | `control-in-summary` | A control inside a summary, which is the control that opens its disclosure. | the link or button in the disclosure's body |
 | `nested-form` | A form opened inside a form, whose opening tag the parser drops, so the inner form's end closes the outer one. | one form, or the second after the first closes |

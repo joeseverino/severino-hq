@@ -8,7 +8,7 @@ the heading, then what the rules below allow and what they held or refused.
 {% section "Access" lede=said id="agent-access" %}
   {% url 'core:audit_list' as audit_url %}{% with_query audit_url awaiting=1 as held_url %}{% with_query audit_url action="denied" as refused_url %}
   {% facts layout="band" %}
-    {% if rule_count == 1 %}{% fact "Rule" value=rule_count %}{% else %}{% fact "Rules" value=rule_count %}{% endif %}
+    {% fact "Rules" value=rule_count %}
     {% if awaiting_count %}{% fact "Held for approval" value=awaiting_count url=held_url %}{% endif %}
     {% fact "Refused in the last day" value=refused_count url=refused_url %}
   {% endfacts %}
@@ -94,7 +94,7 @@ What an agent, or one of its devices, did over the window, counted once
                 {% with streams=standing.streams %}{% if streams.open and not streams.full %}<p data-streams="open">{{ streams.open|breakable }} of {{ streams.cap|counted:"live update stream,live update streams" }} open.</p>{% endif %}{% endwith %}
                 {% if standing.in_force %}<p>Permissions: {% for name in standing.in_force %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
-                {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
+                {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {{ standing.missing|length|agreed:"it,them" }} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
               </div>
             </th>
             <td data-sort="{{ standing.in_force|length }}">{% list %}<li>{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}</li>{% if standing.beyond_role %}<li>{% muted %}{{ standing.beyond_role|length|breakable }} beyond its person's role{% endmuted %}</li>{% endif %}{% if standing.missing %}<li>{% status standing.missing|length "not granted" tone="attention" pill=False %}</li>{% endif %}{% endlist %}</td>

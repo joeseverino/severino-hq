@@ -37,7 +37,7 @@ from hq.platform.application.moments import (
 )
 from hq.platform.application.money import money as _money
 from hq.platform.application.printable import admitted
-from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
+from hq.platform.application.ui import MISSING, agreed as _agreed, counted as _counted, measured as _measured, no_value
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, SlotsNode, answers, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
@@ -69,6 +69,13 @@ def counted(count, phrases):
     The figure and its first word share a line (``line_breaks.held``).
     """
     return held(_counted(int(count or 0), *counted_phrases(phrases)))
+
+
+@register.filter
+def agreed(count, phrases):
+    """``{{ names|length|agreed:"it,them" }}``: ``counted``'s words without the
+    figure, for words that agree with a count said elsewhere."""
+    return _agreed(int(count or 0), *counted_phrases(phrases))
 
 
 @register.filter

@@ -14,7 +14,7 @@ from .card_items import Insight
 from .entity_links import entity_link
 from .lists import split_list
 from .tone import Tone
-from .ui import counted, ended, measured
+from .ui import agreed, counted, ended, measured
 
 DMARC_VERSION = "DMARC1"
 SPF_VERSION = "spf1"
@@ -79,7 +79,7 @@ def _reports_sentence(value: str) -> str:
     count = len(_addresses(value))
     if not count:
         return ""
-    return "Aggregate reports are sent." if count == 1 else f"Aggregate reports go to {count} addresses."
+    return agreed(count, "Aggregate reports are sent.", f"Aggregate reports go to {count} addresses.")
 
 
 def _percent_sentence(value: str) -> str:
@@ -452,8 +452,9 @@ def _signing(dkim: tuple[Any, ...]) -> tuple[str, str]:
     keys = [record for record in dkim if not _revoked(record)]
     if keys:
         selectors = ", ".join(record.name.split("._domainkey.", 1)[0] for record in keys)
-        words = "key" if len(keys) == 1 else "keys"
-        return counted(len(keys), "key"), ended(f"Mail sent from this domain is signed with the {words} {selectors}")
+        return counted(len(keys), "key"), ended(
+            f"Mail sent from this domain is signed with the {agreed(len(keys), 'key')} {selectors}"
+        )
     if dkim:
         return (
             "Nothing, on purpose",

@@ -99,8 +99,15 @@ def counted(count: int, one: str, many: str | None = None) -> str:
     ("entry" counts as "entries"); a phrase has a verb, and a verb cannot be
     pluralized by adding a letter.
     """
+    return f"{count:,} {agreed(count, one, many)}"
+
+
+def agreed(count: int, one: str, many: str | None = None) -> str:
+    """``counted``'s words without the figure, for a phrase that agrees with a
+    count said elsewhere: "X and Y are in place", "fix them"."""
+
     one, many = counted_forms(one, many)
-    return f"{count:,} {one if count == 1 else many}"
+    return one if count == 1 else many
 
 
 def measured(value: Decimal | float | str | None, unit: str, places: int | None = None, *, plus: bool = False) -> str:

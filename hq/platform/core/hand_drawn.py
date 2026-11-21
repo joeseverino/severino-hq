@@ -790,6 +790,17 @@ SHAPES = (
         ),
     ),
     Shape(
+        name="plural",
+        said="A word chosen by a count of one, which the count's own filter agrees.",
+        instead='{{ n|counted:"one,many" }}, or {{ n|agreed:"one,many" }} for the words alone',
+        find=matched(r"\{%-?\s*if\s[^%]*[!=]=\s*1\s*-?%\}[^{}]*\{%-?\s*else\s*-?%\}[^{}]*\{%-?\s*endif\s*-?%\}"),
+        refuses=("Grant {% if names|length == 1 %}it{% else %}them{% endif %}",),
+        keeps=(
+            'Grant {{ names|length|agreed:"it,them" }}',
+            "{% if rows|length == 1 %}{{ rows.0 }}{% else %}{% for row in rows %}{{ row }}{% endfor %}{% endif %}",
+        ),
+    ),
+    Shape(
         name="code-block",
         said="A code block a keyboard cannot reach, though it scrolls in its own box.",
         instead='<pre tabindex="0">',

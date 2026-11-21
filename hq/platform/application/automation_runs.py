@@ -70,7 +70,7 @@ lazy from .resource_operations import (
 lazy from .routes import reverse
 lazy from .run_reads import RUNS
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
-lazy from .ui import ended
+lazy from .ui import agreed, ended
 lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs, run_url
 
 if TYPE_CHECKING:
@@ -428,7 +428,7 @@ def held_words(details: object, principal: Principal | None = None) -> HeldWords
     machines = [str(host) for host in details.get("machines") or ()]
     shared = [str(host) for host in details.get("shared") or ()]
     if shared:
-        busy = f"{get_text_list(shared, 'and')} {'is' if len(shared) == 1 else 'are'} busy with a run of “{title}”"
+        busy = f"{get_text_list(shared, 'and')} {agreed(len(shared), 'is', 'are')} busy with a run of “{title}”"
         sentence = f"{ended(f'{busy}, {since}')} A machine takes one run at a time, so ask again once that run ends."
     else:
         held = f"“{title}” already has a run on {get_text_list(machines, 'and')}, {since}"
