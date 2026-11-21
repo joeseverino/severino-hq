@@ -282,7 +282,7 @@ class CapabilityTests(TestCase):
     def test_a_validator_that_refuses_in_words_of_its_own_does_not_load(self):
         from typing import Annotated
 
-        from pydantic import AfterValidator, field_validator
+        from pydantic import AfterValidator, create_model, field_validator
 
         from ..contracts import Closed
         from ..integration_specs import command_adapter
@@ -293,15 +293,14 @@ class CapabilityTests(TestCase):
 
         with self.assertRaisesRegex(TypeError, "Checked"):
             command_adapter(WordyCommand)
+
+        def _token(cls, value):
+            return value
+
         with self.assertRaisesRegex(TypeError, "Checked"):
-
-            class WordyModel(Closed):
-                token: str
-
-                @field_validator("token")
-                @classmethod
-                def _token(cls, value):
-                    return value
+            create_model(
+                "WordyModel", __base__=Closed, __validators__={"_token": field_validator("token")(_token)}, token=str
+            )
 
     def test_a_domain_refusal_names_the_field_not_the_value(self):
         # An end before the start, which only the model's rule checks, past the
