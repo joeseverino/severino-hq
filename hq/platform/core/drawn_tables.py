@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from django.template.loader import render_to_string
 from django.utils.html import escape
 from django.utils.safestring import SafeString, mark_safe
 
@@ -116,7 +115,8 @@ def drawn(table: DataTable, context: Any) -> dict[str, Any]:
     laid = lay_out(facts, sorts=table.sorted_by is None and not table.keeps_order and not table.region["chart"])
     # A row across the table stands in the gutter its names keep, holding no toggle.
     gutter = any("row-gutter" in facts.added for _, facts in headings)
-    drawing = _Drawing(context, _pieces(table, context))
+    drawing = _Drawing(context)
+    drawing.pieces = _pieces(table, drawing)
     for group in groups:
         for row in group.rows:
             if row.row.across and gutter:
@@ -337,15 +337,15 @@ def _length(cell: Cell, *, after: bool = False) -> int:
     return shown + (_DOT if cell.dot else int(after))
 
 
-def _pieces(table: DataTable, context: Any) -> dict[Piece, SafeString]:
-    """Each piece a cell of the table draws, drawn by its part's partial. The
+def _pieces(table: DataTable, drawing: _Drawing) -> dict[Piece, SafeString]:
+    """Each piece a cell of the table draws, drawn by its part's partial as an
+    include draws it, never through the page's context processors again. The
     space a partial's file keeps around its markup is cut: a value starts and
     ends at its words, so none stands after the dot that opens a run's part."""
 
     rows = [row for group in table.bodies for row in group.rows] + ([table.footer] if table.footer else [])
-    request = context.get("request") if hasattr(context, "get") else None
     pieces = {value.piece for row in rows for cell in row.cells for value in _values(cell) if value.piece is not None}
-    drawn = {piece: render_to_string(piece.part.partial, dict(piece.context), request) for piece in pieces}
+    drawn = {piece: drawing.included(piece.part.partial, **piece.context) for piece in pieces}
     return {piece: mark_safe(markup.strip()) for piece, markup in drawn.items()}  # noqa: S308 - escaped by its own template
 
 
@@ -363,7 +363,7 @@ class _Drawing:
     each piece the table draws, and a row's toggle, drawn once each way."""
 
     context: Any
-    pieces: Mapping[Piece, SafeString]
+    pieces: Mapping[Piece, SafeString] = field(default_factory=dict)
     toggles: dict[bool, SafeString] = field(default_factory=dict)
 
     def included(self, name: str, **values: Any) -> SafeString:
