@@ -340,7 +340,7 @@ class AgentSignIn(models.TextChoices):
     # A client-credentials token, its subject the client itself.
     MACHINE = "machine", "As itself"
     # A token a person signed in for (an authorization code or device grant).
-    PERSON = "person", "Through a person's sign-in"
+    PERSON = "person", "Through an operator's sign-in"
 
 
 class AgentIdentity(models.Model):

@@ -302,6 +302,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `figure-in-chip` | A figure inside a chip, which is a word. | the figure in a band of facts, a numeric column or a sentence |
 | `counted-fold` | A list folded at a count, which hides parts its line has room for. | `{% line_list %}`, which shows as many parts as the line holds |
 | `cut-count` | A count cut off from the words it counts. | `<h2>`Words `<span class="count">`N`</span>``</h2>`, or {{ n\|counted:"thing" }} |
+| `since` | A "since" written before a moment, which reads "since 3 days ago" beside an age. | {{ at\|when:"since" }}, which says its own "since" |
 | `plural` | A word chosen by a count of one, which the count's own filter agrees. | {{ n\|counted:"one,many" }}, or {{ n\|agreed:"one,many" }} for the words alone |
 | `code-block` | A code block a keyboard cannot reach, though it scrolls in its own box. | `<pre tabindex="0">` |
 | `control-in-summary` | A control inside a summary, which is the control that opens its disclosure. | the link or button in the disclosure's body |
@@ -763,7 +764,7 @@ reads the answer and words nothing of its own.
   operator just gave it and ignores a second press.
 - When the work ends, the part of the page named by the ask's `refresh` selector is fetched again
   and swapped in place; without one, the page's content (`#content`, a region of its own). Only if
-  that cannot be had does the page load again, though not under somebody's hands and never twice
+  that cannot be had does the page load again, though not under your hands and never twice
   running; then it offers the reading as a link.
 - A failure is said in the note, where it was asked.
 
@@ -843,7 +844,7 @@ carries, and `search` offers the search field.
 
 ### partials/_example_connection.html (host only)
 
-**A saved copy never says "you" about someone else.** Anything that describes the reader's own
+**A saved copy never says "you" about another reader.** Anything that describes the reader's own
 connection includes this part. On a live HQ it renders nothing; on a saved copy
 (`SEVERINO_RENDERED_COPY`, set only in code by whatever renders the copy, as the demo does) it
 marks the line as an example connection, not the reader's. *Gate:*
@@ -908,7 +909,7 @@ narrower.
 
 ### partials/_linked_text.html (host only)
 
-Every free text a person wrote (a record's notes, a message sent through the contact form) is this
+Every free text written by hand (a record's notes, a message sent through the contact form) is this
 part, over the text's runs that `application.where_it_runs.named_links` finds: each name a link as
 every mention is, and its line breaks kept.
 
@@ -1098,7 +1099,7 @@ asks the controller for those whose last attempt is older than their cadence
 - A page in a background tab asks for nothing, a GET never does, and the request cannot name a
   connection or a kind.
 - When the reading lands, the page's content is fetched again and swapped in place, the ask's own
-  line kept. Only if that fails does the page load again, once; if somebody has touched it or it
+  line kept. Only if that fails does the page load again, once; if you have touched it or it
   reloaded a moment ago, it says a newer reading is in and leaves showing it to them.
 
 ### partials/_work_queue.html

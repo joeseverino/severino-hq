@@ -499,7 +499,7 @@ PARTS = (
         "The mark of a saved copy's example connection.",
         "example-connection",
         rules="""
-        **A saved copy never says "you" about someone else.** Anything that describes the reader's own
+        **A saved copy never says "you" about another reader.** Anything that describes the reader's own
         connection includes this part. On a live HQ it renders nothing; on a saved copy
         (`SEVERINO_RENDERED_COPY`, set only in code by whatever renders the copy, as the demo does) it
         marks the line as an example connection, not the reader's. *Gate:*
@@ -618,10 +618,10 @@ PARTS = (
     ),
     _part(
         "linked_text",
-        "Free text a person wrote, with the names HQ knows in it as links.",
+        "Free text written by hand, with the names HQ knows in it as links.",
         "linked-text",
         rules="""
-        Every free text a person wrote (a record's notes, a message sent through the contact form) is this
+        Every free text written by hand (a record's notes, a message sent through the contact form) is this
         part, over the text's runs that `application.where_it_runs.named_links` finds: each name a link as
         every mention is, and its line breaks kept.
         """,
@@ -845,7 +845,7 @@ PARTS = (
         - A page in a background tab asks for nothing, a GET never does, and the request cannot name a
           connection or a kind.
         - When the reading lands, the page's content is fetched again and swapped in place, the ask's own
-          line kept. Only if that fails does the page load again, once; if somebody has touched it or it
+          line kept. Only if that fails does the page load again, once; if you have touched it or it
           reloaded a moment ago, it says a newer reading is in and leaves showing it to them.
         """,
         states=pages.VISIT_REFRESH_STATES,

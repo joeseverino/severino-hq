@@ -147,7 +147,7 @@ def waiting_for_approval() -> tuple[Finding, ...]:
                 severity=Tone.ATTENTION,
                 title=str(sentence),
                 explanation="" if sentence.whole else _asked_change(shown),
-                why="An agent asked for this change, and HQ writes nothing until a person approves or rejects it.",
+                why="An agent asked for this change, and HQ writes nothing until an operator approves or rejects it.",
                 primary=opens("", _approval_entry(held)),
                 since=held.created_at,
                 held=True,

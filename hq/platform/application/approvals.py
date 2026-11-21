@@ -615,7 +615,7 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
     return held
 
 
-REQUEST = Titled("approval.request", "Asked for a change a person approves")
+REQUEST = Titled("approval.request", "Asked for a change an operator approves")
 APPROVE = "approval.approve"
 REJECT = "approval.reject"
 WITHDRAW = "approval.withdraw"

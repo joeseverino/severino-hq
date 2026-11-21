@@ -7981,7 +7981,7 @@
             "type": "array"
           },
           "serious": {
-            "description": "Whether failing it lets someone or something gain reach.",
+            "description": "Whether failing it lets an attacker gain reach.",
             "type": "boolean"
           },
           "state": {
@@ -28128,7 +28128,7 @@
             "description": "When it came to stand so, an ISO 8601 date-time; null when unsaid."
           },
           "state": {
-            "description": "Its state in one word: `off`, `drifted`, `deploying`, `degraded`, `pending`, `unseen`, `working`, `recorded` or `unread`.",
+            "description": "Its state in one word: `off`, `drifted`, `deploying`, `degraded`, `pending`, `unseen`, `stale`, `working`, `recorded` or `unread`.",
             "type": "string"
           },
           "tone": {
@@ -37595,7 +37595,7 @@
             "style": "form"
           },
           {
-            "description": "True for only the requests still waiting for a person.",
+            "description": "True for only the requests still waiting for an operator.",
             "explode": true,
             "in": "query",
             "name": "awaiting",

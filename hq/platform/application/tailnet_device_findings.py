@@ -405,7 +405,7 @@ RULES: tuple[FindingRule, ...] = (
         _routes_unapproved,
         gathered=True,
         operator_action="Approve the routes you want on the machine's page, and stop offering the rest.",
-        no_help_reason="HQ approves only the routes a machine already offers, and a person decides which.",
+        no_help_reason="HQ approves only the routes a machine already offers, and you decide which.",
         card=TAILNET_CARD,
         bars={Tone.ATTENTION: "a machine offers routes nobody has approved"},
     ),
