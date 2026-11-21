@@ -131,6 +131,8 @@
 .data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
 /* A `th[scope=row]` table with no `thead` is a description list: its label column as wide as its longest label. */
 .data-table th[scope=row] { padding-right: var(--space-10); font-weight: 600; color: var(--muted); }
+/* A row heading that is also the name its row is read by (`Cell(header=True, name=True)`) reads as a name. */
+.data-table th[scope=row] strong[data-cell="name"] { color: var(--ink); }
 .data-table:not(:has(> thead)) th[scope=row] { inline-size: 1px; white-space: nowrap; }
 /* A value of several parts marks each one and wraps only between them: "1 week" broken from "Up" reads as another fact. */
 .data-table td .cell-part { white-space: nowrap; }

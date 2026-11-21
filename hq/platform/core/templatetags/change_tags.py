@@ -107,7 +107,7 @@ def _cells(row: ChangeRow, preview: ChangePreview, *, whole: bool, status: bool 
     sides = (_side(row, "before", whole=whole),) if preview.compares else ()
     after = _side(row, "after", whole=whole)
     tail = (_status(row.change, preview) if status else Cell(blank=True),) if preview.compares else ()
-    return (Cell(row.label, header=True, **head), *sides, after, *tail)
+    return (Cell(row.label, header=True, name=True, **head), *sides, after, *tail)
 
 
 def change_table(preview: ChangePreview) -> dict[str, Any]:
