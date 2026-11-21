@@ -100,13 +100,6 @@ class ServiceSection:
             raise ValueError("ServiceSection below holds one entry for each record.")
         if self.actions and len(self.actions) != len(self.records):
             raise ValueError("ServiceSection actions holds one entry for each record.")
-        # A column no row has anything in is a heading over nothing. Dropped
-        # here, so no section has to check its own; an unknown value (the dash placeholder) is
-        # something to say and keeps its column.
-        keep = filled_columns(len(self.columns), self.records)
-        if self.records and len(keep) < len(self.columns):
-            object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
-            object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
 
     @property
     def count(self) -> int:
@@ -124,9 +117,13 @@ class ServiceSection:
     def spans_row(self) -> bool:
         """Whether it takes the whole row of the flow it is drawn in: a fold,
         or a table too wide to share one. A page writes these ahead of the
-        short ones, which then collect to share rows."""
+        short ones, which then collect to share rows. A column no row says
+        anything in is not drawn, so it does not count."""
 
-        return self.folded or bool(self.history) or len(self.columns) >= ROW_COLUMNS
+        said = sum(
+            any(at < len(row) and not row[at].says_nothing for row in self.records) for at in range(len(self.columns))
+        )
+        return self.folded or bool(self.history) or said >= ROW_COLUMNS
 
     @property
     def table(self) -> DataTable:
@@ -142,18 +139,6 @@ class ServiceSection:
                 for cells, evidence, done in zip(self.records, below, actions, strict=True)
             ),
         )
-
-
-def filled_columns(width: int, records: tuple[tuple[Cell, ...], ...]) -> tuple[int, ...]:
-    """The positions of the columns at least one row says something in."""
-
-    return tuple(index for index in range(width) if any(index < len(row) and _says(row[index]) for row in records))
-
-
-def _says(cell: Cell) -> bool:
-    """Whether a cell shows anything: text, a link, or an entity."""
-
-    return bool(cell.text.strip() or cell.url or cell.link)
 
 
 def sections_for(service) -> tuple[ServiceSection, ...]:
