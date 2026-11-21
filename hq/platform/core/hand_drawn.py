@@ -616,7 +616,6 @@ SHAPES = (
             "partials/_week_plan.html": "the week plan part, its days in order",
             "partials/_dropzone.html": "the dropzone part, the files its script lists as they are chosen",
             "partials/_page_navigation.html": "the page's section navigation",
-            # Held for the one-place CSS wave, which moves each onto the list part.
         },
     ),
     Shape(

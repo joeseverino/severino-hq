@@ -6,18 +6,20 @@ So every rule that names a part's class is that of a part drawn in more than
 one place, or one an extension may write too (``public``). A part that is one
 page's own drawing, a job no other page has, says so (``drawing_of``), and is
 held to it: that page is the one place it is drawn.
+
+A part is placed where the source can draw it, read from the templates and
+views, never from a render (``look_reach``), which places only what one
+catalog entry or seed's data happens to draw.
 """
 
 import re
-from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core.hand_drawn import Source
 from hq.platform.core.template_contract import FRAMES, parts
-from hq.platform.core.template_parts import Part
-from hq.platform.core.tests.css_usage import rules_naming
+from hq.platform.core.tests.css_usage import blocks_of, named
 
 ROOT = Path(__file__).resolve().parents[4]
 TEMPLATES = ROOT / "templates"
@@ -38,55 +40,50 @@ _EVERY = "every page"
 _RENDERED = "django/forms/"
 
 
-def _places(templates: dict[str, str], modules: dict[str, str], every: Iterable) -> Callable[[str], set[str]]:
-    """Where a template is drawn: each page template and view module that draws
-    it, through every part and partial between."""
-
-    owner = {name: part for part in every for name in part.files()}
-    included = {name: _EXTENDS.sub("", Source(text).text) for name, text in templates.items()}
-    frames = {"base.html", *FRAMES}
-    seen: dict[str, set[str]] = {}
-
-    def drawers(name: str) -> set[str]:
-        part = owner.get(name)
-        own = set(part.files()) if part else {name}
-        partial = part.partial.partition("#")[0] if part else name
-        written = rf"[\"']{re.escape(partial)}(?:#[\w-]+)?[\"']"
-        if part and part.name:
-            written += rf"|\{{%\s*{re.escape(part.name)}\b"
-        pattern = re.compile(written)
-        found = {other for other, text in included.items() if other not in own and pattern.search(text)}
-        return found | {
-            module
-            for module, text in modules.items()
-            if not module.startswith(_DECLARING) and re.search(rf"[\"']{re.escape(partial)}(?:#[\w-]+)?[\"']", text)
-        }
-
-    def places(name: str) -> set[str]:
-        """A page is its own place; a partial a view draws alone, as a
-        fragment, is placed by the view's module."""
-
-        if name not in seen:
-            seen[name] = set()
-            if name in frames or name.startswith(_RENDERED):
-                seen[name] = {_EVERY}
-            elif name not in owner and not Path(name).name.startswith("_"):
-                seen[name] = {name}
-            else:
-                seen[name] = set().union(
-                    *(places(drawer) if drawer in templates else {drawer} for drawer in drawers(name))
-                )
-        return seen[name]
-
-    return places
+def _read(folder: Path, pattern: str, within: Path = ROOT) -> dict[str, str]:
+    return {
+        path.relative_to(within).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(folder.rglob(pattern))
+        if "tests" not in path.parts and "migrations" not in path.parts
+    }
 
 
-def one_place_rules(templates: dict[str, str], modules: dict[str, str], sheets: dict[str, str]) -> list[str]:
+def one_place_rules() -> list[str]:
     """Each rule of a part only one place draws, and each part that says it is
     a page's own drawing where that page is not its one place."""
 
     every = parts()
-    places = _places(templates, modules, every)
+    templates = _read(TEMPLATES, "*.html", TEMPLATES)
+    included = {name: _EXTENDS.sub("", Source(text).text) for name, text in templates.items()}
+    modules = {name: text for folder in ("hq", "hq_sdk") for name, text in _read(ROOT / folder, "*.py").items()}
+    owner = {name: part for part in every for name in part.files()}
+    seen: dict[str, set[str]] = {}
+
+    def places(name: str) -> set[str]:
+        """Each page template and view module that draws ``name``, through
+        every part and partial between: a page is its own place, and a partial
+        a view draws alone, as a fragment, is placed by the view's module."""
+
+        if name in seen:
+            return seen[name]
+        seen[name] = set()
+        part = owner.get(name)
+        if name in {"base.html", *FRAMES} or name.startswith(_RENDERED):
+            seen[name] = {_EVERY}
+        elif not part and not Path(name).name.startswith("_"):
+            seen[name] = {name}
+        else:
+            own = set(part.files()) if part else {name}
+            quoted = rf"[\"']{re.escape(part.partial.partition('#')[0] if part else name)}(?:#[\w-]+)?[\"']"
+            tagged = re.compile(quoted + (rf"|\{{%\s*{re.escape(part.name)}\b" if part and part.name else ""))
+            found = {other for other, text in included.items() if other not in own and tagged.search(text)}
+            seen[name] = set().union(*(places(other) for other in found)) | {
+                module
+                for module, text in modules.items()
+                if not module.startswith(_DECLARING) and re.search(quoted, text)
+            }
+        return seen[name]
+
     classes: dict[str, str] = {}
     shared: set[str] = set()
     faults = []
@@ -100,51 +97,22 @@ def one_place_rules(templates: dict[str, str], modules: dict[str, str], sheets: 
             continue
         label = f"{name} (drawn by {', '.join(sorted(reached)) or 'nothing'})"
         classes |= {word: label for word in part.owned() if not word.endswith("*")}
-    faults += [f"{path}:{line}  {what}" for path, line, what in rules_naming(classes, sheets, frozenset(shared))]
+    for path, text in _read(ROOT / "static" / "css", "*.css").items():
+        for block in blocks_of(text):
+            names = set(named(block.prelude))
+            if (
+                block.style
+                and names.isdisjoint(shared)
+                and (hit := sorted({classes[n] for n in names & classes.keys()}))
+            ):
+                faults.append(f"{path}:{block.line}  {', '.join(hit)}: {block.prelude}")
     return faults
-
-
-class PlacesTests(SimpleTestCase):
-    def test_a_part_is_placed_on_the_pages_that_draw_it_through_every_partial_between(self) -> None:
-        templates = {
-            "example/page.html": '{% extends "page.html" %}{% include "partials/_example_wrap.html" %}',
-            "partials/_example_wrap.html": '{% include "partials/_example.html" %}',
-            "partials/_example.html": "<p>A</p>",
-            "base.html": '{% include "partials/_example_chrome.html" %}',
-            "partials/_example_chrome.html": "<p>B</p>",
-            "partials/_example_fragment.html": "<p>C</p>",
-            "page.html": "",
-        }
-        modules = {"hq/domains/example/views.py": 'template_name = "partials/_example_fragment.html"'}
-        examples = [
-            Part(name="", partial=f"partials/_example{suffix}.html", about="An example.")
-            for suffix in ("", "_chrome", "_fragment")
-        ]
-        places = _places(templates, modules, examples)
-        self.assertEqual(places("partials/_example.html"), {"example/page.html"})
-        self.assertEqual(places("partials/_example_chrome.html"), {_EVERY})
-        self.assertEqual(places("partials/_example_fragment.html"), {"hq/domains/example/views.py"})
 
 
 @tag("source", "tree")
 class PartSheetTests(SimpleTestCase):
     def test_a_rule_styles_a_shared_part_never_one_only_one_page_draws(self):
-        templates = {
-            path.relative_to(TEMPLATES).as_posix(): path.read_text(encoding="utf-8")
-            for path in sorted(TEMPLATES.rglob("*.html"))
-        }
-        modules = {
-            path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
-            for folder in ("hq", "hq_sdk")
-            for path in sorted((ROOT / folder).rglob("*.py"))
-            if "tests" not in path.parts and "migrations" not in path.parts
-        }
-        sheets = {
-            path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
-            for path in sorted((ROOT / "static" / "css").rglob("*.css"))
-        }
-
-        faults = one_place_rules(templates, modules, sheets)
+        faults = one_place_rules()
 
         self.assertFalse(
             faults,
