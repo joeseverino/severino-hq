@@ -151,7 +151,13 @@ sources = [
   "tools/pipeline/toolchain.env",
 ]
 outputs = []
-run = "uv run python -m tools.pipeline.toolchain_lock"
+# `mise lock --check` fails on whatever a locked install on each of
+# lockfile_platforms would refuse. It lists every entry's provenance on
+# stdout and its problems on stderr.
+run = [
+  "mise lock --check > /dev/null",
+  "uv run python -m tools.pipeline.toolchain_lock",
+]
 
 ["lint:mise-tasks"]
 description = "Every task is valid: its usage spec parses, its dependencies exist, its timeout and globs are well formed"

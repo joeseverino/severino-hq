@@ -1,5 +1,5 @@
-"""The toolchain gate holds mise.lock to every pinned tool, and the images to
-taking their build tools from the lock and mise from its image at min_version."""
+"""The toolchain gate holds the images to taking their build tools from the
+lock and mise from its image at min_version."""
 
 import re
 
@@ -10,7 +10,6 @@ from tools.pipeline import toolchain_lock as toolchain
 DIGEST = "sha256:" + "a" * 64
 BASE = f"FROM python:3.15-slim-trixie@{DIGEST} AS tools\n"
 MISE = "2026.10.18"
-PLATFORMS = ("linux-x64", "macos-arm64")
 
 
 class ImageTests(SimpleTestCase):
@@ -30,38 +29,6 @@ class ImageTests(SimpleTestCase):
         ):
             with self.subTest(text=text):
                 self.assertTrue(self.foreign(text))
-
-
-def locked(version, platforms=PLATFORMS):
-    entry = {"version": version}
-    entry.update({f"platforms.{platform}": {"checksum": DIGEST} for platform in platforms})
-    return [entry]
-
-
-class LockTests(SimpleTestCase):
-    # Each pin at the version mise renders for it.
-    TOOLS = {"node": "24.22.0", "age": "1.3.2"}
-
-    def lock(self, **tools):
-        return {"tools": {"node": locked("24.22.0"), "age": locked("1.3.2"), **tools}}
-
-    def test_a_tool_with_no_lock_entry_fails(self):
-        for name in self.TOOLS:
-            with self.subTest(tool=name):
-                lock = self.lock()
-                del lock["tools"][name]
-                self.assertTrue(toolchain.missing(list(PLATFORMS), self.TOOLS, lock))
-
-    def test_a_platform_without_a_checksum_fails(self):
-        for platform in PLATFORMS:
-            with self.subTest(platform=platform):
-                others = [p for p in PLATFORMS if p != platform]
-                lock = self.lock(node=locked("24.22.0", others))
-                self.assertTrue(toolchain.missing(list(PLATFORMS), self.TOOLS, lock))
-
-    def test_a_lock_of_another_version_fails(self):
-        lock = self.lock(age=locked("1.3.1"))
-        self.assertTrue(toolchain.missing(list(PLATFORMS), self.TOOLS, lock))
 
 
 @tag("source")
