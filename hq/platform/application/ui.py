@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from numbers import Number
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .card_items import Kpi, TimelineItem
 from .chart_numbers import (
@@ -24,7 +24,10 @@ from .drawings import LegendKey
 from .labels import dotted, plural
 from .money import signed_number
 from .tone import Tone
-lazy from .freshness import Freshness, last_read
+lazy from .freshness import last_read
+
+if TYPE_CHECKING:
+    from .freshness import Freshness
 
 # An advisory's severity as the tone it is drawn in, wherever one is listed:
 # critical and high serious, medium attention, the rest neutral. A weather
