@@ -6,6 +6,7 @@ from typing import Any
 lazy from hq.platform.core.included_parts import RESPONSE_CHECK
 
 from .tables import Cell, DataTable, Piece, Row, StatusMark, TableColumn
+from .ui import ended
 
 
 def _unread(result: Any) -> Row:
@@ -13,9 +14,9 @@ def _unread(result: Any) -> Row:
 
     reading = result.reading
     if reading.fix:
-        reason = Cell(f"{reading.evidence}:", role="prose", parts=(Cell(f"{reading.fix}.", reading.fix_url),))
+        reason = Cell(f"{reading.evidence}:", role="prose", parts=(Cell(ended(reading.fix), reading.fix_url),))
     else:
-        reason = Cell(f"{reading.evidence}.", role="prose")
+        reason = Cell(ended(reading.evidence), role="prose")
     return Row((Cell(result.check.label, name=True), reason), data={"posture-unread": result.check.id})
 
 

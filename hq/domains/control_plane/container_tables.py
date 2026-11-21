@@ -11,7 +11,7 @@ from django.utils.text import capfirst, slugify
 from hq.platform.application.entity_links import declared_link, entity_link, web_url
 from hq.platform.application.moments import ago
 from hq.platform.application.tables import Below, Cell, DataTable, Row, StatusMark, TableColumn
-from hq.platform.application.ui import counted, measured, severity_tone
+from hq.platform.application.ui import counted, ended, measured, severity_tone
 
 from .cells import change
 
@@ -228,7 +228,7 @@ def _need_lines(standing: Any, plan: Any) -> tuple[Cell, ...]:
     if plan:
         said = plan.risk_said
         said += f" Snapshot {counted(len(plan.data), 'mount,mounts')} first." if plan.stateful else ""
-        said += f" Checked afterwards by {plan.verified_by[0]}." if plan.verified_by else ""
+        said += f" {ended(f'Checked afterwards by {plan.verified_by[0]}')}" if plan.verified_by else ""
     else:
         said = f"{capfirst(standing.summary)}, and no newer release yet."
     if standing.release and standing.release.get("published"):
