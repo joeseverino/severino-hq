@@ -1,15 +1,13 @@
-"""audit:hand-drawn: what HQ's own templates, scripts and stylesheets still draw
-by hand, a class to a row in the order the UI waves take them, each with the
+"""audit:hand-drawn: what HQ's own templates and stylesheets still draw by
+hand, a class to a row in the order the UI waves take them, each with the
 shared primitive that should draw it. Each class is read by the reader its
-wave's guard will be: a template's by a hand_drawn ``Shape``, a script's by
-ESLint, a sheet's rules by audit:css-usage's reader of them.
+wave's guard will be: a template's by a hand_drawn ``Shape``, a sheet's rules
+by audit:css-usage's reader of them. An element a script builds is lint:js's
+to refuse.
 """
 
-import json
 import os
 import re
-import subprocess
-import sys
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -124,31 +122,6 @@ def drawn(shape: Shape, templates: dict[str, str]) -> Found:
             end = source.masked.find(">", at)
             found.append((f"templates/{name}", source.line(at), " ".join(source.text[at : end + 1].split())))
     return Found(shape.name, shape.instead, found)
-
-
-def scripted() -> Found:
-    """Each element a script builds, as ESLint finds it."""
-
-    done = subprocess.run(
-        ["eslint", "--config", "tools/audit/eslint.mjs", "--format", "json", "static/js/**/*.js"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if done.returncode not in (0, 1):
-        sys.exit(f"audit:hand-drawn: ESLint failed: {done.stderr.strip()}")
-    found = [
-        (
-            Path(result["filePath"]).relative_to(ROOT).as_posix(),
-            message["line"],
-            Path(result["filePath"]).read_text(encoding="utf-8").splitlines()[message["line"] - 1].strip(),
-        )
-        for result in json.loads(done.stdout)
-        for message in result["messages"]
-        if message.get("ruleId") == "no-restricted-syntax"
-    ]
-    return Found("script-markup", "the server's markup, or a <template> frame the script clones", sorted(found))
 
 
 def _sheets() -> dict[str, str]:
@@ -306,7 +279,6 @@ def main() -> None:
     sheets = _sheets()
     found = [
         *(drawn(shape, templates) for shape in COUNTED),
-        scripted(),
         one_place_css(templates, sheets),
         extension_classes(templates, sheets),
         drawn(BUTTON, templates),

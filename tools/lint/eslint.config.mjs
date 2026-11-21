@@ -190,12 +190,6 @@ export default [
     },
   },
   {
-    // The reference viewer breaks the third party's long names where they
-    // may wrap, inside markup HQ never draws.
-    files: ["static/js/api-reference.js"],
-    rules: { "no-restricted-syntax": ["error", ...scriptSyntax] },
-  },
-  {
     files: ["static/js/fragment.js"],
     languageOptions: { globals: { hqEvery: "off", hqFetch: "off", hqFragment: "off" } },
     rules: {

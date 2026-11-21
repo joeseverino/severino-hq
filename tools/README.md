@@ -22,8 +22,7 @@ The top level holds the credential minting (`credentials.py`) and the
 permission lists it and its tests read, `audit:image`'s reader of a built
 image (`audit_image.py`), `audit:supports`'s asker of the gates' engines
 (`audit_supports.py`), `audit:hand-drawn`'s count of what the pages
-still draw by hand (`audit_hand_drawn.py`, its script rule in
-`audit/eslint.mjs`), and `lint:sdk-breaking`, which holds `hq_sdk` to
+still draw by hand (`audit_hand_drawn.py`), and `lint:sdk-breaking`, which holds `hq_sdk` to
 its base's extensions (`sdk_breaking.py`), and the check-or-write every
 derived file's writer outside Django runs as its `lint:drift-*` gate
 (`derived.py`).

@@ -104,8 +104,11 @@ const PATH_HYPHEN = /-(?=\S)/g;
 //
 // The viewer keeps its own node, the first part, and may write a new path
 // into it later, so the parts split off after it are kept to be taken out
-// then.
+// then. The <wbr> and the box are the page's (`template[data-path-break]`,
+// `template[data-path-hyphen]`), each cloned where it goes.
 const splitOff = new WeakMap();
+const drawnByThePage = (name) =>
+  document.querySelector(`template[data-path-${name}]`).content.firstElementChild.cloneNode(true);
 const markPaths = (node) => {
   if (!node.isConnected || !node.data.includes("/")) return;
   const breaks = new Set();
@@ -120,15 +123,14 @@ const markPaths = (node) => {
     parts.push(rest);
     if (hyphens.has(place)) {
       parts.push(rest.splitText(2));
-      const joined = document.createElement("span");
-      joined.toggleAttribute("data-path-hyphen", true);
+      const joined = drawnByThePage("hyphen");
       rest.replaceWith(joined);
       joined.append(rest);
       rest = joined;
       parts.push(joined);
     }
     if (breaks.has(place)) {
-      const wbr = document.createElement("wbr");
+      const wbr = drawnByThePage("break");
       rest.before(wbr);
       parts.push(wbr);
     }
