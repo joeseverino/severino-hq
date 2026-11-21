@@ -14,11 +14,13 @@ from django.views.generic import (
 
 from hq.platform.application import related
 from hq.platform.application.documentation import SYNC
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.labels import dotted
 from hq.platform.application.list_pages import ListPageMixin
+from hq.platform.application.moments import stamp_day
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin, page_context
 from hq.platform.application.refusal_codes import Code
-from hq.platform.application.tables import TableColumn
+from hq.platform.application.tables import Cell, StatusMark, TableColumn
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.held_values import format_html
@@ -35,18 +37,29 @@ DOCS_TRAIL = (("Docs", reverse_lazy("docs_index:list")),)
 class DocsListView(ListPageMixin, TemplateView):
     resource = "documentation"
     table_empty = "No documents yet."
-    template_name = "docs_index/docs_list.html"
+    template_name = "list_page.html"
     page_title = "Docs"
     table_selectable = True
     # The ID sits beside a title of a dozen words, which it leaves the room.
     table_columns = (
-        TableColumn("Title", "title", css="key-col"),
-        TableColumn("ID", "doc_id"),
-        TableColumn("Type", "doc_type"),
-        TableColumn("Environment", "environment"),
-        TableColumn("Status", "status"),
-        TableColumn("Sensitivity", "sensitivity"),
-        TableColumn("Last changed", "last_reviewed"),
+        TableColumn(
+            "Title",
+            "title",
+            css="key-col",
+            cell=lambda row: Cell.of(entity_link("document", row["doc_id"], label=row["title"]), name=True),
+        ),
+        TableColumn("ID", "doc_id", cell=lambda row: Cell(row["doc_id"], readout=True)),
+        TableColumn("Type", "doc_type", cell=lambda row: Cell(row["doc_type_label"])),
+        TableColumn("Environment", "environment", cell=lambda row: Cell(row["environment_label"])),
+        TableColumn("Status", "status", cell=lambda row: Cell.state(row["state"])),
+        TableColumn(
+            "Sensitivity", "sensitivity", cell=lambda row: Cell(status=StatusMark(row["sensitivity_label"], chip=True))
+        ),
+        TableColumn(
+            "Last changed",
+            "last_reviewed",
+            cell=lambda row: Cell(moment=stamp_day(row["last_reviewed"]), form="day", muted=True),
+        ),
     )
     table_search_placeholder = "Search IDs, titles, systems, paths, and notes…"
 

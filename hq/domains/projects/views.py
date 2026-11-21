@@ -3,6 +3,7 @@ from typing import override
 
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
+from django.utils.text import Truncator, slugify
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -32,7 +33,9 @@ from hq.platform.application.projects import (
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.references import Kind
 from hq.platform.application.security import web_principal
-from hq.platform.application.tables import TableColumn
+from hq.platform.application.tables import Cell, DataTable, Row, StatusMark, TableColumn
+from hq.platform.core.templatetags.value_tags import when_text
+from hq.platform.application.ui import counted, severity_tone
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 lazy from hq.platform.application import standards
@@ -56,17 +59,20 @@ PROJECTS_TRAIL = (("Projects", reverse_lazy("projects:list")),)
 class ProjectListView(ListPageMixin, TemplateView):
     resource = "projects"
     table_empty = "No projects yet."
-    template_name = "projects/project_list.html"
+    template_name = "list_page.html"
     page_title = "Projects"
     table_selectable = True
     table_columns = (
-        TableColumn("Name", "name"),
-        TableColumn("Status", "status", css="key-col"),
-        TableColumn("Updates"),
-        TableColumn("Technologies", "technologies_used", css="optional-col"),
-        TableColumn("Repository", kind="status"),
-        TableColumn("Last active", kind="status"),
-        TableColumn("", css="row-actions"),
+        TableColumn("Name", "name", cell=lambda row: _named(row)),
+        TableColumn("Status", "status", css="key-col", cell=lambda row: Cell.state(row["state"])),
+        TableColumn("Updates", cell=lambda row: Cell(lines=_updates(row))),
+        TableColumn(
+            "Technologies", "technologies_used", css="optional-col", cell=lambda row: _chips(row["technologies"])
+        ),
+        TableColumn("Repository", kind="status", cell=lambda row: Cell(lines=_repository(row))),
+        TableColumn(
+            "Last active", kind="status", cell=lambda row: Cell(moment=row["last_active_at"], form="ago", muted=True)
+        ),
     )
     table_search_placeholder = "Search projects, technology, and notes…"
 
@@ -87,8 +93,51 @@ class ProjectListView(ListPageMixin, TemplateView):
             "pushed_at": moment(item["last_push_at"]),
             "last_active_at": moment(item["last_active_at"]),
             "updates_link": replace(link, url=f"{link.url}#updates"),
-            "row_actions": (PageAction.command("project.update", item["slug"]),),
         }
+
+    @override
+    def table_row(self, row, cells):
+        return Row(cells, actions=tuple(filter(None, (PageAction.command("project.update", row["slug"]),))))
+
+
+def _named(row) -> Cell:
+    """A project by its name, its slug beneath where the name does not say it."""
+
+    link = entity_link(Kind.PROJECT, row["slug"], label=row["name"])
+    slug = (Cell(row["slug"], muted=True),) if row["slug"] != slugify(row["name"]) else ()
+    return replace(Cell.of(link, name=True), lines=slug)
+
+
+def _updates(row) -> tuple[Cell, ...]:
+    """Whether its dependencies are kept up to date, the updates open, and its open alerts."""
+
+    repository, found = row["repository"], []
+    if row["repository_url"]:
+        found.append(Cell("On", tone="good") if row["dependency_updates"] else Cell("Off", muted=True))
+        if pulls := len(repository.update_pulls) if repository else 0:
+            found.append(Cell.of(replace(row["updates_link"], label=counted(pulls, "open update", "open updates"))))
+    if repository and repository.open_alerts:
+        found.append(Cell(status=StatusMark(counted(repository.open_alerts, "open alert", "open alerts"), tone="attention", pill=False)))
+    return tuple(found)
+
+
+def _chips(names) -> Cell:
+    """Each of a project's technologies, a chip."""
+
+    chips = [Cell(status=StatusMark(name, chip=True)) for name in names]
+    return replace(chips[0], parts=tuple(chips[1:])) if chips else Cell()
+
+
+def _repository(row) -> tuple[Cell, ...]:
+    """When its repository was last pushed to, and whether its checks fail."""
+
+    if row["pushed_at"]:
+        found = [Cell("Pushed", muted=True, parts=(Cell(moment=row["pushed_at"], form="ago", muted=True),))]
+    else:
+        found = [Cell("Not read yet", muted=True)] if row["repository_url"] else []
+    if row["repository"] and row["repository"].failing:
+        found.append(Cell("Checks failing", tone="serious"))
+    return tuple(found)
 
 
 # The fact a run is shown in, fetched again when the run is handed off.
@@ -242,6 +291,59 @@ class ProjectDeleteView(ProjectPage, RecordDeleteMixin, DeleteView):
     context_object_name = "project"
 
 
+def _ago(at) -> Cell:
+    """How long ago, quiet, as words that leave the cell's sort to its value."""
+
+    return Cell(when_text(at, "ago"), muted=True) if at else Cell()
+
+
+def _release(repo) -> Cell:
+    if not (release := repo["release"]):
+        return Cell()
+    return Cell(release["tag"], release["url"], external=True, role="prose", parts=(_ago(release["published"]),))
+
+
+def _advisories(repo) -> Cell:
+    """Its two newest advisories, each its severity, its id, what it says and
+    when, then how many more there are."""
+
+    advisories = repo["advisories"]
+    lines = [
+        Cell(
+            status=StatusMark(item.get("severity") or "advisory", tone=severity_tone(item.get("severity"))),
+            parts=(
+                Cell(item["id"], item["url"], external=True),
+                Cell(Truncator(item.get("summary") or "").chars(90)),
+                _ago(item["published"]),
+            ),
+        )
+        for item in advisories[:2]
+    ]
+    if len(advisories) > 2:
+        more = f"and {len(advisories) - 2} more"
+        lines.append(Cell(more, f"{repo['url']}/security/advisories", external=True, muted=True))
+    return Cell(lines=tuple(lines), role="prose")
+
+
+def _starred(repo) -> Cell:
+    description = Truncator(repo.get("description") or "").chars(110)
+    return Cell(
+        repo["name"],
+        repo["url"],
+        external=True,
+        name=True,
+        lines=(Cell(description, muted=True),) if description else (),
+    )
+
+
+_STARRED_COLUMNS = (
+    TableColumn("Repository", cell=_starred),
+    TableColumn("Latest release", kind="identifier", drop=2, cell=_release),
+    TableColumn("Advisories", drop=1, cell=_advisories),
+    TableColumn("Starred", kind="status", cell=lambda repo: Cell(moment=repo["starred"], form="ago")),
+)
+
+
 class WatchingView(PageMixin, TemplateView):
     """Your GitHub profile and what you watch there. Yours: the account your
     sign-in claims, so nobody reads a login HQ was merely told about."""
@@ -282,6 +384,8 @@ class WatchingView(PageMixin, TemplateView):
                 "Add your GitHub login to your sign-in", docs_url("Install.md", "your-github-account")
             )
         context["profile"] = profile(self.login)
+        if context["profile"]:
+            context["starred"] = DataTable.of("Starred", _STARRED_COLUMNS, context["profile"]["watched"])
         context["app_repositories"] = self.app_repositories
         # Why the account is yours, on hover beside its name: the sign-in
         # names it, and the App installed on it says so from GitHub's side.

@@ -15,6 +15,7 @@ from hq.platform.application.plugins import NavigationItem
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.projects import hq_sections, refresh_summary
 from hq.platform.application.tests.test_relationships import estate
+from hq.platform.application.ui import MISSING
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.core.testing import SignedInTestCase, operator
 
@@ -243,7 +244,7 @@ class ProjectListTests(SignedInTestCase):
             rows[cells[headings.index("Name")]] = dict(zip(headings, cells, strict=True))
         # A repository column says only what the repository says; when the
         # project last moved is its own column.
-        self.assertEqual(rows["Example"]["Repository"], "")
+        self.assertEqual(rows["Example"]["Repository"], MISSING)
         self.assertEqual(rows["Example"]["Last"], rows["Example Tool tool"]["Last"])
         self.assertEqual(rows["Example Tool tool"]["Repository"], "Not read yet")
 

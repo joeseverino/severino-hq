@@ -89,7 +89,7 @@ class ListPageMixin(PageMixin):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        rows = [self.row(item) for item in self.collection["items"]]
+        rows = self.rows(self.collection["items"])
         table = self.table()
         if self.table_columns and all(column.cell for column in self.table_columns):
             table["drawn"] = self.drawn(context["page"].title, table, rows)
@@ -120,6 +120,12 @@ class ListPageMixin(PageMixin):
         where the page says so."""
 
         return Row(cells)
+
+    def rows(self, items: list[dict[str, Any]]) -> list[Any]:
+        """The page's items as its rows draw them, each by ``row``: for a page
+        that adds to them what it reads for all of them in one query."""
+
+        return [self.row(item) for item in items]
 
     def row(self, item: dict[str, Any]) -> Any:
         """One item as its row draws it: the item itself, or with what only

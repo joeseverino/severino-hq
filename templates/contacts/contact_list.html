@@ -19,39 +19,7 @@
   {% include "partials/_empty_state.html" with message="No messages yet." only %}
 {% else %}
 
-{% table_region "Messages" %}
-<table class="data-table">
-  <thead>
-    <tr>
-      {% table_heading "From" local_sort=True %}
-      {% table_heading "Received" "status" local_sort=True drop=5 %}
-      {% table_heading "Message" local_sort=True drop=4 %}
-      {% table_heading "Status" "status" local_sort=True %}
-      {% table_heading "Country" local_sort=True drop=2 %}
-      {% table_heading "#" "identifier" local_sort=True drop=1 %}
-      {% table_heading "Actions" css="actions-col" hidden=True %}
-    </tr>
-  </thead>
-  <tbody>
-    {% for s in submissions %}
-      <tr{% row_state emphasized=s.unread %}>
-        <td>
-          <a href="{{ s.url }}"><strong>{{ s.name }}</strong></a>
-          {% muted element="div" %}{% cell_line text=s.email %}{% endmuted %}
-        </td>
-        <td>{% muted %}{{ s.created_at|when }}{% endmuted %}</td>
-        <td>{% cell_line text=s.message_preview url=s.url %}</td>
-        <td>{% status s.state %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
-        <td>{% muted %}{{ s.country|or_empty }}{% endmuted %}</td>
-        <td>{{ s.id }}</td>
-        {% row_actions s.actions gap=gap %}
-      </tr>
-    {% empty %}
-      <tr><td colspan="7">{% muted %}{% if selected_status or q %}Nothing matches.{% else %}No messages yet.{% endif %}{% endmuted %}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% endtable_region %}
+{% data_table message_table %}
 {% endif %}
 {% endif %}
 {% endblock %}
