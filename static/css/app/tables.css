@@ -413,6 +413,9 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
 .row-detail > td > :last-child { margin-block-end: 0; }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
+/* The declared lines inside a block space their parts with a gap, leaving only the cell's pad after the last line. */
+.data-table .row-detail .row-below > .stack-list { row-gap: var(--row-pad); }
+.row-detail .row-below > .stack-list > li > * { margin-block-end: 0; }
 .data-table .row-detail:hover { background: none; }
 /* An entry: its label in a column as wide as the labels, its labels wrapping past two fifths of the line, what it shows beside it in the rest of the row, on a panel. */
 .row-columns {

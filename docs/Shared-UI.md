@@ -548,7 +548,8 @@ and the byte budgets `ROW_BYTES` and `CHROME_BYTES`.
 - A `row-below` block, which the row's line never shows, and the row's editor are moved into a
   line the server draws after the row (`tr.row-detail`, `drawn_tables`), shown while the
   row is open: the blocks first, then each labeled block under its label. A row holding a block
-  says so on its `tr` (`data-below`), which shows its toggle.
+  says so on its `tr` (`data-below`), which shows its toggle. A block's stacked parts are spaced
+  by their list's gap, with the cell's normal pad after the last part.
 - A table whose line is the rest of what a row says and does (`data-line="flat"` on the table)
   draws it flat: one column on no panel, the buttons of its parts side by side, and on a phone
   each the line's width, one to a line.
