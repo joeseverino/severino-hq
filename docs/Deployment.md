@@ -574,6 +574,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `HQ_TEST_STALL_SECONDS` | development | seconds a test process may go without progress before it prints what it is running, every stack and the browser's log, and fails that test; 300 when unset, `0` turns it off; a measured run of tests with no progress for twice it is stopped |
 | `HQ_TEST_MARKS` | development | the folder each test process leaves the test it last began in, for the measurer that stops a run with no progress; set by `tools/lib/measured` |
 | `HQ_BROWSER_ENGINE` | development | the engine a run of browser tests draws in, installed as the run starts: `webkit` by default, or `chromium` or `firefox` |
+| `HQ_BROWSER_FINDINGS` | development | the folder a share of CI's browser run writes its findings to, which the Browser verdict job reads; unset, the run fails on its own findings; set by CI |
 | `HYPOTHESIS_PROFILE` | development | the Hypothesis profile every property runs under: `dev` by default, `ci` where Hypothesis detects CI |
 | `HQ_TEST_REPORTS` | development | the folder a gate names for a test run to write each failed test into, with its exception and traceback; set by `tools/gate/verdict.py` |
 
