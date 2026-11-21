@@ -73,7 +73,7 @@ class AgentRulesTests(TestCase):
 
     def test_the_page_opens_on_what_differs_and_draws_the_rest_when_opened(self):
         page = self.page()
-        (rules,) = select(page, "data-policy")
+        (rules,) = [form for form in select(page, "data-policy") if "section" in {up.tag for up in form.ancestors}]
         (folded,) = [fold for fold in within(page, "data-policy") if "section-fold" in fold.classes]
         (placeholder,) = select(page, "data-fragment-name", EVERY_PART)
 

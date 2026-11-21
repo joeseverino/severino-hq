@@ -290,14 +290,17 @@ change. Asked for when opened: asking takes the server's SDK into the process.
 {% endsection %}
 
 {% comment %}
-The rules, one form over their tables (core/_policy_rules.html) for whoever
-may save them, and the tables alone, read as they hold, for anyone else. The part
-the fold asks for when opened is drawn here, by its name on this page.
+The rules in one section: one form over their tables (core/_policy_rules.html)
+for whoever may save them, its closing row in the section with the tables it
+saves, and the tables alone, read as they hold, for anyone else. The part the
+fold asks for when opened is drawn here, by its name on this page.
 {% endcomment %}
 {% partialdef every_rule %}{% include "core/_every_rule.html" %}{% endpartialdef %}
-{% if rules_settable %}
-  {% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
-{% else %}
-  {% include "core/_policy_rules.html" %}
-{% endif %}
+{% section "Rules" %}
+  {% if rules_settable %}
+    {% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
+  {% else %}
+    {% include "core/_policy_rules.html" %}
+  {% endif %}
+{% endsection %}
 {% endblock %}

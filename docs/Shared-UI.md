@@ -884,7 +884,9 @@ derives it (`asks_one_question`, then `.form.is-question`), so no page flags it.
 A form whose fields stand one to a row of a table (a group chosen for each record, a verdict for
 each request) is the same partial with `table_body` naming the template that draws the table, in
 its `table_region`. The form lays out no fields of its own, so it adds no box: the table reaches
-its section's sides as a table section's does, and the closing row stands under it. The form
+its section's sides as a table section's does, and the closing row stands under it. The page draws
+it inside the one section that heads what it saves, never with sections of its body standing
+alone, so the closing row is framed with every field it sends. The form
 declares one field for each row, named by the row (`group-<id>`), so each control's name and id
 are its own. A row moved between two drawings still posts its own value, where a formset's names
 follow each row's place. Each row's cell draws its field with `partials/_row_field.html`: the
