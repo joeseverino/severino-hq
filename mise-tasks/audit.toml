@@ -45,3 +45,13 @@ hide = true
 dir = "controller"
 usage = 'arg "[linters]" help="Linters to count, comma-separated, as --enable-only takes them (nilerr,gocritic); the configured set without"'
 run = '''golangci-lint run --issues-exit-code=0 --output.text.path=/dev/null ${usage_linters:+--enable-only="${usage_linters}"} ./...'''
+
+# tools/audit_hand_drawn.py reads each class as its wave's guard will: the
+# templates through hand_drawn's shapes, the scripts through ESLint
+# (tools/audit/eslint.mjs), the sheets through audit:css-usage's rule reader.
+["audit:hand-drawn"]
+extends = "audit"
+depends = ["setup:lint-tools", "setup:sandbox"]
+description = "What HQ's own templates, scripts and stylesheets still draw by hand, one row per class with the shared primitive that should draw it, its count and each instance as file:line, in the order the UI waves take them; reach for it before and after each wave, read-only"
+hide = true
+run = "uv run python -m tools.audit_hand_drawn"

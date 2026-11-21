@@ -29,6 +29,7 @@ ignores:
   # A shape's examples are template source it refuses or keeps; no page
   # receives them.
   - "hq/platform/core/hand_drawn.py"
+  - "tools/audit_hand_drawn.py"
   # The provider form's name list is a form widget, which Django renders from
   # Python; its remove control is a button like every other.
   - "hq/platform/application/provider_forms.py"
