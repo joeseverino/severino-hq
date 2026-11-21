@@ -261,15 +261,9 @@ was read and, while the bridge refuses the controller's sweep, why
 (`reading_facts.unjudged`, held for every rule by
 `test_no_rule_measures_an_aged_reading_from_now`).
 
-`hq/platform/application/unit_findings.py` raises, on the same node:
-
-| Finding | When | Severity |
-|---|---|---|
-| `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer, path or socket starts again |
-| `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer, path, socket or mount is not active | serious |
-| `unit-restarting` | systemd has restarted a service on its own at least ten times since it was last started, and it is not up: waiting to restart, starting, or active for less than ten minutes when read. Ten is above systemd's default start limit of five, so a service restarting faster than that is stopped and failed, `unit-failed`'s to say | serious |
-| `timer-stalled` | an active timer is not running its unit. Nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
-| `unit-state-unread` | the launcher mounted no answer, or the answer was refused, or the reading is too old to judge | attention |
+`hq/platform/application/unit_findings.py` raises its rules on the same
+node; the Checks page (`/infrastructure/findings/checks/`) lists each with
+its bars.
 
 The rules name no unit. `unit-not-installed` judges only the shipped set:
 deploying HQ sets up none of a restarting service another package installed,
@@ -296,11 +290,10 @@ contract admits a mount only as printable ASCII from a slash, with no bar. The
 launcher names the file whether or not it could be taken, so a table it could
 not read is a failed read that keeps the last one.
 
-`hq/platform/application/filesystem_findings.py` raises, on the same node:
-
-| Finding | When | Severity |
-|---|---|---|
-| `filesystem-nearly-full` | a filesystem had under 2 GiB free and under a tenth of its size, when read; one finding per machine names each | attention; serious when one had under 512 MiB and under 3% |
+`hq/platform/application/filesystem_findings.py` raises
+`filesystem-nearly-full` on the same node, one finding per machine naming
+each filesystem; the Checks page (`/infrastructure/findings/checks/`) holds
+its bars.
 
 Both a floor and a share must be crossed: a share alone flags a large disk with
 plenty left, and a floor alone flags every small partition, such as a 1 GiB
@@ -331,14 +324,9 @@ that does not answer, one older than version 5 included, is a refused part
 scoped to that connection, so every other edge's record still stands; the
 read fails only when no edge answered.
 
-`hq/platform/application/reboot_findings.py` raises, on the controller's
-machine node for `host.reboot` and on the machine an edge's connection
-reaches for `host.edge_reboot`:
-
-| Finding | When | Severity |
-|---|---|---|
-| `reboot-pending` | the machine waited on a restart, or had one scheduled, when read | attention |
-
+`hq/platform/application/reboot_findings.py` raises `reboot-pending` on the
+controller's machine node for `host.reboot` and on the machine an edge's
+connection reaches for `host.edge_reboot`.
 It says since when, for which packages, and when the restart is scheduled.
 Its steps read the package list, then schedule the restart with
 `shutdown -r 03:00`, or, when one is scheduled, show it with
@@ -512,18 +500,9 @@ config" is decided next to the deploy, recreate or edit that likely caused it.
 Each connection reports alone, and each report can be healthy while together
 they describe something that cannot work.
 `hq/platform/application/contradiction_findings.py` reads the walked paths and
-stored readings for these, polling nothing:
-
-| Rule | Two sides that disagree | Fix HQ offers |
-| --- | --- | --- |
-| `public-name-served-by-nothing` | Public DNS sends a name to a machine whose containers HQ reads; no proxy answers for it and no container there answers on a web port. A machine HQ reads no containers on is unknown, not unserved | Repoint the declared record; removal stays on its page |
-| `route-to-stopped-container` | A route ends at a container Docker reports not running, or forwards to a port no container publishes on a machine whose containers HQ reads | Repoint the declared proxy; `docker start` as a step for a stopped container |
-| `gate-guards-nothing` | A gate (`restricts`) names a host no DNS record answers | The provider console step |
-| `split-horizon-disagrees` | The public and internal records end on different machines | Repoint the declared rewrite |
-| `published-port-unfronted` | A container port answers the internet and no route leads to it | The compose change on its page |
-| `tag-granted-to-nobody` | A grant names a tag no read device carries | Edit the declared tailnet policy |
-| `served-certificate-not-held` | The controller found a consumer serving a certificate other than the one HQ installed | Install it again (reconcile) |
-| `service-wiring-incomplete` | A service's declarations: a name parked or pointing nowhere, two of one kind for one name, a proxied name no certificate covers, a proxy forwarding to an unknown machine (`services._faults`) | The service's page |
+stored readings for its rules, polling nothing; the Checks page
+(`/infrastructure/findings/checks/`) lists each with its bars and what
+resolves it.
 
 A machine where a container publishes 80 or 443 itself is never called
 unserved, since HQ cannot enumerate what it answers for. Removal is
