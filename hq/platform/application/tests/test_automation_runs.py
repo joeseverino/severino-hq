@@ -541,7 +541,7 @@ class FindingInvestigationTests(TestCase):
 
         from hq.platform.core.testing import NOBODY
 
-        from ..findings import finding_run
+        from ..finding_runs import finding_run
 
         (url,) = self.offered()
         (key,) = parse_qs(urlsplit(url).query)["finding"]

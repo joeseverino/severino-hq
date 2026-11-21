@@ -10,17 +10,15 @@ is a registered capability, absent for whoever cannot run it (``_resolved``).
 import inspect
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
-from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from functools import cache, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict, cast
-from urllib.parse import parse_qs, urlsplit
+from typing import Annotated, Any, Literal, TypedDict, cast
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_model, with_config
+from pydantic import ConfigDict, Field, create_model, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
 lazy from hq.domains.control_plane.models import OperationRequest
@@ -101,9 +99,6 @@ lazy from .gathered_findings import gather_findings
 lazy from .moments import ago
 lazy from .record_saves import row
 lazy from .ui import counted
-
-if TYPE_CHECKING:
-    from .upgrades import ComposeTarget
 
 _CLAIM_NAMESPACE = "infrastructure.finding"
 
@@ -314,9 +309,6 @@ def _permitted(capability: str, principal: Principal) -> tuple[bool, Effect | No
     # A rule naming a capability the registry does not hold is a contract error
     # the suite catches; at runtime the honest answer is to offer nothing.
     return False, None
-
-
-_SERVICE_UNIT = "service_unit"
 
 
 def _playbooks(
@@ -693,67 +685,6 @@ def rule_of(item_key: str) -> str:
 
     _, found, rest = item_key.partition("finding:")
     return rest.split(":", 1)[0] if found else ""
-
-
-@dataclass(frozen=True, slots=True)
-class FindingRun:
-    """The values the current finding can supply to its playbook's form."""
-
-    initial: dict[str, Any]
-    deployment: automation_runs.ComposeDeployment | None = None
-
-    @property
-    def review(self) -> str:
-        return self.deployment.review if self.deployment else ""
-
-
-def finding_run(capability: str, key: str, principal: Principal) -> FindingRun | None:
-    """Fill the run only while this reader's finding offers that command."""
-
-    if not automation_runs.runs_procedure(capability) or rule_for(rule := rule_of(key)) is None:
-        return None
-    for finding in estate_findings(principal=principal, rule=rule):
-        if finding_key(finding) != key:
-            continue
-        if (deployment := finding.deployment) and deployment.capability == capability:
-            return FindingRun(deployment.initial, deployment)
-        for offer in finding.offers:
-            if offer.name == PLAYBOOK_INVESTIGATION and offer.capability == capability and not offer.refusal:
-                hosts = parse_qs(urlsplit(offer.url).query)["hosts"]
-                return FindingRun(_investigation_fields(capability, hosts, finding.service_unit))
-    return None
-
-
-def container_deployment(target: ComposeTarget, principal: Principal) -> ActionLink | None:
-    """The upgrade plan and its finding offer the same deployment."""
-
-    for rule in (container_findings.UPDATE, container_findings.ADVISORY):
-        for finding in estate_findings(principal=principal, rule=rule):
-            if finding.compose_target != target:
-                continue
-            if (deployment := finding.deployment) is not None:
-                return next((press for press in finding.presses if press.capability == deployment.capability), None)
-    return None
-
-
-def _investigation_fields(capability: str, hosts: list[str], service: str) -> dict[str, Any]:
-    initial: dict[str, Any] = {"hosts": hosts}
-    if not service:
-        return initial
-    manifest = next(
-        (
-            each
-            for each in automation_runs.operation_registry().values()
-            if automation_runs.capability_name(each.id) == capability
-        ),
-        None,
-    )
-    if manifest and (field := manifest.input_type.model_fields.get(_SERVICE_UNIT)):
-        with suppress(ValidationError):
-            initial[f"parameters.{_SERVICE_UNIT}"] = TypeAdapter(field.rebuild_annotation()).validate_python(
-                service, strict=True
-            )
-    return initial
 
 
 class FindingEvidence(TypedDict):

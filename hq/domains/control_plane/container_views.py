@@ -8,7 +8,7 @@ from hq.platform.application.pages import PageMixin
 from hq.platform.application.security import web_principal
 lazy from hq.platform.application.container_findings import needs_you
 lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containers, standing_of, tally
-lazy from hq.platform.application.findings import container_deployment
+lazy from hq.platform.application.finding_runs import container_deployment
 lazy from hq.platform.application.machines import container_context
 lazy from hq.platform.application.resource_capabilities import offered_changes
 lazy from hq.platform.application.upgrades import plan_for, readiness_of

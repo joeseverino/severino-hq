@@ -37,7 +37,7 @@ from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import run_posted
 from hq.platform.core.web_refusals import refused
 lazy from hq.platform.application.automation_runs import REVIEW_IMAGE_UPDATE
-lazy from hq.platform.application.findings import finding_run
+lazy from hq.platform.application.finding_runs import finding_run
 lazy from hq.platform.application.work_runs import run_url
 
 
