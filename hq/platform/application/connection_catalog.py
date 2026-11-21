@@ -37,6 +37,7 @@ from .projection import read_once
 from .security import Principal
 from .tone import Tone
 lazy from .connection_records import AbilityPart
+lazy from .credential_sight import PARTIAL, READABLE, REFUSED, UNREADABLE, read_through
 lazy from .entity_links import entity_link, link_url
 lazy from .record_saves import row
 
@@ -328,10 +329,8 @@ def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> Co
 
 
 def _check_reading(instance: ConnectionInstance) -> None:
-    """The status a connection was read in, where it was read and by whom."""
+    """Where a connection was read and by whom."""
 
-    if not instance.status_label.strip():
-        raise ImproperlyConfigured(f"Connection {instance.id!r} has no status label.")
     if instance.endpoint and endpoint_has_private_parts(instance.endpoint):
         raise ImproperlyConfigured(f"Connection {instance.id!r} endpoint contains private URL parts.")
     if instance.controller_id != instance.controller_id.strip():
@@ -461,12 +460,14 @@ def _connection_view(
         if state.action is not None and state.action.url not in seen:
             seen.add(state.action.url)
             actions = (*actions, state.action)
+    instance = _read_through(instance)
     authority = connection_authority(states)
     lifecycle = connection_lifecycle(
         instance,
         authority,
         now=present(),
     )
+    instance = replace(instance, status_label=instance.status_label.strip() or lifecycle.label)
     return ConnectionView(
         instance,
         states,
@@ -479,6 +480,21 @@ def _connection_view(
         lifecycle,
         authority,
     )
+
+
+def _read_through(instance: ConnectionInstance) -> ConnectionInstance:
+    """``instance``, observed as of what last came through it where it says
+    nothing of its own: a failed read is a fault, and the newest answer is
+    when it was last read."""
+
+    found = read_through(instance.kind, instance.label) if instance.observed_at is None else None
+    if found is None:
+        return instance
+    failed = [seen.observed_at for seen in found.sights if seen.state in (REFUSED, UNREADABLE) and seen.observed_at]
+    read = [seen.observed_at for seen in found.sights if seen.state in (READABLE, PARTIAL) and seen.observed_at]
+    if not failed and not read:
+        return instance
+    return replace(instance, status=Tone.SERIOUS if failed else Tone.GOOD, observed_at=max(read or failed))
 
 
 def serialize_ability(state: ConnectionAbilityState) -> AbilityPart:

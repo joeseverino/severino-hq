@@ -509,7 +509,6 @@ class ConnectionRegistrationTests(TestCase):
         cases = (
             ("non-ConnectionInstance", object()),
             ("incomplete instance", replace(good, kind=" ")),
-            ("no status label", replace(good, status_label=" ")),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts:read", "accounts:read"))),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts read",))),
             ("invalid relationship", replace(good, dependencies=(ConnectionLink("Box", resource_key=" box"),))),
@@ -581,7 +580,7 @@ class ConnectionWorkspaceTests(SignedInTestCase):
                 self.page_for(model)
 
     def test_a_connection_that_does_not_say_its_credential_model_is_refused(self):
-        made = {"id": "one", "label": "One", "kind": "example", "status": "good", "status_label": "ok"}
+        made = {"id": "one", "label": "One", "kind": "example"}
 
         for unsaid in ("", "password"):
             with self.subTest(unsaid), self.assertRaises(ValueError) as refused:
@@ -604,7 +603,6 @@ class GrantEvidenceTests(TestCase):
             "label": "One",
             "kind": "example",
             "status": "good",
-            "status_label": "ok",
             "credential_model": "unknown",
         }
         return ConnectionInstance(**{**base, **overrides})

@@ -13,6 +13,7 @@ once an ask went unanswered that long, or its last reading failed.
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import cache
 
 lazy from django.core.exceptions import ImproperlyConfigured
 
@@ -21,7 +22,7 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 from .derivations import reached
 from .moments import ago
 from .process_caches import kept
-lazy from . import plugins
+lazy from . import plugins, readings
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
 
 CURRENT = "current"
@@ -168,11 +169,29 @@ def cadence(kind: str = "") -> ReadCadence:
     spec = OBSERVATIONS.get(kind)
     if spec is not None and spec.every is not None:
         return missed(spec.every, 2)
+    if spec is None and (read := _read_through().get(kind)):
+        # A connection HQ reaches itself is judged by the readings through it:
+        # by the slowest it reads on a clock, else by one asked for on open.
+        return max((cadence(item) for item in read), key=lambda found: (not found.on_open, found.stale_after))
     if spec is None and kind and (declared := _extension_cadence(kind)) is not None:
         return declared
     # A controller reads on the sweep, whose slowest interval is the idle one;
     # a reading is stale once it has missed a whole sweep, not when one is due.
     return missed(slowest_sweep_interval(), 2)
+
+
+@cache
+def _read_through() -> dict[str, tuple[str, ...]]:
+    """The kinds of reading HQ takes itself, by the connection they come through."""
+
+    found: dict[str, list[str]] = {}
+    for kind, spec in OBSERVATIONS.items():
+        if spec.read_by == "hq":
+            found.setdefault(spec.provider, []).append(kind)
+    for reading in readings.KEPT:
+        for provider in reading.through:
+            found.setdefault(provider, []).append(reading.cadence)
+    return {provider: tuple(kinds) for provider, kinds in found.items()}
 
 
 def stale_after(kind: str = "") -> timedelta:

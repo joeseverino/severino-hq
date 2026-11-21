@@ -952,6 +952,12 @@ reading it feeds and every resource kind a sweep reads. A kind with an
 - **Not connected**: the controller holds no connection that can read it.
 - **Never read**.
 
+A connection HQ reaches itself with no credential (a public registry, the
+weather service) folds in the same way what came through it: each reading
+whose `ObservationSpec.provider` or `readings.Kept.through` names its kind
+(`credential_sight.read_through`). Its state and age are those readings', and
+its cadence the slowest of theirs read on a clock.
+
 A readable kind older than its cadence allows reads **Out of date**
 (`hq.platform.application.freshness`). The services page's provider readings
 use the same words, through `credential_sight.standing`.

@@ -758,7 +758,10 @@ authorization headers, secret values or private URL parts. URL userinfo, query
 strings and fragments are rejected outright, rather than filtered by a list of
 secret parameter names.
 
-`observed_at` is a `datetime` and serializes as ISO 8601. Links are local paths
+`observed_at` is a `datetime` and serializes as ISO 8601. An instance that
+leaves `status`, `status_label` and `observed_at` unsaid is said in its
+lifecycle's word, and dated by the readings HQ declares came through its
+`kind` where any do. Links are local paths
 or explicit HTTP(S) URLs. Emit a truthful reduced mode when the gateway works
 anonymously, rather than hiding it.
 

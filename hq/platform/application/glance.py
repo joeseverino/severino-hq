@@ -49,9 +49,7 @@ def connection_specs():
             ConnectionInstance(
                 id="national-weather-service",
                 label="National Weather Service",
-                kind="nws",
-                status=Tone.GOOD,
-                status_label="keyless",
+                kind=readings.NWS,
                 detail="Weather for the dashboard. Public, no key needed.",
                 endpoint=NWS_API,
                 credential_model="none",

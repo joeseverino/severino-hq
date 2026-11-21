@@ -21,6 +21,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.control_plane.reading_parts import RefusedPart, parts_of, refused_parts
 
+from . import readings
 from .labels import human_label
 from .projection import read_once
 from .tone import Tone, TonedChoices
@@ -447,6 +448,39 @@ def _fed_parts(fed, kind: str, own: tuple[str, ...]) -> None:
                 tuple(dict.fromkeys(name for part in parts for name in part.requires)),
             )
         )
+
+
+def read_through(provider: str, label: str) -> ProviderSight | None:
+    """What came through a connection HQ reaches itself, with no credential:
+    each reading whose declaration names its kind, as stored. None when none
+    does."""
+
+    def load() -> ProviderSight | None:
+        inventory = _inventory()
+        sights = [
+            sight(kind, spec.label, "reading", inventory.get(kind))
+            for kind, spec in OBSERVATIONS.items()
+            if spec.read_by == "hq" and spec.provider == provider
+        ]
+        sights.extend(_kept(kept, kept.through[provider]) for kept in readings.KEPT if provider in kept.through)
+        return ProviderSight(provider, label, tuple(sorted(sights, key=lambda seen: seen.label))) if sights else None
+
+    return read_once(f"credential_sight.through:{provider}", load)
+
+
+def _kept(kept: readings.Kept, answered) -> Sight:
+    """One kind of kept reading through one connection: read when any stored
+    value says the connection answered, and as of the newest that does."""
+
+    stored = kept.stored()
+    good = [item.observed_at for item in stored if answered(item.value)]
+    if good:
+        return Sight(kept.cadence, kept.label, "reading", READABLE, records=len(good), observed_at=max(good))
+    if stored:
+        return Sight(
+            kept.cadence, kept.label, "reading", UNREADABLE, observed_at=max(item.observed_at for item in stored)
+        )
+    return Sight(kept.cadence, kept.label, "reading", NEVER_SWEPT)
 
 
 def sight_by_connection(
