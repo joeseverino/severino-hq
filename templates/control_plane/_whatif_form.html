@@ -8,12 +8,9 @@ start as that machine, which is the question most often being asked.
 {% endcomment %}
 {% url 'control_plane:tailnet' as tailnet_url %}
 {% filter_bar verb="Check" action=tailnet_url data_fragment_target="whatif-result" %}
-  {% control_label "From" control="whatif-source" %}
-  {% select "source" device_names chosen=asked.source id="whatif-source" %}
-  {% control_label "To" control="whatif-target" %}
-  {% select "target" device_names chosen=asked.target id="whatif-target" %}
-  {% control_label "Port" control="whatif-port" %}
-  {% select "port" ports chosen=asked.port id="whatif-port" %}
+  {% select "source" device_names chosen=asked.source label="From" id="whatif-source" %}
+  {% select "target" device_names chosen=asked.target label="To" id="whatif-target" %}
+  {% select "port" ports chosen=asked.port label="Port" id="whatif-port" %}
 {% endfilter_bar %}
 
 {% include "control_plane/_whatif_result.html" %}

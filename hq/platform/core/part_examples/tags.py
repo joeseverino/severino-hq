@@ -271,8 +271,7 @@ MUTED_STATES = {
 # A choice of one ({% select %}) with a visible label, then one named by
 # its label alone in each status tone, as a rule's setting is.
 SELECT = Example(
-    '{% control_label "Example rule" control="example-rule" %}'
-    '{% select "example" options chosen="allow" id="example-rule" %}'
+    '{% select "example" options chosen="allow" label="Example rule" id="example-rule" %}'
     '{% for tone in tones %} {% select "example-"|add:tone options chosen=tone label="Example rule, "|add:tone '
     "tone=tone %}{% endfor %}",
     context={
