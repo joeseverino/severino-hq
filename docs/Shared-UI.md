@@ -79,10 +79,13 @@ and those that hold across parts in [Design](Design.md).
 | --- | --- | --- | --- | --- |
 | `button` | `label`, first and unnamed | required |  | Its words. |
 | `button` | `arrow` | `False` |  | Ends with the arrow of a link onward. |
+| `button` | `checked` | `None` |  | A switch, its track drawn after its words, and which way it stands. |
 | `button` | `count` | `None` |  | A count of what it holds, after its words. |
 | `button` | `css` |  |  | Classes in place of its look, for a control not drawn as a button. |
 | `button` | `current` | `False` |  | It names the page being drawn. |
 | `button` | `disabled` | `False` |  | Neither a link nor a form, kept in the tab order. |
+| `button` | `expanded` | `None` |  | Shows or hides what it governs, and which it does now. |
+| `button` | `heard` |  |  | Its name aloud, where its words are a glyph or none and it has no title. |
 | `button` | `hit` | `False` |  | Drawn smaller than a target, so it asks for its hit area. |
 | `button` | `icon` |  |  | The icon its words open with. |
 | `button` | `look` |  |  | How it looks, its words from `ui.BUTTON_LOOKS`. |
@@ -270,6 +273,10 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `icon` | An icon drawn by hand, where the icon part draws it. | `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img" |
 | `form` | A form that writes drawn by hand, where the form part draws it. | `{% include "partials/_form.html" %}`, or `partials/_page_action.html` of a PageAction.command |
 | `filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | `{% filter_bar search="..." %}``{% choices %}``{% select ... %}``{% endfilter_bar %}` |
+| `button` | A button drawn by hand, where the button tag draws every control that looks like one. | `{% button %}`, which takes a popover, a dialog command and each data_* hook |
+| `chip` | A chip, a badge, a count or an age drawn by hand, where the status part or a value filter draws it. | `{% status word chip=True %}`, a count by {{ n\|counted:"thing" }}, an age by {{ at\|ago }} |
+| `filter-choice` | A choice of several drawn as boxes by hand, where the toggle set part draws it. | `{% include "partials/_toggle_set.html" %}`, or `{% select %}` for one choice |
+| `form-control` | A form, a field or a label drawn by hand, where the form, field and filter bar parts draw it. | `{% include "partials/_form.html" %}` of a Django form, or `{% filter_bar %}` for what a list keeps |
 | `row-group` | A group of rows headed by hand, where the row group tag heads it. | `{% row_group label count %}` |
 | `list` | A list or a band of facts drawn by hand, where the list or the facts part draws it. | `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}`, or `{% facts %}` |
 | `record-link` | A link to a record's page drawn by hand, where the entity tag names the record by its model's page. | `{% entity row\|record label=row.name %}`, or row\|record:"section" for a part of its page |
@@ -320,7 +327,9 @@ Every control that looks like a button is `{% button label url look="primary com
 one writer of `.btn` (`ui.button_classes` for Python's parts): a link, with `outside=True` one out
 of HQ drawn as `{% outside_link %}` draws it, with an `offer` one that posts, with `submit=True`
 its form's own, and with neither and no url one a script acts on (`data_*`, `popovertarget`,
-`command`). Its words may open with an `icon`, close with a `count` or end with an `arrow`. A post
+`command`). Its words may open with an `icon`, close with a `count` or end with an `arrow`; one with
+a glyph or no words is named aloud by its `heard`, else its title. A `<button>` may be a toggle
+(`pressed`), a switch drawn with its track (`checked`) or a disclosure (`expanded`). A post
 is only ever an offer's: a `PageAction` from `PageAction.command`, which is None for a reader who
 may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has no way to draw a
 press its reader would be refused. `_page_action.html` draws one; a confirmation's is
