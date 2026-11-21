@@ -16,7 +16,7 @@ from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 
 from hq.platform.application.describe import Describe
-from hq.platform.application.tables import check_drop, column_kind
+from hq.platform.application.tables import Cell, DataTable, Row, TableColumn, check_drop, column_kind
 from hq.platform.core.held_values import format_html
 from hq.platform.core.part_examples import tags
 from hq.platform.core.table_cells import (
@@ -655,6 +655,20 @@ def row_actions(
         "mark": mark,
         "order": order,
     }
+
+
+@register.filter
+def chart_table(chart: Any) -> DataTable:
+    """``{% data_table chart|chart_table %}``: what a chart (``ui.ChartDrawing``)
+    draws, as a table read in its own order: a row per period or date, headed
+    by it, a column per series, each value as its tooltip writes it."""
+
+    columns = (
+        TableColumn("Period" if chart.stacked else "Date", kind="status"),
+        *(TableColumn(heading, kind="numeric") for heading in chart.table_headings),
+    )
+    rows = tuple(Row((Cell(row.label, header=True), *map(Cell, row.cells))) for row in chart.table_rows)
+    return DataTable(chart.title, columns, rows, region={"chart": True})
 
 
 def data_table(

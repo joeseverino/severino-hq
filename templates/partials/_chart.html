@@ -60,12 +60,7 @@ one frame draws both.
       </div>
     </div>
     {% section "View chart data" fold=True %}
-      {% table_region chart.title chart=True %}
-        <table class="data-table">
-          <thead><tr>{% if chart.stacked %}{% table_heading "Period" "status" %}{% else %}{% table_heading "Date" "status" %}{% endif %}{% for heading in chart.table_headings %}{% table_heading heading "numeric" %}{% endfor %}</tr></thead>
-          <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label }}</th>{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
-        </table>
-      {% endtable_region %}
+      {% data_table chart|chart_table %}
     {% endsection %}
   {% endif %}
 {% comment %}A line chart of one series is named by its heading, so only bars or several lines carry a legend.{% endcomment %}

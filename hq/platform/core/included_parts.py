@@ -258,6 +258,15 @@ TOPOLOGY_MAP = _part(
     example=graph.TOPOLOGY_MAP,
 )
 
+DOTS = _part(
+    "dots",
+    "A count as a row of dots, those it reached filled.",
+    "is-filled",
+    "figure-dot",
+    "figure-dots",
+    example=records.DOTS,
+    states=records.DOTS_STATES,
+)
 METER = _part(
     "meter",
     "A proportion as a bar, or as a segment for each of what it counts.",
@@ -440,15 +449,7 @@ PARTS = (
         *("is-latest", "figure-trend", "figure-trend-dot", "figure-trend-hit"),
         draws=(CHART,),
     ),
-    _part(
-        "dots",
-        "A count as a row of dots, those it reached filled.",
-        "is-filled",
-        "figure-dot",
-        "figure-dots",
-        example=records.DOTS,
-        states=records.DOTS_STATES,
-    ),
+    DOTS,
     _part(
         "dropzone",
         "A file field that also accepts a drop.",
