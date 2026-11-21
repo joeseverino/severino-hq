@@ -7817,13 +7817,13 @@
                 "enum": [
                   "agent_blocked",
                   "agents_paused",
-                  "declined",
                   "denied_by_policy",
                   "device_awaiting_approval",
                   "device_blocked",
                   "device_unknown",
                   "forbidden",
-                  "insufficient_scope"
+                  "insufficient_scope",
+                  "operator_rejected"
                 ]
               },
               "details": {
@@ -15425,7 +15425,7 @@
         "description": "A held request you asked for: what it asks, where it stands, and once done what the call answered.",
         "properties": {
           "answer": {
-            "description": "What the call answered once done: its command's own answer, carrying its work as it ended, or a refusal coded `declined`, `expired`, `stale`, `withdrawn` or `operation_failed`; empty until then.",
+            "description": "What the call answered once done: its command's own answer, carrying its work as it ended, or a refusal coded `operator_rejected`, `expired`, `stale`, `withdrawn` or `operation_failed`; empty until then.",
             "type": "object"
           },
           "asks": {
@@ -15438,7 +15438,7 @@
             "$ref": "#/components/schemas/HeldRequest/properties/content_fingerprint"
           },
           "done": {
-            "description": "Whether it is settled: declined, lapsed, overtaken or withdrawn, or approved and its work ended.",
+            "description": "Whether it is settled: rejected, lapsed, overtaken or withdrawn, or approved and its work ended.",
             "type": "boolean"
           },
           "expires_at": {

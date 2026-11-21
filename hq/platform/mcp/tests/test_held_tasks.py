@@ -2,8 +2,8 @@
 
 The client waits on the task while a person decides in HQ and HQ applies it:
 it reads working, saying what it holds and where it is decided, then the
-call's answer once the change is applied, or a refusal once a person declines
-or applying it fails. Nothing in the extension approves or declines it; a
+call's answer once the change is applied, or a refusal once an operator rejects
+it or applying it fails. Nothing in the extension approves or rejects it; a
 cancel is its asker withdrawing it, and a task answers only the caller that
 asked.
 """
@@ -232,17 +232,17 @@ class HeldTaskTests(TestCase):
         self.assertFalse(result.is_error)
         self.assertEqual(result.structured_content, approved["result"])
 
-    def test_the_task_completes_as_a_refusal_once_a_person_declines(self):
+    def test_the_task_completes_as_a_refusal_once_an_operator_rejects(self):
         created, _ = self._held_task()
 
         reject(RejectCommand(created.task_id, note="Not this week."), principal=self.person)
         read = self._read(created.task_id)
 
-        # A decline is the call refused, not a protocol failure.
+        # A rejection is the call refused, not a protocol failure.
         self.assertEqual(read["status"], "completed")
         result = types.CallToolResult.model_validate(read["result"])
         self.assertTrue(result.is_error)
-        self.assertEqual(result.structured_content["error"]["code"], "declined")
+        self.assertEqual(result.structured_content["error"]["code"], "operator_rejected")
         self.assertIn("Not this week.", result.structured_content["error"]["message"])
         self.assertFalse(OperationRequest.objects.exists())
 

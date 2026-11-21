@@ -512,7 +512,7 @@ is refused the audit log (`read_audit_log`) and the calendar
   naming it, so the client stays connected and its first call after it is
   allowed again runs. Who set the block and when is kept on the client's
   record and in the audit log. A block holds what the client already asked
-  for, as the pause does: its held requests can be declined but not approved,
+  for, as the pause does: its held requests can be rejected but not approved,
   and its queued work is not handed to the controller until the block is
   lifted.
 - A person can remove an agent HQ no longer needs to list, such as a client
@@ -673,7 +673,7 @@ is refused the audit log (`read_audit_log`) and the calendar
   shown (`over_live` in `controller.py`). A kind nothing reads live is not
   applied this way.
 - The change runs as the agent that asked, so its audit events name that
-  agent. The person who approved or declined it is named by the audit row
+  agent. The person who approved or rejected it is named by the audit row
   of the save that settled the request, written in the same transaction.
 - Every capability's audit events name its caller: the capability runner
   sets the actor, interface and capability name for whatever the handler
