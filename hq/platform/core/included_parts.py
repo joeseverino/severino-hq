@@ -750,7 +750,9 @@ PARTS = (
         rules="""
         **The header is one row.** When room runs out, the search field collapses to a button that opens
         over the navigation, then the sections move behind the toggle. The navigation never shrinks below
-        its own content, and the bar's controls all take their size from `--control-size`.
+        its own content, and the bar's controls all take their size from `--control-size`. The
+        person's control shows their name beside the mark at any width whose bar has room for it, cut
+        past four controls, and only the mark where there is none.
 
         **The user menu says whose session it is first.** It shows the person's picture, kept by HQ from
         sign-on and never loaded from the provider by a page. Then come their name, what the account may
@@ -758,6 +760,7 @@ PARTS = (
         share a line, names over tracks, and the theme has its row. Then where the menu leads.
         """,
         example=pages.SITE_HEADER,
+        states=pages.SITE_HEADER_STATES,
     ),
     _part(
         "sweep_freshness",

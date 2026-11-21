@@ -18,14 +18,14 @@ lazy from hq.platform.application.pages import Page, PageAction, PageVisit
 lazy from hq.platform.application.request_channel import TAILNET_CHANNEL
 lazy from hq.platform.application.service_context import ServiceSection
 lazy from hq.platform.application.tables import Cell
-lazy from hq.platform.application.ui import PageNavigation, PageSection
+lazy from hq.platform.application.ui import PageNavigation, PageSection, button_classes
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 
 
 def _signed_in():
     """What the page frame reads of a signed-in example operator's request,
     as the context processors hand it to base.html: the sections, a group of
-    them among them, the theme and its choices, the connection's channel and
+    them among them, the bar's button look, the theme and its choices, the connection's channel and
     the queue's count."""
 
     return {
@@ -45,6 +45,7 @@ def _signed_in():
                 ),
             },
         ),
+        "bar_button": button_classes("bar"),
         "THEME": Theme.SYSTEM,
         "THEME_CHOICES": THEME_CHOICES,
         "CONNECTION_CHANNEL": TAILNET_CHANNEL,
@@ -103,8 +104,18 @@ def _palette():
 
 # The page frame's header, as every signed-in page draws it: the sections,
 # the doorway to search, the queue's count and the person's menu, whose
-# popovers the survey opens.
+# popovers the survey opens. Its long name is cut beside the mark; a short
+# one fits whole on a phone's bar.
 SITE_HEADER = Example(context=_signed_in, address="/example/", frame="before")
+
+SITE_HEADER_STATES = {
+    "short-name": Example(
+        '{% include "partials/_site_header.html" %}',
+        context=lambda: {**_signed_in(), "user": get_user_model()(username="ex", is_staff=True)},
+        address="/example/",
+        frame="before",
+    ),
+}
 
 
 MODAL = Example(
