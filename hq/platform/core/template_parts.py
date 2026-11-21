@@ -286,6 +286,28 @@ def _drawn_by(part: Part) -> Callable:
     return held
 
 
+def _placed(compile_: Callable) -> Callable:
+    """A function tag's ``compile_``, its failure as it draws noted with the
+    tag as its template writes it, since the value it was handed no longer
+    says which variable it was read from."""
+
+    def compiled(parser, token):
+        node = compile_(parser, token)
+        render = node.render
+
+        def rendered(context):
+            try:
+                return render(context)
+            except Exception as error:
+                error.add_note(f"drawing {{% {token.contents} %}} in {parser.origin}")
+                raise
+
+        node.render = rendered
+        return node
+
+    return compiled
+
+
 def slotted(part: Part, *, library: template.Library) -> None:
     """Register the part as its tag in ``library``. A function part is
     Django's simple tag, or with a partial its inclusion tag, taking the
@@ -303,6 +325,7 @@ def slotted(part: Part, *, library: template.Library) -> None:
             library.inclusion_tag(part.partial, takes_context=takes_context, name=part.name)(drawn)
         else:
             library.simple_tag(drawn, takes_context=takes_context, name=part.name)
+        library.tags[part.name] = _placed(library.tags[part.name])
         # The template contract reads a tag's declaration from what it wraps.
         library.tags[part.name].__wrapped__ = part  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
         return

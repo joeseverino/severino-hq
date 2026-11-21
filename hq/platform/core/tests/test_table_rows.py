@@ -144,6 +144,11 @@ class TableRowTests(SimpleTestCase):
         ]
         self.assertEqual(header.attrs.get("scope"), "row")
 
+    def test_a_table_its_template_does_not_hold_is_refused_as_the_template_writes_it(self):
+        with self.assertRaises(TypeError) as refused:
+            _render("{% data_table missing %}")
+        self.assertIn("{% data_table missing %}", " ".join(refused.exception.__notes__))
+
     def test_a_declared_hook_stands_on_what_it_finds(self):
         """A group's hook is on its body, a line's on its item, and a value's
         around that value alone, so a script reads its words and no others."""

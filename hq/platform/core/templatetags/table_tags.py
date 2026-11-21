@@ -687,6 +687,8 @@ def data_table(
     """A table drawn whole from its declaration, so a page writes no heading
     or cell of its own."""
 
+    if not isinstance(table, DataTable):
+        raise TypeError(f"data_table draws a DataTable, and was handed {table!r}")
     return {**drawn(table, context), "empty": empty}
 
 
