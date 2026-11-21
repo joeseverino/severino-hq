@@ -293,8 +293,9 @@ class Cells(HTMLParser):
         # Its tag is no end tag's, so the cell stays the floor of ``open``.
         self.open, self.firsts, self.children = [], [], []
         self.unsaid, self.off_line, self.part = None, None, None
-        self._role(cell.start, cell.attrs)
-        self._open(cell, "", _classes(cell.attrs), {})
+        classes = _classes(cell.attrs)
+        self._role(cell.start, cell.attrs, classes)
+        self._open(cell, "", classes, {})
 
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self.cell is not None:
@@ -303,6 +304,7 @@ class Cells(HTMLParser):
     def _inside(self, cell: _Cell, tag: str, attrs: list[tuple[str, str | None]], *, void: bool = False) -> None:
         given = dict(attrs)
         classes = _classes(given)
+        at = self.getpos()
         if tag in _LINE_ENDS:
             cell.line = 0
         # A control refused here stands as a button that cannot be pressed.
@@ -317,14 +319,13 @@ class Cells(HTMLParser):
             cell.presses = True
         if "data-row-toggle" in given:
             cell.toggled = True
-            cell.toggle_at = cell.toggle_at or self.getpos()
+            cell.toggle_at = cell.toggle_at or at
             cell.folds = cell.folds or "data-fold-toggle" in given
         if self.section == "thead" and "data-sort-local" in given:
-            at = self.getpos()
             cell.sort.append(((at, 0), (at, len(self.get_starttag_text() or ""))))
             self.sorting = True
         if self.sorting and _SORT_MARK in classes and cell.sort_mark is None:
-            cell.sort_mark = self.getpos()
+            cell.sort_mark = at
         # A mark drawn on the line opens it as a word does.
         if tag == "svg" and self.off_line is None:
             cell.line += 1
@@ -335,7 +336,7 @@ class Cells(HTMLParser):
             cell.said.append(False)
             if len(cell.tops) == 1:
                 found = _CLASS_VALUE.search(self.get_starttag_text() or "")
-                cell.top_tag, cell.top_class = tag, (self.getpos(), found and found.end())
+                cell.top_tag, cell.top_class = tag, (at, found and found.end())
         if (
             self.off_line is None
             and self.part is None
@@ -346,8 +347,8 @@ class Cells(HTMLParser):
         # link's words: the row header of a table that has none.
         leads = len(self.open) == 1 or (len(self.open) == 2 and self.open[1] == "a" and self.firsts[1])
         if tag == "strong" and leads and (first or len(self.open) == 2) and "data-cell" not in given:
-            cell.names.append(self.getpos())
-        self._role(self.getpos(), given)
+            cell.names.append(at)
+        self._role(at, given, classes)
         if tag in _LINE_ENDS and self.off_line is None:
             cell.text.append(" ")
         # What moves whole to the row's open line says nothing on its line.
@@ -425,11 +426,11 @@ class Cells(HTMLParser):
         elif self.cell.said and data.strip():
             self.cell.said[-1] = True
 
-    def _role(self, start: Position, attrs: dict[str, str | None]) -> None:
+    def _role(self, start: Position, attrs: dict[str, str | None], classes: list[str]) -> None:
         """Note the roles an element's classes declare. An element already
         marked was marked by a region inside this one."""
 
-        roles = {ROLE_CLASSES[name] for name in _classes(attrs) if name in ROLE_CLASSES}
+        roles = {ROLE_CLASSES[name] for name in classes if name in ROLE_CLASSES}
         if roles and "data-cell" not in attrs:
             self.roles.setdefault(start, set()).update(roles)
 
