@@ -44,7 +44,7 @@
 /* A cell line's quiet second line (`{% cell_line %}`) is a line of its own under the first; either line that holds something to press is a target tall. */
 .cell-detail { display: block; }
 :is(.cell-line:has(+ .cell-detail), .cell-line + .cell-detail):is(a[href], :has(a[href], [tabindex])) { line-height: var(--target-min); }
-/* A value quoted in a cell breaks a word longer than its line wherever it must, marked on the cell when the whole cell is such text; a run with no seam (a digest) breaks anywhere (cuts.css). Its words stay whole, so the column is never narrower than its longest. */
+/* A value quoted in a cell breaks a word longer than its line wherever it must, marked on the cell when the whole cell is such text; an identifier in it breaks anywhere it must (cuts.css). Its words stay whole, so the column is never narrower than its longest. */
 .data-table :is(td[data-cell~=data], td [data-cell~=data]) { overflow-wrap: break-word; }
 /* A list row's actions (`_record_list.html`) read as several: the span gets the flex box. A table row's are its cell's (tables.css). */
 span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); white-space: nowrap; }

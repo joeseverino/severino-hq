@@ -149,11 +149,7 @@ def _whole(part: str, *, boxed: bool = False) -> str:
         for at, group in enumerate(groups)
     )
     inner = f'<span class="part">{held}</span>' if boxed else held
-    # A run with no hyphen (a digest, a key, a snake_case name) has no place
-    # a browser breaks it, so a cell may break it anywhere rather than widen
-    # its column to it (cuts.css); a hyphenated name breaks at its hyphens.
-    unbroken = "" if _INNER_HYPHEN.search(part) else " data-unbroken"
-    return f'<span class="whole"{unbroken}>{inner}</span>'
+    return f'<span class="whole">{inner}</span>'
 
 
 def _token(word: str, *, sole: bool) -> str:

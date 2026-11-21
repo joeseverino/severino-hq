@@ -274,16 +274,11 @@ class BreakableTests(SimpleTestCase):
 
     def test_a_run_too_long_to_be_a_word_is_held_as_a_name(self):
         """A digest has no seam to wrap at: in a phrase a box of its own, never
-        plain text that widens its column. It, and a snake_case name, are
-        marked as having no place to break, where a hyphenated name breaks at
-        its hyphens."""
+        plain text that widens its column."""
 
         digest = "697a431011ba77cec8b221767743484b20217b9786894fea67f222af655f40a7"
         self.assertEqual(boxed(breakable(f"{digest} on example-oidc")), [digest, "example-oidc"])
         self.assertEqual(boxed(breakable(f"sha256:{digest} pulled")), [digest])
-        for unbroken in (digest, "infrastructure_change"):
-            self.assertEqual([whole.words for whole in select(breakable(unbroken), "data-unbroken")], [unbroken])
-        self.assertEqual(select(breakable("example-docker-host-with-a-long-name-01"), "data-unbroken"), [])
 
     def test_a_word_that_breaks_nowhere_stays_text(self):
         self.assertEqual(breakable("Example Finance"), "Example Finance")
