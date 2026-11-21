@@ -22,6 +22,7 @@ lazy from django.apps import apps
 lazy from django.conf import settings
 
 lazy from hq.platform.application.plugins import installed_plugin_apps
+lazy from hq.platform.core import held_values
 lazy from hq.platform.core.hand_drawn import hand_drawn
 
 # What each builtin library loses, by the module Django names it with: a
@@ -88,10 +89,20 @@ class _Refusing(base.Loader):
     @override
     def get_contents(self, origin: Origin) -> str:
         contents = super().get_contents(origin)
+        if not origin.name.startswith(ours()):
+            return contents
         name = os.fsdecode(origin.template_name)
-        if origin.name.startswith(ours()) and (found := hand_drawn(contents, name)):
+        if found := hand_drawn(contents, name):
             raise TemplateSyntaxError("; ".join(f"{name}:{line}: {said}" for line, said in found))
-        return contents
+        return held_values.held(contents, lambda: self._plain_blocks(held_values.parent(contents), name))[0]
+
+    def _plain_blocks(self, parent: str | None, name: str) -> frozenset[str]:
+        """The blocks ``parent`` and the templates it extends open where text is plain."""
+
+        if not parent or parent == name:
+            return frozenset()
+        source = self.engine.get_template(parent).source
+        return held_values.held(source, lambda: self._plain_blocks(held_values.parent(source), parent))[1]
 
 
 class FilesystemLoader(_Refusing, filesystem.Loader):
