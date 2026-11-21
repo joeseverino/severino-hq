@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_typ
 
 from django import template
 from django.template.base import token_kwargs
-from django.utils.safestring import SafeData, mark_safe
+from django.utils.safestring import SafeData, SafeString, mark_safe
 
 from hq.platform.application.describe import Describe
 
@@ -353,6 +353,15 @@ def slotted(part: Part, *, library: template.Library) -> None:
     # The template contract reads a tag's declaration from what it wraps.
     compile_.__wrapped__ = part  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
     library.tag(part.name, compile_)
+
+
+def enclosed(part: Part, content: str, **given: Any) -> SafeString:
+    """``part`` drawn from Python around markup drawn already, as its tag
+    draws what it encloses (``SlotsNode``)."""
+
+    values = part.values(given) | {"content": mark_safe(content.strip())}  # noqa: S308 - escaped by what drew it
+    drawn = template.Engine.get_default().get_template(part.partial).render(template.Context(values))
+    return mark_safe(drawn.strip())  # noqa: S308 - the part's own escaped output
 
 
 def answers(library: template.Library, *, takes_context: bool = False) -> Callable[[Callable], Callable]:

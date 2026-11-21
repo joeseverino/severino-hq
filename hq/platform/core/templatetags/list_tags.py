@@ -207,30 +207,33 @@ class LineListNode(template.Node):
         self.name = name
         self.kind = kind
 
-    def _parts(self, context: Any, values: list[Any]) -> str:
-        drawn = []
-        for value in values:
-            with context.push(**{self.name: value}):
-                drawn.append(self.nodelist.render(context))
-        return "".join(drawn)
+    def _part(self, context: Any, value: Any) -> str:
+        with context.push(**{self.name: value}):
+            return self.nodelist.render(context)
 
     def render(self, context: Any) -> str:
         values = [value for value in self.values.resolve(context) or () if value not in (None, "")]
-        if not values:
-            return ""
-        kind = self.kind.resolve(context) if self.kind else ""
-        LINE_LIST.held({"kind": kind})
-        lead, rest = values[:LINE_LEAD], values[LINE_LEAD:]
-        # Parts already rendered and escaped by their own template.
-        parts = mark_safe(self._parts(context, lead))  # noqa: S308 - rendered and escaped already
-        tail = mark_safe(self._parts(context, rest))  # noqa: S308 - rendered and escaped already
-        # The rest shows only on the row's open line (table_layout.HELD).
-        if kind:
-            css = KINDS[kind].css
-            more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
-            return format_html('<ul class="{} line-list">{}{}</ul>', css, parts, more)
-        more = format_html('<span class="line-rest"><span class="line-run">{}</span></span>', tail) if rest else ""
-        return format_html('<span class="line-list">{}{}</span>', parts, more)
+        kind = self.kind.resolve(context) if self.kind and values else ""
+        return line_run([self._part(context, value) for value in values], kind)
+
+
+def line_run(drawn: list[str], kind: str = "") -> str:
+    """Parts drawn already, each escaped by what drew it, as a line list:
+    the first few on the row's line, the rest only on its open line
+    (table_layout.HELD)."""
+
+    if not drawn:
+        return ""
+    LINE_LIST.held({"kind": kind})
+    parts = mark_safe("".join(drawn[:LINE_LEAD]))  # noqa: S308 - escaped by what drew each
+    tail = mark_safe("".join(drawn[LINE_LEAD:]))  # noqa: S308 - escaped by what drew each
+    rest = len(drawn) > LINE_LEAD
+    if kind:
+        css = KINDS[kind].css
+        more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
+        return format_html('<ul class="{} line-list">{}{}</ul>', css, parts, more)
+    more = format_html('<span class="line-rest"><span class="line-run">{}</span></span>', tail) if rest else ""
+    return format_html('<span class="line-list">{}{}</span>', parts, more)
 
 
 @register.tag("line_list")

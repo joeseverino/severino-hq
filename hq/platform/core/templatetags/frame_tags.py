@@ -92,6 +92,16 @@ MUTED = Part(
     states=tags.MUTED_STATES,
 )
 slotted(MUTED, library=register)
+
+
+def muted(content: str, **given) -> str:
+    """Words drawn already, muted from Python as ``{% muted %}`` mutes them:
+    its partial writes the frame its shape builds around them."""
+
+    frame = MUTED.values(given)
+    return mark_safe(f"{frame['opening']}{content.strip()}{frame['closing']}")  # noqa: S308 - escaped by what drew each
+
+
 slotted(
     library=register,
     part=Part(
