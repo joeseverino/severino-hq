@@ -21,7 +21,7 @@ from hq.platform.application.freshness import Freshness, ReadCadence, freshness
 # run of local days into the moments to filter a datetime column by, so the read
 # uses the column's index.
 from hq.platform.application.projection import day_span, read_once
-lazy from hq.platform.application.plugins import provided_under
+lazy from hq.platform.application.composed_providers import provided_under
 
 
 def derivation[**P, T](
@@ -48,7 +48,7 @@ def derive_after_commit(plugin_id: str) -> None:
     after it derives one.
     """
 
-    _derivations.derive_after_commit(f"{plugin_id}.", provided_under(plugin_id))
+    _derivations.derive_after_commit(plugin_id, provided_under(plugin_id))
 
 
 __all__ = [

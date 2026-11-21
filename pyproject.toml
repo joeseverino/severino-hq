@@ -465,6 +465,7 @@ ignore = [".claude/worktrees"]
 files = [
     "hq/platform/application/security.py",
     "hq/platform/application/plugins.py",
+    "hq/platform/application/composed_providers.py",
     "hq/platform/application/outbound_work.py",
     "hq/platform/application/capabilities.py",
     "hq/platform/application/resources.py",

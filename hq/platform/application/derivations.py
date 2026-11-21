@@ -776,9 +776,9 @@ def _again(ask: _Ask) -> tuple[bool, str]:
         return True, kept
 
 
-def derive_after_commit(*prefixes: str) -> None:
+def derive_after_commit(*namespaces: str) -> None:
     """Once the transaction in progress commits, derive and store every
-    derivation whose name starts with one of ``prefixes`` that is asked with no
+    derivation named within one of ``namespaces`` that is asked with no
     arguments, so the first request after a write that changes them all (an
     import) finds each one stored.
 
@@ -786,13 +786,13 @@ def derive_after_commit(*prefixes: str) -> None:
     in the writer's own process. One that fails is logged, never raised.
     """
 
-    transaction.on_commit(partial(_derive_every, prefixes))
+    transaction.on_commit(partial(_derive_every, namespaces))
 
 
-def _derive_every(prefixes: tuple[str, ...]) -> None:
+def _derive_every(namespaces: tuple[str, ...]) -> None:
     with _AHEAD.set(True), projection_scope(apart=True):
         for name, declared in list(DERIVATIONS.items()):
-            if not name.startswith(prefixes) or not _asked_bare(declared.compute):
+            if not name.startswith(tuple(f"{within}." for within in namespaces)) or not _asked_bare(declared.compute):
                 continue
             try:
                 declared._answer[0]()

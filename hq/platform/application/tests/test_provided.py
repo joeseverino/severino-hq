@@ -8,14 +8,14 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.platform.application import derivations
 from hq.platform.application.card_items import Insight
-from hq.platform.application.demo import demo_scope, showing_demo
-from hq.platform.application.derivation_testing import frozen
-from hq.platform.application.derivations import DERIVATIONS, counting
-from hq.platform.application.plugins import (
+from hq.platform.application.composed_providers import (
     _identity,
     answered_by,
     provided,
 )
+from hq.platform.application.demo import demo_scope, showing_demo
+from hq.platform.application.derivation_testing import frozen
+from hq.platform.application.derivations import DERIVATIONS, counting
 from hq.platform.application.projection import projection_scope
 from hq.platform.core.models import UpstreamReading
 

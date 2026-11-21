@@ -21,6 +21,7 @@ from hq.platform.application.markup_testing import hrefs, text, with_class
 from hq.platform.application.tests.links import example_command
 
 from ..card_items import Kpi
+from ..composed_providers import answered_by
 from ..domains import domain_navigation
 from ..finding_model import Finding
 from ..finding_steps import Do
@@ -31,7 +32,6 @@ from ..plugins import (
     NavigationItem,
     PluginIntegration,
     PluginManifest,
-    answered_by,
     describe_plugins,
     installed_integrations,
     installed_plugins,

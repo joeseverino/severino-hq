@@ -495,7 +495,7 @@ remembered answer's moment comes.
 | A request | never waits on the pass: it derives what it does not find stored, and the pass waits between questions while a request is deriving |
 | `ahead=` on a derivation | how many ways of asking are kept current (eight by default); a way nobody asked for in a day is forgotten |
 | A question asked ahead | counts as HQ being in use |
-| A write that changes a whole family (an import) | `derive_after_commit(*prefixes)` derives every one under a prefix asked with no arguments once it commits, in the writer's process, remembered or not |
+| A write that changes a whole family (an import) | `derive_after_commit(*namespaces)` derives every one within a namespace asked with no arguments once it commits, in the writer's process, remembered or not |
 
 The declared derivations:
 

@@ -245,7 +245,7 @@ class DerivationTests(TestCase):
             self.assertEqual((count(), count(), len(calls)), (1, 1, 2))
             with self.captureOnCommitCallbacks(execute=True):
                 UpstreamReading.objects.create(key="two", value={}, observed_at=MOMENT)
-                derivations.derive_after_commit("test.other.", "test.count")
+                derivations.derive_after_commit("test.other", "test")
             self.assertEqual((len(calls), count(), len(calls)), (3, 2, 3))
 
     def test_a_value_stored_by_other_code_is_never_served_to_this_code(self):
@@ -698,9 +698,10 @@ class ActionItemCountTests(TestCase):
         self.assertEqual(self.client.get(self.url, headers={"if-none-match": '"anything"'}).status_code, 200)
 
     def test_a_queue_an_extension_reports_work_to_carries_a_validator(self):
+        from hq.platform.application.composed_providers import provided
         from hq.platform.application.domains import Domain, all_domains
         from hq.platform.application.finding_model import Finding
-        from hq.platform.application.plugins import PluginIntegration, provided
+        from hq.platform.application.plugins import PluginIntegration
 
         item = Finding(rule="example", subject="", severity="attention", title="Something waits", explanation="Body.")
         extra = Domain(

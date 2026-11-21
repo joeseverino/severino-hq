@@ -15,14 +15,13 @@ from typing import Any, NamedTuple
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.module_loading import import_string
 
+from .composed_providers import DERIVED_PROVIDERS, answered_by
 from .derivations import derivation
 from .derived_inputs import DASHBOARD_READS, QUEUE_READS, composed_variant, estate_variant
 from .plugins import (
-    DERIVED_PROVIDERS,
     NavigationGroup,
     NavigationItem,
     PluginIntegration,
-    answered_by,
     gather_attention,
     gather_cards,
     installed_integrations,
