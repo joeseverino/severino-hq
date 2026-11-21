@@ -128,6 +128,13 @@ class Cell:
     # In bold, the name its row is read by.
     name: bool = False
     role: Role = ""
+    # Its words as a readout draws them, an identifier in code; or as a line
+    # its box cuts, read whole on a press (``{% cell_line %}``).
+    readout: bool = False
+    cut: bool = False
+    # Words after it, inside its link and its bold: what follows a key that
+    # names the row ("and 3 more").
+    after: str = ""
     shows: Shows = ""
     # A moment, drawn as ``when`` draws it in ``form``, or an amount of money.
     moment: datetime | date | None = None

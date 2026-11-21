@@ -836,6 +836,7 @@ slotted(
         function=data_table,
         public=True,
         example=tags.DATA_TABLE,
+        states=tags.DATA_TABLE_STATES,
     ),
     library=register,
 )

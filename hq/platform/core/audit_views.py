@@ -44,7 +44,7 @@ class AuditLogListView(ListPageMixin, TemplateView):
     # A security log: read apart from the baseline READ a viewer holds.
     required_capability = Capability.READ_AUDIT_LOG
     resource = "audit"
-    template_name = "core/auditlog_list.html"
+    template_name = "list_page.html"
     page_size = 50
     page_title = "Audit log"
     table_empty_remedy = False
@@ -114,6 +114,14 @@ class AuditLogListView(ListPageMixin, TemplateView):
             lines = history.entries(page)
         # Each event, then what it changed, folded beneath it in the same columns.
         context["object_list"] = context["events"] = [line for event in lines for line in event.lines]
+        table = context["table"]
+        table["drawn"] = history.table(
+            context["page"].title,
+            (history.HistoryGroup(tuple(lines)),),
+            table["columns"],
+            selectable=table["selectable"],
+            sorted_by=table["selected_sort"],
+        )
         return context
 
     @override

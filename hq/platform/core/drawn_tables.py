@@ -19,6 +19,8 @@ from .table_layout import SAYS_NOTHING, CellFacts, Moved, RowFacts, TableFacts, 
 # The class a value that shows only part of the time is drawn in, which the
 # region reads (``table_cells._OFF_LINE``, ``table_layout.HELD``).
 SHOWN = {"more": "row-more", "narrow": "narrow-only", "narrow-more": "narrow-more"}
+# The classes of a column its cells carry too: a moment keeps its line (tables.css).
+_CELL_CLASSES = frozenset({"date-col"})
 # What the row's line shows of a value drawn only once it opens or in a narrow box.
 _OFF_LINE = frozenset({"more", "narrow"})
 # The characters a dot before a value adds to its line: a no-break space and the dot.
@@ -78,8 +80,12 @@ def drawn(table: DataTable, context: Any) -> dict[str, Any]:
     facts = [RowFacts("thead", cells=[facts for _, facts in headings])]
     facts += [row.facts for group in groups for row in group.rows]
     laid = lay_out(facts, sorts=table.sorted_by is None)
+    # A row across the table stands in the gutter its names keep, holding no toggle.
+    gutter = any("row-gutter" in facts.added for _, facts in headings)
     for group in groups:
         for row in group.rows:
+            if row.row.across and gutter:
+                row.cells[0].facts.added.append("row-gutter")
             _mark(row, width)
     sorting = {"table": {"selected_sort": table.sorted_by or ""}}
     return {
@@ -139,9 +145,14 @@ def _heading(sorting: dict[str, Any], column: dict[str, Any], facts: CellFacts, 
 
 def _row(table: DataTable, row: Row, context: Any, width: int) -> DrawnRow:
     cells = [_cell(cell, context) for cell in row.cells]
+    for drawn_cell, column in zip(cells, table.columns, strict=False):
+        drawn_cell.facts.classes = tuple(name for name in column.css.split() if name in _CELL_CLASSES)
     if row.across and cells:
         cells[0].facts.colspan, cells[0].facts.spans = width, True
     drawn_row = DrawnRow(row, RowFacts("tbody", cells=[cell.facts for cell in cells]), cells)
+    # A row of one cell across the table spans its tick-box's column and its actions' too.
+    if row.across:
+        return drawn_row
     if table.selectable:
         ticked = row.key is not None
         drawn_row.select = DrawnCell(
@@ -169,7 +180,7 @@ def _mark(row: DrawnRow, width: int) -> None:
     for cell in (row.select, *row.cells, row.actions):
         if cell is None:
             continue
-        if cell is row.cells[0] and row.row.across:
+        if row.row.across:
             cell.facts.marks.insert(0, f' colspan="{width}"')
         cell.attributes = _attributes(cell.facts, cell.role)
         cell.box, cell.toggle, cell.named = cell.facts.box, cell.facts.toggle, cell.facts.named
@@ -237,6 +248,6 @@ def _length(cell: Cell) -> int:
     elif cell.amount is not None:
         words = str(money(cell.amount))
     else:
-        words = cell.link.label if cell.link else cell.text
+        words = (cell.link.label if cell.link else cell.text) + cell.after
     shown = 0 if SAYS_NOTHING.fullmatch(words) else len(" ".join(words.split()))
     return shown + (_DOT if cell.dot else 0)

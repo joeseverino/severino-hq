@@ -3,6 +3,7 @@
 lazy import json
 lazy from dataclasses import replace
 lazy from datetime import UTC, datetime, timedelta
+lazy from decimal import Decimal
 lazy from uuid import UUID
 
 lazy from django import forms
@@ -21,7 +22,6 @@ lazy from hq.platform.application.contracts import Effect
 lazy from hq.platform.application.credential_mint import CredentialFix
 lazy from hq.platform.application.doors import NOBODY, Attribution
 lazy from hq.platform.application.finding_steps import Run
-lazy from hq.platform.application.money import money
 lazy from hq.platform.application.pages import PageAction, RowMark, RowOrder
 lazy from hq.platform.application.payload_words import ChangeRow
 lazy from hq.platform.application.security import MCP_INTERFACE
@@ -719,12 +719,69 @@ DATA_TABLE = Example(
             (
                 TableColumn("Host", cell=lambda name: Cell(name, f"/example/{name}/")),
                 TableColumn("State", cell=lambda name: Cell("Online", tone="good")),
-                TableColumn("Cost", kind="numeric", cell=lambda name: Cell(money(len(name)))),
+                TableColumn("Cost", kind="numeric", cell=lambda name: Cell(amount=Decimal(len(name)))),
             ),
             ("example-host-01", "example-host-two"),
         )
     },
 )
+
+
+def _every_kind() -> DataTable:
+    """A table of every kind of cell: a group, a row that folds others under
+    it with its count and a muted line, a readout, a cut line, a moment, an
+    amount, a state, free text, a part only a narrow box or the open line
+    shows, and the count of a fold's rest across the row."""
+
+    from hq.platform.application import tables
+
+    def row(name: str, **options) -> tables.Row:
+        return tables.Row(
+            (
+                Cell(name, f"/example/{name}/", readout=True, name=True, fold=bool(options.get("folds"))),
+                Cell("example-operator, on the web", cut=True),
+                Cell(moment=DRAWN_AT - timedelta(hours=2), form="clock", muted=True),
+                Cell(amount=Decimal(12)),
+                Cell("Online", tone="good"),
+                Cell("an example note that wraps wherever it must", muted=True, role="data"),
+            ),
+            **options,
+        )
+
+    head = row("example-host-01", folds="example-fold")
+    head = replace(
+        head,
+        cells=(
+            replace(
+                head.cells[0],
+                count=2,
+                lines=(Cell("Machine", muted=True, parts=(Cell("Online", dot=True, shows="narrow"),)),),
+            ),
+            *head.cells[1:],
+        ),
+    )
+    rest = tables.Row((Cell("1 more change", "/example/rest/", name=True),), folded="example-fold", across=True)
+    return DataTable(
+        "Example kinds",
+        (
+            TableColumn("Name"),
+            TableColumn("User", css="optional-col"),
+            TableColumn("Time", css="date-col key-col"),
+            TableColumn("Cost", kind="numeric"),
+            TableColumn("State", kind="status"),
+            TableColumn("Note"),
+        ),
+        groups=(
+            tables.Group(
+                "Example group",
+                (head, row("example-host-02", folded="example-fold"), rest, row("example-host-03")),
+                count=3,
+            ),
+        ),
+    )
+
+
+DATA_TABLE_STATES = {"kinds": Example("{% data_table table %}", context=lambda: {"table": _every_kind()})}
 
 
 DOT = Example("{{ count }}{% dot %}{{ age }}", context={"count": "3 example hosts", "age": "2 days ago"})

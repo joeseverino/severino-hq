@@ -118,7 +118,8 @@ and those that hold across parts in [Design](Design.md).
 | `cell_line` | `lines` | `2` | `1`, `2` | The lines its first line may take: one keeps its row as tall as the rest. |
 | `cell_line` | `text` |  |  | Its words, which make it one tag with no end. |
 | `cell_line` | `url` |  |  | The page its words link to. |
-| `data_table` | `table`, first and unnamed | required |  | A `DataTable`: its columns and its rows. |
+| `data_table` | `table`, first and unnamed | required |  | A `DataTable`: its columns and its rows, or its groups of rows. |
+| `data_table` | `empty` |  |  | With no rows, what is missing. |
 | `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it or a record's read writes it. |
 | `entity` | `code` | `False` |  | Its name drawn as code. |
 | `entity` | `label` |  |  | The words it is named by, in place of its own. |
@@ -255,6 +256,7 @@ and those that hold across parts in [Design](Design.md).
 | `table_region` | `clear` |  |  | The way back from that search. |
 | `table_region` | `compare` | `False` |  | Two values side by side in each row, after the row's name. |
 | `table_region` | `css` |  |  | The classes of where it stands. |
+| `table_region` | `declared` | `False` |  | A table `{% data_table %}` draws, its marks written already. |
 | `table_region` | `empty` |  |  | With no rows, what is missing. |
 | `table_region` | `filtered` | `False` |  | Its own search narrows it, so no rows says nothing matches. |
 | `table_region` | `pane` | `False` |  | A box of its own height, which scrolls. |
@@ -623,9 +625,10 @@ so a dialog opened from inside a section still heads its own sections a level un
 
 ### history_table (host only)
 
-Every table of audit events is this part, its rows the one row the audit log draws
-(`partials/_history_row.html`, its `tr` written with `HistoryLine.attributes`): the audit log, an event's
-other events and a record's recent changes. Each group (`history.HistoryGroup`) is a `tbody` under
+Every table of audit events is this part, its rows the ones the audit log draws (`history.table`,
+drawn by `{% data_table %}`): the audit log, an event's other events and a record's recent
+changes. On a phone only What and When stay, so What's second line says how it came out. Each
+group (`history.HistoryGroup`) is a `tbody` under
 its heading row where it has a label, and a group that starts folded away (`folds`) marks each of
 its rows as folded under its heading. An event that changed things heads them: its gutter holds the
 fold rather than the row's own toggle. A fold carries at most `history.SHOWN` of what the event
