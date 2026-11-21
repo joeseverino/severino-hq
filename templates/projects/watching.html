@@ -31,12 +31,12 @@ would be a page about anybody.
           <tr>
             <td>
               <strong>{% entity repo.url|outside label=repo.name %}</strong>
-              {% if repo.description %}{% muted element="div" %}{{ repo.description|truncatechars:110|breakable }}{% endmuted %}{% endif %}
+              {% if repo.description %}{% muted element="div" %}{{ repo.description|truncatechars:110 }}{% endmuted %}{% endif %}
             </td>
             <td><span class="prose">{% present repo.release %}{% entity repo.release.url|outside label=repo.release.tag %}{% if repo.release.published %} {% muted css="nowrap" %}{{ repo.release.published|when_text:"ago" }}{% endmuted %}{% endif %}{% endpresent %}</span></td>
             <td>
               {% for item in repo.advisories|slice:":2" %}
-                <div class="prose">{% status item.severity|default:"advisory" tone=item.severity|severity_tone %} {% entity item.url|outside label=item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} {% muted css="nowrap" %}{{ item.published|when_text:"ago" }}{% endmuted %}{% endif %}</div>
+                <div class="prose">{% status item.severity|default:"advisory" tone=item.severity|severity_tone %} {% entity item.url|outside label=item.id %}{% if item.summary %} {{ item.summary|truncatechars:90 }}{% endif %}{% if item.published %} {% muted css="nowrap" %}{{ item.published|when_text:"ago" }}{% endmuted %}{% endif %}</div>
               {% empty %}{% empty_value %}{% endfor %}
               {% if repo.advisories|length > 2 %}{% muted %}and {% entity repo.url|add:"/security/advisories"|outside label=repo.advisories|length|add:"-2"|stringformat:"s"|add:" more" %}{% endmuted %}{% endif %}
             </td>

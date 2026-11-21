@@ -7,7 +7,7 @@ one by hand would create a row that means nothing until one of those is true
 anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
-{% if state_counts.1 %}{% muted element="p" %}{% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}{% endif %}
+{% if state_counts.1 %}{% muted element="p" %}{% for count, state in state_counts %}{{ count }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}{% endif %}
 {% table_region "Machines" empty="No machines yet." remedy=page.remedy %}
   <table class="data-table">
     <thead>
@@ -23,7 +23,7 @@ anyway, and would go on meaning nothing after it stopped being.
       {% for machine in machines %}
         <tr>
           <td>
-            {% cell_line %}<strong>{% entity "machine"|entity_of:machine.name %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}{% detail %}{% if machine.role %}{{ machine.role|breakable }}{% endif %}{% endcell_line %}
+            {% cell_line %}<strong>{% entity "machine"|entity_of:machine.name %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}{% detail %}{% if machine.role %}{{ machine.role }}{% endif %}{% endcell_line %}
           </td>
           <td>
             {% present machine.reached_by %}{% list %}{% for ref in machine.reached_by %}<li>{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} {% muted %}not answering{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endpresent %}
@@ -37,7 +37,7 @@ anyway, and would go on meaning nothing after it stopped being.
           </td>
           <td>
             {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
-            {% list %}{% if machine.runs_hq %}<li>{{ hq_label|breakable }}</li>{% endif %}
+            {% list %}{% if machine.runs_hq %}<li>{{ hq_label }}</li>{% endif %}
             {% for hostname in machine.hostnames|slice:":2" %}<li>{% entity "service"|entity_of:hostname %}</li>{% endfor %}
             {% if machine.hostnames|length > 2 %}<li><a href="{{ machine.url }}#names">{% muted %}+{{ machine.hostnames|length|add:"-2"|measured:"more" }}{% endmuted %}</a></li>{% endif %}{% endlist %}
           </td>

@@ -3,5 +3,5 @@
   <li>{{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}</li>
   {% if totals.sample_interval > 1 %}<li>estimated from 1 in {{ totals.sample_interval|counted:"visit" }}</li>{% endif %}
   {% if observed_at %}<li>{% include "partials/_reading_age.html" with at=observed_at only %}</li>{% endif %}
-  {% if coverage.expected_days and not coverage.complete %}<li>{{ coverage.covered_days|breakable }} of {{ coverage.expected_days|counted:"day" }} read so far, the rest still loading</li>{% endif %}
+  {% if coverage.expected_days and not coverage.complete %}<li>{{ coverage.covered_days }} of {{ coverage.expected_days|counted:"day" }} read so far, the rest still loading</li>{% endif %}
 {% endlist %}{% endif %}

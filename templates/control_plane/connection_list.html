@@ -26,17 +26,17 @@ part's heading shows only when there is more than one.
             <td>
               <strong>{% entity connection.name_link %}</strong>
               {% list %}
-              {% if connection.instance.endpoint %}<li><code title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint|breakable }}</code></li>{% endif %}
+              {% if connection.instance.endpoint %}<li><code title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code></li>{% endif %}
               {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
-              {% ifchanged group.spec.label group.spec.secret_store connection.instance.keyless %}<li>{% muted css="narrow-more prose" %}{% if group.spec.label != connection.instance.label %}{{ group.spec.label|breakable:"·" }}{% endif %}{% if connection.instance.keyless %}No key needed{% else %}Secrets in {{ group.spec.secret_store|breakable }}{% endif %}{% if group.spec.documentation_url %}{% dot %}<a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}{% if group.spec.management_route %}{% dot %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}{% endmuted %}</li>{% endifchanged %}
+              {% ifchanged group.spec.label group.spec.secret_store connection.instance.keyless %}<li>{% muted css="narrow-more prose" %}{% if group.spec.label != connection.instance.label %}{{ group.spec.label|breakable:"·" }}{% endif %}{% if connection.instance.keyless %}No key needed{% else %}Secrets in {{ group.spec.secret_store }}{% endif %}{% if group.spec.documentation_url %}{% dot %}<a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}{% if group.spec.management_route %}{% dot %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}{% endmuted %}</li>{% endifchanged %}
               {% comment %}How HQ reaches it, a refusal, then the count of what it reads, said once for the connection, which alone stays in a narrow box: each read is in the Reads column.{% endcomment %}
-              {% if row.reach.summary or connection.instance.facts %}<li>{% muted css="narrow-more" %}{% if row.reach.summary %}{% with mark=row.reach.relay|then:"," %}{% if row.reach.machine %}{{ row.reach.label|breakable }} {{ row.reach.machine_word|breakable }} {% entity row.reach.machine mark=mark %}{% else %}{{ row.reach.label|breakable:mark }}{% endif %}{% endwith %}{% if row.reach.relay %} {{ row.reach.relay|breakable }}{% endif %}{% if connection.instance.facts %}{% dot %}{% endif %}{% endif %}{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value|breakable }}{% else %}{{ fact.label|breakable:":" }} {{ fact.value|breakable }}{% endif %}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}</li>{% endif %}
+              {% if row.reach.summary or connection.instance.facts %}<li>{% muted css="narrow-more" %}{% if row.reach.summary %}{% with mark=row.reach.relay|then:"," %}{% if row.reach.machine %}{{ row.reach.label }} {{ row.reach.machine_word }} {% entity row.reach.machine mark=mark %}{% else %}{{ row.reach.label|breakable:mark }}{% endif %}{% endwith %}{% if row.reach.relay %} {{ row.reach.relay }}{% endif %}{% if connection.instance.facts %}{% dot %}{% endif %}{% endif %}{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}</li>{% endif %}
               {% with sight=row.sight %}
               {% if sight.credential_refusal %}<li>{% status sight.label "refused this credential:" sight.credential_refusal tone="serious" pill=False %}</li>{% endif %}
-              {% if sight.sights %}<li>{% muted %}{{ sight.summary|breakable }}{% if sight.read_at %}{% dot %}{% include "partials/_reading_age.html" with at=sight.read_at only %}{% endif %}{% endmuted %}</li>{% endif %}
+              {% if sight.sights %}<li>{% muted %}{{ sight.summary }}{% if sight.read_at %}{% dot %}{% include "partials/_reading_age.html" with at=sight.read_at only %}{% endif %}{% endmuted %}</li>{% endif %}
               {% endwith %}
               {% endlist %}
-              {% if row.more_scope %}<div class="row-below" data-label="Also sees">{% line_list row.more_scope as line kind="dots" %}<li>{{ line|breakable }}</li>{% endline_list %}</div>{% endif %}
+              {% if row.more_scope %}<div class="row-below" data-label="Also sees">{% line_list row.more_scope as line kind="dots" %}<li>{{ line }}</li>{% endline_list %}</div>{% endif %}
               {% if row.fix %}{% include "control_plane/_credential_fix.html" with fix=row.fix %}{% endif %}
             </td>
             {% comment %}
@@ -80,7 +80,7 @@ part's heading shows only when there is more than one.
             <td class="tight-col">
               {% list %}<li>{% status row.state_label tone=row.lifecycle.tone dot=True %}</li>
               {% if row.read_requested_at %}<li>{% muted css="narrow-more" %}Read asked {{ row.read_requested_at|when_text:"ago" }}{% endmuted %}</li>
-              {% elif row.state_line %}<li>{% muted css=row.state_line_quiet|yesno:"row-more,narrow-more" %}{% if row.state_line_tone %}{% status row.state_line tone=row.state_line_tone pill=False %}{% else %}{{ row.state_line|breakable }}{% endif %}{% endmuted %}</li>
+              {% elif row.state_line %}<li>{% muted css=row.state_line_quiet|yesno:"row-more,narrow-more" %}{% if row.state_line_tone %}{% status row.state_line tone=row.state_line_tone pill=False %}{% else %}{{ row.state_line }}{% endif %}{% endmuted %}</li>
               {% elif row.changes_only and connection.instance.observed_at %}<li>{% muted css="narrow-more" %}Checked {{ connection.instance.observed_at|when_text:"ago" }}{% endmuted %}</li>
               {% elif not row.sight.sights and connection.instance.observed_at %}<li>{% muted css="narrow-more" %}{% include "partials/_reading_age.html" with at=connection.instance.observed_at only %}{% endmuted %}</li>{% endif %}
               {% if row.problems %}<li>{% status row.problems|counted:"problem" tone="attention" pill=False href=row.problems_url %}</li>{% endif %}{% endlist %}
@@ -119,13 +119,13 @@ part's heading shows only when there is more than one.
   {% layout %}
     {% for result in connections.posture.results %}
       {% section result.check.label data_connection_control=result.check.id %}
-        {% if result.reading.evidence %}<p><strong>{{ result.reading.evidence|breakable }}</strong></p>{% endif %}
-        {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail|breakable }}{% endmuted %}{% endif %}
+        {% if result.reading.evidence %}<p><strong>{{ result.reading.evidence }}</strong></p>{% endif %}
+        {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail }}{% endmuted %}{% endif %}
       {% aside %}{% status result.answer tone=result.tone %}
       {% endsection %}
     {% endfor %}
   {% endlayout %}
-{% aside %}{% muted %}This request and each connection's credentials: {{ connections.posture.check_summary|breakable }}{% endmuted %}
+{% aside %}{% muted %}This request and each connection's credentials: {{ connections.posture.check_summary }}{% endmuted %}
 {% endsection %}
 {% if connections.groups and not connections.setups and not connections.unconfigured and connections.again %}{% include "control_plane/_connection_setup.html" with setups=connections.again count=connections.again|length guide=connections.guide again=True only %}{% endif %}
 {% endblock %}
@@ -139,8 +139,8 @@ heading links to. An unread check says what would read it.
   {% steps %}
     {% for result in posture.results %}
       {% step icon=result.icon tone=result.tone title=result.met|then:result.check.holds %}
-        <strong>{{ result.check.label|breakable }}</strong> {% muted %}{% if result.reading.evidence %}{% if result.reading.fix %}{{ result.reading.evidence|breakable:":" }} {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix|breakable:"." }}</a>{% else %}{{ result.reading.fix|breakable:"." }}{% endif %}{% else %}{{ result.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ result.check.why|breakable:"." }}{% endmuted %}{% endstep %}
+        <strong>{{ result.check.label }}</strong> {% muted %}{% if result.reading.evidence %}{% if result.reading.fix %}{{ result.reading.evidence }}: {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix }}.</a>{% else %}{{ result.reading.fix }}.{% endif %}{% else %}{{ result.reading.evidence }}.{% endif %} {% endif %}Stops {{ result.check.why }}.{% endmuted %}{% endstep %}
     {% endfor %}
   {% endsteps %}
-{% aside %}<span class="count prose">{{ posture.count_line|breakable }}{% if guide %}{% dot %}{% entity guide|outside label="Checks guide" %}{% endif %}</span>
+{% aside %}<span class="count prose">{{ posture.count_line }}{% if guide %}{% dot %}{% entity guide|outside label="Checks guide" %}{% endif %}</span>
 {% endsection %}{% endpartialdef %}

@@ -6,14 +6,14 @@ of its repository instead: the production deploy, and the repository's alerts.
 {% endcomment %}
 {% card element="div" %}{% facts layout="band" %}
   {% fact running.state.label|capfirst icon="activity" tone=running.state.tone %}
-    {{ container.item.uptime|default:running.uptime|default:running.status|default:"No status"|breakable }}
+    {{ container.item.uptime|default:running.uptime|default:running.status|default:"No status" }}
   {% detail %}
     <small>{% if running.check %}{{ running.check.said|capfirst|breakable:"·" }}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
   {% endfact %}
   {% fact "Version" icon="layers" %}
-    {% if standing.tag %}<code>{{ standing.tag|breakable }}</code>{% else %}No version tag{% endif %}
+    {% if standing.tag %}<code>{{ standing.tag }}</code>{% else %}No version tag{% endif %}
   {% detail %}
-    <small>{{ standing.image.short|breakable }}</small>
+    <small>{{ standing.image.short }}</small>
     <small>{% if standing.pinned %}<span tabindex="0" data-tip="{{ standing.image.digest }}">Pinned by digest</span>{% else %}Tag only{% endif %}</small>
     {% if standing.built %}<small>Built {{ standing.built|when_text:"ago" }}</small>{% endif %}
     {% if standing.moved_to %}<small>{% status "Its tag now names a newer build." tone="attention" pill=False %}</small>{% endif %}
@@ -23,12 +23,12 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}
     {% detail %}
       {% if deploy %}{% list kind="dots" %}<li>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}</li>{% if deploy.created_at %}<li>{{ deploy.created_at|when_text:"ago" }}</li>{% endif %}{% endlist %}{% endif %}
-      <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name|breakable:"." }}{% endif %}</small>
+      <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name }}.{% endif %}</small>
     {% endfact %}
     {% fact "Security" icon="shield" tone=standing.alerts_tone %}
       {% if standing.repository.open_alerts %}{% entity standing.repository.alerts_url|outside label=standing.repository.open_alerts|stringformat:"s"|add:" open" %}{% else %}{% entity standing.repository.alerts_url|outside label="Clear" %}{% endif %}
     {% detail %}
-      <small>{% for n, level in standing.repository.severities %}{{ n|breakable }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts on the repository.{% endfor %}</small>
+      <small>{% for n, level in standing.repository.severities %}{{ n }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts on the repository.{% endfor %}</small>
     {% endfact %}
   {% endwith %}{% else %}
     {% fact "Update" icon="deploy" tone=standing.update_tone %}
@@ -39,16 +39,16 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% elif standing.update_state == "current" %}
         <small>No newer version.</small>
       {% else %}
-        <small>{{ standing.update_note|breakable }}</small>
+        <small>{{ standing.update_note }}</small>
       {% endif %}
       {% if standing.read_at %}<small>{% include "partials/_reading_age.html" with at=standing.read_at only %}</small>{% endif %}
     {% endfact %}
     {% fact "Known vulnerabilities" icon="shield" tone=standing.vulnerability_tone %}
-      {% if standing.state == 'vulnerable' %}{{ standing.vulnerabilities|capfirst|breakable }}{% elif standing.checked or standing.source %}{% if standing.findings %}None serious{% else %}None known{% endif %}{% else %}Cannot check{% endif %}
+      {% if standing.state == 'vulnerable' %}{{ standing.vulnerabilities|capfirst }}{% elif standing.checked or standing.source %}{% if standing.findings %}None serious{% else %}None known{% endif %}{% else %}Cannot check{% endif %}
     {% detail %}
       {% if standing.state == 'vulnerable' %}
-        {% for advisory in standing.advisories|slice:":2" %}<small>{% entity advisory.url|outside label=advisory.id %} {{ advisory.severity|default:"advisory"|breakable }}</small>{% endfor %}
-        {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small>{% entity finding.url|outside label=finding.id %} in {{ finding.package|breakable }}</small>{% endfor %}{% endif %}
+        {% for advisory in standing.advisories|slice:":2" %}<small>{% entity advisory.url|outside label=advisory.id %} {{ advisory.severity|default:"advisory" }}</small>{% endfor %}
+        {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small>{% entity finding.url|outside label=finding.id %} in {{ finding.package }}</small>{% endfor %}{% endif %}
       {% elif standing.checked or standing.source %}
         <small>{% if standing.findings %}{{ standing.findings|length|measured:"lower" }}, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<span class="nowrap">{% entity standing.source|add:"/security/advisories"|outside label="the repository" %}</span>{% endif %}</small>
       {% else %}

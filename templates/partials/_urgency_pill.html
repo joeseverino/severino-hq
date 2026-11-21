@@ -16,12 +16,12 @@ only when it is not or when the row is `quiet`.
   {% fact "Why" value=item.origin.why %}
   {% fact "Domain" value=item.origin.source %}
   {% if item.origin.rule %}
-    {% fact "Rule" %}{{ item.origin.title|breakable }} <code>{{ item.origin.rule|breakable }}</code>{% endfact %}
+    {% fact "Rule" %}{{ item.origin.title }} <code>{{ item.origin.rule }}</code>{% endfact %}
     {% fact "Severity" value=item.origin.severity %}
-    {% if item.origin.where %}{% fact "Defined at" %}<code>{{ item.origin.where|breakable }}</code>{% endfact %}{% endif %}
+    {% if item.origin.where %}{% fact "Defined at" %}<code>{{ item.origin.where }}</code>{% endfact %}{% endif %}
   {% endif %}
-  {% fact "Key" %}<code>{{ item.origin.key|breakable }}</code>{% endfact %}
-  {% if item.origin.subsumes %}{% fact "Stands in for" %}{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
+  {% fact "Key" %}<code>{{ item.origin.key }}</code>{% endfact %}
+  {% if item.origin.subsumes %}{% fact "Stands in for" %}{% for name in item.origin.subsumes %}<code>{{ name }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
 {% endfacts %}
 {% endpartialdef %}
 {% partialdef read %}{% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %}{% if item.observed_at and item.since %}{% dot %}{% endif %}{% if item.since %}Since {{ item.since|when:"day" }}{% endif %}{% endpartialdef %}

@@ -8,7 +8,16 @@ from django.utils.safestring import mark_safe
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.markup_testing import all_elements, links, select, text, texts, with_class
 from hq.platform.application.printable import Unprintable
-from hq.platform.core.templatetags.value_tags import breakable, cell_line, code_spans, entity, or_empty, readout
+from hq.platform.core.templatetags.value_tags import (
+    breakable,
+    cell_line,
+    code_spans,
+    entity,
+    or_empty,
+    readable,
+    readout,
+    when,
+)
 
 
 def pieces(html):
@@ -295,6 +304,24 @@ class BreakableTests(SimpleTestCase):
     def test_an_entity_name_is_a_token(self):
         link = EntityLink(label="example-docker-host", url="/machines/example-docker-host/", kind_label="Machine")
         self.assertIn('<span class="whole">example-docker-host</span>', entity({}, link))
+
+    def test_a_link_is_named_without_its_mark(self):
+        link = EntityLink(kind_label="Service", label="example.com", url="/services/example.com/")
+
+        printed = entity({}, link, mark=",")
+
+        (hidden,) = [element for element in select(printed, "aria-hidden", "true") if "mark" in element.classes]
+        self.assertEqual(hidden.text, ",")
+        self.assertEqual(links(printed), [("example.com", "/services/example.com/")])
+
+    def test_a_list_takes_a_comma_between_its_items(self):
+        self.assertIn('aria-hidden="true">,<', breakable("example-host", {"last": False}))
+        self.assertNotIn("mark", breakable("example-host", {"last": True}))
+
+    def test_text_that_names_no_moment_is_held(self):
+        for printed in (when("example-docker-host-01"), readable("example-docker-host-01")):
+            with self.subTest(printed=printed):
+                self.assertIn("data-sole", printed)
 
     def test_a_value_or_its_mark_holds_the_names_in_its_text(self):
         self.assertEqual(wholes(or_empty("on example-web")), ["example-web"])

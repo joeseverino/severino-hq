@@ -9,9 +9,9 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.markup_testing import elements, select, with_class
+from hq.platform.application.tests.source import template_files
 from hq.platform.core.testing import render
 from hq.platform.core.tests.test_part_tags import _catalog_templates
-from hq.platform.core.tests.test_template_values import template_sources
 
 
 class FilterBarTagTests(SimpleTestCase):
@@ -362,6 +362,10 @@ class FilterBarUseTests(SimpleTestCase):
         to it in the part's words, so no page's bar says everything while
         its count shows a part."""
 
-        faults = [fault for name, source in template_sources().items() for fault in filter_bar_faults(name, source)]
+        faults = [
+            fault
+            for name, path in template_files()
+            for fault in filter_bar_faults(name, path.read_text(encoding="utf-8"))
+        ]
 
         self.assertEqual(faults, [], "filter_bar's rules")

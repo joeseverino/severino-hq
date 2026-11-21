@@ -24,7 +24,7 @@ no band, and the page around it has already said which provider it is about.
 `count` replaces the sweep's total when the page shows part of it: one domain's
 records. Each state is worded by `credential_sight.standing`: refused, unreadable,
 or out of date.
-{% endcomment %}{% if inventory %}{% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% dot %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower|breakable }}</span>{% endif %}{% endif %}{% endfor %}
+{% endcomment %}{% if inventory %}{% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% dot %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
     {% muted element="p" %}
       {% for snapshot in inventory %}
@@ -33,7 +33,7 @@ or out of date.
             {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}{% dot %}
             {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}
           {% else %}
-            {{ snapshot.state_label|lower|breakable }}{% if snapshot.error %} ({{ snapshot.error|breakable:")" }}{% endif %}
+            {{ snapshot.state_label|lower }}{% if snapshot.error %} ({{ snapshot.error }}){% endif %}
           {% endif %}
         {% endif %}
       {% endfor %}
@@ -50,9 +50,9 @@ or out of date.
           {% if not snapshot.reachable %}
             {% fact snapshot.label tone="serious" %}{% empty_value %}{% detail %}{% status snapshot.state_label tone="serious" pill=False title=snapshot.error %}{% endfact %}
           {% elif snapshot.state == "stale" or snapshot.state == "partial" %}
-            {% fact snapshot.label tone="attention" title=snapshot.refused_parts|join:"; " %}{{ snapshot.count|breakable }}{% detail %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% dot %}{% status snapshot.state_label|lower tone="attention" pill=False %}{% endfact %}
+            {% fact snapshot.label tone="attention" title=snapshot.refused_parts|join:"; " %}{{ snapshot.count }}{% detail %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% dot %}{% status snapshot.state_label|lower tone="attention" pill=False %}{% endfact %}
           {% else %}
-            {% fact snapshot.label title=snapshot.refused_parts|join:"; " %}{{ snapshot.count|breakable }}{% detail %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% endfact %}
+            {% fact snapshot.label title=snapshot.refused_parts|join:"; " %}{{ snapshot.count }}{% detail %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% endfact %}
           {% endif %}
         {% endfor %}
       {% endfacts %}

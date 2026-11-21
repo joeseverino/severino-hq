@@ -16,8 +16,8 @@
   {% url 'analytics:overview' as analytics_url %}{% with_query analytics_url days=traffic.days as analytics_url %}
   {% section "Traffic" more_label="All analytics" more_url=analytics_url %}
     {% facts layout="band" %}
-      {% fact "Page views" %}{{ traffic.pageviews|breakable }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
-      {% fact "Visits" %}{{ traffic.visits|breakable }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
+      {% fact "Page views" %}{{ traffic.pageviews }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
+      {% fact "Visits" %}{{ traffic.visits }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
     {% endfacts %}
   {% endsection %}
 {% endif %}

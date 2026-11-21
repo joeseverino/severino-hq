@@ -4,7 +4,7 @@
   <td><strong>{% entity "expense"|entity_of:row.id label=row.vendor %}</strong></td>
   <td class="date-col">{{ row.date|when }}</td>
   <td>{{ row.item|or_empty }}</td>
-  <td>{{ row.category_label|breakable }}</td>
+  <td>{{ row.category_label }}</td>
   <td>{{ row.total_cost|money }}</td>
   <td>{% muted %}{{ row.business_use_percentage|measured:"%" }}{% endmuted %}</td>
   <td>{{ row.estimated_deductible_amount|money }}</td>

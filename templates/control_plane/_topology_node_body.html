@@ -3,7 +3,7 @@ The selected node in the details pane: its name, what kind of thing it is,
 how many links it has, how it stands and the way to its own page.
 {% endcomment %}
 {% section item.node.label count=item.degree lede=item.node.subtitle data_topology_body_of=item.node.id %}
-  {% if item.node.detail %}{% muted element="p" %}{{ item.node.detail|breakable }}{% endmuted %}{% endif %}
+  {% if item.node.detail %}{% muted element="p" %}{{ item.node.detail }}{% endmuted %}{% endif %}
 
   {% comment %}
     Triage, in the order an operator asks it: is anyone converging this,
@@ -31,7 +31,7 @@ how many links it has, how it stands and the way to its own page.
     {% muted element="p" %}Connected to nothing.{% endmuted %}
   {% endif %}
 
-  {% if topology_trace and item.hop %}{% muted element="p" %}{{ item.hop|counted:"step" }} from {{ topology_trace_focus.label|breakable }}{% endmuted %}{% endif %}
+  {% if topology_trace and item.hop %}{% muted element="p" %}{{ item.hop|counted:"step" }} from {{ topology_trace_focus.label }}{% endmuted %}{% endif %}
   {% if item.node.actions %}
     <div><span class="row-actions">{% include "partials/_action_links.html" with actions=item.node.actions only %}</span></div>
   {% endif %}

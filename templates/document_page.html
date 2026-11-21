@@ -9,7 +9,7 @@ fills only `{% block document %}`.
 {% endcomment %}
 {% block title %}{{ page.title }}{% endblock %}
 {% block content %}
-<h1 class="visually-hidden">{{ page.title|breakable }}</h1>
+<h1 class="visually-hidden">{{ page.title }}</h1>
 <div data-document-page>{% block document %}{% endblock %}</div>
 {% endblock %}
 {% block site_footer %}{% endblock %}

@@ -3,12 +3,12 @@
 {% if not_read %}
 {% include "partials/_empty_state.html" with absent="no reading yet" remedy=page.remedy %}
 {% else %}
-{% if problem %}{% notice tone="warning" %}{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}{% endnotice %}{% endif %}
-{% if waiting_note %}{% notice tone="info" %}{{ waiting_note|breakable }}{% endnotice %}{% endif %}
+{% if problem %}{% notice tone="warning" %}{{ problem }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}{% endnotice %}{% endif %}
+{% if waiting_note %}{% notice tone="info" %}{{ waiting_note }}{% endnotice %}{% endif %}
 {% switch label="Message status" %}
   {% for tab in status_tabs %}
     {% querystring status=tab.value page=None as href %}
-    {% choice url=href current=tab.current count=tab.count %}{{ tab.label|breakable }}{% endchoice %}
+    {% choice url=href current=tab.current count=tab.count %}{{ tab.label }}{% endchoice %}
   {% endfor %}
 {% endswitch %}
 
@@ -36,14 +36,14 @@
     {% for s in submissions %}
       <tr{% row_state emphasized=s.unread %}>
         <td>
-          <a href="{{ s.url }}"><strong>{{ s.name|breakable }}</strong></a>
+          <a href="{{ s.url }}"><strong>{{ s.name }}</strong></a>
           {% muted element="div" %}{% cell_line text=s.email %}{% endmuted %}
         </td>
         <td>{% muted %}{{ s.created_at|when }}{% endmuted %}</td>
         <td>{% cell_line text=s.message_preview url=s.url %}</td>
         <td>{% status s.state %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
         <td>{% muted %}{{ s.country|or_empty }}{% endmuted %}</td>
-        <td>{{ s.id|breakable }}</td>
+        <td>{{ s.id }}</td>
         {% row_actions s.actions gap=gap %}
       </tr>
     {% empty %}

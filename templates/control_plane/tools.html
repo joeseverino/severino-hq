@@ -6,9 +6,9 @@
       {% switch label="Tools" %}
         {% for entry in tabs %}
           {% querystring tab=entry.id as href %}
-          {% choice url=href current=entry.current %}{{ entry.label|breakable }}{% endchoice %}
+          {% choice url=href current=entry.current %}{{ entry.label }}{% endchoice %}
         {% endfor %}
-      {% summary %}{{ tab.summary|breakable }}
+      {% summary %}{{ tab.summary }}
       {% endswitch %}
     {% endif %}
     {% include tab.template %}

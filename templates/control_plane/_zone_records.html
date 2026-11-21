@@ -19,13 +19,13 @@ value under its name (`record.summary`), so the two still read as two.
             {% if record.service %}
               <strong>{% entity "service"|entity_of:record.service %}</strong>
             {% else %}
-              <strong>{{ record.name|breakable }}</strong>
+              <strong>{{ record.name }}</strong>
             {% endif %}
-            {% list %}{% if record.summary %}<li class="narrow-only">{% muted css="cell-data" %}{{ record.summary|breakable }}{% endmuted %}</li>{% endif %}{% endlist %}
+            {% list %}{% if record.summary %}<li class="narrow-only">{% muted css="cell-data" %}{{ record.summary }}{% endmuted %}</li>{% endif %}{% endlist %}
           </td>
-          <td><code>{{ record.record_type|breakable }}</code></td>
+          <td><code>{{ record.record_type }}</code></td>
           <td>
-            <code>{{ record.value|breakable }}</code>
+            <code>{{ record.value }}</code>
             {% if record.proxied %}{% status "Proxied" tone="neutral" %}{% endif %}
           </td>
           {% if ttl_set %}<td>{% if record.ttl != 1 %}{{ record.ttl|measured:"s" }}{% endif %}</td>{% endif %}

@@ -40,7 +40,7 @@ last done to it is read before its parts.
       {% include "control_plane/_container_rows.html" with containers=folded_containers label="Hidden containers" %}
     {% endsection %}
   {% endif %}
-{% aside %}{% if docker %}{% muted %}{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}{% endmuted %}{% endif %}
+{% aside %}{% if docker %}{% muted %}{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}
 
@@ -72,7 +72,7 @@ last done to it is read before its parts.
     together in one place rather than crowding the top of the page. One
     per line, each beside its network; a list, so on a row of its own.
     {% endcomment %}
-    {% fact "Addresses" %}{% list kind="labeled" %}{% for label, address in labeled_addresses %}<li><span>{{ label|breakable }}</span> <code>{{ address|breakable }}</code></li>{% endfor %}{% endlist %}{% endfact %}
+    {% fact "Addresses" %}{% list kind="labeled" %}{% for label, address in labeled_addresses %}<li><span>{{ label }}</span> <code>{{ address }}</code></li>{% endfor %}{% endlist %}{% endfact %}
     {% fact "Device" %}{% entity device_link %}{% endfact %}
     {% if magic_dns_link %}{% fact "MagicDNS" %}{% entity magic_dns_link code=True %}{% endfact %}{% endif %}
     {% fact "State" %}{% if machine.presence.online %}Connected{% else %}Not connected{% if machine.presence.last_seen %}, last seen {{ machine.presence.last_seen|when:"day" }}{% endif %}{% endif %}{% endfact %}
@@ -82,9 +82,9 @@ last done to it is read before its parts.
     last request from its own address says nothing about whether it is
     there.
     {% endcomment %}
-    {% with arrival=machine.presence.reached_hq %}{% if arrival and not machine.presence.observer %}{% fact "Last reached HQ" %}{{ arrival.last_seen|when_text:"ago"|capfirst|breakable:"," }} {{ arrival.how|breakable }}{% endfact %}{% endif %}{% endwith %}
-    {% fact "Node key" %}{% if machine.presence.key_expires %}{{ machine.presence.key_expires|when_text:"expiry"|capfirst|breakable }}{% else %}Does not expire{% endif %}{% endfact %}
-    {% fact "Runs" %}{{ machine.presence.os|or_empty }}{% if tailscale_version %}{% dot %}<span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version|breakable }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}{% endfact %}
+    {% with arrival=machine.presence.reached_hq %}{% if arrival and not machine.presence.observer %}{% fact "Last reached HQ" %}{{ arrival.last_seen|when_text:"ago"|capfirst }}, {{ arrival.how }}{% endfact %}{% endif %}{% endwith %}
+    {% fact "Node key" %}{% if machine.presence.key_expires %}{{ machine.presence.key_expires|when_text:"expiry"|capfirst }}{% else %}Does not expire{% endif %}{% endfact %}
+    {% fact "Runs" %}{{ machine.presence.os|or_empty }}{% if tailscale_version %}{% dot %}<span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}{% endfact %}
     {% comment %}
     Each shown only when true. A device that runs no Tailscale SSH, accepts
     inbound connections and belongs to this tailnet is every device: three
@@ -94,7 +94,7 @@ last done to it is read before its parts.
     {% if machine.presence.blocks_incoming %}{% fact "Shields" value="Up. Blocks all inbound connections." %}{% endif %}
     {% if machine.presence.external %}{% fact "Belongs to" value="Another tailnet (shared in)" %}{% endif %}
     {% if not machine.presence.authorized %}{% fact "Authorized" %}<strong>No</strong>. It cannot connect until you approve it.{% endfact %}{% endif %}
-    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error|breakable }}{% endfact %}{% elif machine.presence.signs_tailnet_lock %}{% fact "Tailnet lock" value="Signing device" %}{% endif %}
+    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error }}{% endfact %}{% elif machine.presence.signs_tailnet_lock %}{% fact "Tailnet lock" value="Signing device" %}{% endif %}
     {% comment %}
     Offered and approved, never one of the two. A route is advertised by the
     machine and then has to be approved in the coordination server; until it
@@ -105,7 +105,7 @@ last done to it is read before its parts.
     {% if machine.presence.advertised_routes or machine.presence.offers_exit_node %}
       {% fact "Exit node" %}{% if not machine.presence.offers_exit_node %}Not offered{% elif machine.presence.exit_node_approved %}Offered and approved{% else %}<strong>Offered, not approved</strong>{% endif %}{% endfact %}
       {% fact "Routes" %}
-        {% list %}{% for route in machine.presence.advertised_routes %}<li><code>{{ route|breakable }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}</li>{% empty %}<li>None advertised</li>{% endfor %}{% endlist %}
+        {% list %}{% for route in machine.presence.advertised_routes %}<li><code>{{ route }}</code>{% if route in machine.presence.enabled_routes %} approved{% else %} <strong>not approved</strong>{% endif %}</li>{% empty %}<li>None advertised</li>{% endfor %}{% endlist %}
         {% comment %}
         The verb where the fact is. Approval takes the whole advertised
         set, so there is one control rather than one per route, and it
@@ -116,7 +116,7 @@ last done to it is read before its parts.
         {% endif %}
       {% endfact %}
     {% endif %}
-    {% if machine.presence.tags %}{% fact "Tags" %}{% for tag in machine.presence.tags %}<code>{{ tag|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
+    {% if machine.presence.tags %}{% fact "Tags" %}{% for tag in machine.presence.tags %}<code>{{ tag }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
     {% comment %}
     Who the policy lets in, per port: the answer the policy test gives,
     shown without having to ask. A policy alias names a machine's address
@@ -158,15 +158,15 @@ last done to it is read before its parts.
         {% fact "Handshake" %}Completed {{ peering.last_handshake|when:"ago" }}{% if peering.active %}{% dot %}active{% endif %}{% endfact %}
         {% fact "Path" %}
           {% if peering.path == "direct" %}
-            Direct: {% with mark=peering.relay|then:"," %}<code>{{ peering.direct_endpoint|breakable:mark }}</code>{% endwith %}{% if peering.relay %} fallback relay <code>{{ peering.relay|breakable }}</code>{% endif %}
+            Direct: {% with mark=peering.relay|then:"," %}<code>{{ peering.direct_endpoint|breakable:mark }}</code>{% endwith %}{% if peering.relay %} fallback relay <code>{{ peering.relay }}</code>{% endif %}
           {% elif peering.path == "relayed" %}
-            Relayed through <code>{{ peering.relay|breakable }}</code> because no direct path was found. It is still encrypted end to end.
+            Relayed through <code>{{ peering.relay }}</code> because no direct path was found. It is still encrypted end to end.
           {% else %}
             No path yet. One is set up when traffic starts.
           {% endif %}
         {% endfact %}
         {% fact "Traffic" %}{{ peering.rx_bytes|bytes }} in{% dot %}{{ peering.tx_bytes|bytes }} out{% endfact %}
-        {% fact "Node key" %}<code>{{ peering.public_key|breakable }}</code>{% endfact %}
+        {% fact "Node key" %}<code>{{ peering.public_key }}</code>{% endfact %}
       {% endfacts %}
     {% endsection %}
   {% endif %}{% endwith %}

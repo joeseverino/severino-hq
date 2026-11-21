@@ -153,21 +153,21 @@ ENTRIES = {
         '{% table_heading "Step" %}{% table_heading "Name" "identifier" %}'
         '{% table_heading "State" "status" %}{% table_heading "Since" drop=3 %}{% table_heading "Impact" drop=2 %}'
         '{% table_heading "Read from" drop=1 %}</tr></thead><tbody>'
-        '<tr><td>Proxy host</td><td><a href="/example/" data-entity="Proxy host">{{ address|breakable }}</a></td>'
+        '<tr><td>Proxy host</td><td><a href="/example/" data-entity="Proxy host">{{ address }}</a></td>'
         '<td>{% status "Up" tone="good" %}</td><td>1 day</td>'
         "<td>If it is removed, the name stops reaching the app it serves.</td>"
         "<td>Read from the proxy's own list of hosts, a minute ago</td></tr>"
-        '<tr><td>Forwards to</td><td>{{ address|breakable }}</td><td>{% status "Up" tone="good" %}</td>'
+        '<tr><td>Forwards to</td><td>{{ address }}</td><td>{% status "Up" tone="good" %}</td>'
         "<td>1 day</td><td>If nothing listens there, a reader gets a gateway error.</td>"
         "<td>Read from the container's ports</td></tr>"
-        '<tr><td>Service</td><td><span data-entity="Service">{{ host|breakable }}</span></td><td></td>'
+        '<tr><td>Service</td><td><span data-entity="Service">{{ host }}</span></td><td></td>'
         "<td>1 day</td><td>The service stops answering at this name.</td><td>Declared in HQ</td></tr>"
         "</tbody></table>{% endtable_region %}{% endsection %}"
         '{% section "Example access" %}{% table_region "Example access" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Access list" %}{% table_heading "Admits by" drop=3 %}'
         '{% table_heading "Addresses" drop=2 %}{% table_heading "Logins" drop=1 %}</tr></thead><tbody>'
-        "<tr><td>office only</td><td>Address rules</td><td>{{ networks|breakable }}</td>"
-        "<td>{{ logins|breakable }}</td></tr></tbody></table>{% endtable_region %}{% endsection %}",
+        "<tr><td>office only</td><td>Address rules</td><td>{{ networks }}</td>"
+        "<td>{{ logins }}</td></tr></tbody></table>{% endtable_region %}{% endsection %}",
         {
             "address": "203.0.113.214:8000",
             "host": "status.example.com",

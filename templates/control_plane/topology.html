@@ -2,17 +2,17 @@
 {% load static %}
 {% block page %}
 
-{% if active_lens %}{% muted element="p" %}{{ active_lens.summary|breakable }}{% endmuted %}{% endif %}
+{% if active_lens %}{% muted element="p" %}{{ active_lens.summary }}{% endmuted %}{% endif %}
 
 {% if topology_trace %}
   {% comment %}What a trace shows, and the switches that follow it another way or to another depth; every link from a trace lands here.{% endcomment %}
   <div id="trace" tabindex="-1">
   {% notice tone="info" %}
     {% muted element="p" %}{{ topology_trace_label|breakable:"·" }}{{ topology_trace.depth|counted:"step" }}{% endmuted %}
-    {% switch label="Direction" %}{% for item in trace_direction_links %}{% choice url=item.url current=item.current %}{{ item.label|breakable }}{% endchoice %}{% endfor %}{% endswitch %}
+    {% switch label="Direction" %}{% for item in trace_direction_links %}{% choice url=item.url current=item.current %}{{ item.label }}{% endchoice %}{% endfor %}{% endswitch %}
     {% switch label="Steps" %}{% for item in trace_depth_links %}{% choice url=item.url current=item.current %}{{ item.depth|counted:"step" }}{% endchoice %}{% endfor %}{% endswitch %}
     {% button "Clear" trace_reset_url look="ghost compact" %}
-  {% title %}Showing {{ topology_trace_focus.label|breakable }}{% endnotice %}
+  {% title %}Showing {{ topology_trace_focus.label }}{% endnotice %}
   </div>
 {% endif %}
 
@@ -27,7 +27,7 @@
         {% for item in topology_edges %}
           <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">
             <td>{% cell_line detail=item.source_link.kind_label %}{% entity item.source_link %}{% endcell_line %}</td>
-            <td>{{ item.edge.label|breakable }}</td>
+            <td>{{ item.edge.label }}</td>
             <td>{% cell_line detail=item.target_link.kind_label %}{% entity item.target_link %}{% endcell_line %}</td>
             <td>{% status item.edge.status tone=item.edge.status %}</td>
           </tr>

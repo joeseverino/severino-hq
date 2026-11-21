@@ -5,13 +5,13 @@
       {% with menu="table-filter-"|add:filter.name %}{% button filter.label popovertarget=menu count=filter.selected_count|default:None %}{% endwith %}
       <div class="table-filter-options" id="table-filter-{{ filter.name }}" popover>
         {% for option in filter.options %}
-          <label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label|breakable }}</label>
+          <label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label }}</label>
         {% endfor %}
       </div>
     </div>
   {% endfor %}
   {% for toggle in table.toggles %}
-    <label class="table-toggle"><input type="checkbox" name="{{ toggle.name }}" value="1"{% if toggle.selected %} checked{% endif %}> {{ toggle.label|breakable }}</label>
+    <label class="table-toggle"><input type="checkbox" name="{{ toggle.name }}" value="1"{% if toggle.selected %} checked{% endif %}> {{ toggle.label }}</label>
   {% endfor %}
   {% if table.sorts %}
     <label class="table-sort">Sort

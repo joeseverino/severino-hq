@@ -4,17 +4,21 @@ loader writes the hold into the template as it loads.
 A browser may break a line after any hyphen, so "example-docker-host-01"
 printed bare can split into "example-docker-" and "host-01". ``breakable``
 holds a name's parts and leaves a plain word, a number and markup as they
-are, so it is safe on any value. The loader reads a template as HTML and
-ends each value it prints where text belongs in ``|breakable``, with the mark
-the template writes after it (``{{ host }}.``) taken into the hold, so the
-mark never starts a line alone. A value printed in a tag (an attribute), a
-comment, or an element whose text stays plain (``PLAIN_TEXT``) is left as
-Django prints it.
+are, so it is safe on any value. The engine reads a template as HTML as it
+compiles it from a file (template_engine's loaders), or from a string that
+draws a part as a page does (``template``), and ends each value printed where text belongs in
+``|breakable``, with the mark the template writes straight after it
+(``{{ host }}.``) taken into the hold, so the mark never starts a line alone.
+A value printed in a tag (an attribute), a comment, or an element whose text
+stays plain (``PLAIN_TEXT``) is left as Django prints it. Django has no hook
+in a value's output (``VariableNode.render`` calls
+``render_value_in_context`` itself), so the hold is written into the source.
 """
 
 import re
 from collections.abc import Callable
 
+from django.template import Engine, Template
 from django.template.base import DebugLexer, TokenType
 
 # Elements whose text is never a token: a span inside one is not markup, is
@@ -87,7 +91,24 @@ class _Markup:
         return not (self.in_tag or self.in_comment or self.open)
 
 
-def parent(source: str) -> str | None:
+def template(source: str) -> Template:
+    """A template written in Python that draws a part as a page does (a
+    test's, a catalog entry's), held as a loaded one is. One Django builds
+    from a string is not ours, so it is held no more than the print gate
+    refuses its values (print_gate)."""
+
+    engine = Engine.get_default()
+    return engine.from_string(held(source, engine))
+
+
+def held(source: str, engine: Engine, name: str = "") -> str:
+    """``source``, the template ``name`` of ``engine``, with each value it
+    prints as text ending in ``|breakable``."""
+
+    return _read(source, lambda: _plain_blocks(engine, _parent(source), name))[0]
+
+
+def _parent(source: str) -> str | None:
     """The template ``source`` extends, when it names it."""
 
     for token in DebugLexer(source).tokenize():
@@ -99,10 +120,19 @@ def parent(source: str) -> str | None:
     return None
 
 
-def held(source: str, inherited: Callable[[], frozenset[str]] = frozenset) -> tuple[str, frozenset[str]]:
-    """``source`` with each value printed as text ending in ``|breakable``,
-    and the blocks it opens where text is plain, with ``inherited`` naming its
-    parent's."""
+def _plain_blocks(engine: Engine, parent: str | None, name: str) -> frozenset[str]:
+    """The blocks ``parent`` and the templates it extends open where text is
+    plain, which the template ``name`` fills as text that stays plain."""
+
+    if not parent or parent == name:
+        return frozenset()
+    source = engine.get_template(parent).source
+    return _read(source, lambda: _plain_blocks(engine, _parent(source), parent))[1]
+
+
+def _read(source: str, inherited: Callable[[], frozenset[str]]) -> tuple[str, frozenset[str]]:
+    """``source`` held, and the blocks it opens where text is plain, with
+    ``inherited`` naming its parent's."""
 
     markup = _Markup()
     tokens = DebugLexer(source).tokenize()

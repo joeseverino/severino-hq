@@ -5,9 +5,9 @@ stop), by the name of what it stops. The button posts back to this address,
 which carries where to return to.
 {% endcomment %}
 {% block consequences %}
-<p><strong>{{ name|breakable }}</strong> stops running, and whatever it serves stops answering until it is started again.</p>
+<p><strong>{{ name }}</strong> stops running, and whatever it serves stops answering until it is started again.</p>
 {% if supervision %}
-<p data-run-by-unit="{{ supervision.unit }}">The systemd unit <code>{{ supervision.unit|breakable }}</code> runs it, so HQ stops the unit, and anything else the unit runs stops with it.</p>
+<p data-run-by-unit="{{ supervision.unit }}">The systemd unit <code>{{ supervision.unit }}</code> runs it, so HQ stops the unit, and anything else the unit runs stops with it.</p>
 {% endif %}
 {% comment %}
 A connection HQ reads and acts through that runs inside this container stops
@@ -16,12 +16,12 @@ the command that starts it again on its machine.
 {% endcomment %}
 {% for channel in channels %}
 {% notice tone="warning" data_cuts_connection=channel.connection_ref %}
-  <p>The connection <code>{{ channel.connection_ref|breakable }}</code> runs in it. Once it stops, HQ can no longer read or change anything through that connection{% if channel.carries_its_verbs %}, so it cannot start this container again either{% endif %}.</p>
+  <p>The connection <code>{{ channel.connection_ref }}</code> runs in it. Once it stops, HQ can no longer read or change anything through that connection{% if channel.carries_its_verbs %}, so it cannot start this container again either{% endif %}.</p>
   {% if channel.start_command %}
-  <p>To start it again on {{ host|breakable:"," }} run:</p>
+  <p>To start it again on {{ host }}, run:</p>
   {% command text=channel.start_command %}
   {% else %}
-  <p>To start it again, start the container on {{ host|breakable }} itself.</p>
+  <p>To start it again, start the container on {{ host }} itself.</p>
   {% endif %}
 {% title %}{% if channel.machines %}HQ reaches {% for machine in channel.machines %}{{ machine|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %} through this container{% else %}HQ reads through this container{% endif %}
 {% endnotice %}

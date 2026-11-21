@@ -8,11 +8,11 @@ word after a name the cell cuts would stand on a line of its own, so
 "available" is the reader's alone.
 {% endcomment %}
 <td>
-  {% if standing.state == "vulnerable" %}{% status standing.vulnerabilities tone=standing.vulnerability_tone pill=False icon="shield" tip=standing.vulnerabilities_note %}{% elif standing.vulnerabilities_note %}{% muted tip=standing.vulnerabilities_note %}{{ standing.vulnerabilities|capfirst|breakable }}{% endmuted %}{% else %}{% muted %}{{ standing.vulnerabilities|capfirst|breakable }}{% endmuted %}{% endif %}
+  {% if standing.state == "vulnerable" %}{% status standing.vulnerabilities tone=standing.vulnerability_tone pill=False icon="shield" tip=standing.vulnerabilities_note %}{% elif standing.vulnerabilities_note %}{% muted tip=standing.vulnerabilities_note %}{{ standing.vulnerabilities|capfirst }}{% endmuted %}{% else %}{% muted %}{{ standing.vulnerabilities|capfirst }}{% endmuted %}{% endif %}
 </td>
 <td>
   {% if standing.update_state == "available" and standing.latest %}{% status standing.latest tone="attention" pill=False icon="deploy" %}<span class="visually-hidden"> available</span>
   {% elif standing.update_state == "available" %}{% status standing.update tone="attention" pill=False icon="deploy" %}
   {% elif standing.update_state == "current" %}{% status standing.update tone="good" pill=False icon="check-circle" ink="context" %}
-  {% else %}{% muted tip=standing.update_note %}{{ standing.update|capfirst|breakable }}{% endmuted %}{% endif %}
+  {% else %}{% muted tip=standing.update_note %}{{ standing.update|capfirst }}{% endmuted %}{% endif %}
 </td>

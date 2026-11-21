@@ -10,7 +10,7 @@ the service page give, not a second one written here.
 {% if facts %}
   {% facts %}
     {% for label, desired, observed in facts %}
-      {% fact label %}<code>{{ observed|default:desired|or_empty|breakable }}</code>{% endfact %}
+      {% fact label %}<code>{{ observed|default:desired|or_empty }}</code>{% endfact %}
     {% endfor %}
   {% endfacts %}
 {% endif %}

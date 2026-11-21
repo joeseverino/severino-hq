@@ -284,11 +284,15 @@ a dot or a slash, before a port); in a table's cell it breaks elsewhere only
 where its column lacks room for it. A length of time
 keeps each count with its unit.
 
-So every value a template prints as text, in a sentence too, ends in
-`|breakable` or a filter that holds its names itself (`|readout`, `|or_empty`,
-`|when`). Markup built in Python holds each value it prints the same way.
-`|breakable` passes a plain word and markup as they are, so it is safe on any
-value (`hq/platform/core/tests/test_template_values.py`).
+A template prints a value bare (`{{ host }}`, `Runs on {{ host }}.`): the
+template engine holds every value printed as text as it compiles the template,
+the mark written straight after it included (`hq/platform/core/held_values.py`),
+and leaves a value in an attribute, a comment, a `<script>`, a `<title>` or a
+`<time>` as Django prints it. Markup built in Python holds each value it prints
+as text the same way, through HQ's `format_html`. `|breakable` passes a plain
+word and markup as they are, so it is safe on any value; a template writes it
+only for a list's commas (`|breakable:forloop`), a mark held in a variable, or
+`{% dot %}`'s dot (`|breakable:"·"`).
 
 A seam is an empty `.seam` whose generated text is a zero-width space, never a
 `<wbr>`: Chromium breaks at a `<wbr>` even under `white-space: nowrap`, and

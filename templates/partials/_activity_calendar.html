@@ -14,7 +14,7 @@ can be linked to directly and works without JavaScript.
   </div>
   {% comment %}A chart for the layout audit: each day's tip repeats what its hidden text already says.{% endcomment %}
   <table class="activity-calendar" data-chart>
-    <caption class="visually-hidden">{% if calendar.period_label %}{{ calendar.title|breakable:"," }} {{ calendar.period_label|breakable:"." }}{% else %}{{ calendar.title|breakable:"." }}{% endif %} {{ calendar.description|breakable }}</caption>
+    <caption class="visually-hidden">{% if calendar.period_label %}{{ calendar.title }}, {{ calendar.period_label }}.{% else %}{{ calendar.title }}.{% endif %} {{ calendar.description }}</caption>
     <thead>
       <tr>
         {% for day in calendar.weeks.0 %}<th scope="col" class="calendar-weekday eyebrow"><span aria-hidden="true">{{ day.when|when:"initials" }}</span><span class="visually-hidden">{{ day.when|when:"weekday" }}</span></th>{% endfor %}
@@ -30,7 +30,7 @@ can be linked to directly and works without JavaScript.
               <td class="calendar-day is-{{ day.state }}"{% if day.detail %} data-tip="{{ day.when|when_text:"day" }} · {{ day.detail }}"{% endif %}>
                 <span class="calendar-date" aria-hidden="true">{{ day.when|when:"numeral" }}</span>
                 {% comment %}Without this a screen reader gets a grid of bare numbers.{% endcomment %}
-                <span class="visually-hidden">{{ day.when|when_text:"day" }}: {{ day.detail|default:"nothing logged"|breakable }}</span>
+                <span class="visually-hidden">{{ day.when|when_text:"day" }}: {{ day.detail|default:"nothing logged" }}</span>
                 <span class="calendar-marks" aria-hidden="true">
                   {% for slot in day.slots %}<i class="swatch calendar-dot series-{{ slot }}"></i>{% endfor %}
                   {% if day.state == "missed" %}<i class="swatch calendar-dot is-missed"></i>{% endif %}
@@ -44,7 +44,7 @@ can be linked to directly and works without JavaScript.
     </tbody>
   </table>
 {% aside %}{% if calendar.period_label or calendar.previous_url or calendar.next_url %}<div class="calendar-controls">
-  {% if calendar.period_label %}<span class="calendar-period">{{ calendar.period_label|breakable }}</span>{% endif %}
+  {% if calendar.period_label %}<span class="calendar-period">{{ calendar.period_label }}</span>{% endif %}
   {% if calendar.previous_url or calendar.next_url %}
     {% include "partials/_calendar_nav.html" with unit="month" previous=calendar.previous_url today=calendar.current_url next=calendar.next_url only %}
   {% endif %}

@@ -15,7 +15,7 @@ waiting its turn says its state's word alone, which the head already holds.
 {% with run=job|job_run %}{% with standing=run|standing_of %}
 {% partialdef progress %}
   <div class="job-progress-head">
-    <strong>{{ job.label|breakable }}</strong>
+    <strong>{{ job.label }}</strong>
     {% status run.word tone=run.tone data_ask_label=True %}
   </div>
   {% comment %}
@@ -24,7 +24,7 @@ waiting its turn says its state's word alone, which the head already holds.
   sits at a number it made up.
   {% endcomment %}
   <progress class="job-bar" aria-label="{{ job.label }}" max="100"{% if run.percent is not None %} value="{{ run.percent }}"{% endif %} data-ask-bar></progress>
-  <output class="job-note{% if standing.tone %} {{ standing.tone|tone_class }}{% endif %}" data-ask-note>{{ standing.note|breakable }}</output>
+  <output class="job-note{% if standing.tone %} {{ standing.tone|tone_class }}{% endif %}" data-ask-note>{{ standing.note }}</output>
 {% endpartialdef %}
 {% comment %}The status resource is given only while the work is live, which is when ask.js follows it; a job whose process stopped is not.{% endcomment %}
 {% if standing.live %}{% url 'jobs:status' job.pk as status_url %}

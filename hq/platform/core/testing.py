@@ -5,12 +5,13 @@ here."""
 from typing import Any
 
 from django.contrib.auth import get_user_model
-from django.template import Context, Template
+from django.template import Context
 from django.test import Client, TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application import roles
 from hq.platform.application.security import Capability, Principal
+from hq.platform.core import held_values
 
 from .test_runner import no_default_role
 
@@ -69,7 +70,7 @@ def declare(key: str, kind: str, spec: dict[str, Any] | None = None, /, **fields
 def render(source: str, **context: Any) -> str:
     """A template written in the test, drawn with ``context``."""
 
-    return Template(source).render(Context(context))
+    return held_values.template(source).render(Context(context))
 
 
 class SignedInTestCase(TestCase):

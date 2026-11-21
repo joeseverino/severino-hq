@@ -2,8 +2,7 @@
 
 lazy from datetime import date
 
-lazy from django.template import Template
-
+from hq.platform.core import held_values
 from hq.platform.core.part_examples import runs
 from hq.platform.core.template_parts import Example
 lazy from hq.platform.application.card_items import Counted, Kpi
@@ -21,7 +20,7 @@ class _Drawn:
         self.source = source
 
     def render(self, context):
-        return Template(self.source).render(context)
+        return held_values.template(self.source).render(context)
 
 
 # A page head's band of facts, as the dashboard's glance draws it, in each
@@ -181,7 +180,7 @@ FACTS_STATES = {
         '{% fact "Example version" icon="layers" %}<code>example-1.2.3</code>{% detail %}'
         "<small>example.com/example/image</small><small>Tag only</small>{% endfact %}"
         '{% fact "An example label long enough to wrap onto a second line in its cell" icon="shield" tone="serious" %}'
-        '<a href="/example/">{{ "2\u00a0example findings"|breakable }}</a>{% detail %}<small>An example detail</small>{% endfact %}'
+        '<a href="/example/">{{ "2\u00a0example findings" }}</a>{% detail %}<small>An example detail</small>{% endfact %}'
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
         "{% endfacts %}{% endcard %}"
     ),
@@ -191,7 +190,7 @@ FACTS_STATES = {
     "band-code": Example(
         '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example running" icon="activity" value="Up 1 week" %}'
-        '{% fact "Example version" icon="layers" %}<code>{{ tag|breakable }}</code>{% endfact %}'
+        '{% fact "Example version" icon="layers" %}<code>{{ tag }}</code>{% endfact %}'
         "{% endfacts %}{% endcard %}"
         '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example running" icon="activity" value="Up 1 week" %}'
@@ -294,7 +293,7 @@ FACTS_STATES = {
     "list": Example(
         '{% facts layout="list" %}'
         '{% fact "Address" %}<code>https://hq.example.com/mcp/</code>{% endfact %}'
-        '{% fact "Sign-in" %}<a href="/example/">{{ sign_in|breakable }}</a>{% endfact %}'
+        '{% fact "Sign-in" %}<a href="/example/">{{ sign_in }}</a>{% endfact %}'
         '{% fact "Protocol" %}<code>2025-06-18</code>{% endfact %}'
         "{% endfacts %}",
         {"sign_in": "https://auth.example.com/application/o/example-hq-agent/.well-known/openid-configuration"},
@@ -305,7 +304,7 @@ FACTS_STATES = {
     "list-identifiers": Example(
         '<div style="max-inline-size: 300px">{% facts %}'
         '{% fact "Example name" value="example-01" %}'
-        '{% fact "Example image" %}<code>{{ image|breakable }}</code>{% endfact %}'
+        '{% fact "Example image" %}<code>{{ image }}</code>{% endfact %}'
         '{% fact "Example kind" value="Renewal" %}'
         '{% fact "Example path" value=path %}'
         '{% fact "Example port" value="8123" %}'
@@ -377,7 +376,7 @@ FACTS_STATES = {
     "list-compact": Example(
         '{% section "Example settings" %}{% facts %}'
         '{% fact "Example name" value="example-01" %}'
-        '{% fact "Example image" %}<code>{{ image|breakable }}</code>{% endfact %}'
+        '{% fact "Example image" %}<code>{{ image }}</code>{% endfact %}'
         "{% endfacts %}"
         '{% section "Example other settings" fold=True open=True %}{% facts %}'
         '{% fact "Example port" value="8123" %}'

@@ -8,7 +8,7 @@
   {% fact "Vendor" %}{{ receipt.vendor|or_empty }}{% endfact %}
   {% fact "Date" %}{{ receipt.date|when }}{% endfact %}
   {% fact "Amount" %}{{ receipt.amount|money }}{% endfact %}
-  {% fact "Original file" %}{{ receipt.original_filename|breakable }}{% endfact %}
+  {% fact "Original file" %}{{ receipt.original_filename }}{% endfact %}
 {% endfacts %}{% endcard %}
 {% if not already_linked %}
   {% words "expense.create" as add_expense %}
@@ -29,8 +29,8 @@
           {% for exp, actions in matches %}
             <tr>
               <td>{{ exp.date|when }}</td>
-              <td><strong>{{ exp.vendor|breakable }}</strong></td>
-              <td>{{ exp.item|breakable }}</td>
+              <td><strong>{{ exp.vendor }}</strong></td>
+              <td>{{ exp.item }}</td>
               <td>{{ exp.total_cost|money }}</td>
               {% row_actions actions %}
             </tr>

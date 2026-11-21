@@ -22,7 +22,7 @@ the bottom of the screen once the form has changed.
   {% endif %}
   {% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% endif %}
   {% if cancel_url %}{% if in_place is True %}{% button "Cancel" cancel_url data_live_cancel=live|default:False data_fragment_target=True %}{% else %}{% button "Cancel" cancel_url data_live_cancel=live|default:False %}{% endif %}{% endif %}
-  {% if note %}{% muted css="form-actions-note" %}{{ note|breakable }}{% endmuted %}{% endif %}
+  {% if note %}{% muted css="form-actions-note" %}{{ note }}{% endmuted %}{% endif %}
   {% if live %}
     {% muted css="form-actions-note" data_fragment_status=True role="status" %}{% endmuted %}
   {% else %}

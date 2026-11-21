@@ -12,7 +12,7 @@
   {% if links.asset %}{% fact "Asset" %}{% entity links.asset %}{% endfact %}{% endif %}
   {% if links.writeup %}{% fact "Writeup or page" %}{% entity links.writeup %}{% endfact %}{% endif %}
   {% if document %}{% fact "Document" %}{% entity document %}{% endfact %}{% endif %}
-  {% if about %}{% fact "For" %}<span class="prose">{{ about.kind_label|breakable }} {% entity about %}</span>{% endfact %}{% endif %}
+  {% if about %}{% fact "For" %}<span class="prose">{{ about.kind_label }} {% entity about %}</span>{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
 
 {% if expense.notes %}{% section "Notes" %}{% include "partials/_linked_text.html" with parts=expense.notes|named_links only %}{% endsection %}{% endif %}

@@ -30,10 +30,10 @@ uptime and how the request came.
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.where|not_urgent only %}
   {% facts %}
     {% if container %}{% with runtime=container.runtime %}
-    {% fact "Container" %}<a href="{{ container.url }}">{{ container.running.name|breakable }}</a>{% endfact %}
-    {% fact "Health" %}{{ runtime.health|default:container.running.check.said|default:container.running.status|capfirst|breakable }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}{% endfact %}
+    {% fact "Container" %}<a href="{{ container.url }}">{{ container.running.name }}</a>{% endfact %}
+    {% fact "Health" %}{{ runtime.health|default:container.running.check.said|default:container.running.status|capfirst }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}{% endfact %}
     {% with posture=container.posture %}
-    {% fact "How it is run" %}{% list %}<li>{{ posture.met|breakable }} of {{ posture.measured|counted:"check met,checks met" }}</li>{% for result in posture.unmet %}<li>{% muted %}{{ result.check.unmet|breakable }}{% endmuted %}</li>{% endfor %}{% endlist %}{% endfact %}
+    {% fact "How it is run" %}{% list %}<li>{{ posture.met }} of {{ posture.measured|counted:"check met,checks met" }}</li>{% for result in posture.unmet %}<li>{% muted %}{{ result.check.unmet }}{% endmuted %}</li>{% endfor %}{% endlist %}{% endfact %}
     {% endwith %}
     {% endwith %}{% else %}
     {% fact "Container" %}{% include "partials/_empty_state.html" with message="No container HQ reads is known to be HQ's." inline=True %}{% endfact %}
@@ -57,20 +57,20 @@ uptime and how the request came.
   {% facts %}
     {% if release.repository %}{% with repository=release.repository %}
     {% fact repository.default_branch|default:"Branch"|capfirst %}<span class="prose">
-        {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
-        {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7"|breakable }}</code>
+        {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7" }},</code> production runs <code>{{ release.deployed|slice:":7" }}</code>
+        {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7" }}</code>
         {% else %}{% muted %}Not read{% endmuted %}{% endif %}
       </span>{% detail %}{% list kind="dots" %}<li>{% entity repository.url|outside label=repository.name %}</li><li>{% include "partials/_reading_age.html" with reading=repository.reading only %}</li>{% endlist %}{% endfact %}
     {% endwith %}{% endif %}
     {% if release.image %}
     {% fact "Image" %}
-        <code title="{{ release.image }}">{{ container.standing.image.short|breakable }}</code>{% if release.digest %} {% muted tip=release.digest %}pinned by digest{% endmuted %}{% endif %}
+        <code title="{{ release.image }}">{{ container.standing.image.short }}</code>{% if release.digest %} {% muted tip=release.digest %}pinned by digest{% endmuted %}{% endif %}
     {% detail %}{% if release.built %}Built {{ release.built|when:"ago" }}{% endif %}
     {% endfact %}
     {% fact "Signature" %}{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}{% muted %}{% include "partials/_reading_age.html" with unread=release.signed_unread only %}{% endmuted %}{% endif %}{% endfact %}
-    {% fact "Vulnerabilities" %}<span class="prose">{% if release.vulnerabilities_unread %}{% muted %}{% include "partials/_reading_age.html" with unread=release.vulnerabilities_unread only %}{% endmuted %}{% else %}{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} {% muted %}{{ release.vulnerabilities_note|breakable }}{% endmuted %}{% endif %}{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}
+    {% fact "Vulnerabilities" %}<span class="prose">{% if release.vulnerabilities_unread %}{% muted %}{% include "partials/_reading_age.html" with unread=release.vulnerabilities_unread only %}{% endmuted %}{% else %}{{ release.vulnerabilities|capfirst }}{% if release.vulnerabilities_note %} {% muted %}{{ release.vulnerabilities_note }}{% endmuted %}{% endif %}{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}
     {% endif %}
-    {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name|breakable }} {% muted %}{{ version|breakable }}{% endmuted %}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
+    {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name }} {% muted %}{{ version }}{% endmuted %}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
   {% endfacts %}
 {% endsection %}
 {% endlayout %}
@@ -82,7 +82,7 @@ row in the flow.
 {% layout %}
 {% section "Jobs" id="hq-work" %}
   {% if work.unread %}
-    {% muted element="p" %}{{ work.unread|breakable }}{% endmuted %}
+    {% muted element="p" %}{{ work.unread }}{% endmuted %}
   {% elif work.jobs %}
     {% table_region "Jobs" %}
       <table class="data-table">
@@ -91,7 +91,7 @@ row in the flow.
           {% for job in work.jobs %}
             <tr>
               <td>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}</td>
-              <td>{% present job.runs %}{% if job.runs_unit %}<code>{{ job.runs|breakable }}</code>{% else %}{{ job.runs|breakable }}{% endif %}{% endpresent %}</td>
+              <td>{% present job.runs %}{% if job.runs_unit %}<code>{{ job.runs }}</code>{% else %}{{ job.runs }}{% endif %}{% endpresent %}</td>
               <td>{{ job.last_run|when:"ago" }}</td>
               <td>{% status job.result tone=job.tone %}</td>
               <td class="optional-col">{{ job.next_run|when }}</td>
@@ -108,8 +108,8 @@ row in the flow.
         <tbody>
           {% for item in work.scheduled %}
             <tr>
-              <td>{{ item.label|breakable }}</td>
-              <td class="optional-col">{{ item.every|breakable }}</td>
+              <td>{{ item.label }}</td>
+              <td class="optional-col">{{ item.every }}</td>
               <td>{% present item.runs %}{% include "partials/_dots.html" with dots=item.runs only %}{% endpresent %}</td>
               <td>{% status item.result tone=item.tone %}</td>
               <td class="optional-col">{% if item.next_due %}{{ item.next_due|when }}{% else %}Now{% endif %}</td>
@@ -120,7 +120,7 @@ row in the flow.
     {% endtable_region %}
   {% endif %}
   {% if work.renderers_unread %}
-    {% muted element="p" %}{{ work.renderers_unread|breakable }}{% endmuted %}
+    {% muted element="p" %}{{ work.renderers_unread }}{% endmuted %}
   {% elif work.renderers %}
     {% table_region "Credentials refresh" %}
       <table class="data-table">
@@ -128,7 +128,7 @@ row in the flow.
         <tbody>
           {% for item in work.renderers %}
             <tr>
-              <td><code>{{ item.name|breakable }}</code></td>
+              <td><code>{{ item.name }}</code></td>
               <td>{% status item.result tone=item.tone %}</td>
               <td>{{ item.attempted|when:"ago" }}</td>
               <td>{{ item.succeeded|when:"ago" }}</td>
@@ -157,11 +157,11 @@ row in the flow.
         {% for row in rows %}
           <tr>
             <td>
-              {{ row.label|breakable }}
-              {% list %}{% for reason in row.reasons %}<li>{% muted %}{{ reason|breakable }}{% endmuted %}</li>{% empty %}{% if row.remedy %}<li>{% muted %}{{ row.remedy|breakable }}{% endmuted %}</li>{% elif row.error and not row.read %}<li>{% muted %}{{ row.error|breakable }}{% endmuted %}</li>{% endif %}{% endfor %}{% endlist %}
+              {{ row.label }}
+              {% list %}{% for reason in row.reasons %}<li>{% muted %}{{ reason }}{% endmuted %}</li>{% empty %}{% if row.remedy %}<li>{% muted %}{{ row.remedy }}{% endmuted %}</li>{% elif row.error and not row.read %}<li>{% muted %}{{ row.error }}{% endmuted %}</li>{% endif %}{% endfor %}{% endlist %}
             </td>
-            <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label|breakable }}{% else %}<strong>{{ row.state_label|breakable }}</strong>{% endif %}</td>
-            <td>{% if row.read %}{{ row.records|breakable }}{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label }}{% else %}<strong>{{ row.state_label }}</strong>{% endif %}</td>
+            <td>{% if row.read %}{{ row.records }}{% else %}{% empty_value %}{% endif %}</td>
             <td class="optional-col">{% include "partials/_reading_age.html" with at=row.observed_at only %}</td>
           </tr>
         {% endfor %}
@@ -170,7 +170,7 @@ row in the flow.
     </table>
   {% endtable_region %}
   {% endif %}
-  {% if sight.unconnected %}{% muted element="p" %}Not connected: {{ sight.unconnected|join:", "|breakable:"." }} <a href="{% url 'control_plane:connections' %}">Connections</a>{% endmuted %}{% endif %}
+  {% if sight.unconnected %}{% muted element="p" %}Not connected: {{ sight.unconnected|join:", " }}. <a href="{% url 'control_plane:connections' %}">Connections</a>{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}
 {% endlayout %}
@@ -179,4 +179,4 @@ row in the flow.
 {% comment %}
 A systemd unit as a person reads it: its unit file's title, with its name
 beneath, its escapes decoded; the name alone when it has no title.
-{% endcomment %}{% partialdef unit %}{% if title %}{% list %}<li>{{ title|breakable }}</li><li><code>{{ unit|breakable }}</code></li>{% endlist %}{% else %}<code>{{ unit|breakable }}</code>{% endif %}{% endpartialdef %}
+{% endcomment %}{% partialdef unit %}{% if title %}{% list %}<li>{{ title }}</li><li><code>{{ unit }}</code></li>{% endlist %}{% else %}<code>{{ unit }}</code>{% endif %}{% endpartialdef %}

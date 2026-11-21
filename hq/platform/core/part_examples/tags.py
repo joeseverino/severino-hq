@@ -446,7 +446,7 @@ RUN_EVIDENCE = Example(
     '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
     '{% table_heading "Playbook" %}{% table_heading "State" "status" %}'
     '{% table_heading "Result" %}</tr></thead><tbody>'
-    "{% for title, word, tone, note, evidence in runs %}<tr><td><strong>{{ title|breakable }}</strong></td>"
+    "{% for title, word, tone, note, evidence in runs %}<tr><td><strong>{{ title }}</strong></td>"
     "<td>{% status word tone=tone %}</td><td>{{ note }}{% run_evidence evidence %}</td></tr>{% endfor %}"
     "</tbody></table>{% endtable_region %}{% endsection %}",
     context=lambda: {"runs": _example_runs()},
@@ -568,10 +568,10 @@ COMMAND_STATES = {
     # phone's, the words under it and its notes.
     "states": Example(
         '{% section "Example setup" %}{% command text="example-cli status" %}{% command text=long %}'
-        '{% command id="example-patch" %}{{ yaml|breakable }}'
-        "{% title %}Add to <code>{{ compose_file|breakable }}</code>"
+        '{% command id="example-patch" %}{{ yaml }}'
+        "{% title %}Add to <code>{{ compose_file }}</code>"
         "{% detail %}Where its service already has one of these keys, replace it. Then run "
-        "<code>docker compose up -d {{ service|breakable }}</code> in that directory."
+        "<code>docker compose up -d {{ service }}</code> in that directory."
         "{% notes %}<li><strong>Remove</strong> <code>pid: host</code></li>"
         '<li><code>user</code> <span class="muted">Its files must be readable by 1000:1000.</span></li>'
         '<li class="prose"><strong>Not included</strong> <span class="muted">An example reason it leaves out,'
@@ -622,7 +622,7 @@ CHECK_LADDER_STATES = {
         '{% section "Example path 5" %}{% check_ladder route=True %}'
         '{% check_rung state="met" kind="Device" %}example-laptop{% more %}Details'
         "{% body %}<p>Example HQ confirmed this example device.</p>{% endcheck_rung %}"
-        '{% check_rung icon="proxy" kind="Proxy" %}{{ proxy|breakable }}{% detail %}{{ address|breakable }}'
+        '{% check_rung icon="proxy" kind="Proxy" %}{{ proxy }}{% detail %}{{ address }}'
         "{% more %}Details{% body %}<p>An example proxy no check reads.</p>{% endcheck_rung %}"
         '{% check_rung icon="container" kind="Container" %}example-app{% detail %}Up 3 days{% more %}Details'
         "{% body %}<p>An example container no check reads.</p>{% endcheck_rung %}"
@@ -702,7 +702,7 @@ ROW_ACTIONS_STATES = {
         '{% section "Example services" %}{% table_region "Example services" %}<table class="data-table"><thead>'
         '<tr>{% table_heading "Service" "identifier" %}{% table_heading "Open to" %}'
         '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead>'
-        "<tbody>{% for name, mark, order in rows %}<tr><td><strong>{{ name|breakable }}</strong></td>"
+        "<tbody>{% for name, mark, order in rows %}<tr><td><strong>{{ name }}</strong></td>"
         "<td>Example network</td>{% row_actions mark=mark order=order %}</tr>{% endfor %}"
         "</tbody></table>{% endtable_region %}{% endsection %}",
         lambda: {"rows": _arranged_rows()},

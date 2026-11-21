@@ -16,9 +16,9 @@ under them.
 
 {% if file_picture %}{% comment %}Under the flow.{% endcomment %}
 {% elif receipt.file == "stored" %}
-{% section "File" data_receipt_file="link" %}<p><a href="{% url 'receipts:file' receipt.id %}">{{ receipt.original_filename|default:"The receipt's file"|breakable }}</a>{% if file_line %} {% muted %}{{ file_line|breakable }}{% endmuted %}{% endif %}</p>{% endsection %}
+{% section "File" data_receipt_file="link" %}<p><a href="{% url 'receipts:file' receipt.id %}">{{ receipt.original_filename|default:"The receipt's file" }}</a>{% if file_line %} {% muted %}{{ file_line }}{% endmuted %}{% endif %}</p>{% endsection %}
 {% elif receipt.file == "missing" %}
-{% section "File" data_receipt_file="missing" remedy_label="Replace the file" remedy_url=edit_url %}{% empty %}{{ receipt.original_filename|default:"This receipt's file"|breakable }} is no longer in HQ's storage.{% endsection %}
+{% section "File" data_receipt_file="missing" remedy_label="Replace the file" remedy_url=edit_url %}{% empty %}{{ receipt.original_filename|default:"This receipt's file" }} is no longer in HQ's storage.{% endsection %}
 {% else %}
 {% section "File" data_receipt_file="none" remedy_label="Add a file" remedy_url=edit_url %}{% empty %}No file is stored for this receipt.{% endsection %}
 {% endif %}

@@ -5,7 +5,7 @@
     {% facts %}
       {% fact "Covers" %}{% for domain in material.domains %}{% status domain chip=True %}{% endfor %}{% endfact %}
       {% fact "Expires" %}{{ material.not_after|expiry }}{% endfact %}
-      {% fact "Fingerprint" %}<code>{{ material.fingerprint_sha256|slice:":16"|breakable }}…</code>{% endfact %}
+      {% fact "Fingerprint" %}<code>{{ material.fingerprint_sha256|slice:":16" }}…</code>{% endfact %}
     {% endfacts %}
     {% muted element="p" %}Uploading again replaces it. The key is never shown.{% endmuted %}
   {% endsection %}

@@ -35,17 +35,17 @@ the fragment `group`. Scripts and tests find each piece by its
       {% for group in palette_search_groups %}
         {# The palette's search groups, the same listbox group as the group fragment below. #}
         <div role="group" aria-labelledby="command-center-group-search-{{ group.scope }}">
-          <div class="command-center-group-label eyebrow" id="command-center-group-search-{{ group.scope }}">{{ group.label|breakable }}</div>
+          <div class="command-center-group-label eyebrow" id="command-center-group-search-{{ group.scope }}">{{ group.label }}</div>
           {% url 'core:audit_list' as audit_url %}{% for item in group.items %}
             <a id="command-center-option-search-{{ group.scope }}-{{ forloop.counter }}"
                class="command-center-option" href="{% if item.url %}{{ item.url }}{% else %}{% with_query audit_url q=q %}{% endif %}"
                role="option" aria-selected="false" tabindex="-1" data-command-center-option>
               <span class="command-center-copy">
                 <span class="command-center-title">
-                  <strong>{{ item.title|breakable }}</strong>
-                  {% if item.badge %}<code>{{ item.badge|breakable }}</code>{% endif %}
+                  <strong>{{ item.title }}</strong>
+                  {% if item.badge %}<code>{{ item.badge }}</code>{% endif %}
                 </span>
-                {% if item.snippet %}{% muted %}{% for text, hit in item.snippet %}{{ text|breakable }}{% endfor %}{% endmuted %}{% endif %}
+                {% if item.snippet %}{% muted %}{% for text, hit in item.snippet %}{{ text }}{% endfor %}{% endmuted %}{% endif %}
               </span>
               <span class="command-center-evidence">
                 {% if item.timestamp %}<span class="command-center-destination">{{ item.timestamp|when }}</span>{% endif %}
@@ -58,11 +58,11 @@ the fragment `group`. Scripts and tests find each piece by its
       {% for group in palette_groups %}{% partial group %}{% endfor %}
     </div>
     {% if palette_total > palette_count %}
-      {% muted element="p" css="command-center-more" %}Showing {{ palette_count|breakable }} of {{ palette_total|counted:"match" }}. Press Enter to search all of HQ.{% endmuted %}
+      {% muted element="p" css="command-center-more" %}Showing {{ palette_count }} of {{ palette_total|counted:"match" }}. Press Enter to search all of HQ.{% endmuted %}
     {% endif %}
   {% elif q %}
     <div class="command-center-empty">
-      <strong>No page or command called “{{ q|breakable }}”.</strong>
+      <strong>No page or command called “{{ q }}”.</strong>
       {% muted %}Press Enter to search everything.{% endmuted %}
     </div>
   {% else %}
@@ -80,17 +80,17 @@ label names a run of options inside the one list, so it is the group's
 label and never a heading, which a listbox would not expose.
 {% endcomment %}
 <div role="group" aria-labelledby="command-center-group-{{ group.key }}">
-  <div class="command-center-group-label eyebrow" id="command-center-group-{{ group.key }}">{{ group.label|breakable }}</div>
+  <div class="command-center-group-label eyebrow" id="command-center-group-{{ group.key }}">{{ group.label }}</div>
   {% for item in group.items %}
     <a id="command-center-option-{{ group.key }}-{{ forloop.counter }}"
        class="command-center-option" href="{{ item.url }}" role="option"
        aria-selected="false" tabindex="-1" data-command-center-option>
       <span class="command-center-copy">
-        <span class="command-center-title"><strong>{{ item.label|breakable }}</strong></span>
-        {% if item.summary and group.key != "resources" %}{% muted %}{{ item.summary|breakable }}{% endmuted %}{% endif %}
+        <span class="command-center-title"><strong>{{ item.label }}</strong></span>
+        {% if item.summary and group.key != "resources" %}{% muted %}{{ item.summary }}{% endmuted %}{% endif %}
       </span>
       <span class="command-center-evidence">
-        {% if item.destination_label %}<span class="command-center-destination">{{ item.destination_label|breakable }}</span>{% endif %}
+        {% if item.destination_label %}<span class="command-center-destination">{{ item.destination_label }}</span>{% endif %}
         {% for badge in item.badges %}{% if badge %}{% status badge chip=True %}{% endif %}{% endfor %}
       </span>
       <span class="command-center-arrow" aria-hidden="true">→</span>

@@ -12,9 +12,9 @@ reader is here by accident, so the page orients and offers a way on rather
 than decorating the mistake.
 {% endcomment %}
 <div class="error-page">
-  <p class="error-page-code">{{ code|breakable }}</p>
-  <h1>{{ title|breakable }}</h1>
-  <p class="error-page-body">{{ body|breakable }}{% if request_id %} Its request id is <code>{{ request_id|breakable:"." }}</code>{% endif %}</p>
+  <p class="error-page-code">{{ code }}</p>
+  <h1>{{ title }}</h1>
+  <p class="error-page-body">{{ body }}{% if request_id %} Its request id is <code>{{ request_id }}.</code>{% endif %}</p>
   {% if search %}
   {% url 'search' as search_url %}
   {% filter_bar search="Find anything" verb="Search" action=search_url %}{% endfilter_bar %}

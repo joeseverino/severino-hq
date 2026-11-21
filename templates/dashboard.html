@@ -46,7 +46,7 @@ the row is gone once every step is done.
 {% section "Get started" %}
   {% steps %}
     {% for step in getting_started %}
-      {% step icon=step.done|yesno:"check-circle,"|default:step.icon done=step.done %}{% if step.done %}<strong>{{ step.label|breakable }}</strong> {% muted %}Done.{% endmuted %}{% else %}<a href="{{ step.url }}">{{ step.label|breakable }}</a> {% muted %}{{ step.why|breakable }}{% endmuted %}{% endif %}{% endstep %}
+      {% step icon=step.done|yesno:"check-circle,"|default:step.icon done=step.done %}{% if step.done %}<strong>{{ step.label }}</strong> {% muted %}Done.{% endmuted %}{% else %}<a href="{{ step.url }}">{{ step.label }}</a> {% muted %}{{ step.why }}{% endmuted %}{% endif %}{% endstep %}
     {% endfor %}
   {% endsteps %}
 {% aside %}<span class="count">{{ getting_started_left|measured:"left" }}{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>
@@ -113,7 +113,7 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   {% partialdef links inline %}
   <div id="dashboard-links" data-fragment data-fragment-name="links">{% list kind="chips" %}
     {% for l in external_links %}
-      <li>{% if l.where == "hq" %}<a href="{{ l.href }}" title="{{ l.sub }}">{{ l.label|breakable }}</a>{% else %}{% entity l.href|outside label=l.label %}{% endif %}</li>
+      <li>{% if l.where == "hq" %}<a href="{{ l.href }}" title="{{ l.sub }}">{{ l.label }}</a>{% else %}{% entity l.href|outside label=l.label %}{% endif %}</li>
     {% endfor %}
   {% endlist %}</div>
   {% endpartialdef %}

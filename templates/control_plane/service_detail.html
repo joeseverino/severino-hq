@@ -8,7 +8,7 @@ the record says it. The path is the next section, drawn once.
 {% card element="div" %}{% facts layout="band" %}
   {% for item in record.summary %}
     {% fact item.label icon=item.icon tone=item.tone detail=item.detail %}
-      {% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}
+      {% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value }}{% endif %}
     {% endfact %}
   {% endfor %}
   {% if record.aliases %}
@@ -41,12 +41,12 @@ none open about it.
   {% include "control_plane/_service_parts.html" %}
 {% empty %}
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
-  {% muted element="p" %}{% for gap in record.path.unread %}{{ gap|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}
+  {% muted element="p" %}{% for gap in record.path.unread %}{{ gap|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}
   {% for hop in service.path.observed %}
-    <p>{{ hop.phrase|breakable:":" }} {% entity hop.link %}{% if hop.source %}{% muted %}{% dot %}{{ hop.source.phrase|breakable }}{% if hop.source.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}{% endmuted %}{% endif %}</p>
+    <p>{{ hop.phrase }}: {% entity hop.link %}{% if hop.source %}{% muted %}{% dot %}{{ hop.source.phrase }}{% if hop.source.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}{% endmuted %}{% endif %}</p>
   {% endfor %}
 {% endfor %}
-{% aside %}{% muted %}{% if routes|length == 1 %}via {{ routes.0.via_phrase|breakable:"·" }}{% endif %}{% status record.exposure.label tone=record.exposure.tone pill=False data_exposure=record.exposure.level %}{% if record.exposure.path_gates %}{% dot %}login only at {% for path in record.exposure.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}{% if topology_url %} {% button "View on map" topology_url look="ghost compact" %}{% endif %}
+{% aside %}{% muted %}{% if routes|length == 1 %}via {{ routes.0.via_phrase|breakable:"·" }}{% endif %}{% status record.exposure.label tone=record.exposure.tone pill=False data_exposure=record.exposure.level %}{% if record.exposure.path_gates %}{% dot %}login only at {% for path in record.exposure.path_gates %}<code>{{ path }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}{% if topology_url %} {% button "View on map" topology_url look="ghost compact" %}{% endif %}
 {% endsection %}
 
 {% if missing_facets or record.origin.parked or record.origin and not record.origin.external and not record.origin.known %}
@@ -58,7 +58,7 @@ template learning anything about it. Each branch is one fact; the lines its
 readings add (one per reading kind, named unless the headline already is it)
 close every one.
 {% endcomment %}
-{% partialdef reading_lines %}{% for line in facet.reading_lines %}<small>{% if facet.present or facet.observed or not forloop.first %}{{ line.label|breakable }} {% endif %}{% if line.issued %}{{ line.detail|breakable }}{% else %}{% for link in line.entities %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% if line.expiry %}{% dot %}expires {{ line.expiry|breakable }}{% endif %}{% if line.stale %} {% status "Out of date" tone="attention" %}{% endif %}</small>{% endfor %}{% endpartialdef %}
+{% partialdef reading_lines %}{% for line in facet.reading_lines %}<small>{% if facet.present or facet.observed or not forloop.first %}{{ line.label }} {% endif %}{% if line.issued %}{{ line.detail }}{% else %}{% for link in line.entities %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% if line.expiry %}{% dot %}expires {{ line.expiry }}{% endif %}{% if line.stale %} {% status "Out of date" tone="attention" %}{% endif %}</small>{% endfor %}{% endpartialdef %}
 {% if missing_facets %}{% card element="div" %}{% facts layout="band" label="Missing parts" %}
   {% for facet in missing_facets %}
     {% comment %}
@@ -73,13 +73,13 @@ close every one.
           <small class="prose">{% entity claim.link code=True label=facet.observed.name %}{% if facet.machine %} on {% entity facet.machine.link %}{% endif %}</small>
           {% section "Running now" fold=True %}
             {% facts %}
-              {% if facet.observed.image %}{% fact "Image" %}<code>{{ facet.observed.image_label|breakable }}</code>{% endfact %}{% endif %}
+              {% if facet.observed.image %}{% fact "Image" %}<code>{{ facet.observed.image_label }}</code>{% endfact %}{% endif %}
               {% if facet.observed.published %}{% fact "Publishes" value=facet.observed.published %}{% endif %}
               {% if facet.observed.status %}{% fact "Status" value=facet.observed.status %}{% endif %}
-              {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack|breakable }}</code>{% endfact %}{% endif %}
+              {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack }}</code>{% endfact %}{% endif %}
               {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
             {% endfacts %}
-            {% with edit=claim.edit %}{% if edit %}<p><a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label|breakable }}{% arrow %}</a></p>{% endif %}{% endwith %}
+            {% with edit=claim.edit %}{% if edit %}<p><a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label }}{% arrow %}</a></p>{% endif %}{% endwith %}
           {% endsection %}
           {% partial reading_lines %}
         {% endfact %}
@@ -89,23 +89,23 @@ close every one.
       The first reading of the first claim is the headline; where it runs is
       said once, as a link, so "what else is on this machine" is one click away.
       {% endcomment %}
-      {% fact facet.label %}{% with first=facet.claims.0.readings.0 %}{% if first %}{{ first.value|breakable }}{% else %}In HQ{% endif %}{% endwith %}{% detail %}
+      {% fact facet.label %}{% with first=facet.claims.0.readings.0 %}{% if first %}{{ first.value }}{% else %}In HQ{% endif %}{% endwith %}{% detail %}
         {% for claim in facet.claims %}
           {% for reading in claim.readings %}
             {% if forloop.parentloop.first and forloop.first %}
               {% if reading.drifted %}<small>{% status "Changed outside HQ: HQ expects" reading.desired tone="serious" %}</small>{% endif %}
             {% else %}
-              <small>{{ reading.label|breakable }} {{ reading.value|breakable }}{% if reading.drifted %} {% status "HQ expects" reading.desired tone="serious" %}{% endif %}</small>
+              <small>{{ reading.label }} {{ reading.value }}{% if reading.drifted %} {% status "HQ expects" reading.desired tone="serious" %}{% endif %}</small>
             {% endif %}
           {% endfor %}
-          <small>{% entity claim.within_service code=True %} {% status claim.health.label tone=claim.health.state %}{% with edit=claim.edit %}{% if edit %} <a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label|breakable }}</a>{% endif %}{% endwith %}</small>
+          <small>{% entity claim.within_service code=True %} {% status claim.health.label tone=claim.health.state %}{% with edit=claim.edit %}{% if edit %} <a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label }}</a>{% endif %}{% endwith %}</small>
         {% endfor %}
         {% if facet.machine %}<small>On {% entity facet.machine.link %}</small>{% endif %}
         {% partial reading_lines %}
       {% endfact %}
     {% elif facet.readings %}
       {% comment %}Observed through a reading joined to the name. Not a declaration. Its lines follow.{% endcomment %}
-      {% fact facet.label %}{{ facet.reading_lines.0.label|breakable }}{% detail %}{% partial reading_lines %}{% endfact %}
+      {% fact facet.label %}{{ facet.reading_lines.0.label }}{% detail %}{% partial reading_lines %}{% endfact %}
     {% elif record.origin.external and facet.routes %}
       {% comment %}
       Not a gap. A name resolving straight to something outside is already
@@ -122,8 +122,8 @@ close every one.
       says that: its own providers are the things it would otherwise want.
       {% endcomment %}
       {% fact facet.label %}{% status "Not needed" tone="neutral" pill=False %}{% detail %}
-        {% for kind, label in facet.declarable %}<small>No {{ label|breakable }} needed.</small>{% endfor %}
-        {% if facet.id == runtime_facet and not record.provider_answers %}<small>Served by <strong>{{ record.origin.headline|breakable }}</strong> from <code>{{ record.origin.address|breakable }}</code></small>{% endif %}
+        {% for kind, label in facet.declarable %}<small>No {{ label }} needed.</small>{% endfor %}
+        {% if facet.id == runtime_facet and not record.provider_answers %}<small>Served by <strong>{{ record.origin.headline }}</strong> from <code>{{ record.origin.address }}</code></small>{% endif %}
         {% partial reading_lines %}
       {% endfact %}
     {% elif facet.observed %}
@@ -135,29 +135,29 @@ close every one.
       Never an Edit link. HQ does not manage this and must not imply it could.
       {% endcomment %}
       {% fact facet.label %}{% status facet.observed.state pill=False %}{% detail %}
-        <small class="prose"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</small>
+        <small class="prose"><code>{{ facet.observed.name }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host }}{% endif %}</small>
         {% section "Running now" fold=True %}
           {% facts %}
-            {% if facet.observed.image %}{% fact "Image" %}<code>{{ facet.observed.image_label|breakable }}</code>{% endfact %}{% endif %}
+            {% if facet.observed.image %}{% fact "Image" %}<code>{{ facet.observed.image_label }}</code>{% endfact %}{% endif %}
             {% if facet.observed.published %}{% fact "Publishes" value=facet.observed.published %}{% endif %}
             {% if facet.observed.status %}{% fact "Status" value=facet.observed.status %}{% endif %}
             {% comment %}
             Only when it differs from the container's own name.
             {% endcomment %}
-            {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack|breakable }}</code>{% endfact %}{% endif %}
+            {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack }}</code>{% endfact %}{% endif %}
             {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
-            {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer.{% else %}A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.{% endif %}{% endfact %}
+            {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer.{% else %}A compose file on {{ facet.observed.host }}. HQ cannot read it.{% endif %}{% endfact %}
           {% endfacts %}
         {% endsection %}
         {% partial reading_lines %}
       {% endfact %}
     {% elif read_only and facet.id == runtime_facet and hq_machine %}
       {% comment %}HQ's own service: derived, never declared, never offered anything.{% endcomment %}
-      {% fact facet.label %}{{ hq_label|breakable }}{% detail %}<small>Runs on {% entity hq_machine %}</small>{% partial reading_lines %}{% endfact %}
+      {% fact facet.label %}{{ hq_label }}{% detail %}<small>Runs on {% entity hq_machine %}</small>{% partial reading_lines %}{% endfact %}
     {% elif facet.not_visible and not facet.reading_lines %}
       {% fact facet.label %}{% status "Not visible" tone="neutral" pill=False %}{% detail %}
         <small>{% status facet.not_visible tone="neutral" pill=False %}</small>
-        {% if not read_only %}{% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=record.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}{% endif %}
+        {% if not read_only %}{% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=record.hostname %}">Add {{ label }}{% arrow %}</a></small>{% endfor %}{% endif %}
       {% endfact %}
     {% elif read_only %}
       {% fact facet.label %}{% status "not set up"|absent pill=False %}{% detail %}{% partial reading_lines %}{% endfact %}
@@ -175,8 +175,8 @@ close every one.
       {% endcomment %}
       {% fact facet.label %}{% status "not set up"|absent pill=False %}{% detail %}
         <small>{% status "HQ has none for" record.hostname|add:"." tone="neutral" pill=False %}</small>
-        {% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=record.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}
-        {% for label, reason in facet.unavailable %}<small>{{ label|breakable }} {{ reason|breakable }}</small>{% endfor %}
+        {% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=record.hostname %}">Add {{ label }}{% arrow %}</a></small>{% endfor %}
+        {% for label, reason in facet.unavailable %}<small>{{ label }} {{ reason }}</small>{% endfor %}
         {% partial reading_lines %}
       {% endfact %}
     {% endif %}
@@ -189,11 +189,11 @@ card can say them: the name points at a documentation address where nothing
 answers, or at an address no known machine holds.
 {% endcomment %}
 {% if record.origin.parked and not record.provider_answers %}
-  {% muted element="p" %}Parked. The name resolves to <code>{{ record.origin.address|breakable:"," }}</code> where nothing answers.{% endmuted %}
+  {% muted element="p" %}Parked. The name resolves to <code>{{ record.origin.address }},</code> where nothing answers.{% endmuted %}
 {% elif record.origin and not record.origin.external and not record.origin.known %}
   {% muted element="p" %}
     {% if record.origin.routed %}The proxy forwards to{% else %}The name resolves to{% endif %}
-    <code>{{ record.origin.address|breakable:"," }}</code> which <strong>matches no known machine</strong>.
+    <code>{{ record.origin.address }},</code> which <strong>matches no known machine</strong>.
     If it belongs to one, add it to that machine's addresses.
   {% endmuted %}
 {% endif %}
@@ -235,15 +235,15 @@ it is not what anyone opens this page to read.
           {% for each in record.alias_records %}
             <tr>
               <td><strong>{% entity each.link %}</strong></td>
-              <td>{{ each.kind|kind_label|breakable }}</td>
-              <td>{{ each.alias|breakable }}</td>
+              <td>{{ each.kind|kind_label }}</td>
+              <td>{{ each.alias }}</td>
               <td>{% status each.health.label tone=each.health.state %}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     {% endtable_region %}
-{% aside %}{% muted %}{{ alias_summary|breakable }}{% endmuted %}
+{% aside %}{% muted %}{{ alias_summary }}{% endmuted %}
 {% endsection %}
 {% endif %}
 {% endblock %}

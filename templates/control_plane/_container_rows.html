@@ -27,19 +27,19 @@ cannot go missing from the other.
               {% if container.watcher %}
                 <strong>{% entity "resource"|entity_of:container.watcher label=container.name %}</strong>
               {% else %}
-                <strong>{{ container.name|breakable }}</strong>
+                <strong>{{ container.name }}</strong>
               {% endif %}
               {% comment %}
               The compose project only when it is not the container's own name.
               A one-service compose file names the project after the service, so
               printing both says one thing twice.
               {% endcomment %}
-              {% list %}{% if container.stack and container.stack != container.name %}<li>{% muted %}{{ container.stack|breakable }}{% endmuted %}</li>{% endif %}{% endlist %}
+              {% list %}{% if container.stack and container.stack != container.name %}<li>{% muted %}{{ container.stack }}{% endmuted %}</li>{% endif %}{% endlist %}
             </td>
-            {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code class="cell-whole" tabindex="0" data-tip="{{ container.image }}">{{ standing.label|breakable }}</code>{% else %}<code class="cell-whole">{{ container.image_label|breakable }}</code>{% endif %}</td>{% endwith %}
+            {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code class="cell-whole" tabindex="0" data-tip="{{ container.image }}">{{ standing.label }}</code>{% else %}<code class="cell-whole">{{ container.image_label }}</code>{% endif %}</td>{% endwith %}
             {% with standing=standings|dictkey:container.name %}{% if standing %}{% include "control_plane/_container_standing.html" %}{% else %}<td>{% empty_value %}</td><td>{% empty_value %}</td>{% endif %}{% endwith %}
-            <td class="optional-col">{{ container.published|breakable }}</td>
-            <td>{% with up=uptimes|dictkey:container.name|default:container.uptime %}{% partialdef status inline %}{% list %}{% if not container.state.running %}<li>{% status container.state %}</li>{% endif %}<li><span class="cell-part">{{ up|default:container.status|breakable }}{% if container.check %}{% muted %},{% endmuted %}{% endif %}</span>{% if container.check %} {% muted css="cell-part" title=container.check.said|capfirst %}{{ container.check|breakable }}{% endmuted %}{% endif %}</li>{% endlist %}{% endpartialdef %}{% endwith %}</td>
+            <td class="optional-col">{{ container.published }}</td>
+            <td>{% with up=uptimes|dictkey:container.name|default:container.uptime %}{% partialdef status inline %}{% list %}{% if not container.state.running %}<li>{% status container.state %}</li>{% endif %}<li><span class="cell-part">{{ up|default:container.status }}{% if container.check %}{% muted %},{% endmuted %}{% endif %}</span>{% if container.check %} {% muted css="cell-part" title=container.check.said|capfirst %}{{ container.check }}{% endmuted %}{% endif %}</li>{% endlist %}{% endpartialdef %}{% endwith %}</td>
           </tr>
         {% endfor %}
       </tbody>

@@ -1,5 +1,5 @@
 {% if cell.unavailable %}
-  {% muted css="nowrap" data_unavailable=True %}{{ cell.unavailable|breakable }}{% endmuted %}
+  {% muted css="nowrap" data_unavailable=True %}{{ cell.unavailable }}{% endmuted %}
 {% elif not rules_settable %}
   {% status cell.words tone=cell.tone pill=False %}
 {% else %}

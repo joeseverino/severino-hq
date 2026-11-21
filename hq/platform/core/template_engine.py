@@ -1,6 +1,7 @@
 """HQ's template engine: Django's, without the tags and filters that write a
-moment in a template's own words, and with loaders that refuse a shape a
-shared part draws, written by hand.
+moment in a template's own words, with loaders that refuse a shape a
+shared part draws, written by hand, and holding each value a template prints
+as text (``held_values``).
 
 A page shows a moment through ``when`` alone, so a template that asks for
 ``date``, ``time``, ``timesince``, ``timeuntil`` or ``{% now %}`` fails as it
@@ -84,7 +85,8 @@ def ours() -> tuple[str, ...]:
 
 class _Refusing(base.Loader):
     """A loader whose templates of HQ and its extensions draw no shared
-    part's shape by hand (``hand_drawn``)."""
+    part's shape by hand (``hand_drawn``), and hold each value an HTML one
+    prints as text (``held_values``)."""
 
     @override
     def get_contents(self, origin: Origin) -> str:
@@ -94,15 +96,7 @@ class _Refusing(base.Loader):
         name = os.fsdecode(origin.template_name)
         if found := hand_drawn(contents, name):
             raise TemplateSyntaxError("; ".join(f"{name}:{line}: {said}" for line, said in found))
-        return held_values.held(contents, lambda: self._plain_blocks(held_values.parent(contents), name))[0]
-
-    def _plain_blocks(self, parent: str | None, name: str) -> frozenset[str]:
-        """The blocks ``parent`` and the templates it extends open where text is plain."""
-
-        if not parent or parent == name:
-            return frozenset()
-        source = self.engine.get_template(parent).source
-        return held_values.held(source, lambda: self._plain_blocks(held_values.parent(source), parent))[1]
+        return held_values.held(contents, self.engine, name) if name.endswith(".html") else contents
 
 
 class FilesystemLoader(_Refusing, filesystem.Loader):

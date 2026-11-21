@@ -7,13 +7,13 @@
 {% comment %}What is said until the viewer mounts, then where it did not: two lines of one notice, which the page's sheet swaps.{% endcomment %}
 {% notice %}
   <p>Loading the reference.</p>
-  <p>The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p>
+  <p>The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url }}.</a></p>
 {% endnotice %}
 <div id="api-reference-root" data-vendored data-url="{{ document_url }}" data-longest-path="{{ longest_path }}"></div>
 {% comment %}What the script sets into a path as the viewer draws it: a place a line may end, and a hyphen held to the character after it.{% endcomment %}
 <template data-path-break><wbr></template>
 <template data-path-hyphen><span data-path-hyphen></span></template>
-<noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p></noscript>
+<noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url }}.</a></p></noscript>
 {% endblock %}
 {% block scripts_extra %}
   <script src="{% static 'js/api-reference.js' %}" {% csp_nonce_attr %} defer></script>

@@ -24,7 +24,7 @@ offers every type.
         <tr>
           <td>
             <strong>{% entity "resource"|entity_of:resource.key label=resource.name %}</strong>
-            {% list %}{% if resource.summary %}<li>{% muted css="cell-data" %}{{ resource.summary|breakable }}{% endmuted %}</li>{% endif %}
+            {% list %}{% if resource.summary %}<li>{% muted css="cell-data" %}{{ resource.summary }}{% endmuted %}</li>{% endif %}
             {% comment %}
             Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
@@ -56,8 +56,8 @@ is not a row, so an unchanged minute-by-minute result is one line.
       {% for change in changes %}
         <tr>
           <td>{% entity "resource"|entity_of:change.resource %}</td>
-          <td>{{ change.run.title|breakable }}</td>
-          <td>{% status change.run.word tone=change.run.tone %} {{ change.run.note|truncatechars:120|breakable }}</td>
+          <td>{{ change.run.title }}</td>
+          <td>{% status change.run.word tone=change.run.tone %} {{ change.run.note|truncatechars:120 }}</td>
           <td>{{ change.run.by.words|or_empty }}</td>
           <td class="date-col">{% muted %}{{ change.run.created_at|when }}{% endmuted %}</td>
         </tr>

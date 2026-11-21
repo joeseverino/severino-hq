@@ -6,17 +6,17 @@ the answer by its id.
 <div id="public-address" data-public-address data-fragment="{% url 'tool_public_address' %}" data-fragment-failure="The lookup could not be reached.">
 {% if reading %}
   {% facts %}
-    {% fact "Address" %}<code>{{ reading.address|breakable }}</code> {% muted %}IPv{{ reading.version|breakable }}{% if reading.note %}{% dot %}{{ reading.note|breakable }}{% endif %}{% endmuted %}{% endfact %}
-    {% if reading.hostnames %}{% fact "Reverse DNS" %}{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}{% endfact %}{% endif %}
+    {% fact "Address" %}<code>{{ reading.address }}</code> {% muted %}IPv{{ reading.version }}{% if reading.note %}{% dot %}{{ reading.note }}{% endif %}{% endmuted %}{% endfact %}
+    {% if reading.hostnames %}{% fact "Reverse DNS" %}{% for hostname in reading.hostnames %}<code>{{ hostname }}</code> {% endfor %}{% endfact %}{% endif %}
     {% if reading.allocation.organization or reading.allocation.name %}
-      {% fact "Allocation" %}{{ reading.allocation.organization|default:reading.allocation.name|breakable }}{% endfact %}
+      {% fact "Allocation" %}{{ reading.allocation.organization|default:reading.allocation.name }}{% endfact %}
       {% if reading.allocation.prefixes %}
-        {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}{% if reading.allocation.country %}{% muted %}{{ reading.allocation.country|breakable }}{% endmuted %}{% endif %}{% endfact %}
+        {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix }}</code> {% endfor %}{% if reading.allocation.country %}{% muted %}{{ reading.allocation.country }}{% endmuted %}{% endif %}{% endfact %}
       {% endif %}
     {% endif %}
   {% endfacts %}
 {% elif failure %}
-  {% muted element="p" %}{{ failure|breakable }}{% endmuted %}
+  {% muted element="p" %}{{ failure }}{% endmuted %}
 {% else %}
   {% muted element="p" %}Not looked up yet. Looking it up asks reverse DNS and the address registry.{% endmuted %}
 {% endif %}

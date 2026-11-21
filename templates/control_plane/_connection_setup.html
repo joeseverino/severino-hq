@@ -20,12 +20,12 @@ connected is in one place.
           {% steps numbered=True %}
             {% step %}
               <strong>Create</strong>
-              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Setup page" %}{% endif %}</p>
+              <p>{{ setup.create }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Setup page" %}{% endif %}</p>
               {% if setup.permissions %}
                 <p>Give it these permissions, and no others:</p>
-                {% list kind="codes" %}{% for permission in setup.permissions %}<li><code>{{ permission|breakable }}</code></li>{% endfor %}{% endlist %}
+                {% list kind="codes" %}{% for permission in setup.permissions %}<li><code>{{ permission }}</code></li>{% endfor %}{% endlist %}
               {% elif setup.credential == "coarse" %}
-                {% muted element="p" %}This is the whole account: {{ setup.label|breakable }} offers nothing narrower, so make it for HQ alone.{% endmuted %}
+                {% muted element="p" %}This is the whole account: {{ setup.label }} offers nothing narrower, so make it for HQ alone.{% endmuted %}
               {% endif %}
               {% if setup.mint %}
                 <p>Or have the script issue one with exactly these:</p>
@@ -34,16 +34,16 @@ connected is in one place.
             {% endstep %}
             {% step %}
               <strong>Store it</strong>
-              <p>In the vault HQ reads, as {{ setup.item|breakable }} with these fields:</p>
+              <p>In the vault HQ reads, as {{ setup.item }} with these fields:</p>
               {% table_region setup.label|add:" fields" %}
                 <table class="data-table">
                   <thead><tr>{% table_heading "Field" "identifier" local_sort=True %}{% table_heading "Value" "identifier" drop=2 local_sort=True %}{% table_heading "Description" css="optional-col" drop=1 local_sort=True %}</tr></thead>
                   <tbody>
                     {% for field in setup.fields %}
                       <tr>
-                        <td><code>{{ field.name|breakable }}</code></td>
-                        <td>{% if field.value %}<code>{{ field.value|breakable }}</code>{% elif field.secret %}{% muted %}the secret{% endmuted %}{% else %}{% muted %}yours{% endmuted %}{% endif %}</td>
-                        <td class="optional-col">{% muted %}{{ field.note|breakable }}{% endmuted %}</td>
+                        <td><code>{{ field.name }}</code></td>
+                        <td>{% if field.value %}<code>{{ field.value }}</code>{% elif field.secret %}{% muted %}the secret{% endmuted %}{% else %}{% muted %}yours{% endmuted %}{% endif %}</td>
+                        <td class="optional-col">{% muted %}{{ field.note }}{% endmuted %}</td>
                       </tr>
                     {% endfor %}
                   </tbody>
@@ -60,7 +60,7 @@ connected is in one place.
     {% endfor %}
     {% for group in others %}
       {% section group.spec.label %}
-        {% muted element="p" %}{{ group.spec.empty_message|breakable }}{% endmuted %}
+        {% muted element="p" %}{{ group.spec.empty_message }}{% endmuted %}
       {% aside %}{% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}{% entity group.spec.documentation_url|outside label="Docs" %}{% endif %}
       {% endsection %}
     {% endfor %}

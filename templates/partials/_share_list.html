@@ -12,8 +12,8 @@ line is cut, whole on hover.
   {% for row in rows %}
     <li class="bar-row">
       {% include "partials/_meter.html" with value=row.share max=100 only %}
-      <span class="bar-label" title="{{ row.label }}">{{ row.label|breakable }}</span>
-      <span class="bar-value">{{ row.figure|breakable }}</span>
+      <span class="bar-label" title="{{ row.label }}">{{ row.label }}</span>
+      <span class="bar-value">{{ row.figure }}</span>
     </li>
   {% endfor %}
 </ol>

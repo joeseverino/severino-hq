@@ -23,17 +23,17 @@ is Field and Value alone.
         <tbody>
           {% if body.head %}
           <tr id="{{ body.folds }}"{% if body.rows %} data-folds{% endif %}{% if body.attention %} class="tone-attention" data-attention{% endif %}>
-            <th>{% if body.rows %}{% include "partials/_row_fold.html" with label=body.head.label only %}{% endif %}{{ body.head.label|breakable }}</th>
-            {% if preview.compares %}<td class="cell-data" data-side="before">{% if body.head.before %}{{ body.head.before|breakable }}{% elif body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
-            <td class="cell-data" data-side="after">{% if body.head.after %}{{ body.head.after|breakable }}{% elif body.whole %}{% empty_value %}{% endif %}</td>
+            <th>{% if body.rows %}{% include "partials/_row_fold.html" with label=body.head.label only %}{% endif %}{{ body.head.label }}</th>
+            {% if preview.compares %}<td class="cell-data" data-side="before">{% if body.head.before %}{{ body.head.before }}{% elif body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
+            <td class="cell-data" data-side="after">{% if body.head.after %}{{ body.head.after }}{% elif body.whole %}{% empty_value %}{% endif %}</td>
             {% if preview.compares %}<td>{% change_status body.head.change preview %}</td>{% endif %}
           </tr>
           {% endif %}
           {% for row in body.rows %}
           <tr{% if body.head %} data-folded="{{ body.folds }}"{% elif body.attention %} class="tone-attention" data-attention{% endif %}>
-            <th>{{ row.label|breakable }}</th>
-            {% if preview.compares %}<td class="cell-data" data-side="before">{% if row.redacted and row.change != "added" %}{% muted %}redacted{% endmuted %}{% elif row.before %}{{ row.before|breakable }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
-            <td class="cell-data" data-side="after">{% if row.redacted and row.change != "removed" %}{% muted %}redacted{% endmuted %}{% elif row.after %}{{ row.after|breakable }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>
+            <th>{{ row.label }}</th>
+            {% if preview.compares %}<td class="cell-data" data-side="before">{% if row.redacted and row.change != "added" %}{% muted %}redacted{% endmuted %}{% elif row.before %}{{ row.before }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
+            <td class="cell-data" data-side="after">{% if row.redacted and row.change != "removed" %}{% muted %}redacted{% endmuted %}{% elif row.after %}{{ row.after }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>
             {% if preview.compares %}<td>{% if not body.whole %}{% change_status row.change preview %}{% endif %}</td>{% endif %}
           </tr>
           {% endfor %}
@@ -43,9 +43,9 @@ is Field and Value alone.
     {% endtable_region %}
   {% endif %}
   {% if preview.lines %}
-    <pre tabindex="0"><code>{% for line in preview.lines %}{{ line|breakable }}
+    <pre tabindex="0"><code>{% for line in preview.lines %}{{ line }}
 {% endfor %}</code></pre>
   {% endif %}
-{% foot %}{% if preview.unchanged %}Unchanged: {{ preview.unchanged|join:", "|breakable }}{% endif %}
+{% foot %}{% if preview.unchanged %}Unchanged: {{ preview.unchanged|join:", " }}{% endif %}
 {% endsection %}
 {% endif %}

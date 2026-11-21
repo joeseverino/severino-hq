@@ -10,7 +10,7 @@
 
   {% if entry.warnings %}
     {% notice tone="warning" %}
-      {% if entry.warnings|length == 1 %}{{ entry.warnings.0|breakable }}{% else %}{% list kind="prose" %}{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}{% endlist %}{% endif %}
+      {% if entry.warnings|length == 1 %}{{ entry.warnings.0 }}{% else %}{% list kind="prose" %}{% for warning in entry.warnings %}<li>{{ warning }}</li>{% endfor %}{% endlist %}{% endif %}
     {% endnotice %}
   {% endif %}
   {% change_table entry.preview %}
@@ -22,7 +22,7 @@
     {% endbutton_row %}
   {% endif %}
 {% aside %}
-  Asked {% if entry.who.door %}{{ entry.who.door|breakable }} {% endif %}{{ entry.held.created_at|when_text:"ago" }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
-  {% else %}{% dot %}<strong>{{ entry.held.get_state_display|breakable }}</strong>{% if entry.decided_by %} by {{ entry.decided_by.words|breakable }}{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|when_text:"ago" }}{% endif %}
+  Asked {% if entry.who.door %}{{ entry.who.door }} {% endif %}{{ entry.held.created_at|when_text:"ago" }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
+  {% else %}{% dot %}<strong>{{ entry.held.get_state_display }}</strong>{% if entry.decided_by %} by {{ entry.decided_by.words }}{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|when_text:"ago" }}{% endif %}
   {% endif %}
 {% endsection %}

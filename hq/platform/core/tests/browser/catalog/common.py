@@ -5,7 +5,7 @@ from typing import override
 from unittest import mock
 
 from django.forms import BaseForm
-from django.template import Context, Template
+from django.template import Context
 from django.template.defaulttags import CsrfTokenNode
 from django.template.loader import render_to_string
 from django.test import RequestFactory, override_settings
@@ -17,6 +17,7 @@ from django.utils.text import slugify
 from hq.platform.application import references
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page
+from hq.platform.core import held_values
 from hq.platform.core.part_examples import DRAWN_AT
 from hq.platform.core.template_parts import Example
 from hq.platform.core.templatetags import write_tags
@@ -63,7 +64,7 @@ def alone(example: Example, name: str) -> str:
         for form in (value for value in given.values() if isinstance(value, BaseForm)):
             form.auto_id = f"{slugify(name)}-%s"
         context = _Asked(given, example.address) if example.address else Context(given)
-        return Template(example.template).render(context)
+        return held_values.template(example.template).render(context)
 
 
 def page(example: Example, name: str) -> str:

@@ -27,9 +27,9 @@ which shares the "Runs on" column with the origin it would duplicate.
         <tbody>
           {% for service, actions in unmanaged_rows %}
             <tr>
-              <td><strong>{{ service.hostname|breakable }}</strong></td>
+              <td><strong>{{ service.hostname }}</strong></td>
               {% for id, label, value in service.facets %}
-                <td>{% present value %}<code>{{ value|breakable }}</code>{% endpresent %}</td>
+                <td>{% present value %}<code>{{ value }}</code>{% endpresent %}</td>
               {% endfor %}
               {% if actions %}{% row_actions actions %}{% else %}<td>{% muted %}Read only{% endmuted %}</td>{% endif %}
             </tr>
