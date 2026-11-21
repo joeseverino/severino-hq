@@ -77,15 +77,14 @@ class ProvidedTests(TestCase):
         self.assertEqual(declared.reads, ())
         self.assertIn(UpstreamReading._meta.db_table, declared.tables)
 
-    def test_it_stands_a_minute_because_the_host_cannot_see_its_clock(self):
-        items = provided("extension.example.unseen.attention", _counting_items)
+    def test_one_that_reads_no_clock_stands_until_a_table_it_read_is_written(self):
+        items = provided("extension.example.clockless.attention", _counting_items)
 
         with frozen(MOMENT), projection_scope():
             items()
             until = derivations.standing(items).until
 
-        self.assertTrue(DERIVATIONS["extension.example.unseen.attention"].unseen)
-        self.assertEqual(until, MOMENT + derivations.UNSEEN)
+        self.assertIsNone(until)
 
     def test_a_demo_is_answered_apart_from_the_real_reading(self):
         items = provided("extension.example.demo.attention", lambda: (showing_demo(), _readings()))

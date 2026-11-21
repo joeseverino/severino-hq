@@ -461,10 +461,10 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
 # and the provider: the answer is kept until a table the provider was seen to
 # read is written, and an extension is cached without knowing a cache exists.
 #
-# The host cannot see where a provider reads the clock, so each is ``unseen``:
-# its answer stands a minute at most and never past local midnight. It varies
-# by the one thing a provider is given that is not a row or the clock: whether
-# the reader asked for a demo.
+# What a provider reads is learned as it runs, the clock included: a day it
+# reads holds the answer until local midnight, an instant for a minute. It
+# varies by the one thing a provider is given that is not a row or the clock:
+# whether the reader asked for a demo.
 
 # The providers answered with one value for everybody, by field.
 DERIVED_PROVIDERS = ("attention", "dashboard", "overview")
@@ -574,9 +574,9 @@ def provided(name: str, provider: Callable[..., Any], *, ahead: int | None = Non
             return _kept(_PROVIDERS[name](*args))
 
         declare = (
-            derivation(name, reads=(), vary=vary, unseen=True)
+            derivation(name, reads=(), vary=vary, learns=True)
             if ahead is None
-            else derivation(name, reads=(), vary=vary, unseen=True, ahead=ahead)
+            else derivation(name, reads=(), vary=vary, learns=True, ahead=ahead)
         )
         answer = _ANSWERS[name] = declare(compute)
     return answer

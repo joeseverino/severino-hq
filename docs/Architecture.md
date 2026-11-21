@@ -464,12 +464,14 @@ asked through a derivation the host declares as it meets the provider,
 learned from the statements the provider runs, in a projection of its own. It
 varies by whether the reader asked for a demo and by which function answers.
 
-The host cannot follow an extension to the clock, so the answer is `unseen`. It
-stands until what it asked of the helpers changes, at most one minute
-(`UNSEEN`), and never past local midnight. A count of days turns at midnight,
-and nothing HQ words is finer than a minute. So that bound keeps every
-statement within one unit of the truth. Whatever asks an unseen derivation
-stands no longer than it does. The rules an extension keeps are in
+An extension's code is not the host's to hold to the clock functions above,
+so Django's own clock says what it was asked. Read inside a derivation, the day
+(`timezone.localdate()`) holds the answer until local midnight, and the instant
+(`timezone.now()`, `localtime()`) for one minute (`UNSEEN`), the finest unit
+HQ words an age in, never past local midnight. What reads neither stands until
+a table it reads is written. Django's own machinery (the cache's expiry) reads
+the clock for itself and is not counted. Whatever asks a derivation stands no
+longer than it does. The rules an extension keeps are in
 [Extensions](Plugins.md#derived-reads).
 
 **Asked again when the change lands.** The controller reports every few

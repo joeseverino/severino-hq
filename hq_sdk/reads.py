@@ -28,13 +28,14 @@ def derivation[**P, T](
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Declare an extension's function as a derived fact of the tables it reads.
 
-    The host's own, declared as one whose reads of the clock it cannot see. The
-    name starts with the extension's own; ``reads`` names the models it queries,
-    and any beyond them is learned; its arguments are plain values, or ``vary``
+    The host's own, which learns what it reads as it runs: any table beyond
+    ``reads``, and the clock, a day holding the answer until local midnight and
+    an instant for a minute. The name starts with the extension's own; ``reads``
+    names the models it queries; its arguments are plain values, or ``vary``
     says what of them the answer depends on; what it returns must pickle.
     """
 
-    return _derivations.derivation(name, reads=reads, vary=vary, unseen=True)
+    return _derivations.derivation(name, reads=reads, vary=vary, learns=True)
 
 
 __all__ = [

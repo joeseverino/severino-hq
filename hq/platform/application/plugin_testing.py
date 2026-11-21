@@ -14,7 +14,7 @@ import types
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from functools import partial
 from typing import Any
 from unittest import mock
@@ -38,8 +38,8 @@ from .ui import DomainOverview
 lazy from . import pages, plugins
 lazy from .connection_contracts import ConnectionSpec
 lazy from .derivation_testing import frozen
-lazy from .derivations import counting
-lazy from .projection import projection_scope
+lazy from .derivations import UNSEEN, counting
+lazy from .projection import projection_scope, read_once
 lazy from .security import WEB_INTERFACE, Principal
 lazy from .web_writes import RETRY_KEY_FIELD, new_key
 
@@ -170,8 +170,9 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
     or whose answer is not what its kind must be.
 
     Named when what it returned does not pickle, comes back unequal to what was
-    stored, or is built anew around something that cannot be compared
-    (docs/Plugins.md#derived-reads), and when a page would show it as
+    stored, is built anew around something that cannot be compared, or stands
+    a minute because it reads the instant (docs/Plugins.md#derived-reads),
+    and when a page would show it as
     unreadable: an attention item, card or overview the host refuses. Call it
     with the extension's records in
     place; ``window`` is the days calendar sources are asked for, the year
@@ -196,12 +197,17 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
             asked[f"calendar {source.id}"] = partial(source.events, first, last)
         return asked
 
-    # Held, so an answer that lapses with the clock is not mistaken for one
-    # that was never kept.
-    with frozen():
-        with projection_scope():
-            stored = {name: ask() for name, ask in questions().items()}
-        again = _refused(plugin_id, stored)
+    # Held at noon, so an answer that lapses with the clock is not mistaken
+    # for one that was never kept, nor a day's for an instant's.
+    with frozen(timezone.make_aware(datetime.combine(timezone.localdate(), time(12)))) as noon:
+        stored, again = {}, []
+        for name, ask in questions().items():
+            with projection_scope():
+                stored[name] = ask()
+                held = read_once("derivation.answered", dict).values()
+            if any(until and until <= noon + UNSEEN for until in held):
+                again.append(f"{name}: derived again every minute, it reads the instant; read the day")
+        again += _refused(plugin_id, stored)
         for name, ask in questions().items():
             with projection_scope(), counting() as (ran, served):
                 answer = ask()

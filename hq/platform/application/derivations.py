@@ -3,15 +3,17 @@
 A derivation is a function of the rows of the tables it reads, its arguments
 and the clock, declared once with ``@derivation`` and answered from the
 projection in progress, then the ``derived`` cache, then by running it. Its
-keys, the revisions, the clock, ``unseen`` answers and asking ahead are
+keys, the revisions, the clock, learned reads and asking ahead are
 docs/Architecture.md#derived-once-per-change.
 """
 
 import hashlib
 import logging
 import math
+import os
 import pickle
 import re
+import sys
 import threading
 import time as monotonic_time
 from collections import Counter
@@ -21,8 +23,11 @@ from contextvars import Context, ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from functools import wraps
+from pathlib import Path
+from types import FrameType
 from typing import Any
 
+import django
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 lazy from django.apps import apps
@@ -38,16 +43,18 @@ from .projection import projection_scope, read_once, seeded
 logger = logging.getLogger("severino.derivations")
 
 
-# The clock, as the module holds it. Derivations reach it only through the
-# functions below, which is what lets a test forbid every other way in, and
-# ``derivation_testing.frozen`` hold it still.
+# The clock, as the module holds it. The host's derivations reach it only
+# through the functions below, which is what lets a test forbid every other way
+# in, and ``derivation_testing.frozen`` hold it still.
 clock = timezone.now
+_localdate = timezone.localdate
 
 
 # The longest a stored value is kept, in seconds; its key outlives its use.
 _LONGEST = 24 * 60 * 60
-# The longest an answer stands when its computation may read the clock where
-# this module cannot see: the finest unit HQ words an age in.
+# The longest an answer stands when its computation reads the instant itself,
+# through Django's clock (``timezone.now``, ``localtime()``): the finest unit
+# HQ words an age in.
 UNSEEN = timedelta(minutes=1)
 # How many ways of asking one derivation are asked again ahead of a request
 # unless it says otherwise, and how long after a request last asked that way.
@@ -194,6 +201,53 @@ def _midnight_after(local: datetime) -> datetime:
     return timezone.make_aware(following, timezone.get_current_timezone())
 
 
+# ----- Django's clock, read inside a derivation ----------------------------------
+#
+# An extension's code is not the host's to hold to the functions above, so
+# Django's own clock says what it was asked: read inside a derivation, the day
+# (``localdate()``) holds the answer until local midnight and the instant
+# (``now()``, ``localtime()``) for one ``UNSEEN``. What a derivation reads
+# nowhere else stands until a table it reads is written. Django's own
+# machinery (the cache's expiry, a session) reads the clock for itself, never
+# for the answer, and is not counted.
+
+_DJANGO = str(Path(django.__file__).parent) + os.sep
+_TIMEZONE = timezone.__file__
+
+
+def _read_for_the_answer() -> bool:
+    """Whether the code that read Django's clock is a derivation's own."""
+
+    caller: FrameType | None = sys._getframe(2)
+    while caller is not None and caller.f_code.co_filename == _TIMEZONE:
+        caller = caller.f_back
+    return caller is not None and not caller.f_code.co_filename.startswith(_DJANGO)
+
+
+def _now() -> datetime:
+    """``django.utils.timezone.now``, held to the instant inside a derivation."""
+
+    if _FRAME.get() is None or not _read_for_the_answer():
+        return _django_now()
+    now = clock()
+    local = timezone.localtime(now)
+    holds_until(min(local + UNSEEN, _midnight_after(local)))
+    return now
+
+
+def _local_day(value: datetime | None = None, timezone: Any = None) -> date:
+    """``django.utils.timezone.localdate``, held to the day inside a derivation."""
+
+    if value is None and timezone is None and _FRAME.get() is not None and _read_for_the_answer():
+        return today()
+    return _localdate(value, timezone)
+
+
+_django_now = clock
+timezone.now = _now
+timezone.localdate = _local_day
+
+
 # ----- Declaring and answering -------------------------------------------------
 
 
@@ -203,8 +257,9 @@ class Derivation:
     reads: tuple[str, ...]
     compute: Callable[..., Any]
     vary: Callable[..., Any] | None
-    # Whether the computation may read the clock where this module cannot see.
-    unseen: bool = False
+    # Whether what the computation reads is learned from the statements it
+    # runs: an extension's, whose tables the host cannot name.
+    learns: bool = False
     # How many ways a request asked it are asked again ahead of the next one.
     ahead: int = REMEMBERED
     _tables: list[frozenset[str]] = field(default_factory=list, compare=False, repr=False)
@@ -245,7 +300,7 @@ def derivation[**P, T](
     *,
     reads: tuple[str, ...],
     vary: Callable[..., Any] | None = None,
-    unseen: bool = False,
+    learns: bool = False,
     ahead: int = REMEMBERED,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Declare a function as a derived fact of the tables in ``reads``.
@@ -253,14 +308,14 @@ def derivation[**P, T](
     ``reads`` names every model it queries, directly or through another
     derivation, as ``app_label.Model``; ``vary`` maps the call's arguments to
     what the answer depends on, with a stable ``repr`` (left out, they must be
-    plain values). ``unseen`` bounds its answer by ``UNSEEN``, as it may read the
-    clock out of sight; ``ahead`` is how many ways of asking are kept current.
+    plain values). ``learns`` keys it on every table it is seen to read besides;
+    ``ahead`` is how many ways of asking are kept current.
     """
 
     def declare(function: Callable[P, T]) -> Callable[P, T]:
         if name in DERIVATIONS:
             raise ImproperlyConfigured(f"Derivation {name!r} is declared twice.")
-        declared = Derivation(name, tuple(sorted(set(reads))), function, vary, unseen, ahead)
+        declared = Derivation(name, tuple(sorted(set(reads))), function, vary, learns, ahead)
         DERIVATIONS[name] = declared
 
         @wraps(function)
@@ -489,18 +544,15 @@ def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, date
     was a change to a table it had read, so the stored answer was sound.
     """
 
-    frame = _Frame(declared.tables, learns=declared.unseen)
+    frame = _Frame(declared.tables, learns=declared.learns)
     with _FRAME.set(frame):
-        # What an unseen computation reads is learned from the statements it
+        # What a learning computation reads, the clock included, is seen as it
         # runs, so it runs in a projection of its own: a read another part of
         # the request already made is made again here, where it is seen.
-        apart = projection_scope(seeded(), apart=True) if declared.unseen else nullcontext()
+        apart = projection_scope(seeded(), apart=True) if declared.learns else nullcontext()
         with apart, connection.execute_wrapper(frame.note):
             value = declared.compute(*args, **kwargs)
     COMPUTED[declared.name] += 1
-    if declared.unseen:
-        local = timezone.localtime(clock())
-        frame.hold_until(min(local + UNSEEN, _midnight_after(local)))
     learned = declared.learn(frame.undeclared)
     if learned:
         UNDECLARED.setdefault(declared.name, set()).update(frame.undeclared)

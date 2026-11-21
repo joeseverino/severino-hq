@@ -1258,14 +1258,16 @@ is true:
   tuples, dates and decimals do; a lambda, a generator held in the value, an
   open file or a lazy queryset does not. An answer that cannot be kept is
   derived on every request, and the log says so.
-- **Expect the clock a minute late at most.** HQ cannot see where an extension
-  reads the clock, so a kept answer stands one minute and never past local
-  midnight. A count of days turns on time; an age in minutes may be a minute
-  behind.
+- **Read the day, not the instant.** HQ sees the clock read through Django
+  (`timezone.now()`, `localtime()`, `localdate()`) or `hq_sdk.reads`. A day
+  holds the answer until local midnight; an instant holds it one minute, so an
+  answer that reads `timezone.now()` is derived again every minute while
+  anybody uses HQ. A window of days is `today()` and `day_span`. HQ cannot see
+  `date.today()` or `datetime.now()`, whose answer stands until a write.
 
 `hq_sdk.testing.providers_derived_again(plugin_id)` holds an extension to them:
 with its records in place, it names every provider not answered from what is
-stored.
+stored, or derived again every minute because it reads the instant.
 
 ```python
 def test_every_provider_is_answered_from_what_is_stored(self):
