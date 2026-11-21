@@ -129,6 +129,7 @@ def _headings(table: DataTable) -> list[tuple[dict[str, Any], CellFacts]]:
                     "css": column.css,
                     "sort": column.sort,
                     "hidden": column.hidden or not column.label,
+                    "sorts": column.sorts,
                 },
                 CellFacts(
                     classes=tuple(column.css.split()), kind=column_kind(column.kind, column.css), drop=column.drop
@@ -151,7 +152,9 @@ def _heading(sorting: dict[str, Any], column: dict[str, Any], facts: CellFacts, 
     its rows can be put in order."""
 
     css = " ".join([*column.get("css", "").split(), *facts.added])
-    drawn = table_heading(sorting, **{**column, "css": css}, local_sort=None if laid.sorts else False)
+    sorts = laid.sorts and column.get("sorts", True)
+    said = {name: value for name, value in column.items() if name != "sorts"}
+    drawn = table_heading(sorting, **{**said, "css": css}, local_sort=None if sorts else False)
     return {**drawn, "marks": mark_safe("".join(facts.marks))}  # noqa: S308 - the layout's own attributes
 
 

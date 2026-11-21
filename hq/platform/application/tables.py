@@ -317,6 +317,9 @@ class TableColumn:
     cell: Callable[[Any], Cell] | None = None
     # Its heading unseen, its words still said to a screen reader.
     hidden: bool = False
+    # False for a column whose values have no order, such as prose, in a
+    # table whose other columns sort on the page.
+    sorts: bool = True
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "kind", column_kind(self.kind, self.css, otherwise=""))
