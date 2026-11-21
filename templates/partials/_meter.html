@@ -1,0 +1,13 @@
+{% comment %}
+A proportion as a bar: `value` of `max` as one `<meter>`, which the browser
+draws from its value, so the template writes no width:
+
+  {% include "partials/_meter.html" with value=row.share max=100 only %}
+
+Given `marks` instead, each is one segment in its `tone`, and a segment whose
+`group` differs from the one before stands a gap apart, so a check sits in the
+same place on every row. The segments are one control, named and tipped by
+`label`:
+
+  {% include "partials/_meter.html" with marks=posture.results label=posture.summary only %}
+{% endcomment %}{% if marks %}<span class="meter-marks" data-hit role="img" tabindex="0" aria-label="{{ label }}" data-tip="{{ label }}">{% for mark in marks %}{% ifchanged mark.group %}{% if not forloop.first %}<span class="meter-break" aria-hidden="true"></span>{% endif %}{% endifchanged %}<span class="meter-mark {{ mark.tone|tone_class }}" aria-hidden="true"></span>{% endfor %}</span>{% else %}<meter class="meter" min="0" max="{{ max }}" value="{{ value }}"{% if label %} aria-label="{{ label }}"{% else %} aria-hidden="true"{% endif %}></meter>{% endif %}

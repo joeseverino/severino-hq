@@ -87,6 +87,13 @@
   :where(.figure-dot, .cadence-mark, .calendar-dot:is(.is-missed, .is-planned), .dropzone) { border: 1.5px solid var(--line); }
   :where(.cadence-mark.is-no-data, .calendar-dot.is-planned, .dropzone) { border-style: dashed; }
   :where(.switch-knob) { box-shadow: var(--shadow-knob); } :where(.menu-theme-option[aria-pressed="true"]) { box-shadow: var(--shadow-sm); }
+  /* A menu row that toggles (`{% button look="menu" pressed=... %}`, the
+     calendar's sources): its box drawn before its words, in the series color
+     it stands in, filled while it is pressed. */
+  .btn.menu[aria-pressed] { gap: var(--space-3); }
+  .btn.menu[aria-pressed]::before { content: ""; flex: none; inline-size: 14px; block-size: 14px; border-radius: var(--radius-sm); outline: 1.5px solid var(--slot, var(--accent)); outline-offset: -1.5px; }
+  .btn.menu[aria-pressed="true"] { color: var(--ink); }
+  .btn.menu[aria-pressed="true"]::before { background: var(--slot, var(--accent)); }
   /* Hairlines a run of cells draws as shadows, adding nothing to a cell's
      size: a band's into the gaps it clips (figures.css), over a cell's frame. */
   :where([data-band] > *) { box-shadow: var(--band-rules, -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2)); }

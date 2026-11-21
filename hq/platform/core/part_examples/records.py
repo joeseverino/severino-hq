@@ -697,6 +697,28 @@ REPOSITORY_POSTURES = Example(
 )
 
 
+# A share of the largest, then one too small to round up, which still shows.
+METER = Example(
+    '{% include "partials/_meter.html" with value=64 max=100 only %}'
+    '{% include "partials/_meter.html" with value=0.4 max=100 only %}'
+)
+METER_STATES = {
+    # Checks of two groups, each met, unmet or not read, as a repository's are.
+    "marks": Example(
+        '{% include "partials/_meter.html" with marks=marks label="4 of 5 checks pass; example is off" only %}',
+        {
+            "marks": (
+                {"tone": Tone.GOOD, "group": "every"},
+                {"tone": Tone.GOOD, "group": "every"},
+                {"tone": Tone.SERIOUS, "group": "every"},
+                {"tone": Tone.GOOD, "group": "public"},
+                {"tone": Tone.NEUTRAL, "group": "public"},
+            )
+        },
+    ),
+}
+
+
 CHANGE_STATES = {
     # A value and the one that replaces it: as words, and as a cell's own
     # identifiers, one pair linking outside HQ and one too long to share a

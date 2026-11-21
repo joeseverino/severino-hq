@@ -33,9 +33,9 @@ ENTRIES = {
     "status/mark": Example(
         '{% section "Example hops" %}'
         '<p>example.com {% status "Example certificate, confirmed" tone="good" pill=False icon="check-circle"'
-        ' shown=False tip="Confirmed" data_hit=True %}</p>'
+        ' shown=False tip="Confirmed" %}</p>'
         '<p>example.org {% status "Example certificate" tone="neutral" pill=False icon="check-circle"'
-        ' shown=False tip="Not confirmed yet" data_hit=True %}</p>'
+        ' shown=False tip="Not confirmed yet" %}</p>'
         "{% endsection %}"
     ),
     # The names a record carries, as chips beside its name: each as written.

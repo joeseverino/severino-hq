@@ -35,10 +35,13 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_identity.html` | `name`, `tip`, `tone`, `url` | `about`, `badge`, `handle`, `picture` | An account's picture, name and handle. |
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
+| `partials/_meter.html` | `label`, `max`, `value` | `marks` | A proportion as a bar, or as a segment for each of what it counts. |
 | `partials/_reading_age.html` | nothing | `at`, `reading`, `unread` | When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none. |
 | `partials/_record_list.html` | `rows` | `empty`, `label`, `whole_rows` | A compact list of records, from `hq_sdk.ui.ListRow`. |
 | `partials/_row_field.html` | `field` | nothing | One field of a form whose fields stand one to a row of a table, in its row. |
+| `partials/_share_list.html` | `rows` | nothing | Ranked shares, each a bar against the largest. |
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
+| `partials/_toggle_set.html` | `legend`, `set` | `name`, `toggles` | A set of toggles that filter what a view shows. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 | `partials/_work_queue.html` | nothing | `empty`, `fold`, `items` | What waits on the operator, each row what wants doing and why, or that nothing does. |
 
@@ -782,7 +785,8 @@ three. *Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_s
 
 ### partials/_calendar_sources.html (host only)
 
-Each source is a `{% button %}` with `post` and `pressed`, in its series color.
+A `{% list %}` of the sources, each a menu row's `{% button %}` with `post` and `pressed`, its box
+in its series color, or its swatch beside its name for a reader who may not choose.
 
 ### partials/_change.html (host only)
 
@@ -900,6 +904,15 @@ Every free text a person wrote (a record's notes, a message sent through the con
 part, over the text's runs that `application.where_it_runs.named_links` finds: each name a link as
 every mention is, and its line breaks kept.
 
+### partials/_meter.html
+
+**A proportion is a meter.** A share of a whole, or of the largest of several, is a `<meter>` of its
+`value` against its `max`, which the browser draws from its value, so no template writes a width; a
+share too small to round up still shows. Given `marks` (each with a `tone`, and a `group`), it is a
+segment for each in its tone instead, a gap where the group changes, every segment one width, so a
+column of meters lines each mark up under the same mark above. The segments are one control, its
+`label` both what it says aloud and its tip.
+
 ### partials/_modal.html (host only)
 
 **About text opens in a dialog.** Long reference text a page explains itself with (a server's
@@ -1001,11 +1014,11 @@ chip (`{% status chip=True %}`) after its line. A list of places to go, as searc
 machines, pages and commands it found, is included `with whole_rows=True`. Each row is its title's
 link, stretched over the row, so the row is one target and its markup stays a link around a name.
 
-### partials/_share_list.html (host only)
+### partials/_share_list.html
 
 A ranked list of shares, as the pages and sources of a site's traffic are: each row its label and
 figure on one line over a bar of its size against the largest row's, so a long tail still reads
-apart. The bar is a `<meter>`, and a label past its line is cut, whole on hover.
+apart. The bar is `partials/_meter.html`'s, and a label past its line is cut, whole on hover.
 
 ### partials/_site_header.html (host only)
 
@@ -1028,7 +1041,7 @@ the viewport). The browser dismisses it on an outside press or Escape, and the f
 shows it again after a swap that replaces it, found by its id, so a ticked box leaves its menu
 open. No script places or closes it.
 
-### partials/_toggle_set.html (host only)
+### partials/_toggle_set.html
 
 No chip walls: a set of on-or-off choices is this part, checkboxes in a row of their own words
 under one hidden legend, named (`name=`) when Filter sends them and unnamed when the page's script
@@ -1181,9 +1194,9 @@ A row draws it through `{% row_actions gap=... %}` and a form through its `gap`.
 
 ### projects/_repository_postures.html (host only)
 
-Repositories against their standard: a row each of its name, a meter with a segment per check, its
-score and who can reach it. The meter follows the name column, so one check sits in the same place
-on every row.
+Repositories against their standard, a table's row each: its name over a meter with a segment per
+check, then its score and who can reach it. Every meter starts where its name does, so one check
+sits in the same place on every row.
 
 ### row_actions
 

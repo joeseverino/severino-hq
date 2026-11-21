@@ -104,19 +104,7 @@
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-2) var(--space-5);
   font-size: var(--text-sm); min-inline-size: 0;
 }
-/* A `<meter>`, so the browser draws the share from its value and the template
-   writes no width; this decides how a share looks. The floor keeps a share
-   too small to round up visible. */
-.bar-track {
-  appearance: none; grid-row: 2; grid-column: 1 / -1; inline-size: 100%; block-size: 4px;
-  border-radius: var(--radius-sm); background: var(--bg-tint);
-}
-/* Blink sets the bar in the middle half of the grid its meter draws in
-   (`::-webkit-meter-inner-element`, rows 1fr 2fr 1fr in its html.css), so
-   the bar spans every row. */
-.bar-track::-webkit-meter-bar { grid-row: 1 / -1; block-size: 100%; border-radius: inherit; background: transparent; }
-.bar-track::-webkit-meter-optimum-value { min-inline-size: 2px; border-radius: var(--radius-sm); background: var(--accent-2); }
-.bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: var(--radius-sm); background: var(--accent-2); }
+.bar-row > .meter { grid-row: 2; grid-column: 1 / -1; }
 .bar-value { font-feature-settings: "tnum"; font-weight: 650; }
 
 /* A long form's closing row: drawn in its place from the first draw, so

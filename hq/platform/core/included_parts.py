@@ -245,6 +245,7 @@ TOPOLOGY_MAP = _part(
     *("topology-node-select", "topology-node-title", "topology-workspace", "relation-arrow", "relation-kind"),
     *("relation-link", "relation-list", "relation-other", "relation-reading", "relation-values", "relation-verb"),
     pieces=("partials/_relation_list.html",),
+    drawing_of="control_plane/topology.html",
     rules="""
     **One map.** A graph is drawn by this part from what the map's view (`drawn`) hands it: the filter bar
     that narrows it, a lane of cards for each kind, and the one panel beside the lanes that holds the
@@ -254,6 +255,23 @@ TOPOLOGY_MAP = _part(
     `partials/_relationships.html` instead. The `graph/` examples draw both from one example graph.
     """,
     example=graph.TOPOLOGY_MAP,
+)
+
+METER = _part(
+    "meter",
+    "A proportion as a bar, or as a segment for each of what it counts.",
+    *("meter", "meter-break", "meter-mark", "meter-marks"),
+    public=True,
+    rules="""
+    **A proportion is a meter.** A share of a whole, or of the largest of several, is a `<meter>` of its
+    `value` against its `max`, which the browser draws from its value, so no template writes a width; a
+    share too small to round up still shows. Given `marks` (each with a `tone`, and a `group`), it is a
+    segment for each in its tone instead, a gap where the group changes, every segment one width, so a
+    column of meters lines each mark up under the same mark above. The segments are one control, its
+    `label` both what it says aloud and its tip.
+    """,
+    example=records.METER,
+    states=records.METER_STATES,
 )
 
 PARTS = (
@@ -331,10 +349,10 @@ PARTS = (
     _part(
         "calendar_sources",
         "The calendar's sources, each a toggle with its color swatch.",
-        *("calendar-source", "calendar-source-failure", "calendar-source-note", "calendar-sources"),
         draws=(CHART, MONTH_GRID),
         rules="""
-        Each source is a `{% button %}` with `post` and `pressed`, in its series color.
+        A `{% list %}` of the sources, each a menu row's `{% button %}` with `post` and `pressed`, its box
+        in its series color, or its swatch beside its name for a reader who may not choose.
         """,
         example=records.CALENDAR_SOURCES,
     ),
@@ -708,12 +726,13 @@ PARTS = (
         "bar-label",
         "bar-list",
         "bar-row",
-        "bar-track",
         "bar-value",
+        draws=(METER,),
+        public=True,
         rules="""
         A ranked list of shares, as the pages and sources of a site's traffic are: each row its label and
         figure on one line over a bar of its size against the largest row's, so a long tail still reads
-        apart. The bar is a `<meter>`, and a label past its line is cut, whole on hover.
+        apart. The bar is `partials/_meter.html`'s, and a label past its line is cut, whole on hover.
         """,
         example=charts.SHARE_LIST,
     ),
@@ -773,6 +792,7 @@ PARTS = (
         "toggle_set",
         "A set of toggles that filter what a view shows.",
         "toggle-set",
+        public=True,
         rules="""
         No chip walls: a set of on-or-off choices is this part, checkboxes in a row of their own words
         under one hidden legend, named (`name=`) when Filter sends them and unnamed when the page's script
@@ -822,19 +842,16 @@ PARTS = (
         """,
         states=pages.VISIT_REFRESH_STATES,
     ),
+    METER,
     Part(
         name="",
         partial="projects/_repository_postures.html",
         about="Each repository's checks as a meter of those met.",
-        classes=(
-            *("posture-access", "posture-meter", "posture-meter-break", "posture-repo-name"),
-            *("posture-repos", "posture-score"),
-        ),
-        draws=(MONTH_GRID,),
+        draws=(METER,),
         rules="""
-        Repositories against their standard: a row each of its name, a meter with a segment per check, its
-        score and who can reach it. The meter follows the name column, so one check sits in the same place
-        on every row.
+        Repositories against their standard, a table's row each: its name over a meter with a segment per
+        check, then its score and who can reach it. Every meter starts where its name does, so one check
+        sits in the same place on every row.
         """,
         example=records.REPOSITORY_POSTURES,
     ),

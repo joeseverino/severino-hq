@@ -106,6 +106,30 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   border-radius: var(--radius-sm);
   background: var(--bg-tint);
 }
+/* A state's mark alone (`{% status ... shown=False %}`), its words said
+   aloud: it opens its tip, so the mark sits in a box a target square. */
+.toned-alone { display: inline-grid; place-items: center; inline-size: var(--target-min); block-size: var(--target-min); vertical-align: middle; cursor: default; }
+/* A proportion (partials/_meter.html). A `<meter>`, so the browser draws it
+   from its value and the template writes no width; this decides how it looks.
+   The floor keeps a share too small to round up visible. */
+.meter {
+  appearance: none; display: block; inline-size: 100%; block-size: 4px;
+  border-radius: var(--radius-sm); background: var(--bg-tint);
+}
+/* Blink sets the bar in the middle half of the grid its meter draws in
+   (`::-webkit-meter-inner-element`, rows 1fr 2fr 1fr in its html.css), so
+   the bar spans every row. */
+.meter::-webkit-meter-bar { grid-row: 1 / -1; block-size: 100%; border-radius: inherit; background: transparent; }
+.meter::-webkit-meter-optimum-value { min-inline-size: 2px; border-radius: var(--radius-sm); background: var(--accent-2); }
+.meter::-moz-meter-bar { min-inline-size: 2px; border-radius: var(--radius-sm); background: var(--accent-2); }
+/* Its marks, one segment each, a fixed width so one mark stands in the same
+   place on every row and a gap reads straight down a column of meters. It is
+   one control, whose tip says what it counts, hit through a target-tall
+   area (page.css). */
+.meter-marks { white-space: nowrap; vertical-align: middle; cursor: default; }
+.meter-mark { display: inline-block; vertical-align: middle; inline-size: 0.875rem; block-size: 0.6rem; margin-inline-end: var(--space-1); border-radius: var(--radius-sm); background: var(--line); }
+.meter-mark:not(.tone-neutral) { background: var(--tone-mark); }
+.meter-break { display: inline-block; inline-size: var(--space-3); }
 /* The Design page's gallery (core/design.html): its map and each entry's
    name stand in the column each part is drawn in on its own page, which the
    part's specimen draws inside its own tree (catalog.gallery_body). */

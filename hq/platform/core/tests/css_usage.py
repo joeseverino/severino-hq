@@ -241,6 +241,23 @@ def named(selector: str) -> list[str]:
     return [*_CLASS.findall(bare), *_DATA.findall(bare)]
 
 
+def rules_naming(
+    classes: dict[str, str], sheets: dict[str, str], shared: frozenset[str] = frozenset()
+) -> list[tuple[str, int, str]]:
+    """Each style rule whose selector names one of ``classes`` and none of
+    ``shared``, with what each class it names stands for."""
+
+    found = []
+    for path, text in sheets.items():
+        for block in blocks_of(text):
+            if not block.style or shared.intersection(names := named(block.prelude)):
+                continue
+            hit = sorted({classes[name] for name in names if name in classes})
+            if hit:
+                found.append((path, block.line, f"{', '.join(hit)}: {block.prelude}"))
+    return found
+
+
 def source_words(root: Path) -> frozenset[str]:
     """Every word the source that writes a page's markup holds."""
 

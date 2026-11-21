@@ -132,6 +132,8 @@ def status_pill(
         mark = render_to_string("partials/_icon.html", {"name": icon}).strip()
         label = mark_safe(f"{mark} {label}")  # noqa: S308 - the icon part's own markup, and the escaped words
     classes = _form(_tone(tone), pill=pill, chip=chip, dot=dot, ink=ink)
+    if not shown:
+        classes = f"{classes} toned-alone"
     if css:
         classes = f"{classes} {css}"
     attributes = [("class", classes)]
