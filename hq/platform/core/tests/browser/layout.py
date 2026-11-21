@@ -4,12 +4,13 @@ import json
 from time import perf_counter
 from typing import override
 
-from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate, signature
+from hq.platform.core.tests.browser.gate import RULE_COSTS, SET_ASIDE, BrowserGate
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE
 from hq.platform.core.tests.browser.probes.tables import CELLS, TABLES_THAT_DO_NOT_FIT
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.stress import stress_estate
 from hq.platform.core.tests.browser.survey import CLOSE_OPENED, open_every_fold
+from hq.platform.core.verdicts import signature
 
 # A key that changes nothing, pressed before a batch a gate opens, so the
 # browser takes what the batch moves as the reader's own doing (`as_a_reader`).
@@ -173,7 +174,7 @@ class LayoutBrowserTests(BrowserGate):
         sentence HQ writes for it word for word is drawn whole."""
 
         notes = self.page.evaluate(
-            _PAGE_NOTE, [SELECTORS["page_note"], SELECTORS["page_trail_row"], SELECTORS["content"]]
+            _PAGE_NOTE, self.css([SELECTORS["page_note"], SELECTORS["page_trail_row"], SELECTORS["content"]])
         )
         if 'form="page-visit"' in self.pages[name]:
             self.assertGreater(len(notes), 0, "the probe measured nothing")
@@ -215,7 +216,7 @@ class LayoutBrowserTests(BrowserGate):
 
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)
-        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"])["found"], [])
+        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, self.css(SELECTORS["table_scroll"]))["found"], [])
 
     def a_table_fits_its_box_at_every_width(self, name):
         """Every table on the page, with every disclosure open, fits its box
@@ -226,10 +227,10 @@ class LayoutBrowserTests(BrowserGate):
         self.page.evaluate(SETTLE)
         self.assertEqual(self.table_defects_at_every_width(), {})
 
-    def card_rows(self, key):
+    def card_rows(self, cards):
         """The cards of one dashboard grid, grouped by the row they sit on."""
         rows: dict[int, list[dict]] = {}
-        for box in self.page.locator(SELECTORS[key]).evaluate_all(
+        for box in self.page.locator(self.css(cards)).evaluate_all(
             "elements => elements.map(e => { const r = e.getBoundingClientRect(); return {top: r.top, left: r.left}; })"
         ):
             rows.setdefault(round(box["top"]), []).append(box)

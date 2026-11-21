@@ -204,11 +204,11 @@ func TestOneApplyCycle(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d, output %v", code, lines)
 	}
-	want := []string{"registry", "glance-plan", "claim", "sweep-due", "connections", "inventory", "analytics", "schedule", "claim", "steps"}
+	want := []string{"registry", "claim", "sweep-due", "connections", "inventory", "analytics", "schedule", "claim", "steps"}
 	if got := actions(calls); !slices.Equal(got, want) {
 		t.Fatalf("calls %v, want %v", got, want)
 	}
-	claim := calls[2].Query
+	claim := calls[1].Query
 	if claim.Get("controller-id") != "e2e" || !slices.Contains(claim["capability"], "adguard.rewrite:reconcile") {
 		t.Fatalf("claim %v", claim)
 	}
@@ -221,16 +221,16 @@ func TestOneApplyCycle(t *testing.T) {
 	}
 	payload := func(index int) []byte { return calls[index-1].Payload }
 	var connections []runtime.ConnectionRecord
-	strict(t, payload(5), &connections)
+	strict(t, payload(4), &connections)
 	var inventory runtime.Inventory
-	strict(t, payload(6), &inventory)
+	strict(t, payload(5), &inventory)
 	if report, ok := inventory["adguard.rewrite"]; !ok || !report.OK || report.Connected == nil || *report.Connected || len(report.Records) != 0 {
 		t.Fatalf("adguard.rewrite with no connection should be reported unconnected: %+v", inventory["adguard.rewrite"])
 	}
 	var analytics runtime.AnalyticsReadings
-	strict(t, payload(7), &analytics)
+	strict(t, payload(6), &analytics)
 	var steps []runtime.StepFailure
-	strict(t, payload(10), &steps)
+	strict(t, payload(9), &steps)
 	if len(steps) != 0 {
 		t.Fatalf("steps %+v", steps)
 	}

@@ -1,6 +1,7 @@
 """HQ's template engine: Django's, without the tags and filters that write a
-moment in a template's own words, and with loaders that refuse a shape a
-shared part draws, written by hand.
+moment in a template's own words, with loaders that refuse a shape a
+shared part draws, written by hand, and holding each value a template prints
+as text (``held_values``).
 
 A page shows a moment through ``when`` alone, so a template that asks for
 ``date``, ``time``, ``timesince``, ``timeuntil`` or ``{% now %}`` fails as it
@@ -22,6 +23,7 @@ lazy from django.apps import apps
 lazy from django.conf import settings
 
 lazy from hq.platform.application.plugins import installed_plugin_apps
+lazy from hq.platform.core import held_values
 lazy from hq.platform.core.hand_drawn import hand_drawn
 
 # What each builtin library loses, by the module Django names it with: a
@@ -83,15 +85,18 @@ def ours() -> tuple[str, ...]:
 
 class _Refusing(base.Loader):
     """A loader whose templates of HQ and its extensions draw no shared
-    part's shape by hand (``hand_drawn``)."""
+    part's shape by hand (``hand_drawn``), and hold each value an HTML one
+    prints as text (``held_values``)."""
 
     @override
     def get_contents(self, origin: Origin) -> str:
         contents = super().get_contents(origin)
+        if not origin.name.startswith(ours()):
+            return contents
         name = os.fsdecode(origin.template_name)
-        if origin.name.startswith(ours()) and (found := hand_drawn(contents, name)):
+        if found := hand_drawn(contents, name):
             raise TemplateSyntaxError("; ".join(f"{name}:{line}: {said}" for line, said in found))
-        return contents
+        return held_values.held(contents, self.engine, name) if name.endswith(".html") else contents
 
 
 class FilesystemLoader(_Refusing, filesystem.Loader):

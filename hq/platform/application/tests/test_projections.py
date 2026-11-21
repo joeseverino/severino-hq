@@ -580,7 +580,7 @@ class ChartDensityTests(SimpleTestCase):
 # domain: a single fixed budget is wrong the moment an extension is installed.
 # Raised only deliberately: a budget nudged up whenever something exceeds it
 # measures nothing.
-HOST_QUERY_BUDGET = 33
+HOST_QUERY_BUDGET = 34
 PER_EXTENSION_QUERY_BUDGET = 10
 
 

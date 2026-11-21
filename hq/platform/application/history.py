@@ -46,9 +46,9 @@ from .labels import lower_first, plural
 from .moments import moment
 from .projection import read_once
 from .routes import reverse
+from .tables import Cell, DataTable, Group, Row, TableColumn
 from .ui import counted
 lazy from .inventory import READING_AUDIT_TYPE
-lazy from .page_parts import html_attributes
 
 # How far either side of a moment counts as near it.
 NEAR = timedelta(hours=6)
@@ -261,15 +261,6 @@ class HistoryLine:
         return bool(self.burst or self.items)
 
     @property
-    def attributes(self) -> str:
-        """Its row's ``tr`` attributes: a line under its event is folded under
-        it, and an event that changed things holds the fold."""
-
-        if self.under:
-            return html_attributes({"data-folded": self.under})
-        return html_attributes({"id": self.fold, "data-folds": True}) if self.grouped else ""
-
-    @property
     def url(self) -> str:
         """Where the line's title opens, or nothing when it has nowhere to go.
 
@@ -406,6 +397,85 @@ class HistoryGroup:
     label: str = ""
     count: int = 0
     folds: str = ""
+
+
+def columns(*, hide_who: bool = False) -> tuple[TableColumn, ...]:
+    """The headings of a table of history, without who did each where ``hide_who``."""
+
+    return tuple(TableColumn(heading, css=css) for heading, css in COLUMNS if not (hide_who and heading == WHO))
+
+
+def table(
+    label: str,
+    groups: Iterable[HistoryGroup],
+    headings: tuple[TableColumn, ...],
+    *,
+    selectable: bool = False,
+    sorted_by: str | None = None,
+) -> DataTable:
+    """The table of history ``{% data_table %}`` draws: each event's line, then
+    the lines folded beneath it, under ``headings`` (``COLUMNS``, the Who column
+    left out where the reader may not read the audit log). A group that starts
+    folded away folds each of its rows under its heading."""
+
+    who = any(column.label == WHO for column in headings)
+    return DataTable(
+        label,
+        headings,
+        groups=tuple(
+            Group(
+                group.label,
+                tuple(
+                    _row(line, who=who, folded=group.folds, key=line.pk if selectable and not line.rest else None)
+                    for event in group.lines
+                    for line in event.lines
+                ),
+                count=group.count or None,
+                folds=group.folds,
+            )
+            for group in groups
+        ),
+        selectable=selectable,
+        sorted_by=sorted_by,
+    )
+
+
+def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
+    """One line as its row: what it was, when, who, how it came out and what it
+    said; on a phone only What and When stay, so What's second line says how it
+    came out, in the action's own word, which the Action column says wider."""
+
+    folding = {"folded": folded} if folded else {"folds": line.fold if line.grouped else "", "folded": line.under}
+    if line.rest is not None:
+        return Row((Cell(line.rest.more_words, line.url, name=True),), across=True, **folding)
+    if line.burst or line.moment is not None:
+        moment = line.burst[0] if line.burst else line.moment
+        title = (
+            Cell(line.title, line.url, name=True, role="data", fold=True)
+            if line.burst
+            else Cell(moment.title, line.url, external=moment.external, name=True, role="data")
+        )
+        person, outcome = Cell(moment.actor), Cell(moment.source, tone="neutral")
+        said = Cell(moment.detail, muted=True, role="data")
+    else:
+        action = Cell(line.action_label, muted=True, dot=bool(line.type_label), shows="narrow")
+        name, after = line.named
+        title = Cell(
+            name,
+            line.url,
+            readout=True,
+            after=after,
+            name=True,
+            fold=line.grouped,
+            count=line.total if line.grouped and line.head is not None else None,
+            lines=(Cell(line.type_label, muted=True, parts=(action,)) if line.type_label else action,),
+        )
+        person = Cell(line.who.words, cut=True)
+        state = line.state
+        outcome = Cell.state(state) if isinstance(state, AuditLog.Action) else Cell(state, tone="neutral")
+        said = Cell(line.message, muted=True, role="data")
+    when = Cell(moment=line.at, form="clock", muted=True)
+    return Row((title, when, *((person,) if who else ()), outcome, said), key=key, **folding)
 
 
 def moments(*, since: datetime, until: datetime | None = None, limit: int = 200) -> tuple[Moment, ...]:

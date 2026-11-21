@@ -296,7 +296,7 @@ class Principal:
         if name in NEEDS_A_PERSON and not has_a_person(self):
             raise AuthorizationError(
                 f"{name!r} needs a signed-in account, and the {self.interface} principal {self.actor!r} "
-                "is a machine token with none. Sign the agent in through a person's account."
+                "is a machine token with none. Sign the agent in through your account."
             )
         # A Capability is a StrEnum, equal to and hashed as its value, so the
         # held set answers for a name as it stands.

@@ -5,7 +5,7 @@
     {% firstof section.overview.url section.cards.0.url as overview_url %}
     {% section section.label more_label="View "|add:section.label more_url=overview_url %}
       {% if section.overview.kpis %}{% facts layout="band" size="lead" items=section.overview.kpis %}{% else %}{% facts layout="band" size="lead" items=section.cards %}{% endif %}
-    {% aside %}{% if section.overview.period %}<span class="count">{{ section.overview.period|breakable }}</span>{% endif %}
+    {% aside %}{% if section.overview.window %}<span class="count">{{ section.overview.window }}</span>{% endif %}
     {% endsection %}
   {% endfor %}
 {% endlayout %}

@@ -893,8 +893,6 @@
       "status": "example",
       "agent_version": "example",
       "docker_version": "example",
-      "containers_running": 1,
-      "containers_total": 1,
       "snapshot_at": "example"
     }
   ],

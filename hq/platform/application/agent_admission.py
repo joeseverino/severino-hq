@@ -136,6 +136,7 @@ def refused(caller: Principal | Stopped, *, source: str = "") -> AgentRefusal | 
             reason=applies.code,
             actor=principal.actor,
             source=source,
+            detail=applies.detail,
             device=principal.device,
         )
     return applies

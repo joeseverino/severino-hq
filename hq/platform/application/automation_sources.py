@@ -17,8 +17,6 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.text import Truncator
 from pydantic import (
-    AfterValidator,
-    BaseModel,
     ConfigDict,
     Field,
     StrictStr,
@@ -31,10 +29,11 @@ lazy from hq.domains.control_plane import models
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 lazy from hq.platform.core.audit import audited_labels
 lazy from hq.platform.core.models import AuditLog
+lazy from hq.platform.core.templatetags.change_tags import change_mark
 
 from .automation_manifest import DottedName, ProcedureTerms
-from .command_fields import Describe, RequiredText
-from .contracts import Effect
+from .command_fields import Checked, Describe, Reason, RequiredText
+from .contracts import Closed, Effect
 from .integration_specs import CapabilitySpec
 from .resource_operations import OperationAsked
 from .security import Capability, Principal
@@ -45,11 +44,13 @@ lazy from .approval_review import grouped, marked
 lazy from .automation_runs import access_words, anywhere, capability_name
 lazy from .cadence import ask, automation_standing
 lazy from .capabilities import Consented, consent
+lazy from .entity_links import entity_link
 lazy from .findings import rule_for
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .record_errors import PolicyError, RecordNotFound
 lazy from .resource_operations import Prepared, asked_fields, enqueue, operation_asked
 lazy from .routes import reverse
+lazy from .tables import Cell, DataTable, Row, TableColumn
 lazy from .work_runs import UNENDED, run_rows, run_url, seen_as_runs, standing_of
 
 if TYPE_CHECKING:
@@ -83,18 +84,22 @@ WORKER_DUE = "Waiting for HQ's playbook worker."
 def _pattern(value: str) -> str:
     try:
         re.compile(value)
-    except re.error as exc:
-        raise ValueError(f"{value!r} is not a regular expression: {exc}") from None
+    except re.error:
+        raise ValueError from None
     return value
 
 
-class InputBound(BaseModel):
+class InputBound(Closed):
     """What Ansible's argument spec cannot say of a text input: the shape it
     must have and how long it may be."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    model_config = ConfigDict(frozen=True, strict=True)
 
-    pattern: Annotated[RequiredText, StringConstraints(max_length=500), AfterValidator(_pattern)]
+    pattern: Annotated[
+        RequiredText,
+        StringConstraints(max_length=500),
+        Checked(_pattern, Reason("input_pattern", "must be a regular expression")),
+    ]
     max_length: Annotated[int, Field(ge=1, le=4096)]
 
 
@@ -444,31 +449,13 @@ def decisions(pending: Reviewed | None, principal: Principal, *, diff: bool) -> 
     return tuple(action for action in shown if action is not None)
 
 
-@dataclass(frozen=True, slots=True)
-class PlaybookTableRow:
-    """One playbook as a table of the playbooks shows it: as adopted, or as
-    a waiting scan would bring it, how that scan changes it, and Adopt and
-    Reject while it waits."""
-
-    title: str
-    # Its command's page, while it is adopted.
-    url: str
-    effect: str
-    hosts: tuple[str, ...]
-    # Where it runs when it names no machine.
-    anywhere: str
-    access: str
-    # How a waiting scan changes it, as the change table's Status says it; empty when it stays.
-    change: str = ""
-    actions: tuple[PageAction, ...] = ()
-
-
-def playbook_rows(
+def playbook_table(
     adopted: tuple[Any, ...], review: Reviewed | None, principal: Principal, *, every: bool = True
-) -> tuple[PlaybookTableRow, ...]:
-    """Each playbook adopted (``every``) or only each one changed, and each
-    one a waiting scan (``review``) adds, in the order of their titles, with
-    what ``principal`` may do about each change."""
+) -> DataTable:
+    """The table of each playbook adopted (``every``) or only each one
+    changed, and each one a waiting scan (``review``) adds, in the order of
+    their titles: as adopted, or as the scan would bring it, and while the
+    scan waits, how it changes each, with what ``principal`` may do about it."""
 
     changes = {change.key: change for change in review.changes} if review is not None and review.pending else {}
     adopts, rejects = _deciding(principal)
@@ -483,7 +470,21 @@ def playbook_rows(
         for key, change in changes.items()
         if key not in held
     )
-    return tuple(sorted(rows, key=lambda row: row.title))
+    deciding = bool(changes)
+    columns = (
+        TableColumn("Playbook"),
+        TableColumn("Effect", drop=3),
+        TableColumn("Runs on", kind="identifier", drop=1),
+        TableColumn("Access", drop=2),
+        *((TableColumn("Status", kind="status"),) if deciding else ()),
+    )
+    shown = sorted(rows, key=lambda row: row[0])
+    return DataTable(
+        "Playbooks",
+        columns,
+        tuple(replace(row, cells=row.cells[: len(columns)]) for _title, row in shown),
+        region={"empty": "No playbooks are adopted yet."},
+    )
 
 
 def _row(
@@ -495,9 +496,11 @@ def _row(
     rejects: bool,
     adopted: bool = False,
     title: str = "",
-) -> PlaybookTableRow:
-    """One playbook's row: ``procedure`` as adopted (``adopted``) or as the
-    scan brings it, None for one HQ can't adopt, which is its ``title`` alone."""
+) -> tuple[str, Row]:
+    """One playbook's row by its title: ``procedure`` as adopted
+    (``adopted``) or as the scan brings it, None for one HQ can't adopt,
+    which is its ``title`` alone. Its adopted title links its command's
+    page; one the scan brings has no page yet."""
 
     actions: list[PageAction | None] = []
     if change is not None and review is not None:
@@ -507,17 +510,23 @@ def _row(
         if rejects:
             actions.append(pages.PageAction.command(automation_adoption.REJECT, review.proposal.pk, fields=sent))
     kind = change.change if change is not None else ""
+    state = Cell(status=change_mark(kind)) if change_mark(kind) else Cell()
+    shown = tuple(filter(None, actions))
+    data = {"change": kind} if kind else {}
     if procedure is None:
-        return PlaybookTableRow(title, "", "", (), "", "", kind, tuple(filter(None, actions)))
-    return PlaybookTableRow(
-        procedure.title,
-        command_url(capability_name(procedure.id)) if adopted else "",
-        procedure.effect.label,
-        tuple(procedure.hosts),
-        anywhere(procedure.target_kinds),
-        access_words(procedure.privilege),
-        kind,
-        tuple(filter(None, actions)),
+        return title, Row((Cell(title), Cell(), Cell(), Cell(), state), actions=shown, data=data)
+    url = command_url(capability_name(procedure.id)) if adopted else ""
+    hosts = tuple(Cell.of(entity_link("machine", host)) for host in procedure.hosts)
+    return procedure.title, Row(
+        (
+            Cell(procedure.title, url),
+            Cell(procedure.effect.label),
+            Cell(lines=hosts) if hosts else Cell(anywhere(procedure.target_kinds)),
+            Cell(access_words(procedure.privilege)),
+            state,
+        ),
+        actions=shown,
+        data=data,
     )
 
 

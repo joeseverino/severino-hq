@@ -7,7 +7,7 @@ A record whose reference names nothing is one finding of its own.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.db.models import Count
 
@@ -47,8 +47,8 @@ class _Backlog:
 
     The title is the count and what is true of them, said whole for ``one``
     and for ``many``. ``named`` reads the records themselves, which then are
-    the count: the first few are said by name, each a link to its own page,
-    and the rest are a count."""
+    the count: the first few are said by name, each a link to its own page
+    with its ``detail`` beside it, and the rest are a count."""
 
     one: str
     many: str
@@ -69,7 +69,7 @@ class _Backlog:
             return ()
         first = named[:MOST_NAMED]
         more = count - len(first)
-        names = ", ".join(link.label for link in first) + (
+        names = ", ".join(f"{link.label} ({link.detail})" if link.detail else link.label for link in first) + (
             f" and {counted(more, 'other')}" if first and more > 0 else ""
         )
         return (
@@ -118,12 +118,17 @@ def _unread() -> int:
 
 
 def _unpriced() -> tuple[EntityLink, ...]:
-    """Each active asset with no purchase date or no cost, by name."""
+    """Each active asset with no purchase date or no cost, by name, with which it lacks."""
 
+    found = Asset.objects.filter(UNPRICED.keeps).order_by("item_name")
     return tuple(
-        entity_link("asset", slug, label=name)
-        for name, slug in Asset.objects.filter(UNPRICED.keeps).order_by("item_name").values_list("item_name", "slug")
+        replace(entity_link("asset", slug, label=name), detail=_lacks(bought is None, cost is None))
+        for name, slug, bought, cost in found.values_list("item_name", "slug", "purchase_date", "total_cost")
     )
+
+
+def _lacks(date: bool, cost: bool) -> str:
+    return {(True, True): "no purchase date or cost", (True, False): "no purchase date"}.get((date, cost), "no cost")
 
 
 def _links_to_nothing(rule: str, model: type) -> FindingRule:
@@ -149,7 +154,7 @@ def _links_to_nothing(rule: str, model: type) -> FindingRule:
         Tone.ATTENTION,
         detect,
         operator_action="Open the record, then choose something else for the link or clear it.",
-        no_help_reason="Only a person knows what the record was meant to name.",
+        no_help_reason="Only you know what the record was meant to name.",
         bars={Tone.ATTENTION: "a record links to something HQ no longer has, so the record points nowhere"},
         domain={Expense: "hq.expenses", Asset: "hq.assets", Entry: "hq.calendar"}[model],
         gathered=True,
@@ -173,7 +178,7 @@ RULES: tuple[FindingRule, ...] = (
         ),
         domain="hq.content",
         operator_action="Finish each draft and publish it, or delete it.",
-        no_help_reason="Only a person decides when a piece is ready.",
+        no_help_reason="Only you decide when a piece is ready.",
         bar="a draft is not published, which is work in hand rather than a problem",
     ),
     _backlog(
@@ -197,7 +202,7 @@ RULES: tuple[FindingRule, ...] = (
         ),
         domain="hq.content",
         operator_action="Link each published piece to the doc that records what it covers.",
-        no_help_reason="Only a person knows which doc a piece belongs with.",
+        no_help_reason="Only you know which doc a piece belongs with.",
         bar="a published piece has no doc linked, so nothing records what it covers",
     ),
     _backlog(
@@ -214,7 +219,7 @@ RULES: tuple[FindingRule, ...] = (
         ),
         domain="hq.contacts",
         operator_action="Read each message, and reply where one asks for it.",
-        no_help_reason="A reply is a person's to write.",
+        no_help_reason="A reply is yours to write.",
         bar="a message from the contact form is unread, and each one waits on a reply",
     ),
     _backlog(
@@ -231,7 +236,7 @@ RULES: tuple[FindingRule, ...] = (
         ),
         domain="hq.expenses",
         operator_action="Upload the receipt for each expense, or attach one already in HQ.",
-        no_help_reason="A receipt is a file only a person can hand HQ.",
+        no_help_reason="A receipt is a file only you can hand HQ.",
         bar="an expense has no receipt, and a deduction needs its receipt",
     ),
     _links_to_nothing("expense-links-to-nothing", Expense),
@@ -249,7 +254,7 @@ RULES: tuple[FindingRule, ...] = (
         ),
         domain="hq.receipts",
         operator_action="Attach each receipt to the expense or asset it proves.",
-        no_help_reason="Only a person knows what a receipt was for.",
+        no_help_reason="Only you know what a receipt was for.",
         bar="a receipt is attached to nothing, so no expense counts it as proof",
     ),
     _backlog(
@@ -267,7 +272,7 @@ RULES: tuple[FindingRule, ...] = (
         ),
         domain="hq.assets",
         operator_action="Fill in each asset's purchase date and cost.",
-        no_help_reason="The purchase date and cost are on a receipt only a person has.",
+        no_help_reason="The purchase date and cost are on a receipt only you have.",
         bar="an active asset has no purchase date or cost, so its depreciation cannot be worked out",
     ),
     _links_to_nothing("asset-links-to-nothing", Asset),

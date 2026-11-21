@@ -27,7 +27,6 @@ lazy from hq.platform.core.hand_drawn import SHAPES
 lazy from hq.platform.core.included_parts import PARTS
 lazy from hq.platform.core.interface_text import TEMPLATE_COMMENT
 lazy from hq.platform.core.stylesheets import stylesheet
-lazy from hq.platform.core.table_cells import ROLE_CLASSES
 lazy from hq.platform.core.template_parts import Part
 lazy from hq.platform.core.templatetags.value_tags import PresentNode
 
@@ -35,7 +34,7 @@ lazy from hq.platform.core.templatetags.value_tags import PresentNode
 # public block is an empty slot, so an override never needs ``block.super``.
 FRAMES: dict[str, tuple[str, ...]] = {
     "page.html": ("page", "print_footer"),
-    "list_page.html": ("summary", "row", "foot"),
+    "list_page.html": ("summary",),
     "confirm_page.html": ("consequences",),
     "form_page.html": (),
 }
@@ -43,9 +42,8 @@ FRAMES: dict[str, tuple[str, ...]] = {
 FRAME_ABOUT = {
     "page.html": "Any page: the head, actions, dialogs and section navigation, drawn from `page`.",
     "list_page.html": (
-        "A `ListPageMixin` list: toolbar, table, empty state and pagination. "
-        "`row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or "
-        "filter changes, `foot` is its `<tfoot>`."
+        "A `ListPageMixin` list: toolbar, the table its columns declare, empty state and pagination. "
+        "`summary` sits above the table and is redrawn with it when a search or filter changes."
     ),
     "confirm_page.html": "A destructive action's confirmation: `consequences` says what will happen.",
     "form_page.html": (
@@ -81,13 +79,11 @@ LIBRARIES = ("static",)
 # missing from both is the host's to add, never the extension's to invent.
 CLASSES = (
     "actions-col",
-    "cell-data",
     "cell-part",
     "cell-whole",
     "compact",
     "count",
     "danger",
-    "data-table",
     "date-col",
     "eyebrow",
     "ghost",
@@ -112,7 +108,6 @@ CLASSES = (
     "swatch",
     "swatch-key",
     "table-scroll",
-    "tight-col",
     "tone-attention",
     "tone-good",
     "tone-neutral",
@@ -558,9 +553,7 @@ def _django(engine: Any) -> dict[str, Any]:
 
 
 def _defined_classes() -> set[str]:
-    # A class that declares a part's role in a table is read by the region,
-    # which marks the part for the stylesheet (table_tags.mark_cells).
-    return set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet())) | set(ROLE_CLASSES)
+    return set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet()))
 
 
 def _scripts() -> str:

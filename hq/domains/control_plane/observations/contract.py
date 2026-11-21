@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, get_args, override
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
 
 from hq.platform.application.describe import Describe
+from hq.platform.application.reasons import Checked, declared_only
 from hq.platform.core.digests import digest
 lazy from hq.platform.application.json_schemas import json_schema
 lazy from hq.platform.application.moments import moment
@@ -25,7 +26,7 @@ def _iso(value: datetime | None) -> str:
 # no record carries a provider's own spelling of a time.
 Stamp = Annotated[
     datetime | None,
-    BeforeValidator(moment),
+    Checked(moment, mode="before"),
     PlainSerializer(_iso, return_type=str),
     WithJsonSchema({"type": ["string", "null"]}),
 ]
@@ -40,6 +41,11 @@ class ObservationRecord(BaseModel):
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
+
+    @classmethod
+    @override
+    def __pydantic_on_complete__(cls) -> None:
+        declared_only(cls.__pydantic_core_schema__, f"Record {cls.__qualname__}")
 
 
 @dataclass(frozen=True, slots=True)

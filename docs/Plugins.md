@@ -516,7 +516,13 @@ the host compiles these into one graph is in
 reporting window. Put the actual window or data cutoff in the card's `detail`
 when it differs from today or coverage is incomplete, since a render time does
 not establish freshness. The host never infers dates from a card label or
-recalculates an extension's totals.
+recalculates an extension's totals. An overview drawn from data that arrives
+dated (an export) gives its `reading`, the `hq_sdk.reads.freshness` of that
+data's newest point; once that is past its cadence the dashboard says how old
+the data is (`Last read …`) in place of the overview's `period`. A card that counts things gives a
+`hq_sdk.ui.Counted` as its label and no `value` (`"label": Counted(3, "Draft")`),
+and the host words it to agree with its count ("1 Draft", "3 Drafts"), as a
+`Kpi` given one does; a count given as a value, an int or text, is refused.
 
 An attention provider emits `serious` or `attention` only for a decision that
 needs the operator, and `neutral` or `good` for observations. An item whose
@@ -644,6 +650,13 @@ class NoteCommand:
   `ReferenceField` of that name holds ([References](#references)), offered
   as the grouped picker the record's own form shows, with what this caller
   may name.
+- `Checked(check, Reason(kind, words))` holds the field to a rule of its own:
+  `check` returns the value or raises `ValueError`, and the refusal says the
+  reason's `words` after the field's name (`must be a host name`), never what
+  was sent. A model's own validator, beneath `model_validator`, is `@checked`
+  and raises a reason's `refused()`. Any other validator, a bare
+  `AfterValidator` or `field_validator` included, fails the command as HQ
+  builds it, since its words could repeat a caller's input.
 
 A marker writes itself into the field's schema through pydantic's
 `__get_pydantic_json_schema__`, so the schema every adapter reads carries it.
@@ -752,7 +765,10 @@ authorization headers, secret values or private URL parts. URL userinfo, query
 strings and fragments are rejected outright, rather than filtered by a list of
 secret parameter names.
 
-`observed_at` is a `datetime` and serializes as ISO 8601. Links are local paths
+`observed_at` is a `datetime` and serializes as ISO 8601. An instance that
+leaves `status`, `status_label` and `observed_at` unsaid is said in its
+lifecycle's word, and dated by the readings HQ declares came through its
+`kind` where any do. Links are local paths
 or explicit HTTP(S) URLs. Emit a truthful reduced mode when the gateway works
 anonymously, rather than hiding it.
 
@@ -860,38 +876,41 @@ declared. `page_trail` holds the trail's crumbs from `PLUGIN_API_VERSION` 7.
 A block a frame does not list is the host's. An override of it is refused,
 rather than silently ignored the day the frame stops rendering it.
 
-A data table is declared through the table tags, so its shape is in the HTML on
-first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in the box it
-fits, which takes the label as its name only when it scrolls. The region derives the width its columns leave at, by rank,
-from what each column holds (`table_region` in [Shared UI](Shared-UI.md#each-parts-rules)). It draws the empty state in
-place of tables with no row beneath their heads; an `{% if %}` around the
-region says what is missing in the page's own words.
+A data table is declared whole in the view, as an `hq_sdk.tables.DataTable`
+of `TableColumn`s and `Row`s of `Cell`s, and drawn by `{% data_table table %}`,
+so its shape is in the HTML on first paint. No template writes a `<td>` or a
+`<th>`: HQ's template loaders refuse one, as they do each shape the table at
+the end of this section names.
 
-Each column heading is `{% table_heading "Name" "identifier" %}`:
+```python
+def _row(note: Note) -> Row:
+    filed = Cell(f"filed as {note.slug}", shows="more", dot=True)
+    return Row((Cell.of(record_link(note)), Cell(moment=note.written_on, form="day", parts=(filed,))))
 
-| Argument | What it says |
-| --- | --- |
-| The kind | `prose`, `identifier`, `numeric`, `status` or `control`, following from `date-col` or `actions-col` when left out; a `numeric` column's cells align under it with nothing written on them |
-| `drop=` | the order a narrow table lets it go in, never on the column that names the row or a `key-col` |
-| `sort=` | a list sorted on the server |
-| `local_sort=True` | a list sorted on the page, its control drawn only where the table holds two rows to sort |
 
-Where a row can hold anything back (a column that leaves, a long value, a part
-only its open line shows), the region draws each row's toggle, last in the
-cell that names it, and refuses one written there by hand; only a table with
-no headings ends its naming cell with `{% row_toggle %}`. The stylesheet shows
-the toggle only where the row holds something back.
+notes = DataTable("Notes", (TableColumn("Note"), TableColumn("Written")), tuple(map(_row, Note.objects.all())))
+```
 
-A row edited on the page holds `{% row_editor form row.pk label="Correct
-distance" action=url verb="Save distance" distance_miles=row.miles %}` in its
-cell. It draws a link to the page with that row's editor open (`?edit=<key>`).
-On that page the region moves the form into the line beneath the row and
-opens the row, with script or without. `form` is the one form the view
-declares for the table. It is drawn for the open row alone, with the values
-given by field name, or as it was sent when it is bound, and its ids carry
-the row's key. With script the link, the form and its Cancel are answered in the
-table's region. The form posts `next`, the page with the editor closed, for
-the view to return to.
+The table derives the width each column leaves at, by rank, from what it
+holds (`TableColumn(kind=)`: `prose`, `identifier`, `numeric`, `status` or
+`control`), unless one says `drop=`; the column that names the row and a
+`key-col` never leave. A cell says what it holds (a link, an entity, a
+moment, an amount, a state), what follows it on its line (`parts`, each after
+a space or its `dot`) and its lines beneath (`lines`); `shows="more"` keeps a
+part for the row's open line. Where a row holds anything back, the table
+draws its toggle. `region` says what it draws with no rows (`empty`) and the
+box it fits; a table's `rows` or its `groups` of rows stand under its headings.
+
+A row edited on the page declares its editor on the cell
+(`Cell(editor=RowEditor(form, row.pk, label="Correct distance", action=url,
+verb="Save distance", initial={"distance_miles": row.miles}))`). It draws a link
+to the page with that row's editor open (`?edit=<key>`). On that page the
+table moves the form into the line beneath the row and opens the row, with
+script or without. `form` is the one form the view declares for the table. It
+is drawn for the open row alone, with the values given by field name, or as
+it was sent when it is bound, and its ids carry the row's key. With script
+the link, the form and its Cancel are answered in the table's region. The
+form posts `next`, the page with the editor closed, for the view to return to.
 
 A state is `{% status label tone=... %}`, a pill said in sentence case; with
 `pill=False` it is the label in its tone alone, as a figure that says which
@@ -963,6 +982,13 @@ with its own filter, sort and toggle declarations and its projected rows, and
 `hq_sdk.resources`' ranked query and its text and status filters: a list page is
 `hq_sdk.tables.ListPageMixin`, drawing one page of its resource's list read,
 whose sorts, filters, toggles and search the `ResourceSpec` declares once.
+`PLUGIN_API_VERSION` 23 retires `Kpi`'s `singular` and its int value: a figure
+that counts takes a `hq_sdk.ui.Counted` as its label, as a dashboard card does.
+`PLUGIN_API_VERSION` 24 retires `{% table_region %}`, `{% table_heading %}`,
+`{% row_group %}`, `{% row_actions %}` and `{% row_toggle %}`: a table is
+`{% data_table table %}` of a `DataTable`, which draws every heading, group,
+row and control, and `hq plugin check` refuses a `<td>` or `<th>` written by
+hand.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -1093,8 +1119,8 @@ in its template:
 HQ draws the one empty state, and the "nothing matches" state of a filtered
 list, from those.
 
-Wrap a `.data-table` in `.table-scroll`. HQ keeps its headings visible through
-long result sets with sticky cells, and the table stays the one semantic and
+The table `{% data_table %}` draws keeps its headings visible through long
+result sets with sticky cells, and the table stays the one semantic and
 interactive source.
 
 ### What a template prints
@@ -1258,14 +1284,16 @@ is true:
   tuples, dates and decimals do; a lambda, a generator held in the value, an
   open file or a lazy queryset does not. An answer that cannot be kept is
   derived on every request, and the log says so.
-- **Expect the clock a minute late at most.** HQ cannot see where an extension
-  reads the clock, so a kept answer stands one minute and never past local
-  midnight. A count of days turns on time; an age in minutes may be a minute
-  behind.
+- **Read the day, not the instant.** HQ sees the clock read through Django
+  (`timezone.now()`, `localtime()`, `localdate()`) or `hq_sdk.reads`. A day
+  holds the answer until local midnight; an instant holds it one minute, so an
+  answer that reads `timezone.now()` is derived again every minute while
+  anybody uses HQ. A window of days is `today()` and `day_span`. HQ cannot see
+  `date.today()` or `datetime.now()`, whose answer stands until a write.
 
 `hq_sdk.testing.providers_derived_again(plugin_id)` holds an extension to them:
 with its records in place, it names every provider not answered from what is
-stored.
+stored, or derived again every minute because it reads the instant.
 
 ```python
 def test_every_provider_is_answered_from_what_is_stored(self):
@@ -1291,6 +1319,12 @@ older than its rows. Asking `today`, `reached` or `whole`
 also derives the answer again when one of them would change. An extension keeps
 no process-level cache, `cache.set` or timestamp table beside this; the
 extension check refuses `django.core.cache` in its source.
+
+A write that changes every one of them at once, such as an import, calls
+`derive_after_commit(plugin.id)`. Once its transaction commits, each
+derivation of the extension asked with no arguments, its own and the host's of
+its providers, is derived and stored in the writer's own process, so no request
+after the write derives one.
 
 A test of an answer that turns on the day holds the clock those reads ask with
 `with hq_sdk.testing.frozen(moment):`. Patching `timezone.now` misses it.

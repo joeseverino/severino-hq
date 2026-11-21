@@ -11,7 +11,7 @@ from django.template.base import token_kwargs
 from django.template.context import RequestContext
 from django.template.loader import render_to_string
 from django.utils import dateformat, timezone
-from django.utils.html import conditional_escape, format_html
+from django.utils.html import conditional_escape
 from django.utils.safestring import SafeData, mark_safe
 lazy from django.conf import settings
 
@@ -37,7 +37,15 @@ from hq.platform.application.moments import (
 )
 from hq.platform.application.money import money as _money
 from hq.platform.application.printable import admitted
-from hq.platform.application.ui import MISSING, counted as _counted, measured as _measured, no_value
+from hq.platform.application.ui import (
+    MISSING,
+    agreed as _agreed,
+    counted as _counted,
+    ended as _ended,
+    measured as _measured,
+    no_value,
+)
+from hq.platform.core.held_values import format_html
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, SlotsNode, answers, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
@@ -69,6 +77,21 @@ def counted(count, phrases):
     The figure and its first word share a line (``line_breaks.held``).
     """
     return held(_counted(int(count or 0), *counted_phrases(phrases)))
+
+
+@register.filter(is_safe=True)
+def ended(text):
+    """``{{ lede|ended }}``: a line as a sentence, its full stop added unless
+    it has one (``application.ui.ended``); markup stays markup."""
+    said = _ended(text)
+    return mark_safe(said) if isinstance(text, SafeData) else said  # noqa: S308 - markup it was handed, a stop added
+
+
+@register.filter
+def agreed(count, phrases):
+    """``{{ names|length|agreed:"it,them" }}``: ``counted``'s words without the
+    figure, for words that agree with a count said elsewhere."""
+    return _agreed(int(count or 0), *counted_phrases(phrases))
 
 
 @register.filter
@@ -431,19 +454,13 @@ def entity(
 
 def cell_line(text, url="", *, lines=2):
     """One fact in a table cell written as a line (``.cell-line``), a link when
-    ``url`` is given: its names held as ``breakable`` holds them. The line asks
-    for its whole length around the box that cuts it (``.cut``, figures.css),
-    and a cut one reads whole as any cut value does (tables.js, ``markCut``).
-    It takes two lines at most, or one (``lines=1``) for a fact that keeps its
-    row as tall as its neighbors. ``{% cell_line text=... %}`` draws it."""
+    ``url`` is given: its names held as ``breakable`` holds them, its words cut
+    by the line's own box, and a cut one reads whole as any cut value does
+    (tables.js, ``markCut``). It takes two lines at most, or one (``lines=1``)
+    for a fact that keeps its row as tall as its neighbors.
+    ``{% cell_line text=... %}`` draws it."""
 
-    drawn = breakable(text)
-    # A name brings its own box; words are cut by the line's box.
-    inside = (
-        drawn
-        if drawn.startswith('<span class="token" data-sole')
-        else format_html('<span class="cut">{}</span>', drawn)
-    )
+    inside = breakable(text)
     if lines not in (1, 2):
         raise ValueError(f"A cell's line takes 1 or 2 lines, never {lines!r}.")
     one = format_html(' data-lines="{}"', lines) if lines == 1 else ""

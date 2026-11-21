@@ -64,13 +64,13 @@ class HeldReadTests(TestCase):
         self.assertEqual(ended["answer"]["operation"]["id"], str(operation.pk))
         self.assertEqual(ended["answer"]["operation"]["state"], OperationRequest.State.SUCCEEDED)
 
-    def test_a_declined_request_answers_the_refusal_its_call_would(self):
+    def test_a_rejected_request_answers_the_refusal_its_call_would(self):
         reject(RejectCommand(self.held_id, note="Not this week."), principal=self.person)
 
         held = self.read()
 
         self.assertTrue(held["done"])
-        self.assertEqual(held["answer"]["error"]["code"], "declined")
+        self.assertEqual(held["answer"]["error"]["code"], "operator_rejected")
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_another_caller_s_request_reads_as_none_at_all(self):

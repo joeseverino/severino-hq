@@ -98,7 +98,9 @@ A capability and the button that runs it say the same words.
 
 **A sentence says what is true, in a few plain words.** A value HQ does not
 have is left out, and its row with it: never "Not known yet", never an
-explanation of why. A detail is one short sentence the reader needs in order to
+explanation of why. A part that is not there yet is said in `tone.Absent`'s
+words ("not set up", "not checked", "not managed", "no reading yet"), which a
+template takes through the `absent` filter. A detail is one short sentence the reader needs in order to
 act, or nothing, and deleting a line is the first fix; past about twenty words
 it is carrying a second thought. No sentence argues with itself, hedges,
 explains HQ's machinery, or narrates the page, as "Open one to see" or "Each
@@ -107,7 +109,8 @@ procedures of the commit of its repository"): name the thing once, by what
 owns it ("the playbooks you adopted"). The reader is "you" when the reader
 acts, and anyone else is named or named by role ("an admin", "the agent"),
 never "a person" or "someone". A count agrees with its noun through
-`counted`, never "account(s)". No sentence praises ("seamless", "blazing
+`counted`, never "account(s)", and words that agree with a count said
+elsewhere ("fix them") through `agreed`. No sentence praises ("seamless", "blazing
 fast") or knocks down a reading nobody held ("not X, but Y"): say what the
 thing does. What an agent or a client's author reads (an API or MCP
 description, an error) is held to the same. A comment says what the code does
@@ -281,11 +284,15 @@ a dot or a slash, before a port); in a table's cell it breaks elsewhere only
 where its column lacks room for it. A length of time
 keeps each count with its unit.
 
-So every value a template prints as text, in a sentence too, ends in
-`|breakable` or a filter that holds its names itself (`|readout`, `|or_empty`,
-`|when`). Markup built in Python holds each value it prints the same way.
-`|breakable` passes a plain word and markup as they are, so it is safe on any
-value (`hq/platform/core/tests/test_template_values.py`).
+A template prints a value bare (`{{ host }}`, `Runs on {{ host }}.`): the
+template engine holds every value printed as text as it compiles the template,
+the mark written straight after it included (`hq/platform/core/held_values.py`),
+and leaves a value in an attribute, a comment, a `<script>`, a `<title>` or a
+`<time>` as Django prints it. Markup built in Python holds each value it prints
+as text the same way, through HQ's `format_html`. `|breakable` passes a plain
+word and markup as they are, so it is safe on any value; a template writes it
+only for a list's commas (`|breakable:forloop`), a mark held in a variable, or
+`{% dot %}`'s dot (`|breakable:"·"`).
 
 A seam is an empty `.seam` whose generated text is a zero-width space, never a
 `<wbr>`: Chromium breaks at a `<wbr>` even under `white-space: nowrap`, and
@@ -357,6 +364,7 @@ column needs nothing else.
 | `when:"dateline"` | "Wednesday, Nov 18" | the day a page opens on, over its title |
 | `when:"length"` | "5 minutes", either way from now | a wait |
 | `when:"ahead"` | "in 3 days" | a wait |
+| `when:"since"` | "since 9:29 AM" today, "since Oct 3" before | how long a state has held; the form says the "since" |
 | `when:"expiry"` | "expires in 3 days", "expired 4 days ago" | a deadline |
 | `{{ at\|when_text:"ago" }}` | the words of any form, as plain text | an attribute, or a table cell's line, which sorts on the first `<time>` it holds |
 | `when_range` | "Oct 3 – Oct 9", a year both ends share said once | a run of days |

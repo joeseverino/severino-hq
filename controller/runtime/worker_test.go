@@ -195,7 +195,9 @@ func TestGlanceObservationsCarryTheirPlansMoment(t *testing.T) {
 	w.Providers = observing{p}
 	asOf := "2026-01-02T03:04:05.000006+00:00"
 	b.Responses["glance-plan"] = GlancePlan{OK: true, Panels: []GlancePanelID{GlancePanelIDInfrastructure, GlancePanelIDWeather}, AsOf: asOf}
-	w.Glance(t.Context())
+	if code, err := w.Glances(t.Context()); code != 0 || err != nil {
+		t.Fatalf("%d %v", code, err)
+	}
 	var reported GlanceObservations
 	for _, c := range b.Calls {
 		if c.Action == "glance" {
@@ -286,7 +288,7 @@ func TestAGlancePassWithoutAPlanFails(t *testing.T) {
 func TestIdleApplyOrder(t *testing.T) {
 	w, b, p := newWorker()
 	code, err := w.Run(t.Context(), true)
-	want := []string{"glance-plan", "claim", "sweep-due", "connections", "inventory", "analytics", "schedule", "claim", "steps"}
+	want := []string{"claim", "sweep-due", "connections", "inventory", "analytics", "schedule", "claim", "steps"}
 	if code != 0 || err != nil || !reflect.DeepEqual(b.actions(), want) {
 		t.Fatalf("%d %v %v", code, err, b.actions())
 	}
@@ -318,7 +320,7 @@ func TestProviderFailureReportsGenerationAndStillSweeps(t *testing.T) {
 			}
 		}
 	}
-	if !reflect.DeepEqual(b.actions(), []string{"glance-plan", "claim", "report", "sweep-due", "connections", "inventory", "analytics", "schedule", "steps"}) {
+	if !reflect.DeepEqual(b.actions(), []string{"claim", "report", "sweep-due", "connections", "inventory", "analytics", "schedule", "steps"}) {
 		t.Fatal(b.actions())
 	}
 }
@@ -391,7 +393,7 @@ func TestFailedReportDoesNotPreventSweepOrBecomeSuccess(t *testing.T) {
 	if code != 1 || !errors.Is(err, want) {
 		t.Fatalf("%d %v", code, err)
 	}
-	if !reflect.DeepEqual(b.actions(), []string{"glance-plan", "claim", "report", "sweep-due", "connections", "inventory", "analytics", "schedule", "steps"}) {
+	if !reflect.DeepEqual(b.actions(), []string{"claim", "report", "sweep-due", "connections", "inventory", "analytics", "schedule", "steps"}) {
 		t.Fatal(b.actions())
 	}
 }

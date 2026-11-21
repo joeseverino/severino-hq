@@ -7,50 +7,6 @@ one by hand would create a row that means nothing until one of those is true
 anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
-{% if state_counts.1 %}{% muted element="p" %}{% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}{% endif %}
-{% table_region "Machines" empty="No machines yet." remedy=page.remedy %}
-  <table class="data-table">
-    <thead>
-      <tr>
-        {% table_heading "Machine" "identifier" local_sort=True %}
-        {% table_heading "Read through" "identifier" drop=3 local_sort=True %}
-        {% table_heading "Containers" drop=2 local_sort=True %}
-        {% table_heading "Serves" "identifier" drop=1 local_sort=True %}
-        {% table_heading "State" "status" css="key-col" local_sort=True %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for machine in machines %}
-        <tr>
-          <td>
-            {% cell_line %}<strong>{% entity "machine"|entity_of:machine.name %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}{% detail %}{% if machine.role %}{{ machine.role|breakable }}{% endif %}{% endcell_line %}
-          </td>
-          <td>
-            {% present machine.reached_by %}{% list %}{% for ref in machine.reached_by %}<li>{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} {% muted %}not answering{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endpresent %}
-          </td>
-          <td>
-            {% if machine.containers %}
-              {{ machine.running|breakable }} of {{ machine.containers|length|measured:"running" }}
-            {% elif not machine.containers_visible %}
-              {% muted title="No connection reads containers." %}Not visible{% endmuted %}
-            {% endif %}
-          </td>
-          <td>
-            {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
-            {% list %}{% if machine.runs_hq %}<li>{{ hq_label|breakable }}</li>{% endif %}
-            {% for hostname in machine.hostnames|slice:":2" %}<li>{% entity "service"|entity_of:hostname %}</li>{% endfor %}
-            {% if machine.hostnames|length > 2 %}<li><a href="{{ machine.url }}#names">{% muted %}+{{ machine.hostnames|length|add:"-2"|measured:"more" }}{% endmuted %}</a></li>{% endif %}{% endlist %}
-          </td>
-          <td>
-            {% comment %}
-            One state. Presence decides when the tailnet reports the machine;
-            the connection that sees it is in "Read through".
-            {% endcomment %}
-            {% list %}<li>{% status machine.state tone=machine.tone %}</li>{% if machine.presence and not machine.presence.online and machine.presence.last_seen %}<li>{% muted css="cell-part" %}since {{ machine.presence.last_seen|when:"day" }}{% endmuted %}</li>{% endif %}{% endlist %}
-          </td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-{% endtable_region %}
+{% if state_counts.1 %}{% muted element="p" %}{% for count, state in state_counts %}{{ count }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}{% endif %}
+{% data_table table %}
 {% endblock %}

@@ -4,7 +4,7 @@ import json
 
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
-from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.selectors import SELECTORS, written
 
 # The most a page may shift by itself: Core Web Vitals' line for a good
 # Cumulative Layout Shift.
@@ -44,7 +44,7 @@ LAYOUT_SHIFTS = (
     "(given) => {"
     + DESCRIBE
     + f"""
-  const [vendored, limit] = given ?? [{json.dumps(SELECTORS["vendored"])}, null];
+  const [vendored, limit] = given ?? [{json.dumps(written(SELECTORS["vendored"]))}, null];
   const probed = (shift) => (window[{json.dumps(PROBE_MOVES)}] || [])
     .some(([from, to]) => shift.startTime >= from && shift.startTime <= to);"""
     + """

@@ -91,7 +91,7 @@ INSTRUCTIONS = "\n\n".join(
         (
             "A client that declares the `io.modelcontextprotocol/tasks` extension gets a held change back "
             "as a task whose id is `approval.id`. `tasks/get` reads `working` until an operator decides and "
-            "HQ applies it. It then reads `completed` with the call's answer, or an error coded `declined`, "
+            "HQ applies it. It then reads `completed` with the call's answer, or an error coded `operator_rejected`, "
             "`expired`, `stale` or `operation_failed`. Poll at `pollIntervalMs`. `tasks/cancel` withdraws it "
             "while it waits, as `approval.withdraw` does, and the task reads `cancelled`. `tasks/update` "
             "changes nothing, and only the agent that asked can read the task."

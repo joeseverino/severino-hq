@@ -10,6 +10,7 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from ..labels import dotted
 from ..projection import iso, read_once
+from ..tables import Cell, DataTable, Group, TableColumn
 from ..tone import Tone
 from ..ui import counted
 from .band import Tile
@@ -84,6 +85,50 @@ class HqSight:
         """Kinds a connection tried and could not read; not-connected ones are not failures."""
 
         return sum(row.state in (REFUSED, UNREADABLE) for row in self.rows)
+
+    @property
+    def table(self) -> DataTable:
+        """Every reading kind under the provider that takes it."""
+
+        return DataTable(
+            "Readings by connection",
+            _SEES_COLUMNS,
+            groups=tuple(
+                Group(provider, DataTable.of("", _SEES_COLUMNS, rows).rows, count=len(rows))
+                for provider, rows in self.groups
+            ),
+        )
+
+
+def _reading(row: Sees) -> Cell:
+    """A reading kind, with why it is not read beneath: each refused part's
+    reason, else its remedy, else the error that stopped it."""
+
+    if row.reasons:
+        said = row.reasons
+    elif row.remedy:
+        said = (row.remedy,)
+    else:
+        said = (row.error,) if row.error and not row.read else ()
+    return Cell(row.label, lines=tuple(Cell(line, muted=True) for line in said))
+
+
+def _state(row: Sees) -> Cell:
+    """Its state, in bold unless it reads as it should."""
+
+    if row.stale:
+        return Cell("Out of date", name=True)
+    return Cell(row.state_label, name=not (row.read and row.state == READABLE))
+
+
+_SEES_COLUMNS = (
+    TableColumn("Reading", cell=_reading),
+    TableColumn("State", kind="status", css="key-col", cell=_state),
+    TableColumn("Records", kind="numeric", drop=2, cell=lambda row: Cell(str(row.records) if row.read else "")),
+    TableColumn(
+        "Reading", kind="status", css="optional-col", drop=1, cell=lambda row: Cell.reading(at=row.observed_at)
+    ),
+)
 
 
 def sight() -> HqSight:

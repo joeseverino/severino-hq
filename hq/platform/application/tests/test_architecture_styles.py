@@ -7,7 +7,6 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
-from hq.platform.core.table_cells import ROLE_CLASSES
 from hq.platform.core.template_contract import class_words
 
 from .hand_rolled import hand_rolled_classes, needless_classes
@@ -411,9 +410,7 @@ class TemplateClassStyleTests(SimpleTestCase):
 
     def test_template_classes_are_defined_in_the_stylesheet(self):
 
-        # A class that declares a part's role in a table is read by the region,
-        # which marks the part for the stylesheet (table_tags.mark_cells).
-        defined = defined_classes() | set(ROLE_CLASSES)
+        defined = defined_classes()
         offenders = sorted(
             f"{name}: .{word}"
             for name, path in template_files()

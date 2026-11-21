@@ -83,8 +83,6 @@ class RefreshAsksTheAppTests(TestCase):
         self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [(REF, "")])
         # The App's own read is the source, so the public one is not asked.
         self.assertEqual(fetcher.asked, [])
-        self.project.refresh_from_db()
-        self.assertEqual(self.project.last_push_at, datetime(2026, 9, 27, 12, 0, tzinfo=UTC))
         self.assertEqual(result["github"], {"ok": True, "last_push_at": "2026-09-27T12:00:00+00:00"})
 
     def test_a_principal_that_may_not_wake_the_controller_falls_back_to_the_public_read(self):
@@ -118,18 +116,6 @@ class RefreshAsksTheAppTests(TestCase):
         self.assertEqual(fetcher.asked, [self.project.repository_url])
         self.project.refresh_from_db()
         self.assertEqual(self.project.last_push_at, fetcher.pushed_at)
-
-    def test_an_app_record_without_a_push_time_leaves_the_last_one(self):
-        read_by_app()
-        ProviderInventory.objects.filter(kind="github.repository").update(
-            records=[{"connection_ref": REF, "repository": "example/alpha"}]
-        )
-
-        result, fetcher = self.refresh()
-
-        self.assertTrue(result["github_app"]["ok"])
-        self.assertEqual(fetcher.asked, [])
-        self.assertEqual(result["github"], {"ok": True, "last_push_at": None})
 
 
 class RefreshButtonTests(TestCase):

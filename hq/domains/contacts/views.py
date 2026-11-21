@@ -31,6 +31,7 @@ from hq.platform.application.moments import moment, when
 from hq.platform.application.pages import PageAction, RecordListMixin, RecordPageMixin, page_context, runs_here
 from hq.platform.application.references import Kind
 from hq.platform.application.security import Capability, safe_next
+from hq.platform.application.tables import Cell, DataTable, Row, StatusMark, TableColumn
 from hq.platform.application.ui import counted
 from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted
@@ -100,6 +101,33 @@ def _offered(submission: dict, marks: list[str]) -> tuple[PageAction, ...]:
     return tuple(action for action in offered if action is not None)
 
 
+def _sender(submission: dict) -> Cell:
+    """Who sent it, linked to the message, their address beneath."""
+
+    email = submission.get("email") or ""
+    lines = (Cell(email, muted=True, cut=True),) if email else ()
+    return Cell(submission.get("name") or "", submission["url"], name=True, lines=lines)
+
+
+def _status(submission: dict) -> Cell:
+    """Its review state, and that a change to it waits for the controller."""
+
+    waiting = (Cell("Waiting", tone="attention"),) if submission.get("pending") else ()
+    return Cell(status=StatusMark(submission_state(submission)), parts=waiting)
+
+
+_MESSAGE_COLUMNS = (
+    TableColumn("From", cell=_sender),
+    TableColumn(
+        "Received", kind="status", drop=5, cell=lambda each: Cell(moment=moment(each.get("created_at")), muted=True)
+    ),
+    TableColumn("Message", drop=4, cell=lambda each: Cell(each.get("message_preview") or "", each["url"], cut=True)),
+    TableColumn("Status", kind="status", cell=_status),
+    TableColumn("Country", drop=2, cell=lambda each: Cell(each.get("country") or "", muted=True)),
+    TableColumn("#", kind="identifier", drop=1, cell=lambda each: Cell(str(each["id"]))),
+)
+
+
 class ContactListView(RecordListMixin, TemplateView):
     """Every message, under its status's tab and the search."""
 
@@ -134,15 +162,29 @@ class ContactListView(RecordListMixin, TemplateView):
                 *((value, label, current.counts.get(value, 0)) for value, label in SubmissionStatus.choices),
             )
         ]
-        for each in self.records:
-            each.update(state=submission_state(each), unread=each.get("status") == "unread", actions=_row_actions(each))
+        gap = change_gap(current)
+        query = self.list_query()["query"]
+        messages_table = DataTable(
+            "Messages",
+            _MESSAGE_COLUMNS,
+            tuple(
+                Row(
+                    tuple(column.cell(each) for column in _MESSAGE_COLUMNS),
+                    actions=_row_actions(each),
+                    gap=gap,
+                    emphasized=each.get("status") == "unread",
+                )
+                for each in self.records
+            ),
+            region={"filtered": bool(selected_status or query), "clear": reverse("contacts:list")},
+        )
         return {
             **context,
             "not_read": current.state == inbox.NOT_READ,
             "status_tabs": status_tabs,
             "selected_status": selected_status,
             "status_kept": {"status": selected_status},
-            "q": self.list_query()["query"],
+            "q": query,
             # The search cleared, on the tab it was asked on.
             "search_cleared": with_query(
                 reverse("contacts:list"), {"status": selected_status} if selected_status else None
@@ -153,7 +195,7 @@ class ContactListView(RecordListMixin, TemplateView):
             "problem": current.problem,
             "observed_at": current.observed_at,
             "waiting_note": _waiting_note(current),
-            "gap": change_gap(current),
+            "message_table": messages_table,
         }
 
 

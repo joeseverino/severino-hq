@@ -17,6 +17,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.routes import reverse
 lazy from hq.domains.projects.specs import NEEDS_OUTPUT, UPDATES_ON
 
+from .card_items import Counted
 from .derivations import passed, today as local_today
 from .expenses import cost_totals
 from .money import money
@@ -25,6 +26,7 @@ from .ui import counted
 lazy from .github_estate import repository_for
 lazy from .github_profile import accounts, profile, profiles
 lazy from .moments import moment
+lazy from .projects import last_active
 
 # The display projection of a reading, in the shape an extension emits, so the
 # dashboard renders host and extension cards through one loop and a new section
@@ -32,7 +34,7 @@ lazy from .moments import moment
 Card = dict[str, Any]
 
 
-def _card(*, id: str, label: str, value: str, url: str, detail: str = "") -> tuple[Card, ...]:
+def _card(*, id: str, label: str | Counted, url: str, value: str = "", detail: str = "") -> tuple[Card, ...]:
     """One card, as the tuple a section answers.
 
     A section with nothing to report answers ``()`` instead, so it stops
@@ -40,7 +42,9 @@ def _card(*, id: str, label: str, value: str, url: str, detail: str = "") -> tup
     the moment it has something to say, with no flag to set.
     """
 
-    card: Card = {"id": id, "label": label, "value": value, "url": url}
+    card: Card = {"id": id, "label": label, "url": url}
+    if value:
+        card["value"] = value
     if detail:
         card["detail"] = detail
     return (card,)
@@ -88,8 +92,7 @@ def projects() -> tuple[Card, ...]:
         return ()
     return _card(
         id="hq.projects.updates",
-        label="Open updates",
-        value=str(reading["open"]),
+        label=Counted(reading["open"], "Open update", "Open updates"),
         url=f"{reverse('projects:list')}?updates_on=1",
         detail=counted(reading["unmatched"], "security alert with no fix open", "security alerts with no fix open")
         if reading["unmatched"]
@@ -124,8 +127,7 @@ def content() -> tuple[Card, ...]:
         return ()
     return _card(
         id="hq.content.drafts",
-        label="Drafts",
-        value=str(reading["drafts"]),
+        label=Counted(reading["drafts"], "Draft"),
         url=f"{reverse('content:list')}?status=draft",
         detail=f"{reading['published']} published" if reading["published"] else "",
     )
@@ -198,7 +200,7 @@ def _project(project: Project) -> dict[str, Any]:
         "category_label": project.get_category_display(),
         "repository_url": project.repository_url,
         "public_url": project.public_url,
-        "updated_at": project.updated_at.isoformat(),
+        "last_active_at": last_active(project).isoformat(),
     }
 
 
@@ -214,7 +216,11 @@ def _content(item: ContentItem) -> dict[str, Any]:
 
 
 def recent_active_projects() -> list[dict[str, Any]]:
-    return [_project(project) for project in active_projects().order_by("-updated_at")[:CALENDAR_ROWS]]
+    """The active projects that moved last, by ``last_active``, which a
+    repository's push sets as well as an edit, so every one is read."""
+
+    newest = sorted(active_projects(), key=last_active, reverse=True)[:CALENDAR_ROWS]
+    return [_project(project) for project in newest]
 
 
 def recent_draft_content() -> list[dict[str, Any]]:
@@ -255,5 +261,9 @@ def watching() -> tuple[Card, ...]:
     releases = sum(1 for repo in found["watched"] if repo["release"] and recent(repo["release"]["published_at"]))
     # A number and what it counts, like the cards beside it; the rest is the page.
     if advisories:
-        return _card(id="hq.watching", label="New security advisories", value=str(advisories), url=reverse("watching"))
-    return _card(id="hq.watching", label="New releases", value=str(releases), url=reverse("watching"))
+        return _card(
+            id="hq.watching",
+            label=Counted(advisories, "New security advisory", "New security advisories"),
+            url=reverse("watching"),
+        )
+    return _card(id="hq.watching", label=Counted(releases, "New release", "New releases"), url=reverse("watching"))

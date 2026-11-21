@@ -31,7 +31,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.11.9"
+min_version = "2026.11.11"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -53,7 +53,7 @@ _.file = "tools/pipeline/toolchain.env"
 # The npm tools setup:lint-tools installs run by name.
 _.path = "tools/lint/node_modules/.bin"
 SEVERINO_LOG_LEVEL = "CRITICAL"
-# The source-file ceiling, read by FileSizeTests and by the brief check that
+# The source-file ceiling, read by lint:file-lines and by the brief check that
 # warns a file near it at launch. Globs are space-separated, from the repo root
 # (Python's PurePath.full_match); HELD names the files the ceiling covers, and
 # one of those is exempt when one of EXEMPT matches and none of COUNTED does (a
@@ -85,7 +85,7 @@ jactionlint = "2.6.0"
 # The workflows' security audit (lint:workflows), offline.
 zizmor = "1.32.0"
 # The prose linter: HQ's wording rules, in tools/lint/vale/.vale.ini (lint:prose).
-vale = "3.27.0"
+vale = "3.28.1"
 # The spelling check, American English, in _typos.toml (lint:spelling).
 typos = "1.52.2"
 # Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
@@ -93,13 +93,13 @@ typos = "1.52.2"
 ast-grep = "0.51.3"
 # Hands the linters that read a file at a time only the files a change touched
 # (hk.pkl, the hk task template).
-"aqua:jdx/hk" = "2.12.0"
+"aqua:jdx/hk" = "2.13.0"
 yq = "4.54.3"
 jq = "1.8.2"
 uv = "0.13.9"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 # Lazy, as age is: only lint:scorecard runs it.
-scorecard = { version = "5.6.0", lazy = true }
+scorecard = { version = "5.7.0", lazy = true }
 # Seals a failed Compose run's output (tools/pipeline/seal-failure-logs.sh). Lazy:
 # `mise install` leaves it to its first use, held to mise.lock all the same.
 age = { version = "1.3.2", lazy = true }
@@ -137,7 +137,7 @@ lazy_bins = ["scc"]
 # "Tracing"), in a terminal on this machine. Not in mise's registry. Lazy, as
 # age is: only a developer looking at a trace runs it.
 [tools."aqua:ymtdzzz/otel-tui"]
-version = "0.7.5"
+version = "0.7.6"
 lazy = true
 lazy_bins = ["otel-tui"]
 
@@ -165,7 +165,7 @@ linux-arm64 = { asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz
 # src/defaults.json), so the local analysis runs the queries CI runs. Bump with
 # that action. Lazy, as age is: only scan:codeql runs it.
 [tools."github:github/codeql-action"]
-version = "2.27.4"
+version = "2.27.5"
 version_prefix = "codeql-bundle-v"
 bin_path = "codeql"
 lazy = true

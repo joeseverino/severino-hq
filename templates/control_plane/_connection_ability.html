@@ -1,8 +1,9 @@
 {% comment %}
-One thing a connection's credential lets HQ do, an item of a `.dot-list`. A
+One thing a connection's credential lets HQ do, a part of its row, given the
+`state` and its `connection`. A
 permission note stands beside it only when it differs from its neighbors or
 cannot be used: the state column says it once for the connection. One HQ
 cannot use is said quietly, and its note in its tone (`#evidence`, which the
 read beside it draws too).
 {% endcomment %}
-<li class="cell-part"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>{% if state.available %}{{ state.ability.label|breakable }}{% else %}{% muted %}{{ state.ability.label|breakable }}{% endmuted %}{% endif %}{% partialdef evidence inline %}{% if state and not state.proven and connection.mixed_evidence or state.available is False %} {% if state.evidence_tone %}{% status state.evidence_label tone=state.evidence_tone pill=False title=state.evidence_detail %}{% else %}<small>{% muted title=state.evidence_detail %}{{ state.evidence_label|breakable }}{% endmuted %}</small>{% endif %}{% endif %}{% endpartialdef %}</li>
+<span class="cell-part"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>{% if state.available %}{{ state.ability.label }}{% else %}{% muted %}{{ state.ability.label }}{% endmuted %}{% endif %}{% partialdef evidence inline %}{% if state and not state.proven and connection.mixed_evidence or state.available is False %} {% if state.evidence_tone %}{% status state.evidence_label tone=state.evidence_tone pill=False title=state.evidence_detail %}{% else %}<small>{% muted title=state.evidence_detail %}{{ state.evidence_label }}{% endmuted %}</small>{% endif %}{% endif %}{% endpartialdef %}</span>

@@ -5,14 +5,16 @@ seams and boxes they draw are this module's, read by the stylesheet's
 ``.seam``, ``.token``, ``.whole``, ``.part``, ``.joined`` and ``.mark``.
 """
 
+import functools
 import re
 from html import unescape
 
-from django.utils.html import conditional_escape, format_html
+from django.utils.html import conditional_escape
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.labels import DOT, DOT_MARKUP
 from hq.platform.application.printable import admitted
+from hq.platform.core.held_values import format_html
 
 # Where an address, a hostname, a path or an image reference may wrap: after a
 # slash, after a colon run (never inside a scheme's "://" or an IPv6 "::"), and
@@ -175,7 +177,7 @@ def _token(word: str, *, sole: bool) -> str:
         # A word of a phrase: each part is cut on its own, at its cell's edge.
         return f'<span class="token">{_SEAM.join(_whole(part, boxed=True) for part in parts)}</span>'
     inside = _SEAM.join(_whole(part) for part in parts)
-    return f'<span class="token" data-sole><span class="cut">{inside}</span></span>'
+    return f'<span class="token" data-sole>{inside}</span>'
 
 
 # The tags that close a word's boxes, after its last letter.
@@ -210,9 +212,17 @@ def breakable(value, mark=""):
     if hasattr(value, "__html__"):
         after = mark_safe(DOT_MARKUP) if mark == DOT_MARK else conditional_escape(mark)  # noqa: S308 - HQ's own literal markup
         return conditional_escape(value) + after
+    return mark_safe(_drawn(str(value), mark))  # noqa: S308 - each word is escaped as it is drawn
+
+
+@functools.lru_cache(maxsize=4096)
+def _drawn(text: str, mark: str) -> str:
+    """Words ``breakable`` draws, drawn once: the same words with the same mark
+    draw the same markup on every page, and a table repeats them row by row."""
+
     if mark == DOT_MARK:
-        return mark_safe("".join([*_inside_last(_line(value), DOT_MARKUP.rstrip()), " "]))  # noqa: S308 - each word is escaped as it is drawn
-    return mark_safe("".join(_marked(_line(value), mark)))  # noqa: S308 - each word is escaped as it is drawn
+        return "".join([*_inside_last(_line(text), DOT_MARKUP.rstrip()), " "])
+    return "".join(_marked(_line(text), mark))
 
 
 # The mark that ends a value with ``{% dot %}``'s dot (``{{ x|breakable:"·" }}``),

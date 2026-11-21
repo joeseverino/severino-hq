@@ -97,13 +97,15 @@
    rows can be read against each other. Deliberately not stacked on a phone: a
    matrix that becomes a list of lists loses the alignment it exists for, and a
    row of five dots fits a narrow screen comfortably. */
-.cadence-detail { display: block; font-weight: 400; font-size: var(--text-2xs); }
-.cadence-cell .cadence-mark { margin: 0 auto; }
+.data-table[data-marks] > tbody > tr > th .stack-list { font-weight: 400; font-size: var(--text-2xs); }
+.data-table[data-marks] > tbody > tr > td:not(:last-child) { text-align: center; }
 .cadence-period { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; white-space: nowrap; }
 .cadence-total { font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }
+.data-table[data-marks] > tbody > tr > td:last-child { font-feature-settings: "tnum"; color: var(--muted); }
 /* Compact: for a matrix sharing a row with a chart, where the default cell
    padding and type would push eight columns past a half-width card. */
-[data-marks="compact"] :is(.cadence-period, .cadence-detail) { font-size: var(--text-3xs); }
+[data-marks="compact"] .cadence-period { font-size: var(--text-3xs); }
+.data-table[data-marks="compact"] > tbody > tr > th .stack-list { font-size: var(--text-3xs); }
 
 /* Tabbed charts. Several drawings of one thing in the space of one, built from
    radios so the panel works with no JavaScript and the arrow keys move between

@@ -9,13 +9,13 @@ reading; nothing here calls GitHub.
     {% fact "Latest commit on "|add:repo.default_branch icon="commit" %}
       {% entity repo.head.url|outside code=True label=repo.head.sha|slice:":7" %}
     {% detail %}
-      <small class="one-line" title="{{ repo.head.message }}">{{ repo.head.message|breakable }}</small>
-      <small>{% if repo.head.author %}{{ repo.head.author|breakable }}{% if repo.head.date %}{% dot %}{% endif %}{% endif %}{% if repo.head.date %}{{ repo.head.date|when_text:"ago" }}{% endif %}</small>
+      <small class="one-line" title="{{ repo.head.message }}">{{ repo.head.message }}</small>
+      <small>{% if repo.head.author %}{{ repo.head.author }}{% if repo.head.date %}{% dot %}{% endif %}{% endif %}{% if repo.head.date %}{{ repo.head.date|when_text:"ago" }}{% endif %}</small>
     {% endfact %}
     {% fact "Checks" icon="check-circle" tone=repo.checks_tone %}
       {% if repo.checks.state == 'failure' %}Failing{% elif repo.checks.state == 'pending' %}Running{% elif repo.checks.state == 'success' %}Passing{% else %}None{% endif %}
     {% detail %}
-      <small>{% if repo.checks.failing %}{{ repo.checks.failing|join:", "|breakable }}{% elif repo.checks.total %}{{ repo.checks.total|breakable }} on this commit{% if repo.checks.running %}, {{ repo.checks.running|breakable }} still running{% endif %}{% else %}Nothing runs on this commit.{% endif %}</small>
+      <small>{% if repo.checks.failing %}{{ repo.checks.failing|join:", " }}{% elif repo.checks.total %}{{ repo.checks.total }} on this commit{% if repo.checks.running %}, {{ repo.checks.running }} still running{% endif %}{% else %}Nothing runs on this commit.{% endif %}</small>
     {% endfact %}
     {% fact "Production" icon="deploy" tone=repo.production_tone %}
       {% if repo.production %}
@@ -26,7 +26,7 @@ reading; nothing here calls GitHub.
       {% else %}None{% endif %}
     {% detail %}
       {% if repo.production %}
-        <small><code>{{ repo.production.sha|slice:":7"|breakable }}</code>{% dot %}{{ repo.production.created_at|when_text:"ago" }}{% if repo.production.sha != repo.head.sha %}{% dot %}{{ repo.default_branch|breakable }} has newer commits{% endif %}</small>
+        <small><code>{{ repo.production.sha|slice:":7" }}</code>{% dot %}{{ repo.production.created_at|when_text:"ago" }}{% if repo.production.sha != repo.head.sha %}{% dot %}{{ repo.default_branch }} has newer commits{% endif %}</small>
         {% if repo.production.verified %}<small>{% if repo.production_verified %}{% status "Verified before deploying" tone=repo.verified_tone pill=False tip=repo.verification_tip %}{% else %}{% status "Verification failed" tone=repo.verified_tone pill=False tip=repo.verification_tip %}{% endif %}</small>{% endif %}
       {% else %}
         <small>No deployments on GitHub.</small>
@@ -36,7 +36,7 @@ reading; nothing here calls GitHub.
       {% if repo.alerts %}{% if repo.open_alerts %}{% entity repo.alerts_url|outside label=repo.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repo.alerts_url|outside label="Clear" %}{% endif %}{% else %}Not available{% endif %}
     {% detail %}
       {% if repo.alerts %}
-        <small>{% for n, level in repo.severities %}{{ n|breakable }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts.{% endfor %}</small>
+        <small>{% for n, level in repo.severities %}{{ n }} {{ level|breakable:forloop }}{% if not forloop.last %} {% endif %}{% empty %}No open alerts.{% endfor %}</small>
       {% else %}
         <small>GitHub does not offer security alerts for this repository's plan.</small>
       {% endif %}
@@ -48,22 +48,22 @@ reading; nothing here calls GitHub.
       {% include "projects/_updates_run.html" with run=updates_run asked=run_asked %}
     </div>{% endfact %}
     {% if posture.measured %}
-      {% fact "Repository settings" %}<span class="prose"><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules)</span>{% if posture.unmet %}{% list kind="dots" %}{% for result in posture.unmet %}<li>{% status result.check.unmet tone="attention" pill=False %}</li>{% endfor %}{% endlist %}{% endif %}{% endfact %}
+      {% fact "Repository settings" %}<span class="prose"><a href="{% url 'posture' %}">{{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules)</span>{% if posture.unmet %}{% list kind="dots" %}{% for result in posture.unmet %}<li>{% status result.check.unmet tone="attention" pill=False %}</li>{% endfor %}{% endlist %}{% endif %}{% endfact %}
     {% endif %}
     {% if rules %}
       {% fact "Changes to "|add:repo.default_branch %}
         {% if rules.pull_request %}Need a pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}Need no pull request{% endif %}
-        and {{ rules.required_checks|length|counted:"passing check,passing checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", "|breakable:")." }}{% else %}.{% endif %}{% if rules.blocks_force_push %} Force-push is blocked.{% endif %}
+        and {{ rules.required_checks|length|counted:"passing check,passing checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", " }}).{% else %}.{% endif %}{% if rules.blocks_force_push %} Force-push is blocked.{% endif %}
         {% if repo.unrequired_checks %}{% list %}<li>{% status "Run on pull requests but not required:" repo.unrequired_checks|join:", " tone="attention" pill=False %}</li>{% endlist %}{% endif %}
       {% endfact %}
     {% elif "branch_rules" in repo.refused %}
       {% fact "Changes to "|add:repo.default_branch %}{% muted %}GitHub does not offer branch rules for this repository's plan.{% endmuted %}{% endfact %}
     {% endif %}
     {% if environment %}
-      {% fact "Deploy rules" %}{% if environment.reviewers %}Approval from {{ environment.reviewers|join:", "|breakable }}{% else %}No approval{% endif %}{% if environment.wait_minutes %}, then a {{ environment.wait_minutes|counted:"minute" }} wait{% endif %}{% if environment.branches == "protected" %}, protected branches only{% elif environment.branches != "any" %}, chosen branches only{% endif %}{% endfact %}
+      {% fact "Deploy rules" %}{% if environment.reviewers %}Approval from {{ environment.reviewers|join:", " }}{% else %}No approval{% endif %}{% if environment.wait_minutes %}, then a {{ environment.wait_minutes|counted:"minute" }} wait{% endif %}{% if environment.branches == "protected" %}, protected branches only{% elif environment.branches != "any" %}, chosen branches only{% endif %}{% endfact %}
     {% endif %}
     {% for runner in repo.runners %}
-      {% fact "Runner" %}{% entity "machine"|entity_of:runner.name %}{% dot %}{{ runner.status|breakable:"," }}{% if runner.busy %} running a job{% else %} idle{% endif %}{% endfact %}
+      {% fact "Runner" %}{% entity "machine"|entity_of:runner.name %}{% dot %}{{ runner.status }},{% if runner.busy %} running a job{% else %} idle{% endif %}{% endfact %}
     {% endfor %}
   {% endfacts %}
   {% endwith %}

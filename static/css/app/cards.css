@@ -95,7 +95,7 @@
 
 /* ── The queue ──────────────────────────────────────────────────────
    What awaits a decision, scanned top-down in severity order. Its rows are
-   the table's own (partials/_queue_rows.html): the words in the cell that
+   the table's own (queue_table): the words in the cell that
    names the row, what can be pressed in its row's actions (tables.css). What
    stays here is the queue's alone: the urgency's word, what a row holds
    beneath, and a row dismissed in place. */
@@ -103,8 +103,8 @@
 /* How old the reading behind it is: quiet while current, in the attention
    tone once out of date. */
 .reading-age.is-stale { color: var(--tone-ink); }
-/* The reason it cannot be done from here, in a row's opened line and on an insight card. */
-.attention-reason { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
+/* The reason it cannot be done from here, in a row's opened line. */
+[data-attention-reason] { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
 /* What raised an item, opened from its urgency: a small modal over the page,
    titled with the item it explains. */
 .modifier-held [data-origin] { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; outline: 1px solid var(--tone-line, var(--line)); outline-offset: 1px; }

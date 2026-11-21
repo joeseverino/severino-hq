@@ -82,7 +82,7 @@ slotted(
             # A title the page composes, written as the tag's title part.
             "composed": Example(
                 '{% notice tone="warning" %}<p>Pick another below.</p>'
-                "{% title %}{{ name|breakable }} cannot be used here{% endnotice %}",
+                "{% title %}{{ name }} cannot be used here{% endnotice %}",
                 {"name": "example-target.example.com"},
             ),
             # Holding a switch, as a trace's says what it shows: a link in its words is

@@ -34,7 +34,7 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% endcomment %}
 {% if container.standing %}
   {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit=container.edit %}
-  {% if container.running.unit %}{% muted element="p" data_run_by_unit=container.running.unit %}The systemd unit <code>{{ container.running.unit|breakable }}</code> runs it, and Start, Stop and Restart go through that unit.{% endmuted %}{% endif %}
+  {% if container.running.unit %}{% muted element="p" data_run_by_unit=container.running.unit %}The systemd unit <code>{{ container.running.unit }}</code> runs it, and Start, Stop and Restart go through that unit.{% endmuted %}{% endif %}
   {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit=container.edit %}{% endif %}
 {% endif %}
 
@@ -52,34 +52,20 @@ declaration's machinery: the controller's actions are the buttons above, and
     {% endsection %}
     {% section "Installed on" %}
       {% if resource.consumers %}
-      {% table_region "Installed on" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Place" "identifier" local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
-        <tbody>
-          {% for consumer in resource.consumers %}
-            <tr>
-              <td>
-                {% cell_line %}<strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name|breakable }}</a>{% else %}{{ consumer.name|breakable }}{% endif %}</strong>{% detail %}through {% entity "connection"|entity_of:consumer.connection_ref %}{% endcell_line %}
-              </td>
-              <td>{% for domain in consumer.domains %}{% entity "service"|entity_of:domain mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% endtable_region %}
+      {% data_table installed %}
       {% elif resource.resolution_error %}
         {% comment %}Why it is installed nowhere, where the list would be.{% endcomment %}
-        {% notice tone="warning" title="Not installed" %}<p>{{ resource.resolution_error|breakable }}</p>{% endnotice %}
+        {% notice tone="warning" title="Not installed" %}<p>{{ resource.resolution_error }}</p>{% endnotice %}
       {% endif %}
       {% comment %}
       Named beside the consumers that answered. A reading that covers six of
       seven is still a reading, and this is the part it does not cover.
       {% endcomment %}
       {% if resource.status.unreachable_consumers %}
-        {% section "Unchecked" count=resource.status.unreachable_consumers|length fold=True open=True %}
+        {% section "not checked"|absent|capfirst count=resource.status.unreachable_consumers|length fold=True open=True %}
           {% list kind="prose" %}
             {% for item in resource.status.unreachable_consumers %}
-              <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
+              <li>{% if item.domain %}<strong>{{ item.consumer }}</strong>{% dot %}{{ item.domain }}:{% else %}<strong>{{ item.consumer }}:</strong>{% endif %} {{ item.reason }}</li>
             {% endfor %}
           {% endlist %}
         {% endsection %}
@@ -122,7 +108,7 @@ where it is saved and how it relates follow, short cards sharing rows.
       {% muted element="p" %}Managed on {% entity "machine"|entity_of:resource.provider_machine.name %}{% if managing_connections %} through {% for link in managing_connections %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endmuted %}
     {% endif %}
     {% if resource.origin_machine %}
-      {% muted element="p" %}{{ origin_phrase|breakable }} {% entity "machine"|entity_of:resource.origin_machine.name %}{% endmuted %}
+      {% muted element="p" %}{{ origin_phrase }} {% entity "machine"|entity_of:resource.origin_machine.name %}{% endmuted %}
     {% endif %}
     {% if service_links %}
       {% muted element="p" %}
@@ -140,21 +126,21 @@ where it is saved and how it relates follow, short cards sharing rows.
     {% if container %}
       {% facts %}
         {% if container.machine and not container.standing %}
-          {% fact "Runs on" %}{% entity container.machine.link %}{% if container.machine.role %} {% muted %}{{ container.machine.role|breakable }}{% endmuted %}{% endif %}{% endfact %}
+          {% fact "Runs on" %}{% entity container.machine.link %}{% if container.machine.role %} {% muted %}{{ container.machine.role }}{% endmuted %}{% endif %}{% endfact %}
         {% endif %}
         {% if container.running and container.standing %}
           {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
           {% fact "Reading" %}{% include "partials/_reading_age.html" with at=container.running.observed_at only %}{% endfact %}
         {% elif container.running %}
-          {% fact "State" %}{% status container.running.state %}{% if container.running.status %} {% muted %}{{ container.running.status|breakable }}{% endmuted %}{% endif %}{% endfact %}
-          {% fact "Image" %}<code>{{ container.running.image_label|breakable }}</code>{% endfact %}
+          {% fact "State" %}{% status container.running.state %}{% if container.running.status %} {% muted %}{{ container.running.status }}{% endmuted %}{% endif %}{% endfact %}
+          {% fact "Image" %}<code>{{ container.running.image_label }}</code>{% endfact %}
           {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
           {% fact "Reading" %}{% include "partials/_reading_age.html" with at=container.running.observed_at only %}{% endfact %}
         {% else %}
           {% fact "State" %}{% muted %}Not read yet.{% endmuted %}{% endfact %}
         {% endif %}
         {% if container.running.unit %}
-          {% fact "Run by" %}<code data-run-by-unit="{{ container.running.unit }}">{{ container.running.unit|breakable }}</code>{% detail %}Start, Stop and Restart go through this systemd unit.{% endfact %}
+          {% fact "Run by" %}<code data-run-by-unit="{{ container.running.unit }}">{{ container.running.unit }}</code>{% detail %}Start, Stop and Restart go through this systemd unit.{% endfact %}
         {% endif %}
         {% if container.serves %}
           {% fact "Serves" %}{% for hostname in container.serves %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}
@@ -199,7 +185,7 @@ certificate, so the relation reads from both ends.
     {% if resource.used_by %}
       <p>{{ resource.used_by|length|counted:"service" }}: {% for hostname in resource.used_by %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
       {% if resource.unused_names %}
-        {% facts %}{% fact "Not served" %}{% list kind="codes" %}{% for name in resource.unused_names %}<li><code>{{ name|breakable }}</code></li>{% endfor %}{% endlist %}{% endfact %}{% endfacts %}
+        {% facts %}{% fact "Not served" %}{% list kind="codes" %}{% for name in resource.unused_names %}<li><code>{{ name }}</code></li>{% endfor %}{% endlist %}{% endfact %}{% endfacts %}
       {% endif %}
     {% endif %}
   {% empty %}No service is served with this certificate.
@@ -212,30 +198,7 @@ certificate, so the relation reads from both ends.
   {% endcomment %}
   {% if resource.status.published_facts %}
     {% section "Saved to 1Password" %}
-      {% table_region "Saved to 1Password" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Item" "identifier" local_sort=True %}{% table_heading "Last saved" "status" local_sort=True %}</tr></thead>
-        <tbody>
-          {% for publication in resource.status.published_facts %}
-            <tr>
-              <td><strong>{{ publication.target|breakable }}</strong></td>
-              <td>
-                {% if publication.detail %}
-                  {% list %}<li>{% status "Not saved" tone="serious" %}</li><li>{% muted %}{{ publication.detail|breakable }}{% endmuted %}</li>{% endlist %}
-                {% elif publication.written %}
-                  {% list %}<li>{% status "Saved" tone="good" %}</li>
-                  {% if publication.fields or publication.material == "written" %}
-                    <li>{% muted %}{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}</li>
-                  {% endif %}{% endlist %}
-                {% else %}
-                  {% status "Already up to date" tone="good" %}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% endtable_region %}
+      {% data_table saved %}
     {% endsection %}
   {% endif %}
 {% include "partials/_relationships.html" %}
@@ -243,8 +206,8 @@ certificate, so the relation reads from both ends.
 {% endlayout %}
 
 {% section "Raw data" fold=True %}
-  {% section "HQ's config" %}<pre tabindex="0">{{ spec_json|breakable }}</pre>{% endsection %}
-  {% section "Last reading" %}<pre tabindex="0">{{ diagnostic_status|breakable }}</pre>{% endsection %}
+  {% section "HQ's config" %}<pre tabindex="0">{{ spec_json }}</pre>{% endsection %}
+  {% section "Last reading" %}<pre tabindex="0">{{ diagnostic_status }}</pre>{% endsection %}
 {% endsection %}
 
 {% comment %}

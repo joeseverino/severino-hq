@@ -8,12 +8,13 @@ from typing import Any
 from django import template
 from django.template import Template
 from django.template.base import token_kwargs
-from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import html_attributes
+from hq.platform.core.held_values import format_html
 from hq.platform.core.template_parts import Example, Option, Part, slotted
 from hq.platform.core.templatetags.frame_tags import MUTED
+lazy from hq.platform.application import tables
 lazy from hq.platform.application.pages import Page
 
 register = template.Library()
@@ -87,14 +88,48 @@ def _title_line() -> dict:
         "page": Page(title="example-host-01"),
         "page_aside": Template(
             '{% list kind="dots" muted=True data_example="example" %}'
-            '<li>{% status "Online" tone="good" %} since 3 days ago</li>'
+            '<li>{% status "Online" tone="good" %} since Oct 3</li>'
             "<li>example role</li><li><code>192.0.2.10</code></li>"
             "<li>also known as <code>example-host-01.example.com</code></li>"
-            '<li><strong>{% status "Out of date" tone="attention" pill=False %}</strong> since 2 hours ago</li>'
+            '<li><strong>{% status "Out of date" tone="attention" pill=False %}</strong> since 9:29 AM</li>'
             '<li>{% status "An example sentence that says what the state means." tone="attention" pill=False %}</li>'
             "{% endlist %}"
         ),
     }
+
+
+def _checks() -> tables.DataTable:
+    """A check's row: its notes under its name, and a list its open row shows under its label."""
+
+    affected = tuple(
+        tables.Cell(name, name=True, parts=(tables.Cell(host, dot=True),))
+        for name, host in (("example-proxy", "example.com"), ("example-mail", "mail.example.com"))
+    )
+    reading = tables.Cell(
+        "Example reading",
+        lines=tuple(
+            tables.Cell(said, muted=True) for said in ("An example reason it is not read.", "Another example reason.")
+        ),
+    )
+    result = tables.Cell(
+        "Failed",
+        tone="serious",
+        lines=(tables.Cell("2 example names differ", name=True),),
+        below=(tables.Below("Example affected", affected),),
+    )
+    columns = (tables.TableColumn("Check"), tables.TableColumn("Result"))
+    return tables.DataTable("Example checks", columns, (tables.Row((reading, result)),))
+
+
+def _runs(label: str, headings: tuple[str, str], rows: dict, part) -> tables.DataTable:
+    """A table whose second column runs each row's parts as far as its line holds."""
+
+    columns = (tables.TableColumn(headings[0], kind="identifier"), tables.TableColumn(headings[1]))
+    drawn = tuple(
+        tables.Row((tables.Cell(name), tables.Cell(fit=True, parts=tuple(map(part, parts)))))
+        for name, parts in rows.items()
+    )
+    return tables.DataTable(label, columns, drawn)
 
 
 LIST = Part(
@@ -145,15 +180,8 @@ LIST = Part(
         ),
         # In a table: a row's notes under its name, and a list the open row shows under its label.
         "in-a-row": Example(
-            '{% section "Example checks" %}{% table_region "Example checks" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Check" %}{% table_heading "Result" %}</tr></thead><tbody>'
-            "<tr><td>Example reading"
-            '{% list %}<li class="muted">An example reason it is not read.</li>'
-            '<li class="muted">Another example reason.</li>{% endlist %}</td>'
-            '<td class="cell-data">{% status "Failed" tone="serious" %}<br><strong>2 example names differ</strong>'
-            '{% list below="Example affected" %}<li><strong>example-proxy</strong>{% dot %}example.com</li>'
-            "<li><strong>example-mail</strong>{% dot %}mail.example.com</li>{% endlist %}</td></tr>"
-            "</tbody></table>{% endtable_region %}{% endsection %}"
+            '{% section "Example checks" %}{% data_table table %}{% endsection %}',
+            lambda: {"table": _checks()},
         ),
         # Places to go: one of HQ's own pages, outside ones with their arrow, and a name long
         # enough to wrap on a phone.
@@ -207,30 +235,33 @@ class LineListNode(template.Node):
         self.name = name
         self.kind = kind
 
-    def _parts(self, context: Any, values: list[Any]) -> str:
-        drawn = []
-        for value in values:
-            with context.push(**{self.name: value}):
-                drawn.append(self.nodelist.render(context))
-        return "".join(drawn)
+    def _part(self, context: Any, value: Any) -> str:
+        with context.push(**{self.name: value}):
+            return self.nodelist.render(context)
 
     def render(self, context: Any) -> str:
         values = [value for value in self.values.resolve(context) or () if value not in (None, "")]
-        if not values:
-            return ""
-        kind = self.kind.resolve(context) if self.kind else ""
-        LINE_LIST.held({"kind": kind})
-        lead, rest = values[:LINE_LEAD], values[LINE_LEAD:]
-        # Parts already rendered and escaped by their own template.
-        parts = mark_safe(self._parts(context, lead))  # noqa: S308 - rendered and escaped already
-        tail = mark_safe(self._parts(context, rest))  # noqa: S308 - rendered and escaped already
-        # The rest shows only on the row's open line (table_cells._HELD).
-        if kind:
-            css = KINDS[kind].css
-            more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
-            return format_html('<ul class="{} line-list">{}{}</ul>', css, parts, more)
-        more = format_html('<span class="line-rest"><span class="line-run">{}</span></span>', tail) if rest else ""
-        return format_html('<span class="line-list">{}{}</span>', parts, more)
+        kind = self.kind.resolve(context) if self.kind and values else ""
+        return line_run([self._part(context, value) for value in values], kind)
+
+
+def line_run(drawn: list[str], kind: str = "") -> str:
+    """Parts drawn already, each escaped by what drew it, as a line list:
+    the first few on the row's line, the rest only on its open line
+    (table_layout.HELD)."""
+
+    if not drawn:
+        return ""
+    LINE_LIST.held({"kind": kind})
+    parts = mark_safe("".join(drawn[:LINE_LEAD]))  # noqa: S308 - escaped by what drew each
+    tail = mark_safe("".join(drawn[LINE_LEAD:]))  # noqa: S308 - escaped by what drew each
+    rest = len(drawn) > LINE_LEAD
+    if kind:
+        css = KINDS[kind].css
+        more = format_html('<li class="line-rest"><ul class="{} line-run">{}</ul></li>', css, tail) if rest else ""
+        return format_html('<ul class="{} line-list">{}{}</ul>', css, parts, more)
+    more = format_html('<span class="line-rest"><span class="line-run">{}</span></span>', tail) if rest else ""
+    return format_html('<span class="line-list">{}{}</span>', parts, more)
 
 
 @register.tag("line_list")
@@ -263,36 +294,43 @@ LINE_LIST = line_list.__wrapped__ = Part(  # type: ignore[attr-defined]  # a fun
             about="The list kind whose `<li>`s the body draws; left out, a run of parts that is no list.",
         )
     },
-    # Four parts that all show, two, and nine. With script the parts past the
-    # first three show as far as their line has room and the row opens for the
-    # rest; without it, the rest wrap on lines of their own beneath the first three.
+    # Four parts, the first three leading and the fourth the rest. With script
+    # the rest show as far as their line has room; without it, they wrap.
     example=Example(
-        '{% section "Example stacks" %}{% table_region "Example stacks" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" "identifier" %}{% table_heading "Parts" %}</tr></thead><tbody>'
-        "{% for row in rows %}<tr><td>{{ row.0 }}</td><td>{% line_list row.1 as part %}{% status part chip=True %}"
-        "{% endline_list %}</td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
-        {
-            "rows": (
-                ("example-01", ("Debian", "systemd", "Caddy", "Tailscale")),
-                ("example-02", ("Django", "SQLite")),
-                ("example-03", tuple(f"example-part-{at:02}" for at in range(1, 10))),
-            )
-        },
+        '{% line_list reads as read kind="dots" %}<li>{{ read }}</li>{% endline_list %}',
+        {"reads": ("example.read", "example.write", "example.admin", "example.audit")},
     ),
     states={
-        # A run its body draws as a list's items, a dot between each.
-        "dots": Example(
-            '{% section "Example reads" %}{% table_region "Example reads" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Connection" "identifier" %}{% table_heading "Reads" %}</tr></thead><tbody>'
-            '{% for row in rows %}<tr><td>{{ row.0 }}</td><td>{% line_list row.1 as read kind="dots" %}'
-            "<li><code>{{ read }}</code></li>{% endline_list %}</td></tr>{% endfor %}</tbody></table>"
-            "{% endtable_region %}{% endsection %}",
-            {
-                "rows": (
-                    ("example-main", ("example.read", "example.list")),
-                    ("example-admin", ("example.read", "example.write", "example.admin", "example.audit")),
+        # In a table's cells (``Cell(fit=True)``): four parts that all show, two, and nine.
+        "stacks": Example(
+            '{% section "Example stacks" %}{% data_table table %}{% endsection %}',
+            lambda: {
+                "table": _runs(
+                    "Example stacks",
+                    ("Name", "Parts"),
+                    {
+                        "example-01": ("Debian", "systemd", "Caddy", "Tailscale"),
+                        "example-02": ("Django", "SQLite"),
+                        "example-03": tuple(f"example-part-{at:02}" for at in range(1, 10)),
+                    },
+                    lambda part: tables.Cell(status=tables.StatusMark(part, chip=True)),
                 )
             },
-        )
+        ),
+        # A run its body draws as a list's items, a dot between each.
+        "dots": Example(
+            '{% section "Example reads" %}{% data_table table %}{% endsection %}',
+            lambda: {
+                "table": _runs(
+                    "Example reads",
+                    ("Connection", "Reads"),
+                    {
+                        "example-main": ("example.read", "example.list"),
+                        "example-admin": ("example.read", "example.write", "example.admin", "example.audit"),
+                    },
+                    lambda read: tables.Cell(read, readout=True),
+                )
+            },
+        ),
     },
 )

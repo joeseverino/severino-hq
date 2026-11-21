@@ -1,7 +1,7 @@
 """Probes of boxes: what escapes the page, frames, overlaps, targets, the map and the chrome's insets."""
 
 from hq.platform.core.included_parts import TOPOLOGY_MAP
-from hq.platform.core.templatetags.table_tags import TABLE_REGION
+from hq.platform.core.templatetags.table_tags import DATA_TABLE
 from hq.platform.core.tests.browser.probes import Check, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -67,7 +67,7 @@ ANY_SCROLLER = None
 # over the space beside it, and for a tick box by the labels that tick it.
 # ``floating`` names the panels drawn over the page, each a layer of its own.
 SMALL_TARGETS = (
-    "([selector, least, floating]) => {"
+    "([selector, least, floating, scroll]) => {"
     + DESCRIBE
     + """
   const found = [];
@@ -230,9 +230,7 @@ SMALL_TARGETS = (
       if (r.width >= least - .5 && r.height >= least - .5) sized.add(el);
     }
     // A table's box is its region, whatever role it carries.
-    const region = (el) => el.closest('td, th, """
-    + SELECTORS["table_scroll"]
-    + """, section, [role=region]');
+    const region = (el) => el.closest(`td, th, ${scroll}, section, [role=region]`);
     const standIn = (el) => {
       const named = document.getElementById(el.dataset.targetEquivalent || '');
       return Boolean(named && sized.has(named) && region(named) === region(el));
@@ -549,7 +547,7 @@ CHECKS = {
     ),
     "into a neighbor": Check(INTO_A_NEIGHBOR, reader_sees="what a box holds drawn over the box beside it"),
     "small targets": Check(
-        (SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN, SELECTORS["floating"]]),
+        (SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN, SELECTORS["floating"], SELECTORS["table_scroll"]]),
         reader_sees="a control too small to hit",
         # Each pair of small targets side by side, so neither is spaced clear
         # of the other.
@@ -625,7 +623,7 @@ CHECKS = {
     "frames short of their box": Check(
         (NARROW_FRAMES, SELECTORS["table_scroll"]),
         reader_sees="a table's frame ending short of the box it heads",
-        part=TABLE_REGION,
+        part=DATA_TABLE,
     ),
     "map": Check(
         (MAP, [SELECTORS["map"], SELECTORS["map_lane"], SELECTORS["map_node"]]),

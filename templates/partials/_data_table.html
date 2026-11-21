@@ -1,16 +1,16 @@
-{% comment %}A table drawn whole from its declaration (`tables.DataTable`): a toned cell is a state, a row's run evidence opens under its last cell, and its actions end it.{% endcomment %}
-{% table_region table.label %}
-  <table class="data-table">
-    <thead><tr>{% for column in table.columns %}{% table_heading column.label column.kind css=column.css drop=column.drop local_sort=True %}{% endfor %}{% if table.has_actions %}{% table_heading "Actions" css="actions-col" hidden=True %}{% endif %}</tr></thead>
-    <tbody>
-      {% for cells, below, actions in table.rows %}
-        <tr>
-          {% for cell in cells %}
-            <td>{% if cell.tone and cell.link %}{% entity cell.link %} {% status cell.text tone=cell.tone %}{% elif cell.tone %}{% status cell.text tone=cell.tone href=cell.url %}{% elif cell.link %}{% entity cell.link %}{% elif cell.url %}{% if cell.external %}{% entity cell.url|outside label=cell.text %}{% else %}<a href="{{ cell.url }}">{{ cell.text|breakable }}</a>{% endif %}{% elif cell.muted %}{% muted %}{{ cell.text|breakable }}{% endmuted %}{% else %}{{ cell.text|breakable }}{% endif %}{% if forloop.last %}{% run_evidence below %}{% endif %}</td>
-          {% endfor %}
-          {% if table.has_actions %}{% row_actions actions %}{% endif %}
-        </tr>
+{% comment %}A table drawn whole from its declaration (`tables.DataTable`), as `drawn_tables.drawn` lays it out: every mark the stylesheet reads is the layout's, written here on the element it belongs to, so nothing is read back. With no rows it draws its empty state in place of the box. Each cell, its value, what follows it and its lines beneath, is drawn by `drawn_tables`, as are the blocks its row keeps below; a row's editor, those blocks and its run evidence stand on its open line, and its totals in its foot. A group's `data-` attributes stand on its body.{% endcomment %}
+{% if rows %}<div class="table-scroll{% if table.region.css %} {{ table.region.css }}{% endif %}{% if table.region.pane %} is-pane{% endif %}"{{ box }}>
+  <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}{{ marks }}>
+    {% if headings %}<thead><tr>{% for heading in headings %}{% include "partials/_table_heading.html" with label=heading.label kind=heading.kind css=heading.css drop=heading.drop server_sort=heading.server_sort local_sort=heading.local_sort hidden=heading.hidden title=heading.title select_all=heading.select_all marks=heading.marks only %}{% endfor %}</tr></thead>{% endif %}
+    {% for group in groups %}
+    <tbody{% if group.group.id %} id="{{ group.group.id }}"{% endif %}{{ group.group.data|data_attributes }}>
+      {% if group.group.label %}{% include "partials/_row_group.html" with label=group.group.label count=group.group.count folds=group.group.folds href=group.group.href attention=group.group.attention across=group.across only %}{% endif %}
+      {% for row in group.rows %}
+        {% partial row %}
       {% endfor %}
     </tbody>
-  </table>
-{% endtable_region %}
+    {% endfor %}
+    {% if footer %}<tfoot>{% with row=footer %}{% partial row %}{% endwith %}</tfoot>{% endif %}
+  </table>{{ frame }}</div>
+{% else %}{% include "partials/_empty_state.html" with message=empty.message remedy=empty.remedy action_url=empty.action_url action_label=empty.action_label only %}{% endif %}
+{% partialdef row %}<tr{{ row.attributes }}>{% if row.select %}{% include "partials/_row_select.html" with pk=row.row.key marks=row.select.attributes only %}{% endif %}{% for cell in row.cells %}{{ cell.drawn }}{% endfor %}{% if row.actions %}{% include "partials/_row_actions.html" with actions=row.row.actions mark=row.row.mark order=row.row.order gap=row.row.gap put_away=row.row.put_away asks=row.row.asks marks=row.actions.attributes only %}{% endif %}</tr>{% if row.detail %}<tr class="row-detail" data-row-detail><td colspan="{{ row.detail }}">{% if row.editor %}{% include "partials/_row_editor.html#form" with open=row.editor.open slug=row.editor.slug form=row.editor.form action=row.editor.action verb=row.editor.verb close_url=row.editor.close_url only %}{% endif %}{% for block in row.blocks %}<div class="row-below">{{ block }}</div>{% endfor %}{% if row.entries or row.row.evidence %}<dl class="row-columns">{% for label, block in row.entries %}<div><dt>{{ label }}</dt><dd class="row-below" data-label="{{ label }}">{{ block }}</dd></div>{% endfor %}{% if row.row.evidence %}{% run_evidence row.row.evidence layout="line" %}{% endif %}</dl>{% endif %}</td></tr>{% endif %}{% endpartialdef %}

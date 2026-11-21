@@ -474,7 +474,7 @@ def outcome(held: ApprovalRequest) -> dict[str, Any] | None:
 
     Approved, it is what the call answered when it ran. Any other end is a
     refusal in the shape a capability refuses in, so the caller reads it as
-    it would the call refused outright: declined, with the person's note, or
+    it would the call refused outright: rejected, with the operator's note, or
     lapsed or overtaken with nothing written.
     """
 
@@ -487,8 +487,8 @@ def outcome(held: ApprovalRequest) -> dict[str, Any] | None:
         return held.result
     if state == ApprovalRequest.State.REJECTED:
         note = held.decision_note.strip()
-        said = f"An operator declined this change in HQ: {note}" if note else "An operator declined this change in HQ."
-        return refuse(Code.DECLINED, said)
+        said = f"An operator rejected this change in HQ: {note}" if note else "An operator rejected this change in HQ."
+        return refuse(Code.OPERATOR_REJECTED, said)
     code, said = _UNAPPLIED[state]
     return refuse(code, said)
 
@@ -615,7 +615,7 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
     return held
 
 
-REQUEST = Titled("approval.request", "Asked for a change a person approves")
+REQUEST = Titled("approval.request", "Asked for a change an operator approves")
 APPROVE = "approval.approve"
 REJECT = "approval.reject"
 WITHDRAW = "approval.withdraw"
@@ -739,11 +739,11 @@ def _refusal(principal: Principal, held: ApprovalRequest, decision: str, *, stop
     if principal.actor == held.requested_actor:
         return _said(AuthorizationError("You cannot approve a request you asked for."))
     # Pausing agents or blocking one stops what it already asked for, not
-    # only what it asks next; declining it still answers it.
+    # only what it asks next; rejecting it still answers it.
     if decision == APPROVE and stopped:
         return _said(
             ApprovalError(
-                "The agent that asked for this is paused or blocked. Resume or allow it to approve this, or decline it."
+                "The agent that asked for this is paused or blocked. Resume or allow it to approve this, or reject it."
             )
         )
     if principal.permits(*need):
@@ -777,9 +777,9 @@ class ApproveCommand:
 
 @dataclass(frozen=True, slots=True)
 class RejectCommand:
-    """The held request to decline, and a note for the agent that asked."""
+    """The held request to reject, and a note for the agent that asked."""
 
-    approval_id: Annotated[str, Describe("The held request to decline.")]
+    approval_id: Annotated[str, Describe("The held request to reject.")]
     note: Annotated[str, Describe("A note for the agent that asked.")] = ""
 
 

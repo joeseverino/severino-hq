@@ -50,10 +50,10 @@ with the surrounding context and holds phrasing content only.
   {% endcomment %}
   <div class="modal-panel" tabindex="-1" autofocus>
     <div class="modal-head">
-      <h2 id="modal-{{ id }}-title">{{ title|breakable }}</h2>
+      <h2 id="modal-{{ id }}-title">{{ title }}</h2>
       {% with dialog="modal-"|add:id %}{% button "×" css="modal-close" command=popover|yesno:"hide-popover,close" commandfor=dialog heard="Close" %}{% endwith %}
     </div>
-    {% if lede %}<p class="modal-lede">{{ lede|breakable }}</p>{% endif %}
+    {% if lede %}<p class="modal-lede">{{ lede|ended }}</p>{% endif %}
     {% if body_template %}{% headed top %}{% include body_template %}{% endheaded %}{% endif %}
     {% if foot_template %}<p class="modal-foot">{% include foot_template %}</p>{% endif %}
   </div>

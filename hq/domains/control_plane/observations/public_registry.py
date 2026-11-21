@@ -21,6 +21,9 @@ UPSTREAM_KIND = "registry.upstream"
 DIGEST_KIND = "registry.digest"
 VULNERABILITY_KIND = "registry.vulnerabilities"
 
+# The keyless RDAP service, through which who holds an address or a domain is read.
+RDAP = "rdap"
+
 
 class AddressHolderRecord(ObservationRecord):
     address: str
@@ -149,7 +152,7 @@ _WEEK = timedelta(days=7)
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         ADDRESS_KIND,
-        "rdap",
+        RDAP,
         "Address owner",
         AddressHolderRecord,
         addresses=_address,
@@ -161,7 +164,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         DOMAIN_KIND,
-        "rdap",
+        RDAP,
         "Domain registration",
         DomainRegistrationRecord,
         hostnames=_domain,

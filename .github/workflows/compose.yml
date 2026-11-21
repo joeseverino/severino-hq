@@ -126,7 +126,7 @@ jobs:
       # HQ's app, asked to read the extensions' code and nothing else.
       - name: Mint a token that can only read the extensions
         id: reader
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           private-key: ${{ secrets.HQ_APP_KEY }}
@@ -159,7 +159,7 @@ jobs:
 
       - name: Install the pinned age
         if: failure()
-        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -272,7 +272,7 @@ jobs:
       # and the published composition is signed and attested with it at the end.
       # The release mise.lock records, which the host verifies with too.
       - name: Install the pinned cosign
-        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -299,7 +299,7 @@ jobs:
       # so no private repository's name is written into this public log.
       - name: Mint a token that can only read the extensions
         id: reader
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           private-key: ${{ secrets.HQ_APP_KEY }}
@@ -385,7 +385,7 @@ jobs:
       - name: Mint a token to start Deploy
         id: production
         if: env.IS_RELEASE == 'true' && steps.fingerprint.outputs.build == 'true'
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           private-key: ${{ secrets.HQ_APP_KEY }}
@@ -558,7 +558,7 @@ jobs:
       - name: Install the pinned Trivy
         if: >-
           steps.fingerprint.outputs.build == 'true'
-        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -674,7 +674,7 @@ jobs:
 
       - name: Install the pinned age
         if: failure()
-        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:

@@ -205,7 +205,7 @@ class ReadCapabilityTests(TestCase):
             (
                 "lookup.address.read",
                 {"address": "not an address"},
-                "lookup.address.read: address is invalid.",
+                "lookup.address.read: address is not a valid IPv4 or IPv6 address.",
             ),
         ):
             with self.subTest(name=name):

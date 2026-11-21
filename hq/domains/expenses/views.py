@@ -18,7 +18,8 @@ from hq.platform.application.moments import stamp_day, when_day
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.references import referenced_by_row, resolve_many
 from hq.platform.application.security import web_principal
-from hq.platform.application.tables import TableColumn
+from hq.platform.application.tables import Cell, TableColumn
+from hq.platform.application.ui import measured
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 
 from .models import EXPENSE_CATEGORY_CHOICES, Expense
@@ -32,13 +33,25 @@ class ExpenseListView(ListPageMixin, TemplateView):
     page_title = "Expenses"
     table_selectable = True
     table_columns = (
-        TableColumn("Vendor", "vendor"),
-        TableColumn("Date", "date", css="date-col"),
-        TableColumn("Item", "item"),
-        TableColumn("Category", "category"),
-        TableColumn("Cost", "total_cost", css="key-col"),
-        TableColumn("Business use", "business_use_percentage"),
-        TableColumn("Deductible (est.)", "estimated_deductible_amount"),
+        TableColumn(
+            "Vendor",
+            "vendor",
+            cell=lambda row: Cell.of(entity_link("expense", row["id"], label=row["vendor"]), name=True),
+        ),
+        TableColumn("Date", "date", css="date-col", cell=lambda row: Cell(moment=stamp_day(row["date"]))),
+        TableColumn("Item", "item", cell=lambda row: Cell(row["item"] or "")),
+        TableColumn("Category", "category", cell=lambda row: Cell(row["category_label"])),
+        TableColumn("Cost", "total_cost", css="key-col", cell=lambda row: Cell(amount=row["total_cost"])),
+        TableColumn(
+            "Business use",
+            "business_use_percentage",
+            cell=lambda row: Cell(measured(row["business_use_percentage"], "%"), muted=True),
+        ),
+        TableColumn(
+            "Deductible (est.)",
+            "estimated_deductible_amount",
+            cell=lambda row: Cell(amount=row["estimated_deductible_amount"]),
+        ),
     )
     table_search_placeholder = "Search vendors, items, purpose, and notes…"
 

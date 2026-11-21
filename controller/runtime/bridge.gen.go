@@ -1787,8 +1787,8 @@ type GlanceObservationAlert struct {
 
 // GlanceObservationDocker A machine read through its Docker environment: what its running
 // containers take of it. “cpu_percent“ is a share of the whole machine.
+// How many there are is the sweep's to count (“ContainerCount“).
 type GlanceObservationDocker struct {
-	Containers  int     `json:"containers"`
 	Cores       int     `json:"cores"`
 	CPUPercent  float64 `json:"cpu_percent"`
 	MemoryTotal int     `json:"memory_total"`
@@ -1824,6 +1824,7 @@ type GlanceObservationHour struct {
 type GlanceObservationMachine struct {
 	// Docker A machine read through its Docker environment: what its running
 	// containers take of it. ``cpu_percent`` is a share of the whole machine.
+	// How many there are is the sweep's to count (``ContainerCount``).
 	Docker *GlanceObservationDocker `json:"docker,omitempty"`
 
 	// Host A machine read over SSH, as the controller's host script prints it.
@@ -2297,19 +2298,17 @@ type PortainerComposeProjectRecord struct {
 
 // PortainerEnvironmentRecord One portainer.environment record: Docker environment.
 type PortainerEnvironmentRecord struct {
-	Address           string `json:"address,omitempty"`
-	AgentVersion      string `json:"agent_version,omitempty"`
-	ConnectionRef     string `json:"connection_ref"`
-	ContainersRunning int    `json:"containers_running,omitempty"`
-	ContainersTotal   int    `json:"containers_total,omitempty"`
-	DockerVersion     string `json:"docker_version,omitempty"`
-	Host              string `json:"host,omitempty"`
-	ID                int    `json:"id"`
-	Local             bool   `json:"local,omitempty"`
-	Name              string `json:"name,omitempty"`
-	SnapshotAt        string `json:"snapshot_at,omitempty"`
-	Status            string `json:"status,omitempty"`
-	Type              string `json:"type,omitempty"`
+	Address       string `json:"address,omitempty"`
+	AgentVersion  string `json:"agent_version,omitempty"`
+	ConnectionRef string `json:"connection_ref"`
+	DockerVersion string `json:"docker_version,omitempty"`
+	Host          string `json:"host,omitempty"`
+	ID            int    `json:"id"`
+	Local         bool   `json:"local,omitempty"`
+	Name          string `json:"name,omitempty"`
+	SnapshotAt    string `json:"snapshot_at,omitempty"`
+	Status        string `json:"status,omitempty"`
+	Type          string `json:"type,omitempty"`
 }
 
 // PortainerImageImageUser defines model for PortainerImageImageUser.

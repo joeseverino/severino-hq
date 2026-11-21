@@ -48,7 +48,8 @@ class TraceLinkTests(TestCase):
         self.assertIsNone(context["topology_trace"])
         self.assertIsNone(context["topology_trace_focus"])
         self.assertEqual(context["topology_trace_label"], "")
-        for unasked in ("topology_edges", "trace_direction_links", "trace_depth_links"):
+        self.assertIsNone(context["topology_links"])
+        for unasked in ("trace_direction_links", "trace_depth_links"):
             self.assertEqual(context[unasked], ())
         self.assertEqual(asks(context["trace_reset_url"]), {"lens": "everything"})
 

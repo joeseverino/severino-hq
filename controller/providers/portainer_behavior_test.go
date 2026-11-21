@@ -115,10 +115,9 @@ func TestPortainerEnvironmentsAreTheirMachines(t *testing.T) {
 	if err != nil || len(found) != 3 {
 		t.Fatalf("%+v %v", found, err)
 	}
-	three, four := int64(3), int64(4)
 	want := []PortainerEnvironment{
 		{ID: 1, Name: "local", Address: urlHostname(server.URL), Local: true, Reachable: true, Type: "docker", Status: "up", AgentVersion: "2.19.4",
-			DockerVersion: "27.1", ContainersRunning: &three, ContainersTotal: &four, SnapshotAt: "2026-01-02T12:00:00Z"},
+			DockerVersion: "27.1", SnapshotAt: "2026-01-02T12:00:00Z"},
 		{ID: 2, Name: "edge-vps", Address: "192.0.2.20", Reachable: true, Type: "agent", Status: "up"},
 		{ID: 3, Name: "odd", Address: "192.0.2.30", Type: "9", Status: "down"},
 	}

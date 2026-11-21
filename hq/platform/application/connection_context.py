@@ -35,7 +35,7 @@ from .connection_security import ConnectionSecurityPosture, connection_security_
 from .connection_setup import ProviderSetup, guide_url, setups
 from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
-from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, sight_by_connection
+from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, read_through, sight_by_connection
 from .derived_reads import serialize_check, serialize_measurement, serialize_path, tally
 from .entity_links import entity_link
 from .freshness import freshness
@@ -207,6 +207,9 @@ class ConnectionRow:
             instance,
             ConnectionStandingRecord,
             credential_model=None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
+            # How it stands is its row's lifecycle, never the bare probe beneath it.
+            status=self.lifecycle.tone,
+            status_label=self.state_label,
             lifecycle=connection.lifecycle,
             authority=connection.authority,
             actions=connection.actions,
@@ -439,7 +442,9 @@ def _rows(
                 ConnectionRow(
                     group=group,
                     connection=connection,
-                    sight=sights.get(ref),
+                    sight=sights.get(ref)
+                    if ref in controller_refs
+                    else read_through(connection.instance.kind, connection.instance.label),
                     fix=fix if fix is not None and fix.needed else None,
                     last_event=events.get(ref),
                     read_now=(read_now_link(principal, connection_ref=ref) if ref in controller_refs else None),

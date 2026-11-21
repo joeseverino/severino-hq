@@ -1,5 +1,5 @@
-"""The tags a write form is drawn through: ``write_token``, ``row_editor`` and
-``asks_one_question`` (each Part's rules).
+"""The tags a write form is drawn through: ``write_token``, ``row_editor``,
+``own_ids`` and ``asks_one_question`` (each Part's rules).
 
 ``{% write_token %}`` replaces ``{% csrf_token %}``, adding a retry key fresh
 for this drawing of the form, so the form sent twice acts once.
@@ -11,13 +11,14 @@ from typing import Annotated, Any
 from django import template
 from django.forms.widgets import Input, Select
 from django.template.defaulttags import CsrfTokenNode
-from django.utils.html import format_html
 from django.utils.text import slugify
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.url_query import with_query
+from hq.platform.core.held_values import format_html
 from hq.platform.core.part_examples import tags
-from hq.platform.core.template_parts import Part, slotted
+from hq.platform.core.template_parts import Part, answers, slotted
+from hq.platform.core.templatetags.part_tags import drawn_ids
 lazy from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 
 register = template.Library()
@@ -53,6 +54,43 @@ def asks_one_question(form):
     return isinstance(widget, Input) and widget.input_type not in _NOT_ONE_LINE
 
 
+def _with_ids(form, auto_id: str):
+    """``form`` drawn with its ids written as ``auto_id`` says, its errors
+    naming them too."""
+
+    drawn = copy.copy(form)
+    drawn.auto_id = auto_id
+    # A copy shares the bound fields its form already drew, with their ids
+    # and values; Django offers no public way to draw them afresh.
+    drawn._bound_fields_cache = {}
+    if form.is_bound:
+        # Each field's errors carry the id they were found under, which
+        # their list is drawn with and the control's aria-describedby names.
+        drawn._errors = copy.copy(form.errors)
+        for name in drawn.fields.keys() & drawn._errors.keys():
+            drawn._errors[name] = drawn._errors[name].copy()
+            drawn._errors[name].field_id = drawn[name].auto_id
+    return drawn
+
+
+@answers(register, takes_context=True)
+def own_ids(context, form):
+    """``{% own_ids form as form %}``: ``form`` with ids no other part on this page drew: its own where they
+    are free, else numbered past them (``id_ended_on-2``), so a label's
+    ``for`` names its own control when a page draws two forms that share a
+    field's name."""
+
+    if not form or "%s" not in str(form.auto_id or ""):
+        return form
+    drawn = drawn_ids(context)
+    auto_id, number = str(form.auto_id), 1
+    while {auto_id % field.html_name for field in form} & drawn:
+        number += 1
+        auto_id = f"{form.auto_id}-{number}"
+    drawn.update(auto_id % field.html_name for field in form)
+    return form if number == 1 else _with_ids(form, auto_id)
+
+
 def row_editor(
     context,
     form: Annotated[Any, Describe("The one form the view declares for the table's editors.")],
@@ -82,20 +120,8 @@ def row_editor(
     asked[ROW_EDIT] = str(key)
     drawn = None
     if is_open:
-        drawn = copy.copy(form)
-        drawn.auto_id = f"row-{slug}-%s"
-        # A copy shares the bound fields its form already drew, with their ids
-        # and values; Django offers no public way to draw them afresh.
-        drawn._bound_fields_cache = {}
+        drawn = _with_ids(form, f"row-{slug}-%s")
         drawn.initial = {**form.initial, **initial}
-        if form.is_bound:
-            # Each field's errors carry the id they were found under, which
-            # their list is drawn with and the control's aria-describedby
-            # names: the row's own, here.
-            drawn._errors = copy.copy(form.errors)
-            for name in drawn.fields.keys() & drawn._errors.keys():
-                drawn._errors[name] = drawn._errors[name].copy()
-                drawn._errors[name].field_id = drawn[name].auto_id
     return {
         "label": label,
         "slug": slug,

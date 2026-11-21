@@ -1,16 +1,14 @@
 """Typed, cached dashboard observations and their explicit refresh queue."""
 
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import cache
 from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
 from django.db.models import Max
-from django.utils import timezone
-from pydantic import AfterValidator, BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from hq.domains.control_plane.glance_shapes import GlanceObservation, Hour, Machine, Weather
+from hq.domains.control_plane.glance_shapes import Hour, Machine, Weather
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
@@ -19,25 +17,25 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
 )
 from hq.platform.application.url_query import with_query
-lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.platform.application.routes import reverse
 
 from . import readings
 from .answer_fields import CallMessage
-from .asks import FAILED, QUEUED, REFRESHING, RUNNING, Ask, Asked, AskedAnswer, Standing
-from .cadence import ask
+from .asks import FAILED, REFRESHING, RUNNING, Standing
 from .card_items import Kpi
-from .command_fields import Describe, stored_in
+from .command_fields import Checked, Describe, Reason, stored_in
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
+from .container_state import ContainerCount
 from .contracts import Effect
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted, human_bytes
-from .moments import moment, when_hour
+from .moments import when_hour
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
 from .ui import MISSING, counted, measured, severity_tone
-lazy from .capabilities import capability_words, command_spec
+lazy from .glance_refresh import refresh_ask
+lazy from .machines import machine as machine_named
 lazy from .projection import read_once
 
 # The National Weather Service API. The connection shows it and the glance plan
@@ -53,9 +51,7 @@ def connection_specs():
             ConnectionInstance(
                 id="national-weather-service",
                 label="National Weather Service",
-                kind="nws",
-                status=Tone.GOOD,
-                status_label="keyless",
+                kind=readings.NWS,
                 detail="Weather for the dashboard. Public, no key needed.",
                 endpoint=NWS_API,
                 credential_model="none",
@@ -164,7 +160,8 @@ def panel_specs(
             icon="server",
             short_labels=(("Containers", "containers"), ("Docker storage", "Storage")),
             lead=("Containers", "CPU"),
-            caption=("CPU", "Memory"),
+            # Storage under either name: Docker's own, or the host's disk.
+            caption=("CPU", "Memory", "Docker storage", "Storage"),
             link=("Containers", reverse("control_plane:containers")),
         )
     ]
@@ -190,10 +187,10 @@ def dashboard_machines() -> tuple[ManagedResource, ...]:
     """The machines chosen for the dashboard, read once per page: the panels and
     the first steps both ask."""
 
-    return read_once("glance.dashboard_machines", _dashboard_machines)
+    return read_once("glance.dashboard_machines", chosen_machines)
 
 
-def _dashboard_machines() -> tuple[ManagedResource, ...]:
+def chosen_machines() -> tuple[ManagedResource, ...]:
     """Enabled declared machines selected for the dashboard, in operator order."""
 
     return tuple(
@@ -204,7 +201,7 @@ def _dashboard_machines() -> tuple[ManagedResource, ...]:
     )
 
 
-def _machine_routes(
+def machine_routes(
     resources: tuple[ManagedResource, ...],
 ) -> dict[int, tuple[str, ...]]:
     catalog = {item.name.lower(): item for item in machines_once()}
@@ -311,7 +308,7 @@ class DashboardSettingsCommand:
         # The schema says the form; the parser refuses outside it, naming the
         # coordinate that is wrong, which a pattern's refusal cannot.
         Field(title="Weather location", json_schema_extra={"pattern": POINT}),
-        AfterValidator(_a_point),
+        Checked(_a_point, Reason("point", "must be a latitude and longitude, in decimal degrees")),
         Describe("Where the weather is read for, as latitude, longitude; blank hides it."),
     ] = ""
     weather_label: Annotated[
@@ -346,7 +343,7 @@ def _panel(
     *,
     payload: dict[str, Any],
     observed_at: Any,
-    pending: bool | None,
+    pending: tuple[bool, Any] | None,
     refreshable: bool,
     subject: str = "",
 ) -> dict[str, Any]:
@@ -355,10 +352,14 @@ def _panel(
     head names, where panels alike stand side by side.
 
     ``pending`` is None while no reading is on its way, else whether a person
-    waits on it. Only that one is said to be refreshing: a refresh HQ asked for
-    itself keeps the last reading, or the empty state, until it lands."""
+    waits on it and when it was asked. Only that one is said to be refreshing:
+    a refresh HQ asked for itself keeps the last reading, or the empty state,
+    until it lands. Due asks for a refresh when the dashboard opens; only an
+    ask unanswered or failed says the reading is out of date."""
 
     shown = tuple(_glance_reading(metric, spec) for metric in payload.get("metrics", []))
+    awaited, asked_at = pending or (False, None)
+    found = freshness(DASHBOARD_GLANCE, observed_at, asked_at=asked_at, failed=bool(payload.get("refresh_failed")))
     return {
         "id": spec.id,
         "label": spec.label,
@@ -372,9 +373,13 @@ def _panel(
         "payload": payload,
         "observed_at": observed_at,
         "pending": pending is not None,
-        "refreshing": bool(pending),
+        "refreshing": awaited,
         "refreshable": refreshable,
-        "standing": _standing(payload, refreshing=bool(pending)),
+        "standing": _standing(payload, refreshing=awaited),
+        "due": found.due,
+        "outdated": found.stale,
+        "unanswered": found.unanswered,
+        "freshness": found,
         # A panel is colored only for what needs a look; a healthy one reads in ink.
         "tone": payload.get("status") if payload.get("status") in (Tone.ATTENTION, Tone.SERIOUS) else "",
         "readings": shown,
@@ -402,16 +407,19 @@ def _failed(failure: str) -> dict[str, Any]:
     }
 
 
-def machine_words(machine: Machine) -> dict[str, Any]:
+def machine_words(machine: Machine, containers: ContainerCount | None = None) -> dict[str, Any]:
     """A machine's reading as its panel and its page say it: a tone, a summary
-    and its metrics, each a label, a value and a detail."""
+    and its metrics, each a label, a value and a detail, led by ``containers``
+    where the panel says them."""
 
     failed = {"refresh_failed": machine.refresh_failed} if machine.refresh_failed else {}
+    counted_here = [_metric("Containers", measured(containers.running, ""), "running")] if containers else []
     if host := machine.host:
         return {
             "status": Tone.GOOD,
             "summary": f"Host load {measured(host.load_1m, '', 2)}",
             "metrics": [
+                *counted_here,
                 _metric("CPU", measured(host.cpu_percent, "%", 0), counted(host.cores, "core")),
                 _metric(
                     "Memory",
@@ -431,7 +439,7 @@ def machine_words(machine: Machine) -> dict[str, Any]:
             "status": Tone.GOOD,
             "summary": dotted(counted(docker.cores, "core"), f"{human_bytes(docker.memory_total)} memory"),
             "metrics": [
-                _metric("Containers", str(docker.containers), "running"),
+                *counted_here,
                 _metric("CPU", measured(docker.cpu_percent, "%", 0), f"of {counted(docker.cores, 'core')}"),
                 _metric(
                     "Memory",
@@ -521,7 +529,7 @@ def weather_words(weather: Weather) -> dict[str, Any]:
     return words
 
 
-def _stored[Shape: BaseModel](shape: type[Shape], value: Any) -> Shape | None:
+def stored_reading[Shape: BaseModel](shape: type[Shape], value: Any) -> Shape | None:
     """A stored reading's value as the shape the controller reports, or None.
 
     A reading kept in an older shape is none: it keeps its time, so the panel
@@ -537,7 +545,7 @@ def _stored[Shape: BaseModel](shape: type[Shape], value: Any) -> Shape | None:
 def machine_metrics(telemetry: Any) -> list[dict[str, str]]:
     """A machine's stored telemetry as the metrics its page lists."""
 
-    machine = _stored(Machine, telemetry)
+    machine = stored_reading(Machine, telemetry)
     return machine_words(machine)["metrics"] if machine else []
 
 
@@ -566,15 +574,20 @@ def dashboard_panels(
     configuration = configuration or dashboard_configuration()
     specs = {spec.id: spec for spec in panel_specs(configuration)}
     machine_resources = dashboard_machines()
-    routes = _machine_routes(machine_resources) if machine_resources else {}
+    routes = machine_routes(machine_resources) if machine_resources else {}
     point = configuration.weather_point
     weather_key = readings.weather(point) if point else ""
     stored = readings.stored_many(
         [*(readings.machine_telemetry(resource.key) for resource in machine_resources), weather_key]
     )
     weather = stored.get(weather_key)
-    # Each panel a reading is on its way for, and whether a person waits on it.
-    pending = dict(DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list("panel_id", "awaited"))
+    # Each panel a reading is on its way for: whether a person waits on it, and when it was asked.
+    pending = {
+        panel_id: (awaited, asked_at)
+        for panel_id, awaited, asked_at in DashboardRefreshRequest.objects.filter(
+            completed_at__isnull=True
+        ).values_list("panel_id", "awaited", "requested_at")
+    }
     panels = []
     for resource in machine_resources:
         panel_id = f"machine-{resource.pk}"
@@ -591,11 +604,14 @@ def dashboard_panels(
                 else "HQ has no way to read this machine yet."
             ),
         )
-        machine = _stored(Machine, reading.value if reading else None)
+        machine = stored_reading(Machine, reading.value if reading else None)
+        found = machine_named(str(resource.spec.get("name") or resource.key))
         panels.append(
             _panel(
                 spec,
-                payload=machine_words(machine) if machine else {},
+                payload=machine_words(machine, found.container_count if found and found.containers else None)
+                if machine
+                else {},
                 observed_at=reading.observed_at if reading else None,
                 # A request nothing can answer is not a refresh in progress.
                 pending=pending.get(panel_id) if resource.pk in routes else None,
@@ -606,7 +622,7 @@ def dashboard_panels(
     # Nothing empty takes space: with no machine chosen there is no machine
     # reading to draw, and Get started's step is what asks for one.
     if "weather" in specs:
-        forecast = _stored(Weather, weather.value if weather else None)
+        forecast = stored_reading(Weather, weather.value if weather else None)
         panels.append(
             _panel(
                 specs["weather"],
@@ -618,10 +634,8 @@ def dashboard_panels(
                 refreshable=bool(routes),
             )
         )
-    now = timezone.now()
-    shown = tuple(_with_freshness(panel, freshness(DASHBOARD_GLANCE, panel["observed_at"], now)) for panel in panels)
     # Current readings lead; an outdated one steps aside.
-    return tuple(sorted(shown, key=lambda panel: panel["outdated"]))
+    return tuple(sorted(panels, key=lambda panel: panel["outdated"]))
 
 
 def _standing(payload: dict[str, Any], *, refreshing: bool) -> Standing:
@@ -633,22 +647,6 @@ def _standing(payload: dict[str, Any], *, refreshing: bool) -> Standing:
     if failed := payload.get("refresh_failed"):
         return Standing(FAILED, f"The last reading failed ({failed}).")
     return Standing()
-
-
-# The strip, which a finished ask fetches again (_dashboard_glance.html).
-GLANCE_REGION = "[data-glance]"
-
-
-def refresh_ask(standing: Standing) -> Ask:
-    """A panel's Refresh: an ask for every panel, standing as this one's reading does."""
-
-    return Ask(
-        capability_words(DASHBOARD_REFRESH),
-        reverse("dashboard_glance"),
-        standing=standing,
-        refresh=GLANCE_REGION,
-        outcome=True,
-    )
 
 
 def glance_context(
@@ -663,22 +661,13 @@ def glance_context(
         panels = tuple({**panel, "ask": refresh_ask(panel["standing"])} for panel in panels)
     return {
         "dashboard_panels": panels,
-        # The strip is asked again for as long as a reading is on its way, and
-        # asks for the due ones itself when the page opens.
-        "dashboard_refreshing": any(panel.get("pending") for panel in panels),
+        # The strip is asked again for as long as a reading is on its way,
+        # until its ask goes unanswered, and asks for the due ones itself when
+        # the page opens.
+        "dashboard_refreshing": any(panel["pending"] and not panel["unanswered"] for panel in panels),
         "dashboard_due": any(panel.get("due") for panel in panels),
         "dashboard_glance_settings": configuration,
     }
-
-
-def _with_freshness(panel: dict[str, Any], found) -> dict[str, Any]:
-    """A panel with whether to ask for it again and whether it is out of date.
-
-    Due asks for a refresh when the dashboard opens; only stale says "Out of
-    date" and shows the reading as of its age.
-    """
-
-    return {**panel, "due": found.due, "outdated": found.stale, "freshness": found}
 
 
 def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[str, Any]:
@@ -696,222 +685,3 @@ def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[st
         "unit": short_label if spec.head_labels else "",
         "alert": bool(spec.alert_metric) and label == spec.alert_metric,
     }
-
-
-DASHBOARD_REFRESH = "dashboard.panels.refresh"
-DASHBOARD_REFRESH_STALE = "dashboard.panels.refresh_due"
-
-
-@dataclass(frozen=True, slots=True)
-class DashboardRefreshCommand:
-    """A refresh names nothing: which panels it asks for is HQ's to work out."""
-
-
-def _panel_names(ids: list[str]) -> list[str]:
-    """Each panel by what a person calls it: its machine's name, the weather's place."""
-
-    names = {f"machine-{machine.pk}": str(machine.spec.get("name") or machine.key) for machine in dashboard_machines()}
-    names["weather"] = dashboard_configuration().weather_label or "Weather"
-    return [names.get(panel_id, panel_id) for panel_id in ids]
-
-
-class PanelsRefreshRequested(AskedAnswer):
-    """The dashboard panels asked to be read again."""
-
-    requested: Annotated[list[str], Describe("The panels asked to be read again, by id.")]
-
-
-def _ask_for(ids: list[str], *, why: str, message: str = "", pressed: bool = False) -> PanelsRefreshRequested:
-    """Queue a reading of each panel in ``ids``, recorded once; ``pressed``
-    when a person asked and waits on it."""
-
-    if ids:
-        # Each panel by the name its head shows.
-        ask(
-            panels={
-                panel_id: f"Asked for {why}: {name}" for panel_id, name in zip(ids, _panel_names(ids), strict=True)
-            },
-            doorbell="glance",
-            activity=pressed,
-        )
-    standing = Standing(QUEUED, REFRESHING) if ids else Standing()
-    return {**Asked(standing, message=message).answer(), "requested": ids}
-
-
-@transaction.atomic
-def request_dashboard_refresh(_command: DashboardRefreshCommand, *, principal: Principal) -> PanelsRefreshRequested:
-    """Ask for a fresh reading of every panel a controller can read."""
-
-    del principal
-    configuration = dashboard_configuration()
-    machines = _dashboard_machines()
-    routes = _machine_routes(machines) if machines else {}
-    ids = [f"machine-{machine.pk}" for machine in machines if machine.pk in routes]
-    if ids and configuration.weather_point:
-        ids.append("weather")
-    return _ask_for(
-        ids, why="a fresh reading of the dashboard", message=command_spec(DASHBOARD_REFRESH).requested(), pressed=True
-    )
-
-
-@transaction.atomic
-def request_stale_panel_refresh(_command: DashboardRefreshCommand, *, principal: Principal) -> PanelsRefreshRequested:
-    """Ask for the panels whose reading is due again.
-
-    The dashboard posts this when it opens on a due reading. Only panels that
-    are due, refreshable and not already waiting on a refresh are asked for,
-    so repeat views of one card ask once.
-    """
-
-    del principal
-    wanted = [
-        str(panel["id"])
-        for panel in dashboard_panels()
-        if panel.get("due") and panel.get("refreshable") and not panel.get("pending")
-    ]
-    # Posted as the page opens, which says nothing of it.
-    return _ask_for(wanted, why="the dashboard's due readings")
-
-
-def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
-    ids = list(
-        DashboardRefreshRequest.objects.filter(completed_at__isnull=True)
-        .order_by("requested_at")
-        .values_list("panel_id", flat=True)
-    )
-    configuration = dashboard_configuration()
-    targets = _dashboard_machines()
-    routes = _machine_routes(targets) if targets else {}
-    connection_refs = {ref for values in routes.values() for ref in values}
-    owned = set(
-        ProviderConnection.objects.filter(
-            controller_id=controller_id,
-            connection_ref__in=connection_refs,
-            reachable=True,
-        ).values_list("connection_ref", flat=True)
-    )
-    machines = []
-    controller_owns_machine = False
-    for target in targets:
-        owned_connections = [ref for ref in routes.get(target.pk, ()) if ref in owned]
-        if owned_connections or target.key == controller_id:
-            controller_owns_machine = True
-            if f"machine-{target.pk}" in ids:
-                machines.append(
-                    {
-                        "key": target.key,
-                        "connections": owned_connections,
-                        "request_id": f"machine-{target.pk}",
-                    }
-                )
-    panels = []
-    if machines:
-        panels.append("infrastructure")
-    if "weather" in ids and controller_owns_machine:
-        panels.append("weather")
-    return {
-        "ok": True,
-        "panels": panels,
-        "targets": {
-            "infrastructure": machines,
-            "weather": {"point": configuration.weather_point, "endpoint": NWS_API},
-        },
-        # Every request made by now is one a reading begun after this answers.
-        "as_of": timezone.now().isoformat(),
-    }
-
-
-def _refresh_is_pending(panel_id: str) -> bool:
-    pending = DashboardRefreshRequest.objects.filter(completed_at__isnull=True)
-    lookup = {"panel_id__startswith": "machine-"} if panel_id == "infrastructure" else {"panel_id": panel_id}
-    return pending.filter(**lookup).exists()
-
-
-def _answer(panel_id: str, *, as_of: Any, observed_at: Any) -> None:
-    """Mark answered the request for ``panel_id`` if it was made by ``as_of``.
-
-    A request made while the reading was under way stays pending: the reading
-    began before it, so the next one answers it.
-    """
-
-    DashboardRefreshRequest.objects.filter(
-        panel_id=panel_id, completed_at__isnull=True, requested_at__lte=as_of
-    ).update(completed_at=observed_at)
-
-
-def _record_machine_readings(
-    observation: GlanceObservation, *, controller_id: str, as_of: Any, observed_at: Any
-) -> None:
-    expected = {target["key"] for target in dashboard_refresh_plan(controller_id)["targets"]["infrastructure"]}
-    matched = False
-    for machine in observation.machines:
-        if machine.key not in expected:
-            continue
-        resource = ManagedResource.objects.filter(kind="machine", key=machine.key, enabled=True).first()
-        if resource is None:
-            continue
-        matched = True
-        reading_key = readings.machine_telemetry(resource.key)
-        _keep(
-            reading_key, machine, worked=lambda kept: kept.host is not None or kept.docker is not None, now=observed_at
-        )
-        _answer(f"machine-{resource.pk}", as_of=as_of, observed_at=observed_at)
-    if not matched:
-        raise ValueError("No machine HQ knows matched the controller's report.")
-
-
-def _record_weather_reading(
-    observation: GlanceObservation, *, configuration: DashboardConfiguration, as_of: Any, observed_at: Any
-) -> None:
-    weather = observation.weather
-    if weather is None or weather.point != configuration.weather_point:
-        raise ValueError("Weather was reported without a configured point.")
-    _keep(readings.weather(weather.point), weather, worked=lambda kept: bool(kept.hours), now=observed_at)
-    _answer("weather", as_of=as_of, observed_at=observed_at)
-
-
-@transaction.atomic
-def record_dashboard_observations(payload: list[dict[str, Any]], *, admitted: Admitted) -> dict[str, Any]:
-    controller_id = admission(admitted).controller_id
-    configuration = dashboard_configuration()
-    allowed = {spec.id for spec in panel_specs(configuration)}
-    now = timezone.now()
-    stored = []
-    for item in payload:
-        panel_id = str(item.get("panel_id", "")).strip()
-        if panel_id not in allowed:
-            raise ValueError(f"Unknown dashboard panel {panel_id!r}.")
-        if not _refresh_is_pending(panel_id):
-            raise ValueError(f"No refresh is pending for {panel_id!r}.")
-        planned = moment(item.get("as_of"), naive="refuse")
-        if planned is None:
-            raise ValueError(f"The reading of {panel_id!r} does not say when its plan was made.")
-        try:
-            observation = GlanceObservation.model_validate(item)
-        except ValidationError as exc:
-            raise ValueError(f"The reading of {panel_id!r} is not the shape the contract states.") from exc
-        as_of = min(planned, now)
-        if panel_id == "infrastructure":
-            _record_machine_readings(observation, controller_id=controller_id, as_of=as_of, observed_at=now)
-        else:
-            _record_weather_reading(observation, configuration=configuration, as_of=as_of, observed_at=now)
-        stored.append(panel_id)
-    return {"ok": True, "recorded": stored, "observed_at": now.isoformat()}
-
-
-def _keep[Shape: (Machine, Weather)](key: str, reading: Shape, *, worked: Callable[[Shape], bool], now: Any) -> None:
-    """Store a panel's reading, as the controller reported it.
-
-    A failed refresh never replaces a reading that worked. The last good reading
-    keeps its own time, so the panel ages toward "Out of date" on its own, and
-    the failure is carried as a note. Only a panel with nothing to show stores
-    the failure itself.
-    """
-
-    previous = readings.stored(key)
-    kept = _stored(type(reading), previous.value if previous else None)
-    if reading.refresh_failed and previous is not None and kept is not None and worked(kept):
-        kept = kept.model_copy(update={"refresh_failed": reading.refresh_failed})
-        readings.record(key, kept.model_dump(mode="json", exclude_defaults=True), observed_at=previous.observed_at)
-        return
-    readings.record(key, reading.model_dump(mode="json", exclude_defaults=True), observed_at=now)

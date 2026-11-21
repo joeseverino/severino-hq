@@ -3,7 +3,7 @@
 import inspect
 from collections.abc import Callable
 from functools import cache
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, create_model
 
@@ -11,7 +11,7 @@ from hq.platform.application.json_schemas import sent_schema
 
 from . import services
 from .contract import Resource, ResourceContract, filters, identifiers, served_resources
-from .shapes import answer_schema, answer_type, declared, output_schema
+from .shapes import answer_schema, answer_type, declared, example_call, output_schema
 
 HANDLERS: tuple[Callable[..., Any], ...] = (
     services.describe_capabilities,
@@ -96,7 +96,9 @@ def argument_model(handler: Callable[..., Any], resources: ResourceContract) -> 
     # A Literal needs one value; with none to name, the service refuses every value.
     if (kinds := _kinds(handler, resources)) is not None and (names := tuple(resource.name for resource in kinds)):
         default = parameters["name"].default
-        chosen: Any = Literal[names]
+        # The argument's own field (its example) stays beside the kinds it may name.
+        said = getattr(parameters["name"].annotation, "__metadata__", ())
+        chosen: Any = Annotated[Literal[names], *said] if said else Literal[names]
         fields["name"] = (chosen, ...) if default is inspect.Parameter.empty else (chosen | None, default)
     return create_model(f"{handler.__name__}Arguments", __config__=_ARGUMENTS, **fields)
 
@@ -119,6 +121,7 @@ def tool_contract() -> dict[str, Any]:
         if handler is services.get_resource:
             description += "\nIdentifiers: " + identifiers(resources.addressable)
         declaration = declared(handler)
+        example_call(schema)
         entries[name] = {
             "title": declaration.title,
             "description": description,

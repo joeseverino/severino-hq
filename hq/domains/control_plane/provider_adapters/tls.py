@@ -2,11 +2,12 @@
 
 import re
 from collections.abc import Callable, Mapping
+from datetime import timedelta
 from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
 
-from hq.platform.application.command_fields import NonEmpty, RequiredText
+from hq.platform.application.command_fields import NonEmpty, Reason, RequiredText, checked
 from hq.platform.application.expiry import DEFAULT_RENEWAL_WINDOW_DAYS
 
 from ..connection_shapes import ACME
@@ -121,6 +122,12 @@ class TLSCertificateSpec(ProviderModel):
     )
 
 
+_DNS_NAMES = Reason("domains_dns_names", "must each be a DNS name")
+_DOMAINS_ONCE = Reason("domains_once", "must name each domain once")
+_CONSUMERS_ONCE = Reason("consumers_once", "must list each place it is installed once")
+_CPANEL_COVERED = Reason("cpanel_names_covered", "must install on cPanel only names among the certificate's domains")
+
+
 class ResolvedTLSCertificateSpec(ProviderModel):
     certificate_name: RequiredText = Field(max_length=160)
     domains: Annotated[list[str], NonEmpty()]
@@ -135,27 +142,28 @@ class ResolvedTLSCertificateSpec(ProviderModel):
 
     @field_validator("domains")
     @classmethod
+    @checked
     def normalize_domains(cls, domains: list[str]) -> list[str]:
         normalized = [normalized_hostname(domain) for domain in domains]
         if any(not domain or " " in domain for domain in normalized):
-            raise ValueError("Each domain must be a DNS name.")
+            raise _DNS_NAMES.refused()
         if len(normalized) != len(set(normalized)):
-            raise ValueError("Each domain can be listed only once.")
+            raise _DOMAINS_ONCE.refused()
         return normalized
 
     @model_validator(mode="after")
+    @checked
     def validate_consumers(self) -> ResolvedTLSCertificateSpec:
         identities = [(consumer.kind, consumer.name) for consumer in self.consumers]
         if len(identities) != len(set(identities)):
-            raise ValueError("Each place it is installed can be listed only once.")
+            raise _CONSUMERS_ONCE.refused()
 
         covered = set(self.domains)
         for consumer in self.consumers:
             if not isinstance(consumer, CPanelTLSConsumer):
                 continue
-            uncovered = [domain for domain in consumer.install_domains if not certificate_covers(domain, covered)]
-            if uncovered:
-                raise ValueError("These cPanel names are not among the certificate's domains: " + ", ".join(uncovered))
+            if any(not certificate_covers(domain, covered) for domain in consumer.install_domains):
+                raise _CPANEL_COVERED.refused()
         return self
 
 
@@ -411,6 +419,11 @@ def _managed_certificate_applies(context: NameContext) -> str:
     )
 
 
+# What a target serves can change without HQ (a certificate replaced by
+# hand, a site moved), so HQ reads every install again twice a day.
+RECHECKED_EVERY = timedelta(hours=12)
+
+
 CERTIFICATE = ProviderSpec(
     CERTIFICATE_KIND,
     "Issues a Let's Encrypt certificate, renews it, and installs it wherever these names are served.",
@@ -443,7 +456,8 @@ CERTIFICATE = ProviderSpec(
     hostnames=_certificate_hostnames,
     seed=_certificate_seed,
     covers=True,
-    unobserved_reason=("HQ updates this when it issues or installs the certificate."),
+    unobserved_reason=("HQ reads every install when it issues, installs or checks the certificate."),
+    rechecked_every=RECHECKED_EVERY,
     removal_gap=("HQ cannot delete certificates yet, so renewals would not stop."),
 )
 
@@ -467,7 +481,8 @@ UPLOADED_CERTIFICATE = ProviderSpec(
     hostnames=_uploaded_certificate_hostnames,
     covers=True,
     readout=_uploaded_certificate_readout,
-    unobserved_reason=("HQ stores the file and checks each install when it applies the certificate."),
+    unobserved_reason=("HQ stores the file and reads every install when it installs or checks the certificate."),
+    rechecked_every=RECHECKED_EVERY,
 )
 
 # Declarations only: the controller half is still the core's.

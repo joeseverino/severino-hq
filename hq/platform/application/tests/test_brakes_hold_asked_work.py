@@ -1,6 +1,6 @@
 """Both brakes, the Agents pause and a person's block on one client, hold what
 an agent already asked for: its pending hold cannot be approved and its queued
-work is not claimed, while it stays declinable and every other caller's work
+work is not claimed, while it stays rejectable and every other caller's work
 runs. Lifting the brake releases both as they stand."""
 
 from contextlib import contextmanager
@@ -73,10 +73,10 @@ class BrakesHoldAskedWorkTests(TestCase):
                 self.assertEqual(held.state, ApprovalRequest.State.APPROVED)
                 OperationRequest.objects.all().delete()
 
-    def test_a_held_request_stays_declinable(self):
+    def test_a_held_request_stays_rejectable(self):
         for name, brake in BRAKES.items():
             with self.subTest(brake=name):
-                held = self._held(f"decline-{name}")
+                held = self._held(f"reject-{name}")
                 with brake():
                     reject(RejectCommand(str(held.id)), principal=self.operator)
                 held.refresh_from_db()

@@ -26,7 +26,7 @@ from .moments import ago, duration, moment
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
-from .ui import counted, ended
+from .ui import agreed, counted, ended
 
 # ``LoadState`` when systemd holds the unit's configuration, and
 # ``UnitFileState`` when the file is there and nothing starts it at boot.
@@ -298,9 +298,8 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 severity=Tone.SERIOUS,
                 explanation=(
-                    "So its work is not happening. Deploying HQ sets it up."
-                    if len(absent) == 1
-                    else "So their work is not happening. Deploying HQ sets them up."
+                    f"So {agreed(len(absent), 'its', 'their')} work is not happening. "
+                    f"Deploying HQ sets {agreed(len(absent), 'it', 'them')} up."
                 ),
                 evidence=tuple(item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))),
                 steps=tuple(
@@ -429,10 +428,10 @@ _restarting = OnEachMachine(
         if len(looping) == 1
         else f"{counted(len(looping), 'service keeps', 'services keep')} restarting on {node.label}"
     ),
-    explanation=lambda looping: (
-        "systemd starts it again each time it stops, and it does not stay up."
-        if len(looping) == 1
-        else "systemd starts each again when it stops, and none stays up."
+    explanation=lambda looping: agreed(
+        len(looping),
+        "systemd starts it again each time it stops, and it does not stay up.",
+        "systemd starts each again when it stops, and none stays up.",
     ),
     evidence=lambda unit: (
         ("Service", unit.unit),

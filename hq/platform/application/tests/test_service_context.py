@@ -20,7 +20,6 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import prospects
-from ..ui import MISSING
 
 
 def a_service(hostname="probe.example.com"):
@@ -438,38 +437,7 @@ class ObservedHealthTests(SimpleTestCase):
         self.assertIsNone(self.health((("dns", "example.com"),), self.box(), "dns"))
 
 
-class EmptyColumnTests(SimpleTestCase):
-    def test_a_column_no_row_fills_is_not_drawn(self):
-        section = ServiceSection(
-            id="example",
-            label="Example",
-            columns=("Name", "Note", "State"),
-            records=((Cell("one"), Cell(""), Cell("ok")), (Cell("two"), Cell(""), Cell(MISSING))),
-        )
-
-        self.assertEqual(section.columns, ("Name", "State"))
-        self.assertEqual([[c.text for c in row] for row in section.records], [["one", "ok"], ["two", MISSING]])
-
-    def test_an_unknown_value_keeps_its_column(self):
-        section = ServiceSection(
-            id="example",
-            label="Example",
-            columns=("Name", "Note"),
-            records=((Cell("one"), Cell(MISSING)),),
-        )
-
-        self.assertEqual(section.columns, ("Name", "Note"))
-
-    def test_a_link_alone_fills_its_column(self):
-        section = ServiceSection(
-            id="example",
-            label="Example",
-            columns=("Name", "Where", "Extra"),
-            records=((Cell("one"), Cell("", url="/somewhere/"), Cell("")),),
-        )
-
-        self.assertEqual(section.columns, ("Name", "Where"))
-
+class SectionTests(SimpleTestCase):
     def test_a_section_needs_a_page_id_and_a_label(self):
         for fields in ({"id": "Not an id!", "label": "Example"}, {"id": "example", "label": "  "}):
             with self.subTest(**fields), self.assertRaises(ValueError):
@@ -494,6 +462,16 @@ class SpansRowTests(SimpleTestCase):
 
     def test_a_table_of_three_columns_shares_a_row(self):
         self.assertFalse(_rows(3).spans_row)
+
+    def test_a_column_no_row_fills_is_not_counted(self):
+        section = ServiceSection(
+            id="example",
+            label="Example",
+            columns=("Name", "Note", "Where", "State"),
+            records=((Cell("one"), Cell(""), Cell("", url="/somewhere/"), Cell("ok")),),
+        )
+
+        self.assertFalse(section.spans_row)
 
 
 def _drawn(section) -> str:

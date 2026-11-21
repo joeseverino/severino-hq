@@ -18,6 +18,7 @@ from ..freshness import (
     DASHBOARD_GLANCE,
     DUE,
     NEVER,
+    PAGE_VISIT,
     SSH_PROBE,
     STALE,
     ReadCadence,
@@ -35,15 +36,27 @@ SWEPT = "adguard.rewrite"
 class FreshnessTests(TestCase):
     def test_states_follow_the_kinds_cadence(self):
         now = timezone.now()
-        every = cadence(DASHBOARD_GLANCE).every
+        every = cadence(SWEPT).every
 
-        self.assertEqual(freshness(DASHBOARD_GLANCE, now, now).state, CURRENT)
-        self.assertEqual(freshness(DASHBOARD_GLANCE, now - every, now).state, DUE)
-        self.assertEqual(
-            freshness(DASHBOARD_GLANCE, now - stale_after(DASHBOARD_GLANCE), now).state,
-            STALE,
-        )
-        self.assertEqual(freshness(DASHBOARD_GLANCE, None, now).state, NEVER)
+        self.assertEqual(freshness(SWEPT, now, now).state, CURRENT)
+        self.assertEqual(freshness(SWEPT, now - every, now).state, DUE)
+        self.assertEqual(freshness(SWEPT, now - stale_after(SWEPT), now).state, STALE)
+        self.assertEqual(freshness(SWEPT, None, now).state, NEVER)
+
+    def test_a_reading_taken_on_open_is_out_of_date_only_when_its_ask_goes_unanswered(self):
+        now = timezone.now()
+        for kind in (DASHBOARD_GLANCE, PAGE_VISIT):
+            with self.subTest(kind=kind):
+                every, within = cadence(kind).every, cadence(kind).stale_after
+                # Its age only says how long nobody looked: due, never stale.
+                self.assertEqual(freshness(kind, now - every, now).state, DUE)
+                self.assertEqual(freshness(kind, now - timedelta(days=30), now).state, DUE)
+                aged = now - timedelta(days=1)
+                self.assertEqual(freshness(kind, aged, now, asked_at=now - within / 2).state, DUE)
+                self.assertEqual(freshness(kind, aged, now, asked_at=now - within).state, STALE)
+                self.assertEqual(freshness(kind, now, now, failed=True).state, STALE)
+                # A scheduled kind is judged by its age alone.
+                self.assertEqual(freshness(SWEPT, now, now, asked_at=now - within, failed=True).state, CURRENT)
 
     def test_a_reading_minutes_old_is_never_out_of_date(self):
         now = timezone.now()

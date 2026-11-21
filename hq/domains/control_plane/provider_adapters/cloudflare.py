@@ -4,10 +4,11 @@ import re
 from dataclasses import KW_ONLY, dataclass
 from typing import Annotated, Any, Literal, get_args, override
 
+from django.utils.text import get_text_list
 from pydantic import Field, GetJsonSchemaHandler, model_validator
 from pydantic_core import CoreSchema
 
-from hq.platform.application.command_fields import Choices, RequiredText
+from hq.platform.application.command_fields import Choices, Reason, RequiredText, checked
 from hq.platform.application.describe import Describe
 from hq.platform.application.routes import reverse
 from hq.platform.application.tone import Tone, TonedChoices
@@ -201,6 +202,7 @@ class CloudflareDNSRecordSpec(ProviderModel):
     )
 
     @model_validator(mode="after")
+    @checked
     def type_shape(self) -> CloudflareDNSRecordSpec:
         """Reject at the form what Cloudflare would reject a minute later.
 
@@ -212,19 +214,19 @@ class CloudflareDNSRecordSpec(ProviderModel):
 
         record_type = DNS_RECORD_TYPES_BY_ID[self.record_type]
         if self.priority is not None and not record_type.takes_priority:
-            raise ValueError(f"priority applies only to {', '.join(_PRIORITIZED)} records")
+            raise _PRIORITY_UNUSED.refused()
         if record_type.takes_priority and self.priority is None:
-            raise ValueError(f"a {self.record_type} record needs a priority")
+            raise _NEEDS_PRIORITY[record_type.id].refused()
         if self.proxied and not record_type.proxyable:
-            raise ValueError(f"Cloudflare cannot proxy a {self.record_type} record")
+            raise _NOT_PROXIED[record_type.id].refused()
         if self.proxied and self.ttl != 1:
             # Cloudflare drives the TTL of a proxied record itself and returns 1
             # for it regardless of what was sent. Storing anything else would
             # make every reconciliation report drift against a value the
             # provider will never agree to.
-            raise ValueError("a proxied record must leave TTL automatic (1)")
+            raise _PROXIED_TTL.refused()
         if record_type.value_pattern and not re.match(record_type.value_pattern, self.content):
-            raise ValueError(f"a {self.record_type} value looks like: {record_type.value_help}")
+            raise _VALUE_FORM[record_type.id].refused()
         return self
 
     @classmethod
@@ -236,6 +238,29 @@ class CloudflareDNSRecordSpec(ProviderModel):
 
 
 _PRIORITIZED = tuple(record_type.id for record_type in DNS_RECORD_TYPES if record_type.takes_priority)
+_PRIORITY_UNUSED = Reason(
+    "dns_priority_unused", f"sets a priority, which only {get_text_list(list(_PRIORITIZED), 'and')} records take"
+)
+_NEEDS_PRIORITY = {
+    kind: Reason(f"dns_{kind.lower()}_priority", f"is a record of type {kind}, which needs a priority")
+    for kind in _PRIORITIZED
+}
+_NOT_PROXIED = {
+    record_type.id: Reason(
+        f"dns_{record_type.id.lower()}_proxied", f"proxies a record of type {record_type.id}, which Cloudflare cannot"
+    )
+    for record_type in DNS_RECORD_TYPES
+    if not record_type.proxyable
+}
+_PROXIED_TTL = Reason("dns_proxied_ttl", "proxies a record, whose TTL stays automatic (1)")
+_VALUE_FORM = {
+    record_type.id: Reason(
+        f"dns_{record_type.id.lower()}_value",
+        f"has a {record_type.id} value not in its form: {record_type.value_help.removesuffix('.')}",
+    )
+    for record_type in DNS_RECORD_TYPES
+    if record_type.value_pattern
+}
 
 
 def _by_type(record_type: DNSRecordType) -> dict[str, Any]:

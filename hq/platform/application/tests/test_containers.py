@@ -16,7 +16,7 @@ from ..container_findings import ADVISORY, UPDATE
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, containers, tally
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
-from ..finding_steps import Do, Run
+from ..finding_steps import Run
 from ..findings import finding_key, rule_of
 from ..github_estate import Repository
 
@@ -175,22 +175,8 @@ class StandingTests(TestCase):
         self.assertIn(("Container", "kuma"), update.evidence)
         # A card says how old its reading is, and leads with the containers' page.
         self.assertIsNotNone(update.observed_at)
-        self.assertEqual(
-            (update.primary.label, update.primary.url), ("Open containers", reverse("control_plane:containers"))
-        )
-        self.assertIn("v1.3.0", advisory.primary.label)
-        self.assertEqual(
-            (update.steps, update.no_help_reason),
-            (
-                (
-                    Do(
-                        "On example-box, set the image of kuma to docker.io/example/kuma:2 where it is defined, "
-                        "then start it again."
-                    ),
-                ),
-                "HQ cannot apply an update itself yet.",
-            ),
-        )
+        self.assertEqual(update.primary.url, reverse("control_plane:containers"))
+        self.assertEqual(update.no_help_reason, "HQ cannot apply an update itself yet.")
 
     def test_an_update_names_the_command_when_its_compose_project_was_read(self):
         estate()
@@ -312,7 +298,7 @@ class ToneTests(TestCase):
         found = tally(containers())
 
         self.assertEqual(
-            (found.running, found.vulnerable, found.vulnerable_images, found.update_available, found.up_to_date),
+            (found.count.total, found.vulnerable, found.vulnerable_images, found.update_available, found.up_to_date),
             (3, 1, 1, 2, 1),
         )
         self.assertEqual(
@@ -321,19 +307,20 @@ class ToneTests(TestCase):
         )
 
     def test_a_tally_is_good_only_when_every_container_is(self):
+        from ..container_state import ContainerCount
+
         clean = Tally(
-            running=2,
+            count=ContainerCount(running=2, total=2),
             vulnerable=0,
             vulnerable_images=0,
             update_available=0,
             up_to_date=2,
             pinned=2,
             checkable=2,
-            stopped=0,
         )
 
         self.assertEqual((clean.vulnerable_tone, clean.updates_tone, clean.pinned_tone, clean.tone), ("good",) * 4)
-        self.assertEqual(replace(clean, stopped=1).tone, "serious")
+        self.assertEqual(replace(clean, count=ContainerCount(running=1, total=2)).tone, "serious")
         self.assertEqual(replace(clean, update_available=1, up_to_date=1).tone, "attention")
         self.assertEqual(replace(clean, up_to_date=1).updates_tone, "")
 

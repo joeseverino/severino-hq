@@ -12,7 +12,7 @@ for: one band under the head, as a service's and HQ's own page open.
   {% endif %}
   {% if machine.containers %}
   {% fact "Containers" icon="container" tone=container_counts.tone %}
-    {{ machine.running|breakable }} of {{ machine.containers|length|measured:"running" }}
+    {% include "control_plane/_container_count.html" with running=machine.running total=machine.containers|length only %}
   {% detail %}
     <small>{% if container_counts.vulnerable %}{{ container_counts.vulnerable|counted:"has known vulnerabilities,have known vulnerabilities" }}{% dot %}{% endif %}{% if container_counts.update_available %}{{ container_counts.update_available|counted:"has an update,have an update" }}{% elif container_counts.up_to_date == standings|length %}All up to date{% elif container_counts.up_to_date %}{{ container_counts.up_to_date|measured:"up to date" }}{% else %}Updates not checked yet{% endif %}</small>
   {% endfact %}
@@ -23,12 +23,12 @@ for: one band under the head, as a service's and HQ's own page open.
     Where the page lists its names in a table, the band counts them and
     leads there; the names themselves are said once, in the table.
     {% endcomment %}
-    {% if names_listed %}<a href="#names">{{ names_listed|counted:"name" }}</a>{% elif serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{{ machine.roles.0.label|breakable }}{% endif %}
+    {% if names_listed %}<a href="#names">{{ names_listed|counted:"name" }}</a>{% elif serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{{ machine.roles.0.label }}{% endif %}
   {% detail %}
     {% if names_listed %}
-    {% if machine.roles %}<small>{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>{% endif %}
+    {% if machine.roles %}<small>{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>{% endif %}
     {% else %}
-    {% list kind="dots" %}{% for link in serves_links %}<li>{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label|breakable:")" }}</a>{% endif %}</li>{% endfor %}{% for role in machine.roles %}<li><span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span></li>{% endfor %}{% endlist %}
+    {% list kind="dots" %}{% for link in serves_links %}<li>{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label }})</a>{% endif %}</li>{% endfor %}{% for role in machine.roles %}<li><span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span></li>{% endfor %}{% endlist %}
     {% endif %}
   {% endfact %}
   {% endif %}

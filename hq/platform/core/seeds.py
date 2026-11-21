@@ -120,6 +120,24 @@ def _reading(owner) -> None:
     apps.get_model("control_plane", "ProviderConnection").objects.update(manages=False)
 
 
+def _images_left(owner) -> None:
+    """The example estate with images nothing runs on its machine, so the
+    finding about those HQ can remove, and its silence about those it keeps,
+    are drawn."""
+
+    _estate(owner)
+    example_estate.docker.images_left()
+
+
+def _advised(owner) -> None:
+    """The example estate with advisories against what runs and newer
+    releases, so each upgrade a card can offer, or say is not worth making,
+    is drawn."""
+
+    _estate(owner)
+    example_estate.docker.advised()
+
+
 def _rescanned(owner) -> None:
     """The example estate once a later Refresh found the commit adopted, so
     the procedures page has nothing to adopt."""
@@ -142,6 +160,22 @@ def _unattended(owner) -> None:
 
     _estate(owner)
     example_estate.automation.unattended()
+
+
+def _glance_aged(owner) -> None:
+    """The example estate as the dashboard finds it after nobody looked for a
+    while: the machine's reading due again, nothing asked yet."""
+
+    _estate(owner)
+    example_estate.infra.glance_aged()
+
+
+def _glance_unanswered(owner) -> None:
+    """The example estate with the dashboard's ask for the machine's reading
+    left unanswered, so the reading is out of date."""
+
+    _estate(owner)
+    example_estate.infra.glance_unanswered()
 
 
 def _glance_asked(owner) -> None:
@@ -192,11 +226,15 @@ SEEDS: dict[str, Seed] = {
     "standard": Seed(_estate, _SET_UP),
     "reading": Seed(_reading, _SET_UP),
     "read-empty": Seed(_read_empty, _SET_UP),
+    "advised": Seed(_advised, _SET_UP),
+    "images-left": Seed(_images_left, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
     "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
     "policy-change": Seed(_policy_change, _SET_UP),
+    "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
+    "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

@@ -1,16 +1,21 @@
-"""A table's rows, drawn by the row tags: each row's tick-box, its state, its
-toggle in the gutter, and the heading row of a group."""
+"""A declared table's rows: each row's tick-box, its state, its toggle in
+the gutter, and the heading row of a group."""
 
 from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import all_elements, elements, select
+from hq.platform.application.tables import Cell, DataTable, Group, Row, TableColumn
 
-from .test_table_contract import _render
+from .test_table_contract import _drawn, _render, _row, _things
+
+
+def _grouped(*groups: Group) -> str:
+    return _drawn(_things(("Name",), groups=groups))
 
 
 class TableRowTests(SimpleTestCase):
     def test_the_select_all_heading_holds_its_tick_box(self):
-        html = _render('{% table_heading "Select all rows" select_all=True %}')
+        html = _drawn(_things(("Name",), rows=(_row("thing", key=7),), selectable=True))
         self.assertIn("select-column", elements(html, "th")[0].classes)
         (box,) = select(html, "data-select-all")
         self.assertEqual(box.attrs["aria-label"], "Select all rows")
@@ -19,116 +24,114 @@ class TableRowTests(SimpleTestCase):
         """Each row's tick-box is labeled and sends the row's key; a row with
         none keeps an empty cell, so its columns stay under their headings."""
 
-        source = (
-            '{% table_region "Things" %}<table class="data-table" data-selectable-table><thead><tr>'
-            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" %}</tr></thead><tbody>'
-            "{% for pk in keys %}<tr>{% row_select pk %}<td>thing</td></tr>{% endfor %}</tbody></table>"
-            "{% endtable_region %}"
-        )
-        html = _render(source, {"keys": [7, None]})
+        html = _drawn(_things(("Name",), rows=(_row("thing", key=7), _row("thing")), selectable=True))
         boxes = select(html, "data-row-select")
         self.assertEqual([box.attrs["value"] for box in boxes], ["7"])
         self.assertEqual(boxes[0].attrs["aria-label"], "Select row")
         self.assertEqual(len([cell for cell in elements(html, "td") if "select-column" in cell.classes]), 2)
 
     def test_a_row_says_it_is_emphasized_and_no_other_does(self):
-        html = _render(
-            "<table><tbody>{% for each in rows %}<tr{% row_state emphasized=each %}><td>x</td></tr>{% endfor %}"
-            "</tbody></table>",
-            {"rows": [True, False]},
-        )
-        self.assertEqual(["data-emphasized" in row.attrs for row in elements(html, "tr")], [True, False])
+        html = _drawn(_things(("Name",), rows=(_row("a", emphasized=True), _row("b"))))
+        rows = [row for row in elements(html, "tr") if any(up.tag == "tbody" for up in row.ancestors)]
+        self.assertEqual(["data-emphasized" in row.attrs for row in rows], [True, False])
 
     def test_the_gutter_column_holds_each_rows_toggle(self):
         """In a table whose rows can hold something back (here a ranked
         column), each row's cell in the column that names it stands in the
-        gutter and ends with the row's toggle; a folded
-        group's row keeps its own, a totals row stands in the gutter with no
-        toggle, and a cell that spans the table holds none."""
+        gutter and ends with the row's toggle; a folded group's row keeps its
+        own, and a totals row and a cell that spans the table stand in the
+        gutter with no toggle."""
 
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" %}'
-            '{% table_heading "Note" drop=1 %}</tr></thead><tbody>'
-            '<tr><td class="select-column"></td><td class="cell-data" data-probe="classed">A <b>a</b></td><td>b</td></tr>'
-            '<tr><td class="select-column"></td><th scope="row" data-probe="plain">B</th><td>c</td></tr>'
-            '<tr><td class="select-column"></td><td data-probe="folds">'
-            '{% include "partials/_row_fold.html" with label="C" only %}C</td><td>d</td></tr>'
-            '<tr><td colspan="3" data-probe="spans">Nothing else</td></tr>'
-            '</tbody><tfoot><tr><td></td><td data-probe="total">Total</td><td></td></tr></tfoot>'
-            "</table>{% endtable_region %}"
+        rows = (
+            _row(Cell("A", parts=(Cell("a", name=True),)), "b", key=1),
+            _row(Cell("B", header=True), "c", key=2),
+            _row(Cell("C", fold=True), "d", key=3, folds="example-c"),
+            _row("Nothing else", across=True),
         )
-        found = all_elements(_render(source))
-        probes = {each.attrs["data-probe"]: each for each in found if "data-probe" in each.attrs}
+        html = _drawn(
+            _things(("Name",), TableColumn("Note", drop=1), rows=rows, selectable=True, footer=_row("Total", ""))
+        )
+        found = all_elements(html)
+        named = {
+            "parted": next(each for each in found if each.tag == "td" and each.words.startswith("A")),
+            "header": next(each for each in found if each.tag == "th" and each.words.startswith("B")),
+            "folds": next(each for each in found if each.tag == "td" and each.words.startswith("C")),
+            "spans": next(each for each in found if each.words == "Nothing else" and each.tag == "td"),
+            "total": next(each for each in found if each.tag == "td" and each.words == "Total"),
+        }
         self.assertEqual(
-            {name: "row-gutter" in cell.classes for name, cell in probes.items()},
-            {"classed": True, "plain": True, "folds": True, "spans": False, "total": True},
+            {name: "row-gutter" in cell.classes for name, cell in named.items()},
+            {"parted": True, "header": True, "folds": True, "spans": True, "total": True},
         )
-        self.assertIn("cell-data", probes["classed"].classes)
         toggles = {
             name: [
                 each.attrs.get("data-fold-toggle", "row")
                 for each in found
                 if cell in each.ancestors and "data-row-toggle" in each.attrs
             ]
-            for name, cell in probes.items()
+            for name, cell in named.items()
         }
-        self.assertEqual(toggles, {"classed": ["row"], "plain": ["row"], "folds": [""], "spans": [], "total": []})
+        self.assertEqual(toggles, {"parted": ["row"], "header": ["row"], "folds": [""], "spans": [], "total": []})
         # Last in its cell, after what names the row.
-        children = [each for each in found if each.ancestors and each.ancestors[-1] is probes["classed"]]
+        children = [each for each in found if each.ancestors and each.ancestors[-1] is named["parted"]]
         self.assertIn("data-row-toggle", children[-1].attrs)
 
-    def test_a_toggle_written_in_a_table_with_headings_is_refused(self):
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
-            "</tr></thead><tbody><tr><td>A{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}"
-        )
-        with self.assertRaisesMessage(ValueError, "the region's to draw"):
-            _render(source)
-
     def test_a_groups_heading_row_spans_every_column_its_table_declares(self):
-        html = _render(
-            '{% table_region "Records" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Name" %}{% table_heading "Type" %}{% table_heading "Value" %}</tr></thead>'
-            '<tbody>{% row_group "Policy" 2 %}<tr><td>a</td><td>b</td><td>c</td></tr></tbody>'
-            "</table>{% endtable_region %}"
-        )
+        groups = (Group("Policy", (_row("a", "b", "c"),), count=2),)
+        html = _drawn(_things(("Name",), ("Type",), ("Value",), groups=groups))
         (heading,) = select(html, "scope", "rowgroup")
         self.assertEqual(heading.attrs["colspan"], "3")
         self.assertEqual(heading.words, "Policy 2")
         self.assertNotIn("data-kind", heading.attrs)
 
     def test_a_group_in_a_table_without_headings_spans_its_widest_row(self):
-        html = _render(
-            '{% table_region "Queue" %}<table class="data-table"><tbody>{% row_group "Example" 2 %}'
-            '<tr><td>a</td><td>b</td><td>c</td></tr><tr><td colspan="2">a</td></tr></tbody>'
-            "</table>{% endtable_region %}"
-        )
-        (heading,) = select(html, "scope", "rowgroup")
+        groups = (Group("Example", (_row("a", "b", "c"), _row("a", across=True)), count=2),)
+        (heading,) = select(_drawn(_things(("",), ("",), ("",), groups=groups, headed=False)), "scope", "rowgroup")
         self.assertEqual(heading.attrs["colspan"], "3")
 
     def test_a_folded_group_starts_closed_and_names_the_row_its_rows_fold_under(self):
-        html = _render('{% row_group "Policy" folds="example-policy" %}')
-        (row,) = elements(html, "tr")
+        html = _grouped(Group("Policy", (_row("a"),), folds="example-policy"))
+        (row,) = [each for each in elements(html, "tr") if "row-group" in each.classes]
         self.assertEqual(row.attrs["id"], "example-policy")
         self.assertIn("data-folds", row.attrs)
         (toggle,) = select(html, "data-fold-toggle")
         self.assertEqual(toggle.attrs["aria-expanded"], "false")
 
     def test_a_groups_name_links_where_its_rows_are_dealt_with_when_given_a_page(self):
-        (link,) = elements(_render('{% row_group "Policy" 2 href="/example/policy/" %}'), "a")
+        (link,) = elements(_grouped(Group("Policy", (_row("a"),), count=2, href="/example/policy/")), "a")
         self.assertEqual((link.words, link.attrs["href"]), ("Policy", "/example/policy/"))
-        self.assertFalse(elements(_render('{% row_group "Policy" 2 %}'), "a"))
+        self.assertFalse(elements(_grouped(Group("Policy", (_row("a"),), count=2)), "a"))
 
     def test_a_group_a_reader_should_weigh_first_is_marked_for_attention(self):
-        (row,) = elements(_render('{% row_group "Policy" "gains access" attention=True %}'), "tr")
-        self.assertIn("data-attention", row.attrs)
-        (plain,) = elements(_render('{% row_group "Policy" 2 %}'), "tr")
+        weighed = _grouped(Group("Policy", (_row("a"),), attention=True), Group("Plain", (_row("b"),)))
+        weighed_row, plain = [each for each in elements(weighed, "tr") if "row-group" in each.classes]
+        self.assertIn("data-attention", weighed_row.attrs)
         self.assertNotIn("data-attention", plain.attrs)
 
-    def test_a_row_toggle_starts_closed(self):
-        # Drawn by hand in a table whose rows have no heading to keep a gutter.
-        html = _render('<td class="row-gutter">a{% row_toggle %}</td>')
-        (toggle,) = select(html, "data-row-toggle")
-        self.assertEqual(toggle.attrs["aria-expanded"], "false")
-        self.assertIn("row-expand", toggle.classes)
+    def test_a_cell_that_heads_its_row_is_its_rows_header(self):
+        table = DataTable(
+            "Things", (TableColumn("Name"), TableColumn("Size")), (Row((Cell("a", header=True), Cell("1"))),)
+        )
+        (header,) = [
+            cell for cell in elements(_render("{% data_table table %}", {"table": table}), "th") if cell.words == "a"
+        ]
+        self.assertEqual(header.attrs.get("scope"), "row")
+
+    def test_a_table_its_template_does_not_hold_is_refused_as_the_template_writes_it(self):
+        with self.assertRaises(TypeError) as refused:
+            _render("{% data_table missing %}")
+        self.assertIn("{% data_table missing %}", " ".join(refused.exception.__notes__))
+
+    def test_a_declared_hook_stands_on_what_it_finds(self):
+        """A group's hook is on its body, a line's on its item, and a value's
+        around that value alone, so a script reads its words and no others."""
+
+        from hq.platform.core.part_examples.tags import DATA_TABLE_STATES
+
+        html = _render("{% data_table table %}", DATA_TABLE_STATES["kinds"].context())
+        (group,) = select(html, "data-example", "group")
+        (line,) = select(html, "data-example", "zone")
+        (value,) = select(html, "data-example", "digits")
+        self.assertEqual((group.tag, group.attrs.get("id")), ("tbody", "example-group"))
+        self.assertEqual((line.tag, line.words), ("li", "example-zone"))
+        self.assertEqual(value.words, "…1234 ending in 1234")

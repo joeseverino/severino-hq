@@ -2,11 +2,11 @@
 {% block page %}
 {% layout %}
 {% card label="Asset" %}{% facts %}
-  {% if thing %}{% fact "This is" %}<span class="prose">{{ thing.kind_label|breakable }} {% entity thing %}</span>{% endfact %}{% endif %}
+  {% if thing %}{% fact "This is" %}<span class="prose">{{ thing.kind_label }} {% entity thing %}</span>{% endfact %}{% endif %}
   {% if domain %}{% fact "Domain page" %}{% entity domain %}{% endfact %}{% endif %}
   {% if asset.vendor %}{% fact "Vendor" value=asset.vendor %}{% endif %}
   {% fact "Purchased" %}{{ asset.purchase_date|when }}{% endfact %}
-  {% if asset.total_cost != "0.00" %}
+  {% if asset.total_cost is not None %}
     {% fact "Cost" %}{{ asset.total_cost|money }}{% endfact %}
     {% fact "Business use" %}{{ asset.business_use_percentage|measured:"%" }}{% endfact %}
     {% fact "Deductible (est.)" %}{{ asset.estimated_deductible_amount|money }}{% endfact %}
@@ -14,7 +14,7 @@
     {% fact "Cost" %}{% muted %}Not recorded{% endmuted %}{% endfact %}
   {% endif %}
   {% if payment_method %}{% fact "Payment method" value=payment_method %}{% endif %}
-  {% if asset.serial_number %}{% fact "Serial" %}<code>{{ asset.serial_number|breakable }}</code>{% endfact %}{% endif %}
+  {% if asset.serial_number %}{% fact "Serial" %}<code>{{ asset.serial_number }}</code>{% endfact %}{% endif %}
   {% if asset.warranty_date %}{% fact "Warranty until" %}{{ asset.warranty_date|when }}{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
 {% if asset.notes %}{% section "Notes" %}{% include "partials/_linked_text.html" with parts=asset.notes|named_links only %}{% endsection %}{% endif %}

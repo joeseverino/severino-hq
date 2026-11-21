@@ -61,11 +61,11 @@ def _highlights():
         series=series,
         period_label="Example period",
     )
-    short = tuple(Kpi(f"Reading {i}", i, url="/example/") for i in range(4))
+    short = tuple(Kpi(f"Reading {i}", str(i), url="/example/") for i in range(4))
     long = tuple(
         Kpi(
             f"Longer example reading {i}",
-            i,
+            str(i),
             "An intentionally longer reporting window and explanation.",
             "/example/",
         )
@@ -74,9 +74,9 @@ def _highlights():
     # The most dots a figure draws, each a link a target apart, in a card that
     # shares its row and so sets its six figures three to a row.
     linked = tuple(
-        Kpi(f"Linked {count}", count, "of them up", "/example/", drawing=_linked_dots(count)) for count in (12, 8)
+        Kpi(f"Linked {count}", str(count), "of them up", "/example/", drawing=_linked_dots(count)) for count in (12, 8)
     )
-    dense = (*linked, Kpi("Plain", 4, url="/example/"), Kpi("Counted", 7, drawing=Dots.of(5, 7)), *short[:2])
+    dense = (*linked, Kpi("Plain", "4", url="/example/"), Kpi("Counted", "7", drawing=Dots.of(5, 7)), *short[:2])
     return {
         "highlights": [
             {
@@ -101,10 +101,15 @@ def _highlights():
         # A strip of counts as an installation fills it, some with a detail
         # after their words, wide enough to wrap on a phone.
         "compact": [
-            {"label": "Example count", "value": 3, "url": "/example/"},
-            {"label": "Example open updates", "value": 2, "url": "/example/updates/"},
-            {"label": "Example new security advisories", "value": 15, "url": "/example/advisories/"},
-            {"label": "Example drafts", "value": 1, "url": "/example/drafts/", "detail": "22 published"},
+            {"label": "Example counts", "value": 3, "url": "/example/"},
+            {"label": "Example open updates", "value": 2, "url": "/example/u/"},
+            {"label": "Example new advisories", "value": 15, "url": "/example/a/"},
+            {
+                "label": "Example draft",
+                "value": 1,
+                "url": "/example/drafts/",
+                "detail": "22 published",
+            },
             {
                 "label": "Example expenses",
                 "value": "$1,204.50",

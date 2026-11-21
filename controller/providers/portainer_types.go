@@ -27,10 +27,8 @@ type portainerAgent struct {
 
 // portainerSnapshot is Portainer's periodic picture of a Docker environment.
 type portainerSnapshot struct {
-	DockerVersion         string `json:"DockerVersion"`
-	Time                  int64  `json:"Time"`
-	RunningContainerCount *int64 `json:"RunningContainerCount"`
-	ContainerCount        *int64 `json:"ContainerCount"`
+	DockerVersion string `json:"DockerVersion"`
+	Time          int64  `json:"Time"`
 }
 
 // portainerStack is one stack from GET /stacks.

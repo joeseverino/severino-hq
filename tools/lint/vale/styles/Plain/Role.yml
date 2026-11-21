@@ -1,0 +1,10 @@
+# The reader is "you" when the reader acts; anyone else is named by role
+# (docs/Design.md), never by a word that names no one.
+extends: substitution
+message: "Say '%s' in place of '%s': name the reader as you, anyone else by role"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, description, ~comment & ~code]
+swap:
+  '(?<![\w-])(?:a person|someone|somebody)(?![\w-])': you|an operator|the agent

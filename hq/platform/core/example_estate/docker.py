@@ -13,6 +13,7 @@ from hq.domains.control_plane.observations.public_registry import (
     UPSTREAM_KIND,
     VULNERABILITY_KIND,
 )
+from hq.platform.application.docker_estate import release_pins
 from hq.platform.application.images import ImageRef
 from hq.platform.application.services import CONTAINER_KIND
 
@@ -62,8 +63,6 @@ def containers():
             "status": "up",
             "agent_version": "2.24.0",
             "docker_version": "27.3.1",
-            "containers_running": len(CONTAINERS),
-            "containers_total": len(CONTAINERS),
             "snapshot_at": iso(timedelta(minutes=4)),
         },
     )
@@ -208,7 +207,60 @@ def _network():
     )
 
 
-def _registries():
+def _advisory(name, vulnerable, patched=""):
+    return {
+        "id": f"GHSA-example-{name}",
+        "severity": "high",
+        "summary": f"Example advisory against {name}",
+        "url": f"https://github.com/advisories/GHSA-example-{name}",
+        "vulnerabilities": [[vulnerable, patched]],
+    }
+
+
+# Each upgrade a card can offer: a release that fixes what runs, one still
+# affected, one that brings an advisory of its own, and a major move.
+ADVISED_NEWER = {
+    **NEWER,
+    "immich": "v1.120.1",
+    "jellyfin": "10.10.1",
+    "forgejo": "9.0.2",
+    "adguard": "v1.0.0",
+}
+ADVISED = {
+    "immich": [_advisory("immich", "< 1.120.1", "1.120.1")],
+    "jellyfin": [_advisory("jellyfin", "< 10.11.0")],
+    "forgejo": [_advisory("forgejo-running", "< 9.0.2", "9.0.2"), _advisory("forgejo-target", ">= 9.0.2")],
+}
+
+
+def images_left():
+    """Images nothing runs: an earlier pull of a container's image and an
+    untagged one, which HQ offers to remove, and each image the release pins,
+    which it keeps."""
+
+    _name, _port, image = CONTAINERS[0]
+    earlier = _ref(image).name
+    pins = [ref for pin in release_pins() if (ref := ImageRef.parse(pin)) is not None]
+    store(
+        portainer.IMAGE_KIND,
+        *(_pulled(name, image) for name, _port, image in CONTAINERS),
+        _on_machine(id=digest("image-id", "earlier"), tags=[f"{earlier}:0.9"], size=240_000_000, containers=[]),
+        _on_machine(id=digest("image-id", "untagged"), size=60_000_000, containers=[]),
+        *(
+            _on_machine(id=digest("image-id", ref.name), digests=[f"{ref.name}@{ref.digest}"], size=900_000_000)
+            for ref in pins
+        ),
+    )
+
+
+def advised():
+    """The registries and advisories of ``ADVISED``: each upgrade card a
+    vulnerable or older image can draw."""
+
+    _registries(ADVISED_NEWER, ADVISED)
+
+
+def _registries(newer=NEWER, advisories=None):
     """Each image as its registry publishes it, its source's releases, what its
     publisher attached to each digest it publishes, and those packages checked.
     What runs was released three weeks ago; a newer release, where there is
@@ -219,8 +271,8 @@ def _registries():
         ref = _ref(image)
         source = SOURCES[name]
         releases = {ref.tag: (running_digest(image), timedelta(days=20))}
-        if name in NEWER:
-            releases[NEWER[name]] = (digest(ref.name, NEWER[name]), timedelta(days=4))
+        if name in newer:
+            releases[newer[name]] = (digest(ref.name, newer[name]), timedelta(days=4))
         published.append(
             {
                 "image": ref.name,
@@ -239,7 +291,7 @@ def _registries():
                     {"tag": tag, "url": f"{source}/releases/tag/{tag}", "published_at": stamp(age)}
                     for tag, (_pin, age) in reversed(releases.items())
                 ],
-                "advisories": [],
+                "advisories": list((advisories or {}).get(name, ())),
                 "read_at": stamp(timedelta(hours=3)),
             }
         )

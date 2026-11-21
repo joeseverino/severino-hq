@@ -83,7 +83,7 @@ class AgentDeviceBrowserTests(BrowserGate):
         self.page.goto(f"{ORIGIN}{self.page_path}", wait_until="load")
         self.assertEqual(self.row().get_attribute("data-device-standing"), "awaiting")
 
-        prompt = self.page.locator(SELECTORS["device_prompt"])
+        prompt = self.page.locator(self.css(SELECTORS["device_prompt"]))
         self.assertEqual(prompt.get_attribute("data-prompt"), self.anchor)
         with self.page.expect_navigation():
             prompt.get_by_role("button", name=capability_words(APPROVE_AGENT_DEVICE, "on")).click()
@@ -92,7 +92,9 @@ class AgentDeviceBrowserTests(BrowserGate):
         self.assertEqual((approved.get("device"), approved.get("approved")), ([self.device], ["1"]))
         self.assertTrue(approved["next"][0].endswith(f"#{self.anchor}"), "the press returns to the device's row")
         self.assertEqual(self.row().get_attribute("data-device-standing"), "approved")
-        self.assertEqual(self.page.locator(SELECTORS["device_prompt"]).count(), 0, "nothing waits for the owner now")
+        self.assertEqual(
+            self.page.locator(self.css(SELECTORS["device_prompt"])).count(), 0, "nothing waits for the owner now"
+        )
 
         with self.page.expect_navigation():
             self.row().get_by_role("button", name=capability_words(BLOCK_AGENT_DEVICE, "on")).click()
@@ -111,7 +113,7 @@ class AgentDeviceBrowserTests(BrowserGate):
             agent = "element => (element.closest('[data-agent]') ?? element.closest('tr').previousElementSibling)"
             return {
                 element.evaluate(f"{agent}.dataset.agent").partition("@")[0]: (element.get_attribute("data-streams"))
-                for element in self.page.locator(selector).all()
+                for element in self.page.locator(self.css(selector)).all()
             }
 
         self.assertEqual(drawn(SELECTORS["agent_streams"]), {ASSISTANT: "full"}, "only a full set is in the row's cell")
@@ -120,5 +122,5 @@ class AgentDeviceBrowserTests(BrowserGate):
             {AGENT: "open"},
             "an agent holding none shows nothing more",
         )
-        for element in self.page.locator(SELECTORS["agent_streams"]).all():
+        for element in self.page.locator(self.css(SELECTORS["agent_streams"])).all():
             self.assertTrue(element.is_visible(), "a full set shows without opening the row")

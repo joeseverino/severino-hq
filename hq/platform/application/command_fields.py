@@ -12,10 +12,11 @@ from datetime import date
 from typing import TYPE_CHECKING, Annotated, Any, TypeAliasType, get_args, get_origin, get_type_hints
 
 from django.core.exceptions import ValidationError
-lazy from pydantic_core import PydanticCustomError, core_schema
+lazy from pydantic_core import core_schema
 
 from .describe import Describe
 from .non_empty import NonEmpty, RequiredText
+from .reasons import Checked, Reason, checked
 
 # Lazy: it loads pydantic, which declaring a command does not.
 lazy from .json_schemas import choices
@@ -88,16 +89,9 @@ class Choices:
         object.__setattr__(self, "options", tuple((value, str(label)) for value, label in options))
 
     def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        allowed = frozenset(str(value) for value, _label in self.options)
-        # Worded as pydantic words a Literal's refusal, which input_errors says as "must be one of".
-        expected = " or ".join(", ".join(repr(value) for value, _label in self.options).rsplit(", ", 1))
-
-        def one_of(value: Any) -> Any:
-            if str(value) not in allowed:
-                raise PydanticCustomError("literal_error", "Input should be {expected}", {"expected": expected})
-            return value
-
-        return core_schema.no_info_after_validator_function(one_of, handler(source))
+        # Pydantic's own Literal, once the value is of its field's type, so its refusal lists the choices.
+        allowed = core_schema.literal_schema([value for value, _label in self.options])
+        return core_schema.chain_schema([handler(source), allowed])
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
         return {**handler(schema), **choices(self.options)}
@@ -210,23 +204,16 @@ class Upload:
 _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
-@dataclass(frozen=True, slots=True)
-class IsoDay:
-    """A day sent as the ISO 8601 date its schema's ``format: date`` says.
-    Pydantic would read a number, or a text of digits, as a Unix time."""
-
-    def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
-        return core_schema.no_info_before_validator_function(_iso_day, handler(source))
-
-
 def _iso_day(value: object) -> object:
     if isinstance(value, date) or (isinstance(value, str) and _ISO_DAY.fullmatch(value)):
         return value
-    raise PydanticCustomError("date_parsing", "Input should be an ISO 8601 date, YYYY-MM-DD")
+    raise ValueError
 
 
-# The type of every day a caller sends.
-Day = Annotated[date, IsoDay()]
+# The type of every day a caller sends: the ISO 8601 date its schema's
+# ``format: date`` says, since Pydantic would read a number, or a text of
+# digits, as a Unix time.
+Day = Annotated[date, Checked(_iso_day, Reason("iso_day", "must be an ISO 8601 date, YYYY-MM-DD"), mode="before")]
 
 
 # A delete's confirmation: the identifier of what it deletes, sent again, so
@@ -270,7 +257,7 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
     return (declared["model"], declared["field"]) if isinstance(declared, dict) else None
 
 
-# Every marker is imported from here, Describe and NonEmpty too, though each lives in a leaf of its own.
+# Every marker is imported from here, Describe, NonEmpty and Checked too, though each lives in a leaf of its own.
 __all__ = [
     "AMONG",
     "CONFIRM_MISMATCH",
@@ -279,17 +266,20 @@ __all__ = [
     "UPLOAD",
     "Among",
     "AmongNow",
+    "Checked",
     "Choices",
     "Confirm",
     "Describe",
     "ForAgents",
     "Names",
     "NonEmpty",
+    "Reason",
     "Refers",
     "RequiredText",
     "Upload",
     "among",
     "among_now",
+    "checked",
     "confirm",
     "for_agents",
     "is_upload",

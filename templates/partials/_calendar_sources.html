@@ -16,8 +16,8 @@ a source's color alone, beside what of it a day holds:
 {% list %}
   {% for source in sources %}
     <li class="series-{{ source.slot }}">
-      {% if source.choice %}{% button source.label offer=source.choice look="menu" pressed=source.shown %}{% else %}<span>{% partial swatch %} {{ source.label|breakable }}</span>{% endif %}
-      {% if source.description %}<small>{% muted %}{{ source.description|breakable }}{% endmuted %}</small>{% endif %}
+      {% if source.choice %}{% button source.label offer=source.choice look="menu" pressed=source.shown %}{% else %}<span>{% partial swatch %} {{ source.label }}</span>{% endif %}
+      {% if source.description %}<small>{% muted %}{{ source.description }}{% endmuted %}</small>{% endif %}
       {% if source.failure %}<small>{% status source.failure tone="attention" pill=False %}</small>{% endif %}
     </li>
   {% endfor %}

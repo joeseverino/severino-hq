@@ -62,6 +62,12 @@ extends = "hk"
 vars = { step = "prose" }
 depends = ["setup:lint-tools"]
 
+["lint:file-lines"]
+description = "No source file is longer than the ceiling mise.toml declares (SEVERINO_FILE_LINE_*), which also names the files it holds"
+hide = true
+extends = "hk"
+vars = { step = "file-lines" }
+
 ["lint:task-modes"]
 description = "Every file task under mise-tasks/ is executable, so mise runs it rather than hiding it"
 hide = true
@@ -145,7 +151,13 @@ sources = [
   "tools/pipeline/toolchain.env",
 ]
 outputs = []
-run = "uv run python -m tools.pipeline.toolchain_lock"
+# `mise lock --check` fails on whatever a locked install on each of
+# lockfile_platforms would refuse. It lists every entry's provenance on
+# stdout and its problems on stderr.
+run = [
+  "mise lock --check > /dev/null",
+  "uv run python -m tools.pipeline.toolchain_lock",
+]
 
 ["lint:mise-tasks"]
 description = "Every task is valid: its usage spec parses, its dependencies exist, its timeout and globs are well formed"
@@ -226,7 +238,8 @@ sources = [
 outputs = []
 depends = ["setup:lint-tools"]
 usage = 'flag "--fix" help="Write what the tool fixes itself, then report the rest: fast runs it first"'
-run = 'stylelint --config tools/lint/stylelint.config.mjs $([ "${usage_fix:-}" != true ] || echo --fix) "static/css/**/*.css"'
+# A plugin rule's cases (tools/lint/*.test.mjs) prove it before its scan is trusted.
+run = 'node --test --test-reporter=dot tools/lint/*.test.mjs && stylelint --config tools/lint/stylelint.config.mjs $([ "${usage_fix:-}" != true ] || echo --fix) "static/css/**/*.css"'
 
 ["lint:js"]
 description = "ESLint holds the browser scripts to its recommended rules and the modern forms (const and let, strict equality), every name they use defined, no unsanitized markup sink, fetching, parsing and polling to fragment.js, and tables.js's layout reads to the places that say why"

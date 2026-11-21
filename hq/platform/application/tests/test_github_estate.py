@@ -109,19 +109,25 @@ class FailingRunTests(TestCase):
 
 
 class ProjectPushedTests(TestCase):
-    def test_a_project_with_a_read_repository_says_when_it_was_pushed(self):
+    def test_a_project_pushed_since_its_last_edit_is_dated_and_ordered_by_the_push(self):
         from django.urls import reverse
 
         from hq.domains.projects.models import Project
 
+        from ..sections import recent_active_projects
+
         store(pushed_at=(timezone.now() - timedelta(minutes=5)).isoformat())
-        project = Project.objects.create(name="Alpha", slug="alpha", repository_url="https://github.com/example/alpha")
+        url = "https://github.com/example/alpha"
+        project = Project.objects.create(name="Alpha", slug="alpha", status="active", repository_url=url)
+        Project.objects.create(name="Beta", slug="beta", status="active")
+        Project.objects.filter(slug="beta").update(updated_at=timezone.now() - timedelta(days=1))
+        Project.objects.filter(pk=project.pk).update(updated_at=timezone.now() - timedelta(days=30))
         operator(self.client)
 
         response = self.client.get(reverse("projects:detail", args=[project.slug]))
 
-        self.assertContains(response, "Last push 5")
-        self.assertNotContains(response, "Edited ")
+        self.assertContains(response, "Last active 5")
+        self.assertEqual([row["slug"] for row in recent_active_projects()], ["alpha", "beta"])
 
 
 def waiting_deploy() -> None:

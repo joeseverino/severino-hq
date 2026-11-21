@@ -1,0 +1,6 @@
+{% comment %}
+One thing the browser reads back from HQ's own response (`check`, a
+request_headers.ResponseCheck), in the Headers HQ sent table: its `value`
+cell, the name connection.js fills with what was sent, or its state, which
+says it is being read until the script shows what the response holds.
+{% endcomment %}{% if value %}<code class="cell-whole" data-response-value>{{ check.name }}</code>{% else %}<span data-response-state="waiting">{% status "Reading" %}</span><span data-response-state="present" hidden>{% if check.directive %}{% status "Enforced" tone="good" %}{% else %}{% status "Sent" tone="good" %}{% endif %}</span><span data-response-state="absent" hidden>{% status "Absent" tone="serious" %}</span>{% endif %}

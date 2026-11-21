@@ -405,7 +405,7 @@ func (r *Registry) environmentGlance(ctx context.Context, docker string, headers
 		cpu /= float64(info.NCPU)
 	}
 	return runtime.GlanceObservationMachine{Docker: &runtime.GlanceObservationDocker{
-		Containers: len(containers), CPUPercent: cpu, Cores: int(info.NCPU),
+		CPUPercent: cpu, Cores: int(info.NCPU),
 		MemoryUsed: int(memoryUsed), MemoryTotal: int(info.MemTotal), Storage: int(dockerStorage(disk)),
 	}}, nil
 }

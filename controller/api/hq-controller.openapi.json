@@ -4244,11 +4244,8 @@
       },
       "GlanceObservationDocker": {
         "additionalProperties": false,
-        "description": "A machine read through its Docker environment: what its running\ncontainers take of it. ``cpu_percent`` is a share of the whole machine.",
+        "description": "A machine read through its Docker environment: what its running\ncontainers take of it. ``cpu_percent`` is a share of the whole machine.\nHow many there are is the sweep's to count (``ContainerCount``).",
         "properties": {
-          "containers": {
-            "type": "integer"
-          },
           "cpu_percent": {
             "format": "double",
             "type": "number"
@@ -4270,7 +4267,6 @@
           }
         },
         "required": [
-          "containers",
           "cpu_percent",
           "cores",
           "memory_used",
@@ -5392,20 +5388,6 @@
           "docker_version": {
             "default": "",
             "type": "string"
-          },
-          "containers_running": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "default": null
-          },
-          "containers_total": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "default": null
           },
           "snapshot_at": {
             "default": null,

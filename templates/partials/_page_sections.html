@@ -7,7 +7,7 @@
   {% data_table section.table %}
   {% endif %}
   {% for label, text in section.readouts %}
-    {% section label fold=True %}<pre tabindex="0">{{ text|breakable }}</pre>{% endsection %}
+    {% section label fold=True %}<pre tabindex="0">{{ text }}</pre>{% endsection %}
   {% endfor %}
 {% endsection %}
 {% endif %}{% endfor %}

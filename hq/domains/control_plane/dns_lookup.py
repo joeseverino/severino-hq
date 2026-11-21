@@ -20,11 +20,13 @@ from hq.platform.application.connection_contracts import (
 )
 from hq.platform.application.http_read import UNREACHABLE, fetch, redirect_target
 from hq.platform.application.reach import public_host
+from hq.platform.application.readings import PUBLIC_DNS
 from hq.platform.application.security import Capability
-from hq.platform.application.tone import Tone
 from hq.platform.application.url_query import with_query
 from hq.platform.core.errors import UpstreamUnavailable
 lazy from hq.platform.application.entity_links import https_url
+
+from .observations.public_registry import RDAP
 
 
 def connection_specs():
@@ -38,8 +40,6 @@ def connection_specs():
             id=identifier,
             label=label,
             kind=kind,
-            status=Tone.GOOD,
-            status_label="configured",
             detail="Needs no key. Checked only when a lookup runs.",
             endpoint=f"https://{parsed.netloc}",
             credential_model="none",
@@ -51,14 +51,14 @@ def connection_specs():
             configured_instance(
                 identifier="public-dns-resolver",
                 label="Public DNS resolver",
-                kind="public_dns",
+                kind=PUBLIC_DNS,
                 setting="SEVERINO_LOOKUP_ENDPOINT",
                 abilities=("lookup.public_dns", "lookup.reverse_dns"),
             ),
             configured_instance(
                 identifier="public-rdap",
                 label="Public address registry",
-                kind="rdap",
+                kind=RDAP,
                 setting="SEVERINO_RDAP_ENDPOINT",
                 abilities=("lookup.address_registry",),
             ),

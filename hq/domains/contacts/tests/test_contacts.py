@@ -81,7 +81,7 @@ class InboxReadingTests(TestCase):
 
         response = self.client.get(reverse("contacts:list"))
 
-        self.assertContains(response, "No messages read yet.")
+        self.assertContains(response, "No reading yet")
         self.assertContains(response, "Connect Cloudflare API")
         self.assertEqual(with_class(response, "notice-error"), [])
         self.assertEqual(inbox.unread(), (0, "unknown"))

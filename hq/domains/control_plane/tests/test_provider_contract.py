@@ -286,7 +286,7 @@ class ProviderContractTests(TestCase):
         )
 
         spec["consumers"][-1]["install_domains"].append("not-covered.example")
-        with self.assertRaisesRegex(ValueError, "not-covered.example"):
+        with self.assertRaisesRegex(ValueError, "cpanel_names_covered"):
             validate_resolved_certificate(spec)
 
     def test_invalid_provider_payload_fails_before_persistence(self):

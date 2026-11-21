@@ -88,22 +88,15 @@ describe_capabilities.__doc__ = f"{describe_capabilities.__doc__}\n{effect_gloss
 @tool(
     "Run a capability",
     requires=RUNS_A_CAPABILITY,
-    budget=Budget(
-        480,
-        frozendict(
-            {
-                "name": "project.create",
-                "payload": frozendict(
-                    {"name": "Budget", "slug": "budget", "status": "active", "idempotency_key": "example-budget"}
-                ),
-            }
-        ),
-    ),
+    budget=Budget(540),
 )
 def execute_capability(
-    name: str,
+    name: Annotated[str, Field(examples=["project.create"])],
     # Absent means an empty one, as an answer's left-out field means its default.
-    payload: dict[str, Any] | None = None,
+    payload: Annotated[
+        dict[str, Any] | None,
+        Field(examples=[{"name": "Budget", "slug": "budget", "status": "active", "idempotency_key": "example-budget"}]),
+    ] = None,
     # Read by the capability runner once the caller may run it, as every door's are.
     target: SkipValidation[str | RecordId | None] = None,
     expected_updated_at: SkipValidation[str | None] = None,
@@ -187,10 +180,10 @@ def get_topology(**narrowing: Any) -> TopologyAnswer:
 @tool(
     "List records",
     requires=READS_A_LIST,
-    budget=Budget(1_700, frozendict({"name": "action_items"})),
+    budget=Budget(1_700),
 )
 def list_resource(
-    name: str,
+    name: Annotated[str, Field(examples=[QUEUE])],
     filters: dict[str, Any] | None = None,
     fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None,
     limit: PageSize = None,
@@ -224,11 +217,11 @@ def list_resource(
 
 
 # One record of its kind, with the fields describe_resources names for it.
-@tool(
-    "Read one record", requires=READS_A_RECORD, budget=Budget(720, frozendict({"name": "projects", "identifier": "hq"}))
-)
+@tool("Read one record", requires=READS_A_RECORD, budget=Budget(800))
 def get_resource(
-    name: str, identifier: str | RecordId, fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None
+    name: Annotated[str, Field(examples=["projects"])],
+    identifier: Annotated[str | RecordId, Field(examples=["hq"])],
+    fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None,
 ) -> dict[str, Any]:
     """One record of a kind, by its identifier.
 
@@ -250,9 +243,9 @@ def audit_registry() -> RegistryAudit:
     return audit_application_registry()
 
 
-@tool("Export a year summary", requires=holding(Capability.READ), budget=Budget(4_700, frozendict({"year": 2026})))
+@tool("Export a year summary", requires=holding(Capability.READ), budget=Budget(4_700))
 def export_year_summary(
-    year: Annotated[int, Field(ge=MINYEAR, le=MAXYEAR)], format: ExportFormat = "md"
+    year: Annotated[int, Field(ge=MINYEAR, le=MAXYEAR, examples=[2026])], format: ExportFormat = "md"
 ) -> YearSummary:
     """One year's summary, as Markdown or JSON: its expenses, projects,
     writeups, docs and the assets bought.

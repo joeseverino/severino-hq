@@ -63,6 +63,6 @@ class SelectCatalogTests(SimpleTestCase):
         it takes is drawn there at least once."""
 
         drawn = re.findall(r"\{% select (.*?)%\}", " ".join(_catalog_templates().values()))
-        self.assertTrue(any("id=" in found for found in drawn), "draw a select a control label names")
+        self.assertTrue(any("id=" in found for found in drawn), "draw a select its control label names")
         self.assertTrue(any("tone=" in found for found in drawn), "draw a select in a tone")
         self.assertTrue(any("every=" in found for found in drawn), "draw a select that narrows")

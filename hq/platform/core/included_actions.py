@@ -33,8 +33,8 @@ ASK = _part(
       operator just gave it and ignores a second press.
     - When the work ends, the part of the page named by the ask's `refresh` selector is fetched again
       and swapped in place; without one, the page's content (`#content`, a region of its own). Only if
-      that cannot be had does the page load again, though not under somebody's hands and never twice
-      running; then it offers the reading as a link.
+      that cannot be had does the page load again, though never while the operator is using it and
+      never twice running; then it offers the reading as a link.
     - A failure is said in the note, where it was asked.
 
     In a table's row the note's line is as wide as the button, so there it says the state's word alone
@@ -87,7 +87,7 @@ WRITE_GAP = _part(
     rules="""
     Every page that would offer a change its connection cannot make offers this instead: what the change
     needs, linked to the setup step that gives it, with the whole reason as its title (`data-write-gap`).
-    A row draws it through `{% row_actions gap=... %}` and a form through its `gap`.
+    A row draws it through `Row(gap=)` and a form through its `gap`.
     """,
     example=tags.WRITE_GAP,
     states=tags.WRITE_GAP_STATES,

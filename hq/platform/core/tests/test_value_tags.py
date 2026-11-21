@@ -8,7 +8,17 @@ from django.utils.safestring import mark_safe
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.markup_testing import all_elements, links, select, text, texts, with_class
 from hq.platform.application.printable import Unprintable
-from hq.platform.core.templatetags.value_tags import breakable, cell_line, code_spans, entity, or_empty, readout
+from hq.platform.core.held_values import format_html
+from hq.platform.core.templatetags.value_tags import (
+    breakable,
+    cell_line,
+    code_spans,
+    entity,
+    or_empty,
+    readable,
+    readout,
+    when,
+)
 
 
 def pieces(html):
@@ -262,30 +272,12 @@ class BreakableTests(SimpleTestCase):
         self.assertIn("data-sole", breakable("example-docker-host-01"))
         self.assertNotIn("data-sole", breakable("Receipt for example-docker-host-01"))
 
-    def test_a_name_has_its_box_in_its_token(self):
-        """A name is drawn in a box of its own in its token; a word of a
-        sentence has none, and a line of words is cut by the line's own box."""
-
-        for name in ("example.com/example-path", "hq.example.com"):
-            with self.subTest(name=name):
-                html = str(breakable(name))
-                (token,) = with_class(html, "token")
-                (box,) = with_class(html, "cut")
-                self.assertEqual(box.ancestors[-1:], (token,))
-        self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "cut"), [])
-        (line,) = with_class(str(cell_line("on example-web")), "cut")
-        self.assertIn("cell-line", line.ancestors[-1].classes)
-        (named,) = with_class(str(cell_line("example-web")), "cut")
-        self.assertIn("token", named.ancestors[-1].classes)
-
     def test_a_run_too_long_to_be_a_word_is_held_as_a_name(self):
-        """A digest has no seam to wrap at, so a cell cuts it as it cuts a
-        hyphenated name: in a phrase a box of its own, alone a name with a
-        box to cut it, never plain text that widens its column."""
+        """A digest has no seam to wrap at: in a phrase a box of its own, never
+        plain text that widens its column."""
 
         digest = "697a431011ba77cec8b221767743484b20217b9786894fea67f222af655f40a7"
         self.assertEqual(boxed(breakable(f"{digest} on example-oidc")), [digest, "example-oidc"])
-        self.assertIn('<span class="cut"><span class="whole">', breakable(digest))
         self.assertEqual(boxed(breakable(f"sha256:{digest} pulled")), [digest])
 
     def test_a_word_that_breaks_nowhere_stays_text(self):
@@ -295,6 +287,44 @@ class BreakableTests(SimpleTestCase):
     def test_an_entity_name_is_a_token(self):
         link = EntityLink(label="example-docker-host", url="/machines/example-docker-host/", kind_label="Machine")
         self.assertIn('<span class="whole">example-docker-host</span>', entity({}, link))
+
+    def test_a_link_is_named_without_its_mark(self):
+        link = EntityLink(kind_label="Service", label="example.com", url="/services/example.com/")
+
+        printed = entity({}, link, mark=",")
+
+        (hidden,) = [element for element in select(printed, "aria-hidden", "true") if "mark" in element.classes]
+        self.assertEqual(hidden.text, ",")
+        self.assertEqual(links(printed), [("example.com", "/services/example.com/")])
+
+    def test_markup_built_in_python_holds_only_what_it_prints_as_text(self):
+        name = "example-docker-host"
+
+        html = format_html('<a href="/{}/" title="{t}">{}</a> <b>{}</b>', name, name, mark_safe("<i>x-y</i>"), t=name)
+
+        self.assertEqual(wholes(html), [name])
+        self.assertEqual(select(html, "title", name)[0].attrs["href"], f"/{name}/")
+        self.assertIn("<b><i>x-y</i></b>", html)
+
+    def test_a_mark_after_a_figure_in_its_words_stays_the_sentences_text(self):
+        """A count is text, no box, so its mark has its line already and is
+        read with the sentence."""
+
+        from hq.platform.core.testing import render
+
+        printed = render('<p>{% load value_tags %}At {{ n|counted:"bank" }}.</p>', n=1)
+
+        self.assertEqual(text(printed), "At 1 bank.")
+        self.assertEqual(with_class(printed, "mark"), [])
+
+    def test_a_list_takes_a_comma_between_its_items(self):
+        self.assertIn('aria-hidden="true">,<', breakable("example-host", {"last": False}))
+        self.assertNotIn("mark", breakable("example-host", {"last": True}))
+
+    def test_text_that_names_no_moment_is_held(self):
+        for printed in (when("example-docker-host-01"), readable("example-docker-host-01")):
+            with self.subTest(printed=printed):
+                self.assertIn("data-sole", printed)
 
     def test_a_value_or_its_mark_holds_the_names_in_its_text(self):
         self.assertEqual(wholes(or_empty("on example-web")), ["example-web"])

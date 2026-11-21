@@ -19,7 +19,7 @@ first screen on chips before the first finding.
 {% endcard %}
 {% elif finding_coverage and not finding_coverage.read_at %}
 {% url 'control_plane:controller' as controller_url %}
-{% include "partials/_empty_state.html" with message="Nothing read yet." action_url=controller_url action_label="Start the controller" %}
+{% include "partials/_empty_state.html" with absent="no reading yet" action_url=controller_url action_label="Start the controller" %}
 {% elif finding_coverage %}
 {% comment %}
 The verdict is the checks', said as theirs: what else waits on the reader

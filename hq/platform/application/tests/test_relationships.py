@@ -577,7 +577,7 @@ class DomainCardTests(TestCase):
         self.assertEqual(list(self.cards("example.net")), ["Services", "Security", "Email", "Registration"])
         card = self.cards("example.net")["Email"]
 
-        self.assertEqual(card.value, "Not configured")
+        self.assertEqual(card.value, "Not set up")
         self.assertIn("v=spf1 -all", card.note)
         self.assertEqual(card.url, reverse("zones:mail", args=["example.net"]))
 

@@ -7,4 +7,4 @@ the network's color only once every check is confirmed. The panel behind the
 link has the rest, and works without script.
 {% endcomment %}
 {% url 'connection' as address %}
-{% fact "Connection" icon="network" url=address modal="connection" %}{% status connection.channel.label tone=connection.tone dot=True ink="context" %}{% detail %}<small>{{ connection.transport|breakable }} {% include "partials/_example_connection.html" %}</small>{% if connection.failing %}<small>{% status connection.summary tone="attention" pill=False %}</small>{% elif not connection.holds %}<small>{{ connection.summary|breakable }}</small>{% endif %}{% endfact %}
+{% fact "Connection" icon="network" url=address modal="connection" %}{% status connection.channel.label tone=connection.tone dot=True ink="context" %}{% detail %}<small>{{ connection.transport }} {% include "partials/_example_connection.html" %}</small>{% if connection.failing %}<small>{% status connection.summary tone="attention" pill=False %}</small>{% elif not connection.holds %}<small>{{ connection.summary }}</small>{% endif %}{% endfact %}

@@ -16,6 +16,7 @@ from .finding_model import FindingRule, cannot_run_commands, machine_step
 from .finding_steps import Run
 from .labels import human_bytes
 from .reading_facts import OnEachMachine, ReadingRow
+from .thresholds import Threshold
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, measured
@@ -26,8 +27,10 @@ MIB = 1 << 20
 # A filesystem is nearly full when its free space is under both a floor and a
 # share of its size. A share alone flags a large disk that still has plenty
 # left; a floor alone flags every small partition (a 1 GiB /boot) for good.
-ATTENTION_FREE, ATTENTION_SHARE = 2 * GIB, 0.10
-SERIOUS_FREE, SERIOUS_SHARE = 512 * MIB, 0.03
+ATTENTION_FREE = Threshold(2 * GIB, "bytes")
+ATTENTION_SHARE = Threshold(0.10, "share")
+SERIOUS_FREE = Threshold(512 * MIB, "bytes")
+SERIOUS_SHARE = Threshold(0.03, "share")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,9 +63,9 @@ class FilesystemSpace(ReadingRow):
     def severity(self) -> str:
         """``serious`` or ``attention`` when nearly full, else ""."""
 
-        if self.under(SERIOUS_FREE, SERIOUS_SHARE):
+        if self.under(SERIOUS_FREE.value, SERIOUS_SHARE.value):
             return Tone.SERIOUS
-        if self.under(ATTENTION_FREE, ATTENTION_SHARE):
+        if self.under(ATTENTION_FREE.value, ATTENTION_SHARE.value):
             return Tone.ATTENTION
         return ""
 
@@ -130,9 +133,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="On the machine, free space on the mount, then check again.",
         no_help_reason=cannot_run_commands(),
         bars={
-            Tone.SERIOUS: f"free space is under {human_bytes(SERIOUS_FREE)} and {measured(SERIOUS_SHARE * 100, '%', 0)} of the disk",
-            Tone.ATTENTION: f"free space is under {human_bytes(ATTENTION_FREE)} and {measured(ATTENTION_SHARE * 100, '%', 0)} of the disk",
+            Tone.SERIOUS: f"free space is under {SERIOUS_FREE} and {SERIOUS_SHARE} of the disk",
+            Tone.ATTENTION: f"free space is under {ATTENTION_FREE} and {ATTENTION_SHARE} of the disk",
         },
-        clears=f"free space is back above {human_bytes(ATTENTION_FREE)} or {measured(ATTENTION_SHARE * 100, '%', 0)} of the disk",
+        clears=f"free space is back above {ATTENTION_FREE} or {ATTENTION_SHARE} of the disk",
     ),
 )

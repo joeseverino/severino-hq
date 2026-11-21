@@ -13,19 +13,26 @@ lazy from hq.domains.jobs.models import Job, JobState
 lazy from hq.platform.application.appearance import THEME_CHOICES, Theme
 lazy from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, WAITING, Ask, Standing
 lazy from hq.platform.application.command_center import DiscoveryItem
-lazy from hq.platform.application.freshness import CURRENT, STALE, Freshness
+lazy from hq.platform.application.freshness import CURRENT, DUE, STALE, Freshness
 lazy from hq.platform.application.pages import Page, PageAction, PageVisit
 lazy from hq.platform.application.request_channel import TAILNET_CHANNEL
 lazy from hq.platform.application.service_context import ServiceSection
-lazy from hq.platform.application.tables import Cell
-lazy from hq.platform.application.ui import PageNavigation, PageSection
+lazy from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
+lazy from hq.platform.application.ui import PageNavigation, PageSection, button_classes
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
+
+
+def _asked(label, ask):
+    """A table named ``label`` of one connection, its read asked from its row."""
+
+    rows = (Row((Cell("example-main"),), asks=(ask,)),)
+    return {"table": DataTable(label, (TableColumn("Name", kind="identifier"),), rows)}
 
 
 def _signed_in():
     """What the page frame reads of a signed-in example operator's request,
     as the context processors hand it to base.html: the sections, a group of
-    them among them, the theme and its choices, the connection's channel and
+    them among them, the bar's button look, the theme and its choices, the connection's channel and
     the queue's count."""
 
     return {
@@ -45,6 +52,7 @@ def _signed_in():
                 ),
             },
         ),
+        "bar_button": button_classes("bar"),
         "THEME": Theme.SYSTEM,
         "THEME_CHOICES": THEME_CHOICES,
         "CONNECTION_CHANNEL": TAILNET_CHANNEL,
@@ -103,8 +111,18 @@ def _palette():
 
 # The page frame's header, as every signed-in page draws it: the sections,
 # the doorway to search, the queue's count and the person's menu, whose
-# popovers the survey opens.
+# popovers the survey opens. Its long name is cut beside the mark; a short
+# one fits whole on a phone's bar.
 SITE_HEADER = Example(context=_signed_in, address="/example/", frame="before")
+
+SITE_HEADER_STATES = {
+    "short-name": Example(
+        '{% include "partials/_site_header.html" %}',
+        context=lambda: {**_signed_in(), "user": get_user_model()(username="ex", is_staff=True)},
+        address="/example/",
+        frame="before",
+    ),
+}
 
 
 MODAL = Example(
@@ -262,12 +280,10 @@ ASK_STATES = {
     # In a row's cell, where its word alone stands and its sentence opens
     # under the row: one that failed with a long sentence.
     "in-a-row": Example(
-        '{% section "Example connections 1" %}{% table_region "Example connections 1" %}<table class="data-table">'
-        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
-        '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
-        "</tbody></table>{% endtable_region %}{% endsection %}",
-        lambda: {
-            "ask": Ask(
+        '{% section "Example connections 1" %}{% data_table table %}{% endsection %}',
+        lambda: _asked(
+            "Example connections 1",
+            Ask(
                 "Example read",
                 "/example/read/",
                 standing=Standing(
@@ -276,25 +292,23 @@ ASK_STATES = {
                     since=DRAWN_AT - timedelta(minutes=8),
                 ),
                 compact=True,
-            )
-        },
+            ),
+        ),
     ),
     # Waiting its turn, given a sentence that only says its word again: the
     # word alone in the cell, and no line under the row.
     "waiting": Example(
-        '{% section "Example feeds 1" %}{% table_region "Example feeds 1" %}<table class="data-table">'
-        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
-        '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
-        "</tbody></table>{% endtable_region %}{% endsection %}",
-        lambda: {
-            "ask": Ask(
+        '{% section "Example feeds 1" %}{% data_table table %}{% endsection %}',
+        lambda: _asked(
+            "Example feeds 1",
+            Ask(
                 "Example read",
                 "/example/read/",
                 standing=Standing(QUEUED, note=WAITING, since=DRAWN_AT - timedelta(seconds=20)),
                 status_url="/example/read/status/",
                 compact=True,
-            )
-        },
+            ),
+        ),
     ),
     # As a page's own action, beside a link, in its head.
     "in-the-head": Example(
@@ -379,11 +393,13 @@ JOB_PROGRESS_STATES = {
 
 
 READING_AGE_STATES = {
-    # A reading's age in each of its states: current, out of date, the moment
-    # alone, none, and none with why.
+    # A reading's age in each of its states: current, aged and due again (a
+    # reading taken on open, no fault), out of date, the moment alone, none,
+    # and none with why.
     "states": Example(
         '{% section "Example readings 4" %}{% facts %}'
         '{% fact "Example current" %}{% include "partials/_reading_age.html" with reading=current only %}{% endfact %}'
+        '{% fact "Example due" %}{% include "partials/_reading_age.html" with reading=due only %}{% endfact %}'
         '{% fact "Example stale" %}{% include "partials/_reading_age.html" with reading=stale only %}{% endfact %}'
         '{% fact "Example moment" %}{% include "partials/_reading_age.html" with at=at only %}{% endfact %}'
         '{% fact "Example never" %}{% include "partials/_reading_age.html" only %}{% endfact %}'
@@ -392,6 +408,7 @@ READING_AGE_STATES = {
         lambda: {
             "unread": "the registry refused an anonymous read (HTTP 401); the image may be private.",
             "current": Freshness(CURRENT, DRAWN_AT - timedelta(minutes=4), timedelta(hours=1)),
+            "due": Freshness(DUE, DRAWN_AT - timedelta(minutes=22), timedelta(minutes=1)),
             "stale": Freshness(STALE, DRAWN_AT - timedelta(days=3), timedelta(hours=1)),
             "at": DRAWN_AT - timedelta(hours=2),
         },

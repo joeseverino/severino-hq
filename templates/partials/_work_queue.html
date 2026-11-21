@@ -1,17 +1,13 @@
 {% comment %}
 The queue as one table, wherever it is drawn whole: the findings page, the
 dashboard's short list, a thing's problems, a domain's attention list. Its
-entries are `_queue_entries.html`; the queue page's own sections are
-`_queue_groups.html`, the same rows under their domains.
+rows are `queue_table`'s; the queue page's own sections are
+`action_items.html#queue_groups`, the same rows under their domains.
 
 `fold` folds a family under its name, as the queue page does.
 {% endcomment %}
 {% if items %}
-{% table_region "Queue" %}
-  <table class="data-table" data-line="flat">
-    <tbody>{% with folding=fold|default:False %}{% include "partials/_queue_entries.html" with entries=items|families:folding prefix="problem" %}{% endwith %}</tbody>
-  </table>
-{% endtable_region %}
+{% queue_table items fold=fold|default:False grouped=grouped|default:False here=here|default:False triage=triage|default:False glance=glance|default:False prefix="problem" as queue %}{% data_table queue %}
 {% else %}
 <p class="attention-clear">{% include "partials/_empty_state.html" with message=empty|default:"Nothing needs you." inline=True only %}</p>
 {% endif %}

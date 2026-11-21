@@ -8,7 +8,6 @@ the agent limits let in, and one after another.
 """
 
 import asyncio
-import dataclasses
 import gc
 import importlib
 import json
@@ -34,7 +33,7 @@ lazy from hq.platform.mcp.binding import Tool
 lazy from hq.platform.mcp.identity import set_principal
 lazy from hq.platform.mcp.security import MCPBoundary, TailnetGate
 lazy from hq.platform.mcp.server import ToolServer
-lazy from hq.platform.mcp.shapes import declared
+lazy from hq.platform.mcp.shapes import declared, example_call
 
 SERVER = "hq.platform.mcp.server"
 LOADED = "server"
@@ -273,7 +272,7 @@ async def answered(
 
 async def tool_answers(server, application, tools: list[dict[str, Any]], ident: int) -> dict[str, dict[str, Any]]:
     """Each listed tool's answer as a client reads it, its text, weighed, and whether it was refused:
-    to the call its budget declares, or, in a tree older than budgets, to ``answer_arguments``'."""
+    to the call its listed schema shows, or, in an older tree, to its budget's or ``answer_arguments``'."""
 
     async def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         nonlocal ident
@@ -285,11 +284,15 @@ async def tool_answers(server, application, tools: list[dict[str, Any]], ident: 
     year = datetime.now(UTC).year
     weights = {}
     fallback = answer_arguments(tools, projects[0]["slug"] if projects else "", year)
-    for name, older in fallback.items():
-        said = declared(server.tools[name].handler)
-        # A tree older than budgets declares none.
-        budgeted = "budget" in {field.name for field in dataclasses.fields(said)}
-        arguments = json.loads(json.dumps(said.budget.call, default=dict)) if budgeted else older
+    for listed in tools:
+        name = listed["name"]
+        try:
+            arguments = example_call(listed["inputSchema"])
+        except ImportError:
+            # A tree older than schema examples: its budget's call, or before budgets none.
+            budget = getattr(declared(server.tools[name].handler), "budget", None)
+            declared_call = getattr(budget, "call", None)
+            arguments = fallback[name] if declared_call is None else json.loads(json.dumps(declared_call, default=dict))
         answer = await call(name, arguments)
         weights[name] = weighed(answer["content"][0]["text"]) | {"refused": bool(answer.get("isError"))}
     return weights

@@ -154,18 +154,27 @@ def command_action(
 
 
 def capability_action_link(
-    name: str, *, principal: Principal, variant: str = "", subject: str = ""
+    name: str,
+    *,
+    principal: Principal,
+    variant: str = "",
+    subject: str = "",
+    subject_resource: str | None = None,
 ) -> ActionLink | None:
     """Link to a command only when its canonical contract permits ``principal``.
 
-    ``subject`` is the record the link is offered beside. A command about one
-    record is linked to it as its target; one about none ignores it.
+    ``subject`` is the key of the record the link is offered beside, a record
+    of ``subject_resource`` (None for one no resource lists, as a connection
+    is). It is the target of a command about a record of that same resource.
+    A command about another resource's records is linked to its form, which
+    chooses one, since this key names none of them. One about no record
+    ignores it.
     """
 
     spec = _permitted_spec(name, principal)
     if spec is None:
         return None
-    target = subject if spec.target_kind else ""
+    target = subject if spec.target_kind and spec.subject_resource == subject_resource else ""
     link = command_action("command", name, target=target, variant=variant, reason="Its permissions were checked.")
     return link if link.url else None
 

@@ -66,9 +66,9 @@ FACTS = Part(
     a row of its own where the band has no room for it beside them. Given `items` (each a `Kpi`), the
     band draws each as its fact. Under 24rem a band reads as a list, each fact a row of its own; small
     figures keep their grid, and headline figures (`large`, `lead`) and a band beside a page's title
-    their counted rows, two to a row (a phone's head: label beside value, a one-line note). Headline
-    figures stand on a wider floor, so three take a row only once the band is about 360px wide, each
-    value sized to its cell, never under the band's.
+    their counted rows, two to a row (a phone's head: label beside value, over a note whose run wraps
+    whole parts to the lines it needs). Headline figures stand on a wider floor, so three take a row
+    only once the band is about 360px wide, each value sized to its cell, never under the band's.
 
     **A band's values are one size.** A domain's overview is a band of facts at `size="large"`, every
     figure the same size, in its contributor's order. Values, context and links render once from the
@@ -94,9 +94,9 @@ FACTS = Part(
     pair and leaves that pair's row a gap.
 
     A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
-    each fact one phrase, its bold value then its words ("3 rules") then its detail, a fixed gap
-    apart, wrapping fact by fact, so a wide card holds them on one line. Under the card's head it
-    takes a rule above.
+    each fact one phrase, its bold value then its words ("3 rules"), agreeing with it, then a dot
+    and its detail ("1 Draft · 22 published"), a fixed gap apart, wrapping fact by fact, so a wide
+    card holds them on one line. Under the card's head it takes a rule above.
 
     **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
     two shares a row with the sections beside it, so its values never end a third of the way across
@@ -142,7 +142,9 @@ FACT = FactTakes(
     rules="""
     Every label and its value is a fact: `{% fact "Label" value=n url=... detail=... %}` inside `{%
     facts %}`, or the block form `{% fact "Label" %}markup{% detail %}lines{% endfact %}` for a value
-    that is markup. A zero and a linked count stand alike. A fact is drawn as a figure is: its label
+    that is markup. A zero and a linked count stand alike. A `Kpi` or a card that counts things
+    takes a `Counted` as its label, which words it to agree with its figure ("1 Draft", "2 Drafts").
+    A fact is drawn as a figure is: its label
     with its mark before it, its value large under it, its detail under that. What a figure counts may
     follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
     ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value

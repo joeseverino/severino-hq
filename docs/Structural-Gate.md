@@ -1,7 +1,7 @@
 # Structural Gate
 
 The gate fails a near-duplicate pair of executable code that its baseline
-does not list. File size is `FileSizeTests`' job: the ceiling, the files it
+does not list. File size is `lint:file-lines`' job: the ceiling, the files it
 covers (`SEVERINO_FILE_LINE_HELD`) and the exemptions `mise.toml` declares
 (`SEVERINO_FILE_LINE_*`).
 

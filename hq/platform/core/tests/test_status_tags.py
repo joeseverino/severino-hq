@@ -108,9 +108,9 @@ class StatusPillTests(SimpleTestCase):
 
         for tone in (*Tone, ""):
             with self.subTest(tone):
-                frame = _drawn("{{ tone|tone_class }}", tone=tone)
+                (frame,) = elements(_drawn('<i class="{{ tone|tone_class }}"></i>', tone=tone), "i")
                 (drawn,) = elements(_drawn('{% status "Example" tone=tone dot=True %}', tone=tone), "span")
-                self.assertIn(frame, drawn.classes)
+                self.assertLessEqual(frame.classes, drawn.classes)
 
     def test_a_word_that_is_no_tone_is_refused_wherever_a_tone_colors_words(self):
         """A misspelled tone fails where it is drawn, never drawn as neutral,

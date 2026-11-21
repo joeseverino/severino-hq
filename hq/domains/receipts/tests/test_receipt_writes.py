@@ -121,7 +121,7 @@ class UploadCapabilityTests(_PrivateMedia):
     def test_a_file_a_receipt_cannot_be_is_refused_in_the_hosts_words(self):
         for file, said in (
             (a_file("text/html"), "A receipt cannot be this type of file. Upload a PDF or an image."),
-            (a_file(content="not base64!"), "receipt.upload: file.content is invalid."),
+            (a_file(content="not base64!"), "receipt.upload: file.content must be base64."),
         ):
             with self.subTest(said=said):
                 refused = self.upload(file)["error"]

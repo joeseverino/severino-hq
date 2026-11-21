@@ -21,7 +21,7 @@ from hq.domains.control_plane.provider_adapters.tls import (
 )
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS, read_spec
-from hq.platform.application.labels import dotted, lower_first
+from hq.platform.application.labels import dotted, lower_first, sentence
 from hq.platform.application.routes import reverse
 
 from .card_items import ListRow
@@ -32,6 +32,7 @@ from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
 from .mail_policy import is_null_mx
 from .moments import expiry_words, moment
+from .tone import Absent
 from .ui import counted, ended
 from .zones import ZONE_KIND, ZoneInsight
 lazy from . import zones
@@ -142,19 +143,19 @@ def certificates(zone) -> ZoneInsight | None:
         if refused:
             return ZoneInsight(
                 label="Certificates",
-                value="None managed here",
+                value=sentence(Absent.NOT_MANAGED),
                 detail="Edge certificates are not readable.",
                 note=refused[0].detail,
             )
         if permitted:
             return ZoneInsight(
                 label="Certificates",
-                value="None managed here",
+                value=sentence(Absent.NOT_MANAGED),
                 detail=ended("Issuance is restricted to " + ", ".join(sorted(permitted))),
             )
         return ZoneInsight(
             label="Certificates",
-            value="None managed here",
+            value=sentence(Absent.NOT_MANAGED),
             detail="No CAA record either, so any authority may issue for it.",
         )
 
@@ -334,7 +335,7 @@ def email(zone) -> ZoneInsight | None:
         return ZoneInsight(
             label="Email",
             url=reverse("zones:mail", kwargs={"zone": zone.zone}),
-            value="Not configured",
+            value=sentence(Absent.NOT_SET_UP),
             detail=(
                 "No MX, SPF or DMARC record. This domain receives no mail, and "
                 "nothing stops anyone sending mail that says it comes from it."

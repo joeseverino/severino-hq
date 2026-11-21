@@ -637,7 +637,9 @@ policy, on any endpoint, is recorded once in the audit log as `Denied`.
 An `invalid_input` message names every offending field and why, in one
 sentence: `project.create: name is required.`, or
 `example.decide: verdict must be one of applies, does_not_apply.` It gives field
-paths, expected types and declared choices, never a value the request carried.
+paths, expected types, declared choices and each rule's declared reason
+(`calendar.entry.create: starts_at must be a time of day with no offset.`),
+never a value the request carried.
 A field a command does not have is refused at any depth, as `extra_forbidden`
 at its path (`rules[0].scope is not a known field`), and its `input_schema` is
 closed at the same levels; only a part its type declares open takes any key.
@@ -1072,7 +1074,7 @@ capabilities. A client that declares nothing keeps the held answer.
 | Approved, its operation queued or running | `working`, polled every 2,000 ms |
 | Approved and applied, or approved with no operation to run | `completed`, `result` the call's answer, carrying its operation as it ended |
 | Approved, and its operation failed or was cancelled | `completed`, `result` a tool error coded `operation_failed`, whose `details` is the call's answer with its operation as it ended |
-| Declined | `completed`, `result` a tool error coded `declined`, with the person's note |
+| Rejected | `completed`, `result` a tool error coded `operator_rejected`, with the operator's note |
 | Lapsed unanswered, or overtaken by a change to what it acts on | `completed`, `result` a tool error coded `expired` or `stale` |
 | Withdrawn by its asker, through `tasks/cancel` or `approval.withdraw` | `cancelled`, with no `result` |
 
@@ -1099,7 +1101,7 @@ Security properties:
 
 - The task is the hold, read afresh at each `tasks/get`; no task state is
   kept apart from it. Its id is the hold's random UUID.
-- Nothing in the extension approves or declines a hold. A hold asks for no
+- Nothing in the extension approves or rejects a hold. A hold asks for no
   input, so `tasks/update` acknowledges and changes nothing. `tasks/cancel` is
   the asker withdrawing its own hold while it waits: it runs `approval.withdraw`,
   under that command's rules and audit, and the task then reads `cancelled`,

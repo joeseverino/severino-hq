@@ -1,6 +1,7 @@
 """For what an extension can do: declare its capabilities and their commands, and run a write.
 
 A command is a frozen dataclass or a TypedDict: HQ closes it to the fields it names.
+A field's rule is ``Checked`` with a ``Reason``, the one way a value is refused.
 """
 
 from hq.platform.application.capabilities import (
@@ -9,7 +10,17 @@ from hq.platform.application.capabilities import (
     describe_capabilities,
     execute_capability,
 )
-from hq.platform.application.command_fields import Choices, Describe, Names, NonEmpty, Refers, RequiredText
+from hq.platform.application.command_fields import (
+    Checked,
+    Choices,
+    Describe,
+    Names,
+    NonEmpty,
+    Reason,
+    Refers,
+    RequiredText,
+    checked,
+)
 from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import Kept, keeps
 from hq.platform.application.record_errors import InputError, RecordNotFound
@@ -31,6 +42,7 @@ __all__ = [
     "AuthorizationError",
     "Capability",
     "CapabilitySpec",
+    "Checked",
     "Choices",
     "Describe",
     "Effect",
@@ -39,10 +51,12 @@ __all__ = [
     "Names",
     "NonEmpty",
     "Principal",
+    "Reason",
     "RecordNotFound",
     "Refers",
     "RequiredText",
     "as_sent",
+    "checked",
     "cli_principal",
     "command_spec",
     "describe_capabilities",

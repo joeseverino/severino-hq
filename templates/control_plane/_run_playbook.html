@@ -3,4 +3,4 @@ The body of a machine's "Run playbook" dialog: each playbook its
 reader may run on the machine (`automation_runs.playbooks_on`), linked to its
 Run page with the machine chosen.
 {% endcomment %}
-{% list %}{% for playbook in playbooks_here %}<li><a href="{{ playbook.url }}">{{ playbook.title|breakable }}</a></li>{% endfor %}{% endlist %}
+{% list %}{% for playbook in playbooks_here %}<li><a href="{{ playbook.url }}">{{ playbook.title }}</a></li>{% endfor %}{% endlist %}

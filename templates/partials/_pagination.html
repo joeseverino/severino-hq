@@ -5,7 +5,7 @@
   {% else %}
     {% muted %}<span aria-hidden="true">←</span>&nbsp;Prev{% endmuted %}
   {% endif %}
-  {% muted %}Page {{ pages.number|breakable }}{% if pages.of %} of {{ pages.of|breakable }}{% endif %}{% endmuted %}
+  {% muted %}Page {{ pages.number }}{% if pages.of %} of {{ pages.of }}{% endif %}{% endmuted %}
   {% if pages.next %}
     <a data-hit href="{% querystring page=pages.next %}">Next{% arrow %}</a>
   {% else %}
@@ -19,7 +19,7 @@
   {% else %}
     {% muted %}<span aria-hidden="true">←</span>&nbsp;Prev{% endmuted %}
   {% endif %}
-  {% muted %}Page {{ page_obj.number|breakable }} of {{ paginator.num_pages|breakable }}{% endmuted %}
+  {% muted %}Page {{ page_obj.number }} of {{ paginator.num_pages }}{% endmuted %}
   {% if page_obj.has_next %}
     <a data-hit href="{% querystring page=page_obj.next_page_number %}">Next{% arrow %}</a>
   {% else %}

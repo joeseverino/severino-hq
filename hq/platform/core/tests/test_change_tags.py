@@ -19,14 +19,27 @@ def _headings(html: str) -> list[str]:
     ]
 
 
-def _sides(html: str, folds: str) -> dict[str, list[str]]:
-    """The words of each side's cells in the rows folded under ``folds``, by their ``data-side``."""
+def _side(html: str, side: str, row_is=lambda attrs: True) -> list[str]:
+    """The words of one side's cell in each body row whose attributes
+    ``row_is`` takes, by its column: Before then After where both are, else
+    Value alone."""
 
-    cells = [cell for cell in within(html, "data-folded", folds) if cell.tag == "td"]
-    return {
-        side: [cell.words.strip() for cell in cells if cell.attrs.get("data-side") == side]
-        for side in ("before", "after")
-    }
+    shown = all_elements(html)
+    rows = [
+        row for row in shown if row.tag == "tr" and any(up.tag == "tbody" for up in row.ancestors) and row_is(row.attrs)
+    ]
+    at = 1 if side == "after" and "Before" in _headings(html) else 0
+    found = []
+    for row in rows:
+        cells = [cell for cell in shown if cell.tag == "td" and any(up is row for up in cell.ancestors)]
+        found.append(cells[at].words.strip())
+    return found
+
+
+def _sides(html: str, folds: str) -> dict[str, list[str]]:
+    """The words of each side's cells in the rows folded under ``folds``."""
+
+    return {side: _side(html, side, lambda attrs: attrs.get("data-folded") == folds) for side in ("before", "after")}
 
 
 class ChangeTableTests(SimpleTestCase):
@@ -37,20 +50,19 @@ class ChangeTableTests(SimpleTestCase):
         html = _drawn(compare({"example_name": "before"}, {"example_name": "after"}, label="Would change"))
 
         self.assertEqual(_headings(html), ["Field", "Before", "After", "Status"])
-        self.assertTrue(with_class(html, "is-compare"), "the two values share the row evenly")
-        self.assertEqual([cell.words for cell in select(html, "data-side")], ["before", "after"])
+        self.assertEqual((_side(html, "before"), _side(html, "after")), (["before"], ["after"]))
 
     def test_what_is_written_where_nothing_stood_is_one_column(self):
         html = _drawn(compare({}, {"example_name": "after"}, label="Would be applied"))
 
         self.assertEqual(_headings(html), ["Field", "Value"], "every row would say New")
-        self.assertEqual([cell.words for cell in select(html, "data-side")], ["after"])
+        self.assertEqual(_side(html, "after"), ["after"])
 
     def test_a_redacted_value_is_said_to_have_changed_and_never_shown(self):
         row = ChangeRow(label="Example token", before="", after="", change="changed", redacted=True)
         html = _drawn(ChangePreview(label="Changes", rows=(row,), lines=()))
 
-        self.assertEqual([cell.words for cell in select(html, "data-side")], ["redacted", "redacted"])
+        self.assertEqual((_side(html, "before"), _side(html, "after")), (["redacted"], ["redacted"]))
 
     def test_a_record_that_moves_is_one_row_its_fields_folded_under_it_and_one_that_stays_is_only_named(self):
         from hq.platform.application.approval_review import grouped
@@ -119,10 +131,9 @@ class ChangeTableTests(SimpleTestCase):
 
         (head,) = select(html, "data-folds")
         self.assertIn(summary["label"], head.words)
-        cells = [cell for cell in select(html, "data-side") if any("data-folds" in row.attrs for row in cell.ancestors)]
-        self.assertEqual(len(cells), 2)
-        self.assertEqual(cells[0].words, MISSING, "nothing stood before it")
-        self.assertEqual(cells[1].words, summary["value"], "what it is, after")
+        ((before,), (after,)) = (_side(html, side, lambda attrs: "data-folds" in attrs) for side in ("before", "after"))
+        self.assertEqual(before, MISSING, "nothing stood before it")
+        self.assertEqual(after, summary["value"], "what it is, after")
         self.assertNotIn("example.second", html, "a record with a name is named by it, never by its key")
         self.assertEqual([row.words.count(summary["value"]) for row in elements(html, "tr")].count(1), 1)
         self.assertFalse(with_class(html, "row-group"), "the record is said once, on its own row")

@@ -40,6 +40,8 @@ class ServedDocumentTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), openapi.document())
         self.assertEqual(response["Cache-Control"], "private, no-store")
+        # Built once a process for the commands and resources it has.
+        self.assertIs(openapi.document(), openapi.document())
 
     def test_an_anonymous_caller_is_refused(self):
         response = self.client.get(reverse("hq_api:openapi"))

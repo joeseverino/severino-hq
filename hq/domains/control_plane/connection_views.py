@@ -14,6 +14,8 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 lazy from hq.platform.application.asks import Ask, AskMixin, WatchView
 
+from .connection_tables import connections_table, setup_fields
+
 
 class ConnectionListView(PageMixin, TemplateView):
     """What HQ can reach, as the controllers last found it.
@@ -55,6 +57,8 @@ class ConnectionListView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["connections"] = self._connections
+        context["table"] = connections_table(self._connections, self.request)
+        context["setup_fields"] = setup_fields((*self._connections.setups, *self._connections.again))
         context["page_facts"] = render_to_string("control_plane/_connection_summary.html", context)
         return context
 

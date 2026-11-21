@@ -231,8 +231,9 @@ class RunStalenessTests(TestCase):
 
         from typing import Annotated
 
-        from pydantic import AfterValidator, Field
+        from pydantic import Field
 
+        from ..command_fields import Checked
         from .procedures import manifest, run_payload
 
         held = self.held(run_payload(service="Web"))
@@ -241,7 +242,7 @@ class RunStalenessTests(TestCase):
             service: Annotated[
                 str,
                 Field(min_length=1, max_length=60, description="The service to restart."),
-                AfterValidator(str.lower),
+                Checked(str.lower),
             ]
 
         self.supply(manifest(effect="destructive", input_type=ServiceRestart))

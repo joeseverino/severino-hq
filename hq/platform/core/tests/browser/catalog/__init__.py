@@ -19,7 +19,7 @@ from hq.platform.core.template_contract import parts
 from hq.platform.core.template_parts import Example, Part
 from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 from hq.platform.core.tests.browser.catalog.common import alone, head_of, page as entry_page, part_page
-from hq.platform.core.tests.browser.catalog.families import chart, form, graph, status, table
+from hq.platform.core.tests.browser.catalog.families import chart, form, graph, status, table, value
 
 
 def default_name(each: Part) -> str:
@@ -55,7 +55,7 @@ def _assembled(*families) -> dict[str, Example]:
     return {name: replace(entry, context=entry.given()) for name, entry in catalog.items()}
 
 
-CATALOG = _assembled(chart, form, graph, status, table)
+CATALOG = _assembled(chart, form, graph, status, table, value)
 
 # Every entry on one page (`gallery_body`), held by the survey as each entry
 # is (`layout.CatalogLayoutTests`), and the pages the catalog draws.

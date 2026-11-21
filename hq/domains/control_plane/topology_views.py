@@ -1,7 +1,7 @@
 """The topology workspace and the drill-in for one node."""
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, override
 
@@ -15,6 +15,7 @@ from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
+from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
 from hq.platform.application.topology import derive_topology
 from hq.platform.application.topology_lenses import (
     QUIET_KINDS,
@@ -205,7 +206,7 @@ class TopologyView(PageMixin, TemplateView):
         if trace is None:
             return {
                 "topology_trace": None,
-                "topology_edges": (),
+                "topology_links": None,
                 "focus_node": "",
                 "topology_trace_focus": None,
                 "topology_trace_label": "",
@@ -217,15 +218,16 @@ class TopologyView(PageMixin, TemplateView):
             "topology_trace": trace,
             # The ledger restates every edge the node bodies already state
             # from both ends, so it is drawn for a bounded trace only.
-            "topology_edges": tuple(
-                {
-                    "edge": edge,
-                    "source": by_id[edge.source],
-                    "target": by_id[edge.target],
-                    "source_link": node_link(by_id[edge.source]),
-                    "target_link": node_link(by_id[edge.target]),
-                }
-                for edge in topology.edges
+            "topology_links": DataTable(
+                "Links shown",
+                (
+                    TableColumn("From", kind="identifier"),
+                    TableColumn("Link", drop=3),
+                    TableColumn("To", kind="identifier", drop=2),
+                    TableColumn("State", kind="status"),
+                ),
+                tuple(_link_row(edge, by_id[edge.source], by_id[edge.target]) for edge in topology.edges),
+                region={"pane": True},
             ),
             "focus_node": trace.focus,
             "topology_trace_focus": by_id.get(trace.focus),
@@ -395,3 +397,19 @@ class TopologyNodeView(TemplateView):
             raise Http404("No such node.")
         context.update(item=items[0], traffic_window_days=HOST_TRAFFIC_DAYS)
         return context
+
+
+def _link_row(edge, source, target) -> Row:
+    """One link a trace shows, from one end to the other, which the map finds by its ends."""
+
+    return Row(
+        (_end(source), Cell(edge.label), _end(target), Cell(edge.status, tone=edge.status)),
+        data={"topology-edge": f"{edge.source} {edge.target}"},
+    )
+
+
+def _end(node) -> Cell:
+    """A link's end by its entity, with what kind of thing it is beneath."""
+
+    link = node_link(node)
+    return replace(Cell.of(link), lines=(Cell(link.kind_label, muted=True),))

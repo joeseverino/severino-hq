@@ -14,11 +14,11 @@ lazy from dataclasses import asdict, is_dataclass
 from django import template
 from django.middleware.csrf import get_token
 from django.template.loader import render_to_string
-from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.tone import Tone
+from hq.platform.core.held_values import format_html, format_html_join
 from hq.platform.core.part_examples import tags
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
@@ -27,6 +27,7 @@ lazy from hq.platform.application.dashboard import gathered_rows
 lazy from hq.platform.application.page_parts import html_attributes
 lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.ui import button_classes
+lazy from hq.platform.core import queue_table as queue_tables
 lazy from hq.platform.core.template_parts import Example, Part, answers, slotted
 lazy from hq.platform.core.templatetags.value_tags import (
     OUTSIDE_LINK,
@@ -66,6 +67,38 @@ def triage(item=None, *, sorts=True, family="", url=""):
         return PageAction.command(action_items.SET_ASIDE, query={**shown, "family": family})
     command = action_items.RESTORE if item.get("aside") else action_items.SET_ASIDE
     return PageAction.command(command, field="key", value=action_items.row_value(item))
+
+
+@answers(register, takes_context=True)
+def queue_table(
+    context,
+    items=(),
+    *,
+    groups=None,
+    fold=False,
+    grouped=False,
+    here=False,
+    triage=False,
+    glance=False,
+    prefix="",
+    aside_url="",
+    titled=True,
+):
+    """``{% queue_table items ... as table %}``: the queue as its declared
+    table (``queue_table.Where`` says each option), or with ``groups`` under
+    its domains, for ``{% data_table %}`` to draw."""
+
+    where = queue_tables.Where(
+        grouped=bool(grouped),
+        here=bool(here),
+        triage=bool(triage),
+        glance=bool(glance),
+        prefix=prefix or "",
+        aside_url=aside_url or "",
+    )
+    if groups is not None:
+        return queue_tables.by_domain(context, groups, where, titled=titled not in (0, "0"))
+    return queue_tables.table(context, items or (), where, fold=bool(fold))
 
 
 @register.filter

@@ -13,8 +13,8 @@ the input's aria-describedby names.
 <div class="field{% if field.errors %} has-errors tone-serious{% endif %}">
   <label class="dropzone" data-dropzone>
     {{ field }}
-    <span class="dropzone-title">{{ title|default:field.label|breakable }}</span>
-    <span class="dropzone-hint"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ hint|default:field.help_text|breakable }}</span>
+    <span class="dropzone-title">{{ title|default:field.label }}</span>
+    <span class="dropzone-hint"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ hint|default:field.help_text }}</span>
     <ul class="dropzone-files" data-dropzone-files hidden></ul>
     <template data-dropzone-file><li></li></template>
   </label>

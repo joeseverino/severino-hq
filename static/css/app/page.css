@@ -108,7 +108,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    run inside a line of text (a summary, a statement) is a span of spans, the
    same run in phrasing content where a list is not allowed. */
 /* A run of links wraps onto lines a target tall (`--target-min`), so a link is never pressed for the one above it; in a table the row keeps its height, and a cell spaces its own links (figures.css). */
-.dot-list:has(a):not(td *) { line-height: var(--target-min); }
+.dot-list:has(a):not(td *, th *) { line-height: var(--target-min); }
 /* The dot stands in the gap before its part, so where the run wraps, the dot
    that would open a line lies outside the run and is clipped: a line never
    starts with a separator. */
@@ -335,17 +335,16 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    Each part has a track of its own and the row is a control tall, so a page
    drawn while its header is still arriving already puts each part where it
    ends: the brand and the sections hold the start, the demo mark's
-   track takes what is left, the mark at its end, and every track past it is
-   as wide as its control whether or not the control has come. The person's
-   track is sized by the room the bar has, never by their name, which is cut
-   short past it; every breakpoint names it, so none can size it by content.
-   Each width's tracks are here; on a phone the person's track is squared
-   where its control is, beside the rule that hides the name. */
+   track takes what is left, the mark at its end, and every square track past
+   it is a control wide whether or not the control has come. The person's
+   track is as wide as their control asks, from a square up to the room the
+   bar has left once every other part holds its own; every breakpoint names
+   it. Each width's tracks are here. */
 /* One row a control tall at every width, padded and ruled: the inset a
    sticky part below it sits under. */
 :root:has(.site-header) { --site-header-height: calc(var(--control-size) + 2 * var(--space-5) + 1px); }
 .site-header {
-  --header-user: minmax(var(--control-size), calc(4 * var(--control-size)));
+  --header-user: minmax(var(--control-size), max-content);
   display: grid;
   grid-template: "brand nav demo search badge user" var(--control-size) / auto auto 1fr minmax(150px, 210px) var(--control-size) var(--header-user);
   align-items: center;
@@ -507,13 +506,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 }
 
 @media (max-width: 860px) {
-  /* The person's control is a square mark like search and the bell beside it:
-     the name is in its menu, and a phone's one row has no room to repeat it.
-     Its track is squared here, beside the rules that square it. */
-  .site-header { --header-user: var(--control-size); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
-  .user-menu > button { width: var(--control-size); padding: 0; }
-  /* Gone, the name still names the button (its aria-labelledby). */
-  .user-menu .user-name { display: none; }
+  .site-header { gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
   .brand { font-size: var(--text-md); }
   /* The sections live in the toggle's panel from 1080px down, so the bar stays
      a single row here and needs no wrapping rules of its own. */
@@ -529,9 +522,11 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    down to the mark alone: squeezed, the name wraps to a second line that the
    control does not show. So the name is there on every phone that fits it and
    on none that does not, all of it or none of it, without a width being named. */
-/* Its track is as wide as the bar allows: a short name keeps the control to
-   its own width at the bar's end, and a long one is cut to the track. */
-.user-menu { position: relative; grid-area: user; justify-self: stretch; max-width: 100%; }
+/* It asks its track for the whole name, up to four controls, and takes what
+   the bar has: a long name is cut there. The mark is inset from the edge by
+   as much as from the top, so alone it is centered in a square control, and
+   the name's own padding gives it the room a button's words have. */
+.user-menu { --mark-inset: calc((var(--control-size) - 2px - 22px) / 2); position: relative; grid-area: user; justify-self: stretch; max-inline-size: calc(4 * var(--control-size)); }
 /* Each fills the control's one line exactly, so the line after it starts
    below the control's edge and is not shown. */
 .user-menu > button > * { flex: none; height: calc(var(--control-size) - 2px); }
@@ -548,7 +543,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .role-mark { flex: none; padding: 0 var(--space-3); border-color: var(--accent); border-radius: var(--radius-pill); color: var(--accent); font-size: var(--text-2xs); font-weight: 600; line-height: 1.5; }
 /* The person's own picture as the control's mark. Its margins make it as tall
    as the control's one line, like everything else in it. */
-.user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: var(--radius-pill); object-fit: cover; background: var(--bg-tint); }
+.user-menu .user-avatar { width: 22px; height: 22px; margin-block: var(--mark-inset); border-radius: var(--radius-pill); object-fit: cover; background: var(--bg-tint); }
 .user-menu-panel {
   display: flex;
   /* As wide as what it holds, up to a width that still fits beside the

@@ -3,13 +3,13 @@
   "private": true,
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@mdn/browser-compat-data": "8.1.9",
-    "@redocly/cli": "2.79.0",
+    "@mdn/browser-compat-data": "8.1.10",
+    "@redocly/cli": "2.82.0",
     "axe-core": "4.14.1",
     "eslint": "10.15.0",
     "eslint-plugin-no-unsanitized": "4.1.5",
     "globals": "17.14.0",
-    "stylelint": "18.0.0"
+    "stylelint": "18.1.0"
   },
   "overrides": {
     "minimatch": "11.0.9"

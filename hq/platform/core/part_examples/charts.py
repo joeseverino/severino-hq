@@ -65,6 +65,16 @@ def matrix():
     )
 
 
+# A period done twice, then one nothing is known about.
+CADENCE_MARK = Example(
+    '{% include "partials/_cadence_mark.html" with week=done %}{% include "partials/_cadence_mark.html" with week=unknown %}',
+    lambda: {
+        "done": CadenceWeek("Jan 5", hit=True, count=2, detail="Week of Jan 5"),
+        "unknown": CadenceWeek("Jan 12", hit=False, no_data=True),
+    },
+)
+
+
 def _month():
     """A month of plan against what was done, paged, with its period."""
 

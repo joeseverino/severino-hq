@@ -27,14 +27,14 @@ same eyebrow in the same state.
     <article class="insight-card">
       <div class="insight-head">
         {% ifchanged item.eyebrow item.status %}{% if item.eyebrow %}{% status item.eyebrow tone=item.status|default:"neutral" %}{% endif %}{% endifchanged %}
-        {% if item.value %}<strong class="insight-value">{{ item.value|breakable }}</strong>{% endif %}
+        {% if item.value %}<strong class="insight-value">{{ item.value }}</strong>{% endif %}
       </div>
       <h{{ level|default:3 }} class="insight-title">
-        {% if item.url %}<a href="{{ item.url }}">{{ item.title|breakable }}</a>{% else %}{{ item.title|breakable }}{% endif %}
+        {% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
       </h{{ level|default:3 }}>
       {% headed %}
-      {% if item.body %}<p class="insight-body">{{ item.body|breakable }}</p>{% endif %}
-      {% if item.action %}<p class="insight-action">{{ item.action|breakable }}</p>{% endif %}
+      {% if item.body %}<p class="insight-body">{{ item.body }}</p>{% endif %}
+      {% if item.action %}<p class="insight-action">{{ item.action }}</p>{% endif %}
       {% endheaded %}
     </article>
   {% endfor %}

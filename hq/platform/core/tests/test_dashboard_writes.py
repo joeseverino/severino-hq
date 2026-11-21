@@ -15,7 +15,8 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application import readings
 from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.glance import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE, DASHBOARD_SETTINGS
+from hq.platform.application.glance import DASHBOARD_SETTINGS
+from hq.platform.application.glance_refresh import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal

@@ -1,19 +1,20 @@
 """The Docker readings joined into the relation graph, and what they imply.
 
 A container no compose project declares, a container running an image its
-own tag no longer names locally, and an image with no tag at all are each
-read from the records as the findings are gathered, about the machine they
-are on. Nothing here calls a registry: "behind"
-means behind the image already pulled onto the machine.
+own tag no longer names locally, an image with no tag at all and the images
+nothing runs or keeps are each read from the records as the findings are
+gathered, about the machine they are on. Nothing here calls a registry:
+"behind" means behind the image already pulled onto the machine.
 """
 
 import shlex
 from collections.abc import Iterable, Iterator, Mapping
 from typing import Any
 
+from django.conf import settings
 lazy from django.urls import NoReverseMatch
 
-from hq.domains.control_plane.observations.portainer import IMAGE_KIND, short_id
+from hq.domains.control_plane.observations.portainer import IMAGE_KIND, image_title, short_id
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 lazy from hq.platform.application.routes import reverse
 
@@ -30,14 +31,22 @@ from .finding_model import (
     machine_step,
 )
 from .finding_steps import Run
+from .images import ImageRef
+from .labels import human_bytes
+from .projection import read_once
 from .tone import Tone
-from .ui import ended
+from .ui import counted, ended
 lazy from .adoption import unmanaged
+lazy from .hq_self import own_container
 lazy from .inventory import record_token
 lazy from .topology_estate import machine_nodes
 
 IMAGE_BEHIND = "image-behind"
 IMAGE_UNTAGGED = "image-untagged"
+IMAGES_UNUSED = "container-images-unused"
+# The images the running release pins, each a file of one reference in its
+# tree: the ones hq-host runs only from the copy the host holds.
+PINNED = ("automation", "renovate")
 
 
 def reference_tag(reference: str) -> str:
@@ -73,6 +82,52 @@ def image_verdicts(records: Iterable[Mapping[str, Any]]) -> list[tuple[str, ...]
             elif not record.get("tags"):
                 found.append((IMAGE_UNTAGGED, container, reference, image, "", service))
     return found
+
+
+def image_names(record: Mapping[str, Any]) -> frozenset[str]:
+    """Every image name an image record is held under, by its tags and its digests."""
+
+    return frozenset(
+        parsed.name
+        for reference in (*(record.get("tags") or ()), *(record.get("digests") or ()))
+        if (parsed := ImageRef.parse(str(reference))) is not None
+    )
+
+
+def kept_names() -> frozenset[str]:
+    """The images HQ keeps on its machine with nothing running them: its own,
+    whose earlier releases a deploy prunes itself, and each image its release
+    pins (``PINNED``), which the worker and the dependency run start only from
+    the copy the host holds."""
+
+    return read_once("docker_estate.kept_names", _kept_names)
+
+
+def _kept_names() -> frozenset[str]:
+    own = own_container()
+    references = (*((own.running.image,) if own is not None else ()), *release_pins())
+    return frozenset(parsed.name for reference in references if (parsed := ImageRef.parse(reference)) is not None)
+
+
+def release_pins() -> tuple[str, ...]:
+    """The image references the running release pins (``PINNED``)."""
+
+    pins = (settings.BASE_DIR / "deploy" / part / "image" for part in PINNED)
+    return tuple(pin.read_text().strip() for pin in pins if pin.is_file())
+
+
+def reclaimable(records: Iterable[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    """The image records no container runs and HQ does not keep (``kept_names``)."""
+
+    kept = kept_names()
+    return tuple(record for record in records if not record.get("containers") and not kept & image_names(record))
+
+
+def _removed_by(record: Mapping[str, Any]) -> tuple[str, ...]:
+    """What ``docker image rm`` removes this image and nothing else by: its
+    tags, else the digests it was pulled by, else its id."""
+
+    return tuple(record.get("tags") or record.get("digests") or (short_id(str(record.get("id", ""))),))
 
 
 # ----- Findings ------------------------------------------------------------------
@@ -139,9 +194,9 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
-def _stated(estate: FindingEstate, key: str) -> Iterator[tuple[Any, ...]]:
-    """``(node, container, host, reference, running, tagged, service)`` for each
-    container on a machine of the estate whose image is judged ``key``."""
+def _environments(estate: FindingEstate) -> Iterator[tuple[Any, str, list[Mapping[str, Any]]]]:
+    """``(node, host, records)``: each Docker environment's image records, on a
+    machine of the estate."""
 
     nodes = {node.id: node for node in estate.nodes()}
     machine = machine_nodes()
@@ -153,12 +208,45 @@ def _stated(estate: FindingEstate, key: str) -> Iterator[tuple[Any, ...]]:
             )
     for records in by_environment.values():
         first = records[0]
-        if (node := nodes.get(machine(first.get("host")) or machine(first.get("host_address")))) is None:
-            continue
-        host = str(first.get("host", "") or node.label)
+        if (node := nodes.get(machine(first.get("host")) or machine(first.get("host_address")))) is not None:
+            yield node, str(first.get("host", "") or node.label), records
+
+
+def _stated(estate: FindingEstate, key: str) -> Iterator[tuple[Any, ...]]:
+    """``(node, container, host, reference, running, tagged, service)`` for each
+    container on a machine of the estate whose image is judged ``key``."""
+
+    for node, host, records in _environments(estate):
         for fact, container, reference, running, tagged, service in image_verdicts(records):
             if fact == key:
                 yield node, container, host, reference, short_id(running), short_id(tagged), service
+
+
+def images_unused(estate: FindingEstate) -> tuple[Finding, ...]:
+    """The images on a machine nothing runs and HQ does not keep, and the one
+    command that removes those and nothing else."""
+
+    found = []
+    for node, host, records in _environments(estate):
+        if spare := sorted(reclaimable(records), key=image_title):
+            size = human_bytes(sum(record.get("size") or 0 for record in spare))
+            found.append(
+                Finding(
+                    rule=IMAGES_UNUSED,
+                    subject=node.id,
+                    title=f"{counted(len(spare), 'unused image', 'unused images')} on {node.label}",
+                    severity=Tone.NEUTRAL,
+                    explanation=ended(f"They take {size}"),
+                    evidence=tuple(("Image", image_title(record)) for record in spare),
+                    steps=machine_step(
+                        f"Remove them from {host}",
+                        host,
+                        "docker image rm "
+                        + " ".join(shlex.quote(ref) for record in spare for ref in _removed_by(record)),
+                    ),
+                )
+            )
+    return distinct(found)
 
 
 def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -259,5 +347,16 @@ RULES: tuple[FindingRule, ...] = (
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
         bars={Tone.ATTENTION: "a container runs an image with no tag"},
+    ),
+    FindingRule(
+        IMAGES_UNUSED,
+        "Unused images",
+        Tone.NEUTRAL,
+        images_unused,
+        gathered=True,
+        operator_action="Remove the images nothing runs from the machine.",
+        no_help_reason=cannot_run_commands(),
+        card=CONTAINERS_CARD,
+        bars={Tone.NEUTRAL: "a machine holds images no container runs and HQ does not keep"},
     ),
 )

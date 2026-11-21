@@ -132,8 +132,7 @@ class TieTests(TestCase):
     def test_it_counts_what_is_running_rather_than_what_exists(self):
         found = machine(" A-Docker-Host ")
 
-        self.assertEqual(len(found.containers), 2)
-        self.assertEqual(found.running, 1)
+        self.assertEqual((found.container_count.running, found.container_count.total), (1, 2))
 
     def test_a_machine_is_reachable_while_its_credential_answers(self):
         self.assertTrue(machine("a-docker-host").reachable)

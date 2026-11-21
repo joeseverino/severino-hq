@@ -6,13 +6,14 @@ from .expiry import days_until
 from .finding_model import Finding, FindingEstate, FindingRule, parse_stamp
 from .finding_steps import Do
 from .moments import expiry_words, when_day
+from .thresholds import Threshold
 from .tone import Tone
 from .ui import ended
 
 # Ninety days, the window a certificate gets: long enough to act on a domain
 # whose renewal failed, short enough not to live in the queue.
-WINDOW_DAYS = 90
-SERIOUS_DAYS = 30
+WINDOW_DAYS = Threshold(90, "days")
+SERIOUS_DAYS = Threshold(30, "days")
 
 
 def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -41,7 +42,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=UTC)
         days = days_until(expires, estate.now)
-        if days > WINDOW_DAYS:
+        if days > WINDOW_DAYS.value:
             continue
         domain = facts.get("domain", node.label)
         registrar = facts.get("registrar", "")
@@ -50,7 +51,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="registration-lapsing",
                 subject=node.id,
                 title=f"{domain} {expiry_words(days)} and will not renew",
-                severity=Tone.SERIOUS if days <= SERIOUS_DAYS else Tone.ATTENTION,
+                severity=Tone.SERIOUS if days <= SERIOUS_DAYS.value else Tone.ATTENTION,
                 explanation=(
                     f"On {when_day(expires.date())} its records, certificate and every name under it stop working."
                 ),
@@ -75,9 +76,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=("Renew the domain or turn on auto-renew at its registrar."),
         no_help_reason=("HQ cannot renew a domain."),
         bars={
-            Tone.SERIOUS: f"a domain that will not renew lapses within {SERIOUS_DAYS} days",
-            Tone.ATTENTION: f"a domain that will not renew lapses within {WINDOW_DAYS} days",
+            Tone.SERIOUS: f"a domain that will not renew lapses within {SERIOUS_DAYS}",
+            Tone.ATTENTION: f"a domain that will not renew lapses within {WINDOW_DAYS}",
         },
-        clears=f"auto-renew is on, or the domain runs more than {WINDOW_DAYS} days out",
+        clears=f"auto-renew is on, or the domain runs more than {WINDOW_DAYS} out",
     ),
 )

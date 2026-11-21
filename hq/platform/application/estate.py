@@ -20,7 +20,7 @@ from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.names import in_zone
 
 from .action_links import read_link
-from .card_items import Kpi
+from .card_items import Counted, Kpi
 from .certificate_expiry import serving
 from .connection_lifecycle import Lifecycle, probed, standing
 from .drawings import Dot, Dots
@@ -283,23 +283,20 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
     found = [
         {
             "id": "hq.estate.machines",
-            "label": "Machines online",
-            "value": str(len(estate.online)),
+            "label": Counted(len(estate.online), "Machine online", "Machines online"),
             "url": reverse("control_plane:machines"),
             "detail": (f"{len(estate.offline)} offline" if estate.offline else f"of {len(estate.watched)}"),
             **({"status": Tone.ATTENTION} if estate.offline else {}),
         },
         {
             "id": "hq.estate.services",
-            "label": "Services",
-            "value": str(services["total"]),
+            "label": Counted(services["total"], "Service"),
             "url": reverse("control_plane:services"),
             **({"detail": f"{services['incomplete']} not fully set up"} if services["incomplete"] else {}),
         },
         {
             "id": "hq.estate.domains",
-            "label": "Domains",
-            "value": str(len(estate.domains)),
+            "label": Counted(len(estate.domains), "Domain"),
             "url": reverse("zones:index"),
         },
     ]
@@ -337,8 +334,7 @@ def _connections_card(estate: Estate, total: int) -> dict[str, Any]:
     troubled = estate.connections
     card = {
         "id": "hq.estate.connections",
-        "label": "Connections",
-        "value": str(total),
+        "label": Counted(total, "Connection"),
         "url": reverse("control_plane:connections"),
     }
     if len(troubled) == 1:
@@ -404,10 +400,9 @@ def overview(*, principal: Principal):
     # One word each, so a label and its mark fit a narrow column; the note
     # carries the rest. For a date that runs out, the note is what and when.
     labels = {
-        "hq.estate.machines": "Machines",
+        "hq.estate.machines": Counted(len(estate.online), "Machine"),
         "hq.estate.registration": "Renewal",
         "hq.estate.certificate": "Certificate",
-        "hq.estate.connections": "Connections",
     }
     notes = {"hq.estate.machines": "" if estate.offline else f"of {len(estate.watched)} online"}
     if len(checked) < len(estate.services):
@@ -432,10 +427,9 @@ def overview(*, principal: Principal):
         kpis=tuple(
             Kpi(
                 label=labels.get(card["id"], card["label"]),
-                value=card["value"],
+                value=card.get("value", ""),
                 detail=notes.get(card["id"]) or card.get("detail", ""),
                 url=card["url"],
-                is_zero=card["value"] == "0",
                 icon=icons.get(card["id"], ""),
                 drawing=drawings.get(card["id"]),
             )

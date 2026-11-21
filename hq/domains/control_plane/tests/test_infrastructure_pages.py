@@ -211,6 +211,14 @@ class InfrastructureViewsTests(TestCase):
         self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", links)
         self.assertIn(reverse("action_items"), links)
 
+    def test_findings_link_the_checks_page_which_links_what_each_rule_has_open(self):
+        declare("unswept-rewrite", "adguard.rewrite", {"domain": "unswept.example", "answer": "10.0.0.9"})
+
+        self.assertIn(reverse("control_plane:checks"), hrefs(self.client.get(reverse("control_plane:findings"))))
+        response = self.client.get(reverse("control_plane:checks"))
+
+        self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", hrefs(response))
+
     def test_findings_render_only_offers_the_projection_authorized(self):
         subject = TopologyNode(
             "controller:one",

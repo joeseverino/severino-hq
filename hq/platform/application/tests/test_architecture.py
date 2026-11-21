@@ -1,6 +1,5 @@
-"""How the code is laid out: delivery adapters, file sizes, requests that never wait, where tests and dependencies live."""
+"""How the code is laid out: delivery adapters, requests that never wait, where tests and dependencies live."""
 
-import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -17,7 +16,6 @@ from hq.platform.core.compression import Compressed
 from hq.platform.core.network import TrustedNetworkASGI
 from hq.platform.core.static import CachedStaticFiles
 
-from .source import source_files
 from .test_view_writes import routed_modules, shown
 
 
@@ -102,54 +100,6 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
         self.assertTrue(modules, "the walk found no view")
         self.assertEqual(sorted(paginated), [])
-
-
-@tag("source", "tree")
-class FileSizeTests(SimpleTestCase):
-    """No source file is longer than the ceiling mise.toml declares.
-
-    A file grows freely below it; one past it is split by responsibility, a
-    test module by the behavior it holds. Every file ``SEVERINO_FILE_LINE_HELD``
-    globs is held to it, and a Python test module like the code it tests. Migrations, generated
-    code and vendored copies are not counted, nor a helper module under tests/.
-    The ceiling and the exemptions are mise.toml's ``SEVERINO_FILE_LINE_*``, which
-    the launch-time brief check reads too; with none declared the test fails.
-    """
-
-    ROOT = Path(__file__).resolve().parents[4]
-    # The fewest files each declared glob's walk can find in a checkout or the image.
-    FLOOR = {"**/*.py": 100, "**/*.go": 50, "**/*.js": 4, "**/*.css": 4}
-
-    @staticmethod
-    def _declared(name: str) -> str:
-        value = os.environ.get(name)
-        if not value:
-            raise AssertionError(f"{name} is not declared: run through mise, whose [env] holds the ceiling")
-        return value
-
-    def _counted(self, path: Path) -> bool:
-        relative = path.relative_to(self.ROOT)
-        counted = self._declared("SEVERINO_FILE_LINE_COUNTED").split()
-        exempt = self._declared("SEVERINO_FILE_LINE_EXEMPT").split()
-        if any(relative.full_match(glob) for glob in counted):
-            return True
-        return not any(relative.full_match(glob) for glob in exempt)
-
-    def test_no_source_file_exceeds_the_ceiling(self):
-        limit = int(self._declared("SEVERINO_FILE_LINE_LIMIT"))
-        held = self._declared("SEVERINO_FILE_LINE_HELD").split()
-        self.assertEqual(sorted(held), sorted(self.FLOOR), "every held glob needs a floor, and every floor a held glob")
-        sizes = {}
-        for pattern in held:
-            floor = self.FLOOR[pattern]
-            # rglob already walks every directory, so the glob's leading **/ is dropped.
-            found = [path for path in source_files(self.ROOT, pattern.removeprefix("**/")) if self._counted(path)]
-            self.assertGreater(len(found), floor, f"the {pattern} walk found almost nothing; its root is wrong")
-            sizes |= {
-                str(path.relative_to(self.ROOT)): len(path.read_text(encoding="utf-8").splitlines()) for path in found
-            }
-        over = {path: lines for path, lines in sizes.items() if lines > limit}
-        self.assertEqual(over, {}, "split these by responsibility, a test module by the behavior it holds")
 
 
 class RequestNeverWaitsTests(SimpleTestCase):

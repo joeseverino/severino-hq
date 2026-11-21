@@ -1,8 +1,9 @@
 """The layout's examples: each kind, holding the runs of sections a page gives it."""
 
-from hq.platform.core.part_examples import NARROW
+from hq.platform.core.part_examples import NARROW, table
 from hq.platform.core.part_examples.charts import readings, weeks
 from hq.platform.core.template_parts import Example
+lazy from hq.platform.application.tables import TableColumn
 
 
 def _sections(*sections):
@@ -16,13 +17,13 @@ def _flow(*sections):
 
 
 # A wide section's body: a table of four columns, which takes the whole row.
-_WIDE = (
-    '{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" %}{% table_heading "State" drop=3 %}{% table_heading "Address" drop=1 %}'
-    '{% table_heading "Seen" drop=2 %}'
-    "</tr></thead><tbody><tr><td>example-01</td><td>Online</td><td>192.0.2.10</td><td>Today</td></tr></tbody>"
-    "</table>{% endtable_region %}"
-)
+_WIDE = "{% data_table hosts %}"
+
+
+def _hosts():
+    columns = ("Name", TableColumn("State", drop=3), TableColumn("Address", drop=1), TableColumn("Seen", drop=2))
+    return {"hosts": table("Example hosts", columns, ("example-01", "Online", "192.0.2.10", "Today"))}
+
 
 # A long section's body: more facts than a narrow one holds.
 _LONG = (
@@ -46,7 +47,9 @@ LAYOUT_STATES = {
             ("Example device", NARROW),
         )
     ),
-    "flow-wide": Example(_flow(("Example hosts", _WIDE), ("Example identity 4", NARROW), ("Example link 4", NARROW))),
+    "flow-wide": Example(
+        _flow(("Example hosts", _WIDE), ("Example identity 4", NARROW), ("Example link 4", NARROW)), _hosts
+    ),
     # A section that says how to read it beside a taller one: the row ends
     # both together, and the foot stands at the bottom of its frame.
     "flow-foot": Example(
@@ -63,7 +66,10 @@ LAYOUT_STATES = {
     ),
     # A pair, like beside like: a table beside a list of facts as long.
     "pair": Example(
-        '{% layout kind="pair" %}' + _sections(("Example hosts 2", _WIDE), ("Example facts", _LONG)) + "{% endlayout %}"
+        '{% layout kind="pair" %}'
+        + _sections(("Example hosts 2", _WIDE), ("Example facts", _LONG))
+        + "{% endlayout %}",
+        _hosts,
     ),
     # A main with its companion, a flow of sections drawn as its aside: the
     # companion sized to what it holds, the two sections pairing once they

@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
 from .contracts import Effect
 from .display_words import display
 from .json_schemas import fields, sent_schema
+from .reasons import declared_only
 from .search_contracts import SearchDefinition
 from .security import Capability, Principal, Requires
 from .ui import ended
@@ -64,11 +65,14 @@ def command_adapter(command_type: type) -> TypeAdapter[Any]:
 
     A field the command does not have is refused, never dropped, so a
     misspelled or retired field cannot return success for work the caller did
-    not ask for.
+    not ask for. A validator that says its own words is refused as it is
+    built (``reasons.declared_only``), so every refusal of a command says a declared reason.
     """
 
     alias: Any = TypeAliasType(command_type.__name__, stored_columns.held(command_type))
-    return TypeAdapter(alias, config=ConfigDict(extra="forbid"))
+    adapter = TypeAdapter(alias, config=ConfigDict(extra="forbid"))
+    declared_only(adapter.core_schema, f"Command {command_type.__name__}")
+    return adapter
 
 
 @cache

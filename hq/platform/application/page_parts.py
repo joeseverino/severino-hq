@@ -11,11 +11,12 @@ from dataclasses import field
 from datetime import date
 from typing import Any, Literal, get_args
 
-from django.utils.html import conditional_escape, format_html, format_html_join, strip_tags
+from django.utils.html import conditional_escape, strip_tags
 from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 lazy from django.template.loader import render_to_string
 
+from hq.platform.core.held_values import format_html
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .display_words import display
@@ -35,9 +36,11 @@ def html_attributes(named: Mapping[str, object]) -> SafeString:
 
     flags = {key: True if value else None for key, value in named.items() if isinstance(value, bool | None)}
     drawn = [(key, value) for key, value in (named | flags).items() if value is not None and value != ""]
-    valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
-    bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
-    return valued + bare
+    valued = "".join(
+        f' {conditional_escape(key)}="{conditional_escape(value)}"' for key, value in drawn if value is not True
+    )
+    bare = "".join(f" {conditional_escape(key)}" for key, value in drawn if value is True)
+    return mark_safe(valued + bare)  # noqa: S308 - each name and value escaped
 
 
 SECTION_PARTIAL = "partials/_part_section.html"

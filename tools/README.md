@@ -21,8 +21,9 @@ import of `tools` from outside it.
 The top level holds the credential minting (`credentials.py`) and the
 permission lists it and its tests read, `audit:image`'s reader of a built
 image (`audit_image.py`), `audit:supports`'s asker of the gates' engines
-(`audit_supports.py`), and `lint:sdk-breaking`, which holds `hq_sdk` to
-its base's extensions (`sdk_breaking.py`), and the check-or-write every
+(`audit_supports.py`), `lint:sdk-breaking`, which holds `hq_sdk` to
+its base's extensions (`sdk_breaking.py`), `lint:file-lines`, which holds each
+source file to the line ceiling (`file_lines.py`), and the check-or-write every
 derived file's writer outside Django runs as its `lint:drift-*` gate
 (`derived.py`).
 

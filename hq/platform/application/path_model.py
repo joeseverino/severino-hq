@@ -20,11 +20,13 @@ from .json_schemas import ObservedMoment
 from .labels import dotted, lower_first
 from .standards import Standing
 from .tone import Tone
+lazy from . import connection_tables
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
 
 if TYPE_CHECKING:
     from .standards import CheckResult
+    from .tables import DataTable
 
 
 # A hop's check in the words the hop shows.
@@ -239,6 +241,12 @@ class Hop:
         return _HOP_ICONS.get(self.step, "")
 
     @property
+    def evidence_table(self) -> DataTable:
+        """What the request carried here, as the hop's table."""
+
+        return connection_tables.evidence(self)
+
+    @property
     def standing(self) -> str:
         """How the stop stands on a route: as its check does, unavailable where
         HQ could not read it, and "" where no check reads it."""
@@ -278,6 +286,16 @@ def last_machine(hops: tuple[Hop, ...]) -> str:
     """The machine a walk of hops ends on, or "" when it reaches none."""
 
     return next((hop.name for hop in reversed(hops) if hop.step == "machine"), "")
+
+
+@dataclass(frozen=True, slots=True)
+class Forward:
+    """An address a proxy forwards to, the machine it lands on and the
+    container that publishes it there, each "" where HQ places none."""
+
+    address: str
+    machine: str = ""
+    container: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +362,19 @@ class Route:
     @property
     def machine(self) -> str:
         return last_machine(self.hops)
+
+    @property
+    def forwards(self) -> tuple[Forward, ...]:
+        """Where each proxy on the route forwards to, in order; the last is
+        what answers the name."""
+
+        found: list[Forward] = []
+        for hop in self.hops:
+            if hop.step == "upstream":
+                found.append(Forward(hop.name))
+            elif found and hop.step in ("machine", "container"):
+                found[-1] = replace(found[-1], **{hop.step: hop.name})
+        return tuple(found)
 
     @property
     def unread(self) -> tuple[str, ...]:

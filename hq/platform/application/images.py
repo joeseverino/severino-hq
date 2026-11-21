@@ -10,6 +10,8 @@ their own tags are written, so ``1.31.3-alpine`` is compared only with other
 import re
 from dataclasses import dataclass
 
+from django.utils.text import get_text_list
+
 from .lists import split_list
 
 # Docker's rule: the first path component is a registry when it looks like a
@@ -137,18 +139,45 @@ def affected(tag: str, vulnerabilities) -> bool | None:
     return False if readable else None
 
 
+def _fixes(text: str) -> list[tuple[str, tuple[int, ...], bool]]:
+    """The releases a stated fix names, each as written, its version, and
+    whether only what is above it is fixed: ``1.8.5, 2.1.3`` is two,
+    ``> v7.15.4`` is every release after v7.15.4. An upper bound fixes
+    nothing and is left out."""
+
+    found = []
+    for part in re.split(r"[,|]", str(text or "")):
+        match = re.match(r"^\s*(>=|>)?\s*(\S+)\s*$", part)
+        if match is not None and (number := version(_clean(match.group(2)))):
+            found.append((match.group(2), number, match.group(1) == ">"))
+    return found
+
+
 def _patched(running: tuple[int, ...], text: str) -> bool:
     """Whether a stated fix covers ``running``: the newest fix, or one on the
     same major line as it, at or below it (a fix backported to 1.x does not
     cover 2.0)."""
 
-    fixes = [version(_clean(part)) for part in re.split(r"[,|]", text) if version(_clean(part))]
+    fixes = _fixes(text)
     if not fixes:
         return False
-    newest = max(fixes, key=lambda item: _padded(item, running)[0])
-    if compare(running, newest) >= 0:
-        return True
-    return any(fix[0] == running[0] and compare(running, fix) >= 0 for fix in fixes)
+
+    def covers(fix: tuple[str, tuple[int, ...], bool]) -> bool:
+        return compare(running, fix[1]) > (0 if fix[2] else -1)
+
+    newest = max(fixes, key=lambda fix: _padded(fix[1], running)[0])
+    return covers(newest) or any(fix[1][0] == running[0] and covers(fix) for fix in fixes)
+
+
+def fixed_in(patched) -> str:
+    """The releases ``patched`` texts state a fix in, as a person reads them:
+    ``v2.19.3``, ``releases after v7.15.4``."""
+
+    said: dict[str, tuple[int, ...]] = {}
+    for text in patched:
+        for written, number, after in _fixes(str(text or "")):
+            said.setdefault(f"releases after {written}" if after else written, number)
+    return get_text_list([words for words, _number in sorted(said.items(), key=lambda item: item[1])], "and")
 
 
 def _clean(text: str) -> str:

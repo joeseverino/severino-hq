@@ -313,7 +313,7 @@ class ListenStreamTests(TransactionTestCase):
                 for ident in range(count):
                     reply = await streams.enter_async_context(listening(application, AGENT, _listen(ident)))
                     await reply.message()
-                return threading.active_count()
+                return set(threading.enumerate())
 
         async def steps(application):
             # A first stream warms the pool its brakes are asked on, which every stream shares.
@@ -329,7 +329,8 @@ class ListenStreamTests(TransactionTestCase):
         # Served as production serves it: an event loop with no synchronous caller above it.
         one, four = asyncio.run(run())
 
-        self.assertEqual(four, one, "three more open streams hold no thread more")
+        # Which threads, never how many: a thread the process ends elsewhere under load is no stream's.
+        self.assertEqual(four - one, set(), "three more open streams hold no thread more")
 
     def test_a_listen_at_an_earlier_protocol_opens_no_stream(self):
         async def steps(application):

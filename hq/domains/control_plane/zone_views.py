@@ -7,13 +7,13 @@ answer. Both read the same declarations: there is no second store and no
 second truth, only a second way of slicing the first.
 """
 
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from functools import cached_property
 from typing import override
 
 from django.http import Http404
 from django.shortcuts import redirect, render
-from django.utils.html import format_html
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -37,9 +37,12 @@ from hq.platform.application.resource_capabilities import (
 from hq.platform.application.resources import every_item
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
-from hq.platform.application.ui import counted
+from hq.platform.application.tables import Cell, DataTable, Group, Row, StatusMark, TableColumn
+from hq.platform.application.tone import Absent
+from hq.platform.application.ui import counted, measured
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.zones import ADOPT_ZONE, RECORD_KIND, find_zone, zone_catalog
+from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.value_tags import entity
 from hq.platform.core.web_refusals import refused
 
@@ -309,19 +312,97 @@ class ZoneDetailView(RecordPageMixin, TemplateView):
                 # once.
                 "public_dns_enabled": public_dns_enabled(),
                 "records_lede": _records_lede(domain),
-                # 1 leaves a TTL to the DNS service (Cloudflare's "Auto"), which
-                # the table leaves blank, so a zone where every record does has
-                # no TTL column.
-                "ttl_set": any(record["ttl"] != 1 for record in domain["records"]),
-                "record_rows": {
-                    "routing": [(record, actions) for record, actions in rows if not record["secondary"]],
-                    "policy": [(record, actions) for record, actions in rows if record["secondary"]],
-                },
+                "records_table": records_table(
+                    [(record, actions) for record, actions in rows if not record["secondary"]],
+                    [(record, actions) for record, actions in rows if record["secondary"]],
+                    managed=bool(domain["declaration"]),
+                ),
                 "relationships": relationships,
                 "read_with": read_with,
             }
         )
         return context
+
+
+# The fold the policy and verification records start in.
+_POLICY_FOLD = "zone-policy-records"
+
+
+def records_table(
+    routing: Sequence[tuple[Mapping, tuple[PageAction, ...]]],
+    policy: Sequence[tuple[Mapping, tuple[PageAction, ...]]],
+    *,
+    managed: bool,
+) -> DataTable:
+    """A zone's DNS records as one table: those that send traffic somewhere,
+    then the policy and verification records folded away under their own
+    group, both sharing one set of columns. A state is said only where it is
+    not healthy, and a TTL only where it was set: 1 leaves it to the DNS
+    service, so a zone where every record does has no TTL column. Where the
+    Value column has left, a record that shares its name and type with another
+    says its value under its name. Unmanaged, a zone offers no State or row
+    actions."""
+
+    ttl_set = any(record["ttl"] != 1 for record, _actions in (*routing, *policy))
+    columns = (
+        TableColumn("Name", kind="identifier"),
+        TableColumn("Type", kind="identifier", css="key-col"),
+        TableColumn("Value", kind="identifier", drop=4),
+        *((TableColumn("TTL", kind="status", drop=3),) if ttl_set else ()),
+        *((TableColumn("State", kind="status"),) if managed else ()),
+    )
+
+    def rows(found, folded=""):
+        return tuple(
+            Row(
+                _record_cells(record, ttl_set=ttl_set, managed=managed),
+                actions=actions if managed else (),
+                folded=folded,
+            )
+            for record, actions in found
+        )
+
+    region = {"empty": "No records."}
+    if not policy:
+        return DataTable("Records", columns, rows(routing), region=region)
+    return DataTable(
+        "Records",
+        columns,
+        groups=(
+            *((Group("Routing records", rows(routing)),) if routing else ()),
+            Group("Policy records", rows(policy, _POLICY_FOLD), folds=_POLICY_FOLD),
+        ),
+        region=region,
+    )
+
+
+def _record_cells(record: Mapping, *, ttl_set: bool, managed: bool) -> tuple[Cell, ...]:
+    summary = record.get("summary")
+    name = (
+        Cell.of(entity_link("service", record["service"]), name=True)
+        if record.get("service")
+        else Cell(record["name"], name=True)
+    )
+    proxied = (Cell(status=StatusMark("Proxied", tone="neutral")),) if record.get("proxied") else ()
+    return (
+        replace(name, lines=(Cell(summary, muted=True, role="data", shows="narrow"),) if summary else ()),
+        Cell(record["record_type"], readout=True),
+        Cell(record["value"], readout=True, parts=proxied),
+        *((Cell(measured(record["ttl"], "s") if record["ttl"] != 1 else ""),) if ttl_set else ()),
+        *((_record_state(record),) if managed else ()),
+    )
+
+
+def _record_state(record: Mapping) -> Cell:
+    """A type HQ does not model is still a real record in the zone, so it is
+    shown, and said to be outside HQ's reach, rather than labeled New."""
+
+    if not record.get("manageable"):
+        return Cell(status=StatusMark(record["record_type"], Absent.NOT_MANAGED))
+    if not record.get("declaration"):
+        return Cell("New", tone="attention")
+    health = record["health"]
+    return Cell(health["label"], tone=health["state"]) if health["state"] != "healthy" else Cell()
 
 
 def _record_actions(record, here: str) -> tuple[PageAction, ...]:

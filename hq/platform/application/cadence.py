@@ -50,11 +50,12 @@ from .command_fields import Choices, Describe, Names
 from .contracts import Effect
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import CapabilitySpec, requested
+from .labels import sentence
 from .moments import duration
 from .record_errors import Sentence
 from .refusal_codes import Code
 from .security import Capability, Principal
-from .tone import Tone, Toned
+from .tone import Absent, Tone, Toned
 from .ui import ended
 lazy from .adoption import manages_through, observes_only
 lazy from .credential_sight import fed_kinds
@@ -208,7 +209,7 @@ class WorkerState(Toned):
     ONLINE = "online", Tone.GOOD
     SILENT = "silent", Tone.ATTENTION
     # Never run is known to be neither online nor silent.
-    NOT_CONFIGURED = "not configured", Tone.NEUTRAL
+    NOT_CONFIGURED = Absent.NOT_SET_UP
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,7 +461,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         "only_kinds": [],
     }
     if oldest is None:
-        return {**verdict, "due": True, "reason": "Nothing has been read yet."}
+        return {**verdict, "due": True, "reason": ended(sentence(Absent.NOT_READ))}
     age = timezone.now() - oldest
     due = age >= interval
     reason = (
@@ -652,8 +653,8 @@ def pass_due() -> str:
 
     The doorbell (`hq.platform.core.doorbell`) asks this once a minute, and
     again as each capability's write commits: a capability's change starts a
-    pass at once, any other writer's within the minute. An
-    unanswered dashboard refresh stops counting after `read_request_lifetime()`.
+    pass at once, any other writer's within the minute. A dashboard reading
+    is the glance pass's, on its own doorbell, so it starts no pass here.
     """
 
     now = timezone.now()
@@ -661,10 +662,6 @@ def pass_due() -> str:
         return "Work is queued."
     if OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).exists():
         return "Work a controller took did not finish in time."
-    if DashboardRefreshRequest.objects.filter(
-        completed_at__isnull=True, requested_at__gte=now - read_request_lifetime()
-    ).exists():
-        return "A dashboard reading was asked for."
     if unapplied():
         return "A record's settings changed and nothing has applied them yet."
     verdict = sweep_due()

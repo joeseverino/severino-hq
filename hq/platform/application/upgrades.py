@@ -48,8 +48,8 @@ class Plan:
     target_digest: str
     change: str
     release: Mapping[str, Any] | None
-    # Advisories and vulnerabilities against what runs that the target is clear
-    # of, and any serious one the target would bring.
+    # Of what makes the running version vulnerable, what the target is clear
+    # of, and what known vulnerability the target would bring of its own.
     fixes: tuple[Mapping[str, Any], ...]
     introduces: tuple[Mapping[str, Any], ...]
     # Writable mounts holding its data: snapshotted before, restored on rollback.
@@ -63,6 +63,14 @@ class Plan:
     @property
     def viable(self) -> bool:
         return not self.blockers
+
+    @property
+    def recommended(self) -> bool:
+        """Whether moving to the target is worth doing: it brings no known
+        vulnerability of its own and, where the running version has some,
+        fixes at least one. Everything that offers the move reads this."""
+
+        return not self.introduces and (bool(self.fixes) or not self.container.standing.known_vulnerabilities)
 
     @property
     def stateful(self) -> bool:
@@ -105,12 +113,19 @@ class Plan:
         if self.change in (MAJOR, MINOR):
             reasons.append(f"it is a {self.change} version change")
         if self.introduces:
-            reasons.append("the new version also has a known serious vulnerability")
+            reasons.append("the new version has a known vulnerability of its own")
         if self.stateful:
             reasons.append("it keeps data")
         if not self.verified_by:
             reasons.append("nothing checks that it works afterwards")
         return "" if self.risk == LOW else " and ".join(reasons)
+
+    @property
+    def risk_said(self) -> str:
+        """The risk as a sentence, as every page and card says it."""
+
+        reason = self.risk_reason
+        return ended(f"Upgrade risk {self.risk}, because {reason}" if reason else f"Upgrade risk {self.risk}")
 
 
 def change_between(running: str, target: str) -> str:
@@ -152,16 +167,14 @@ def plan_for(item: Container) -> Plan | None:
     if standing.state not in (BEHIND, VULNERABLE) or not standing.newer:
         return None
     target = standing.latest
-    fixes = tuple(
-        advisory
-        for advisory in standing.advisories
-        if affected(target, [tuple(pair) for pair in advisory.get("vulnerabilities") or ()]) is False
-    ) + _cleared(standing)
-    introduces = tuple(
-        advisory
-        for advisory in standing.advisories
-        if affected(target, [tuple(pair) for pair in advisory.get("vulnerabilities") or ()]) is True
-    ) + _brought(standing)
+    fixes = _fixed(standing, target)
+    running = {str(advisory.get("id", "")) for advisory in standing.advisories}
+    introduces = ranked(
+        (
+            *(advisory for advisory in standing.target_advisories if advisory.get("id") not in running),
+            *_brought(standing),
+        )
+    )
     data = data_of(item.mounts)
     verified_by = _verified_by(item)
     change = change_between(standing.tag, target)
@@ -186,14 +199,26 @@ def _found(checked: Mapping[str, Any] | None) -> dict[tuple[str, str], Mapping[s
     return {(str(item.get("id")), str(item.get("package"))): item for item in (checked or {}).get("findings") or ()}
 
 
-def _cleared(standing: Any) -> tuple[Mapping[str, Any], ...]:
-    """Vulnerabilities in what runs that the target's packages are clear of,
-    when both digests' packages were checked."""
+def _fixed(standing: Any, target: str) -> tuple[Mapping[str, Any], ...]:
+    """Which of what makes the running version vulnerable the target is clear
+    of: an advisory its range leaves the target out of, a package finding the
+    target's checked packages no longer hold."""
 
-    if standing.checked is None or standing.target_checked is None:
-        return ()
-    after = _found(standing.target_checked)
-    return ranked(item for key, item in _found(standing.checked).items() if key not in after)
+    pairs = {str(item.get("id", "")): item.get("vulnerabilities") for item in standing.advisories}
+    urgent = {str(item.get("id", "")) for item in standing.urgent}
+    after = (
+        None
+        if standing.target_checked is None
+        else {str(item.get("id", "")) for item in (standing.target_checked.get("findings") or ())}
+    )
+
+    def clear(item: Mapping[str, Any]) -> bool:
+        key = str(item.get("id", ""))
+        if key in pairs and affected(target, [tuple(pair) for pair in pairs[key] or ()]) is False:
+            return True
+        return after is not None and key in urgent and key not in after
+
+    return tuple(item for item in standing.known_vulnerabilities if clear(item))
 
 
 def _brought(standing: Any) -> tuple[Mapping[str, Any], ...]:

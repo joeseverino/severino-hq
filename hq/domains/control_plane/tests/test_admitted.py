@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.platform.application.analytics import record_analytics
-from hq.platform.application.glance import record_dashboard_observations
+from hq.platform.application.glance_refresh import record_dashboard_observations
 from hq.platform.application.inventory import record_connections, record_step_failures
 from hq.platform.application.security import cli_principal, internal_principal
 from hq.platform.application.sweep import record_sweep

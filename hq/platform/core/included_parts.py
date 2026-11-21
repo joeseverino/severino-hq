@@ -4,8 +4,10 @@ registered; the template contract reads both (``template_contract.parts``).
 A ``public`` one is an extension's to include too."""
 
 from hq.platform.core.included_actions import APPROVAL_CARD, ASK, PAGE_ACTION, WRITE_GAP
-from hq.platform.core.part_examples import charts, connection, forms, graph, pages, records
+from hq.platform.core.included_queue import ICON_LINKS, INSIGHT_FACTS, OPERATOR_STEPS, ORIGIN_PANEL, WORK_QUEUE
+from hq.platform.core.part_examples import charts, connection, forms, graph, pages, records, tags
 from hq.platform.core.template_parts import Part, included as _part
+from hq.platform.core.templatetags.table_tags import ROW_ACTIONS, ROW_GROUP, ROW_SELECT, ROW_TOGGLE, TABLE_HEADING
 
 FIELD = Part(
     name="",
@@ -46,6 +48,12 @@ CADENCE = _part(
     *("cadence-strip", "cadence-title", "cadence-week", "is-hit", "is-no-data"),
     public=True,
     example=charts.CADENCE,
+)
+CADENCE_MARK = _part(
+    "cadence_mark",
+    "One period of a cadence matrix's row, given `week`: its mark and what it says.",
+    draws=(CADENCE,),
+    example=charts.CADENCE_MARK,
 )
 MONTH_GRID = _part(
     "month_grid",
@@ -133,110 +141,6 @@ READING_AGE = _part(
     """,
     states=pages.READING_AGE_STATES,
 )
-WORK_QUEUE = _part(
-    "work_queue",
-    "What waits on the operator, each row what wants doing and why, or that nothing does.",
-    *("attention-clear", "attention-reason", "is-mark", "row-gist", "row-line"),
-    pieces=("partials/_queue_entries.html", "partials/_queue_rows.html", "partials/_urgency_pill.html"),
-    public=True,
-    rules="""
-    **A queue row says what is wrong and holds what fixes it.** The queue is named "Needs you"
-    wherever it appears. Every list of problems is drawn by it, so every row's urgency, words and
-    buttons share one edge. The queue page, the findings page, the dashboard's short queue, a thing's
-    problems, the checks a subject does not meet, the steps a request contradicts and a domain's own
-    attention list all use one projection (`hq/platform/application/decisions.py`). They draw it as
-    one table (its rows `partials/_queue_rows.html`). A page never draws a list of its own (the
-    `list` shape of `hand_drawn.SHAPES`). A row is a table row as any other: its words in the cell that names
-    it, what it offers in `{% row_actions %}`, so it stands at the table's own density and gives way
-    as every table does. It reads, in order:
-
-    - its first line (`row-line`): the title and, only when it is urgent, the word "Urgent" after it
-      in its tone (the words are `decisions.URGENCY`; a row that needs attention carries no mark, its
-      word kept for a screen reader), then what it means (`row-gist`), quiet. The title states what is
-      wrong and links to the thing it is about. It is what a reader presses, so it leads; a domain's
-      heading, a family's name and their counts read below it. What it means is one line cut at its
-      end, on the title's line where both fit, released in place by the row's toggle; a held
-      request's says what is asked, the whole change its buttons decide one press away;
-    - quiet under it, once out of date, how old the reading it is drawn from is
-      (`Insight(observed_at=...)`). An out-of-date reading never asserts a live condition: its owner
-      says what was read, in the past tense, as a notice. These are words under the title, not a
-      column: most rows have none. Since when (`Insight(since=...)`) is said in the origin panel, never
-      on the row;
-    - buttons: the owner's actions, the first step that can be taken now when the owner offered none,
-      and the check that reads again. At most one is primary. Where the reader sorts their own queue,
-      Dismiss or Restore is the last of them (`row_actions put_away=`).
-
-    Closed, a row is one line where its words fit. Everything taller is the row's `row-below`, opened
-    by its toggle into the line beneath, from the title's edge to the table's. A row toggles only where
-    opening it shows something more, or releases a cut meaning, and with no script every row shows all
-    of it. The line beneath holds, in order:
-
-    - what was read that shows it (`Insight(facts=...)`), each label once with its values beside it;
-    - what to do, where a command or an instruction is a step, one standing alone and several
-      numbered. A command is `{% command text=... %}`;
-    - the reason it cannot be done from here, as a sentence and never as a step;
-    - the pages that help look into it (`Insight(links=...)`), the map's as icons with HQ's
-      tooltip;
-
-    The survey holds "words swapped for a glyph".
-
-    The word is `partials/_urgency_pill.html`. A Cmd- or Ctrl-click on it opens what raised it, read
-    from the code rather than written down. That is the finding rule, its severity and the line its
-    detector is defined at, or the domain and key of anything else.
-
-    A next step an owner names as a short label with a `url` is a link to that page; one it writes as
-    a sentence is shown as a sentence. Each action renders once, by method and URL, through the
-    page-action renderer and the shared POST form, and the transport keeps the owner's full workflow.
-    A dismissed row is its title and the way back. A link to a row (`/action-items/#…`) lands on it
-    open.
-
-    Several items of one family (`Insight(family=...)`) fold under a row saying how bad, what kind
-    and how many, which opens to their rows: on the queue page (`partials/_queue_entries.html`) and
-    wherever a thing's problems are drawn (`fold`). The findings page keeps each row its own, its
-    filter being by rule.
-
-    A queue of three or fewer is read on the dashboard, under the greeting, as the queue's own rows
-    (`glance`), under no heading of their own. A longer one is a count and a link to its page, except
-    the held requests, which are read there first at any length. There a row is its title, what it
-    means and its buttons, holding nothing beneath; its title opens the row on the page that shows the
-    rest, steps included, or a held request's own page.
-
-    **An item is open until its owner stops raising it.** Nobody closes one by looking at it. What a
-    reader can do with one they are not acting on is dismiss it. It leaves their queue and their
-    counts, stays reachable in a fold below while its owner still raises it, and comes back on its own
-    when it gets worse, grows, or is raised again after clearing (its `since` after the dismissal).
-    The header and the dashboard count what waits; a dashboard with only dismissed items says so and
-    links to them, and never claims all is clear. A held request (`Insight(held=True)`) is decided by
-    its Approve or Reject, never dismissed: its row has no Dismiss and no mark hides it
-    (`action_items.sortable`). It is composed with no decision on it: each reader is offered only the
-    decisions the rule that refuses them lets that reader take (`approvals.offers`), and a decision
-    withheld says why among the row's facts.
-
-    **A family folds.** An owner names what kind of matter an item is (`Insight(family="Image
-    advisories")`), in the words it would head a list with. Several open items of one family from one
-    domain are one line in the queue (how bad, what kind, how many), a row that opens to theirs, and
-    can be dismissed whole. A family of one is the item alone.
-
-    **Dismissing a row costs a write, not a queue.** A row's button names the row itself (its revision
-    and key), so dismissing or restoring one composes nothing. With script it happens in place, the
-    row becoming one quiet line with the way back and the counts over it following. Only "all of
-    these" asks the server what "these" are.
-
-    **A notice is not something to do.** An owner marks an item a notice (`Insight(notice=True)`) when
-    it reports something that happened or was measured and there is nothing to resolve. The queue
-    keeps notices in their own section, out of the "needs you" count, and a dismissed notice is done
-    with: it returns only when what it reports changes. The line is drawn once
-    (`action_items.split_waiting`) from what each item says of itself.
-
-    The queue page is sections by the domain that raised each item, derived from what the items carry
-    (`hq/platform/application/action_items.py`), so a domain that starts raising items has its section
-    without being listed anywhere. Filters that match nothing offer a way back; they never imply a
-    healthy estate.
-    """,
-    example=records.WORK_QUEUE,
-    states=records.WORK_QUEUE_STATES,
-)
-
 TOPOLOGY_MAP = _part(
     "topology_map",
     "The map of how things connect, laid out and filtered by its own script, each node's edges stated from it.",
@@ -258,6 +162,15 @@ TOPOLOGY_MAP = _part(
     example=graph.TOPOLOGY_MAP,
 )
 
+DOTS = _part(
+    "dots",
+    "A count as a row of dots, those it reached filled.",
+    "is-filled",
+    "figure-dot",
+    "figure-dots",
+    example=records.DOTS,
+    states=records.DOTS_STATES,
+)
 METER = _part(
     "meter",
     "A proportion as a bar, or as a segment for each of what it counts.",
@@ -274,9 +187,83 @@ METER = _part(
     example=records.METER,
     states=records.METER_STATES,
 )
+RESPONSE_CHECK = Part(
+    name="",
+    partial="core/_response_check.html",
+    about="What HQ sent back, read by the browser: the name it fills with the value, or the state it shows.",
+    rules="""
+    A response header or policy directive is read from a real response once the Headers fold opens
+    (connection.js), never from the settings meant to produce it. Until then its state says it is
+    being read; the script shows the state drawn beside it, Sent or Enforced, or Absent.
+    """,
+    example=connection.RESPONSE_CHECK,
+)
+
+POLICY_SETTING = Part(
+    name="",
+    partial="core/_policy_setting.html",
+    about="One agent's rule for one action: its select, its words where it cannot change, or why it has none.",
+    rules="""
+    A rule is read and changed where it sits, in its agent's column of the rules table
+    (`capability_policy.table`): a select in the rule's tone for whoever may save the rules, else the
+    chosen words in that tone, and past the agent's grant the reason, muted, on one line.
+    """,
+    example=tags.POLICY_TABLE,
+)
+
+CHANGE = _part(
+    "change",
+    "One value changed: what it was, an arrow, what it is.",
+    "change",
+    "change-arrow",
+    "change-to",
+    rules="""
+    **A change is one primitive.** A value and the one it changes into (a running version and the
+    newer release, an installed package and the version that fixes it) is `{% include
+    "partials/_change.html" with from=… to=… %}`, with `code=True` for identifiers and `url` to link
+    the new value. Old value, arrow and new value share one baseline. A narrow line breaks only between
+    the two values, with the arrow kept beside the new one, and a reader hears "1.2.3 to 1.3.0" rather
+    than an arrow.
+    """,
+    states=records.CHANGE_STATES,
+)
+
+CREDENTIAL_FIX = Part(
+    name="",
+    partial="control_plane/_credential_fix.html",
+    about="What a connection's credential lacks, and the one approved fix in numbered steps.",
+    example=tags.CREDENTIAL_FIX,
+    rules="""
+    **A credential's fix is one notice.** The permissions it lacks, then the steps of the one fix
+    `application.credential_mint` approves, a warning notice a connection's row opens to; the row's
+    own line says what is missing.
+    """,
+)
+
+CONNECTION_READ = Part(
+    name="",
+    partial="control_plane/_connection_read.html",
+    about="One thing a connection reads: its name, and opened, how its last reading went.",
+    rules="""
+    A part of a connection's Reads, given the `read` and its `connection`: its name, quiet where its
+    credential cannot use it, then on the row's open line its state word in its tone where it was not
+    read cleanly, its record count where it was, and why it was not read.
+    """,
+)
+CONNECTION_ABILITY = Part(
+    name="",
+    partial="control_plane/_connection_ability.html",
+    about="One thing a connection's credential lets HQ do, quiet where HQ cannot use it.",
+    rules="""
+    A part of a connection's row, given the `state` and its `connection`: the ability's name, and its
+    permission note in its tone where it differs from its neighbors or cannot be used.
+    """,
+)
 
 PARTS = (
     FIELD,
+    POLICY_SETTING,
+    RESPONSE_CHECK,
     Part(
         name="",
         partial="django/forms/widgets/choice_cards.html",
@@ -302,8 +289,14 @@ PARTS = (
         through the form's own loop, so no page writes its markup.
         """,
     ),
+    TABLE_HEADING,
+    ROW_GROUP,
+    ROW_ACTIONS,
+    ROW_SELECT,
+    ROW_TOGGLE,
     CHART,
     CADENCE,
+    CADENCE_MARK,
     MONTH_GRID,
     WEEK_PLAN,
     ASK,
@@ -314,6 +307,10 @@ PARTS = (
     MODAL,
     READING_AGE,
     WORK_QUEUE,
+    ORIGIN_PANEL,
+    INSIGHT_FACTS,
+    OPERATOR_STEPS,
+    ICON_LINKS,
     _part(
         "activity_calendar",
         "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
@@ -336,8 +333,7 @@ PARTS = (
     _part(
         "cadence_matrix",
         "Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`.",
-        *("cadence-cell", "cadence-detail", "cadence-period", "cadence-total"),
-        draws=(CADENCE,),
+        draws=(CADENCE, CADENCE_MARK),
         public=True,
         example=charts.CADENCE_MATRIX,
     ),
@@ -357,22 +353,10 @@ PARTS = (
         """,
         example=records.CALENDAR_SOURCES,
     ),
-    _part(
-        "change",
-        "One value changed: what it was, an arrow, what it is.",
-        "change",
-        "change-arrow",
-        "change-to",
-        rules="""
-        **A change is one primitive.** A value and the one it changes into (a running version and the
-        newer release, an installed package and the version that fixes it) is `{% include
-        "partials/_change.html" with from=… to=… %}`, with `code=True` for identifiers and `url` to link
-        the new value. Old value, arrow and new value share one baseline. A narrow line breaks only between
-        the two values, with the arrow kept beside the new one, and a reader hears "1.2.3 to 1.3.0" rather
-        than an arrow.
-        """,
-        states=records.CHANGE_STATES,
-    ),
+    CHANGE,
+    CONNECTION_ABILITY,
+    CONNECTION_READ,
+    CREDENTIAL_FIX,
     _part(
         "chart_tabs",
         "Up to four charts of one thing in the space of one.",
@@ -440,15 +424,7 @@ PARTS = (
         *("is-latest", "figure-trend", "figure-trend-dot", "figure-trend-hit"),
         draws=(CHART,),
     ),
-    _part(
-        "dots",
-        "A count as a row of dots, those it reached filled.",
-        "is-filled",
-        "figure-dot",
-        "figure-dots",
-        example=records.DOTS,
-        states=records.DOTS_STATES,
-    ),
+    DOTS,
     _part(
         "dropzone",
         "A file field that also accepts a drop.",
@@ -472,7 +448,9 @@ PARTS = (
         the same part with `inline=True`: its words, quiet, in the line that holds them, with no frame.
 
         The message is the fact alone, one sentence ("No playbooks adopted yet."), with no how-to after
-        it: the action and the page's controls say what to do.
+        it: the action and the page's controls say what to do. An absence every page shares (nothing
+        read yet) is `absent="no reading yet"`, said in the words `tone.Absent` declares, which the
+        `absent` filter also hands `{% status %}` and refuses any other wording for.
         """,
         example=records.EMPTY_STATE,
         states=records.EMPTY_STATE_STATES,
@@ -497,7 +475,7 @@ PARTS = (
         "The mark of a saved copy's example connection.",
         "example-connection",
         rules="""
-        **A saved copy never says "you" about someone else.** Anything that describes the reader's own
+        **A saved copy never says "you" about another reader.** Anything that describes the reader's own
         connection includes this part. On a live HQ it renders nothing; on a saved copy
         (`SEVERINO_RENDERED_COPY`, set only in code by whatever renders the copy, as the demo does) it
         marks the line as an example connection, not the reader's. *Gate:*
@@ -547,9 +525,11 @@ PARTS = (
         `form/lookup`, and `form/lookup-help` with its help and an error.
 
         A form whose fields stand one to a row of a table (a group chosen for each record, a verdict for
-        each request) is the same partial with `table_body` naming the template that draws the table, in
-        its `table_region`. The form lays out no fields of its own, so it adds no box: the table reaches
-        its section's sides as a table section's does, and the closing row stands under it. The form
+        each request) is the same partial with `table_body` naming the template that draws the table, its
+        `{% data_table %}`. The form lays out no fields of its own, so it adds no box: the table reaches
+        its section's sides as a table section's does, and the closing row stands under it. The page draws
+        it inside the one section that heads what it saves, never with sections of its body standing
+        alone, so the closing row is framed with every field it sends. The form
         declares one field for each row, named by the row (`group-<id>`), so each control's name and id
         are its own. A row moved between two drawings still posts its own value, where a formset's names
         follow each row's place. Each row's cell draws its field with `partials/_row_field.html`: the
@@ -614,10 +594,10 @@ PARTS = (
     ),
     _part(
         "linked_text",
-        "Free text a person wrote, with the names HQ knows in it as links.",
+        "Free text written by hand, with the names HQ knows in it as links.",
         "linked-text",
         rules="""
-        Every free text a person wrote (a record's notes, a message sent through the contact form) is this
+        Every free text written by hand (a record's notes, a message sent through the contact form) is this
         part, over the text's runs that `application.where_it_runs.named_links` finds: each name a link as
         every mention is, and its line breaks kept.
         """,
@@ -750,7 +730,9 @@ PARTS = (
         rules="""
         **The header is one row.** When room runs out, the search field collapses to a button that opens
         over the navigation, then the sections move behind the toggle. The navigation never shrinks below
-        its own content, and the bar's controls all take their size from `--control-size`.
+        its own content, and the bar's controls all take their size from `--control-size`. The
+        person's control shows their name beside the mark at any width whose bar has room for it, cut
+        past four controls, and only the mark where there is none.
 
         **The user menu says whose session it is first.** It shows the person's picture, kept by HQ from
         sign-on and never loaded from the provider by a page. Then come their name, what the account may
@@ -758,6 +740,7 @@ PARTS = (
         share a line, names over tracks, and the theme has its row. Then where the menu leads.
         """,
         example=pages.SITE_HEADER,
+        states=pages.SITE_HEADER_STATES,
     ),
     _part(
         "sweep_freshness",
@@ -838,22 +821,10 @@ PARTS = (
         - A page in a background tab asks for nothing, a GET never does, and the request cannot name a
           connection or a kind.
         - When the reading lands, the page's content is fetched again and swapped in place, the ask's own
-          line kept. Only if that fails does the page load again, once; if somebody has touched it or it
+          line kept. Only if that fails does the page load again, once; if the operator has touched it or it
           reloaded a moment ago, it says a newer reading is in and leaves showing it to them.
         """,
         states=pages.VISIT_REFRESH_STATES,
     ),
     METER,
-    Part(
-        name="",
-        partial="projects/_repository_postures.html",
-        about="Each repository's checks as a meter of those met.",
-        draws=(METER,),
-        rules="""
-        Repositories against their standard, a table's row each: its name over a meter with a segment per
-        check, then its score and who can reach it. Every meter starts where its name does, so one check
-        sits in the same place on every row.
-        """,
-        example=records.REPOSITORY_POSTURES,
-    ),
 )

@@ -293,10 +293,10 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
 
         self.page.evaluate(
             "(disclosure) => document.querySelectorAll(disclosure).forEach((d) => { d.open = true; })",
-            SELECTORS["disclosure"],
+            self.css(SELECTORS["disclosure"]),
         )
         self.page.evaluate(SETTLE)
-        found = {"sideways, opened": self.page.evaluate(SIDEWAYS, SELECTORS["sideways"])}
+        found = {"sideways, opened": self.page.evaluate(SIDEWAYS, self.css(SELECTORS["sideways"]))}
         probes = {check: probe for check, probe in geometry_probes().items() if check in _IN_A_POPOVER}
         for (label, _slug), _alike in self.each_popover_kind():
             self.page.evaluate(SETTLE)
@@ -499,7 +499,7 @@ class ExampleEstateControlTests(BrowserGate):
         self.page.evaluate(SETTLE)
 
     def rows(self):
-        return self.page.locator(SELECTORS["table_rows"]).count()
+        return self.page.locator(self.css(SELECTORS["table_rows"])).count()
 
     def test_a_filter_narrows_its_list_keeps_it_in_the_address_and_lets_it_go(self):
         path = reverse("expenses:list")
@@ -510,9 +510,9 @@ class ExampleEstateControlTests(BrowserGate):
                 self.page.evaluate("() => { window.kept = true; }")
                 every = self.rows()
                 unfold(self.page)
-                self.page.locator(SELECTORS["table_filter"]).first.click()
-                menu = self.page.locator(SELECTORS["table_filter_panel"]).first
-                box = menu.locator(SELECTORS["table_filter_box"]).first
+                self.page.locator(self.css(SELECTORS["table_filter"])).first.click()
+                menu = self.page.locator(self.css(SELECTORS["table_filter_panel"])).first
+                box = menu.locator(self.css(SELECTORS["table_filter_box"])).first
                 asked = [box.get_attribute("name"), box.get_attribute("value")]
                 box.check()
                 self.page.wait_for_function(_ASKED, arg=asked)
@@ -525,7 +525,7 @@ class ExampleEstateControlTests(BrowserGate):
                 self.assertEqual(self.rows(), every)
 
                 # A toggle beside the menus narrows the list too, and gives every row back.
-                toggle = self.page.locator(SELECTORS["table_toggle"]).first
+                toggle = self.page.locator(self.css(SELECTORS["table_toggle"])).first
                 asked = [toggle.get_attribute("name"), toggle.get_attribute("value")]
                 toggle.check()
                 self.page.wait_for_function(_ASKED, arg=asked)
@@ -555,10 +555,10 @@ class ExampleEstateControlTests(BrowserGate):
                 self.visit(path, width)
                 self.page.evaluate("() => { window.kept = true; }")
                 every = self.rows()
-                search = self.page.locator(SELECTORS["table_search"])
+                search = self.page.locator(self.css(SELECTORS["table_search"]))
                 search.fill(word)
                 self.page.wait_for_function(_ASKED, arg=["q", word])
-                found = self.page.locator(SELECTORS["table_rows"]).all_inner_texts()
+                found = self.page.locator(self.css(SELECTORS["table_rows"])).all_inner_texts()
                 self.assertGreater(len(found), 0)
                 self.assertLess(len(found), every)
                 self.assertEqual([row for row in found if word.lower() not in row.lower()], [])
@@ -567,7 +567,7 @@ class ExampleEstateControlTests(BrowserGate):
                 search.fill(_NOTHING)
                 self.page.wait_for_function(_ASKED, arg=["q", _NOTHING])
                 self.assertEqual(self.rows(), 0)
-                self.assertTrue(self.page.locator(SELECTORS["table_empty"]).is_visible())
+                self.assertTrue(self.page.locator(self.css(SELECTORS["table_empty"])).is_visible())
                 search.fill("")
                 self.page.wait_for_function(_LET_GO, arg=["q", _NOTHING])
                 self.assertEqual(self.rows(), every)
@@ -579,7 +579,7 @@ class ExampleEstateControlTests(BrowserGate):
         old width past its region."""
 
         self.visit(reverse("projects:list"), 1360)
-        link = self.page.locator(SELECTORS["sort_link"]).first
+        link = self.page.locator(self.css(SELECTORS["sort_link"])).first
         asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
         link.click()
         self.page.wait_for_function(_ASKED, arg=["sort", asked])
@@ -589,17 +589,17 @@ class ExampleEstateControlTests(BrowserGate):
           return table.offsetWidth <= table.parentElement.clientWidth
             && [...table.tHead.rows[0].cells].some((heading) => !heading.checkVisibility());
         }"""
-        self.page.wait_for_function(fits, arg=SELECTORS["table_scroll"])
+        self.page.wait_for_function(fits, arg=self.css(SELECTORS["table_scroll"]))
 
     def test_a_list_sorted_on_a_phone_draws_no_column_it_had_dropped(self):
         """The table a sort swaps in is laid out by the stylesheet in its first
         frame, so no column the list had dropped is drawn and then dropped again."""
 
         self.visit(reverse("projects:list"), PHONE_SCREEN[0])
-        before = self.page.evaluate(_DROPPED, SELECTORS["table_scroll"])
+        before = self.page.evaluate(_DROPPED, self.css(SELECTORS["table_scroll"]))
         self.assertTrue(before, "a phone's list dropped no column, so the sort has nothing to keep")
-        self.page.evaluate(_WATCH_DROPPED, SELECTORS["table_scroll"])
-        link = self.page.locator(SELECTORS["sort_link"]).first
+        self.page.evaluate(_WATCH_DROPPED, self.css(SELECTORS["table_scroll"]))
+        link = self.page.locator(self.css(SELECTORS["sort_link"])).first
         asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
         link.click()
         self.page.wait_for_function(_ASKED, arg=["sort", asked])
@@ -614,7 +614,7 @@ class ExampleEstateControlTests(BrowserGate):
             with self.subTest(width=width):
                 self.visit(path, width)
                 self.page.evaluate("() => { window.kept = true; }")
-                link = self.page.locator(SELECTORS["sort_link"]).first
+                link = self.page.locator(self.css(SELECTORS["sort_link"])).first
                 sorted_by = "(link) => link.closest('th').getAttribute('aria-sort')"
                 self.assertEqual(link.evaluate(sorted_by), "none")
                 for direction in ("ascending", "descending"):
@@ -622,7 +622,7 @@ class ExampleEstateControlTests(BrowserGate):
                     link.click()
                     self.page.wait_for_function(_ASKED, arg=["sort", asked])
                     self.assertEqual(link.evaluate(sorted_by), direction)
-                    names = self.page.evaluate(_FIRST_COLUMN, SELECTORS["table_rows"])
+                    names = self.page.evaluate(_FIRST_COLUMN, self.css(SELECTORS["table_rows"]))
                     self.assertEqual(names, sorted(names, key=str.lower, reverse=direction == "descending"))
                 self.assertTrue(self.page.evaluate("() => window.kept === true"), "a sort loaded another page")
 
@@ -634,7 +634,7 @@ class ExampleEstateControlTests(BrowserGate):
         for width in PRESSED_AT:
             with self.subTest(width=width):
                 self.visit(reverse("action_items"), width)
-                rows = self.page.locator(f"{SELECTORS['decisions']}:has([data-origin])")
+                rows = self.page.locator(self.css(SELECTORS["decisions"] + ":has([data-origin])"))
                 self.assertGreater(rows.count(), 0)
                 for place in range(rows.count()):
                     row = rows.nth(place)
@@ -652,19 +652,21 @@ class ExampleEstateControlTests(BrowserGate):
         for width in PRESSED_AT:
             with self.subTest(width=width):
                 self.visit(reverse("action_items"), width)
-                every = self.page.locator(SELECTORS["decisions"]).count()
+                every = self.page.locator(self.css(SELECTORS["decisions"])).count()
                 unfold(self.page)
-                urgency = self.page.locator(SELECTORS["queue_urgency"])
+                urgency = self.page.locator(self.css(SELECTORS["queue_urgency"]))
                 # The urgency the first row is at, so the answer has rows to hold.
                 offered = urgency.locator("option").evaluate_all("(options) => options.map((option) => option.value)")
-                first = self.page.locator(f"{SELECTORS['decisions']} .pill").first.get_attribute("class").split()
+                first = (
+                    self.page.locator(self.css(SELECTORS["decisions"] + " .pill")).first.get_attribute("class").split()
+                )
                 chosen = next(value for value in offered if value and f"tone-{value}" in first)
                 urgency.select_option(chosen)
                 with self.page.expect_navigation():
-                    self.page.locator(SELECTORS["queue_apply"]).click()
+                    self.page.locator(self.css(SELECTORS["queue_apply"])).click()
                 self.assertIn(("status", chosen), parse_qsl(urlsplit(self.page.url).query))
                 self.assertEqual(urgency.input_value(), chosen)
-                rows = self.page.locator(SELECTORS["decisions"])
+                rows = self.page.locator(self.css(SELECTORS["decisions"]))
                 shown = rows.count()
                 self.assertGreater(shown, 0)
                 self.assertLessEqual(shown, every)
@@ -677,12 +679,12 @@ class ExampleEstateControlTests(BrowserGate):
         around it; Escape closes the category alone, then the drawer."""
 
         self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
-        toggle = self.page.locator(SELECTORS["nav_toggle"])
+        toggle = self.page.locator(self.css(SELECTORS["nav_toggle"]))
         toggle.click()
-        drawer = self.page.locator(SELECTORS["nav_drawer"])
+        drawer = self.page.locator(self.css(SELECTORS["nav_drawer"]))
         self.assertTrue(drawer.is_visible())
-        handle = self.page.locator(SELECTORS["nav_menu"]).first
-        links = self.page.locator(SELECTORS["nav_menu_panel"]).first.get_by_role("link")
+        handle = self.page.locator(self.css(SELECTORS["nav_menu"])).first
+        links = self.page.locator(self.css(SELECTORS["nav_menu_panel"])).first.get_by_role("link")
         handle.click()
         self.assertTrue(links.first.is_visible())
         self.assertTrue(drawer.is_visible())
@@ -690,7 +692,7 @@ class ExampleEstateControlTests(BrowserGate):
         beside = self.page.evaluate(
             "([drawer, panel]) => [document.querySelector(drawer), document.querySelector(panel)]"
             ".map((box) => box.getBoundingClientRect().toJSON())",
-            [SELECTORS["nav_drawer"], f"{SELECTORS['nav_menu_panel']}:popover-open"],
+            self.css([SELECTORS["nav_drawer"], SELECTORS["nav_menu_panel"] + ":popover-open"]),
         )
         self.assertLessEqual(beside[1]["right"], beside[0]["left"])
         self.assertGreaterEqual(beside[1]["left"], 0)
@@ -705,12 +707,12 @@ class ExampleEstateControlTests(BrowserGate):
         the list's edge as a plain section's link does, never centered."""
 
         self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
-        self.page.locator(SELECTORS["nav_toggle"]).click()
+        self.page.locator(self.css(SELECTORS["nav_toggle"])).click()
         starts = self.page.evaluate(
             "(drawer) => [...document.querySelector(drawer).querySelectorAll(':scope > a, .nav-group-label')]"
             ".map((entry) => { const range = document.createRange(); range.selectNodeContents(entry);"
             " return Math.round(range.getClientRects()[0].left); })",
-            SELECTORS["nav_drawer"],
+            self.css(SELECTORS["nav_drawer"]),
         )
         self.assertEqual(len(set(starts)), 1, starts)
 
@@ -723,8 +725,8 @@ class ExampleEstateControlTests(BrowserGate):
             with self.subTest(height=height):
                 self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
                 self.page.set_viewport_size({"width": PHONE_SCREEN[0], "height": height})
-                self.page.locator(SELECTORS["nav_toggle"]).click()
-                handles = self.page.locator(SELECTORS["nav_menu"])
+                self.page.locator(self.css(SELECTORS["nav_toggle"])).click()
+                handles = self.page.locator(self.css(SELECTORS["nav_menu"]))
                 for place in range(handles.count()):
                     handle = handles.nth(place)
                     handle.click()
@@ -753,7 +755,7 @@ class ExampleEstateControlTests(BrowserGate):
 
         self.page.clock.install()
         self.visit(reverse("expenses:list"), WIDE)
-        handles = self.page.locator(SELECTORS["nav_menu"])
+        handles = self.page.locator(self.css(SELECTORS["nav_menu"]))
         pressed, hovered = handles.nth(0), handles.nth(1)
         pressed.hover()
         self.page.clock.run_for(1000)

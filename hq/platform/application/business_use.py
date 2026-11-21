@@ -34,14 +34,15 @@ VALIDATORS = [
 ]
 
 
-def deductible() -> models.GeneratedField:
+def deductible(*, null: bool = False) -> models.GeneratedField:
     """``total_cost`` times the share, in cents, rounded as ``quantize_money``
     rounds, stored by the table so every write path (``update``,
     ``bulk_create``) keeps it current.
 
     SQLite holds a decimal as a double, in which 0.015 lies just under half a
     cent. Whole cents times a whole percentage is an exact integer, so the half
-    is decided on an exact value and ``ROUND`` takes it away from zero."""
+    is decided on an exact value and ``ROUND`` takes it away from zero.
+    ``null`` is for a cost that may be unknown, whose deductible is then unknown too."""
 
     cents = Round(F("total_cost") * 100, output_field=models.FloatField())
     hundredths_of_a_cent = cents * F(FIELD)
@@ -49,6 +50,7 @@ def deductible() -> models.GeneratedField:
         expression=Round(hundredths_of_a_cent / 100.0) / 100.0,
         output_field=models.DecimalField(max_digits=12, decimal_places=2),
         db_persist=True,
+        null=null,
     )
 
 

@@ -106,8 +106,10 @@ class ConnectionInstance:
     id: str
     label: str
     kind: str
-    status: Tone
-    status_label: str
+    # How its owner last found it. One that says nothing is read from what came
+    # through it (``credential_sight.read_through``), its state in its lifecycle's word.
+    status: Tone = Tone.NEUTRAL
+    status_label: str = ""
     detail: str = ""
     endpoint: str = ""
     observed_at: datetime | None = None

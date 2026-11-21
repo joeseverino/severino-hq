@@ -17,19 +17,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% comment %}Each posture check HQ could not judge, with why: folded, since the line above already counts them.{% endcomment %}
   {% if posture.unread %}
     {% section "Not read" count=posture.unread fold=True lede="Checks HQ could not read, and why" %}
-        {% table_region "Not read" %}
-          <table class="data-table">
-            <thead><tr>{% table_heading "Check" %}{% table_heading "Reason" %}</tr></thead>
-            <tbody>
-              {% for result in posture.results %}{% if result.state == "unavailable" %}
-                <tr data-posture-unread="{{ result.check.id }}">
-                  <td><strong>{{ result.check.label|breakable }}</strong></td>
-                  <td><span class="cell-prose prose">{% if result.reading.fix %}{{ result.reading.evidence|breakable:":" }} {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix|breakable:"." }}</a>{% else %}{{ result.reading.fix|breakable:"." }}{% endif %}{% else %}{{ result.reading.evidence|breakable:"." }}{% endif %}</span></td>
-                </tr>
-              {% endif %}{% endfor %}
-            </tbody>
-          </table>
-        {% endtable_region %}
+        {% data_table tables.unread %}
     {% endsection %}
   {% endif %}
 
@@ -37,21 +25,21 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% layout %}
   {% section "Identity" %}
     {% facts %}
-      {% fact "Signed in" %}<strong>{{ connection.identity.full_name|default:connection.identity.username|breakable }}</strong>{% if connection.identity.email %} <code>{{ connection.identity.email|breakable }}</code>{% endif %}{% endfact %}
+      {% fact "Signed in" %}<strong>{{ connection.identity.full_name|default:connection.identity.username }}</strong>{% if connection.identity.email %} <code>{{ connection.identity.email }}</code>{% endif %}{% endfact %}
       {% comment %}A row is drawn only when it has a value: the strip above already says why there is no device.{% endcomment %}
-      {% if connection.identity.tailnet_user %}{% fact "Tailnet account" %}<code>{{ connection.identity.tailnet_user|breakable }}</code>{% endfact %}{% endif %}
+      {% if connection.identity.tailnet_user %}{% fact "Tailnet account" %}<code>{{ connection.identity.tailnet_user }}</code>{% endfact %}{% endif %}
       {% if connection.caller_device %}
-        {% fact "Device" %}<strong>{{ connection.caller_device.label|breakable }}</strong>{% if connection.caller_device.os %} {% muted %}{{ connection.caller_device.os|breakable }}{% endmuted %}{% endif %}{% if connection.untrusted_forwarding and connection.reported_device %} {% muted %}From the proxy's header{% endmuted %}{% endif %}{% endfact %}
+        {% fact "Device" %}<strong>{{ connection.caller_device.label }}</strong>{% if connection.caller_device.os %} {% muted %}{{ connection.caller_device.os }}{% endmuted %}{% endif %}{% if connection.untrusted_forwarding and connection.reported_device %} {% muted %}From the proxy's header{% endmuted %}{% endif %}{% endfact %}
       {% endif %}
-      {% if connection.caller_device.dns_name %}{% fact "MagicDNS" %}<code>{{ connection.caller_device.dns_name|breakable }}</code>{% endfact %}{% endif %}
+      {% if connection.caller_device.dns_name %}{% fact "MagicDNS" %}<code>{{ connection.caller_device.dns_name }}</code>{% endfact %}{% endif %}
       {% if connection.caller_device.tags %}
-        {% fact "Tags" %}{% for tag in connection.caller_device.tags %}<code>{{ tag|breakable }}</code> {% endfor %}{% endfact %}
+        {% fact "Tags" %}{% for tag in connection.caller_device.tags %}<code>{{ tag }}</code> {% endfor %}{% endfact %}
       {% endif %}
       {% if connection.identity.route %}
-        {% fact "Signed in via" %}{{ connection.identity.route|breakable }}{% if connection.identity.provider %} <code>{{ connection.identity.provider|breakable }}</code>{% endif %}{% endfact %}
+        {% fact "Signed in via" %}{{ connection.identity.route }}{% if connection.identity.provider %} <code>{{ connection.identity.provider }}</code>{% endif %}{% endfact %}
       {% endif %}
       {% if connection.identity.groups %}
-        {% fact "Groups" %}{% for group in connection.identity.groups %}<code>{{ group|breakable }}</code> {% endfor %}{% endfact %}
+        {% fact "Groups" %}{% for group in connection.identity.groups %}<code>{{ group }}</code> {% endfor %}{% endfact %}
       {% endif %}
       {% fact "Rights" %}{% if connection.identity.superuser %}superuser{% elif connection.identity.staff %}staff{% else %}standard{% endif %}{% endfact %}
       {% if connection.identity.last_sign_in %}{% fact "Last sign-in" %}{{ connection.identity.last_sign_in|when }}{% endfact %}{% endif %}
@@ -74,15 +62,15 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% muted element="p" data_last_seen=True %}Tailnet read {{ connection.tailnet_observed_at|when }}.{% endmuted %}
     {% endif %}
     {% facts %}
-      {% if connection.path_label %}{% fact "Path" %}<strong>{{ connection.path_label|breakable }}</strong>{% endfact %}{% endif %}
+      {% if connection.path_label %}{% fact "Path" %}<strong>{{ connection.path_label }}</strong>{% endfact %}{% endif %}
       {% if connection.observer %}
-        {% fact "Measured by" %}<strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label|breakable }}</strong>{% endfact %}
+        {% fact "Measured by" %}<strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label }}</strong>{% endfact %}
       {% endif %}
       {% comment %}Named as Tailscale names a connection type, and left out where the reading names no path.{% endcomment %}
       {% if connection.peering %}
         {% fact "Connection" %}{% include "partials/_connection_peering.html#carriage" with peering=connection.peering only %}{% endfact %}
       {% endif %}
-      {% if connection.presence.direct_endpoint %}{% fact "WireGuard endpoint" %}<code>{{ connection.presence.direct_endpoint|breakable }}</code>{% endfact %}{% endif %}
+      {% if connection.presence.direct_endpoint %}{% fact "WireGuard endpoint" %}<code>{{ connection.presence.direct_endpoint }}</code>{% endfact %}{% endif %}
       {% if connection.presence %}{% fact "Last handshake" value=connection.handshake %}{% endif %}
       {% if connection.carried %}{% fact "Node traffic" value=connection.carried %}{% endif %}
       {% fact "Browser round trip" %}<span data-rtt>{% empty_value %}</span><span hidden data-rtt-measure="{% url 'health_live' %}">{% include "partials/_connection_loading.html#frame" %}</span>{% endfact %}
@@ -95,7 +83,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% endcomment %}
       {% section "Both node keys" fold=True %}
         {% facts %}
-          {% for label, key in connection.peer_keys %}{% fact label %}<code>{{ key|breakable }}</code>{% endfact %}{% endfor %}
+          {% for label, key in connection.peer_keys %}{% fact label %}<code>{{ key }}</code>{% endfact %}{% endfor %}
         {% endfacts %}
       {% foot %}Compare with <code>tailscale status</code>.
       {% endsection %}
@@ -114,45 +102,32 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     {% check_ladder route=True %}
       {% for hop in route.line_hops %}
         {% check_rung state=hop.standing icon=hop.icon kind=hop.label open=hop.check.contradicted data_connection_hop=hop.step %}
-          {% if hop.link and hop.link.url %}{{ hop.link.label|breakable }}{% elif hop.name %}{{ hop.name|breakable }}{% else %}{{ hop.detail|or_empty }}{% endif %}
+          {% if hop.link and hop.link.url %}{{ hop.link.label }}{% elif hop.name %}{{ hop.name }}{% else %}{{ hop.detail|or_empty }}{% endif %}
         {% detail %}
-          {% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}{{ hop.detail|breakable }}{% elif hop.link.url and hop.name and hop.name != hop.link.label %}{{ hop.name|breakable }}{% endif %}
+          {% if hop.name and hop.detail and hop.detail != hop.name and hop.detail != hop.link.label %}{{ hop.detail }}{% elif hop.link.url and hop.name and hop.name != hop.link.label %}{{ hop.name }}{% endif %}
         {% more %}
           {% if hop.checks %}{{ hop.checks|length|counted:"check,checks" }}{% else %}Details{% endif %}
         {% page %}
           {% if hop.link and hop.link.url %}{% entity hop.link %}{% endif %}
         {% body %}
-          {% if hop.check.label or hop.check.detail or hop.source %}{% muted element="p" %}{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}{% endmuted %}{% endif %}
-          {% if hop.check.step %}{% notice tone="warning" %}{{ hop.check.step|breakable }}{% endnotice %}{% endif %}
-          {% if hop.facts %}{% list kind="dots" muted=True %}{% for text, url in hop.facts %}<li>{% if url %}{% entity url|outside label=text %}{% else %}{{ text|breakable }}{% endif %}</li>{% endfor %}{% endlist %}{% endif %}
-          {% if hop.certificate %}{% muted element="p" %}{{ hop.certificate.statement|breakable }}{% endmuted %}{% endif %}
-          {% if hop.unread %}{% muted element="p" %}{{ hop.unread|capfirst|breakable }}{% endmuted %}{% endif %}
-          {% for relation, link in hop.overlays %}{% muted element="p" %}{{ relation|breakable }} {% entity link %}{% endmuted %}{% endfor %}
+          {% if hop.check.label or hop.check.detail or hop.source %}{% muted element="p" %}{% if hop.check %}{{ hop.check.label }}. {{ hop.check.detail }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}{% endmuted %}{% endif %}
+          {% if hop.check.step %}{% notice tone="warning" %}{{ hop.check.step }}{% endnotice %}{% endif %}
+          {% if hop.facts %}{% list kind="dots" muted=True %}{% for text, url in hop.facts %}<li>{% if url %}{% entity url|outside label=text %}{% else %}{{ text }}{% endif %}</li>{% endfor %}{% endlist %}{% endif %}
+          {% if hop.certificate %}{% muted element="p" %}{{ hop.certificate.statement }}{% endmuted %}{% endif %}
+          {% if hop.unread %}{% muted element="p" %}{{ hop.unread|capfirst }}{% endmuted %}{% endif %}
+          {% for relation, link in hop.overlays %}{% muted element="p" %}{{ relation }} {% entity link %}{% endmuted %}{% endfor %}
           {% if hop.evidence %}
-            {% table_region "Evidence" %}
-              <table class="data-table">
-                <thead><tr>{% table_heading "Value" "identifier" %}{% table_heading "Type" "status" %}{% table_heading "Note" drop=1 %}</tr></thead>
-                <tbody>
-                  {% for item in hop.evidence %}
-                    <tr>
-                      <td><code class="cell-whole">{{ item.value|breakable }}</code></td>
-                      <td>{% status item.role|default:item.label tone=item.tone %}</td>
-                      <td>{{ item.detail|breakable }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            {% endtable_region %}
+            {% data_table hop.evidence_table %}
           {% endif %}
           {% if hop.checks %}
             {% check_ladder %}
               {% for result in hop.checks %}
                 {% check_rung state=result.reading.standing evidence=result.reading.evidence data_connection_layer=result.check.id %}
-                  {{ result.check.label|breakable }}
+                  {{ result.check.label }}
                 {% body %}
-                  {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail|breakable }}{% endmuted %}{% endif %}
+                  {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail }}{% endmuted %}{% endif %}
                   {% if result.reading.rules %}
-                    {% list %}{% for rule in result.reading.rules %}<li><code>{{ rule|breakable }}</code></li>{% endfor %}{% endlist %}
+                    {% list %}{% for rule in result.reading.rules %}<li><code>{{ rule }}</code></li>{% endfor %}{% endlist %}
                   {% endif %}
                 {% endcheck_rung %}
               {% endfor %}
@@ -163,44 +138,19 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     {% endcheck_ladder %}
     {% endpartialdef %}
     {% endwith %}
-  {% aside %}<span class="count">{{ request_path.proof|breakable }}</span>
+  {% aside %}<span class="count">{{ request_path.proof }}</span>
   {% endsection %}
   {% endlayout %}
 
   {% section "Addresses" fold=True open=True lede="Yours and HQ's" %}
       {% section "Your addresses" %}
-        {% table_region "Your addresses" %}
-          <table class="data-table" data-addresses="yours">
-            <thead><tr>{% table_heading "Address" "identifier" %}{% table_heading "Network" "status" %}{% table_heading "Known from" %}</tr></thead>
-            <tbody>
-              {% for address in request_path.addresses %}
-                <tr>
-                  <td><code class="cell-whole">{{ address.value|breakable }}</code></td>
-                  <td>{% status address.label tone=address.tone %}</td>
-                  <td>{{ address.source|breakable }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% endtable_region %}
+        {% data_table tables.yours %}
       {% aside %}{% if connection.tailnet_observed_at %}<span class="count">Tailnet{% dot %}{% include "partials/_reading_age.html" with at=connection.tailnet_observed_at only %}</span>{% endif %}
       {% endsection %}
 
       {% if request_path.hq_addresses %}
         {% section "HQ answers at" %}
-          {% table_region "HQ answers at" %}
-            <table class="data-table" data-addresses="hq">
-              <thead><tr>{% table_heading "Address" "identifier" %}{% table_heading "Network" "status" %}</tr></thead>
-              <tbody>
-                {% for address in request_path.hq_addresses %}
-                  <tr>
-                    <td><code class="cell-whole">{{ address.value|breakable }}</code></td>
-                    <td>{% status address.label tone=address.tone %}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% endtable_region %}
+          {% data_table tables.hq %}
         {% endsection %}
       {% endif %}
   {% aside %}<span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %}{% dot %}HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
@@ -209,36 +159,10 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% comment %}Folded: the response is read back only once somebody opens it.{% endcomment %}
   {% section "Headers" fold=True lede="Sent by your browser and by HQ" data_connection_protocol=True %}
       {% section "Request" %}
-        {% table_region "Headers HQ read" %}
-          <table class="data-table" data-request-headers="read">
-            <thead><tr>{% table_heading "Header" %}{% table_heading "HQ" "status" %}{% table_heading "For" drop=1 %}</tr></thead>
-            <tbody>
-              {% for header in request_path.headers %}{% if header.used %}
-                <tr>
-                  <td><code class="cell-whole">{{ header.name|breakable:":" }} {{ header.value|breakable }}</code></td>
-                  <td>{% status header.state %}</td>
-                  <td><span class="cell-prose">{{ header.purpose|breakable }}</span></td>
-                </tr>
-              {% endif %}{% endfor %}
-            </tbody>
-          </table>
-        {% endtable_region %}
+        {% data_table tables.read %}
         {% if request_path.unread_headers %}
           {% section "Not read" count=request_path.unread_headers|length fold=True %}
-            {% table_region "Unread headers" %}
-              <table class="data-table" data-request-headers="unread">
-                <thead><tr>{% table_heading "Header" %}{% table_heading "HQ" "status" drop=2 %}{% table_heading "Reason" drop=1 %}</tr></thead>
-                <tbody>
-                  {% for header in request_path.unread_headers %}
-                    <tr>
-                      <td><code class="cell-whole">{{ header.name|breakable:":" }} {{ header.value|breakable }}</code></td>
-                      <td>{% status header.state %}</td>
-                      <td><span class="cell-prose">{{ header.declined|breakable }}</span></td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            {% endtable_region %}
+            {% data_table tables.declined %}
           {% endsection %}
         {% endif %}
       {% endsection %}
@@ -249,20 +173,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         response once the fold opens (connection.js); until then each says
         it is waiting.
         {% endcomment %}
-        {% table_region "Headers HQ sent" %}
-          <table class="data-table" data-response-headers>
-            <thead><tr>{% table_heading "Header" %}{% table_heading "HQ" "status" %}{% table_heading "For" drop=1 %}</tr></thead>
-            <tbody>
-              {% for check in request_path.response_checks %}
-                <tr data-response-check="{{ check.name }}"{% if check.directive %} data-response-directive{% endif %}>
-                  <td><code class="cell-whole" data-response-value>{{ check.name|breakable }}</code></td>
-                  <td><span data-response-state="waiting">{% status "Reading" %}</span><span data-response-state="present" hidden>{% if check.directive %}{% status "Enforced" tone="good" %}{% else %}{% status "Sent" tone="good" %}{% endif %}</span><span data-response-state="absent" hidden>{% status "Absent" tone="serious" %}</span></td>
-                  <td>{{ check.purpose|breakable }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% endtable_region %}
+        {% data_table tables.sent %}
         {% muted element="p" data_response_failure=True hidden=True %}The response could not be read back.{% endmuted %}
       {% endsection %}
   {% aside %}<span class="count">Yours {{ request_path.headers|length }}</span>

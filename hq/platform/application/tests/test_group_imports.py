@@ -58,7 +58,6 @@ class Lock:
         self.runtime = root["dependencies"]
         self.groups: dict[str, list[dict]] = root["dev-dependencies"]
         self.default_groups: list[str] = root["default-groups"]
-        self.requires_python: str = lock["requires-python"]
 
     def installs(self, groups: list[str]) -> set[str]:
         """The distributions the runtime dependencies and ``groups`` bring, each name normalized."""
@@ -239,34 +238,6 @@ class GroupImportTests(SimpleTestCase):
                 self.assertEqual(
                     offenders, [], f"only the {group} group installs these; a module its tasks run may import them"
                 )
-
-    def test_the_runner_image_builds_from_source_only_what_publishes_no_wheel(self):
-        # The runner stage installs from wheels alone but the packages its
-        # --no-binary names, whose build hq_runner/build-constraints.txt pins:
-        # once each publishes a wheel the lock holds, both go.
-        wheelless = {
-            name for name in self.lock.reached(self.lock.groups["runner"]) if not self.lock.packages[name].get("wheels")
-        }
-        built = set(re.findall(r"--no-binary (\S+)", (ROOT / "Dockerfile").read_text()))
-        constraints = ROOT / "hq_runner" / "build-constraints.txt"
-
-        self.assertEqual(built, wheelless, "the runner stage's --no-binary is what the lock holds no wheel of")
-        self.assertEqual(
-            constraints.is_file(),
-            bool(wheelless),
-            "hq_runner/build-constraints.{in,txt} pin the build of a package with no wheel; with none left, delete them",
-        )
-        if wheelless:
-            header = constraints.read_text()
-            (python,) = re.findall(r"--python-version=(\S+)", header)
-            self.assertEqual(f"=={python}.*", self.lock.requires_python, "compiled for the Python the image runs")
-            # Renovate moves the file by running the command its header
-            # records, and its parser loses an option's argument given after a space.
-            self.assertEqual(
-                re.findall(r"--output-file(\S*)", header),
-                ["=hq_runner/build-constraints.txt"],
-                "the header names its own file, after =, so Renovate can compile it again",
-            )
 
     def test_a_module_the_image_suite_loads_imports_only_the_runtime_as_it_loads(self):
         forbidden = import_names(self.lock.installs(list(self.lock.groups)) - self.lock.installs([]))

@@ -35,9 +35,9 @@ class ImageStandingWords:
         """What is known against the version that runs, in a few words."""
 
         if self.advisories:
-            return f"{len(self.advisories)} known"
+            return f"{len(self.known_vulnerabilities)} known"
         if self.urgent:
-            return f"{len(self.urgent)} serious"
+            return f"{len(self.known_vulnerabilities)} serious"
         if self.awaiting_read:
             return "not read"
         if not self.checkable:

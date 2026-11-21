@@ -21,6 +21,7 @@ from hq.platform.application.markup_testing import hrefs, text, with_class
 from hq.platform.application.tests.links import example_command
 
 from ..card_items import Kpi
+from ..composed_providers import answered_by
 from ..domains import domain_navigation
 from ..finding_model import Finding
 from ..finding_steps import Do
@@ -31,7 +32,6 @@ from ..plugins import (
     NavigationItem,
     PluginIntegration,
     PluginManifest,
-    answered_by,
     describe_plugins,
     installed_integrations,
     installed_plugins,
@@ -369,7 +369,7 @@ class PluginContractTests(TestCase):
             page_context("Example Notes", "Shared host interface"),
         )
         kpis = Template('{% facts layout="band" items=items label="Notes summary" %}').render(
-            Context({"items": (Kpi("Notes", 0, "No records yet", is_zero=True),)})
+            Context({"items": (Kpi("Notes", "0", "No records yet", is_zero=True),)})
         )
         empty = render_to_string("partials/_empty_state.html", {"message": "No notes have been created."})
         page_navigation = render_to_string(
@@ -678,7 +678,7 @@ class ComposedPluginTestKitTests(TestCase):
         from ..plugin_testing import sibling
         from ..plugins import plugin_dashboard_sections
 
-        card = {"id": "alpha-open", "label": "Open", "value": 3, "url": "/alpha/"}
+        card = {"id": "alpha-open", "label": "Open", "value": "Clear", "url": "/alpha/"}
         self.case(siblings=(sibling(cards=(card,)),))
 
         sections = {section["id"]: section for section in plugin_dashboard_sections()}
@@ -691,7 +691,7 @@ class ComposedPluginTestKitTests(TestCase):
         from ..plugins import plugin_overviews
         from ..ui import DomainOverview
 
-        overview = DomainOverview("Current state.", "/alpha/", (Kpi("Open", 3),))
+        overview = DomainOverview("Current state.", "/alpha/", (Kpi("Open", "3"),))
         self.case(siblings=(sibling(overview=overview),))
 
         sections = {section["id"]: section for section in plugin_overviews()}
@@ -742,7 +742,7 @@ class ComposedPluginTestKitTests(TestCase):
             siblings=(
                 sibling(
                     attention=(item,),
-                    overview=DomainOverview("State.", "/alpha/", (Kpi("Open", 3),)),
+                    overview=DomainOverview("State.", "/alpha/", (Kpi("Open", "3"),)),
                 ),
             )
         )

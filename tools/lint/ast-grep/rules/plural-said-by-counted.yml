@@ -1,21 +1,42 @@
 # A plural guessed from a letter ("s" if n != 1 else "") agrees the noun and
-# forgets the verb ("1 need output"). counted takes the whole phrase in both
-# forms, and refuses one whose verb cannot agree. The plugin check runs this
-# rule over each extension too.
+# forgets the verb ("1 need output"), and a choice between two words by a
+# count of one ("is" if n == 1 else "are") is the same rule written again.
+# counted takes the whole phrase in both forms, and refuses one whose verb
+# cannot agree; agreed says its words without the figure. The plugin check
+# runs this rule over each extension too.
 id: plural-said-by-counted
 language: python
 severity: error
-message: A plural is guessed from a letter.
-note: Write counted(n, "one", "many"), or {{ n|counted:"one,many" }} in a template.
+message: A plural is chosen by hand.
+note: Write counted(n, "one", "many") or agreed(n, "one", "many"), or {{ n|counted:"one,many" }} and {{ n|agreed:"one,many" }} in a template.
 ignores:
   - "**/tests/**"
   - "**/migrations/**"
+  # The automation worker runs on the standard library alone, without ui.
+  - "hq_runner/**"
 rule:
   kind: conditional_expression
-  all:
-    - has:
-        kind: string
-        regex: ^['"]e?s['"]$
-    - has:
-        kind: string
-        regex: ^(''|"")$
+  any:
+    - all:
+        - has:
+            kind: string
+            regex: ^['"]e?s['"]$
+        - has:
+            kind: string
+            regex: ^(''|"")$
+    # Words for one, never a thing named when there is one ("X failed"
+    # beside "3 jobs failed"), which is a choice of what to say.
+    - all:
+        - has:
+            kind: string
+            nthChild: 1
+            not:
+              has:
+                kind: interpolation
+        - has:
+            kind: comparison_operator
+            nthChild: 2
+            regex: '[!=]=\s*1$'
+        - has:
+            kind: string
+            nthChild: 3

@@ -10,4 +10,4 @@ options and each choice's are their Parts' (switch_tags).
   <nav aria-label="{{ label }}"><ul role="list">{{ content|safe }}</ul></nav>
   {% if summary %}{% muted element="p" %}{{ summary|safe }}{% endmuted %}{% endif %}
 </div>
-{% partialdef choice %}<li><a href="{{ url }}"{% if current %} aria-current="page"{% endif %}><span class="scope-chip">{% if mark %}<span aria-hidden="true">{{ mark|breakable }}</span>{% endif %}{{ content|safe }}{% if note %}{% muted %}{{ note|breakable }}{% endmuted %}{% endif %}</span>{% if counted %}<span class="count">{{ count|breakable }}</span>{% endif %}</a></li>{% endpartialdef %}
+{% partialdef choice %}<li><a href="{{ url }}"{% if current %} aria-current="page"{% endif %}><span class="scope-chip">{% if mark %}<span aria-hidden="true">{{ mark }}</span>{% endif %}{{ content|safe }}{% if note %}{% muted %}{{ note }}{% endmuted %}{% endif %}</span>{% if counted %}<span class="count">{{ count }}</span>{% endif %}</a></li>{% endpartialdef %}

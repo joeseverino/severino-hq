@@ -11,7 +11,7 @@ four domains behind a click and then need a second one to go anywhere.
 {% if zones|length > 1 %}
   {% switch label="Domains" %}
     {% for other in zones %}
-      {% choice url=other.url current=other.current mark=other.pinned|yesno:"★," note=other.managed|yesno:",not managed" %}{{ other.zone|breakable }}{% endchoice %}
+      {% choice url=other.url current=other.current mark=other.pinned|yesno:"★," note=other.managed|yesno:",not managed" %}{{ other.zone }}{% endchoice %}
     {% endfor %}
   {% endswitch %}
 {% endif %}
@@ -35,7 +35,7 @@ four domains behind a click and then need a second one to go anywhere.
     {% elif domain.observed_only %}
       {% muted element="p" %}HQ can read this domain, but the credential it reads with cannot change it.{% endmuted %}
     {% endif %}
-  {% title %}{{ domain.name|breakable }} is not managed{% endnotice %}
+  {% title %}{{ domain.name }} is not managed{% endnotice %}
 {% endif %}
 
 {% comment %}
@@ -51,11 +51,11 @@ so the fact still works if the dialog does not open.
 {% endcomment %}
 {% card element="div" %}{% facts layout="band" label=domain.name %}
   {% for insight in domain.insights %}{% if not insight.notice %}
-    {% fact insight.label tone=insight.concern|yesno:"attention," %}{% if insight.url %}<a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="zone-{{ insight.label|slugify }}"{% endif %}>{{ insight.value|breakable }}</a>{% else %}{{ insight.value|breakable }}{% endif %}{% detail %}
+    {% fact insight.label tone=insight.concern|yesno:"attention," %}{% if insight.url %}<a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="zone-{{ insight.label|slugify }}"{% endif %}>{{ insight.value }}</a>{% else %}{{ insight.value }}{% endif %}{% detail %}
       {% if insight.concern %}<small>{% status "Needs attention" tone="attention" %}</small>{% endif %}
-      {% if insight.detail %}<small>{{ insight.detail|breakable }}</small>{% endif %}
-      {% for group in insight.links %}<small>{{ group.label|breakable }} {% for link in group.links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% endfor %}
-      {% if insight.note %}<small{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note|breakable }}</small>{% endif %}
+      {% if insight.detail %}<small>{{ insight.detail }}</small>{% endif %}
+      {% for group in insight.links %}<small>{{ group.label }} {% for link in group.links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% endfor %}
+      {% if insight.note %}<small{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note }}</small>{% endif %}
     {% endfact %}
   {% endif %}{% endfor %}
 {% endfacts %}{% endcard %}
@@ -64,7 +64,7 @@ so the fact still works if the dialog does not open.
 {% endif %}{% endfor %}
 
 {% for notice in domain.insights %}{% if notice.notice %}
-  {% notice tone="warning" %}<p>{{ notice.detail|breakable }}</p>{% title %}{{ notice.label|breakable:":" }} {{ notice.value|breakable }}{% endnotice %}
+  {% notice tone="warning" %}<p>{{ notice.detail }}</p>{% title %}{{ notice.label }}: {{ notice.value }}{% endnotice %}
 {% endif %}{% endfor %}
 
 {% comment %}
@@ -74,10 +74,10 @@ and sorted with the rest they would come first: the least interesting rows in
 the zone at the top of the page.
 {% endcomment %}
 {% section "Records" lede=records_lede %}
-  {% include "control_plane/_zone_records.html" with routing=record_rows.routing policy=record_rows.policy managed=domain.declaration ttl_set=ttl_set public_dns_enabled=public_dns_enabled %}
+  {% data_table records_table %}
 {% aside %}
   {% comment %}How old the records' reading is, beside the one way to add one.{% endcomment %}
-  {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}{% muted %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|breakable }}</span>{% endif %}{% endmuted %}{% endif %}{% endfor %}
+  {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}{% muted %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label }}</span>{% endif %}{% endmuted %}{% endif %}{% endfor %}
   {% comment %}
   No "adopt" button: the sweep adopts records in a managed domain
   (``zones.adopt_discovered_records``).

@@ -10,8 +10,6 @@ from collections.abc import Mapping
 from typing import Annotated, Any, NotRequired, TypedDict, cast
 
 from pydantic import (
-    AfterValidator,
-    BeforeValidator,
     ConfigDict,
     Field,
     Strict,
@@ -22,12 +20,12 @@ from pydantic import (
     WithJsonSchema,
     with_config,
 )
-from pydantic_core import PydanticKnownError
 
-from .command_fields import RequiredText
+from .command_fields import Checked, Reason, RequiredText
 from .integration_specs import TARGET_KINDS, CapabilitySpec
 from .json_schemas import json_schema
 from .moments import moment
+from .reasons import declared_only
 from .record_fields import RecordId
 from .refusal_status import Refusal, refusal_of
 
@@ -38,10 +36,11 @@ def _as_its_kind(value: str | int, info: ValidationInfo) -> str | int:
     kind = TARGET_KINDS.get((info.context or {}).get("target_kind") or "")
     if kind is None or not kind.pattern or not isinstance(value, str) or re.fullmatch(kind.pattern, value):
         return value
-    # Pydantic's own types, whose fixed words name the kind; a validator's own text is never shown.
-    if kind.coerce is int:
-        raise PydanticKnownError("int_parsing")
-    raise PydanticKnownError("string_pattern_mismatch", {"pattern": kind.pattern})
+    raise (_NOT_AN_ID if kind.coerce is int else _NOT_ITS_FORM).refused()
+
+
+_NOT_AN_ID = Reason("target_id", "must be the id of the record it acts on")
+_NOT_ITS_FORM = Reason("target_form", "must be in the form its schema's pattern gives")
 
 
 def _whole(value: Any) -> Any:
@@ -55,7 +54,7 @@ def _moment(value: str) -> str:
     """``value`` unchanged once it reads as a date and time: it is compared with the record's ``updated_at`` as written."""
 
     if moment(value, zero_is_never=False) is None:
-        raise ValueError("not a date and time")
+        raise ValueError
     return value
 
 
@@ -63,7 +62,7 @@ def _moment(value: str) -> str:
 # every request schema.
 type ExpectedUpdatedAt = Annotated[
     StrictStr,
-    AfterValidator(_moment),
+    Checked(_moment, Reason("expected_updated_at", "must be a date and time, as the record's updated_at says it")),
     # The whole schema: inside an alias, this replaces what a Field beside it would say.
     WithJsonSchema(
         {
@@ -88,8 +87,8 @@ class CallEnvelope(TypedDict):
     ]
     target: NotRequired[
         Annotated[
-            Annotated[RecordId, Strict(), BeforeValidator(_whole)] | Annotated[RequiredText, Strict()],
-            AfterValidator(_as_its_kind),
+            Annotated[RecordId, Strict(), Checked(_whole, mode="before")] | Annotated[RequiredText, Strict()],
+            Checked(_as_its_kind),
             Field(description="The record the command acts on, by its identifier."),
         ]
     ]
@@ -97,6 +96,7 @@ class CallEnvelope(TypedDict):
 
 
 ENVELOPE = TypeAdapter(CallEnvelope)
+declared_only(ENVELOPE.core_schema, "A call")
 ENVELOPE_SCHEMA: Mapping[str, Any] = json_schema(ENVELOPE)
 
 
@@ -104,8 +104,11 @@ def _sent(value: Any) -> Any:
     """``value``, refused where it is JSON's null: a field is left out, never sent as nothing."""
 
     if value is None:
-        raise ValueError("a field without a value is left out of the body")
+        raise _SENT.refused()
     return value
+
+
+_SENT = Reason("null_sent", "must be left out of the body rather than sent as null")
 
 
 @with_config(ConfigDict(extra="forbid"))
@@ -113,11 +116,12 @@ class _Body(TypedDict):
     """A request body's own form: its fields, a command that is an object, and nothing sent as null."""
 
     payload: NotRequired[dict[str, Any]]
-    target: NotRequired[Annotated[Any, AfterValidator(_sent)]]
-    expected_updated_at: NotRequired[Annotated[Any, AfterValidator(_sent)]]
+    target: NotRequired[Annotated[Any, Checked(_sent)]]
+    expected_updated_at: NotRequired[Annotated[Any, Checked(_sent)]]
 
 
 _BODY = TypeAdapter(_Body)
+declared_only(_BODY.core_schema, "A call's body")
 
 
 def read_body(name: str, body: Mapping[str, Any]) -> CallEnvelope | Refusal:

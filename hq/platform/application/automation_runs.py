@@ -15,7 +15,7 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError as Djan
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
-from pydantic import AfterValidator, Field, StrictStr, StringConstraints
+from pydantic import Field, StrictStr, StringConstraints
 
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.application.url_query import with_query
@@ -33,7 +33,7 @@ lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
-from .command_fields import Among, AmongNow, Describe, ForAgents, Names, NonEmpty
+from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .process_caches import kept
@@ -70,7 +70,7 @@ lazy from .resource_operations import (
 lazy from .routes import reverse
 lazy from .run_reads import RUNS
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
-lazy from .ui import ended
+lazy from .ui import agreed, ended
 lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs, run_url
 
 if TYPE_CHECKING:
@@ -133,13 +133,13 @@ type Hosts = Annotated[
         Annotated[
             StrictStr,
             StringConstraints(strip_whitespace=True, max_length=HOSTNAME_LENGTH, pattern=HOSTNAME_PATTERN),
-            AfterValidator(normalized_hostname),
+            Checked(normalized_hostname),
         ],
         ...,
     ],
     NonEmpty(),
     Field(max_length=64),
-    AfterValidator(sorted_unique),
+    Checked(sorted_unique),
     Names("machines"),
     # The label says it on the form, so the sentence is the agent's alone.
     Describe("", api="The machines to run it on, each by its name in HQ."),
@@ -428,7 +428,7 @@ def held_words(details: object, principal: Principal | None = None) -> HeldWords
     machines = [str(host) for host in details.get("machines") or ()]
     shared = [str(host) for host in details.get("shared") or ()]
     if shared:
-        busy = f"{get_text_list(shared, 'and')} {'is' if len(shared) == 1 else 'are'} busy with a run of “{title}”"
+        busy = f"{get_text_list(shared, 'and')} {agreed(len(shared), 'is', 'are')} busy with a run of “{title}”"
         sentence = f"{ended(f'{busy}, {since}')} A machine takes one run at a time, so ask again once that run ends."
     else:
         held = f"“{title}” already has a run on {get_text_list(machines, 'and')}, {since}"

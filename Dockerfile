@@ -10,7 +10,7 @@
 # mise is the release min_version names, from its image by digest
 # (lint:toolchain holds the tag to min_version).
 FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.11.9@sha256:9a182adba2584a6f5b29ddc1f2c7651c93694a5f829d74452b90214616baacf4 /usr/local/bin/mise /usr/local/bin/mise
+COPY --from=ghcr.io/jdx/mise:2026.11.11@sha256:14a30b9945ea5c2fbae70d8b6be8f2c8b2456698f2a258f3f6315f7784c84676 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
@@ -106,20 +106,14 @@ COPY --from=controller /out/ /
 
 
 # The automation worker's dependencies: the runner group alone, from the same
-# lock, complete, hashed and installed without resolving, as the build stage's.
-# Each installs from a wheel but PyYAML, which publishes none for this Python:
-# it builds from the sdist the lock hashes, its build backend pinned and hashed
-# by hq_runner/build-constraints.txt, and with no compiler here it builds as
-# pure Python.
+# lock, complete, hashed and installed from wheels without resolving, as the
+# build stage's.
 FROM locked AS runner-build
-COPY hq_runner/build-constraints.txt /build/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --locked --no-default-groups --only-group runner --no-emit-project \
         --format requirements-txt --output-file /tmp/runner.txt > /dev/null \
     && uv pip install --python /usr/local/bin/python --prefix /install \
-        --require-hashes --no-deps --only-binary :all: --no-binary pyyaml \
-        --build-constraints /build/build-constraints.txt --require-build-hashes \
-        -r /tmp/runner.txt
+        --require-hashes --no-deps --only-binary :all: -r /tmp/runner.txt
 # The Ansible collections hq_runner/collections.yml pins, by the ansible-galaxy
 # just installed: each archive is checked against the SHA-256 Galaxy publishes
 # for its release, and they land in the prefix the runner stage copies whole,

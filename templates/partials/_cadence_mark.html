@@ -1,0 +1,5 @@
+{% comment %}
+One period of a cadence matrix's row, given `week`: its mark, filled where it
+happened and dashed where nothing is known, its count where more than one,
+and what it says, tipped and read out.
+{% endcomment %}<span class="cadence-mark{% if week.hit %} is-hit{% elif week.no_data %} is-no-data{% endif %}" data-tip="{{ week.said }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count }}{% endif %}</span><span class="visually-hidden">{{ week.said }}</span>

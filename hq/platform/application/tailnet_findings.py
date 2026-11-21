@@ -20,7 +20,7 @@ from .finding_model import (
 from .finding_steps import Do, Run
 from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort, loopback_grants
 from .tone import Tone
-from .ui import counted, counted_forms, ended
+from .ui import agreed, counted, counted_forms, ended
 
 
 def _devices_join_without_approval(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -162,7 +162,7 @@ def _tailnet_dns_off_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
         says=lambda _node, resolvers: {
             "title": (
                 f"Tailnet DNS points at {', '.join(resolvers)}, which "
-                f"{'is not a tailnet address' if len(resolvers) == 1 else 'are not tailnet addresses'}"
+                f"{agreed(len(resolvers), 'is not a tailnet address', 'are not tailnet addresses')}"
             ),
             "explanation": (
                 "Devices reach it through a subnet router or the internet, so the DNS server sees them all as one device."

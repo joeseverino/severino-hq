@@ -261,15 +261,9 @@ was read and, while the bridge refuses the controller's sweep, why
 (`reading_facts.unjudged`, held for every rule by
 `test_no_rule_measures_an_aged_reading_from_now`).
 
-`hq/platform/application/unit_findings.py` raises, on the same node:
-
-| Finding | When | Severity |
-|---|---|---|
-| `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer, path or socket starts again |
-| `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer, path, socket or mount is not active | serious |
-| `unit-restarting` | systemd has restarted a service on its own at least ten times since it was last started, and it is not up: waiting to restart, starting, or active for less than ten minutes when read. Ten is above systemd's default start limit of five, so a service restarting faster than that is stopped and failed, `unit-failed`'s to say | serious |
-| `timer-stalled` | an active timer is not running its unit. Nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
-| `unit-state-unread` | the launcher mounted no answer, or the answer was refused, or the reading is too old to judge | attention |
+`hq/platform/application/unit_findings.py` raises its rules on the same
+node; the Checks page (`/infrastructure/findings/checks/`) lists each with
+its bars.
 
 The rules name no unit. `unit-not-installed` judges only the shipped set:
 deploying HQ sets up none of a restarting service another package installed,
@@ -296,11 +290,10 @@ contract admits a mount only as printable ASCII from a slash, with no bar. The
 launcher names the file whether or not it could be taken, so a table it could
 not read is a failed read that keeps the last one.
 
-`hq/platform/application/filesystem_findings.py` raises, on the same node:
-
-| Finding | When | Severity |
-|---|---|---|
-| `filesystem-nearly-full` | a filesystem had under 2 GiB free and under a tenth of its size, when read; one finding per machine names each | attention; serious when one had under 512 MiB and under 3% |
+`hq/platform/application/filesystem_findings.py` raises
+`filesystem-nearly-full` on the same node, one finding per machine naming
+each filesystem; the Checks page (`/infrastructure/findings/checks/`) holds
+its bars.
 
 Both a floor and a share must be crossed: a share alone flags a large disk with
 plenty left, and a floor alone flags every small partition, such as a 1 GiB
@@ -331,14 +324,9 @@ that does not answer, one older than version 5 included, is a refused part
 scoped to that connection, so every other edge's record still stands; the
 read fails only when no edge answered.
 
-`hq/platform/application/reboot_findings.py` raises, on the controller's
-machine node for `host.reboot` and on the machine an edge's connection
-reaches for `host.edge_reboot`:
-
-| Finding | When | Severity |
-|---|---|---|
-| `reboot-pending` | the machine waited on a restart, or had one scheduled, when read | attention |
-
+`hq/platform/application/reboot_findings.py` raises `reboot-pending` on the
+controller's machine node for `host.reboot` and on the machine an edge's
+connection reaches for `host.edge_reboot`.
 It says since when, for which packages, and when the restart is scheduled.
 Its steps read the package list, then schedule the restart with
 `shutdown -r 03:00`, or, when one is scheduled, show it with
@@ -512,18 +500,9 @@ config" is decided next to the deploy, recreate or edit that likely caused it.
 Each connection reports alone, and each report can be healthy while together
 they describe something that cannot work.
 `hq/platform/application/contradiction_findings.py` reads the walked paths and
-stored readings for these, polling nothing:
-
-| Rule | Two sides that disagree | Fix HQ offers |
-| --- | --- | --- |
-| `public-name-served-by-nothing` | Public DNS sends a name to a machine whose containers HQ reads; no proxy answers for it and no container there answers on a web port. A machine HQ reads no containers on is unknown, not unserved | Repoint the declared record; removal stays on its page |
-| `route-to-stopped-container` | A route ends at a container Docker reports not running | Repoint the declared proxy; `docker start` as a step |
-| `gate-guards-nothing` | A gate (`restricts`) names a host no DNS record answers | The provider console step |
-| `split-horizon-disagrees` | The public and internal records end on different machines | Repoint the declared rewrite |
-| `published-port-unfronted` | A container port answers the internet and no route leads to it | The compose change on its page |
-| `tag-granted-to-nobody` | A grant names a tag no read device carries | Edit the declared tailnet policy |
-| `served-certificate-not-held` | The controller found a consumer serving a certificate other than the one HQ installed | Install it again (reconcile) |
-| `service-wiring-incomplete` | A service's declarations: a name parked or pointing nowhere, two of one kind for one name, a proxied name no certificate covers, a proxy forwarding to an unknown machine (`services._faults`) | The service's page |
+stored readings for its rules, polling nothing; the Checks page
+(`/infrastructure/findings/checks/`) lists each with its bars and what
+resolves it.
 
 A machine where a container publishes 80 or 443 itself is never called
 unserved, since HQ cannot enumerate what it answers for. Removal is
@@ -691,6 +670,16 @@ instead: the production deploy, whether it passed its checks, and, for whether
 anything is newer, whether the default branch has moved past it. Which
 container is HQ's is derived (`hq_self.own_container`).
 
+An image no container runs is one to remove unless HQ keeps it
+(`docker_estate.kept_names`): HQ's own, whose earlier releases each deploy
+prunes, and each image the release pins under `deploy/` (the automation
+worker's, the dependency run's), which hq-host runs only from the copy the host
+holds. The finding about the rest removes them by name, never with `prune -a`.
+
+How many containers a machine has, and how many run, is counted once from the
+sweep (`ContainerCount`): the machine page, the machines list, the containers
+page and the dashboard all read it.
+
 The containers page, each container's page and each machine's container table
 show one `ImageStanding`. The action queue holds one item per affected image
 and version, and one for every image with a newer release.
@@ -770,8 +759,12 @@ failed.
 something newer published, and changes nothing. A plan holds:
 
 - the target by digest, and the size of the move;
-- the advisories and package vulnerabilities it clears or would bring (the two
-  digests' OSV readings compared);
+- which of the running version's known vulnerabilities (its advisories and
+  its urgent package findings, the set its title counts) it clears, and what
+  it would bring of its own (the two digests' OSV readings compared);
+- whether the move is recommended: it brings nothing of its own and, where
+  the running version is vulnerable, fixes something. A finding's title, its
+  action and its steps all read that one answer;
 - the writable mounts that would be snapshotted;
 - what would verify it (its health check, a request to each name it serves);
 - the steps;
@@ -809,7 +802,8 @@ Dependabot, secret scanning; `ALERT_PAGES`), the worst first.
 derived from the same record. Every repository is held to this: only you have
 access, deploy keys read-only and in use, a read-only workflow token that
 approves nothing, actions pinned to a commit, vulnerability alerts on, and no
-Actions variables. A public one is also held to what GitHub gives it besides:
+secret kept in an Actions variable (a name that says it holds a credential and
+not that it is public). A public one is also held to what GitHub gives it besides:
 pull requests required, the default branch protected from force pushes and
 deletion, secret scanning, push protection, code scanning. What a plan does
 not offer is "not available", never a failure. The queue holds one item per
@@ -947,9 +941,21 @@ reading it feeds and every resource kind a sweep reads. A kind with an
 - **Not connected**: the controller holds no connection that can read it.
 - **Never read**.
 
+A connection HQ reaches itself with no credential (a public registry, the
+weather service) folds in the same way what came through it: each reading
+whose `ObservationSpec.provider` or `readings.Kept.through` names its kind
+(`credential_sight.read_through`). Its state and age are those readings', and
+its cadence the slowest of theirs read on a clock.
+
 A readable kind older than its cadence allows reads **Out of date**
 (`hq.platform.application.freshness`). The services page's provider readings
 use the same words, through `credential_sight.standing`.
+
+A kind no sweep reads is read by the controller applying it. One whose
+provider declares `rechecked_every` (a certificate, whose installs change
+without HQ) is reconciled again once its reading falls due, and only reads
+**Out of date** once that check is a sweep's tolerance late. Any other holds
+what its last apply found until HQ changes it.
 
 A connection whose probe fails reports why as `failure`, a class the controller
 assigns where the request failed (`FailureClass`, `controller/runtime`). The

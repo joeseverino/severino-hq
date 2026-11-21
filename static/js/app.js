@@ -152,7 +152,7 @@ document.addEventListener("click", (event) => {
         if (count) counts.add(count);
       }
       const family = row.dataset.folded && document.getElementById(row.dataset.folded);
-      const familyCount = family?.querySelector("[data-queue-count]");
+      const familyCount = family?.querySelector(".count");
       if (familyCount) counts.add(familyCount);
       if (dismissing) row.querySelector(".row-expand[aria-expanded=true]")?.click();
       counts.forEach((count) => { count.textContent = String(Math.max(0, Number(count.textContent) + step)); });

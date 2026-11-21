@@ -12,7 +12,7 @@ from typing import Any, Self
 
 from .labels import dotted
 from .tone import Tone, Toned
-from .ui import ended
+from .ui import counted, ended
 lazy from . import dashboard
 lazy from .finding_model import Finding
 lazy from .standard_findings import worded
@@ -263,7 +263,7 @@ class Measurement:
         """How many checks pass, then what is wrong in each that fails: what a
         meter of the results says as one control."""
 
-        passing = f"{self.met} of {self.measured} {'check passes' if self.measured == 1 else 'checks pass'}"
+        passing = f"{self.met} of {counted(self.measured, 'check passes', 'checks pass')}"
         if not self.unmet:
             return passing
         return f"{passing}; {', '.join(result.check.unmet for result in self.unmet)}"

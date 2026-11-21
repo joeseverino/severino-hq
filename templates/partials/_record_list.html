@@ -15,14 +15,14 @@ entry needs interpreting rather than just identifying.
     <li>
       <span class="row-main">
         {% if row.category %}<span class="swatch-key cat-dot cat-{{ row.category }}" aria-hidden="true"></span>{% endif %}
-        {% if row.link %}<strong>{% entity row.link %}</strong>{% elif row.url and row.external %}<strong>{% entity row.url|outside label=row.title %}</strong>{% elif row.url %}<a href="{{ row.url }}"><strong>{{ row.title|breakable }}</strong></a>{% else %}<strong>{{ row.title|breakable }}</strong>{% endif %}
-        {% if row.detail %}{% muted %}{{ row.detail|breakable }}{% endmuted %}{% endif %}
+        {% if row.link %}<strong>{% entity row.link %}</strong>{% elif row.url and row.external %}<strong>{% entity row.url|outside label=row.title %}</strong>{% elif row.url %}<a href="{{ row.url }}"><strong>{{ row.title }}</strong></a>{% else %}<strong>{{ row.title }}</strong>{% endif %}
+        {% if row.detail %}{% muted %}{{ row.detail }}{% endmuted %}{% endif %}
         {% if row.badge %}{% status row.badge tone=row.status|default:"neutral" %}{% endif %}
       </span>
       {% if row.chips %}<span class="row-chips">{% for chip in row.chips %}{% status chip chip=True %}{% endfor %}</span>{% endif %}
-      {% if row.meta or row.at %}<span class="row-meta">{% if row.meta %}{{ row.meta|breakable }}{% endif %}{% if row.meta and row.at %}{% dot %}{% endif %}{% if row.at %}{{ row.at|when:"day" }}{% endif %}</span>{% endif %}
+      {% if row.meta or row.at %}<span class="row-meta">{% if row.meta %}{{ row.meta }}{% endif %}{% if row.meta and row.at %}{% dot %}{% endif %}{% if row.at %}{{ row.at|when:"day" }}{% endif %}</span>{% endif %}
       {% if row.actions %}<span class="row-actions">{% for action in row.actions %}{% include "partials/_page_action.html" with action=action extra="compact" only %}{% endfor %}</span>{% endif %}
-      {% if row.snippet %}<p class="row-snippet">{% for text, matched in row.snippet %}{% if matched %}<mark>{{ text|breakable }}</mark>{% else %}{{ text|breakable }}{% endif %}{% endfor %}</p>{% endif %}
+      {% if row.snippet %}<p class="row-snippet">{% for text, matched in row.snippet %}{% if matched %}<mark>{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}</p>{% endif %}
     </li>
   {% empty %}
     <li class="row-empty">{% include "partials/_empty_state.html" with message=empty|default:"None." inline=True only %}</li>

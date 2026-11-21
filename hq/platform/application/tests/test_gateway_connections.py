@@ -69,11 +69,12 @@ class GatewayConnectionTests(TestCase):
             reported_weather("41.8781,-87.6298", city="Chicago", state="IL"),
             observed_at=timezone.now(),
         )
+        # An address RDAP answered for and the resolver did not.
+        readings.record(readings.public_address("192.0.2.1"), {"address": "192.0.2.1", "allocation": {"name": "NET"}})
 
     def test_host_gateways_emit_from_the_domain_registry(self):
         names = set(held_graph().connections)
 
-        self.assertLessEqual({"hq.public_registries", "hq.nws"}, names)
         # The contact inbox is read and written by the controller through the
         # Cloudflare API connection, so it has no connection of its own here.
         self.assertNotIn("hq.cloudflare_d1", names)
@@ -84,8 +85,9 @@ class GatewayConnectionTests(TestCase):
     def test_safe_runtime_catalog_contains_relationships_and_no_tokens(self):
         items = list_resource("connections", principal=OPERATOR, fields=[WHOLE_RECORD])["items"]
 
+        found = {item["kind"]: item["lifecycle"] for item in items}
+        self.assertEqual((found["nws"], found["rdap"], found["public_dns"]), ("ready", "ready", "unreachable"))
         nws = next(item for item in items if item["family"] == "hq.nws")
-        self.assertEqual(nws["status_label"], "keyless")
         self.assertEqual(nws["targets"][0]["label"], "Dashboard weather")
         # No command performs a weather read, so the abilities name none. They
         # named the privileged controller refresh, which resolved and so passed

@@ -6,7 +6,7 @@ from datetime import date
 from django.test import TestCase
 
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, gather
-from hq.platform.application.card_items import Kpi
+from hq.platform.application.card_items import Counted, Kpi
 from hq.platform.application.dashboard import dashboard_highlights, work_queue
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import DERIVATIONS, counting
@@ -47,8 +47,8 @@ ITEM = Finding(
     steps=(Do("Look into it."),),
 )
 CARDS = (
-    {"id": "alpha-open", "label": "Open", "value": 3, "url": "/alpha/"},
-    {"id": "alpha-late", "label": "Late", "value": 1, "url": "/alpha/"},
+    {"id": "alpha-open", "label": Counted(3, "Open item", "Open items"), "url": "/alpha/"},
+    {"id": "alpha-late", "label": Counted(1, "Late item", "Late items"), "url": "/alpha/"},
 )
 
 
@@ -68,7 +68,7 @@ def _sources():
     return (CalendarSource(id="example.alpha.reviews", label="Reviews", events=_events),)
 
 
-OVERVIEW = DomainOverview("Current state.", "/alpha/", (Kpi("Open", 3),))
+OVERVIEW = DomainOverview("Current state.", "/alpha/", (Kpi("Open", "3"),))
 
 
 def _with_calendar(manifest, contribution):

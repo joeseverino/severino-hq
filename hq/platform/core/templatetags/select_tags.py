@@ -48,8 +48,9 @@ slotted(
         rules="""
         A choice of one drawn from data is `{% select "rule" choices chosen=rule label="What it sets"
         tone=tone %}`: a `<select>` named by its first argument, an option for each `(value, words)` of
-        its second, the chosen one selected, `id` the one a `{% control_label %}` names it by, and with
-        no visible label `label` the name a reader hears (a table cell's setting). A value alone is its
+        its second, the chosen one selected, and `label` the name a reader hears (a table cell's
+        setting). With an `id` its `label` is shown, the `{% control_label %}` drawn before it for that
+        id, as a question's fields are named (From, To, Port). A value alone is its
         own words (a year, a port), and `submit_on_change=True` sends the form as the choice changes,
         for a bar whose one choice is its whole query. `tone` says the choice in a status tone, the
         status part's ink, edged in it unless neutral, as an agent's rule reads "On" in the good tone and
@@ -62,7 +63,6 @@ slotted(
         partial=SELECT_PARTIAL,
         function=select,
         example=tags.SELECT,
-        states=tags.SELECT_STATES,
     ),
     library=register,
 )

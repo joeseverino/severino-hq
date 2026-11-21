@@ -846,7 +846,7 @@ measured on it instead, once, in its clone's git config
 (`git config hq.gateTokens <tokens>`), which `tools/gate/room.py` reads
 before the fallback. mise's task lock pools take a count fixed where the task
 declares it, all or none with no queue
-([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.9/src/task/task_lock.rs)),
+([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.11/src/task/task_lock.rs)),
 so they hold neither a share weighed from its run nor a share of several
 waiting among shares of one. A share is the counting semaphore the kernel's flock(2) makes, as
 `flock -s` and GNU make's jobserver tokens do: it takes the lock `heavy` shared,
@@ -1063,16 +1063,22 @@ there.
 Beside each screenshot is a Playwright trace of the same name (`.zip`): what
 the failed subtest did, each step with the page as it stood.
 `uv run --group browser playwright show-trace <file>` opens it. CI uploads
-every such folder of a failed gate.
+every such folder.
 
-A failed subtest says its findings whole, in JSON by check, and ends with the
-`dev:look` that finds them again on that page, run as printed: the engine,
-the width, script, the palette, what was opened and any sheet the test laid
-over it. A finding the test already reported is not reported again; the
-test's closing lines list every place it was found. After the slowest
-classes, the run prints two ledgers: each check's time in the page, and each
-rule's time per subtest, each row with where it was slowest. They fail
-nothing.
+A layout defect fails once, however many classes, engines, widths and
+shares found it (`hq/platform/core/verdicts.py`). A subtest whose check finds
+something records each finding with where it was found (the engine, the
+class, the page, the width and the state) and the Part that draws what it
+names: the Part the check measures, else the Part owning the first class the
+finding names. The run then fails once for each defect, a rule broken where
+one Part draws (or, where no Part does, findings alike but for their
+numbers): its rule, its Part, that Part's file (the one place to fix), each
+finding with every place, and the `dev:look` that finds it again, run as
+printed. CI's shares write their findings to `HQ_BROWSER_FINDINGS` instead, and its
+Browser verdict job fails once per defect over every leg's. A `dev:look`
+that fails says its findings the same way. After the slowest classes, the
+run prints two ledgers: each check's time in the page, and each rule's time
+per subtest, each row with where it was slowest. They fail nothing.
 
 A check is declared once, beside its probe: an entry of its probe module's
 `CHECKS` (`hq/platform/core/tests/browser/probes/__init__.py` says what an
@@ -1083,9 +1089,12 @@ and markup it must pass (`clear`), and one test walks them all in each engine
 (`hq/platform/core/tests/browser/plants.py`), so a check needs no test of its
 own.
 
-A check selects markup only through `SELECTORS`, and
-`hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
-template renders.
+A check selects markup only through `SELECTORS`, handing a selector to the
+page through `css` (`hq/platform/core/tests/browser/selectors.py`), which
+fails where the selector matches nothing on a page the check asks it of,
+naming the part it belongs to and the fix. A selector some pages lack (one a
+sweep reads on every page) is declared `optional`, and is then held only on
+its part's catalog entry.
 
 A browser test that fails only sometimes is a race a reader can meet.
 Reproduce it by taking the reader's steps back to back, which opens the race

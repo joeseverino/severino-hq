@@ -34,6 +34,7 @@ from .record_errors import PolicyError, RecordNotFound
 from .refusal_codes import Code
 from .refusal_status import Refusal
 from .sessions import SIGN_OUT, SignOutCommand, sign_out
+from .ui import ended
 
 logger = logging.getLogger("severino.agents")
 
@@ -84,6 +85,8 @@ class AgentRefusal:
 
     code: Code
     reason: str
+    # What the thing that refused said, which its audit row keeps as well.
+    detail: str = ""
 
     @property
     def refusal(self) -> Refusal:
@@ -117,9 +120,6 @@ _DEVICE_REFUSALS = {
     DeviceStanding.BLOCKED: DEVICE_BLOCKED,
 }
 _UNPLACED_REFUSALS = {Code.DEVICE_UNKNOWN: DEVICE_UNKNOWN, Code.TAILNET_UNAVAILABLE: TAILNET_UNAVAILABLE}
-# The codes a call the tailnet could not place is refused with, which the
-# Agents page reads back as the addresses an agent was refused from.
-UNPLACED_CODES = frozenset(_UNPLACED_REFUSALS)
 
 
 def unplaced(refused: Code, detail: str = "") -> AgentRefusal:
@@ -128,7 +128,8 @@ def unplaced(refused: Code, detail: str = "") -> AgentRefusal:
     refusal = _UNPLACED_REFUSALS[refused]
     if not detail:
         return refusal
-    return AgentRefusal(refusal.code, f"{refusal.reason} tailscaled said: {detail}")
+    said = ended(f"tailscaled said: {detail}")
+    return AgentRefusal(refusal.code, f"{refusal.reason} {said}", said)
 
 
 def refusal(principal: Principal) -> AgentRefusal | None:

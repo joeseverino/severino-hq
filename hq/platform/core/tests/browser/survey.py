@@ -3,14 +3,20 @@ declare them (`probes/__init__.py` says how), how a reading becomes
 findings, and how a page is opened for them to read what its folds hold."""
 
 import importlib
+import inspect
 import pkgutil
+import re
 from collections.abc import Callable, Mapping
-from functools import partial
+from functools import cache, partial
+from pathlib import Path
 from typing import Any, override
 
+from django.conf import settings
 from django.utils.text import slugify
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.core.template_contract import parts
+from hq.platform.core.template_parts import Part
 from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.probes import Check, Example
 from hq.platform.core.tests.browser.reading import _probe
@@ -119,6 +125,42 @@ def findings_of(check, returned, value, drawn=None, on=""):
     if drawn is declared.part and not value["read"]:
         found.append(f"measured nothing on {on}, which draws {declared.part.name or declared.part.partial}")
     return found
+
+
+# A class an element is named by in a finding (`probes/describe.py`'s `describe`).
+_NAMED_CLASS = re.compile(r"\.(-?[_a-zA-Z][\w-]*)")
+
+
+@cache
+def _owners() -> dict[str, Part]:
+    """Each class a Part writes as its own, by the one Part that owns it
+    (`template_contract.parts` refuses two owning one)."""
+
+    return {word: part for part in parts() for word in part.owned()}
+
+
+def _owner(word: str) -> Part | None:
+    owners = _owners()
+    return owners.get(word) or next(
+        (part for owned, part in owners.items() if owned.endswith("*") and word.startswith(owned[:-1])), None
+    )
+
+
+def drawn_by(check: str, said: str) -> tuple[str, str]:
+    """The Part that draws what a finding of ``check`` names, and the file
+    that draws it, the one place to fix: the Part the check measures, else
+    the owner of the first class the finding names that one Part owns; empty
+    for markup no Part owns."""
+
+    declared = CHECKS.get(check.partition(", with ")[0])
+    part = declared.part if declared is not None and declared.part is not None else None
+    part = part or next(filter(None, map(_owner, _NAMED_CLASS.findall(said))), None)
+    if part is None:
+        return "", ""
+    if part.partial:
+        return part.name or part.partial, f"templates/{part.files()[0]}"
+    source = inspect.getsourcefile(part.function) if part.function else None
+    return part.name, str(Path(source).relative_to(settings.BASE_DIR)) if source else ""
 
 
 # A region waiting on its answer: fragment.js marks one busy until then, and a

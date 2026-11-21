@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from numbers import Number
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .card_items import Kpi, TimelineItem
 from .chart_numbers import (
@@ -24,6 +24,9 @@ from .drawings import LegendKey
 from .labels import dotted, plural
 from .money import signed_number
 from .tone import Tone
+
+if TYPE_CHECKING:
+    from .freshness import Freshness
 
 # An advisory's severity as the tone it is drawn in, wherever one is listed:
 # critical and high serious, medium attention, the rest neutral. A weather
@@ -98,8 +101,15 @@ def counted(count: int, one: str, many: str | None = None) -> str:
     ("entry" counts as "entries"); a phrase has a verb, and a verb cannot be
     pluralized by adding a letter.
     """
+    return f"{count:,} {agreed(count, one, many)}"
+
+
+def agreed(count: int, one: str, many: str | None = None) -> str:
+    """``counted``'s words without the figure, for a phrase that agrees with a
+    count said elsewhere: "X and Y are in place", "fix them"."""
+
     one, many = counted_forms(one, many)
-    return f"{count:,} {one if count == 1 else many}"
+    return one if count == 1 else many
 
 
 def measured(value: Decimal | float | str | None, unit: str, places: int | None = None, *, plus: bool = False) -> str:
@@ -160,8 +170,10 @@ def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:
     if not one.strip():
         raise ValueError("A count needs the words it counts.")
     if many is None:
-        if " " in one.strip():
-            raise ValueError(f"Give the plural of {one!r}: a phrase has a verb to agree.")
+        # Only one word is pluralized by a rule; a phrase or a list of forms
+        # ("mount,mounts") passed as one argument is said by the caller.
+        if not re.fullmatch(r"[\w-]+", one.strip()):
+            raise ValueError(f"Give the plural of {one!r} as its own argument.")
         many = plural(one)
     return one, many
 
@@ -826,6 +838,22 @@ class DomainOverview:
     # The window every KPI shares, such as "Latest 4 weeks". Said once beside
     # the domain's name rather than repeated in each label.
     period: str = ""
+    # How current the data every figure is drawn from is, judged by its kind's
+    # cadence (``hq_sdk.reads.freshness``), for a domain whose data arrives
+    # dated (an export) rather than read today.
+    reading: Freshness | None = None
+
+    @property
+    def window(self) -> str:
+        """What the head says beside the domain's name: its window while its
+        data is current, else how old that data is, so a window whose data
+        ended long ago is never called the latest."""
+
+        if self.reading is None or not self.reading.due:
+            return self.period
+        if self.reading.observed_at is None:
+            return self.reading.label
+        return dotted(self.reading.last_read, "out of date" if self.reading.stale else "")
 
 
 def stacked_bar_chart(

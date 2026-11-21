@@ -7,16 +7,7 @@ from django.template import RequestContext, Template, TemplateSyntaxError
 from django.test import RequestFactory, SimpleTestCase
 
 from hq.platform.application.markup_testing import all_elements
-
-EDITED = (
-    '{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Run" "identifier" %}{% table_heading "Miles" "numeric" %}'
-    '{% table_heading "Distance check" "control" %}</tr></thead><tbody>'
-    '{% for key, miles in rows %}<tr data-probe="{{ key }}"><td><strong>{{ key }}</strong></td><td>{{ miles }}</td>'
-    '<td>{% row_editor form key label="Correct distance" action="/example/distance/" verb="Save distance"'
-    " distance_miles=miles %}</td></tr>{% endfor %}"
-    "</tbody></table>{% endtable_region %}"
-)
+from hq.platform.application.tables import Cell, DataTable, Row, RowEditor, TableColumn
 
 
 class ExampleDistanceForm(forms.Form):
@@ -24,10 +15,31 @@ class ExampleDistanceForm(forms.Form):
     reason = forms.CharField(required=False)
 
 
-def draw(address, form=None, source=EDITED):
+def draw(address, form=None, field="distance_miles"):
+    form = form or ExampleDistanceForm()
+    columns = (
+        TableColumn("Run", kind="identifier"),
+        TableColumn("Miles", kind="numeric"),
+        TableColumn("Distance check", kind="control"),
+    )
+    rows = tuple(
+        Row(
+            (
+                Cell(key, name=True),
+                Cell(miles),
+                Cell(
+                    editor=RowEditor(
+                        form, key, "Correct distance", "/example/distance/", "Save distance", {field: miles}
+                    )
+                ),
+            ),
+            data={"probe": key},
+        )
+        for key, miles in (("example-01", "3.10"), ("example-02", "5.00"))
+    )
     request = RequestFactory().get(address)
-    context = {"form": form or ExampleDistanceForm(), "rows": [("example-01", "3.10"), ("example-02", "5.00")]}
-    return Template(source).render(RequestContext(request, context))
+    table = DataTable("Example runs", columns, rows)
+    return Template("{% data_table table %}").render(RequestContext(request, {"table": table}))
 
 
 def tagged(html, tag):
@@ -108,7 +120,5 @@ class RowEditorTests(SimpleTestCase):
         self.assertIn(error.attrs["id"], fields["distance_miles"].attrs["aria-describedby"].split())
 
     def test_a_value_for_a_field_the_form_lacks_is_refused(self):
-        source = EDITED.replace("distance_miles=miles", "miles=miles")
-
         with self.assertRaisesMessage(TemplateSyntaxError, "miles"):
-            draw("/example/runs/?edit=example-01", source=source)
+            draw("/example/runs/?edit=example-01", field="miles")

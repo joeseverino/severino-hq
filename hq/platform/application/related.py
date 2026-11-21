@@ -60,7 +60,8 @@ def assets(rows: Iterable[Any]) -> Mentions:
         "Assets",
         tuple(
             Mention(
-                entity_link("asset", row.slug, label=row.item_name), money(row.total_cost) if row.total_cost else ""
+                entity_link("asset", row.slug, label=row.item_name),
+                money(row.total_cost) if row.total_cost is not None else "",
             )
             for row in rows
         ),

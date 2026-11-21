@@ -32,7 +32,7 @@ class AuditQuery(BoundedQuery):
         default=None, max_length=200, description="Only the rows about the record with this key; absent, every row."
     )
     on: Day | None = Field(default=None, description="Only the rows of this day, in HQ's time zone; absent, every day.")
-    awaiting: bool = Field(default=False, description="True for only the requests still waiting for a person.")
+    awaiting: bool = Field(default=False, description="True for only the requests still waiting for an operator.")
     events: bool = Field(
         default=False,
         description="True for one row per operation, its newest of those kept, in place of every row it wrote.",

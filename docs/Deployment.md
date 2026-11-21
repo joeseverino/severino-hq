@@ -333,7 +333,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-web.service` | the web container; the only thing that starts it. Once HQ is ready, a health poll that reads unhealthy stops it and fails the unit, which restarts it, and a supervisor or health read that hangs for 90 seconds misses the watchdog (`WatchdogSec=`), which does the same |
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
 | `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
-| `severino-hq-glance.service` / `.path` | `hq-controller --glance` beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |
+| `severino-hq-glance.service` / `.path` | `hq-controller --glance`, the only pass that reads a dashboard panel, beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
@@ -393,9 +393,7 @@ journalctl -u severino-hq-glance.service -o short-precise --since -10min
 
 A run's lines sit between systemd's `Starting` and `Finished` (or `Failed`)
 lines for the unit; `grep controller.glance.stage` keeps the stages, and the
-`step=glance` stage is the whole reading. The same events appear in
-`journalctl -u severino-hq-controller.service`, where a controller pass reads
-its glance before it sweeps.
+`step=glance` stage is the whole reading.
 
 ## A deploy
 
@@ -576,6 +574,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `HQ_TEST_STALL_SECONDS` | development | seconds a test process may go without progress before it prints what it is running, every stack and the browser's log, and fails that test; 300 when unset, `0` turns it off; a measured run of tests with no progress for twice it is stopped |
 | `HQ_TEST_MARKS` | development | the folder each test process leaves the test it last began in, for the measurer that stops a run with no progress; set by `tools/lib/measured` |
 | `HQ_BROWSER_ENGINE` | development | the engine a run of browser tests draws in, installed as the run starts: `webkit` by default, or `chromium` or `firefox` |
+| `HQ_BROWSER_FINDINGS` | development | the folder a share of CI's browser run writes its findings to, which the Browser verdict job reads; unset, the run fails on its own findings; set by CI |
 | `HYPOTHESIS_PROFILE` | development | the Hypothesis profile every property runs under: `dev` by default, `ci` where Hypothesis detects CI |
 | `HQ_TEST_REPORTS` | development | the folder a gate names for a test run to write each failed test into, with its exception and traceback; set by `tools/gate/verdict.py` |
 

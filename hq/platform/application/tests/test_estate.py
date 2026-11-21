@@ -251,22 +251,22 @@ class EstateCardTests(TestCase):
         with projection_scope():
             return {card["id"]: card for card in cards(principal=cli_principal())}
 
-    def listed(self) -> str:
+    def listed(self) -> int:
         from ..connection_catalog import connection_total
 
         with projection_scope():
-            return str(connection_total(principal=cli_principal()))
+            return connection_total(principal=cli_principal())
 
     def test_every_figure_links_to_its_page_and_the_nearest_expiries_to_their_subject(self):
         found = self.cards()
 
-        self.assertEqual(found["hq.estate.machines"]["value"], "1")
+        self.assertEqual(found["hq.estate.machines"]["label"].count, 1)
         self.assertIn("1", found["hq.estate.machines"]["detail"])
         self.assertEqual(found["hq.estate.machines"]["url"], reverse("control_plane:machines"))
         self.assertEqual(found["hq.estate.services"]["url"], reverse("control_plane:services"))
-        self.assertEqual(found["hq.estate.domains"]["value"], "1")
+        self.assertEqual(found["hq.estate.domains"]["label"].count, 1)
         self.assertEqual(found["hq.estate.domains"]["url"], reverse("zones:index"))
-        self.assertEqual(found["hq.estate.connections"]["value"], self.listed())
+        self.assertEqual(found["hq.estate.connections"]["label"].count, self.listed())
         self.assertIn("example-ssh", found["hq.estate.connections"]["detail"])
         # One connection with a problem leads to its own row.
         self.assertEqual(
@@ -299,7 +299,7 @@ class EstateCardTests(TestCase):
 
         card = self.cards()["hq.estate.connections"]
 
-        self.assertEqual(card["value"], self.listed())
+        self.assertEqual(card["label"].count, self.listed())
         self.assertEqual(card["url"], reverse("control_plane:connections"))
         self.assertNotIn("detail", card)
         self.assertNotIn("status", card)
@@ -464,12 +464,15 @@ class CertificateListTests(TestCase):
 
 
 class StaleGlanceTests(TestCase):
-    def test_a_reading_older_than_its_cadence_is_shown_as_of_its_age_and_steps_aside(self):
+    def test_an_old_reading_keeps_its_place_until_its_ask_goes_unanswered(self):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
         machine_spec = declare("example-host", "machine", {"name": "example-host"})
-        from hq.domains.control_plane.models import DashboardMachine
+        from hq.domains.control_plane.models import DashboardMachine, DashboardRefreshRequest
 
         DashboardMachine.objects.create(machine=machine_spec, position=0)
+        ProviderConnection.objects.create(
+            connection_ref="example-ssh", controller_id="example-host", provider="ssh", observed_at=timezone.now()
+        )
         readings.record(
             readings.machine_telemetry("example-host"),
             reported_machine("example-host", host=HOST),
@@ -480,42 +483,17 @@ class StaleGlanceTests(TestCase):
             reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
             observed_at=timezone.now() - timedelta(minutes=1),
         )
+        machine = f"machine-{machine_spec.pk}"
 
+        # Aged while nobody looked: shown with its age, in its place.
         panels = dashboard_panels()
-
-        self.assertEqual([panel["id"] for panel in panels][-1], f"machine-{machine_spec.pk}")
-        old = panels[-1]
-        self.assertTrue(old["outdated"])
-        self.assertFalse(panels[0]["outdated"])
+        self.assertEqual(panels[0]["id"], machine)
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
         self.assertTrue(elements(html, "time"))
 
-    def test_a_current_reading_is_not_outdated(self):
-        from ..freshness import DASHBOARD_GLANCE, stale_after
-
-        DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        readings.record(
-            readings.weather("41.8781,-87.6298"),
-            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
-            observed_at=timezone.now() - stale_after(DASHBOARD_GLANCE) + timedelta(minutes=1),
-        )
-
-        weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
-
-        self.assertFalse(weather["outdated"])
-
-
-class OldGlanceTests(TestCase):
-    def test_an_old_reading_stays_on_the_dashboard_with_its_age(self):
-        DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        readings.record(
-            readings.weather("41.8781,-87.6298"),
-            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
-            observed_at=timezone.now() - timedelta(days=20),
-        )
-        weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
-
-        self.assertTrue(weather["outdated"])
+        # Its refresh went unanswered: out of date, and it steps aside.
+        DashboardRefreshRequest.objects.create(panel_id=machine, requested_at=timezone.now() - timedelta(minutes=5))
+        self.assertEqual([panel["id"] for panel in dashboard_panels()][-1], machine)
 
 
 class ActionItemTests(TestCase):
@@ -800,5 +778,5 @@ class ConnectionFigureTests(TestCase):
             listed = connections_context(principal=admin).connection_count
 
         self.assertIn("hq.estate.machines", found)
-        self.assertEqual(found["hq.estate.connections"]["value"], str(listed))
+        self.assertEqual(found["hq.estate.connections"]["label"].count, listed)
         self.assertTrue(all(card["url"] for card in found.values()))

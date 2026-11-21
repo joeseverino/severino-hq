@@ -39,7 +39,7 @@ class CheckPart(TypedDict):
         Describe(ended(f"Where it stands: {listed((*Standing, INTENDED))}; the last is failed on purpose")),
     ]
     limited: Annotated[bool, Describe("Met, with a limit the reader should see.")]
-    serious: Annotated[bool, Describe("Whether failing it lets someone or something gain reach.")]
+    serious: Annotated[bool, Describe("Whether failing it lets an attacker gain reach.")]
     detail: Annotated[str, Describe("Why it was decided so, or why it is failed on purpose, in a sentence.")]
     evidence: Annotated[str, Describe("What it was decided from, or why HQ could not read it; empty for none.")]
     why: Annotated[str, Describe("Why it matters, in a sentence.")]
