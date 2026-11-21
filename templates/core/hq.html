@@ -84,22 +84,7 @@ row in the flow.
   {% if work.unread %}
     {% muted element="p" %}{{ work.unread }}{% endmuted %}
   {% elif work.jobs %}
-    {% table_region "Jobs" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Unit" "identifier" local_sort=True %}{% table_heading "Runs" "identifier" local_sort=True drop=3 %}{% table_heading "Last run" "status" local_sort=True drop=2 %}{% table_heading "Result" "status" css="key-col" local_sort=True %}{% table_heading "Next run" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
-        <tbody>
-          {% for job in work.jobs %}
-            <tr>
-              <td>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}</td>
-              <td>{% present job.runs %}{% if job.runs_unit %}<code>{{ job.runs }}</code>{% else %}{{ job.runs }}{% endif %}{% endpresent %}</td>
-              <td>{{ job.last_run|when:"ago" }}</td>
-              <td>{% status job.result tone=job.tone %}</td>
-              <td class="optional-col">{{ job.next_run|when }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
+    {% data_table work.jobs_table %}
   {% endif %}
   {% if work.scheduled %}
     {% table_region "Scheduled work" %}
@@ -122,21 +107,7 @@ row in the flow.
   {% if work.renderers_unread %}
     {% muted element="p" %}{{ work.renderers_unread }}{% endmuted %}
   {% elif work.renderers %}
-    {% table_region "Credentials refresh" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Credentials refresh" "identifier" local_sort=True %}{% table_heading "Result" "status" css="key-col" local_sort=True %}{% table_heading "Tried" "status" local_sort=True drop=2 %}{% table_heading "Last confirmed current" "status" local_sort=True drop=1 %}</tr></thead>
-        <tbody>
-          {% for item in work.renderers %}
-            <tr>
-              <td><code>{{ item.name }}</code></td>
-              <td>{% status item.result tone=item.tone %}</td>
-              <td>{{ item.attempted|when:"ago" }}</td>
-              <td>{{ item.succeeded|when:"ago" }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
+    {% data_table work.renderers_table %}
   {% endif %}
 {% aside %}{% if work.jobs and work.read_at and not work.unread %}<span class="count">{% include "partials/_reading_age.html" with at=work.read_at only %}</span>{% endif %}
 {% endsection %}

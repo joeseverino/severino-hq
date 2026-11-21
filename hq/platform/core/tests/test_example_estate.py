@@ -346,7 +346,7 @@ class WalkedStatesTests(TestCase):
         expense = Expense.objects.get(vendor=vendor, item=item)
         page = self.walked(reverse("receipts:match", args=[UNFILED_RECEIPT]))
 
-        self.assertEqual([match for match, _actions in page.context["matches"]], [expense])
+        self.assertEqual(len(page.context["matches"].rows), 1)
         self.assertIn(str(expense.pk), [field.attrs.get("value") for field in select(page, "name", "expense_id")])
 
     def test_the_photographed_receipt_s_page_draws_its_picture(self):

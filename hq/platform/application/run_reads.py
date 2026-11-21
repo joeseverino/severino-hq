@@ -6,6 +6,7 @@ it, and nothing more.
 """
 
 import uuid
+from collections.abc import Mapping
 from datetime import timedelta
 from typing import Annotated, Any, Literal, TypedDict
 
@@ -19,6 +20,7 @@ from .automation_runs import CORRELATION_CHARACTER, CORRELATION_LONGEST
 from .describe import Describe, listed
 from .integration_specs import ListFilter, ListRead, ListSort, ResourceSpec
 from .managed_records import AskedAt
+from .moments import moment
 from .projection import iso, page_of
 from .record_errors import RecordNotFound
 from .resources import BoundedQuery, SearchText
@@ -26,6 +28,7 @@ from .security import Capability
 from .tone import Tone
 from .ui import ended
 from .work_runs import (
+    RunEvidence,
     WorkRun,
     asked_with,
     hydrated,
@@ -179,6 +182,25 @@ def _evidence(run: WorkRun) -> dict[str, Any]:
         ],
         "matched": evidence.matched,
     }
+
+
+def evidence_of(item: Mapping[str, Any]) -> RunEvidence:
+    """What a listed piece of work shows for itself, read back from its item."""
+
+    return RunEvidence(
+        hosts=tuple(item["hosts"]),
+        correlation=item["correlation"],
+        worker=item["worker"],
+        lease_until=moment(item["lease_until"]),
+        attempts=item["attempts"],
+        events=tuple(item["events"]),
+        stated=tuple(item["stated"]),
+        expected=item["expected"],
+        consumers=(
+            *({**served, "matches_expected": False} for served in item["affected"]),
+            *({"matches_expected": True} for _ in range(item["matched"])),
+        ),
+    )
 
 
 def _item(run: WorkRun) -> dict[str, Any]:

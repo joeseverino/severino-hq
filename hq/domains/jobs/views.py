@@ -1,5 +1,6 @@
 """Where a job says what it is doing, and where they are all listed."""
 
+from datetime import timedelta
 from functools import cached_property
 from typing import override
 
@@ -11,19 +12,27 @@ from django.views.generic import DetailView, TemplateView, View
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction, PageBadge, RecordPageMixin, RouteNamed
 from hq.platform.application.security import web_principal
-from hq.platform.application.tables import TableColumn
+from hq.platform.application.tables import Cell, Row, TableColumn
 from hq.platform.application.tone import Tone
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import AskMixin
 lazy from hq.platform.application.automation_runs import AGAIN, cancel_action
 lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.labels import lower_first
-lazy from hq.platform.application.moments import moment
+lazy from hq.platform.application.moments import duration, moment
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.run_pages import run_context
+lazy from hq.platform.application.run_reads import evidence_of
 lazy from hq.platform.application.work_runs import RUN, operation_of
 
 from .models import Job, JobState
+
+
+def _ran_for(seconds: float | None) -> str:
+    """How long a piece of work ran, from the one owner of a run time; "" when unknown."""
+
+    return "" if seconds is None else duration(timedelta(seconds=seconds), short=True)
+
 
 # A run's tone (``JobState``'s) in the notice's own names for it.
 NOTICE_TONES = {Tone.SERIOUS: "error", Tone.ATTENTION: "warning"}
@@ -42,14 +51,19 @@ class JobListView(ListPageMixin, TemplateView):
     page_title = "Background jobs"
     table_search_placeholder = "Search jobs and results…"
     table_columns = (
-        TableColumn("Job", kind="prose"),
-        TableColumn("State", css="key-col", kind="status"),
-        TableColumn("Started", css="date-col"),
-        TableColumn("Duration", kind="numeric"),
-        TableColumn("Result", kind="prose"),
-        TableColumn("Requested by", kind="prose"),
-        TableColumn("", css="actions-col"),
+        TableColumn("Job", kind="prose", cell=lambda row: Cell(row["title"], row["url"], name=True, role="data")),
+        TableColumn(
+            "State", css="key-col", kind="status", cell=lambda row: Cell(row["state_label"], tone=str(row["tone"]))
+        ),
+        TableColumn("Started", css="date-col", cell=lambda row: Cell(moment=moment(row["created_at"]))),
+        TableColumn("Duration", kind="numeric", cell=lambda row: Cell(_ran_for(row["duration_seconds"]))),
+        TableColumn("Result", kind="prose", cell=lambda row: Cell(row["headline"] or "")),
+        TableColumn("Requested by", kind="prose", cell=lambda row: Cell(row["by"], cut=bool(row["by"]))),
     )
+
+    @override
+    def table_row(self, row, cells):
+        return Row(cells, actions=row["actions"], evidence=evidence_of(row) or None)
 
     @override
     def get_page_actions(self):

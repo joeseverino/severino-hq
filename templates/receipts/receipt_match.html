@@ -13,32 +13,7 @@
 {% if not already_linked %}
   {% words "expense.create" as add_expense %}
   {% section "Matching expenses" lede="Expenses without a receipt that match this vendor or amount." remedy_label=add_expense remedy_url=new_expense %}
-    {% if matches %}
-    {% table_region "Matching expenses" %}
-      <table class="data-table">
-        <thead>
-          <tr>
-            {% table_heading "Date" "status" local_sort=True %}
-            {% table_heading "Vendor" local_sort=True %}
-            {% table_heading "Item" local_sort=True %}
-            {% table_heading "Cost" "numeric" local_sort=True drop=2 %}
-            {% table_heading "Link" "control" hidden=True %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for exp, actions in matches %}
-            <tr>
-              <td>{{ exp.date|when }}</td>
-              <td><strong>{{ exp.vendor }}</strong></td>
-              <td>{{ exp.item }}</td>
-              <td>{{ exp.total_cost|money }}</td>
-              {% row_actions actions %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
-    {% endif %}
+    {% if matches.rows %}{% data_table matches %}{% endif %}
   {% empty %}None match.
   {% endsection %}
 {% endif %}

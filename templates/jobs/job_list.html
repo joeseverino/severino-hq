@@ -16,15 +16,3 @@ cancel it.
   {% endnotice %}
 {% endif %}
 {% endblock %}
-{% block row %}
-  <td class="cell-data">{% if row.url %}<a href="{{ row.url }}"><strong>{{ row.title }}</strong></a>{% else %}<strong>{{ row.title }}</strong>{% endif %}</td>
-  <td>{% status row.state_label tone=row.tone %}</td>
-  <td class="date-col">{{ row.created_at|when }}</td>
-  <td>{{ row.duration_seconds|seconds }}</td>
-  <td>
-    {{ row.headline|or_empty }}
-    {% run_evidence row %}
-  </td>
-  <td>{% if row.by %}{% cell_line text=row.by %}{% else %}{{ row.by|or_empty }}{% endif %}</td>
-  {% row_actions row.actions %}
-{% endblock %}

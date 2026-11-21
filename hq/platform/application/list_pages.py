@@ -1,5 +1,6 @@
 """A table page drawn from one page of its resource's list read."""
 
+from dataclasses import replace
 from math import ceil
 from typing import Any
 
@@ -9,7 +10,7 @@ from django.db.models import QuerySet
 from .integration_specs import SEARCH_FIELD, ListRead, ResourceSpec
 from .page_reads import Remedy
 from .pages import PageMixin
-from .tables import DataTable, Row, TableColumn, ranked, typed
+from .tables import Cell, DataTable, Row, TableColumn, ranked, typed
 from .ui import ended
 lazy from .resources import InvalidResourceInput, list_resource, resource_registry
 lazy from .security import web_principal
@@ -103,8 +104,8 @@ class ListPageMixin(PageMixin):
             label,
             table["columns"],
             tuple(
-                Row(
-                    tuple(column.cell(row) for column in table["columns"] if column.cell),
+                replace(
+                    self.table_row(row, tuple(column.cell(row) for column in table["columns"] if column.cell)),
                     key=(row[key] if key else row.pk) if table["selectable"] else None,
                 )
                 for row in rows
@@ -112,6 +113,13 @@ class ListPageMixin(PageMixin):
             selectable=table["selectable"],
             sorted_by=table["selected_sort"],
         )
+
+    def table_row(self, row: Any, cells: tuple[Cell, ...]) -> Row:
+        """A row of the table, its cells as its columns declare them: with
+        what may be done to its record and what it shows on its open line,
+        where the page says so."""
+
+        return Row(cells)
 
     def row(self, item: dict[str, Any]) -> Any:
         """One item as its row draws it: the item itself, or with what only
