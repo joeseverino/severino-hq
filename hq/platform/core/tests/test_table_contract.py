@@ -334,8 +334,8 @@ class TableTagTests(SimpleTestCase):
     def test_only_a_cut_cell_with_a_long_line_is_clamped(self):
         """A value with a long line is held to a few lines where its row
         opens, and its row holds the toggle that shows it whole; the name the
-        row is read by and a status are never held, nor is a short line or a
-        blank cell."""
+        row is read by and a status are never held, nor is a short line (a
+        dialog it holds is no line of it) or a blank cell."""
 
         long = "A sentence long enough to stand <em>several</em> lines tall in a narrow column"
         lines = "Two lines, each of them short<br>and the second one as short"
@@ -343,7 +343,7 @@ class TableTagTests(SimpleTestCase):
             '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
             '{% table_heading "State" "status" %}{% table_heading "Note" %}</tr></thead><tbody>'
             f'<tr><td data-col="name">{long}</td><td data-col="status">{long}</td><td data-col="long">{long}</td></tr>'
-            f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}</td></tr>'
+            f'<tr><td>b</td><td>Up</td><td data-col="lines">{lines}<dialog>{long}</dialog></td></tr>'
             f'<tr><td>c</td><td>Up</td><td data-col="blank"><span class="empty-value">{"\u2014" * 18}</span></td></tr>'
             "</tbody></table>{% endtable_region %}"
         )

@@ -245,6 +245,11 @@ class Cells(HTMLParser):
         self.sorting: bool = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "dialog":
+            # A dialog is a layer of its own, never part of a row or its line,
+            # so the parser passes over it whole to its end tag.
+            self.set_cdata_mode(tag)
+            return
         own = self.tables == 1
         if self.cell is not None and own and tag in ("td", "th", "tr", *_SECTIONS):
             self._close()
@@ -383,6 +388,8 @@ class Cells(HTMLParser):
                 return
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "dialog":
+            return
         if self.cell is not None and self.sorting and tag == "button":
             self.sorting = False
             if self.cell.sort_mark is not None:
@@ -405,7 +412,7 @@ class Cells(HTMLParser):
             self.section = ""
 
     def handle_data(self, data: str) -> None:
-        if self.cell is None or self.unsaid is not None:
+        if self.cell is None or self.unsaid is not None or self.cdata_elem == "dialog":
             return
         if self.off_line is None:
             self.cell.text.append(data)
