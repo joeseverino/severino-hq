@@ -727,6 +727,9 @@ The Command Center is a projection of that graph:
 
 That ability is the only authored connection-to-capability edge. Capabilities
 keep no reciprocal list, and no command is invented from a credential scope.
+A connection's row aims the command at the connection only when the command's
+`subject_resource` is unset; a command about a resource's records opens its
+form, which chooses one.
 
 The form is derived from the JSON Schema. Unknown and repeated fields are
 rejected, and targets use the registered label. Eligible choices come from the

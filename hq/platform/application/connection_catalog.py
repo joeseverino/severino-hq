@@ -435,7 +435,7 @@ def _ability_state(
         # Named for the command it opens, not for the ability that led here.
         # Several abilities are commonly performed by one command, and a button
         # labeled with the ability lands on a page that says something else.
-        # A command about one record is about this connection.
+        # A command about a record no resource lists is about this connection.
         action=capability_action_link(ability.capability, principal=principal, subject=instance.id)
         if available
         else None,
