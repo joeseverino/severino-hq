@@ -9,13 +9,13 @@ from typing import Annotated, Any, Literal, get_args
 
 from django import template
 from django.template.loader import render_to_string
-from django.utils.html import format_html
 from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tone import Absent, Tone, Toned
+from hq.platform.core.held_values import format_html
 from hq.platform.core.template_parts import Part, slotted
 from hq.platform.core.templatetags.value_tags import breakable
 lazy from hq.platform.application.ui import ended, severity_tone as _severity_tone

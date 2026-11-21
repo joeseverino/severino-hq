@@ -11,11 +11,11 @@ from typing import Annotated, Any
 from django import template
 from django.forms.widgets import Input, Select
 from django.template.defaulttags import CsrfTokenNode
-from django.utils.html import format_html
 from django.utils.text import slugify
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.url_query import with_query
+from hq.platform.core.held_values import format_html
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Part, answers, slotted
 from hq.platform.core.templatetags.part_tags import drawn_ids

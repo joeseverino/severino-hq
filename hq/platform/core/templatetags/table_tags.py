@@ -11,12 +11,13 @@ from typing import Annotated, Any
 from django import template
 from django.template.base import token_kwargs
 from django.template.loader import render_to_string
-from django.utils.html import escape, format_html
+from django.utils.html import escape
 from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.tables import check_drop, column_kind
+from hq.platform.core.held_values import format_html
 from hq.platform.core.part_examples import tags
 from hq.platform.core.table_cells import (
     Cells,

@@ -14,11 +14,11 @@ lazy from dataclasses import asdict, is_dataclass
 from django import template
 from django.middleware.csrf import get_token
 from django.template.loader import render_to_string
-from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.tone import Tone
+from hq.platform.core.held_values import format_html, format_html_join
 from hq.platform.core.part_examples import tags
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask

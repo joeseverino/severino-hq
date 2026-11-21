@@ -5,11 +5,11 @@ from typing import Any
 from django.contrib import messages
 from django.http import HttpRequest, HttpResponse
 lazy from django.forms import BaseForm
-lazy from django.utils.html import format_html
 
 from hq.platform.application.refusal_status import Refusal, refusal_of
 from hq.platform.application.security import Principal, web_principal
 lazy from hq.platform.application.automation_runs import held_words
+lazy from hq.platform.core.held_values import format_html
 lazy from hq.platform.core.templatetags.action_tags import offer_markup
 lazy from hq.platform.core.templatetags.value_tags import breakable
 

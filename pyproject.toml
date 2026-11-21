@@ -396,7 +396,9 @@ check-typed-exception = true
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
-"unittest.mock".msg = "Production code never patches: reach the code through a setting, an argument or a public name it reads. A stand-in only tests and demos use lives in a testing.py or *_testing.py module."
+"django.utils.html.format_html".msg = "Build markup with hq.platform.core.held_values.format_html, which holds each value it prints as text."
+"django.utils.html.format_html_join".msg = "Build markup with hq.platform.core.held_values.format_html_join, which holds each value it prints as text."
+"unittest.mock".msg ="Production code never patches: reach the code through a setting, an argument or a public name it reads. A stand-in only tests and demos use lives in a testing.py or *_testing.py module."
 
 [tool.ruff.lint.per-file-ignores]
 # OperationRequest distinguishes unknown legacy attribution (NULL) from a machine's known empty person key.

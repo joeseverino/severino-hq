@@ -13,13 +13,27 @@ A value printed in a tag (an attribute), a comment, or an element whose text
 stays plain (``PLAIN_TEXT``) is left as Django prints it. Django has no hook
 in a value's output (``VariableNode.render`` calls
 ``render_value_in_context`` itself), so the hold is written into the source.
+
+Markup built in Python holds what it prints the same way: ``format_html``
+reads its format string as HTML and holds each value standing where text
+belongs, so HQ's code builds markup with it, never with Django's (Ruff's
+banned-api, pyproject.toml).
 """
 
+import functools
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any
 
 from django.template import Engine, Template
 from django.template.base import DebugLexer, TokenType
+from django.utils.html import (
+    conditional_escape,
+    format_html as django_format_html,  # noqa: TID251 - the one place HQ's hands on to Django's
+)
+from django.utils.safestring import SafeString, mark_safe
+
+lazy from hq.platform.core.templatetags.line_breaks import breakable
 
 # Elements whose text is never a token: a span inside one is not markup, is
 # not drawn (an SVG drawing), or is not shown on the page; and a `<time>`,
@@ -30,6 +44,56 @@ _TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)")
 # The marks a sentence puts straight after a value.
 _MARK = re.compile(r"[.,;:!?)\]]+")
 _EXTENDS = re.compile(r"""extends\s+["']([^"']+)["']""")
+# A format string's placeholder, by position or by name.
+_PLACEHOLDER = re.compile(r"\{(\w*)\}")
+# A format string that is attributes to add to a tag (' title="{}"', ' {}="{}"') starts
+# inside that tag.
+_ATTRIBUTES = re.compile(r"\s+(?:[\w:-]+=|\{)")
+
+
+def format_html(format_string: str, *args: Any, **kwargs: Any) -> SafeString:
+    """Django's ``format_html``, each value printed where text belongs held by ``breakable``."""
+
+    text = _text_placeholders(format_string)
+    return django_format_html(
+        format_string,
+        *(breakable(arg) if str(at) in text else arg for at, arg in enumerate(args)),
+        **{name: breakable(value) if name in text else value for name, value in kwargs.items()},
+    )
+
+
+def format_html_join(sep: str, format_string: str, args_generator: Iterable) -> SafeString:
+    """Django's ``format_html_join``, each value held as ``format_html`` holds it."""
+
+    return mark_safe(  # noqa: S308 - each piece is format_html's, the separator escaped
+        conditional_escape(sep).join(
+            format_html(format_string, **args) if isinstance(args, Mapping) else format_html(format_string, *args)
+            for args in args_generator
+        )
+    )
+
+
+@functools.cache
+def _text_placeholders(format_string: str) -> frozenset[str]:
+    """The placeholders of a format string printed as text, by position
+    ("0", "1", ...) or by name."""
+
+    markup = _Markup()
+    markup.in_tag = bool(_ATTRIBUTES.match(format_string))
+    found = set()
+    at = position = 0
+    for match in _PLACEHOLDER.finditer(format_string):
+        before = format_string[at : match.start()]
+        markup.read(before)
+        # A placeholder that names the element ("<{}{}>") opens its tag.
+        if markup.in_text and before.endswith(("<", "</")):
+            markup.in_tag, markup._tag = True, ""
+        at = match.end()
+        name = match[1] or str(position)
+        position += not match[1]
+        if markup.in_text:
+            found.add(name)
+    return frozenset(found)
 
 
 class _Markup:

@@ -10,8 +10,8 @@ from typing import Any, ClassVar, override
 
 from django import forms
 from django.utils.datastructures import MultiValueDict
-lazy from django.utils.html import format_html, format_html_join
 
+lazy from hq.platform.core.held_values import format_html, format_html_join
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .ui import button_classes

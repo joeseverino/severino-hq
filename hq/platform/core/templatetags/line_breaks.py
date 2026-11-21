@@ -8,11 +8,12 @@ seams and boxes they draw are this module's, read by the stylesheet's
 import re
 from html import unescape
 
-from django.utils.html import conditional_escape, format_html
+from django.utils.html import conditional_escape
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.labels import DOT, DOT_MARKUP
 from hq.platform.application.printable import admitted
+from hq.platform.core.held_values import format_html
 
 # Where an address, a hostname, a path or an image reference may wrap: after a
 # slash, after a colon run (never inside a scheme's "://" or an IPv6 "::"), and

@@ -11,7 +11,7 @@ from django.template.base import token_kwargs
 from django.template.context import RequestContext
 from django.template.loader import render_to_string
 from django.utils import dateformat, timezone
-from django.utils.html import conditional_escape, format_html
+from django.utils.html import conditional_escape
 from django.utils.safestring import SafeData, mark_safe
 lazy from django.conf import settings
 
@@ -45,6 +45,7 @@ from hq.platform.application.ui import (
     measured as _measured,
     no_value,
 )
+from hq.platform.core.held_values import format_html
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, SlotsNode, answers, slotted
 from hq.platform.core.templatetags.facts_tags import FACT

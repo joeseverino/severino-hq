@@ -13,7 +13,6 @@ from typing import override
 
 from django.http import Http404
 from django.shortcuts import redirect, render
-from django.utils.html import format_html
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -40,6 +39,7 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import counted
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.zones import ADOPT_ZONE, RECORD_KIND, find_zone, zone_catalog
+from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.value_tags import entity
 from hq.platform.core.web_refusals import refused
 

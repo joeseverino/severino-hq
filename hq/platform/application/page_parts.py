@@ -11,11 +11,12 @@ from dataclasses import field
 from datetime import date
 from typing import Any, Literal, get_args
 
-from django.utils.html import conditional_escape, format_html, format_html_join, strip_tags
+from django.utils.html import conditional_escape, strip_tags
 from django.utils.safestring import SafeString, mark_safe
 from django.utils.text import slugify
 lazy from django.template.loader import render_to_string
 
+from hq.platform.core.held_values import format_html, format_html_join
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .display_words import display

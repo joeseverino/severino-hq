@@ -8,10 +8,10 @@ from typing import Any
 from django import template
 from django.template import Template
 from django.template.base import token_kwargs
-from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import html_attributes
+from hq.platform.core.held_values import format_html
 from hq.platform.core.template_parts import Example, Option, Part, slotted
 from hq.platform.core.templatetags.frame_tags import MUTED
 lazy from hq.platform.application.pages import Page

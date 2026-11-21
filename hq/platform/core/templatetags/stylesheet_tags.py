@@ -4,8 +4,8 @@ from pathlib import PurePath
 
 from django import template
 from django.templatetags.static import static
-from django.utils.html import format_html, format_html_join
 
+from hq.platform.core.held_values import format_html, format_html_join
 from hq.platform.core.stylesheets import FACES, SHEETS
 
 register = template.Library()

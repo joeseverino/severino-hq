@@ -4,7 +4,6 @@ from typing import override
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
-from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -22,6 +21,7 @@ from hq.platform.application.refusal_codes import Code
 from hq.platform.application.tables import TableColumn
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.status_tags import status_pill
 from hq.platform.core.templatetags.value_tags import breakable
 from hq.platform.core.web_refusals import refused

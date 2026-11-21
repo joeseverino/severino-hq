@@ -8,6 +8,7 @@ from django.utils.safestring import mark_safe
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.markup_testing import all_elements, links, select, text, texts, with_class
 from hq.platform.application.printable import Unprintable
+from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.value_tags import (
     breakable,
     cell_line,
@@ -313,6 +314,15 @@ class BreakableTests(SimpleTestCase):
         (hidden,) = [element for element in select(printed, "aria-hidden", "true") if "mark" in element.classes]
         self.assertEqual(hidden.text, ",")
         self.assertEqual(links(printed), [("example.com", "/services/example.com/")])
+
+    def test_markup_built_in_python_holds_only_what_it_prints_as_text(self):
+        name = "example-docker-host"
+
+        html = format_html('<a href="/{}/" title="{t}">{}</a> <b>{}</b>', name, name, mark_safe("<i>x-y</i>"), t=name)
+
+        self.assertEqual(wholes(html), [name])
+        self.assertEqual(select(html, "title", name)[0].attrs["href"], f"/{name}/")
+        self.assertIn("<b><i>x-y</i></b>", html)
 
     def test_a_list_takes_a_comma_between_its_items(self):
         self.assertIn('aria-hidden="true">,<', breakable("example-host", {"last": False}))

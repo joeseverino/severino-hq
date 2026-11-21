@@ -6,10 +6,10 @@ template draws the element it belongs to. No markup is read back."""
 from dataclasses import dataclass, field
 from typing import Any
 
-from django.utils.html import format_html
 from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.tables import Cell, DataTable, Group, Row, column_kind
+from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.table_tags import LINE_FRAME, table_heading
 from hq.platform.core.templatetags.value_tags import money, when_text
 from hq.platform.core.templatetags.write_tags import row_editor
