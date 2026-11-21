@@ -1303,6 +1303,12 @@ also derives the answer again when one of them would change. An extension keeps
 no process-level cache, `cache.set` or timestamp table beside this; the
 extension check refuses `django.core.cache` in its source.
 
+A write that changes every one of them at once, such as an import, calls
+`derive_after_commit(plugin.id)`. Once its transaction commits, each
+derivation of the extension asked with no arguments, its own and the host's of
+its providers, is derived and stored in the writer's own process, so no request
+after the write derives one.
+
 A test of an answer that turns on the day holds the clock those reads ask with
 `with hq_sdk.testing.frozen(moment):`. Patching `timezone.now` misses it.
 

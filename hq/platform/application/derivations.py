@@ -8,6 +8,7 @@ docs/Architecture.md#derived-once-per-change.
 """
 
 import hashlib
+import inspect
 import logging
 import math
 import os
@@ -22,7 +23,7 @@ from contextlib import contextmanager, nullcontext
 from contextvars import Context, ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from functools import wraps
+from functools import partial, wraps
 from pathlib import Path
 from types import FrameType
 from typing import Any
@@ -32,7 +33,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 lazy from django.apps import apps
 lazy from django.core.cache import caches
-lazy from django.db import DatabaseError, OperationalError, connection
+lazy from django.db import DatabaseError, OperationalError, connection, transaction
 
 lazy from hq.platform.core import revisions
 lazy from hq.platform.core.database import without_waiting
@@ -266,6 +267,8 @@ class Derivation:
     # Tables a computation was seen to read beyond ``reads``: an installed
     # extension's, which the host cannot name. Kept for the life of the process.
     _learned: set[str] = field(default_factory=set, compare=False, repr=False)
+    # The function that answers it, as ``@derivation`` returned it.
+    _answer: list[Callable[..., Any]] = field(default_factory=list, compare=False, repr=False)
 
     @property
     def declared(self) -> frozenset[str]:
@@ -332,6 +335,7 @@ def derivation[**P, T](
             return value
 
         answer.derivation = declared  # type: ignore[attr-defined]  # a function carries its declaration
+        declared._answer.append(answer)
         return answer
 
     return declare
@@ -770,6 +774,38 @@ def _again(ask: _Ask) -> tuple[bool, str]:
             raise LookupError(f"The answer of {declared.name} could not be kept.")
         ask.until = answered[kept]
         return True, kept
+
+
+def derive_after_commit(*prefixes: str) -> None:
+    """Once the transaction in progress commits, derive and store every
+    derivation whose name starts with one of ``prefixes`` that is asked with no
+    arguments, so the first request after a write that changes them all (an
+    import) finds each one stored.
+
+    Unlike ``derive_ahead`` it needs no request to have asked first, and it runs
+    in the writer's own process. One that fails is logged, never raised.
+    """
+
+    transaction.on_commit(partial(_derive_every, prefixes))
+
+
+def _derive_every(prefixes: tuple[str, ...]) -> None:
+    with _AHEAD.set(True), projection_scope(apart=True):
+        for name, declared in list(DERIVATIONS.items()):
+            if not name.startswith(prefixes) or not _asked_bare(declared.compute):
+                continue
+            try:
+                declared._answer[0]()
+            except Exception:  # one failing must not stop the rest
+                logger.exception("Derivation %s could not be derived after a write.", name)
+
+
+def _asked_bare(function: Callable[..., Any]) -> bool:
+    try:
+        inspect.signature(function).bind()
+    except TypeError:
+        return False
+    return True
 
 
 def _standing_stored(key: str) -> bool:

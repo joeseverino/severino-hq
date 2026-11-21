@@ -243,6 +243,10 @@ class DerivationTests(TestCase):
             self.assertEqual((count(), len(calls)), (0, 1))
             UpstreamReading.objects.create(key="one", value={}, observed_at=MOMENT)
             self.assertEqual((count(), count(), len(calls)), (1, 1, 2))
+            with self.captureOnCommitCallbacks(execute=True):
+                UpstreamReading.objects.create(key="two", value={}, observed_at=MOMENT)
+                derivations.derive_after_commit("test.other.", "test.count")
+            self.assertEqual((len(calls), count(), len(calls)), (3, 2, 3))
 
     def test_a_value_stored_by_other_code_is_never_served_to_this_code(self):
         def running(code: str):

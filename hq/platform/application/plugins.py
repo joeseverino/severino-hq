@@ -556,6 +556,13 @@ def _kept(value: Any) -> Any:
     return tuple(value)
 
 
+def provided_under(plugin_id: str) -> str:
+    """What the name of every derivation the host asks an extension's
+    providers through starts with."""
+
+    return f"extension.{plugin_id}."
+
+
 def provided(name: str, provider: Callable[..., Any], *, ahead: int | None = None) -> Callable[..., Any]:
     """``provider`` asked through the derivation ``name``, declared on first use.
 
@@ -572,6 +579,9 @@ def provided(name: str, provider: Callable[..., Any], *, ahead: int | None = Non
 
         def compute(*args: Any) -> Any:
             return _kept(_PROVIDERS[name](*args))
+
+        # Asked as the provider is: what ``derive_after_commit`` reads.
+        compute.__signature__ = inspect.signature(provider)  # type: ignore[attr-defined]  # a function carries its signature
 
         declare = (
             derivation(name, reads=(), vary=vary, learns=True)
@@ -595,7 +605,7 @@ def _derived_calendars(plugin_id: str, provider: Callable[[], Iterable[Any]]) ->
     def derived(source: Any) -> Any:
         if not _is_source(source):
             return source
-        events = provided(f"extension.{plugin_id}.calendar.{source.id}", source.events, ahead=CALENDAR_WINDOWS)
+        events = provided(f"{provided_under(plugin_id)}calendar.{source.id}", source.events, ahead=CALENDAR_WINDOWS)
         return replace(source, events=events)
 
     def sources() -> tuple[Any, ...]:
@@ -608,7 +618,7 @@ def _derived(plugin_id: str, integration: PluginIntegration) -> PluginIntegratio
     """``integration`` with each provider of a shared composition derived."""
 
     derived: dict[str, Any] = {
-        field: provided(f"extension.{plugin_id}.{field}", provider)
+        field: provided(f"{provided_under(plugin_id)}{field}", provider)
         for field in DERIVED_PROVIDERS
         if (provider := getattr(integration, field)) is not None
     }
