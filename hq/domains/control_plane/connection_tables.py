@@ -173,9 +173,9 @@ def _name_below(row: Any) -> tuple[Below, ...]:
     """What else its credential would see, and the steps of its fix."""
 
     return (
-        *((Below("", tuple(Cell(line) for line in row.more_scope)),) if row.more_scope else ()),
+        *((Below("Also sees", tuple(Cell(line) for line in row.more_scope)),) if row.more_scope else ()),
         *(
-            (Below("", (Cell(piece=Piece(CREDENTIAL_FIX, {"fix": row.fix}, ", ".join(row.fix.missing))),)),)
+            (Below("To fix", (Cell(piece=Piece(CREDENTIAL_FIX, {"fix": row.fix}, ", ".join(row.fix.missing))),)),)
             if row.fix and (row.fix.missing or row.fix.steps)
             else ()
         ),

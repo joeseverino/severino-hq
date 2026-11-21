@@ -289,10 +289,10 @@ class ConnectionPageTests(SentinelMixin, TestCase):
             and any(ancestor is reads_cell for ancestor in element.ancestors)
         ]
         # What it changes is a block of the row's open line, under its label.
-        after = page[page.index(tr) :]
-        label = next(element for element in after if element.tag == "dt" and element.words.strip() == "Changes")
-        block = next(element for element in after[after.index(label) :] if element.tag == "dd")
-        changes = [item.words for item in after if item.tag == "li" and any(up is block for up in item.ancestors)]
+        labeled = [item for item in page if item.tag == "li" and item.inside(tr)]
+        changes = [
+            item.words for item in labeled if any(a.attrs.get("data-label") == "Changes" for a in item.ancestors)
+        ]
         # Each read's name is its first element; a state word may follow it.
         named = [next(element for element in page if element.ancestors[-1:] == (item,)).words for item in items]
 
