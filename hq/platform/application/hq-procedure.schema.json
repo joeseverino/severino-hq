@@ -1,5 +1,26 @@
 {
   "$defs": {
+    "ComposeUpdates": {
+      "additionalProperties": false,
+      "description": "Where a procedure deploys the Compose projects in its adopted source.",
+      "properties": {
+        "destination": {
+          "maxLength": 200,
+          "pattern": "^(?:/[a-zA-Z0-9_-]+)+$",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "destination"
+      ],
+      "type": "object"
+    },
     "InputBound": {
       "additionalProperties": false,
       "description": "What Ansible's argument spec cannot say of a text input: the shape it\nmust have and how long it may be.",
@@ -26,6 +47,18 @@
   "additionalProperties": false,
   "description": "A procedure's sidecar (``<name>.hq.yml`` beside ``<name>.yml``): what\nHQ needs to know of it that Ansible has no word for. Its title, its\npreconditions and verification and its inputs' types are Ansible's own,\nread from the playbook and its roles.",
   "properties": {
+    "compose_updates": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComposeUpdates",
+          "title": "Compose updates"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "effect": {
       "enum": [
         "read",

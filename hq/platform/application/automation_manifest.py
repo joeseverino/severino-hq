@@ -93,6 +93,9 @@ _NO_EXECUTION_FIELD = Reason(
 _NAMED_FIELDS = Reason("input_free_form", "must name each field it allows, never take free-form values")
 _READ_PRIVILEGE = Reason("read_privilege", "is a read, which takes no privilege")
 _INVESTIGATION_READ = Reason("investigation_read", "must be read-only to investigate a finding")
+_COMPOSE_UPDATE_INPUTS = Reason(
+    "compose_update_inputs", "must be an infrastructure change with Compose project, service and image inputs"
+)
 _CHANGE_CHECKED = Reason(
     "change_checked", "is a change, which needs preconditions and verification: its play's pre_tasks and post_tasks"
 )
@@ -150,6 +153,27 @@ def _closed(model: type[BaseModel], seen: set[type[BaseModel]]) -> None:
 PlaybookEffect = Literal[Effect.READ, Effect.INFRASTRUCTURE_CHANGE, Effect.DESTRUCTIVE]
 
 
+class ComposeUpdates(Closed):
+    """Where a procedure deploys the Compose projects in its adopted source."""
+
+    source: Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9_-]+$", max_length=64)]
+    destination: Annotated[str, StringConstraints(pattern=r"^(?:/[a-zA-Z0-9_-]+)+$", max_length=200)]
+
+
+class ComposeImage(Closed):
+    """A literal service image observed in one Compose file of the scanned commit."""
+
+    project: Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_-]*$", max_length=63)]
+    file: Literal["compose.yaml", "docker-compose.yml"]
+    service: Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", max_length=128)]
+    image: Annotated[
+        str, StringConstraints(pattern=r"^[a-zA-Z0-9./:_-]+:[a-zA-Z0-9_.-]+@sha256:[0-9a-f]{64}$", max_length=320)
+    ]
+
+
+COMPOSE_INPUTS = ("compose_project_name", "compose_project_upgrade_service", "compose_project_upgrade_image")
+
+
 class ProcedureTerms(Closed):
     """What a playbook's manifest and its sidecar both say of it: where it
     may run, what it does, and how to recover from a failed run."""
@@ -172,6 +196,7 @@ class ProcedureTerms(Closed):
     fixes: Annotated[tuple[RuleName, ...], Checked(sorted_unique)] = ()
     # Read-only playbooks can offer evidence for a finding without claiming to clear it.
     investigates: Annotated[tuple[RuleName, ...], Checked(sorted_unique)] = ()
+    compose_updates: ComposeUpdates | None = None
 
     @model_validator(mode="after")
     @checked
@@ -193,6 +218,7 @@ class OperationManifest(ProcedureTerms):
     # read may state none; a change states each.
     preconditions: tuple[Statement, ...]
     verification: tuple[Statement, ...]
+    compose_images: tuple[ComposeImage, ...] = ()
 
     @field_validator("input_type")
     @classmethod
@@ -206,6 +232,15 @@ class OperationManifest(ProcedureTerms):
     def _a_change_says_how_it_is_checked(self) -> Self:
         if self.effect.changes and not (self.preconditions and self.verification):
             raise _CHANGE_CHECKED.refused()
+        return self
+
+    @model_validator(mode="after")
+    @checked
+    def _compose_update_inputs(self) -> Self:
+        if self.compose_updates is not None and (
+            self.effect != Effect.INFRASTRUCTURE_CHANGE or set(COMPOSE_INPUTS) != set(self.input_type.model_fields)
+        ):
+            raise _COMPOSE_UPDATE_INPUTS.refused()
         return self
 
     def admits(self, kind: str, host: str) -> bool:

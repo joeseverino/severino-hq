@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from functools import cache, partial
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypedDict, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict, cast
 from urllib.parse import parse_qs, urlsplit
 
 from django.conf import settings
@@ -101,6 +101,9 @@ lazy from .gathered_findings import gather_findings
 lazy from .moments import ago
 lazy from .record_saves import row
 lazy from .ui import counted
+
+if TYPE_CHECKING:
+    from .upgrades import ComposeTarget
 
 _CLAIM_NAMESPACE = "infrastructure.finding"
 
@@ -329,9 +332,10 @@ def _playbooks(
     for manifest in automation_runs.playbooks_for(finding.rule, machine):
         name = automation_runs.capability_name(manifest.id)
         if finding.rule not in manifest.investigates:
-            remedies.append(
-                FindingRemedy(capability=name, target="", url=automation_runs.run_here_url(manifest.id, (machine,)))
-            )
+            if manifest.compose_updates is None:
+                remedies.append(
+                    FindingRemedy(capability=name, target="", url=automation_runs.run_here_url(manifest.id, (machine,)))
+                )
             continue
         allowed, _ = _permitted(name, principal)
         if not allowed:
@@ -343,6 +347,12 @@ def _playbooks(
                 command_action(PLAYBOOK_INVESTIGATION, name, url, intent=capabilities.command_spec(name).label)
             )
     return remedies, investigations
+
+
+def _compose_deployment(finding: Finding, principal: Principal) -> automation_runs.ComposeDeployment | None:
+    if (target := finding.compose_target) is None:
+        return None
+    return automation_runs.compose_deployment(finding.rule, finding_key(finding), target.machine, target, principal)
 
 
 def _presses(
@@ -393,6 +403,11 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     the pages about its subject."""
 
     remedies, diagnostics = _playbooks(finding, subject, principal)
+    deployment = _compose_deployment(finding, principal)
+    if deployment:
+        remedies.append(
+            FindingRemedy(deployment.capability, "", intent=automation_runs.REVIEW_IMAGE_UPDATE, url=deployment.url)
+        )
     subject_reads = tuple(
         action
         for action in (subject.actions if subject else ())
@@ -400,15 +415,18 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     presses = _presses((*finding.remedies, *remedies), principal, subject)
+    has_deployment = deployment is not None and any(press.link.capability == deployment.capability for press in presses)
     check, read_now = _verification(finding, principal, subject)
     # Every field the detector set carries through; only what derivation adds changes.
     return replace(
         finding,
         remedies=(),
+        deployment=deployment if has_deployment else None,
         offers=(*finding.offers, *diagnostics, *subject_reads),
         investigations=investigations,
-        steps=(*presses, *finding_steps(finding, pressed=bool(presses))),
-        no_help_reason=_no_help_reason(finding),
+        primary=container_findings.upgrade_plan_link(finding.primary) if has_deployment else finding.primary,
+        steps=presses if has_deployment else (*presses, *finding_steps(finding, pressed=bool(presses))),
+        no_help_reason="" if has_deployment else _no_help_reason(finding),
         check=check,
         subject_link=read_link("subject", subject.label, subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
@@ -677,19 +695,45 @@ def rule_of(item_key: str) -> str:
     return rest.split(":", 1)[0] if found else ""
 
 
-def investigation_initial(capability: str, key: str, principal: Principal) -> dict[str, Any]:
-    """Fill an investigation only while this reader's finding offers that command."""
+@dataclass(frozen=True, slots=True)
+class FindingRun:
+    """The values the current finding can supply to its playbook's form."""
+
+    initial: dict[str, Any]
+    deployment: automation_runs.ComposeDeployment | None = None
+
+    @property
+    def review(self) -> str:
+        return self.deployment.review if self.deployment else ""
+
+
+def finding_run(capability: str, key: str, principal: Principal) -> FindingRun | None:
+    """Fill the run only while this reader's finding offers that command."""
 
     if not automation_runs.runs_procedure(capability) or rule_for(rule := rule_of(key)) is None:
-        return {}
+        return None
     for finding in estate_findings(principal=principal, rule=rule):
         if finding_key(finding) != key:
             continue
+        if (deployment := finding.deployment) and deployment.capability == capability:
+            return FindingRun(deployment.initial, deployment)
         for offer in finding.offers:
             if offer.name == PLAYBOOK_INVESTIGATION and offer.capability == capability and not offer.refusal:
                 hosts = parse_qs(urlsplit(offer.url).query)["hosts"]
-                return _investigation_fields(capability, hosts, finding.service_unit)
-    return {}
+                return FindingRun(_investigation_fields(capability, hosts, finding.service_unit))
+    return None
+
+
+def container_deployment(target: ComposeTarget, principal: Principal) -> ActionLink | None:
+    """The upgrade plan and its finding offer the same deployment."""
+
+    for rule in (container_findings.UPDATE, container_findings.ADVISORY):
+        for finding in estate_findings(principal=principal, rule=rule):
+            if finding.compose_target != target:
+                continue
+            if (deployment := finding.deployment) is not None:
+                return next((press for press in finding.presses if press.capability == deployment.capability), None)
+    return None
 
 
 def _investigation_fields(capability: str, hosts: list[str], service: str) -> dict[str, Any]:

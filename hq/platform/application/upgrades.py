@@ -8,6 +8,7 @@ HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import Annotated, Any
 
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
@@ -39,6 +40,19 @@ class UpgradeStep:
     id: Annotated[str, Describe("The step's stable id.")]
     label: Annotated[str, Describe("The step, in a few words.")]
     detail: Annotated[str, Describe("What the step does, in a sentence.")]
+
+
+@dataclass(frozen=True, slots=True)
+class ComposeTarget:
+    """The running service and exact target pin a reviewed deployment must match."""
+
+    file: PurePosixPath
+    machine: str
+    project: str
+    service: str
+    image: str
+    tag: str
+    digest: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +89,35 @@ class Plan:
     @property
     def stateful(self) -> bool:
         return bool(self.data)
+
+    @property
+    def compose_target(self) -> ComposeTarget | None:
+        """A directly managed Compose service the reviewed deploy can update without a data snapshot."""
+
+        item = self.container
+        files = item.compose_files
+        service = (item.runtime or {}).get("service")
+        if (
+            not self.recommended
+            or self.stateful
+            or any(blocker.id != "no-apply-path" for blocker in self.blockers)
+            or not item.running.state.running
+            or item.running.unit
+            or len(files) != 1
+            or not item.running.stack
+            or not isinstance(service, str)
+            or not service
+        ):
+            return None
+        return ComposeTarget(
+            PurePosixPath(files[0]),
+            item.machine.name,
+            item.running.stack,
+            service,
+            item.standing.image.name,
+            self.target_tag,
+            self.target_digest,
+        )
 
     @property
     def fixes_tone(self) -> str:

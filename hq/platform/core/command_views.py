@@ -36,7 +36,9 @@ from hq.platform.application.service_context import Cell, ServiceSection
 from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import run_posted
 from hq.platform.core.web_refusals import refused
-lazy from hq.platform.application.findings import investigation_initial
+lazy from hq.platform.application.automation_runs import REVIEW_IMAGE_UPDATE
+lazy from hq.platform.application.findings import finding_run
+lazy from hq.platform.application.work_runs import run_url
 
 
 def _json_value(value):
@@ -127,6 +129,10 @@ def _named_records(form, query) -> dict[str, Any]:
     return named
 
 
+class FindingChanged(Http404):
+    """A contextual command no longer matches the finding that opened it."""
+
+
 class CommandView(View):
     """Render and execute any permitted capability without reimplementing it."""
 
@@ -160,7 +166,15 @@ class CommandView(View):
             target_options=self.target_options,
             record_choices=record_options(capability_schema(self.spec), principal=self.principal),
         )
-        return super().dispatch(request, name, *args, **kwargs)
+        try:
+            return super().dispatch(request, name, *args, **kwargs)
+        except FindingChanged:
+            return TemplateResponse(
+                request,
+                self.template_name,
+                {**page_context("Finding changed"), "finding_changed": True},
+                status=409,
+            )
 
     def _result(self):
         saved = self.request.session.get("command_center_result")
@@ -171,7 +185,7 @@ class CommandView(View):
             return None
         return saved
 
-    def _context(self, form, *, result=None):
+    def _context(self, form, *, result=None, reviewed=None):
         if result and _only_queues(result["payload"]):
             result = None
         resource = held_graph().resources.get(self.spec.subject_resource)
@@ -189,9 +203,10 @@ class CommandView(View):
         return {
             # No lede: the summary is the agent's description of the command,
             # and the page says what it changes in its fields and its button.
-            **page_context(self.spec.title, trail=trail),
+            **page_context(REVIEW_IMAGE_UPDATE if reviewed else self.spec.title, trail=trail),
             "command": self.spec,
-            "command_label": self.spec.title,
+            "command_label": "Deploy image" if reviewed else self.spec.title,
+            "reviewed": reviewed,
             "chosen_target": self._chosen_target(form),
             "form": form,
             "result": result,
@@ -203,7 +218,7 @@ class CommandView(View):
             "result_json_open": not facts and table is None,
             "return_url": safe_next(self.request),
             # Cancel goes back where it was opened from, else to the trail's end.
-            "cancel_url": safe_next(self.request, fallback=trail[-1][1]),
+            "cancel_url": safe_next(self.request, fallback=reverse("action_items") if reviewed else trail[-1][1]),
             "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
             "resource_open": f"Open {resource.label}" if resource else "",
@@ -290,17 +305,36 @@ class CommandView(View):
         if target and (self.target_options is None or target in known_targets):
             initial["__target"] = target
             initial.update(capability_target_initial(self.spec, target, principal=self.principal))
-        form = self.form_class(initial=initial)
-        named = _named_records(form, request.GET)
-        if finding := request.GET.get("finding"):
-            named.update(investigation_initial(self.spec.name, finding, self.principal))
-        if named:
-            form = self.form_class(initial={**initial, **named})
-        context = self._context(form, result=self._result())
+        start = self._finding_run()
+        named = start.initial if start else _named_records(self.form_class(initial=initial), request.GET)
+        if start and start.deployment:
+            initial["reason"] = f"Deploy the reviewed image for {start.deployment.pin.service}."
+        form = self.form_class(initial={**initial, **named})
+        reviewed = self._reviewed(form, start)
+        context = self._context(form, result=self._result(), reviewed=reviewed)
         # A link that named a target the form cannot offer says so, rather than
         # opening on an empty choice that looks like the link worked.
         context["unoffered_target"] = target if target and "__target" not in initial else ""
         return TemplateResponse(request, self.template_name, context)
+
+    def _finding_run(self):
+        key = self.request.GET.get("finding", "")
+        if not key:
+            return None
+        start = finding_run(self.spec.name, key, self.principal)
+        if start is None or start.review != self.request.GET.get("review", ""):
+            raise FindingChanged()
+        return start
+
+    def _reviewed(self, form, start):
+        """Display the reviewed values and bind the same values on submission."""
+
+        if start is None or not start.deployment:
+            return None
+        for name in start.initial:
+            form.fields[name].disabled = True
+            form.fields[name].widget = form.fields[name].hidden_widget()
+        return start.deployment
 
     def _held(self, target: str) -> dict:
         """What the record a form edits holds, so a posted value its source no
@@ -312,9 +346,14 @@ class CommandView(View):
         return capability_target_initial(self.spec, target, principal=self.principal)
 
     def post(self, request, name: str):
-        form = self.form_class(request.POST, request.FILES, initial=self._held(request.POST.get("__target", "")))
+        start = self._finding_run()
+        initial = self._held(request.POST.get("__target", ""))
+        if start:
+            initial.update(start.initial)
+        form = self.form_class(request.POST, request.FILES, initial=initial)
+        reviewed = self._reviewed(form, start)
         if not form.is_valid():
-            return TemplateResponse(request, self.template_name, self._context(form), status=400)
+            return TemplateResponse(request, self.template_name, self._context(form, reviewed=reviewed), status=400)
 
         payload = _json_value(form.command_payload)
         target = form.cleaned_data.get("__target")
@@ -327,7 +366,11 @@ class CommandView(View):
             expected_updated_at=expected_updated_at,
         )
         if refusal := refused(request, result, form=form):
-            return TemplateResponse(request, self.template_name, self._context(form), status=refusal.status)
+            return TemplateResponse(
+                request, self.template_name, self._context(form, reviewed=reviewed), status=refusal.status
+            )
+        if reviewed:
+            return redirect(run_url(result["operation"]["id"]))
 
         token = secrets.token_urlsafe(18)
         request.session["command_center_result"] = {

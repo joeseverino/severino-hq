@@ -28,15 +28,20 @@ standard, with what it uses beside its limits. Each said once; the band above ha
       <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
     {% endfact %}
   {% endfacts %}
-  {% if plan.viable %}
+  {% if deployment %}
+    {% notice tone="success" title="Ready to review" %}
+      <p>The adopted Compose file pins this exact image. The playbook updates the service and checks the result.</p>
+    {% endnotice %}
+  {% elif plan.viable %}
     {% notice tone="success" title="Ready" %}{% endnotice %}
   {% else %}
     {% notice tone="warning" title="Not yet, because:" %}{% list %}{% for blocker in plan.blockers %}<li>{{ blocker.reason }}</li>{% endfor %}{% endlist %}{% endnotice %}
   {% endif %}
-  {% steps numbered=True %}
+  {% if not deployment %}{% steps numbered=True %}
     {% for step in plan.steps %}{% step %}<strong>{{ step.label }}</strong> {% muted %}{{ step.detail }}{% endmuted %}{% endstep %}{% endfor %}
-  {% endsteps %}
+  {% endsteps %}{% endif %}
 {% aside %}{% muted %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% endmuted %}
+  {% if deployment %}{% button deployment.label deployment.url %}{% endif %}
 {% endsection %}
 {% endif %}
 

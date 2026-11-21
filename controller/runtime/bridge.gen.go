@@ -854,6 +854,24 @@ func (e RunEventOutcome) Valid() bool {
 	}
 }
 
+// Defines values for ScannedComposeImageFile.
+const (
+	ComposeYaml      ScannedComposeImageFile = "compose.yaml"
+	DockerComposeYml ScannedComposeImageFile = "docker-compose.yml"
+)
+
+// Valid indicates whether the value is a known member of the ScannedComposeImageFile enum.
+func (e ScannedComposeImageFile) Valid() bool {
+	switch e {
+	case ComposeYaml:
+		return true
+	case DockerComposeYml:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SweptKind.
 const (
 	SweptAdGuardClient                SweptKind = "adguard.client"
@@ -2539,6 +2557,17 @@ type RunnerReach struct {
 	Profile string `json:"profile"`
 }
 
+// ScannedComposeImage A literal image pin in a Compose service of the scanned commit.
+type ScannedComposeImage struct {
+	File    ScannedComposeImageFile `json:"file"`
+	Image   string                  `json:"image"`
+	Project string                  `json:"project"`
+	Service string                  `json:"service"`
+}
+
+// ScannedComposeImageFile defines model for ScannedComposeImage.File.
+type ScannedComposeImageFile string
+
 // ScannedFile A file of the repository, by its path and the git object id that names its content.
 type ScannedFile struct {
 	Object string `json:"object"`
@@ -2547,6 +2576,8 @@ type ScannedFile struct {
 
 // ScannedProcedure One sidecar and the playbook of the same name beside it: the sidecar as parsed, the play's title and assertions, each role's argument spec, and what could not be read.
 type ScannedProcedure struct {
+	ComposeImages []ScannedComposeImage `json:"compose_images,omitempty"`
+
 	// Declaration The sidecar as YAML read it, unjudged; null when it could not be read.
 	Declaration   any           `json:"declaration"`
 	Playbook      string        `json:"playbook"`

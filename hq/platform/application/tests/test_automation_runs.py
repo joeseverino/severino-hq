@@ -541,11 +541,11 @@ class FindingInvestigationTests(TestCase):
 
         from hq.platform.core.testing import NOBODY
 
-        from ..findings import investigation_initial
+        from ..findings import finding_run
 
         (url,) = self.offered()
         (key,) = parse_qs(urlsplit(url).query)["finding"]
-        self.assertEqual(investigation_initial(self.COMMAND, key, NOBODY), {})
+        self.assertIsNone(finding_run(self.COMMAND, key, NOBODY))
 
     def test_a_worker_that_cannot_reach_the_machine_is_offered_no_run(self):
         self.supply.reach()

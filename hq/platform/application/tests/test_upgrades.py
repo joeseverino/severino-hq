@@ -1,11 +1,19 @@
 from dataclasses import replace
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
+from hq.domains.control_plane.models import OperationRequest
+from hq.platform.core.testing import operator
+
+from ..contracts import Closed
+from ..machines import Machine
 from ..upgrades import HIGH as HIGH_RISK, LOW, MAJOR, PATCH, change_between, plans
+from .procedures import NEXT_REVISION, Supply, manifest
 from .test_container_standard import runtime
 from .test_containers import HIGH, container, estate, inventory
+from .test_image_findings import project
 
 TARGET = "sha256:" + "9" * 64
 
@@ -26,6 +34,82 @@ def published(app_tags=("v1.2.0", "v1.2.1"), digests=None):
             {"image": "docker.io/example/kuma", "tags": ["1", "2"], "digests": {"2": TARGET}, "read_at": now},
         ],
     )
+
+
+class DeployInputs(Closed):
+    compose_project_name: str
+    compose_project_upgrade_service: str
+    compose_project_upgrade_image: str
+
+
+class ReviewedDeploymentTests(TestCase):
+    operation = "example.compose_deploy"
+    image = f"ghcr.io/example/app:v1.2.1@{TARGET}"
+    pin = {"project": "app", "file": "compose.yaml", "service": "web", "image": image}
+
+    def setUp(self):
+        estate()
+        published()
+        inventory("portainer.runtime", [runtime("app", stack="app", service="web", healthcheck=True)])
+        inventory("portainer.compose_project", [project("app", "/opt/example/app/compose.yaml")])
+        container("app")
+        operator(self.client)
+        self.procedure = manifest(
+            id=self.operation,
+            input_type=DeployInputs,
+            fixes=("container-image-update",),
+            compose_updates={"source": "compose", "destination": "/opt/example"},
+            compose_images=(self.pin,),
+        )
+        self.supply = Supply(self, self.procedure)
+        self.supply.know(Machine("example-box"))
+
+    def offer(self):
+        from ..markup_testing import links
+
+        response = self.client.get(reverse("action_items"))
+        return [url for label, url in links(response.content) if label == "Review image update"]
+
+    def test_reviewed_image_reuses_the_run_form_and_keeps_the_reviewed_values(self):
+        (url,) = self.offer()
+        response = self.client.get(url)
+        self.assertContains(response, self.image)
+        self.assertContains(response, "Deploy image")
+        self.assertFalse(OperationRequest.objects.exists())
+        response = self.client.post(
+            url,
+            {
+                "parameters.compose_project_upgrade_image": "wrong",
+                "reason": "Update the reviewed image",
+                "__confirm_effect": "on",
+                "__retry_key": "web:example-image-update",
+            },
+        )
+        self.assertEqual(response.status_code, 302, getattr(response, "context_data", {}).get("form"))
+        queued = OperationRequest.objects.get()
+        self.assertEqual(queued.input["hosts"], ["example-box"])
+        self.assertEqual(
+            queued.input["parameters"],
+            {
+                "compose_project_name": "app",
+                "compose_project_upgrade_service": "web",
+                "compose_project_upgrade_image": self.image,
+            },
+        )
+        self.assertRedirects(response, reverse("jobs:run", kwargs={"pk": queued.pk}))
+
+    def test_stale_review_cannot_submit_through_the_old_link(self):
+        (url,) = self.offer()
+        self.supply(self.procedure.model_copy(update={"revision": NEXT_REVISION}))
+        self.assertContains(self.client.post(url, {"__confirm_effect": "on"}), "Open Needs you", status_code=409)
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_no_action_until_the_exact_pin_and_login_are_available(self):
+        self.supply(self.procedure.model_copy(update={"compose_images": ()}))
+        self.assertEqual(self.offer(), [])
+        self.supply(self.procedure)
+        self.supply.reach()
+        self.assertEqual(self.offer(), [])
 
 
 class ChangeTests(TestCase):

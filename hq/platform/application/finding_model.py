@@ -25,8 +25,10 @@ lazy from .capabilities import capability_spec, capability_words
 lazy from .pages import command_reach
 
 if TYPE_CHECKING:
+    from .automation_runs import ComposeDeployment
     from .cadence import ControllerSweepCommand
     from .security import Principal
+    from .upgrades import ComposeTarget
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +134,8 @@ class Finding:
     reads: str = ""
     # The exact systemd service the finding is about, if it names one.
     service_unit: str = ""
+    compose_target: ComposeTarget | None = None
+    deployment: ComposeDeployment | None = None
     # The page a card leads with, where its subject's own page is not it: the
     # certificate to renew, the containers to upgrade.
     primary: ActionLink | None = None

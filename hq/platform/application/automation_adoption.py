@@ -41,7 +41,7 @@ from hq.platform.core.digests import digest
 
 from . import automation_sources
 from .answer_fields import CallMessage
-from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
+from .automation_manifest import PLAYBOOK, REVISION, ComposeImage, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe, RequiredText
 from .contracts import Closed, Effect
@@ -115,6 +115,7 @@ class AdoptedProcedure(ProcedureTerms):
     revision: Annotated[str, StringConstraints(pattern=REVISION)]
     files: dict[str, str]
     shared: dict[str, str]
+    compose_images: tuple[ComposeImage, ...] = ()
 
     def same(self, other: AdoptedProcedure) -> bool:
         """Whether ``other`` runs what this does: the commit apart, every
@@ -259,6 +260,7 @@ def manifest(procedure: AdoptedProcedure) -> OperationManifest:
         input_type=input_type(procedure.id, procedure.inputs),
         preconditions=procedure.preconditions,
         verification=procedure.verification,
+        compose_images=procedure.compose_images,
     )
 
 
@@ -440,6 +442,12 @@ def _procedure(
     try:
         declaration = ProcedureDeclaration.model_validate_json(json.dumps(scanned["declaration"]))
         inputs = _inputs(scanned, declaration.inputs, problems)
+        updates = declaration.compose_updates
+        compose_images = tuple(
+            ComposeImage.model_validate(row)
+            for row in scanned.get("compose_images", ())
+            if updates and f"{updates.source}/{row['project']}/{row['file']}" in objects
+        )
         procedure = AdoptedProcedure(
             **declaration.model_dump(include=set(ProcedureTerms.model_fields)),
             playbook=scanned["playbook"],
@@ -450,6 +458,7 @@ def _procedure(
             revision=proposal.revision,
             files={path: objects[path] for path in sorted(used) if path in objects},
             shared=dict(shared),
+            compose_images=compose_images,
         )
         manifest(procedure)
     except (ValidationError, ValueError) as exc:

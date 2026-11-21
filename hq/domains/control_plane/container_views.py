@@ -5,8 +5,10 @@ from typing import Any, override
 from django.views.generic import TemplateView
 
 from hq.platform.application.pages import PageMixin
+from hq.platform.application.security import web_principal
 lazy from hq.platform.application.container_findings import needs_you
 lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containers, standing_of, tally
+lazy from hq.platform.application.findings import container_deployment
 lazy from hq.platform.application.machines import container_context
 lazy from hq.platform.application.resource_capabilities import offered_changes
 lazy from hq.platform.application.upgrades import plan_for, readiness_of
@@ -32,11 +34,14 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
         (each for each in containers() if each.machine.name == host and each.running.name == running.name),
         None,
     )
+    plan = plan_for(item) if item is not None else None
+    target = plan.compose_target if plan else None
     return {
         **found,
         "standing": item.standing if item is not None else standing_of(running.image, host, running.name),
         "item": item,
-        "plan": plan_for(item) if item is not None else None,
+        "plan": plan,
+        "deployment": container_deployment(target, web_principal(request.user)) if target else None,
         "readiness": readiness_of(item) if item is not None and item.standing.repository is None else None,
         # Where the operator names what its image is built from, when the image does not say.
         "edit": offered_changes([resource])[resource.key].edit(resource.key, next=request.get_full_path()),
