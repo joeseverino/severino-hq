@@ -5,6 +5,7 @@ seams and boxes they draw are this module's, read by the stylesheet's
 ``.seam``, ``.token``, ``.whole``, ``.part``, ``.joined`` and ``.mark``.
 """
 
+import functools
 import re
 from html import unescape
 
@@ -211,9 +212,17 @@ def breakable(value, mark=""):
     if hasattr(value, "__html__"):
         after = mark_safe(DOT_MARKUP) if mark == DOT_MARK else conditional_escape(mark)  # noqa: S308 - HQ's own literal markup
         return conditional_escape(value) + after
+    return mark_safe(_drawn(str(value), mark))  # noqa: S308 - each word is escaped as it is drawn
+
+
+@functools.lru_cache(maxsize=4096)
+def _drawn(text: str, mark: str) -> str:
+    """Words ``breakable`` draws, drawn once: the same words with the same mark
+    draw the same markup on every page, and a table repeats them row by row."""
+
     if mark == DOT_MARK:
-        return mark_safe("".join([*_inside_last(_line(value), DOT_MARKUP.rstrip()), " "]))  # noqa: S308 - each word is escaped as it is drawn
-    return mark_safe("".join(_marked(_line(value), mark)))  # noqa: S308 - each word is escaped as it is drawn
+        return "".join([*_inside_last(_line(text), DOT_MARKUP.rstrip()), " "])
+    return "".join(_marked(_line(text), mark))
 
 
 # The mark that ends a value with ``{% dot %}``'s dot (``{{ x|breakable:"·" }}``),

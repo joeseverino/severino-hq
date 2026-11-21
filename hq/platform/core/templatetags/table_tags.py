@@ -661,7 +661,7 @@ def data_attributes(data: Any) -> SafeString:
     """Each ``data-`` attribute a declaration names (``tables.held_data``), as
     the start tag it belongs to writes it."""
 
-    return mark_safe("".join(format_html(f' data-{name}="{{}}"', value) for name, value in data.items()))  # noqa: S308 - each value escaped, each name held
+    return mark_safe("".join(f' data-{name}="{escape(value)}"' for name, value in data.items()))  # noqa: S308 - each value escaped, each name held
 
 
 @register.filter

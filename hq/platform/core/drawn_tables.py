@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.template.loader import render_to_string
+from django.utils.html import escape
 from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, column_kind
@@ -235,14 +236,13 @@ def _mark(row: DrawnRow, width: int) -> None:
 
 
 def _attributes(facts: CellFacts, role: str, own: str = "", sort: str = "") -> SafeString:
-    classes = [name for name in (*facts.classes, *facts.added) if name != own]
-    return format_html(
-        "{}{}{}{}{}",
-        SafeString(' scope="row"') if facts.row_header else "",
-        format_html(' class="{}"', " ".join(classes)) if classes else "",
-        format_html(' data-cell="{}"', role) if role else "",
-        format_html(' data-sort="{}"', sort) if sort else "",
-        mark_safe("".join(facts.marks)),  # noqa: S308 - the layout's own attributes
+    classes = " ".join(name for name in (*facts.classes, *facts.added) if name != own)
+    return mark_safe(  # noqa: S308 - each value escaped, the rest the layout's own attributes
+        (' scope="row"' if facts.row_header else "")
+        + (f' class="{escape(classes)}"' if classes else "")
+        + (f' data-cell="{escape(role)}"' if role else "")
+        + (f' data-sort="{escape(sort)}"' if sort else "")
+        + "".join(facts.marks)
     )
 
 
