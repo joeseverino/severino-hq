@@ -2,7 +2,7 @@
   {% choices %}
   {% for filter in table.filters %}
     <div class="table-filter-menu">
-      <button type="button" popovertarget="table-filter-{{ filter.name }}">{{ filter.label|button_words }}{% if filter.selected_count %} <span class="filter-count">{{ filter.selected_count|breakable }}</span>{% endif %}</button>
+      {% with menu="table-filter-"|add:filter.name %}{% button filter.label popovertarget=menu count=filter.selected_count|default:None %}{% endwith %}
       <div class="table-filter-options" id="table-filter-{{ filter.name }}" popover>
         {% for option in filter.options %}
           <label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label|breakable }}</label>

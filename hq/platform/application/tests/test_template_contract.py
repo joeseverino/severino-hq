@@ -45,7 +45,7 @@ OUTSIDE = {
     # A class beside a tag is still written, and one built from a value is
     # its prefix's.
     "templates/example/beside.html": (
-        '<b class="{% if a %}chip{% endif %}"></b>\n<i class="compact {% if b %}kpi{% endif %}"></i>\n'
+        '<b class="{% if a %}glow{% endif %}"></b>\n<i class="compact {% if b %}kpi{% endif %}"></i>\n'
         '<s class="tone-{{ t }}"></s>'
     ),
     "templates/example/parts.html": (
@@ -90,7 +90,7 @@ class TemplateValidationTests(SimpleTestCase):
             "markup.html:2": "data-secret",
             "markup.html:3": "style attribute",
             "markup.html:4": "heading",
-            "beside.html:1": "class chip ",
+            "beside.html:1": "class glow ",
             "beside.html:2": "class kpi ",
             "beside.html:3": "class tone-* ",
             "parts.html:1": "aside",

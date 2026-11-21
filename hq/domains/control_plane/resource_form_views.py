@@ -73,7 +73,7 @@ class ResourceFormView(View):
     def _kind(self, request, resource):
         if resource:
             return resource.kind
-        kind = request.GET.get("kind") or request.POST.get("kind") or ""
+        kind = request.GET.get("kind", "")
         if spec_withheld(kind):
             raise Http404
         return kind

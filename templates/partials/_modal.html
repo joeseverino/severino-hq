@@ -51,7 +51,7 @@ with the surrounding context and holds phrasing content only.
   <div class="modal-panel" tabindex="-1" autofocus>
     <div class="modal-head">
       <h2 id="modal-{{ id }}-title">{{ title|breakable }}</h2>
-      <button class="modal-close" type="button" command="{% if popover %}hide-popover{% else %}close{% endif %}" commandfor="modal-{{ id }}" aria-label="Close">&times;</button>
+      {% with dialog="modal-"|add:id %}{% button "×" css="modal-close" command=popover|yesno:"hide-popover,close" commandfor=dialog heard="Close" %}{% endwith %}
     </div>
     {% if lede %}<p class="modal-lede">{{ lede|breakable }}</p>{% endif %}
     {% if body_template %}{% headed top %}{% include body_template %}{% endheaded %}{% endif %}

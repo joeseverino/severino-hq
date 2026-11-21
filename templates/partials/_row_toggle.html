@@ -1,1 +1,1 @@
-<button type="button" class="row-expand" data-row-toggle aria-expanded="{% if open %}true{% else %}false{% endif %}" aria-label="{% if open %}Show less of this row{% else %}Show all of this row{% endif %}"></button>
+{% if open %}{% button "" css="row-expand" data_row_toggle=True expanded=True heard="Show less of this row" %}{% else %}{% button "" css="row-expand" data_row_toggle=True expanded=False heard="Show all of this row" %}{% endif %}

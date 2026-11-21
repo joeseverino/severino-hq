@@ -229,6 +229,11 @@ def button(
     name: Annotated[str, Describe("The field its form's own sends.")] = "",
     value: Annotated[Any, Describe("That field's value.")] = "",
     pressed: Annotated[bool | None, Describe("A toggle, and which way it stands.")] = None,
+    checked: Annotated[
+        bool | None, Describe("A switch, its track drawn after its words, and which way it stands.")
+    ] = None,
+    expanded: Annotated[bool | None, Describe("Shows or hides what it governs, and which it does now.")] = None,
+    heard: Annotated[Any, Describe("Its name aloud, where its words are a glyph or none and it has no title.")] = "",
     hit: Annotated[bool, Describe("Drawn smaller than a target, so it asks for its hit area.")] = False,
     modal: Annotated[str, Describe("The dialog a link opens where script runs.")] = "",
     icon: Annotated[str, Describe("The icon its words open with.")] = "",
@@ -263,6 +268,8 @@ def button(
         unknown += ["name", "value"]
     if outside and (not url or attributes or modal):
         raise template.TemplateSyntaxError("button leads outside (outside=True) to a url, with no hooks or modal")
+    if (posts or url or current) and (checked is not None or expanded is not None or heard):
+        unknown += ["checked", "expanded", "heard"]
     if unknown:
         raise template.TemplateSyntaxError(f"button takes no {', '.join(unknown)}")
     try:
@@ -283,8 +290,27 @@ def button(
         return mark_safe(render_to_string(OUTSIDE_LINK, {"url": url, **named}).strip())  # noqa: S308 - the outside link part's own markup
     if url:
         return format_html("<a{}>{}</a>", html_attributes({"href": url, "data-modal-open": modal} | named), words)
+    # A glyph or no words is named by its title, as a posting button is.
+    stands = {
+        "role": "switch" if checked is not None else "",
+        "aria-checked": _way(checked),
+        "aria-pressed": _way(pressed),
+        "aria-expanded": _way(expanded),
+        "aria-label": heard or (title if _glyph(label) else ""),
+    }
+    if checked is not None:
+        words = format_html("<span>{}</span>{}", words, mark_safe(SWITCH_TRACK))  # noqa: S308 - the switch's own literal markup
     kind = {"type": "submit" if submit else "button", "name": name, "value": value, "disabled": bool(disabled)}
-    return format_html("<button{}>{}</button>", html_attributes(kind | named), words)
+    return format_html("<button{}>{}</button>", html_attributes(kind | named | stands), words)
+
+
+SWITCH_TRACK = '<span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>'
+
+
+def _way(state):
+    """A state ARIA reads as ``"true"`` or ``"false"``, or none where it is not given."""
+
+    return "" if state is None else ("true" if state else "false")
 
 
 # How many controls a head draws beside its title; the rest wait in its
@@ -443,7 +469,9 @@ slotted(
         one writer of `.btn` (`ui.button_classes` for Python's parts): a link, with `outside=True` one out
         of HQ drawn as `{% outside_link %}` draws it, with an `offer` one that posts, with `submit=True`
         its form's own, and with neither and no url one a script acts on (`data_*`, `popovertarget`,
-        `command`). Its words may open with an `icon`, close with a `count` or end with an `arrow`. A post
+        `command`). Its words may open with an `icon`, close with a `count` or end with an `arrow`; one with
+        a glyph or no words is named aloud by its `heard`, else its title. A `<button>` may be a toggle
+        (`pressed`), a switch drawn with its track (`checked`) or a disclosure (`expanded`). A post
         is only ever an offer's: a `PageAction` from `PageAction.command`, which is None for a reader who
         may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has no way to draw a
         press its reader would be refused. `_page_action.html` draws one; a confirmation's is

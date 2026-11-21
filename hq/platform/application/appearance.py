@@ -19,6 +19,10 @@ from .describe import listed
 from .ui import ended
 
 Theme = Appearance.Theme
+# Each theme as the menu offers it: its value, its name and the icon its button draws.
+THEME_CHOICES = tuple(
+    (value, label, {Theme.LIGHT: "sun", Theme.DARK: "moon"}.get(value, "laptop")) for value, label in Theme.choices
+)
 
 SET_THEME = "appearance.theme.set"
 

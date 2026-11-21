@@ -825,7 +825,7 @@ class DeclareFromWhatHQKnowsTests(TestCase):
         )
         response = self.client.post(
             reverse("control_plane:create") + "?" + query,
-            form_keyed({"kind": "machine", "name": "example-host", "addresses": ["100.64.0.7"]}),
+            form_keyed({"name": "example-host", "addresses": ["100.64.0.7"]}),
         )
 
         self.assertRedirects(
