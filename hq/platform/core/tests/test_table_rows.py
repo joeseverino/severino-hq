@@ -132,3 +132,14 @@ class TableRowTests(SimpleTestCase):
         (toggle,) = select(html, "data-row-toggle")
         self.assertEqual(toggle.attrs["aria-expanded"], "false")
         self.assertIn("row-expand", toggle.classes)
+
+    def test_a_cell_that_heads_its_row_is_its_rows_header(self):
+        from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
+
+        table = DataTable(
+            "Things", (TableColumn("Name"), TableColumn("Size")), (Row((Cell("a", header=True), Cell("1"))),)
+        )
+        (header,) = [
+            cell for cell in elements(_render("{% data_table table %}", {"table": table}), "th") if cell.words == "a"
+        ]
+        self.assertEqual(header.attrs.get("scope"), "row")

@@ -233,7 +233,7 @@ def _attributes(facts: CellFacts, role: str, own: str = "", sort: str = "") -> S
     classes = [name for name in (*facts.classes, *facts.added) if name != own]
     return format_html(
         "{}{}{}{}{}",
-        ' scope="row"' if facts.row_header else "",
+        SafeString(' scope="row"') if facts.row_header else "",
         format_html(' class="{}"', " ".join(classes)) if classes else "",
         format_html(' data-cell="{}"', role) if role else "",
         format_html(' data-sort="{}"', sort) if sort else "",
