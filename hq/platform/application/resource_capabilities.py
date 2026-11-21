@@ -14,6 +14,7 @@ from typing import NamedTuple
 lazy from django.conf import settings
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.provider_spec import ControllerActionPolicy
 from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
@@ -135,11 +136,12 @@ def offered_changes(resources: Iterable[ManagedResource]) -> dict[str, Offered]:
     return offered
 
 
-def kind_converges(kind: str) -> bool:
-    """Whether the controller reconciles resources of this kind."""
+def kind_converges(kind: str) -> ControllerActionPolicy | None:
+    """How the controller applies HQ's config for resources of this kind (its
+    ``automatic`` says whether unasked), or None when it applies none."""
     capability = controller_capability_registry().capabilities.get(kind)
     policy = capability.actions.get("reconcile") if capability else None
-    return bool(policy and policy.mode == "apply")
+    return policy if policy is not None and policy.mode == "apply" else None
 
 
 def public_dns_enabled() -> bool:

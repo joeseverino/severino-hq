@@ -17,7 +17,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
-from hq.domains.control_plane.providers import PROVIDERS, controller_capability_registry, read_spec, readout_rows
+from hq.domains.control_plane.providers import PROVIDERS, read_spec, readout_rows
 
 from .asks import APPLIES_SHORTLY
 from .display_words import as_members
@@ -34,7 +34,7 @@ from .infrastructure import (
     serialize_resource,
 )
 from .record_errors import RecordNotFound
-from .resource_capabilities import ResourceCapabilities, resource_capabilities
+from .resource_capabilities import ResourceCapabilities, kind_converges, resource_capabilities
 from .resource_operations import resource_history
 from .tone import Tone
 lazy from . import machines
@@ -153,15 +153,6 @@ class RecordStatus:
         return self.state.tone
 
 
-def _reconciles(kind: str) -> tuple[bool, bool]:
-    """``(applies, automatically)``: whether the controller applies HQ's config."""
-
-    capability = controller_capability_registry().capabilities.get(kind)
-    policy = capability.actions.get("reconcile") if capability else None
-    applies = bool(policy and policy.mode == "apply")
-    return applies, bool(applies and policy.automatic)
-
-
 def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
     """A record that is switched off, changed outside HQ, or reporting a problem."""
 
@@ -197,13 +188,15 @@ def record_status(resource, *, health: dict[str, str] | None = None) -> RecordSt
     if fault is not None:
         return fault
     read_at = resource.last_observed_at
-    applies, automatically = _reconciles(resource.kind)
+    applies = kind_converges(resource.kind)
     state = ResourceState(health["state"])
     if state is ResourceState.PENDING:
         return RecordStatus(
             RecordState.PENDING,
             health["label"],
-            APPLIES_SHORTLY if automatically else f"Press {OperationRequest.Action.RECONCILE.label} to apply it.",
+            APPLIES_SHORTLY
+            if applies and applies.automatic
+            else f"Press {OperationRequest.Action.RECONCILE.label} to apply it.",
             None,
             read_at,
         )
