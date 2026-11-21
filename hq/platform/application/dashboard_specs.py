@@ -4,7 +4,7 @@ from pydantic import Field, create_model
 
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
-from . import action_items, derived_reads, glance, pins
+from . import action_items, derived_reads, glance, glance_refresh, pins
 from .appearance import SET_THEME, ThemeCommand, set_theme
 from .contracts import Effect
 from .demo import SET_DEMO, DemoCommand, set_demo, showing_demo
@@ -141,23 +141,23 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             state=showing_demo,
         ),
         CapabilitySpec(
-            glance.DASHBOARD_REFRESH,
+            glance_refresh.DASHBOARD_REFRESH,
             "Ask for a fresh reading of every dashboard panel a controller can read.",
             Effect.INFRASTRUCTURE_CHANGE,
             Capability.MANAGE_INFRASTRUCTURE,
-            glance.DashboardRefreshCommand,
-            glance.request_dashboard_refresh,
+            glance_refresh.DashboardRefreshCommand,
+            glance_refresh.request_dashboard_refresh,
             execution_notes=("Ask only for panels a controller has a way to read.",),
             label="Refresh the dashboard",
             verb="Refresh",
         ),
         CapabilitySpec(
-            glance.DASHBOARD_REFRESH_STALE,
+            glance_refresh.DASHBOARD_REFRESH_STALE,
             "Ask again for the dashboard panels whose reading is due.",
             Effect.INFRASTRUCTURE_CHANGE,
             Capability.MANAGE_INFRASTRUCTURE,
-            glance.DashboardRefreshCommand,
-            glance.request_stale_panel_refresh,
+            glance_refresh.DashboardRefreshCommand,
+            glance_refresh.request_stale_panel_refresh,
             execution_notes=("Ask once for each panel that is due, readable and not already asked for.",),
             label="Refresh due readings",
         ),

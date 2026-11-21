@@ -24,13 +24,8 @@ from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
 from hq.platform.application.entity_links import entity_link, page_url
-from hq.platform.application.glance import (
-    DASHBOARD_REFRESH,
-    DASHBOARD_REFRESH_STALE,
-    DASHBOARD_SETTINGS,
-    dashboard_configuration,
-    glance_context,
-)
+from hq.platform.application.glance import DASHBOARD_SETTINGS, dashboard_configuration, glance_context
+from hq.platform.application.glance_refresh import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE
 from hq.platform.application.moments import moment, stamp_day
 from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.pages import PageVisit, page_context

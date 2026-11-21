@@ -30,16 +30,13 @@ from ..asks import REFRESHING
 from ..capabilities import execute_capability
 from ..glance import (
     DASHBOARD_MACHINE,
-    DASHBOARD_REFRESH,
     DASHBOARD_SETTINGS,
-    GLANCE_REGION,
     DashboardMachineCommand,
     dashboard_panels,
-    dashboard_refresh_plan,
     panel_specs,
-    refresh_ask,
     select_dashboard_machine,
 )
+from ..glance_refresh import DASHBOARD_REFRESH, GLANCE_REGION, dashboard_refresh_plan, refresh_ask
 from ..report_testing import bridged
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from .glance_readings import DOCKER, HOST, reported_hour, reported_machine, reported_weather

@@ -11,7 +11,7 @@ its id, is shown again if it was open.
 <div data-glance data-fragment="{% url 'dashboard_glance' %}"{% if dashboard_refreshing %} data-fragment-poll="3"{% endif %}>
   {% comment %}
   The region asks for its due readings itself, once, when the page is showing.
-  Asking by hand is each panel's Refresh (glance.refresh_ask), an ask whose
+  Asking by hand is each panel's Refresh (glance_refresh.refresh_ask), an ask whose
   answer fetches the region, which then follows the reading while it is on its
   way. Its note is heard; the panel's own line says how its reading stands.
   Only a reading a person asked for is said to be refreshing (glance._panel):
