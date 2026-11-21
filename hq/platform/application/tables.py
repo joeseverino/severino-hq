@@ -167,6 +167,8 @@ class Piece:
     part: Part
     context: Mapping[str, Any]
     words: str
+    # It draws a field a reader fills in (a select), which fills its column.
+    field: bool = False
 
     def __post_init__(self) -> None:
         if not self.part.partial:
@@ -341,6 +343,8 @@ class TableColumn:
     # False for a column whose values have no order, such as prose, in a
     # table whose other columns sort on the page.
     sorts: bool = True
+    # What a hover over its heading says of it (an agent's client).
+    title: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "kind", column_kind(self.kind, self.css, otherwise=""))

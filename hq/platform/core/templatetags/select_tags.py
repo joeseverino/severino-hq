@@ -63,7 +63,6 @@ slotted(
         partial=SELECT_PARTIAL,
         function=select,
         example=tags.SELECT,
-        states=tags.SELECT_STATES,
     ),
     library=register,
 )

@@ -357,10 +357,9 @@ class AgentPolicyView(PageMixin, TemplateView):
             context["endpoint_read"] = True
             if part:
                 return context
-        context.update(self._rules())
         # The rules are drawn as a form only for whoever may save them, and
         # read as they hold for anyone else.
-        context["rules_settable"] = runs_here(capability_policy.SET_POLICY)
+        context.update(self._rules(settable=runs_here(capability_policy.SET_POLICY)))
         context["every_read"] = part == self.EVERY_PART or "all" in self.request.GET
         if part == self.EVERY_PART:
             return context
@@ -406,17 +405,23 @@ class AgentPolicyView(PageMixin, TemplateView):
         return context
 
     @staticmethod
-    def _rules() -> dict:
+    def _rules(*, settable: bool) -> dict:
         """The policy form's tables and what their headings say."""
 
         current = capability_policy.rules()
-        policy = {"rule_count": len(current)}
-        policy["columns"], policy["groups"] = capability_policy.matrix(current)
+        columns, groups = capability_policy.matrix(current)
         # Nearly every rule is at its default, so the page opens on the ones
         # that are not, and the rest fold under their own heading.
-        policy["changed_groups"], policy["default_groups"] = capability_policy.split_by_default(policy["groups"])
-        policy["default_count"] = sum(len(group.rows) for group in policy["default_groups"])
-        return policy
+        changed, defaults = capability_policy.split_by_default(groups)
+        return {
+            "rule_count": len(current),
+            "rules_settable": settable,
+            "changed_rules": capability_policy.table("Rules", columns, changed, settable=settable) if changed else None,
+            "default_rules": capability_policy.table("Defaults", columns, defaults, settable=settable)
+            if defaults
+            else None,
+            "default_count": sum(len(group.rows) for group in defaults),
+        }
 
     def post(self, request):
         form = forms.Form(request.POST)

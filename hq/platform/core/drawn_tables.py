@@ -134,6 +134,7 @@ def _headings(table: DataTable) -> list[tuple[dict[str, Any], CellFacts]]:
                     "sort": column.sort,
                     "hidden": column.hidden or not column.label,
                     "sorts": column.sorts,
+                    "title": column.title,
                 },
                 CellFacts(
                     classes=tuple(column.css.split()), kind=column_kind(column.kind, column.css), drop=column.drop
@@ -260,14 +261,15 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         for each in cell.lines
         if each.shows not in _OFF_LINE
     ]
+    fields = cell.field is not None or bool(cell.piece and cell.piece.field)
     tops = [bool(cell.tone or (cell.status and cell.status.pill))] + [False] * (
         (bool(cell.parts) if cell.fit else len(cell.parts)) + bool(cell.lines) + (cell.count is not None) + cell.fold
     )
     facts = CellFacts(
         says_nothing=cell.says_nothing,
         longest=max([line, *lines]),
-        controls=bool(cell.url or (cell.link and cell.link.url) or cell.fold or cell.field is not None or editor),
-        fields=cell.field is not None,
+        controls=bool(cell.url or (cell.link and cell.link.url) or cell.fold or fields or editor),
+        fields=fields,
         moved=[Moved("editor", None, editor)]
         if editor and editor["open"]
         else [] + [Moved("below", block.label or None, block) for block in cell.below],

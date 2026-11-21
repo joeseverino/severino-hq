@@ -435,6 +435,12 @@ alone.
 A control's visible name is `{% control_label "From" control="id" %}`, the `<label>` of the
 control with that id; with no `control` it names what follows.
 
+### core/_policy_setting.html (host only)
+
+A rule is read and changed where it sits, in its agent's column of the rules table
+(`capability_policy.table`): a select in the rule's tone for whoever may save the rules, else the
+chosen words in that tone, and past the agent's grant the reason, muted, on one line.
+
 ### django/forms/field.html (host only)
 
 A field is the view's Django form field, drawn by this template, so its label, help, errors and

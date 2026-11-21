@@ -14,6 +14,7 @@ from hq.platform.core.part_examples import DRAWN_AT
 from hq.platform.core.template_parts import Example
 lazy from hq.domains.control_plane.models import ApprovalRequest
 lazy from hq.domains.jobs.models import JobState
+lazy from hq.platform.application import capability_policy
 lazy from hq.platform.application.adoption import ONLY_READS, WriteGap
 lazy from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
 lazy from hq.platform.application.approvals import DECISIONS, NO_OFFER, Offer, _decision_link
@@ -84,37 +85,34 @@ def _policy():
         )
         return Row(name, label, effect, default, (cell,))
 
-    return {
-        "columns": (column,),
-        "label": "Example rules",
-        "groups": (
-            Group(
-                "Example records",
-                (
-                    row("example.edit", "Edit an example record", Effect.REMOTE_WRITE, "On", "allow"),
-                    row("example.move", "Move an example record", Effect.REMOTE_WRITE, "On", None),
-                    row(
-                        "example.stop",
-                        "Stop an example container",
-                        Effect.DESTRUCTIVE,
-                        "Ask me first",
-                        "approve",
-                    ),
-                    row(
-                        "example.delete",
-                        "Delete an example record",
-                        Effect.DESTRUCTIVE,
-                        "Ask me first",
-                        "deny",
-                    ),
+    groups = (
+        Group(
+            "Example records",
+            (
+                row("example.edit", "Edit an example record", Effect.REMOTE_WRITE, "On", "allow"),
+                row("example.move", "Move an example record", Effect.REMOTE_WRITE, "On", None),
+                row(
+                    "example.stop",
+                    "Stop an example container",
+                    Effect.DESTRUCTIVE,
+                    "Ask me first",
+                    "approve",
+                ),
+                row(
+                    "example.delete",
+                    "Delete an example record",
+                    Effect.DESTRUCTIVE,
+                    "Ask me first",
+                    "deny",
                 ),
             ),
-            Group(
-                "Example hosts",
-                (row("example.read", "Read an example host", Effect.READ, "On", None, "Not granted"),),
-            ),
         ),
-    }
+        Group(
+            "Example hosts",
+            (row("example.read", "Read an example host", Effect.READ, "On", None, "Not granted"),),
+        ),
+    )
+    return {"table": capability_policy.table("Example rules", (column,), groups, settable=True)}
 
 
 def _approval(state, decided_by=NOBODY, **decided):
@@ -290,12 +288,9 @@ SELECT = Example(
 )
 
 
-SELECT_STATES = {
-    # Agents' rules (core/_policy_table.html), each setting a toned select
-    # (core/_policy_setting.html): every state a rule can be in, and a cell
-    # past an agent's grant.
-    "policy-table": Example('{% include "core/_policy_table.html" %}', _policy),
-}
+# Agents' rules (capability_policy.table), each setting a toned select:
+# every state a rule can be in, and a cell past an agent's grant.
+POLICY_TABLE = Example("{% data_table table %}", _policy)
 
 
 STEPS_STATES = {

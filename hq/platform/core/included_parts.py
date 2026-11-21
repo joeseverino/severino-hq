@@ -4,7 +4,7 @@ registered; the template contract reads both (``template_contract.parts``).
 A ``public`` one is an extension's to include too."""
 
 from hq.platform.core.included_actions import APPROVAL_CARD, ASK, PAGE_ACTION, WRITE_GAP
-from hq.platform.core.part_examples import charts, connection, forms, graph, pages, records
+from hq.platform.core.part_examples import charts, connection, forms, graph, pages, records, tags
 from hq.platform.core.template_parts import Part, included as _part
 
 FIELD = Part(
@@ -283,9 +283,21 @@ METER = _part(
     example=records.METER,
     states=records.METER_STATES,
 )
+POLICY_SETTING = Part(
+    name="",
+    partial="core/_policy_setting.html",
+    about="One agent's rule for one action: its select, its words where it cannot change, or why it has none.",
+    rules="""
+    A rule is read and changed where it sits, in its agent's column of the rules table
+    (`capability_policy.table`): a select in the rule's tone for whoever may save the rules, else the
+    chosen words in that tone, and past the agent's grant the reason, muted, on one line.
+    """,
+    example=tags.POLICY_TABLE,
+)
 
 PARTS = (
     FIELD,
+    POLICY_SETTING,
     Part(
         name="",
         partial="django/forms/widgets/choice_cards.html",
