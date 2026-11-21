@@ -185,6 +185,9 @@ class Cell:
     tone: str = ""
     # In bold, the name its row is read by.
     name: bool = False
+    # It shows nothing at all, not even the empty value's mark: the side of a
+    # change its row's record already says.
+    blank: bool = False
     # It heads its row (``th scope="row"``), its label in the heading's voice.
     header: bool = False
     role: Role = ""

@@ -734,8 +734,8 @@ def _every_kind() -> DataTable:
     shows, and the count of a fold's rest across the row; an entity named
     as code, a state drawn as ``status_pill`` draws it (a chip, an icon), a
     tip and a title, blocks kept for the open line, a declared part, a row's
-    id, data, mark and order, a total in the foot, and a region of its own
-    height."""
+    id, data, mark and order, a total in the foot with blank cells beside
+    it, and a region of its own height."""
 
     from hq.platform.application import tables
 
@@ -816,7 +816,16 @@ def _every_kind() -> DataTable:
                 count=4,
             ),
         ),
-        footer=tables.Row((Cell("Total", name=True), Cell(), Cell(), Cell(amount=Decimal(39)), Cell(), Cell())),
+        footer=tables.Row(
+            (
+                Cell("Total", name=True),
+                Cell(),
+                Cell(blank=True),
+                Cell(amount=Decimal(39)),
+                Cell(blank=True),
+                Cell(blank=True),
+            )
+        ),
         region={"pane": True},
     )
 
