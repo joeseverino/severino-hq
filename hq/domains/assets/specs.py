@@ -7,13 +7,11 @@ from django.db.models import Q
 
 from hq.platform.application import assets, expenses
 from hq.platform.application.answer_fields import (
-    DeductibleAmount,
     LinkedContent,
     LinkedDocs,
     LinkedExpenses,
     PageUrl,
     RecordSlug,
-    TotalCostAmount,
     UpdatedAt,
 )
 from hq.platform.application.business_use import BusinessUseShare
@@ -49,19 +47,21 @@ FILTERS = (
 
 
 def _unpriced() -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """An active asset with no date or cost, kept; a priced one and a retired one, left out."""
+    """An active asset with no date or no cost, kept; a priced one, a free one and a retired one, left out."""
 
-    kept = Asset.objects.create(item_name="Example router")
+    undated = Asset.objects.create(item_name="Example router", total_cost=Decimal("40.00"))
+    uncosted = Asset.objects.create(item_name="Example hub", purchase_date="2030-01-02")
     priced = Asset.objects.create(item_name="Example switch", purchase_date="2030-01-02", total_cost=Decimal("80.00"))
+    free = Asset.objects.create(item_name="Example license", purchase_date="2030-01-02", total_cost=Decimal("0.00"))
     retired = Asset.objects.create(item_name="Example modem", status=Asset.Status.RETIRED)
-    return (kept.slug,), (priced.slug, retired.slug)
+    return (undated.slug, uncosted.slug), (priced.slug, free.slug, retired.slug)
 
 
 UNPRICED = ListToggle(
     "missing_purchase",
     "No date or cost",
-    "True for only the active assets with no purchase date or no cost.",
-    Q(status=Asset.Status.ACTIVE) & (Q(purchase_date__isnull=True) | Q(total_cost=0)),
+    "True for only the active assets with no purchase date or no cost recorded.",
+    Q(status=Asset.Status.ACTIVE) & (Q(purchase_date__isnull=True) | Q(total_cost__isnull=True)),
     _unpriced,
 )
 
@@ -76,9 +76,9 @@ class AssetRow(TypedDict):
     category: assets.AssetCategory
     status: assets.AssetStatus
     purchase_date: assets.PurchaseDate
-    total_cost: TotalCostAmount
+    total_cost: assets.AssetCostAmount
     business_use_percentage: BusinessUseShare
-    estimated_deductible_amount: DeductibleAmount
+    estimated_deductible_amount: assets.AssetDeductible
     payment_method: assets.PaymentMethod
     serial_number: assets.SerialNumber
     warranty_date: assets.WarrantyDate

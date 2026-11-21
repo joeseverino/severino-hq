@@ -5709,7 +5709,7 @@
             }
           },
           "total_cost": {
-            "$ref": "#/components/schemas/TotalCost",
+            "$ref": "#/components/schemas/AssetCost",
             "anyOf": [
               {
                 "exclusiveMaximum": 10000000000,
@@ -5722,7 +5722,7 @@
                 "type": "string"
               }
             ],
-            "default": "0.00"
+            "default": null
           },
           "vendor": {
             "$ref": "#/components/schemas/AssetVendor",
@@ -5739,6 +5739,36 @@
         ],
         "type": "object"
       },
+      "AssetCost": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "What it cost in all. Null when not recorded; zero for a free asset.",
+        "title": "Asset cost"
+      },
+      "AssetCostAmount": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "What it cost in all, a decimal string with two places. Null when not recorded; zero for a free asset.",
+        "examples": [
+          "12.50"
+        ],
+        "title": "Asset cost amount"
+      },
       "AssetCreateRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -5754,6 +5784,18 @@
           "payload"
         ],
         "type": "object"
+      },
+      "AssetDeductible": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "An estimate of what may be deducted: `total_cost` times `business_use_percentage`, rounded to the cent, as a decimal string. Null while its cost is not recorded.",
+        "title": "Asset deductible"
       },
       "AssetDeleteRequest": {
         "additionalProperties": false,
@@ -6016,7 +6058,7 @@
             "$ref": "#/components/schemas/AssetCategory"
           },
           "estimated_deductible_amount": {
-            "$ref": "#/components/schemas/DeductibleAmount"
+            "$ref": "#/components/schemas/AssetDeductible"
           },
           "infrastructure": {
             "$ref": "#/components/schemas/AssetInfrastructure"
@@ -6043,7 +6085,7 @@
             "$ref": "#/components/schemas/AssetStatus"
           },
           "total_cost": {
-            "$ref": "#/components/schemas/TotalCostAmount"
+            "$ref": "#/components/schemas/AssetCostAmount"
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
@@ -6122,7 +6164,7 @@
             "$ref": "#/components/schemas/AssetCategory"
           },
           "estimated_deductible_amount": {
-            "$ref": "#/components/schemas/DeductibleAmount"
+            "$ref": "#/components/schemas/AssetDeductible"
           },
           "infrastructure": {
             "$ref": "#/components/schemas/AssetInfrastructure"
@@ -6149,7 +6191,7 @@
             "$ref": "#/components/schemas/AssetStatus"
           },
           "total_cost": {
-            "$ref": "#/components/schemas/TotalCostAmount"
+            "$ref": "#/components/schemas/AssetCostAmount"
           },
           "updated_at": {
             "$ref": "#/components/schemas/UpdatedAt"
@@ -6326,7 +6368,7 @@
                 }
               },
               "total_cost": {
-                "$ref": "#/components/schemas/TotalCost",
+                "$ref": "#/components/schemas/AssetCost",
                 "anyOf": [
                   {
                     "exclusiveMaximum": 10000000000,
@@ -16217,7 +16259,7 @@
             }
           },
           "total_cost": {
-            "$ref": "#/components/schemas/TotalCost",
+            "$ref": "#/components/schemas/AssetCost",
             "anyOf": [
               {
                 "exclusiveMaximum": 10000000000,
@@ -37260,7 +37302,7 @@
             "style": "form"
           },
           {
-            "description": "True for only the active assets with no purchase date or no cost.",
+            "description": "True for only the active assets with no purchase date or no cost recorded.",
             "explode": true,
             "in": "query",
             "name": "missing_purchase",

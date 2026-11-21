@@ -7,7 +7,7 @@ A record whose reference names nothing is one finding of its own.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.db.models import Count
 
@@ -47,8 +47,8 @@ class _Backlog:
 
     The title is the count and what is true of them, said whole for ``one``
     and for ``many``. ``named`` reads the records themselves, which then are
-    the count: the first few are said by name, each a link to its own page,
-    and the rest are a count."""
+    the count: the first few are said by name, each a link to its own page
+    with its ``detail`` beside it, and the rest are a count."""
 
     one: str
     many: str
@@ -69,7 +69,7 @@ class _Backlog:
             return ()
         first = named[:MOST_NAMED]
         more = count - len(first)
-        names = ", ".join(link.label for link in first) + (
+        names = ", ".join(f"{link.label} ({link.detail})" if link.detail else link.label for link in first) + (
             f" and {counted(more, 'other')}" if first and more > 0 else ""
         )
         return (
@@ -118,12 +118,17 @@ def _unread() -> int:
 
 
 def _unpriced() -> tuple[EntityLink, ...]:
-    """Each active asset with no purchase date or no cost, by name."""
+    """Each active asset with no purchase date or no cost, by name, with which it lacks."""
 
+    found = Asset.objects.filter(UNPRICED.keeps).order_by("item_name")
     return tuple(
-        entity_link("asset", slug, label=name)
-        for name, slug in Asset.objects.filter(UNPRICED.keeps).order_by("item_name").values_list("item_name", "slug")
+        replace(entity_link("asset", slug, label=name), detail=_lacks(bought is None, cost is None))
+        for name, slug, bought, cost in found.values_list("item_name", "slug", "purchase_date", "total_cost")
     )
+
+
+def _lacks(date: bool, cost: bool) -> str:
+    return {(True, True): "no purchase date or cost", (True, False): "no purchase date"}.get((date, cost), "no cost")
 
 
 def _links_to_nothing(rule: str, model: type) -> FindingRule:

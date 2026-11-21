@@ -6,7 +6,7 @@
   {% if domain %}{% fact "Domain page" %}{% entity domain %}{% endfact %}{% endif %}
   {% if asset.vendor %}{% fact "Vendor" value=asset.vendor %}{% endif %}
   {% fact "Purchased" %}{{ asset.purchase_date|when }}{% endfact %}
-  {% if asset.total_cost != "0.00" %}
+  {% if asset.total_cost is not None %}
     {% fact "Cost" %}{{ asset.total_cost|money }}{% endfact %}
     {% fact "Business use" %}{{ asset.business_use_percentage|measured:"%" }}{% endfact %}
     {% fact "Deductible (est.)" %}{{ asset.estimated_deductible_amount|money }}{% endfact %}

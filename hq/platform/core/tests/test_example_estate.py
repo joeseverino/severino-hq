@@ -118,7 +118,7 @@ class ExampleEstateTests(TestCase):
 
     def test_an_assets_expense_is_dated_and_filed_as_its_purchase(self):
         # An asset with no cost recorded was not bought, so no expense files it.
-        for asset in Asset.objects.exclude(total_cost=0):
+        for asset in Asset.objects.filter(total_cost__isnull=False):
             with self.subTest(asset=asset.slug):
                 (expense,) = Expense.objects.filter(related_asset=asset)
                 self.assertEqual(expense.date, asset.purchase_date)
