@@ -14,7 +14,7 @@ from hq.platform.core.part_examples import DRAWN_AT
 from hq.platform.core.template_parts import Example
 lazy from hq.domains.control_plane.models import ApprovalRequest
 lazy from hq.domains.jobs.models import JobState
-lazy from hq.platform.application import capability_policy
+lazy from hq.platform.application import capability_policy, tables
 lazy from hq.platform.application.adoption import ONLY_READS, WriteGap
 lazy from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
 lazy from hq.platform.application.approvals import DECISIONS, NO_OFFER, Offer, _decision_link
@@ -731,8 +731,6 @@ def _every_kind() -> DataTable:
     id, data, mark, order and ask, a run of parts as far as its line holds,
     a blank cell, a total in the foot, and a region of its own height."""
 
-    from hq.platform.application import tables
-
     def row(name: str, **options) -> tables.Row:
         return tables.Row(
             (
@@ -756,7 +754,13 @@ def _every_kind() -> DataTable:
                 lines=(Cell("Machine", muted=True, parts=(Cell("Online", dot=True, shows="narrow"),)),),
             ),
             *head.cells[1:4],
-            Cell("Up 1 week,", parts=(Cell("healthy", muted=True, title="An example health check"),)),
+            Cell(
+                "Up 1 week,",
+                parts=(
+                    Cell("healthy", muted=True, title="An example health check"),
+                    Cell("example check", muted=True, dot=True, shows="narrow-more"),
+                ),
+            ),
             *head.cells[5:],
         ),
     )
@@ -823,7 +827,39 @@ def _every_kind() -> DataTable:
     )
 
 
-DATA_TABLE_STATES = {"kinds": Example("{% data_table table %}", context=lambda: {"table": _every_kind()})}
+def _queue_kind() -> DataTable:
+    """Rows as the queue reads them: a title, its urgency's mark, which only a
+    screen reader hears unless serious, and what it means cut to the line
+    until the row opens; open, what was read, what to do and where to look,
+    each a declared part."""
+
+    from hq.platform.application.decisions import decision
+    from hq.platform.core.included_queue import ICON_LINKS, INSIGHT_FACTS, OPERATOR_STEPS
+    from hq.platform.core.part_examples.records import ICON_LINKS as LINKS, opened_problems
+
+    def piece(part, **given) -> Cell:
+        # Each says on its line what it is about, so its line says something.
+        return Cell(piece=tables.Piece(part, given, words=part.about))
+
+    def row(item: dict) -> tables.Row:
+        css = "is-mark" if item["status"] == "serious" else "is-mark visually-hidden"
+        mark = Cell(status=tables.StatusMark(item["urgency"], tone=item["status"], css=css))
+        gist = Cell(item["detail"], shows="gist", data={"example": "gist"})
+        pieces = (
+            piece(INSIGHT_FACTS, facts=item["facts"]),
+            piece(OPERATOR_STEPS, steps=item["steps"]),
+            piece(ICON_LINKS, **LINKS.given()),
+        )
+        title = Cell(item["label"], "/example/", name=True, parts=(mark, gist), below=(tables.Below("", pieces),))
+        return tables.Row((title,))
+
+    return DataTable("Example queue", (TableColumn("Item"),), tuple(row(decision(each)) for each in opened_problems()))
+
+
+DATA_TABLE_STATES = {
+    "kinds": Example("{% data_table table %}", context=lambda: {"table": _every_kind()}),
+    "queue": Example("{% data_table table %}", context=lambda: {"table": _queue_kind()}),
+}
 
 
 DOT = Example("{{ count }}{% dot %}{{ age }}", context={"count": "3 example hosts", "age": "2 days ago"})

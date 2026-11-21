@@ -32,15 +32,16 @@ from hq.platform.core.templatetags.value_tags import (
 )
 from hq.platform.core.templatetags.write_tags import row_editor
 
-from .table_layout import SAYS_NOTHING, CellFacts, Moved, RowFacts, TableFacts, lay_out
+from .table_layout import GIST, SAYS_NOTHING, CellFacts, Moved, RowFacts, TableFacts, lay_out
 
 # The class a value that shows only part of the time is drawn in, which the
 # region reads (``table_cells._OFF_LINE``, ``table_layout.HELD``).
-SHOWN = {"more": "row-more", "narrow": "narrow-only", "narrow-more": "narrow-more"}
+SHOWN = {"more": "row-more", "narrow": "narrow-only", "narrow-more": "narrow-more", "gist": GIST}
 # The classes of a column its cells carry too: a moment keeps its line (tables.css).
 _CELL_CLASSES = frozenset({"date-col"})
-# What the row's line shows of a value drawn only once it opens or in a narrow box.
-_OFF_LINE = frozenset({"more", "narrow"})
+# What the row's line never measures of a value: one drawn only once it opens
+# or in a narrow box, and a gist, cut to the room its line leaves.
+_OFF_LINE = frozenset({"more", "narrow", "gist"})
 # The characters a dot before a value adds to its line: a no-break space and the dot.
 _DOT = 2
 
@@ -305,7 +306,11 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         moved=[Moved("editor", None, editor)]
         if editor and editor["open"]
         else [] + [Moved("below", block.label or None, block) for block in cell.below],
-        holds={SHOWN[part.shows] for part in (cell, *cell.parts, *cell.lines) if part.shows in ("more", "narrow-more")}
+        holds={
+            SHOWN[part.shows]
+            for part in (cell, *cell.parts, *cell.lines)
+            if part.shows in ("more", "narrow-more", "gist")
+        }
         | ({"line-rest"} if runs else set()),
         names=int(cell.name),
         row_header=cell.header,
@@ -415,6 +420,9 @@ def _content(cell: DrawnCell, drawing: _Drawing) -> SafeString:
         drawn.append(line_run(parts, kind="dots"))
     else:
         drawn += [_after(part, cell, drawing) for part in value.parts]
+    # A gist takes the room its line leaves (cuts.css), so the line is a box of its own.
+    if any(each.shows == "gist" for each in (value, *value.parts)):
+        drawn = [_safe('<div class="row-line">', *drawn, "</div>")]
     if value.lines:
         drawn.append(_block(value.lines, cell, drawing))
     return _safe(*drawn)
@@ -460,11 +468,16 @@ def _value(
     ``hushed`` a value on a line muted whole."""
 
     drawn = _named(value, cell, drawing, own=own)
+    gist = value.shows == "gist"
     if value.aloud:
         drawn = format_html(
             '<span aria-hidden="true">{}</span><span class="visually-hidden">{}</span>', drawn, value.aloud
         )
-    if value.muted and not hushed:
+    if gist:
+        # A gist is the quiet line its row's toggle releases, its hooks on it.
+        hooks = {f"data_{name.replace('-', '_')}": said or True for name, said in value.data.items()}
+        drawn = muted(drawn, css=SHOWN["gist"], tip=value.tip, title=value.title, **hooks)
+    elif value.muted and not hushed:
         drawn = muted(drawn, tip=value.tip, title=value.title)
     elif value.tip or value.title:
         tipped = html_attributes({"title": value.title, "tabindex": "0" if value.tip else None, "data-tip": value.tip})
@@ -473,11 +486,11 @@ def _value(
         drawn = _safe('<span class="cell-part">', drawn, "</span>")
     if value.dot:
         drawn = _safe(dot(), drawn)
-    if value.shows and not whole:
+    if value.shows and not (whole or gist):
         drawn = _safe('<span class="', SHOWN[value.shows], '">', drawn, "</span>")
     if value.count is not None:
         drawn = _safe(drawn, ' <span class="count">', breakable(value.count), "</span>")
-    if value.data and not whole:
+    if value.data and not (whole or gist):
         drawn = _safe("<span", data_attributes(value.data), ">", drawn, "</span>")
     return drawn
 

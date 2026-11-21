@@ -14,6 +14,7 @@ lazy from hq.platform.application.approvals import DECISIONS, _decision_link
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
 lazy from hq.platform.application.dashboard import finding_rows
+lazy from hq.platform.application.decisions import decision
 lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_model import CHECK_AGAIN, Finding, opens
@@ -709,7 +710,7 @@ WORK_QUEUE = Example(
 )
 
 
-def _opened_problems():
+def opened_problems():
     """Rows that open onto what was read and what to do: commands whose
     labels differ in length, and one step alone between the facts and the
     reason it cannot be done from here."""
@@ -747,6 +748,32 @@ def _opened_problems():
     )
 
 
+def _opened(key: str):
+    """What the first opened row's decision holds under ``key``, as its open line draws it."""
+
+    return lambda: {key: decision(opened_problems()[0])[key]}
+
+
+# What raised a row, opened by its urgency: its rule, severity and key, and how old its reading is.
+ORIGIN_PANEL = Example(
+    '{% include "partials/_urgency_pill.html" %}{% include "partials/_origin_panel.html" %}',
+    lambda: {"item": decision(opened_problems()[0])},
+)
+# What was read: each label once, a value of several words beside one of several names.
+INSIGHT_FACTS = Example(context=_opened("facts"))
+# Two commands, the second with its note.
+OPERATOR_STEPS = Example(context=_opened("steps"))
+# A page HQ draws as its icon, and one it names in words.
+ICON_LINKS = Example(
+    context={
+        "links": (
+            {"name": "topology", "label": "Open on the map", "url": "/example/topology/"},
+            {"name": "", "label": "Example runbook", "url": "/example/runbook/"},
+        )
+    }
+)
+
+
 def _glance():
     """The dashboard's short queue: a held request whose meaning outruns its line, then two failing runs."""
 
@@ -769,6 +796,6 @@ WORK_QUEUE_STATES = {
     # Rows opened as the queue page draws them: what each opens onto starts
     # where its title does, commands in one column, a lone step close.
     "opened": Example(
-        '{% include "partials/_work_queue.html" %}', lambda: {"items": _opened_problems(), "grouped": True}
+        '{% include "partials/_work_queue.html" %}', lambda: {"items": opened_problems(), "grouped": True}
     ),
 }

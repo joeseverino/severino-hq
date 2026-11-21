@@ -30,6 +30,7 @@ _DECLARING = (
     "hq/platform/core/hand_drawn.py",
     "hq/platform/core/included_actions.py",
     "hq/platform/core/included_parts.py",
+    "hq/platform/core/included_queue.py",
     "hq/platform/core/template_contract.py",
     "hq/platform/core/template_engine.py",
     "hq/platform/core/part_examples/",
@@ -82,7 +83,7 @@ def one_place_rules() -> list[str]:
             tagged = re.compile(quoted + (rf"|\{{%\s*{re.escape(part.name)}\b" if part and part.name else ""))
             found = {other for other, text in included.items() if other not in own and tagged.search(text)}
             if part and id(part) in imported:
-                quoted += rf"|from hq\.platform\.core\.included_parts import [^\n]*\b{imported[id(part)]}\b"
+                quoted += rf"|from hq\.platform\.core\.included_\w+ import [^\n]*\b{imported[id(part)]}\b"
             seen[name] = set().union(*(places(other) for other in found)) | {
                 module
                 for module, text in modules.items()

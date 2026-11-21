@@ -1,0 +1,4 @@
+{% comment %}
+What an operator does, given `steps`: each a step of a numbered list, a
+command or words with its notes (`partials/_operator_step.html`).
+{% endcomment %}{% steps numbered=True %}{% for step in steps %}{% include "partials/_operator_step.html" %}{% endfor %}{% endsteps %}

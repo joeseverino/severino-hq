@@ -109,9 +109,10 @@ def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
 
 
 # Where a value of a cell shows: on its row's line (""), only once the row
-# opens ("more"), only in a narrow box ("narrow"), or on the line until a
-# narrow box lets it go to the open line ("narrow-more").
-type Shows = Literal["", "more", "narrow", "narrow-more"]
+# opens ("more"), only in a narrow box ("narrow"), on the line until a
+# narrow box lets it go to the open line ("narrow-more"), or as what the row
+# means, quiet and cut at the line's end until the row opens ("gist").
+type Shows = Literal["", "more", "narrow", "narrow-more", "gist"]
 # What a value is beyond its column's kind: free text, which breaks wherever
 # it must ("data"), or what the row means told in words ("prose").
 type Role = Literal["", "data", "prose"]
@@ -261,6 +262,10 @@ class Cell:
         held = [part.fold or part.field is not None or part.editor is not None for part in within]
         if any(nested) or any(held):
             raise ValueError("A cell's parts are each one value, and each of its lines one value and its parts.")
+        beneath = within[len(self.parts) :]
+        apart = (*(self.parts if self.fit else ()), *beneath, *(part for line in beneath for part in line.parts))
+        if any(part.shows == "gist" for part in apart):
+            raise ValueError("A gist follows the words of its cell's own line, never in a run or a line beneath.")
 
     @classmethod
     def of(cls, link: EntityLink, *, muted: bool = False, name: bool = False) -> Cell:

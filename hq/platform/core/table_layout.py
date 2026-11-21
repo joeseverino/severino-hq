@@ -37,6 +37,8 @@ _HELD_KINDS = frozenset({"status", "numeric", "control"})
 # What a cell holds that its row shows only on its open line: at any width
 # (`row-more`, a list's rest), or once a narrow box lets it go (`narrow-more`).
 HELD = frozenset({"row-more", "line-rest", "narrow-more"})
+# What a cell holds that its row's line cuts and its open line releases in place.
+GIST = "row-gist"
 # How many widths of its region a table's columns leave at, one rule each in
 # tables.css, the narrowest wider than a narrow box (36rem), so a narrow box
 # holds only the columns a row keeps.
@@ -388,7 +390,7 @@ def _detail(row: RowFacts, width: int, levels: dict[int, int]) -> tuple[bool, bo
                 )
             held = True
         always = always or bool(moved) or shown
-        opens = opens or shown or at in levels or "narrow-more" in cell.holds
+        opens = opens or shown or at in levels or bool({"narrow-more", GIST} & cell.holds)
     if always:
         row.marks.append(" data-below")
     if blocks or entries:
@@ -515,7 +517,7 @@ def _holds_back(row: RowFacts, kinds: dict[int, str], named: int) -> bool:
     moved there, its editor, or a fold."""
 
     for at, cell in _placed(row):
-        if cell.folds or cell.holds & HELD or _finished(cell, "below") or _finished(cell, "editor"):
+        if cell.folds or cell.holds & (HELD | {GIST}) or _finished(cell, "below") or _finished(cell, "editor"):
             return True
         kind = _kind_at(at, kinds, named)
         if not cell.spans and cell.closes and _long(cell) and _words(cell, kind) and _clamps(kind):
