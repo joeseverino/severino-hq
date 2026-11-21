@@ -41,6 +41,7 @@ lazy from .path_model import Route
 lazy from .paths import path_to, routed_names
 lazy from .services import find_service
 lazy from .topology_estate import machine_nodes
+lazy from .whereabouts import reads_containers_on
 
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 # A service's wiring fault (``services._faults``), one fact per fault on its node.
@@ -134,7 +135,7 @@ def _answered_by_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
     return distinct(found)
 
 
-# ----- A route to a container that is not running ----------------------------
+# ----- A route that ends where nothing runs ----------------------------------
 
 
 def _containers_by_place() -> dict[tuple[str, str], Mapping[str, Any]]:
@@ -144,19 +145,26 @@ def _containers_by_place() -> dict[tuple[str, str], Mapping[str, Any]]:
     }
 
 
-def _stopped_targets(route, containers) -> list[tuple[str, str, str]]:
-    """``(machine, container, state)`` for each container the route ends at that is not running."""
+def _dead_ends(route, containers) -> list[tuple[str, str, str]]:
+    """``(machine, container, state)`` for each container the route ends at
+    that is not running, and ``(machine, "", address)`` where it forwards to a
+    port no container publishes on a machine whose containers HQ reads."""
 
     found = []
-    machine = ""
+    machine = forwarded = ""
     for hop in route.hops:
-        if hop.step == "machine":
+        if hop.step == "upstream":
+            machine, forwarded = "", hop.name
+        elif hop.step == "machine":
             machine = hop.name
         elif hop.step == "container":
+            forwarded = ""
             record = containers.get((machine, hop.name))
             state = str((record or {}).get("state", "") or "")
             if record is not None and state and state != "running":
                 found.append((machine, hop.name, state))
+    if forwarded and machine and reads_containers_on(machine):
+        found.append((machine, "", forwarded))
     return found
 
 
@@ -171,26 +179,28 @@ def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
     found = []
     for name in routed_names():
         for route in path_to(name).routes:
-            for machine, container, state in _stopped_targets(route, containers):
+            for machine, container, state in _dead_ends(route, containers):
                 proxies = _declared(name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "proxy"))
+                if container:
+                    title = f"{name} leads to {container} on {machine}, which is {_said(state)}"
+                    said = f"fail until {container} runs again or the proxy route points at what replaced it."
+                    shown = ("Container", _said(state))
+                    start = on_machine(machine, f"docker start {shlex.quote(container)}")
+                    steps = (told(f"Start {container} on {machine}", start),)
+                else:
+                    title = f"{name} forwards to {state} on {machine}, where no container publishes that port"
+                    said = "fail unless something outside Docker answers there, or the proxy route points elsewhere."
+                    shown, steps = ("Forwards to", state), ()
                 found.append(
                     Finding(
                         rule="route-to-stopped-container",
                         **_about(estate, name, machine),
-                        title=f"{name} leads to {container} on {machine}, which is {_said(state)}",
-                        severity=Tone.SERIOUS,
-                        explanation=(
-                            f"Requests for {name} fail until {container} runs again or "
-                            "the proxy route points at what replaced it."
-                        ),
-                        evidence=(("Name", name), ("Path", route.line), ("Container", _said(state))),
+                        title=title,
+                        severity=Tone.SERIOUS if container else Tone.ATTENTION,
+                        explanation=f"Requests for {name} {said}",
+                        evidence=(("Name", name), ("Path", route.line), shown),
                         remedies=tuple(_update(key, intent="Change where it points") for key in proxies),
-                        steps=(
-                            told(
-                                f"Start {container} on {machine}",
-                                on_machine(machine, f"docker start {shlex.quote(container)}"),
-                            ),
-                        ),
+                        steps=steps,
                     )
                 )
     return distinct(found)
@@ -439,13 +449,16 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "route-to-stopped-container",
-        "A route to a container that is not running",
+        "A route to nothing running",
         Tone.SERIOUS,
         _routed_to_stopped,
         gathered=True,
-        operator_action="Start the container, or point the proxy route at what replaced it.",
+        operator_action="Start what it leads to, or point the proxy route at what replaced it.",
         no_help_reason="HQ cannot start containers.",
-        bars={Tone.SERIOUS: "a proxy route leads to a container that is not running"},
+        bars={
+            Tone.SERIOUS: "a proxy route leads to a container that is not running",
+            Tone.ATTENTION: "a proxy route forwards to a port no container publishes",
+        },
     ),
     FindingRule(
         "gate-guards-nothing",

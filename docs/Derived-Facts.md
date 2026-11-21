@@ -517,7 +517,7 @@ stored readings for these, polling nothing:
 | Rule | Two sides that disagree | Fix HQ offers |
 | --- | --- | --- |
 | `public-name-served-by-nothing` | Public DNS sends a name to a machine whose containers HQ reads; no proxy answers for it and no container there answers on a web port. A machine HQ reads no containers on is unknown, not unserved | Repoint the declared record; removal stays on its page |
-| `route-to-stopped-container` | A route ends at a container Docker reports not running | Repoint the declared proxy; `docker start` as a step |
+| `route-to-stopped-container` | A route ends at a container Docker reports not running, or forwards to a port no container publishes on a machine whose containers HQ reads | Repoint the declared proxy; `docker start` as a step for a stopped container |
 | `gate-guards-nothing` | A gate (`restricts`) names a host no DNS record answers | The provider console step |
 | `split-horizon-disagrees` | The public and internal records end on different machines | Repoint the declared rewrite |
 | `published-port-unfronted` | A container port answers the internet and no route leads to it | The compose change on its page |
