@@ -5,9 +5,10 @@ once one cadence of its kind has passed, or when none was ever taken, so a
 surface may ask for it, and *stale* once the tolerance has passed with no
 newer reading, so a surface says it is out of date.
 
-A kind read only when someone opens its page (``on_open``) ages while nobody
-looks, which is no fault. Its tolerance counts from an ask instead: it is stale
-once an ask went unanswered that long, or its last reading failed.
+A kind read only when asked (``on_open``: its page opening, or HQ applying
+it) ages while nobody asks, which is no fault. Its tolerance counts from an ask
+instead: it is stale once an ask went unanswered that long, or its last reading
+failed.
 """
 
 from collections.abc import Callable, Mapping
@@ -18,6 +19,7 @@ from functools import cache
 lazy from django.core.exceptions import ImproperlyConfigured
 
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .derivations import reached
 from .moments import ago
@@ -177,6 +179,13 @@ def cadence(kind: str = "") -> ReadCadence:
         return max((cadence(item) for item in read), key=lambda found: (not found.on_open, found.stale_after))
     if spec is None and kind and (declared := _extension_cadence(kind)) is not None:
         return declared
+    if (provider := PROVIDERS.get(kind)) is not None and provider.unobserved_reason:
+        # No sweep reads it, so what the controller applied is its reading.
+        if (every := provider.rechecked_every) is None:
+            return on_open(slowest_sweep_interval())
+        # Read again at the first pass after it falls due, which may be a
+        # whole sweep's tolerance away.
+        return ReadCadence(every, every + stale_after())
     # A controller reads on the sweep, whose slowest interval is the idle one;
     # a reading is stale once it has missed a whole sweep, not when one is due.
     return missed(slowest_sweep_interval(), 2)

@@ -368,11 +368,22 @@ func (r *Registry) uploadedReconcile(ctx context.Context, spec TLSCertificateSpe
 		return Result{Changed: true, Status: UploadedCertificateStatus{CertificateName: spec.CertificateName, Domains: domains}, Conditions: []Condition{condition(runtime.ConditionReady, "Planned", "Would install the certificate.")}, Message: "Would install the stored certificate."}, nil
 	}
 	target := TLSCertificateSpec{CertificateName: spec.CertificateName, Domains: domains, Consumers: spec.Consumers}
+	known := npmCertificateIDsOf(spec, observed)
+	// HQ asks again to check what it installed, so a target already serving
+	// it is read and left alone, as an issued certificate's is.
+	expected, err := validateCertificate([]byte(material.Fullchain), []byte(privateKey), domains)
+	if err != nil {
+		return Result{}, err
+	}
+	if _, served, err := r.reconcileTLS(ctx, target); err == nil && consumersServe(target, served, expected) {
+		status := UploadedCertificateStatus{CertificateName: spec.CertificateName, Domains: domains, NPMCertificateIDs: known}
+		return Result{Changed: false, Status: status, Conditions: []Condition{condition(runtime.ConditionReady, "Verified", "Every site is serving this certificate.")}, Message: "Every site already serves this certificate."}, nil
+	}
 	plan, err := r.planDeployment(ctx, target)
 	if err != nil {
 		return Result{}, err
 	}
-	deployment, err := r.deployCertificate(ctx, target, []byte(material.Fullchain), []byte(privateKey), plan, npmCertificateIDsOf(spec, observed))
+	deployment, err := r.deployCertificate(ctx, target, []byte(material.Fullchain), []byte(privateKey), plan, known)
 	if err != nil {
 		return Result{}, err
 	}

@@ -972,6 +972,12 @@ A readable kind older than its cadence allows reads **Out of date**
 (`hq.platform.application.freshness`). The services page's provider readings
 use the same words, through `credential_sight.standing`.
 
+A kind no sweep reads is read by the controller applying it. One whose
+provider declares `rechecked_every` (a certificate, whose installs change
+without HQ) is reconciled again once its reading falls due, and only reads
+**Out of date** once that check is a sweep's tolerance late. Any other holds
+what its last apply found until HQ changes it.
+
 A connection whose probe fails reports why as `failure`, a class the controller
 assigns where the request failed (`FailureClass`, `controller/runtime`). The
 class is `credential` or `permission` (HTTP 401 or 403, or the provider's own refusal),

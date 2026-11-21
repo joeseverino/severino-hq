@@ -80,31 +80,25 @@ class OperationPolicyTests(TestCase):
             fetch_redirect_response=False,
         )
 
-    def test_controller_automatically_queues_due_certificate_renewal(self):
-        self.resource.status = {"not_after": (timezone.now() + timedelta(days=29)).isoformat()}
+    def test_controller_automatically_queues_what_is_due_as_itself(self):
+        now = timezone.now()
         self.resource.conditions = [{"type": "Ready", "status": True, "reason": "Verified"}]
-        self.resource.observed_generation = self.resource.generation
-        self.resource.save()
-
-        result = schedule_automatic_operations("a-docker-host")
-
-        operation = OperationRequest.objects.get()
-        self.assertEqual(result["scheduled"], [str(operation.id)])
-        self.assertEqual(operation.action, OperationRequest.Action.RENEW)
-        self.assertEqual(operation.requested_interface, "controller")
-
-    def test_controller_automatically_reconciles_a_new_generation(self):
-        self.resource.status = {"not_after": (timezone.now() + timedelta(days=89)).isoformat()}
-        self.resource.conditions = [{"type": "Ready", "status": True, "reason": "Verified"}]
-        self.resource.observed_generation = self.resource.generation - 1
-        self.resource.save()
-
-        schedule_automatic_operations("a-docker-host")
-
-        self.assertEqual(
-            OperationRequest.objects.get().action,
-            OperationRequest.Action.RECONCILE,
-        )
+        due = now - timedelta(hours=13)
+        for days, behind, read_at, queued in (
+            (29, 0, now, "renew"),
+            (89, 1, now, "reconcile"),
+            (89, 0, due, "reconcile"),
+            (89, 0, now, ""),
+        ):
+            with self.subTest(days=days, behind=behind, read_at=read_at):
+                OperationRequest.objects.all().delete()
+                self.resource.status = {"not_after": (now + timedelta(days=days)).isoformat()}
+                self.resource.observed_generation = self.resource.generation - behind
+                self.resource.last_observed_at = read_at
+                self.resource.save()
+                result = schedule_automatic_operations("a-docker-host")
+                operations = OperationRequest.objects.filter(action=queued, requested_interface="controller")
+                self.assertEqual(result["scheduled"], [str(operations.get().id)] if queued else [])
 
     def test_failed_automatic_renewal_retries_once_on_the_next_day(self):
         current = timezone.now()

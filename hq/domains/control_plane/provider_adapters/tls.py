@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Callable, Mapping
+from datetime import timedelta
 from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, field_validator, model_validator
@@ -411,6 +412,11 @@ def _managed_certificate_applies(context: NameContext) -> str:
     )
 
 
+# What a target serves can change without HQ (a certificate replaced by
+# hand, a site moved), so HQ reads every install again twice a day.
+RECHECKED_EVERY = timedelta(hours=12)
+
+
 CERTIFICATE = ProviderSpec(
     CERTIFICATE_KIND,
     "Issues a Let's Encrypt certificate, renews it, and installs it wherever these names are served.",
@@ -443,7 +449,8 @@ CERTIFICATE = ProviderSpec(
     hostnames=_certificate_hostnames,
     seed=_certificate_seed,
     covers=True,
-    unobserved_reason=("HQ updates this when it issues or installs the certificate."),
+    unobserved_reason=("HQ reads every install when it issues, installs or checks the certificate."),
+    rechecked_every=RECHECKED_EVERY,
     removal_gap=("HQ cannot delete certificates yet, so renewals would not stop."),
 )
 
@@ -467,7 +474,8 @@ UPLOADED_CERTIFICATE = ProviderSpec(
     hostnames=_uploaded_certificate_hostnames,
     covers=True,
     readout=_uploaded_certificate_readout,
-    unobserved_reason=("HQ stores the file and checks each install when it applies the certificate."),
+    unobserved_reason=("HQ stores the file and reads every install when it installs or checks the certificate."),
+    rechecked_every=RECHECKED_EVERY,
 )
 
 # Declarations only: the controller half is still the core's.

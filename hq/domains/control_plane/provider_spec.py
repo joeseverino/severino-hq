@@ -10,6 +10,7 @@ import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import timedelta
 from functools import cache
 from typing import Annotated, Any, Literal, get_args
 
@@ -416,6 +417,11 @@ class ProviderSpec:
     # collector has been written yet" are different states, and the second is
     # work rather than a fact about the world.
     unobserved_reason: str = ""
+    # For a kind no sweep reads, how often the controller's reconcile reads
+    # again what it applied, where something outside HQ moves it (a
+    # certificate's installs, and so what each serves). None: only HQ's own
+    # change moves it, so its last apply holds until the next.
+    rechecked_every: timedelta | None = None
     # Why removing this declaration is not offered, or "" when it is.
     #
     # Removal queues a controller delete unless the provider is
