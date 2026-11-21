@@ -152,18 +152,25 @@ class SectionNode(TagHelperNode):
         finally:
             root[_LEVEL] = level
         values = part.drawn(
-            body=body, lead=lead, aside=aside, empty=empty, foot=foot, heading_id=_unique(root, part.heading_id)
+            body=body, lead=lead, aside=aside, empty=empty, foot=foot, heading_id=_unique(context, part.heading_id)
         )
         if values is None:
             return ""
         return context.template.engine.get_template(SECTION.partial).render(context.new(values)).strip()
 
 
-def _unique(root: dict, heading_id: str) -> str:
-    """The heading id this drawing takes: the part's own, numbered past any
-    other section on this page drew, so no two share one."""
+def drawn_ids(context) -> set[str]:
+    """Every id the parts have drawn on this page so far, which the next part
+    to draw one numbers its own past."""
 
-    drawn = root.setdefault(_IDS, set())
+    return context.render_context.dicts[0].setdefault(_IDS, set())
+
+
+def _unique(context, heading_id: str) -> str:
+    """The heading id this drawing takes: the part's own, numbered past any
+    other part on this page drew, so no two share one."""
+
+    drawn = drawn_ids(context)
     unique, number = heading_id, 1
     while unique in drawn:
         number += 1

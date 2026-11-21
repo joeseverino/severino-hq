@@ -1,7 +1,7 @@
 """A form that writes is one partial, ``partials/_form.html``."""
 
 from django import forms
-from django.template import engines
+from django.template import Context, engines
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
@@ -46,6 +46,22 @@ class FormPartialTests(SimpleTestCase):
         self.assertEqual([a.attrs["href"] for a in elements(html, "a")], ["/example/"])
         self.assertEqual(len(select(html, "data-submit-status")), 1)
         self.assertNotIn("save-bar", row.classes)
+
+    def test_two_forms_on_a_page_sharing_a_fields_name_each_label_their_own_control(self):
+        page = engines["django"].engine.from_string(
+            '{% include "partials/_form.html" with form=first verb="Start" %}'
+            '{% include "partials/_form.html" with form=second verb="End" %}'
+        )
+        second = ExampleForm(data={"name": ""})
+        second.is_valid()
+
+        drawn = all_elements(page.render(Context({"first": ExampleForm(), "second": second})))
+
+        ids = [e.attrs["id"] for e in drawn if "id" in e.attrs]
+        named = [e.attrs["for"] for e in drawn if "for" in e.attrs]
+        named += [word for e in drawn for word in e.attrs.get("aria-describedby", "").split()]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertLessEqual(set(named), set(ids))
 
     def test_it_posts_where_it_is_told_and_takes_a_file_when_its_form_does(self):
         html = render_to_string(FORM, {"form": ExampleUpload(), "verb": "Upload", "action": "/example/upload/"})

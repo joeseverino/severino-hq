@@ -27,7 +27,9 @@ lookup) is `method="get"`: it carries no write token, since sending it twice
 changes nothing, and it never takes a file. A form that asks one question,
 one line of words to fill (`asks_one_question`) and its verb alone, draws its
 button on the field's line where there is room (`is-question`, forms.css).
-{% endcomment %}
+Its ids are its own on the page (`own_ids`), so two forms that share a
+field's name never share a control's id.
+{% endcomment %}{% own_ids form as form %}
 <form{% if method == "get" %} method="get"{% else %} method="post"{% endif %}{% if action %} action="{{ action }}"{% endif %}{% if form.is_multipart and method != "get" %} enctype="multipart/form-data"{% endif %}{% if not table_body %} class="form{% if not fields and not cancel_url and not choices and not note and not bar and form|asks_one_question %} is-question{% endif %}"{% endif %}{% if in_place %} data-fragment-target="{% if in_place is not True %}{{ in_place }}{% endif %}" data-fragment-busy="Working…"{% else %} data-submit-busy data-submit-label="Working…"{% endif %}{% if hooks %}{% for hook in hooks.split %} {{ hook }}{% endfor %}{% endif %}>
   {% if method != "get" %}{% write_token %}{% endif %}
   {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
