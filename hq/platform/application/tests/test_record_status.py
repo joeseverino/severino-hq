@@ -107,7 +107,7 @@ class RecordPageTests(TestCase):
         self.assertIn("Working", row.words)
 
     def test_what_each_state_means_is_said_beside_it_in_its_tone(self):
-        """The sentence is the state's own, so it stands on the title's line
+        """The sentence is the state's own, so it stands under the title
         with the state and reads as good, waiting or wrong as the state does."""
 
         now = timezone.now()

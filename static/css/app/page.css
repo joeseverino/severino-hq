@@ -38,14 +38,21 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* A link's muted words take the link's color when it is pressed, as a muted link would. */
 a:is(:hover, :focus-visible) > .muted { color: inherit; }
 
-/* One head at every width. The copy steps aside (`display: contents`) so its
-   parts can be ordered: the controls end the head's first line, the trail's
-   where it has one, the name's where not, and everything after that line
-   (the title, what the page says beside it, the lede) has the head's whole
-   width, never the room the controls leave. */
+/* One head at every width, on a grid: the trail, then the name, in the
+   first column, the controls beside both in the second, as tall as the two
+   lines together, so they set neither's height; everything after (what the
+   page says beside its title, the lede, the facts) spans the head's whole
+   width, never the room the controls leave. With no trail the controls
+   stand beside the name alone. The copy steps aside (`display: contents`)
+   so its parts are the grid's items. */
 /* A container, so its controls fold by the head's width (surfaces.css). */
-.page-head { container: page-head / inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
+.page-head { container: page-head / inline-size; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
+.page-head:has(> .page-actions) { grid-template-columns: minmax(0, 1fr) auto; }
 .page-head-copy { display: contents; }
+.page-head > *, .page-head-copy > * { grid-column: 1 / -1; min-width: 0; }
+.page-head-copy > :is(.page-trail-row, .page-name) { grid-column: 1; }
+.page-head > .page-actions { grid-column: 2; grid-row: 1 / span 2; }
+.page-head:not(:has(> .page-head-copy > .page-trail-row)) > .page-actions { grid-row: 1; }
 /* The head's first line: the trail, then at its end the note of a page about
    one thing (partials/_visit_refresh.html) in the room it keeps (cuts.css).
    A trail longer than the line wraps between its steps inside it, leaving the
@@ -54,33 +61,23 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .page-trail-row { display: flex; flex-wrap: wrap; align-items: baseline; }
 .page-trail-row:has(> .visit-slot)::after { content: ""; flex: 1000 0 0; inline-size: var(--space-6); max-inline-size: var(--space-6); }
 .page-trail-row > :not(.visit-slot) { flex: 1 1 0; }
-/* The trail yields width to the controls beside it, wrapping between its steps. */
-.page-head-copy > .page-trail-row { flex: 1 1 0; order: 0; min-width: 0; margin-bottom: calc(-1 * var(--space-2)); }
-.page-head > .page-actions { order: 0; }
-/* Under the trail, the title's line takes a line of its own. */
-.page-head .page-title-row { flex: 1 1 100%; order: 1; }
-/* With no trail, the name ends that first line beside the controls, and what
-   the page says beside the title takes the line under both. The name yields
-   width before the controls do: a long one wraps in its own column at its
-   spaces and seams, and the controls take a row of their own only when its
-   widest word or identifier would not fit beside them, never splitting it. */
-.page-head-copy:not(.is-column) > .page-title-row:first-child { display: contents; }
-.page-head-copy:not(.is-column) > .page-title-row:first-child > * { flex: 1 1 100%; order: 2; }
-.page-head-copy:not(.is-column) > .page-title-row:first-child > .page-name { flex: 1 1 0; order: 0; max-width: 100%; }
+.page-head-copy > .page-trail-row { margin-bottom: calc(-1 * var(--space-2)); }
+/* The name and what it is: a long name wraps in its own column at its spaces
+   and seams beside the controls. */
 .page-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 /* Its width is its whole name, so the controls give way rather than split it. */
 .page-head h1 .token { width: max-content; }
-/* Full width so it always takes its own row, under the title and controls. */
-.page-head .page-lede { flex: 1 1 100%; order: 3; margin-bottom: 0; margin-top: calc(-1 * var(--space-1)); }
+.page-head .page-lede { margin-bottom: 0; margin-top: calc(-1 * var(--space-1)); }
 /* A line of facts is short things side by side, which read best on as few
    lines as fit, so it takes the head's width. */
-.page-head .page-facts { flex: 1 1 100%; order: 3; color: var(--muted); font-size: var(--text-sm); margin-top: calc(-1 * var(--space-1)); }
+.page-head .page-facts { color: var(--muted); font-size: var(--text-sm); margin-top: calc(-1 * var(--space-1)); }
 .page-head h1 { margin: 0; }
 .page-head p { margin: 0; }
 /* With an aside beside it and a line of facts (partials/_page_head.html), the
    copy is a column of its own: its lines stacked a small gap apart, as wide
    as its words, and the aside takes the rest of the head's line beside all of
    them, wrapping under the column only when it cannot fit. */
+.page-head:has(> .is-column) { display: flex; flex-wrap: wrap; }
 .page-head-copy.is-column { display: grid; align-content: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0; }
 .page-head-copy.is-column > * { margin: 0; }
 .page-trail { margin: 0; color: var(--muted); font-size: var(--text-xs); }
@@ -114,6 +111,11 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- clips the dot before a part that opens a line, never a part */
   overflow-x: clip;
 }
+/* A part that is a run of its own (a machine's addresses) moves to the next
+   line whole and wraps inside itself only where a line cannot hold it, its
+   dot beside it. */
+.dot-list > :has(> .dot-list) { display: flex; align-items: baseline; min-width: 0; }
+.dot-list > * > .dot-list { min-width: 0; }
 .dot-list > * + *::before {
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;

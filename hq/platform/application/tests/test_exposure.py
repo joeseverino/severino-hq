@@ -176,7 +176,7 @@ class ServiceReachTests(TestCase):
         ):
             with self.subTest(reach=reach.id):
                 body = self.service(hostname)
-                (header,) = (item for item in within(body, "class", "page-title-row") if item.attrs.get("title"))
+                (header,) = (item for item in within(body, "class", "page-name") if item.attrs.get("title"))
                 (path,) = select(body, "data-exposure")
                 (row,) = (item for item in select(listed, "data-exposure") if hostname in item.attrs["title"])
 

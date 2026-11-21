@@ -70,13 +70,14 @@ PAGE_HEAD = _part(
     "page_head",
     "A page's head: its trail, its title, its facts and its actions, the overflow of them in a menu.",
     *("is-column", "overflow-menu", "overflow-menu-copies", "overflow-menu-panel", "page-actions", "page-facts"),
-    *("page-head", "page-head-copy", "page-name", "page-title-row", "page-trail", "page-trail-row"),
+    *("page-head", "page-head-copy", "page-name", "page-trail", "page-trail-row"),
     rules="""
-    **One head.** Trail, title, controls, lede, laid out the same at every width. The controls end
-    the head's first line, beside the trail, or beside the title where there is no trail (the title
-    wraps before the controls move). Every line after it has the head's whole width: what the page
-    says beside its title and the lede never share a line with the controls. Two controls stand beside the title at every width, the lead and the next the page
-    names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
+    **One head.** Trail, title, controls, lede, laid out the same at every width. The controls stand
+    at the head's top right, beside the trail and the title together, so the trail's line is as tall
+    as its words, or beside the title alone where there is no trail (the title wraps before the
+    controls move). Every line after the title has the head's whole width: what the page says about
+    its thing and the lede never share a line with the controls. Two controls stand there at every
+    width, the lead and the next the page names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
     the head) folds the second in too. The lead is chosen by what each control is for, never by where
     it stands: not a destructive one while another is offered, then one that can be pressed, then the
     page's primary (`head_actions`). A destructive verb (a stop) is a link to its confirmation, which
@@ -88,7 +89,8 @@ PAGE_HEAD = _part(
     how HQ works inside (a file path, a background mechanism). Never "What X may run: ...", which says
     the heading again.
 
-    A thing's state sits on its title's line (`page_aside`), as words. A page about a day (the
+    A thing's state is the line under its title (`page_aside`), as words, each of its parts (a
+    machine's addresses) moving to the next line whole. A page about a day (the
     dashboard) names it with `page_dateline`, drawn over the title where a trail stands. A head with
     an aside and a line of facts (`page_facts`) stacks its words in a column of their own: the trail
     or day, the title, the facts. The aside stands beside the whole column, as the dashboard's

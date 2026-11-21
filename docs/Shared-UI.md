@@ -670,7 +670,7 @@ under that label.
 A run of whole parts read across one line (a fact's links, a row's context line, a band's
 details) is `{% list kind="dots" %}`, each part an `<li>`, with `muted=True` for one said quietly.
 The stylesheet draws the dot in the gap before each part, so no template writes a separator and no
-line opens on one. The facts a page states on its title's line (a record's state, a machine's
+line opens on one. The facts a page states under its title (a record's state, a machine's
 addresses) are `{% list kind="dots" muted=True %}`, written by the template its view names as
 `page_aside`, where the stylesheet sets it small.
 
@@ -919,10 +919,12 @@ which sends what it carries.
 
 ### partials/_page_head.html (host only)
 
-**One head.** Trail, title, controls, lede, laid out the same at every width. The title and its
-controls share a row (the title wraps before the controls move); the lede runs the full width
-under both. Two controls stand beside the title at every width, the lead and the next the page
-names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
+**One head.** Trail, title, controls, lede, laid out the same at every width. The controls stand
+at the head's top right, beside the trail and the title together, so the trail's line is as tall
+as its words, or beside the title alone where there is no trail (the title wraps before the
+controls move). Every line after the title has the head's whole width: what the page says about
+its thing and the lede never share a line with the controls. Two controls stand there at every
+width, the lead and the next the page names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
 the head) folds the second in too. The lead is chosen by what each control is for, never by where
 it stands: not a destructive one while another is offered, then one that can be pressed, then the
 page's primary (`head_actions`). A destructive verb (a stop) is a link to its confirmation, which
@@ -934,7 +936,8 @@ details. Never a table of contents of the page, a pointer to another page (link 
 how HQ works inside (a file path, a background mechanism). Never "What X may run: ...", which says
 the heading again.
 
-A thing's state sits on its title's line (`page_aside`), as words. A page about a day (the
+A thing's state is the line under its title (`page_aside`), as words, each of its parts (a
+machine's addresses) moving to the next line whole. A page about a day (the
 dashboard) names it with `page_dateline`, drawn over the title where a trail stands. A head with
 an aside and a line of facts (`page_facts`) stacks its words in a column of their own: the trail
 or day, the title, the facts. The aside stands beside the whole column, as the dashboard's

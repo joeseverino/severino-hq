@@ -81,7 +81,7 @@ def list_items(content: str) -> str:
 
 
 def _title_line() -> dict:
-    """A page head whose title's line states its facts as a muted dots list."""
+    """A page head whose line under its title states its facts as a muted dots list."""
 
     return {
         "page": Page(title="example-host-01"),
@@ -114,7 +114,7 @@ LIST = Part(
     A run of whole parts read across one line (a fact's links, a row's context line, a band's
     details) is `{% list kind="dots" %}`, each part an `<li>`, with `muted=True` for one said quietly.
     The stylesheet draws the dot in the gap before each part, so no template writes a separator and no
-    line opens on one. The facts a page states on its title's line (a record's state, a machine's
+    line opens on one. The facts a page states under its title (a record's state, a machine's
     addresses) are `{% list kind="dots" muted=True %}`, written by the template its view names as
     `page_aside`, where the stylesheet sets it small.
 
@@ -165,7 +165,7 @@ LIST = Part(
             '<li>{% entity "https://example.org/"|outside '
             'label="An example tool whose name runs long enough to wrap" %}</li>{% endlist %}{% endsection %}'
         ),
-        # The facts on a title's line: long enough to wrap under the title on a phone, each
+        # The facts under a title: long enough to wrap under the title on a phone, each
         # part wrapping whole, a state as a pill and as words among them.
         "title-line": Example(
             '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>'

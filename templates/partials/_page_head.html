@@ -4,8 +4,8 @@ drawn: a page template extends page.html rather than including this.
 `page_badges`, when a view supplies it, is what the thing is, beside its name:
 (label, tone, title) as application.pages.PageBadge. Context rather than a
 Page field, so the SDK's Page is unchanged. `page_aside`, the same way, names
-a template drawn on the title's line: what a page says about its subject at a
-glance (how it is doing, where it runs), beside its name rather than under it. `page_facts`, the same way, is markup:
+a template drawn on the line under the name: what a page says about its
+subject at a glance (how it is doing, where it runs). `page_facts`, the same way, is markup:
 a line of short facts under the lede (where a thing lives and runs, when it
 last changed), drawn the head's width where the lede keeps the measure. The
 trail's line ends with the note of a page about one thing (`page_visit`,
@@ -14,15 +14,13 @@ page no trail leads to opens on (the dashboard's), drawn in the trail's place
 as a kicker. A head with both an aside and a line of facts is a column of
 its words (the trail, the title, the lede, the facts) with the aside beside
 the whole column, as the dashboard's readings stand beside its day, greeting
-and what needs you; with no facts line, the aside stays on the title's line.
+and what needs you.
 {% endcomment %}
 <header class="page-head">
   <div class="page-head-copy{% if page_aside and page_facts %} is-column{% endif %}">
     {% if page.trail or page_dateline or page_visit %}<div class="page-trail-row">{% if page.trail %}<div class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</div>{% elif page_dateline %}<p class="eyebrow">{{ page_dateline|when:"dateline" }}</p>{% endif %}{% if page_visit %}{% include "partials/_visit_refresh.html#note" %}{% endif %}</div>{% endif %}
-    <div class="page-title-row">
-      <div class="page-name"><h1>{{ page.title|breakable }}</h1>{% for badge in page_badges %}{% status badge.label tone=badge.tone title=badge.title %}{% endfor %}</div>
-      {% if page_aside and not page_facts %}{% include page_aside %}{% endif %}
-    </div>
+    <div class="page-name"><h1>{{ page.title|breakable }}</h1>{% for badge in page_badges %}{% status badge.label tone=badge.tone title=badge.title %}{% endfor %}</div>
+    {% if page_aside and not page_facts %}{% include page_aside %}{% endif %}
     {% if page.lede %}<p class="page-lede">{{ page.lede|breakable }}</p>{% endif %}
     {% if page_facts %}<p class="page-facts">{{ page_facts|breakable }}</p>{% endif %}
   </div>

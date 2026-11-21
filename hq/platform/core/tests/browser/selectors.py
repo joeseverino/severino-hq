@@ -118,6 +118,9 @@ SELECTORS = {
     "page_title": ".page-head h1",
     # A head's line of facts under its title (`page_facts`).
     "head_facts": ".page-head .page-facts",
+    # A head's controls, and what it says beside its title, its lede and its facts.
+    "head_actions": ".page-head > .page-actions",
+    "head_said": ".page-head-copy > :not(.page-trail-row, .page-name), .page-title-row > :not(h1, .pill)",
     # What holds the content and so stays inside its gutter: a card, a block
     # of code.
     "gutter_bound": "pre, .card",
