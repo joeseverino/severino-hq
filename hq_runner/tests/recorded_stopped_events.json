@@ -7,7 +7,7 @@
       "event": "verbose",
       "runner_ident": "11111111-2222-4333-8444-555555555555",
       "start_line": 0,
-      "stdout": "\u001b[0;31m[ERROR]: YAML parsing failed: While parsing a flow sequence expected ',' or ']', but got '<stream end>'.\u001b[0m",
+      "stdout": "\u001b[0;31m[ERROR]: YAML parsing failed: While parsing a flow sequence did not find expected ',' or ']'.\u001b[0m",
       "uuid": "333a05e2-f0bc-4405-9370-2082faa36b1c"
     },
     {
