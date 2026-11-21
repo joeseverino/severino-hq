@@ -652,8 +652,8 @@ def pass_due() -> str:
 
     The doorbell (`hq.platform.core.doorbell`) asks this once a minute, and
     again as each capability's write commits: a capability's change starts a
-    pass at once, any other writer's within the minute. An
-    unanswered dashboard refresh stops counting after `read_request_lifetime()`.
+    pass at once, any other writer's within the minute. A dashboard reading
+    is the glance pass's, on its own doorbell, so it starts no pass here.
     """
 
     now = timezone.now()
@@ -661,10 +661,6 @@ def pass_due() -> str:
         return "Work is queued."
     if OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).exists():
         return "Work a controller took did not finish in time."
-    if DashboardRefreshRequest.objects.filter(
-        completed_at__isnull=True, requested_at__gte=now - read_request_lifetime()
-    ).exists():
-        return "A dashboard reading was asked for."
     if unapplied():
         return "A record's settings changed and nothing has applied them yet."
     verdict = sweep_due()

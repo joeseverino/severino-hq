@@ -65,7 +65,6 @@ func (w *Worker) Run(ctx context.Context, apply bool) (int, error) {
 		}
 		w.post("steps", w.Bridge.Steps(ctx, w.ID, failures))
 	}()
-	w.Glance(ctx)
 	applied, stopped, failed, queueErr := w.applyQueued(ctx)
 	sweepErr := w.sweep(ctx)
 	if sweepErr == nil {
@@ -100,13 +99,6 @@ func (w *Worker) Run(ctx context.Context, apply bool) (int, error) {
 // GlanceLimit bounds the readings one glance pass takes.
 const GlanceLimit = 3
 
-// Glance reads the dashboard panels HQ is waiting on and reports them. Each
-// observation carries the plan's as_of, so HQ answers only the requests the
-// plan saw: one made while this reads waits for a reading begun after it.
-func (w *Worker) Glance(ctx context.Context) {
-	_, _ = w.glance(ctx)
-}
-
 // Glances is a glance pass, the whole of one: it reads again while HQ is
 // still waiting on a panel, which after a reading it reported is a request
 // made during that reading, up to GlanceLimit readings. It fails only when
@@ -124,8 +116,11 @@ func (w *Worker) Glances(ctx context.Context) (int, error) {
 	return 0, nil
 }
 
-// glance takes one reading; whether it read and HQ took the report, so a
-// pass may read again, and the error when HQ gave no plan.
+// glance reads the dashboard panels HQ is waiting on and reports them;
+// whether it read and HQ took the report, so a pass may read again, and the
+// error when HQ gave no plan. Each observation carries the plan's as_of, so
+// HQ answers only the requests the plan saw: one made while this reads waits
+// for a reading begun after it.
 func (w *Worker) glance(ctx context.Context) (bool, error) {
 	plan, err := w.Bridge.GlancePlan(ctx, w.ID)
 	if err != nil {

@@ -584,14 +584,11 @@ class PassDueTests(TestCase):
         OperationRequest.objects.filter(pk=claimed.pk).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
         self.assertEqual(cadence.pass_due(), "Work a controller took did not finish in time.")
 
-    def test_a_dashboard_reading_asked_for_is_a_pass_until_a_read_request_would_expire(self):
+    def test_a_dashboard_reading_asked_for_belongs_to_the_glance_pass_alone(self):
         from hq.domains.control_plane.models import DashboardRefreshRequest
 
-        asked = DashboardRefreshRequest.objects.create(panel_id="weather")
-        self.assertEqual(cadence.pass_due(), "A dashboard reading was asked for.")
-
-        long_ago = timezone.now() - cadence.read_request_lifetime() - timedelta(seconds=1)
-        DashboardRefreshRequest.objects.filter(pk=asked.pk).update(requested_at=long_ago)
+        # A controller pass reading it too would read every refresh twice.
+        DashboardRefreshRequest.objects.create(panel_id="weather")
         self.assertEqual(cadence.pass_due(), "")
 
     @override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=30)

@@ -218,7 +218,6 @@ class ControllerPassTests(TransactionTestCase):
         calls = self.bridge.calls
         for step in (
             "registry",
-            "glance-plan",
             "sweep-due",
             "connections",
             "inventory",
@@ -227,6 +226,8 @@ class ControllerPassTests(TransactionTestCase):
             "steps",
         ):
             self.assertEqual(calls.count(step), 1, step)
+        # A dashboard panel is the glance pass's alone, so it is read once.
+        self.assertNotIn("glance-plan", calls)
         writes = [calls.index(step) for step in ("connections", "inventory", "analytics", "schedule", "steps")]
         self.assertIn("claim", calls)
         self.assertLess(calls.index("claim"), min(writes))

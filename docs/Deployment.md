@@ -333,7 +333,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-web.service` | the web container; the only thing that starts it. Once HQ is ready, a health poll that reads unhealthy stops it and fails the unit, which restarts it, and a supervisor or health read that hangs for 90 seconds misses the watchdog (`WatchdogSec=`), which does the same |
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
 | `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
-| `severino-hq-glance.service` / `.path` | `hq-controller --glance` beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |
+| `severino-hq-glance.service` / `.path` | `hq-controller --glance`, the only pass that reads a dashboard panel, beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
@@ -393,9 +393,7 @@ journalctl -u severino-hq-glance.service -o short-precise --since -10min
 
 A run's lines sit between systemd's `Starting` and `Finished` (or `Failed`)
 lines for the unit; `grep controller.glance.stage` keeps the stages, and the
-`step=glance` stage is the whole reading. The same events appear in
-`journalctl -u severino-hq-controller.service`, where a controller pass reads
-its glance before it sweeps.
+`step=glance` stage is the whole reading.
 
 ## A deploy
 

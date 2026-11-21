@@ -109,11 +109,11 @@ same address:
 | Who asks | For what |
 |---|---|
 | The refresh button | every panel |
-| The dashboard, opening on a reading older than five minutes (`freshness.GLANCE_EVERY`) | the due panels only (`scope=stale`) |
+| The dashboard, opening on a reading older than five minutes (`freshness.GLANCE_EVERY`), or on an ask that went unanswered | the due panels only (`scope=stale`) |
 
 Either way HQ records a credential-free `DashboardRefreshRequest` and rings the
-glance doorbell. That starts a glance pass beside any controller pass
-([Units](Deployment.md#units)), and the controller derives target and
+glance doorbell. That starts a glance pass, the only reader of a dashboard
+panel ([Units](Deployment.md#units)), and the controller derives target and
 connection from the machine graph. The browser follows that one request for a
 bounded interval and keeps no page-lifetime polling loop.
 
@@ -121,9 +121,11 @@ An SSH-capable connection yields whole-host readings. A Portainer fallback is
 labeled as container and Docker scope, not machine utilization.
 
 Machine and weather readings show their observation time at every width. A
-reading three intervals old (15 minutes) is marked out of date. That is
-presentation freshness, separate from the provider's reported health, and a
-refresh keeps the previous reading visible until a new one arrives.
+glance is read only when the dashboard opens, so its age is no fault: it is
+marked out of date only when an ask went unanswered for a minute
+(`freshness.ANSWER_WITHIN`) or its last reading failed. That is presentation
+freshness, separate from the provider's reported health, and a refresh keeps
+the previous reading visible until a new one arrives.
 
 Dashboard cards are grouped by contributing domain. Card providers run once per
 projection scope and are still checked for cross-domain collisions. A
