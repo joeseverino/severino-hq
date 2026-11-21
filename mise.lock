@@ -116,50 +116,47 @@ url = "https://github.com/gotestyourself/gotestsum/releases/download/v1.13.0/got
 url_api = "https://api.github.com/repos/gotestyourself/gotestsum/releases/assets/291996838"
 
 [[tools."aqua:jdx/hk"]]
-version = "2.12.0"
+version = "2.13.0"
 backend = "aqua:jdx/hk"
-specifiers = ["2.12.0"]
+specifiers = ["2.13.0"]
 
 [tools."aqua:jdx/hk"."platforms.linux-arm64"]
-checksum = "sha256:0f4e44802c3fcf98461b6608281353ae1944b82fd12f4a683f8e2e6683e562f3"
+checksum = "sha256:490196a4e638991c671f42941d72ade4d00b14750145f34fc64377b49fc070bb"
 checksum_source = "mise-versions"
-url = "https://github.com/jdx/hk/releases/download/v2.12.0/hk-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/728911209"
+url = "https://github.com/jdx/hk/releases/download/v2.13.0/hk-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/756295808"
 
 [tools."aqua:jdx/hk"."platforms.linux-x64"]
-checksum = "sha256:db98f893b882f064c1f7abcc96f4ccc31e8154fd1ba0f7f94823d371c2c4fdad"
+checksum = "sha256:8ff0b29c9925d73df9b14af7fc43ace86de03db73eafa3046750fce5c39e1955"
 checksum_source = "mise-versions"
-url = "https://github.com/jdx/hk/releases/download/v2.12.0/hk-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/728911276"
+url = "https://github.com/jdx/hk/releases/download/v2.13.0/hk-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/756295854"
 
 [tools."aqua:jdx/hk"."platforms.macos-arm64"]
-checksum = "sha256:269c17d47e884c19adb77144d5957e854fc5fc6a1a6f9c1a0a5b19431e2fabb8"
+checksum = "sha256:64efc441dc0858a175909fd6253ddd6c540da80e7d1bd2a2ad0ec9c0cdab3d97"
 checksum_source = "mise-versions"
-url = "https://github.com/jdx/hk/releases/download/v2.12.0/hk-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/jdx/hk/releases/assets/728911206"
+url = "https://github.com/jdx/hk/releases/download/v2.13.0/hk-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/jdx/hk/releases/assets/756295809"
 
 [[tools."aqua:ymtdzzz/otel-tui"]]
-version = "0.7.5"
+version = "0.7.6"
 backend = "aqua:ymtdzzz/otel-tui"
-specifiers = ["0.7.5"]
+specifiers = ["0.7.6"]
 
 [tools."aqua:ymtdzzz/otel-tui"."platforms.linux-arm64"]
-checksum = "sha256:b627a7bbf5d6be7aed1fdd36e6cee935edd590b5be4cb9b124bd0450dd75bb63"
-checksum_source = "mise-versions"
-url = "https://github.com/ymtdzzz/otel-tui/releases/download/v0.7.5/otel-tui_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/ymtdzzz/otel-tui/releases/assets/559114053"
+checksum = "sha256:bb9cc5efddfa91ba06c9dc7b39f07a67ca6fbe2b4ab62e97ed8be2ca721ac3e3"
+url = "https://github.com/ymtdzzz/otel-tui/releases/download/v0.7.6/otel-tui_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/ymtdzzz/otel-tui/releases/assets/775790227"
 
 [tools."aqua:ymtdzzz/otel-tui"."platforms.linux-x64"]
-checksum = "sha256:dd10bfa12b6713a2d51d7a094644ff61a2467856fc93d3acecfe741a124ca896"
-checksum_source = "mise-versions"
-url = "https://github.com/ymtdzzz/otel-tui/releases/download/v0.7.5/otel-tui_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/ymtdzzz/otel-tui/releases/assets/559114057"
+checksum = "sha256:1fffba2004cc079e53ed30cf7f45103db0b498f46776233877b02ce85d2f5f0d"
+url = "https://github.com/ymtdzzz/otel-tui/releases/download/v0.7.6/otel-tui_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/ymtdzzz/otel-tui/releases/assets/775790121"
 
 [tools."aqua:ymtdzzz/otel-tui"."platforms.macos-arm64"]
-checksum = "sha256:f65340825ba044515af6cba18c1771c2f8400b5ba4912d7cfea76f0bd04dce19"
-checksum_source = "mise-versions"
-url = "https://github.com/ymtdzzz/otel-tui/releases/download/v0.7.5/otel-tui_Darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/ymtdzzz/otel-tui/releases/assets/559114003"
+checksum = "sha256:8da7805a86c705895c12a53d86122f2b6da0ea4ee1410e3916f578ad2e73adf7"
+url = "https://github.com/ymtdzzz/otel-tui/releases/download/v0.7.6/otel-tui_Darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/ymtdzzz/otel-tui/releases/assets/775790637"
 
 [[tools.ast-grep]]
 version = "0.51.3"
@@ -266,47 +263,47 @@ url_api = "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/as
 provenance = "github-attestations"
 
 [[tools."github:github/codeql-action"]]
-version = "2.27.4"
+version = "2.27.5"
 backend = "github:github/codeql-action"
-specifiers = ["2.27.4"]
+specifiers = ["2.27.5"]
 
 [tools."github:github/codeql-action".options]
 version_prefix = "codeql-bundle-v"
 
 [tools."github:github/codeql-action"."platforms.linux-arm64"]
-checksum = "sha256:1c015b411c6e1c7f7e767eb8c9408fc6a2012d24d78b177cf22f29edc5772d10"
-url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-linux-arm64.tar.zst"
-url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/692236360"
+checksum = "sha256:bf4d478810886959783c114a39cb0f95f1f5ca19f6baa84d64c86283ef20fded"
+url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.5/codeql-bundle-linux-arm64.tar.zst"
+url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/759633116"
 provenance = "github-attestations"
 
 [[tools."github:github/codeql-action"]]
-version = "2.27.4"
+version = "2.27.5"
 backend = "github:github/codeql-action"
-specifiers = ["2.27.4"]
+specifiers = ["2.27.5"]
 
 [tools."github:github/codeql-action".options]
 asset_pattern = "codeql-bundle-linux64.tar.zst"
 version_prefix = "codeql-bundle-v"
 
 [tools."github:github/codeql-action"."platforms.linux-x64"]
-checksum = "sha256:da3e952c7fe978a0b6b93e75d9cbabbdf8535667ca0810bd4b2ae37bc840ffee"
-url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-linux64.tar.zst"
-url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/692235033"
+checksum = "sha256:141e6eb4e99c8498a1258e282e6f7b59c747b4b1a7eabc7cbf7d1aa92792edf0"
+url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.5/codeql-bundle-linux64.tar.zst"
+url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/759632221"
 provenance = "github-attestations"
 
 [[tools."github:github/codeql-action"]]
-version = "2.27.4"
+version = "2.27.5"
 backend = "github:github/codeql-action"
-specifiers = ["2.27.4"]
+specifiers = ["2.27.5"]
 
 [tools."github:github/codeql-action".options]
 asset_pattern = "codeql-bundle-osx64.tar.zst"
 version_prefix = "codeql-bundle-v"
 
 [tools."github:github/codeql-action"."platforms.macos-arm64"]
-checksum = "sha256:d5940b767427f113705aca401c7c09cf7af8cedb82fdad8a170c9d964b3a699b"
-url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-osx64.tar.zst"
-url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/692238076"
+checksum = "sha256:c671dd6956a604a189aa43827c54d2cff974b7dfcb10290a7ced4d3e3f52fade"
+url = "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.5/codeql-bundle-osx64.tar.zst"
+url_api = "https://api.github.com/repos/github/codeql-action/releases/assets/759634302"
 provenance = "github-attestations"
 
 [[tools.gitleaks]]
@@ -481,24 +478,27 @@ url = "https://github.com/BurntSushi/ripgrep/releases/download/15.2.0/ripgrep-15
 url_api = "https://api.github.com/repos/BurntSushi/ripgrep/releases/assets/478118851"
 
 [[tools.scorecard]]
-version = "5.6.0"
+version = "5.7.0"
 backend = "aqua:ossf/scorecard"
-specifiers = ["5.6.0"]
+specifiers = ["5.7.0"]
 
 [tools.scorecard."platforms.linux-arm64"]
-checksum = "sha256:3eacaceb3fdee6d0ba5df6ede45d1ada73321949029921bb63633802e8ec5951"
-url = "https://github.com/ossf/scorecard/releases/download/v5.6.0/scorecard_5.6.0_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/ossf/scorecard/releases/assets/632187120"
+checksum = "sha256:4e1e472e629689aff5877ddf160e3df0d0bc9a94694342d91b17a5f3f83581e2"
+checksum_source = "mise-versions"
+url = "https://github.com/ossf/scorecard/releases/download/v5.7.0/scorecard_5.7.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/ossf/scorecard/releases/assets/766054936"
 
 [tools.scorecard."platforms.linux-x64"]
-checksum = "sha256:19bde07129450cb65a95c6e3b9f34e034341579e6f0e241546ec3ae6efb2dd9a"
-url = "https://github.com/ossf/scorecard/releases/download/v5.6.0/scorecard_5.6.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/ossf/scorecard/releases/assets/632187119"
+checksum = "sha256:3b08ec0a8681806c3e744ec9210742a502c7d66f06f25523b70f7128738235d3"
+checksum_source = "mise-versions"
+url = "https://github.com/ossf/scorecard/releases/download/v5.7.0/scorecard_5.7.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/ossf/scorecard/releases/assets/766054941"
 
 [tools.scorecard."platforms.macos-arm64"]
-checksum = "sha256:1537183c0fcc6d8d1572aabc7a949091a36a2ee6be5bcb65f487cbb0a7b40381"
-url = "https://github.com/ossf/scorecard/releases/download/v5.6.0/scorecard_5.6.0_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/ossf/scorecard/releases/assets/632187121"
+checksum = "sha256:5b9d68508787a16edadabc9559743d0ef8388b730dbccaaf3052788947050202"
+checksum_source = "mise-versions"
+url = "https://github.com/ossf/scorecard/releases/download/v5.7.0/scorecard_5.7.0_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/ossf/scorecard/releases/assets/766054938"
 
 [[tools.shellcheck]]
 version = "0.11.0"
@@ -590,27 +590,27 @@ url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/758513631"
 provenance = "github-attestations"
 
 [[tools.vale]]
-version = "3.27.0"
+version = "3.28.1"
 backend = "aqua:vale-cli/vale"
-specifiers = ["3.27.0"]
+specifiers = ["3.28.1"]
 
 [tools.vale."platforms.linux-arm64"]
-checksum = "sha256:dcaee812fd892c5750702d16ed348a1f7113be57c73cf36fe9e016c789cae6e2"
+checksum = "sha256:af0ca36ec6133ba20093295591e43ed2823b2632520d1f3811293aa4cbe758f2"
 checksum_source = "mise-versions"
-url = "https://github.com/vale-cli/vale/releases/download/v3.27.0/vale_3.27.0_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/740781556"
+url = "https://github.com/vale-cli/vale/releases/download/v3.28.1/vale_3.28.1_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/768120906"
 
 [tools.vale."platforms.linux-x64"]
-checksum = "sha256:c80d62f6bce87b81843ac5b512a26e63213927b957adba0a64fc594570da2000"
+checksum = "sha256:068954ad869ebec24b8dec6ebcd1cbb1fd5f5a83e966a35baedfae8b2cdc093a"
 checksum_source = "mise-versions"
-url = "https://github.com/vale-cli/vale/releases/download/v3.27.0/vale_3.27.0_Linux_64-bit.tar.gz"
-url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/740781554"
+url = "https://github.com/vale-cli/vale/releases/download/v3.28.1/vale_3.28.1_Linux_64-bit.tar.gz"
+url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/768120835"
 
 [tools.vale."platforms.macos-arm64"]
-checksum = "sha256:91bcd6352a832e5995a61dde73ee6367c5006669c6efa4091e0404ec8d7dd7e3"
+checksum = "sha256:b5362c16d2c95db9d773078b957f5bd59cef27d05dac34c5248a93fed130e9f1"
 checksum_source = "mise-versions"
-url = "https://github.com/vale-cli/vale/releases/download/v3.27.0/vale_3.27.0_macOS_arm64.tar.gz"
-url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/740781550"
+url = "https://github.com/vale-cli/vale/releases/download/v3.28.1/vale_3.28.1_macOS_arm64.tar.gz"
+url_api = "https://api.github.com/repos/vale-cli/vale/releases/assets/768120908"
 
 [[tools.yq]]
 version = "4.54.3"

@@ -5,8 +5,8 @@ globalThis.__zod_globalConfig = { jitless: true };
 
 // Scalar marks the entry in view (the sidebar's current item, the bar's name
 // on a phone) as each entry's section crosses the middle of the window, an
-// IntersectionObserver with this margin (`c3`, its `Section`'s, in
-// static/vendor/scalar/standalone.js line 3395). A reader's place is the top
+// IntersectionObserver with this margin (`dAn`, its `Section`'s, in
+// static/vendor/scalar/standalone.js line 3541). A reader's place is the top
 // of what is shown, so the end of one entry above the middle reads as that
 // entry while the next is named. Each such observer watches instead the one
 // line under the bars that stand over the page, the ones Scalar scrolls an
@@ -78,7 +78,7 @@ const STOCK_SENTENCES = [
 
 // Where a line may end inside a path: before each "/", "." or "-", the
 // places Scalar's own path text takes (`ScalarWrappingText`'s `path` preset,
-// static/vendor/scalar/standalone.js line 964), and before a query's "?" and
+// static/vendor/scalar/standalone.js line 282), and before a query's "?" and
 // "&"; never after a space, a ":" or another of them, so "https://" and
 // "../" stay whole.
 const PATH_BREAK = /(?<=[^\s/.?&:-])[/.?&-]/g;

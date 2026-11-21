@@ -19,7 +19,7 @@ dependencies = [
     "jsonschema==4.26.0",
     "mcp==2.3.0",
     "mozilla-django-oidc==5.0.2",
-    "pydantic==2.14.3",
+    "pydantic==2.14.4",
     "pyjwt==2.15.1",
     "referencing==0.37.0",
     # Strips comments from collected scripts (hq/platform/core/static.py); a
@@ -297,10 +297,10 @@ dev = [
 # plugin check installs this group beside them (tools/pipeline/check-plugin.sh).
 source-tests = [
     # The pipeline tests read the workflows through it, and the page tests their ast-grep rules.
-    "pyyaml==6.0.3",
+    "pyyaml==6.0.4",
 ]
 tools = [
-    "coverage==7.17.3",
+    "coverage==7.17.4",
     # Holds the runtime dependencies to what host code imports (lint:deptry).
     "deptry==0.25.1",
     "django-stubs==6.1.2",
@@ -308,12 +308,12 @@ tools = [
     "fonttools==4.68.0",
     # Compares hq_sdk's public shape with the base's (lint:sdk-breaking).
     "griffelib==2.4.1",
-    "hypothesis==6.170.15",
+    "hypothesis==6.170.17",
     # Holds the layering contracts in [tool.importlinter] (lint:imports); its
     # graph, grimp, counts the imports between the layers (audit:layers).
-    "import-linter==2.16",
+    "import-linter==2.17",
     "mypy==2.4.1",
-    "ruff==0.17.5",
+    "ruff==0.17.6",
     # Holds a test's clock still (test_record_life.py).
     "time-machine==3.6.0",
     "types-jsonschema==4.26.0.20261006",
@@ -329,7 +329,7 @@ runner = [
     "ansible-core==2.22.0",
     "ansible-runner==2.4.3",
     # hq_runner/catalog.py reads each sidecar and playbook with it.
-    "pyyaml==6.0.3",
+    "pyyaml==6.0.4",
 ]
 # Generates the API cases of test:api-properties, the one task that installs it.
 fuzz = [

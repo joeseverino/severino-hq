@@ -846,7 +846,7 @@ measured on it instead, once, in its clone's git config
 (`git config hq.gateTokens <tokens>`), which `tools/gate/room.py` reads
 before the fallback. mise's task lock pools take a count fixed where the task
 declares it, all or none with no queue
-([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.9/src/task/task_lock.rs)),
+([task_lock.rs](https://github.com/jdx/mise/blob/v2026.11.11/src/task/task_lock.rs)),
 so they hold neither a share weighed from its run nor a share of several
 waiting among shares of one. A share is the counting semaphore the kernel's flock(2) makes, as
 `flock -s` and GNU make's jobserver tokens do: it takes the lock `heavy` shared,
