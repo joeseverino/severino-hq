@@ -259,13 +259,23 @@ def output_schema(success: Schema) -> Schema:
 
 @dataclass(frozen=True, slots=True)
 class Budget:
-    """The most bytes a tool's answer to ``call``, its arguments, may take on
-    the standard data set, composed. A byte count does not move with load, so
-    it is held exactly (``test_answer_budgets``), and ``audit:mcp`` makes the
+    """The most bytes a tool's answer to its ``example_call`` may take on the
+    standard data set, composed. A byte count does not move with load, so it
+    is held exactly (``test_answer_budgets``), and ``audit:mcp`` makes the
     same call."""
 
     bytes: int
-    call: Mapping[str, Any] = frozendict()
+
+
+def example_call(schema: Schema) -> dict[str, Any]:
+    """The call a tool's ``inputSchema`` shows a client: each argument at its
+    first example, and every other left to its default. A required argument
+    with no example is refused, since nothing else says what to send."""
+
+    fields = schema.get("properties") or {}
+    if missing := [name for name in schema.get("required", ()) if not fields[name].get("examples")]:
+        raise ValueError(f"A tool's required arguments need an example: {', '.join(missing)}.")
+    return {name: field["examples"][0] for name, field in fields.items() if field.get("examples")}
 
 
 @dataclass(frozen=True, slots=True)
