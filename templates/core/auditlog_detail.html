@@ -47,7 +47,7 @@
   {% endif %}
   {% if scan_rows %}
     {% section "Playbooks" count=scan_rows|length %}
-      {% include "control_plane/_playbook_table.html" with rows=scan_rows deciding=True %}
+      {% data_table scan_rows %}
     {% endsection %}
   {% endif %}
   {% if scan.preview %}{% change_table scan.preview %}{% endif %}
