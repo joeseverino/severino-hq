@@ -396,16 +396,16 @@ class AgentDeviceTests(TestCase):
         self.assertEqual(none.attrs["data-placement"], "none")
         self.assertEqual(placed, [], "a tailnet device placing each call is the normal case, said by the Devices table")
 
-    def test_a_devices_calls_are_counted_on_its_row(self):
+    def test_a_devices_changes_are_counted_on_its_row_as_its_agents_are(self):
         device = self.device(approved_at=timezone.now(), approved_by=self.person)
         for _ in range(3):
             AuditLog.objects.create(
                 action=AuditLog.Action.UPDATED, metadata={"actor": AGENT, "interface": "mcp", "device": LAPTOP_ID}
             )
+        page = self.page()
 
-        row = " ".join(element.words for element in within(self.page(), "id", f"device-{device.pk}"))
-
-        self.assertIn("3 calls", row)
+        for row in (within(page, "id", f"device-{device.pk}"), within(page, "data-client", AGENT)):
+            self.assertIn("3 changes", " ".join(element.words for element in row))
 
     def test_a_refusal_from_a_device_points_at_its_row(self):
         device = self.device()

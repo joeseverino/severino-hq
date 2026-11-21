@@ -52,6 +52,17 @@ holds open now (none says nothing, and a full set is warned of in its row),
 and its own block beside the pause above. Removing it is offered only while
 it is not blocked, since removal never lifts a block.
 {% endcomment %}
+{% comment %}
+What an agent, or one of its devices, did over the window, counted once
+(agent_activity.Activity) and worded here for both tables.
+{% endcomment %}
+{% partialdef activity_cell %}
+<td data-sort="{{ activity.changes }}">
+  {% list %}<li>{{ activity.changes|counted:"change" }}</li>
+  {% if activity.refused %}<li>{% status activity.refused|measured:"refused" tone="attention" pill=False %}{% if activity.limited == activity.refused %} {% muted %}for calling too much{% endmuted %}{% elif activity.limited %} {% muted %}{{ activity.limited|breakable }} for calling too much{% endmuted %}{% endif %}</li>{% endif %}
+  {% if streams.full %}<li>{% status streams.open "of" streams.cap|counted:"stream" "open" tone="attention" pill=False data_streams="full" %} {% muted %}so another is refused{% endmuted %}</li>{% endif %}{% endlist %}
+</td>
+{% endpartialdef %}
 {% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
 {% section "Agents" count=standings|length id="agents" lede=lede %}
 {% if standings %}
@@ -88,11 +99,7 @@ it is not blocked, since removal never lifts a block.
             </th>
             <td data-sort="{{ standing.in_force|length }}">{% list %}<li>{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}</li>{% if standing.beyond_role %}<li>{% muted %}{{ standing.beyond_role|length|breakable }} beyond its person's role{% endmuted %}</li>{% endif %}{% if standing.missing %}<li>{% status standing.missing|length "not granted" tone="attention" pill=False %}</li>{% endif %}{% endlist %}</td>
             <td>{{ identity.last_seen|when:"ago" }}</td>
-            <td data-sort="{{ activity.changes }}">
-              {% list %}<li>{{ activity.changes|counted:"change" }}</li>
-              {% if activity.refused %}<li>{% status activity.refused|measured:"refused" tone="attention" pill=False %}{% if activity.limited == activity.refused %} {% muted %}for calling too much{% endmuted %}{% elif activity.limited %} {% muted %}{{ activity.limited|breakable }} for calling too much{% endmuted %}{% endif %}</li>{% endif %}
-              {% with streams=standing.streams %}{% if streams.full %}<li>{% status streams.open "of" streams.cap|counted:"stream" "open" tone="attention" pill=False data_streams="full" %} {% muted %}so another is refused{% endmuted %}</li>{% endif %}{% endwith %}{% endlist %}
-            </td>
+            {% with streams=standing.streams %}{% partial activity_cell %}{% endwith %}
             {% row_actions actions %}
           </tr>
         {% endwith %}{% endfor %}
@@ -145,7 +152,7 @@ device sent the call there. A call from a device runs once it is
 approved, and a block stops that device alone.
 {% endcomment %}
 {% if device_groups %}
-  {% with days=recent_days|counted:"day" %}{% with lede="Calls over the last "|add:days %}
+  {% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
   {% section "Devices" id="agent-devices" lede=lede %}
   {% table_region "Devices" %}
     <table class="data-table">
@@ -155,7 +162,7 @@ approved, and a block stops that device alone.
           {% table_heading "Approval" "status" %}
           {% table_heading "First seen" "status" drop=2 %}
           {% table_heading "Last seen" "status" drop=3 %}
-          {% table_heading "Calls" drop=1 %}
+          {% table_heading "Activity" drop=1 %}
           {% table_heading "Approve or block" "control" hidden=True %}
         </tr>
       </thead>
@@ -182,7 +189,7 @@ approved, and a block stops that device alone.
               <td>{% list %}<li>{% status device.standing %}</li>{% if device.waits_for %}<li>{% muted %}For {{ device.waits_for|breakable }}{% endmuted %}</li>{% endif %}{% endlist %}</td>
               <td>{{ device.first_seen|when:"ago" }}</td>
               <td>{{ device.last_seen|when:"ago" }}</td>
-              <td data-sort="{{ device.calls }}">{% list %}<li>{{ device.calls|counted:"call" }}</li>{% if device.refused %}<li>{% status device.refused|measured:"refused" tone="attention" pill=False %}</li>{% endif %}{% endlist %}</td>
+              {% with activity=device.activity streams=None %}{% partial activity_cell %}{% endwith %}
               {% row_actions actions %}
             </tr>
           {% endfor %}
