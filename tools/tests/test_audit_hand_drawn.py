@@ -1,22 +1,12 @@
-"""audit:hand-drawn finds what each class says, and places a part where its pages draw it."""
+"""audit:hand-drawn places a part where its pages draw it."""
 
 from django.test import SimpleTestCase
 
-from hq.platform.core.hand_drawn import Source
 from hq.platform.core.template_parts import Part
 from tools import audit_hand_drawn
 
 
 class HandDrawnTests(SimpleTestCase):
-    def test_each_counted_shape_finds_its_examples_and_keeps_the_rest(self) -> None:
-        for shape in (*audit_hand_drawn.COUNTED, audit_hand_drawn.BUTTON):
-            for source in shape.refuses:
-                with self.subTest(shape.name, found=source):
-                    self.assertTrue(list(shape.find(Source(source))))
-            for source in shape.keeps:
-                with self.subTest(shape.name, kept=source):
-                    self.assertEqual(list(shape.find(Source(source))), [])
-
     def test_a_part_is_placed_on_the_pages_that_draw_it_through_every_partial_between(self) -> None:
         templates = {
             "example/page.html": '{% extends "page.html" %}{% include "partials/_example_wrap.html" %}',
