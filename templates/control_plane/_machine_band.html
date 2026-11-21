@@ -6,11 +6,8 @@ for: one band under the head, as a service's and HQ's own page open.
 {% card element="div" %}{% facts layout="band" %}
   {% if reached_links %}
   {% fact "Read through" icon="network" %}
-    {% comment %}A connection named for this machine is named by its kind, a word rather than an identifier.{% endcomment %}
-    {% with found=reached_links.0 %}{% if found.0.title %}{% entity found.0 %}{% else %}{% entity found.0 code=True %}{% endif %}{% endwith %}
-  {% detail %}
-    {% with found=reached_links.0 %}{% if found.1 %}<small>Not answering</small>{% endif %}{% endwith %}
-    {% if reached_links|length > 1 %}{% list kind="dots" %}{% for link, unanswered in reached_links|slice:"1:" %}<li{% if unanswered %} class="prose"{% endif %}>{% entity link %}{% if unanswered %} not answering{% endif %}</li>{% endfor %}{% endlist %}{% endif %}
+    {% comment %}Every connection that reads it, one run. One named for this machine is named by its kind, a word rather than an identifier.{% endcomment %}
+    {% list kind="dots" %}{% for link, unanswered in reached_links %}<li{% if unanswered %} class="prose"{% endif %}>{% if link.title %}{% entity link %}{% else %}{% entity link code=True %}{% endif %}{% if unanswered %} <small>not answering</small>{% endif %}</li>{% endfor %}{% endlist %}
   {% endfact %}
   {% endif %}
   {% if machine.containers %}
