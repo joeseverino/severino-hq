@@ -149,7 +149,11 @@ def _whole(part: str, *, boxed: bool = False) -> str:
         for at, group in enumerate(groups)
     )
     inner = f'<span class="part">{held}</span>' if boxed else held
-    return f'<span class="whole">{inner}</span>'
+    # A run with no hyphen (a digest, a key, a snake_case name) has no place
+    # a browser breaks it, so a cell may break it anywhere rather than widen
+    # its column to it (cuts.css); a hyphenated name breaks at its hyphens.
+    unbroken = "" if _INNER_HYPHEN.search(part) else " data-unbroken"
+    return f'<span class="whole"{unbroken}>{inner}</span>'
 
 
 def _token(word: str, *, sole: bool) -> str:
@@ -176,7 +180,7 @@ def _token(word: str, *, sole: bool) -> str:
         # A word of a phrase: each part is cut on its own, at its cell's edge.
         return f'<span class="token">{_SEAM.join(_whole(part, boxed=True) for part in parts)}</span>'
     inside = _SEAM.join(_whole(part) for part in parts)
-    return f'<span class="token" data-sole><span class="cut">{inside}</span></span>'
+    return f'<span class="token" data-sole>{inside}</span>'
 
 
 # The tags that close a word's boxes, after its last letter.

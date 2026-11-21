@@ -110,11 +110,12 @@
   .cell-clamp .line-list { display: inline; }
   .cell-clamp .tag { padding-block: 0; }
 }
-/* A hash or a key, which has no break in it, may break anywhere, so it asks
-   its column for no more than a letter. A name or a host breaks only at its
-   words and the breaks it is drawn with, so its column asks for its longest
-   word and another column gives way first. */
-.data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
+/* A hash, a key or a snake_case name, which has no break in it
+   (`data-unbroken`, line_breaks), may break anywhere, so it asks its column
+   for no more than a letter. A name or a host breaks only at its words and
+   the breaks it is drawn with (`break-word`, base.css), so its column asks
+   for its longest word and another column gives way first. */
+.data-table > tbody > tr > * [data-unbroken] { overflow-wrap: anywhere; }
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }

@@ -44,12 +44,8 @@
 /* A cell line's quiet second line (`{% cell_line %}`) is a line of its own under the first; either line that holds something to press is a target tall. */
 .cell-detail { display: block; }
 :is(.cell-line:has(+ .cell-detail), .cell-line + .cell-detail):is(a[href], :has(a[href], [tabindex])) { line-height: var(--target-min); }
-/* Anywhere else the box the filter puts in a name is no box, and in a link a part is text, as in the link's token (base.css). */
-.cut { display: contents; }
-:is(td, th) [data-entity] > .token > .cut > .whole { display: contents; }
-/* A value quoted in a cell can hold a run with no seam (a link, a digest), which `breakable` makes a token, so the token breaks wherever it must and never widens its column; marked on the cell when the whole cell is such text. Its words stay whole, so the column is never narrower than its longest. */
+/* A value quoted in a cell breaks a word longer than its line wherever it must, marked on the cell when the whole cell is such text; a run with no seam (a digest) breaks anywhere (cuts.css). Its words stay whole, so the column is never narrower than its longest. */
 .data-table :is(td[data-cell~=data], td [data-cell~=data]) { overflow-wrap: break-word; }
-.data-table :is(td[data-cell~=data], td [data-cell~=data]) .token { overflow-wrap: anywhere; }
 /* A list row's actions (`_record_list.html`) read as several: the span gets the flex box. A table row's are its cell's (tables.css). */
 span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); white-space: nowrap; }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
@@ -291,7 +287,7 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .external-link:not(td *, th *) > code > .token { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 /* Each line of such a chip draws its padding, so a part on a line of its own takes the line less the chip's two sides. A part longer than that wraps inside its own box, which the chip's ground reaches only if the box paints it too. */
 .external-link:not(td *, th *) > code .whole { max-width: calc(100% - 2 * var(--space-2)); }
-.external-link:not(td *, th *) > code :is(.token, .cut, .whole) { background: inherit; border-radius: inherit; }
+.external-link:not(td *, th *) > code :is(.token, .whole) { background: inherit; border-radius: inherit; }
 
 /* A band of facts (`{% facts layout="band" %}`): the few figures that sum up a page or a part, each a cell drawn as a figure is: its label, its mark before it, over its value over its detail. `size="large"` sets the values as a page's headline figures. */
 /* Its cells are counted into whole rows (`data-band`, above) at a narrower floor than an insight's, so a long detail wraps in its cell and never takes a row for the cell alone. Each cell is its own stack, top-aligned, its value right under its label. The band draws no box and no edges of its own: its facts stand apart by gaps, the frame's padding (a card, a section's body) their inset, as a card's figures do. */

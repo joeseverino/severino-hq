@@ -454,19 +454,13 @@ def entity(
 
 def cell_line(text, url="", *, lines=2):
     """One fact in a table cell written as a line (``.cell-line``), a link when
-    ``url`` is given: its names held as ``breakable`` holds them. The line asks
-    for its whole length around the box that cuts it (``.cut``, figures.css),
-    and a cut one reads whole as any cut value does (tables.js, ``markCut``).
-    It takes two lines at most, or one (``lines=1``) for a fact that keeps its
-    row as tall as its neighbors. ``{% cell_line text=... %}`` draws it."""
+    ``url`` is given: its names held as ``breakable`` holds them, its words cut
+    by the line's own box, and a cut one reads whole as any cut value does
+    (tables.js, ``markCut``). It takes two lines at most, or one (``lines=1``)
+    for a fact that keeps its row as tall as its neighbors.
+    ``{% cell_line text=... %}`` draws it."""
 
-    drawn = breakable(text)
-    # A name brings its own box; words are cut by the line's box.
-    inside = (
-        drawn
-        if drawn.startswith('<span class="token" data-sole')
-        else format_html('<span class="cut">{}</span>', drawn)
-    )
+    inside = breakable(text)
     if lines not in (1, 2):
         raise ValueError(f"A cell's line takes 1 or 2 lines, never {lines!r}.")
     one = format_html(' data-lines="{}"', lines) if lines == 1 else ""
