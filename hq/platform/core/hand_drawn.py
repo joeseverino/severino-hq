@@ -579,25 +579,46 @@ SHAPES = (
     ),
     Shape(
         name="list",
-        said="A list drawn by hand, where the list part draws it.",
-        instead='{% list kind="down|dots|prose|chips|codes|labeled" %}<li>...</li>{% endlist %}',
+        said="A list or a band of facts drawn by hand, where the list or the facts part draws it.",
+        instead='{% list kind="down|dots|prose|chips|codes|labeled" %}<li>...</li>{% endlist %}, or {% facts %}',
         find=lambda source: (
             start
             for find in (
-                tagged("ul|ol", without=r"[\s}]class\b"),
+                tagged("ul|ol|dl"),
                 tagged(
-                    "ul|ol",
-                    r"[\s}]class=[\"'](?:[^\"']*\s)?(?:(?:stack|dot|prose|code|address)-list|link-chips)(?:[\s\"']|$)",
+                    r"[\w-]+",
+                    r"[\s}]class=[\"'](?:[^\"']*\s)?(?:(?:stack|dot|prose|code|address)-list|link-chips"
+                    r"|facts-(?:band|list|inline))(?:[\s\"']|$)",
                 ),
             )
             for start in find(source)
         ),
-        refuses=("<ul><li>A</li></ul>", '<ol class="dot-list"><li>A</li></ol>'),
-        keeps=('<ul class="nav-items"><li>A</li></ul>',),
+        refuses=(
+            "<ul><li>A</li></ul>",
+            '<ul class="example-links"><li>A</li></ul>',
+            '<span class="dot-list"><span>A</span></span>',
+        ),
+        keeps=('{% list kind="dots" %}<li>A</li>{% endlist %}', '<div class="stack">A</div>'),
         drawn_by={
             "partials/_list.html": "the list part itself",
+            "partials/_facts.html": "the facts part itself",
+            "django/forms/errors/list/ul.html": "Django's error list, which every form's and field's errors draw",
             "partials/_switch.html": "the switch styles the list it draws",
             "partials/_relation_list.html": "the relation list styles the list it draws",
+            "partials/_messages.html": "the messages part, each message a notice",
+            "partials/_record_list.html": "the record list part, each row a record",
+            "partials/_steps.html": "the steps part, a list of its own in order",
+            "partials/_timeline.html": "the timeline part, its events in order",
+            "partials/_share_list.html": "the share list part, each row a bar",
+            "partials/_check_ladder.html": "the check ladder part, its rungs in order",
+            "partials/_check_rung.html": "the rung's statement, a dot run in its summary, where no list may stand",
+            "partials/_cadence.html": "the cadence part, its periods in order",
+            "partials/_week_plan.html": "the week plan part, its days in order",
+            "partials/_dropzone.html": "the dropzone part, the files its script lists as they are chosen",
+            "partials/_page_navigation.html": "the page's section navigation",
+            # Held for the one-place CSS wave, which moves each onto the list part.
+            "partials/_calendar_sources.html": "held for the one-place CSS wave",
+            "projects/_repository_postures.html": "held for the one-place CSS wave",
         },
     ),
     Shape(

@@ -13,5 +13,5 @@ kept for the control to name, and its errors stand under it.
   <label class="visually-hidden" for="{{ field.id_for_label }}">{{ field.label|breakable }}</label>
   {{ field }}
   {% if field.help_text %}<p class="visually-hidden"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|breakable }}</p>{% endif %}
-  {% if field.errors %}<ul class="errors"{% if field.auto_id %} id="{{ field.auto_id }}_error"{% endif %}>{% for e in field.errors %}<li>{{ e|breakable }}</li>{% endfor %}</ul>{% endif %}
+  {{ field.errors }}
 </div>

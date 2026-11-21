@@ -142,14 +142,12 @@ class FindingCardTests(TestCase):
     def test_the_specific_step_comes_first_and_the_generic_plan_is_gone(self):
         words, held = self.card()
 
-        parts = [element for element in held if element.classes & {"row-gutter", "attention-links"}]
-        self.assertEqual(
-            [part.classes & {"row-gutter", "attention-links"} for part in parts][:2],
-            [
-                {"row-gutter"},
-                {"attention-links"},
-            ],
-        )
+        parts = [
+            "links" if "data-attention-links" in element.attrs else "gutter"
+            for element in held
+            if "row-gutter" in element.classes or "data-attention-links" in element.attrs
+        ]
+        self.assertEqual(parts[:2], ["gutter", "links"])
         self.assertNotIn("Next steps", words)
         self.assertNotIn("Fix it", words)
         # A connection that does not answer is a reading: confirming it reads now.
@@ -165,7 +163,7 @@ class FindingCardTests(TestCase):
 
     def test_open_connections_is_a_link_not_the_fix(self):
         words, held = self.card()
-        (links,) = [element for element in held if "attention-links" in element.classes]
+        (links,) = [element for element in held if "data-attention-links" in element.attrs]
 
         self.assertIn("Open connections", links.words)
         self.assertEqual(words.count("Open connections"), 1)

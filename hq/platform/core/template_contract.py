@@ -89,7 +89,6 @@ CLASSES = (
     "danger",
     "data-table",
     "date-col",
-    "errors",
     "eyebrow",
     "finding",
     "ghost",

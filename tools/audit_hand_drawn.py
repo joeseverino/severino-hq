@@ -12,7 +12,6 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
-from itertools import chain
 from pathlib import Path
 
 from hq.platform.core.hand_drawn import SHAPES, Shape, Source, tagged, within
@@ -25,10 +24,6 @@ TEMPLATES = ROOT / "templates"
 
 _EXISTING = {shape.name: shape for shape in SHAPES}
 _CHOICE = r"[\s}]type=[\"']?(?:checkbox|radio)\b"
-_LIST_CLASS = (
-    r"[\s}]class=[\"'](?:[^\"']*\s)?(?:(?:stack|dot|prose|code|address)-list|link-chips|facts-(?:band|list|inline))"
-    r"(?:[\s\"']|$)"
-)
 _CHIP_CLASS = r"[\s}]class=[\"'](?:[^\"']*[\s}])?(?:[\w-]*(?:chips?|badge|pill|tag)|[\w-]+-(?:count|age))(?:[\s\"'{]|$)"
 
 
@@ -45,27 +40,6 @@ def _form_controls(source: Source) -> Iterator[int]:
 # The template classes, as shapes not yet refused. Each wave moves its own
 # into hand_drawn.SHAPES, where the loaders refuse it, as the guard it adds.
 COUNTED = (
-    Shape(
-        name="list",
-        said="A list or a band of facts drawn by hand, where the list or the facts part draws it.",
-        instead='{% list kind="..." %}<li>...</li>{% endlist %}, or {% facts %} for labels and their values',
-        find=lambda source: chain(tagged("ul|ol|dl")(source), tagged(r"[\w-]+", _LIST_CLASS)(source)),
-        refuses=('<ul class="example-links"><li>A</li></ul>', '<span class="dot-list"><span>A</span></span>'),
-        keeps=('{% list kind="dots" %}<li>A</li>{% endlist %}', '<div class="stack">A</div>'),
-        drawn_by={
-            "partials/_list.html": "the list part itself",
-            "partials/_facts.html": "the facts part itself",
-            "partials/_messages.html": "the messages part, each message a notice",
-            "partials/_record_list.html": "the record list part, each row a record",
-            "partials/_steps.html": "the steps part, a list of its own in order",
-            "partials/_timeline.html": "the timeline part, its events in order",
-            "partials/_share_list.html": "the share list part, each row a bar",
-            "partials/_check_ladder.html": "the check ladder part, its rungs in order",
-            "partials/_cadence.html": "the cadence part, its periods in order",
-            "partials/_page_navigation.html": "the page's section navigation",
-            **_EXISTING["list"].drawn_by,
-        },
-    ),
     Shape(
         name="filter-choice",
         said="A choice of several drawn as boxes by hand, where the toggle set part draws it.",

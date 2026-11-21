@@ -37,8 +37,8 @@ p, li, dd, blockquote, figcaption { text-wrap: pretty; }
 /* A list drawn as a part (rows, chips, a strip, a ladder) draws no markers
    and sits flush, set once here; a part with an inset or a margin of its own
    sets it in its rule, which outranks this one. A list of prose
-   (`.prose-list`, a field's `.errors`) keeps the browser's markers. */
-:where(.attention-links, .step-list, .timeline-list, .cadence-strip,
+   (`.prose-list`) keeps the browser's markers. */
+:where(.step-list, .timeline-list, .cadence-strip,
   .check-ladder, .errorlist, .dropzone-files, .dot-list, .page-nav-list, .relation-list > ul,
   .relation-values, .link-chips, .stack-list, .messages, .calendar-sources,
   .week-plan, .week-plan-notes, .list-rows, .address-list, .code-list, .bar-list, .posture-repos) {

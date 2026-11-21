@@ -36,7 +36,7 @@ that shows it whole.
         {% if item.advice %}<p>{{ item.advice|breakable }}</p>{% endif %}
         {% if item.steps %}{% steps numbered=True %}{% for step in item.steps %}{% include "partials/_operator_step.html" %}{% endfor %}{% endsteps %}{% endif %}
         {% if item.reason %}<p class="attention-reason">{{ item.reason|breakable }}</p>{% endif %}
-        {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}{% button link.label link.url look="ghost glyph" icon=icon data_tip=link.label %}{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
+        {% if item.links %}{% list kind="dots" data_attention_links=True %}{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}{% button link.label link.url look="ghost glyph" icon=icon data_tip=link.label %}{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}{% endlist %}{% endif %}
       </div>
       {% endif %}
     {% endif %}

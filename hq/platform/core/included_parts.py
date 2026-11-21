@@ -136,7 +136,7 @@ READING_AGE = _part(
 WORK_QUEUE = _part(
     "work_queue",
     "What waits on the operator, each row what wants doing and why, or that nothing does.",
-    *("attention-clear", "attention-links", "attention-reason", "is-mark", "row-gist", "row-line"),
+    *("attention-clear", "attention-reason", "is-mark", "row-gist", "row-line"),
     pieces=("partials/_queue_entries.html", "partials/_queue_rows.html", "partials/_urgency_pill.html"),
     public=True,
     rules="""
