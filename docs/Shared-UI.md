@@ -764,8 +764,8 @@ reads the answer and words nothing of its own.
   operator just gave it and ignores a second press.
 - When the work ends, the part of the page named by the ask's `refresh` selector is fetched again
   and swapped in place; without one, the page's content (`#content`, a region of its own). Only if
-  that cannot be had does the page load again, though not under your hands and never twice
-  running; then it offers the reading as a link.
+  that cannot be had does the page load again, though never while the operator is using it and
+  never twice running; then it offers the reading as a link.
 - A failure is said in the note, where it was asked.
 
 In a table's row the note's line is as wide as the button, so there it says the state's word alone
@@ -1099,7 +1099,7 @@ asks the controller for those whose last attempt is older than their cadence
 - A page in a background tab asks for nothing, a GET never does, and the request cannot name a
   connection or a kind.
 - When the reading lands, the page's content is fetched again and swapped in place, the ask's own
-  line kept. Only if that fails does the page load again, once; if you have touched it or it
+  line kept. Only if that fails does the page load again, once; if the operator has touched it or it
   reloaded a moment ago, it says a newer reading is in and leaves showing it to them.
 
 ### partials/_work_queue.html

@@ -33,8 +33,8 @@ ASK = _part(
       operator just gave it and ignores a second press.
     - When the work ends, the part of the page named by the ask's `refresh` selector is fetched again
       and swapped in place; without one, the page's content (`#content`, a region of its own). Only if
-      that cannot be had does the page load again, though not under your hands and never twice
-      running; then it offers the reading as a link.
+      that cannot be had does the page load again, though never while the operator is using it and
+      never twice running; then it offers the reading as a link.
     - A failure is said in the note, where it was asked.
 
     In a table's row the note's line is as wide as the button, so there it says the state's word alone

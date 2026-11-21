@@ -845,7 +845,7 @@ PARTS = (
         - A page in a background tab asks for nothing, a GET never does, and the request cannot name a
           connection or a kind.
         - When the reading lands, the page's content is fetched again and swapped in place, the ask's own
-          line kept. Only if that fails does the page load again, once; if you have touched it or it
+          line kept. Only if that fails does the page load again, once; if the operator has touched it or it
           reloaded a moment ago, it says a newer reading is in and leaves showing it to them.
         """,
         states=pages.VISIT_REFRESH_STATES,
