@@ -25,6 +25,7 @@ from .ui import counted
 lazy from .github_estate import repository_for
 lazy from .github_profile import accounts, profile, profiles
 lazy from .moments import moment
+lazy from .projects import last_active
 
 # The display projection of a reading, in the shape an extension emits, so the
 # dashboard renders host and extension cards through one loop and a new section
@@ -202,7 +203,7 @@ def _project(project: Project) -> dict[str, Any]:
         "category_label": project.get_category_display(),
         "repository_url": project.repository_url,
         "public_url": project.public_url,
-        "updated_at": project.updated_at.isoformat(),
+        "last_active_at": last_active(project).isoformat(),
     }
 
 
@@ -218,7 +219,11 @@ def _content(item: ContentItem) -> dict[str, Any]:
 
 
 def recent_active_projects() -> list[dict[str, Any]]:
-    return [_project(project) for project in active_projects().order_by("-updated_at")[:CALENDAR_ROWS]]
+    """The active projects that moved last, by ``last_active``, which a
+    repository's push sets as well as an edit, so every one is read."""
+
+    newest = sorted(active_projects(), key=last_active, reverse=True)[:CALENDAR_ROWS]
+    return [_project(project) for project in newest]
 
 
 def recent_draft_content() -> list[dict[str, Any]]:

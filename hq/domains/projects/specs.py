@@ -229,6 +229,10 @@ class ProjectRow(TypedDict):
         str | None,
         Describe("When its repository was last pushed to, an ISO 8601 date-time; null until HQ has read it."),
     ]
+    last_active_at: Annotated[
+        str,
+        Describe("When it last moved, its repository's last push or its last edit, the later, an ISO 8601 date-time."),
+    ]
     dependency_updates: projects.DependencyUpdates
     deployment_notes: projects.DeploymentNotes
     security_notes: projects.SecurityNotes

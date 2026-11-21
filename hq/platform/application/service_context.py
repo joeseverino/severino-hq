@@ -40,6 +40,7 @@ lazy from .pages import PageBadge, principal_opens
 lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
 lazy from .paths import hq_path
+lazy from .projects import last_push
 lazy from .reach import network_of
 lazy from .record_timeline import record_timeline
 lazy from .security import Capability, Principal
@@ -480,7 +481,7 @@ def _project(service) -> SummaryItem | None:
             _repository_detail(repo)
             or (_repository_label(project.repository_url) if project and project.repository_url else "",)
         ),
-        f"pushed {ago(project.last_push_at)}" if project and project.last_push_at else "",
+        f"pushed {ago(pushed)}" if project and (pushed := last_push(project)) else "",
     )
     return SummaryItem("Project", service.project["name"], link, lines(*parts), icon="commit")
 

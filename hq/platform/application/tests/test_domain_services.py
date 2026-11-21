@@ -103,12 +103,16 @@ class ProjectApplicationServiceTests(TestCase):
                 expected_updated_at=created["project"]["updated_at"],
             )
 
-    def test_refresh_owns_external_metadata_persistence_and_audit(self):
+    def test_refresh_stores_the_push_and_its_audit_and_is_no_edit(self):
+        """``updated_at`` is when the operator last changed the project, and
+        the ``expected_updated_at`` token, so a refresh leaves it."""
+
         project = Project.objects.create(
             name="HQ",
             slug="hq",
             repository_url="https://github.com/joeseverino/severino-hq",
         )
+        before = project.updated_at
         pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
 
         result = refresh_project(
@@ -120,32 +124,8 @@ class ProjectApplicationServiceTests(TestCase):
         self.assertTrue(result["github"]["ok"])
         project.refresh_from_db()
         self.assertEqual(project.last_push_at, pushed_at)
-        self.assertTrue(AuditLog.objects.filter(object_type="Project", object_id=str(project.pk)).exists())
-
-    def test_refresh_does_not_pass_itself_off_as_an_edit(self):
-        """``updated_at`` answers when the operator last changed the project:
-        the "Updated" column, the default sort and the model's ordering. It is
-        also the ``expected_updated_at`` token. When the repository last moved
-        is ``last_push_at``.
-        """
-
-        project = Project.objects.create(
-            name="HQ",
-            slug="hq",
-            repository_url="https://github.com/joeseverino/severino-hq",
-        )
-        before = project.updated_at
-        pushed_at = datetime(2026, 7, 31, 20, 0, tzinfo=UTC)
-
-        refresh_project(
-            project.slug,
-            principal=Principal("operator", "web", OPERATOR_CAPABILITIES),
-            github_fetcher=lambda repository_url, **kwargs: pushed_at,
-        )
-
-        project.refresh_from_db()
-        self.assertEqual(project.last_push_at, pushed_at)
         self.assertEqual(project.updated_at, before)
+        self.assertTrue(AuditLog.objects.filter(object_type="Project", object_id=str(project.pk)).exists())
 
 
 class AdapterParityTests(TestCase):

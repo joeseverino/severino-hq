@@ -158,8 +158,31 @@ class ProjectCommand:
     notes: Notes = ""
 
 
+def last_push(project: Project) -> datetime | None:
+    """When the project's repository last moved: GitHub's reading of it where
+    the App reads it, else the public read a refresh stored."""
+
+    repository = repository_for(project.repository_url)
+    return (moment(repository.pushed_at) if repository is not None else None) or project.last_push_at
+
+
+def last_active(project: Project) -> datetime:
+    """A project's date wherever it is shown or ordered: the newest of its
+    repository's last push and its record's last edit."""
+
+    pushed = last_push(project)
+    return max(pushed, project.updated_at) if pushed is not None else project.updated_at
+
+
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
-    fields = row(project, ProjectRow, url=entity_link(Kind.PROJECT, project.slug).url, technologies=project.tech_list)
+    fields = row(
+        project,
+        ProjectRow,
+        url=entity_link(Kind.PROJECT, project.slug).url,
+        technologies=project.tech_list,
+        last_push_at=last_push(project),
+        last_active_at=last_active(project),
+    )
     if repository_key(project.repository_url):
         fields["updates"] = _updates(project)
     return linked(fields, project, relationships=relationships, assets=project.assets)
@@ -241,7 +264,8 @@ def refresh_project(
     if app is not None:
         result["github_app"] = app
         if app["ok"]:
-            result["github"] = _record_push(project, app.pop("pushed_at"), principal)
+            # The App's reading is where a project's last push is read from, so nothing is copied.
+            result["github"] = {"ok": True, "last_push_at": iso(app.pop("pushed_at")) or None}
             return result
 
     try:
@@ -253,7 +277,7 @@ def refresh_project(
     if pushed_at is None:
         result["github"] = {"ok": False, "error": "GitHub did not say when this repository was last pushed."}
         return result
-    result["github"] = _record_push(project, pushed_at, principal)
+    result["github"] = _record_push(project, pushed_at)
     return result
 
 
@@ -302,19 +326,16 @@ def _pushed_at(stamp: Any) -> datetime | None:
     return moment(stamp)
 
 
-def _record_push(project: Project, pushed_at: datetime | None, principal: Principal) -> dict[str, Any]:
-    """Persist when the repository last moved, where a source said."""
+def _record_push(project: Project, pushed_at: datetime) -> dict[str, Any]:
+    """Persist when a repository the App does not read last moved, as the public read said."""
 
-    if pushed_at is None:
-        return {"ok": True, "last_push_at": iso(project.last_push_at) or None}
     with transaction.atomic():
         project = held(Project, _PROJECT, {"pk": project.pk}, None)
         project.last_push_at = pushed_at
-        # `updated_at` is left out on purpose: it is the "Updated" column, the
-        # default sort and this model's ordering, and reading GitHub is not an
-        # operator edit. When the repository last moved is `last_push_at`. It
-        # is also the `expected_updated_at` token, which a refresh must not
-        # invalidate mid-edit.
+        # `updated_at` is left out on purpose: it is the record's last edit,
+        # and reading GitHub is not an operator edit. It is also the
+        # `expected_updated_at` token, which a refresh must not invalidate
+        # mid-edit.
         project.save(update_fields=["last_push_at"])
     return {"ok": True, "last_push_at": pushed_at.isoformat()}
 

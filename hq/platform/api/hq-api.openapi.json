@@ -1801,6 +1801,7 @@
               "repository_url",
               "public_url",
               "last_push_at",
+              "last_active_at",
               "dependency_updates",
               "deployment_notes",
               "security_notes",
@@ -1847,6 +1848,7 @@
               "repository_url",
               "public_url",
               "last_push_at",
+              "last_active_at",
               "dependency_updates",
               "deployment_notes",
               "security_notes",
@@ -23007,6 +23009,9 @@
           "description": {
             "$ref": "#/components/schemas/ProjectRow/properties/description"
           },
+          "last_active_at": {
+            "$ref": "#/components/schemas/ProjectRow/properties/last_active_at"
+          },
           "last_push_at": {
             "$ref": "#/components/schemas/ProjectRow/properties/last_push_at"
           },
@@ -23058,6 +23063,7 @@
           "repository_url",
           "public_url",
           "last_push_at",
+          "last_active_at",
           "dependency_updates",
           "deployment_notes",
           "security_notes",
@@ -23082,6 +23088,9 @@
           },
           "description": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/description"
+          },
+          "last_active_at": {
+            "$ref": "#/components/schemas/ProjectRowPartial/properties/last_active_at"
           },
           "last_push_at": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/last_push_at"
@@ -23185,6 +23194,10 @@
           "description": {
             "$ref": "#/components/schemas/ProjectDescription"
           },
+          "last_active_at": {
+            "description": "When it last moved, its repository's last push or its last edit, the later, an ISO 8601 date-time.",
+            "type": "string"
+          },
           "last_push_at": {
             "anyOf": [
               {
@@ -23245,6 +23258,7 @@
           "repository_url",
           "public_url",
           "last_push_at",
+          "last_active_at",
           "dependency_updates",
           "deployment_notes",
           "security_notes",
@@ -23298,6 +23312,9 @@
           },
           "description": {
             "$ref": "#/components/schemas/ProjectDescription"
+          },
+          "last_active_at": {
+            "$ref": "#/components/schemas/ProjectRow/properties/last_active_at"
           },
           "last_push_at": {
             "$ref": "#/components/schemas/ProjectRow/properties/last_push_at"

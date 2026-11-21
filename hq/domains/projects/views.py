@@ -65,7 +65,7 @@ class ProjectListView(ListPageMixin, TemplateView):
         TableColumn("Updates"),
         TableColumn("Technologies", "technologies_used", css="optional-col"),
         TableColumn("Repository", kind="status"),
-        TableColumn("Edited", "updated_at"),
+        TableColumn("Last active", kind="status"),
         TableColumn("", css="row-actions"),
     )
     table_search_placeholder = "Search projects, technology, and notes…"
@@ -84,7 +84,8 @@ class ProjectListView(ListPageMixin, TemplateView):
             **item,
             "state": Project.Status(item["status"]),
             "repository": repository,
-            "pushed_at": moment(str(repository.pushed_at or "")) if repository is not None else None,
+            "pushed_at": moment(item["last_push_at"]),
+            "last_active_at": moment(item["last_active_at"]),
             "updates_link": replace(link, url=f"{link.url}#updates"),
             "row_actions": (PageAction.command("project.update", item["slug"]),),
         }
@@ -179,8 +180,6 @@ class ProjectDetailView(RecordPageMixin, TemplateView):
     def facts(self):
         """Where the project lives and runs, the head's line of facts."""
 
-        # The work moves where the code does: a push says when it last
-        # changed better than the last edit of this record does.
         record, repository = self.record, self.repository
         return render_to_string(
             "projects/_project_meta.html",
@@ -191,7 +190,7 @@ class ProjectDetailView(RecordPageMixin, TemplateView):
                 # published names the service, and the service what runs it.
                 "runs_on": where_it_runs(record["public_url"]),
                 "address": _written_as(record["public_url"]),
-                "pushed_at": moment(str(repository.pushed_at or "")) if repository is not None else None,
+                "last_active_at": moment(record["last_active_at"]),
                 # The GitHub panel names the repository when it is read.
                 "repository_url": "" if repository is not None else web_url(record["repository_url"]),
                 "repository": _written_as(record["repository_url"]),
