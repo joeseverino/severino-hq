@@ -31,7 +31,14 @@ from hq.platform.core.example_estate import automation
 from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED, REWRITE
 from hq.platform.core.example_estate.testing import sign_in, throwaway_media
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
-from hq.platform.core.tests.browser.estate import ask_as_production, estate_pages, landings, owner_client
+from hq.platform.core.tests.browser.estate import (
+    ask_as_production,
+    estate_pages,
+    fragments_of,
+    landings,
+    owner_client,
+)
+from hq.platform.core.tests.browser.gate import answered
 
 
 class ExampleEstateTests(TestCase):
@@ -315,6 +322,21 @@ class WalkedStatesTests(TestCase):
 
         self.assertIn(f"{reverse('agent_policy')}?endpoint=1", folded)
         self.assertLessEqual(folded, set(walked))
+
+    def test_every_part_a_walked_page_fetches_is_drawn_at_that_page_s_address(self):
+        # A part is asked at the address of the page that holds it, its query
+        # included, so the view hands the part what it draws whatever else
+        # that address opens.
+        def ask(client, url, **headers):
+            response = client.get(url, follow=True, **headers)
+            self.assertEqual(response.status_code, 200, f"{url} {headers}")
+            return response
+
+        parts = {}
+        for address in landings(self.client.get, estate_pages()):
+            fragments_of(self.client, address, answered(self.client.get(address)), parts, ask)
+
+        self.assertIn((f"{reverse('agent_policy')}?endpoint=1", "every_rule"), parts)
 
     def test_what_the_controller_reads_of_its_host_is_on_the_machine_it_runs_on(self):
         # Production's controller reports as its machine's hostname, so what it

@@ -353,11 +353,13 @@ class AgentPolicyView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         part = fragments.requested(self.request)
-        if part == self.ENDPOINT_PART or "endpoint" in self.request.GET:
+        # The endpoint is read for its own part, or for the whole page asked
+        # with it open; another part asked at that address draws without it.
+        if part == self.ENDPOINT_PART or (not part and "endpoint" in self.request.GET):
             context["endpoint"] = listing.endpoint()
             context["endpoint_read"] = True
-            if part:
-                return context
+        if part == self.ENDPOINT_PART:
+            return context
         # The rules are drawn as a form only for whoever may save them, and
         # read as they hold for anyone else.
         context.update(self._rules(settable=runs_here(capability_policy.SET_POLICY)))
