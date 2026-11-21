@@ -144,6 +144,22 @@ def _unattended(owner) -> None:
     example_estate.automation.unattended()
 
 
+def _glance_aged(owner) -> None:
+    """The example estate as the dashboard finds it after nobody looked for a
+    while: the machine's reading due again, nothing asked yet."""
+
+    _estate(owner)
+    example_estate.infra.glance_aged()
+
+
+def _glance_unanswered(owner) -> None:
+    """The example estate with the dashboard's ask for the machine's reading
+    left unanswered, so the reading is out of date."""
+
+    _estate(owner)
+    example_estate.infra.glance_unanswered()
+
+
 def _glance_asked(owner) -> None:
     """The example estate as the dashboard opens on it cold: the machine's
     reading a day old and the forecast never read, each asked for by the
@@ -196,7 +212,9 @@ SEEDS: dict[str, Seed] = {
     "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
     "policy-change": Seed(_policy_change, _SET_UP),
+    "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
+    "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

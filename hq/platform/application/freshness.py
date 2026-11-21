@@ -4,6 +4,10 @@ One answer for every surface, and nothing else decides it. A reading is *due*
 once one cadence of its kind has passed, or when none was ever taken, so a
 surface may ask for it, and *stale* once the tolerance has passed with no
 newer reading, so a surface says it is out of date.
+
+A kind read only when someone opens its page (``on_open``) ages while nobody
+looks, which is no fault. Its tolerance counts from an ask instead: it is stale
+once an ask went unanswered that long, or its last reading failed.
 """
 
 from collections.abc import Callable, Mapping
@@ -52,6 +56,10 @@ GLANCE_EVERY = timedelta(minutes=5)
 # own, slower, cadence however the page is opened.
 VISIT_EVERY = timedelta(minutes=2)
 
+# How long a reading asked for when a page opens may take to arrive. One takes
+# seconds, so an ask still unanswered after this one never reached a reader.
+ANSWER_WITHIN = timedelta(minutes=1)
+
 # A read or hand-off that failed is asked again after this, not on every
 # pass, whatever the cadence of its kind. GitHub's allowance is by the hour,
 # so an hour also lets a read refused by its rate limit succeed.
@@ -67,6 +75,9 @@ class ReadCadence:
 
     every: timedelta
     stale_after: timedelta
+    # Read only when a page opens, so ``stale_after`` counts from an
+    # unanswered ask, never from the reading.
+    on_open: bool = False
 
     def __post_init__(self) -> None:
         if self.every <= timedelta(0) or self.stale_after <= timedelta(0):
@@ -80,11 +91,18 @@ def missed(every: timedelta, runs: int) -> ReadCadence:
     return ReadCadence(every, every * runs)
 
 
+def on_open(every: timedelta) -> ReadCadence:
+    """The cadence of a reading asked for when its page opens and it is older
+    than ``every``, out of date only when an ask goes unanswered."""
+
+    return ReadCadence(every, ANSWER_WITHIN, on_open=True)
+
+
 # The cadences the host names itself, each read as its kind is judged; an
 # observation kind is the host's too.
 _NAMED: Mapping[str, Callable[[], ReadCadence]] = {
-    DASHBOARD_GLANCE: lambda: missed(GLANCE_EVERY, 3),
-    PAGE_VISIT: lambda: missed(VISIT_EVERY, 3),
+    DASHBOARD_GLANCE: lambda: on_open(GLANCE_EVERY),
+    PAGE_VISIT: lambda: on_open(VISIT_EVERY),
     SSH_PROBE: lambda: missed(ssh_probe_interval(), 2),
     # A look at what is open derives the whole queue, so a report is followed
     # by one at most this often. A new item is dated by a look only while the
@@ -186,13 +204,29 @@ class Freshness:
         }[self.state]
 
 
-def freshness(kind: str, observed_at: datetime | None, now: datetime | None = None) -> Freshness:
-    """Whether a reading of ``kind`` taken at ``observed_at`` is current."""
+def freshness(
+    kind: str,
+    observed_at: datetime | None,
+    now: datetime | None = None,
+    *,
+    asked_at: datetime | None = None,
+    failed: bool = False,
+) -> Freshness:
+    """Whether a reading of ``kind`` taken at ``observed_at`` is current.
+
+    ``asked_at`` is when a reading still unanswered was asked for, and
+    ``failed`` whether the last one failed; only a kind read on open is judged
+    by them.
+    """
 
     found = cadence(kind)
     if observed_at is None:
         return Freshness(NEVER, None, found.stale_after)
-    if reached(observed_at + found.stale_after, now=now):
+    if found.on_open:
+        stale = failed or (asked_at is not None and reached(asked_at + found.stale_after, now=now))
+    else:
+        stale = reached(observed_at + found.stale_after, now=now)
+    if stale:
         state = STALE
     elif reached(observed_at + found.every, now=now):
         state = DUE

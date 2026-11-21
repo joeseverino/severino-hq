@@ -8,6 +8,7 @@ from django.utils.timezone import localtime
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
+    DashboardRefreshRequest,
     ManagedResource,
 )
 from hq.platform.application import cadence, readings
@@ -359,6 +360,15 @@ def _weather():
     )
 
 
+def glance_aged():
+    """The machine's reading 22 minutes old, as the dashboard finds it when
+    nobody has looked since: due again, and no fault."""
+
+    UpstreamReading.objects.filter(key=readings.machine_telemetry(MACHINE)).update(
+        observed_at=now() - timedelta(minutes=22)
+    )
+
+
 def glance_asked():
     """The machine's reading a day old and the forecast never read, each
     with a refresh the dashboard asked for itself still under way."""
@@ -369,3 +379,13 @@ def glance_asked():
     UpstreamReading.objects.filter(key=readings.weather(_POINT)).delete()
     machine = ManagedResource.objects.get(key=MACHINE)
     cadence.ask(panels={f"machine-{machine.pk}": "Asked for a due reading", "weather": "Asked for a due reading"})
+
+
+def glance_unanswered():
+    """The machine's reading 22 minutes old with the refresh the dashboard
+    asked for five minutes ago still unanswered, so it is out of date."""
+
+    glance_aged()
+    machine = ManagedResource.objects.get(key=MACHINE)
+    cadence.ask(panels={f"machine-{machine.pk}": "Asked for a due reading"})
+    DashboardRefreshRequest.objects.update(requested_at=now() - timedelta(minutes=5))

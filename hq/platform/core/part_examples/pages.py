@@ -13,7 +13,7 @@ lazy from hq.domains.jobs.models import Job, JobState
 lazy from hq.platform.application.appearance import THEME_CHOICES, Theme
 lazy from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, WAITING, Ask, Standing
 lazy from hq.platform.application.command_center import DiscoveryItem
-lazy from hq.platform.application.freshness import CURRENT, STALE, Freshness
+lazy from hq.platform.application.freshness import CURRENT, DUE, STALE, Freshness
 lazy from hq.platform.application.pages import Page, PageAction, PageVisit
 lazy from hq.platform.application.request_channel import TAILNET_CHANNEL
 lazy from hq.platform.application.service_context import ServiceSection
@@ -379,11 +379,13 @@ JOB_PROGRESS_STATES = {
 
 
 READING_AGE_STATES = {
-    # A reading's age in each of its states: current, out of date, the moment
-    # alone, none, and none with why.
+    # A reading's age in each of its states: current, aged and due again (a
+    # reading taken on open, no fault), out of date, the moment alone, none,
+    # and none with why.
     "states": Example(
         '{% section "Example readings 4" %}{% facts %}'
         '{% fact "Example current" %}{% include "partials/_reading_age.html" with reading=current only %}{% endfact %}'
+        '{% fact "Example due" %}{% include "partials/_reading_age.html" with reading=due only %}{% endfact %}'
         '{% fact "Example stale" %}{% include "partials/_reading_age.html" with reading=stale only %}{% endfact %}'
         '{% fact "Example moment" %}{% include "partials/_reading_age.html" with at=at only %}{% endfact %}'
         '{% fact "Example never" %}{% include "partials/_reading_age.html" only %}{% endfact %}'
@@ -392,6 +394,7 @@ READING_AGE_STATES = {
         lambda: {
             "unread": "the registry refused an anonymous read (HTTP 401); the image may be private.",
             "current": Freshness(CURRENT, DRAWN_AT - timedelta(minutes=4), timedelta(hours=1)),
+            "due": Freshness(DUE, DRAWN_AT - timedelta(minutes=22), timedelta(minutes=1)),
             "stale": Freshness(STALE, DRAWN_AT - timedelta(days=3), timedelta(hours=1)),
             "at": DRAWN_AT - timedelta(hours=2),
         },

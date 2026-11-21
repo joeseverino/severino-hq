@@ -346,7 +346,7 @@ def _panel(
     *,
     payload: dict[str, Any],
     observed_at: Any,
-    pending: bool | None,
+    pending: tuple[bool, Any] | None,
     refreshable: bool,
     subject: str = "",
 ) -> dict[str, Any]:
@@ -355,10 +355,14 @@ def _panel(
     head names, where panels alike stand side by side.
 
     ``pending`` is None while no reading is on its way, else whether a person
-    waits on it. Only that one is said to be refreshing: a refresh HQ asked for
-    itself keeps the last reading, or the empty state, until it lands."""
+    waits on it and when it was asked. Only that one is said to be refreshing:
+    a refresh HQ asked for itself keeps the last reading, or the empty state,
+    until it lands. Due asks for a refresh when the dashboard opens; only an
+    ask unanswered or failed says the reading is out of date."""
 
     shown = tuple(_glance_reading(metric, spec) for metric in payload.get("metrics", []))
+    awaited, asked_at = pending or (False, None)
+    found = freshness(DASHBOARD_GLANCE, observed_at, asked_at=asked_at, failed=bool(payload.get("refresh_failed")))
     return {
         "id": spec.id,
         "label": spec.label,
@@ -372,9 +376,12 @@ def _panel(
         "payload": payload,
         "observed_at": observed_at,
         "pending": pending is not None,
-        "refreshing": bool(pending),
+        "refreshing": awaited,
         "refreshable": refreshable,
-        "standing": _standing(payload, refreshing=bool(pending)),
+        "standing": _standing(payload, refreshing=awaited),
+        "due": found.due,
+        "outdated": found.stale,
+        "freshness": found,
         # A panel is colored only for what needs a look; a healthy one reads in ink.
         "tone": payload.get("status") if payload.get("status") in (Tone.ATTENTION, Tone.SERIOUS) else "",
         "readings": shown,
@@ -573,8 +580,13 @@ def dashboard_panels(
         [*(readings.machine_telemetry(resource.key) for resource in machine_resources), weather_key]
     )
     weather = stored.get(weather_key)
-    # Each panel a reading is on its way for, and whether a person waits on it.
-    pending = dict(DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list("panel_id", "awaited"))
+    # Each panel a reading is on its way for: whether a person waits on it, and when it was asked.
+    pending = {
+        panel_id: (awaited, asked_at)
+        for panel_id, awaited, asked_at in DashboardRefreshRequest.objects.filter(completed_at__isnull=True).values_list(
+            "panel_id", "awaited", "requested_at"
+        )
+    }
     panels = []
     for resource in machine_resources:
         panel_id = f"machine-{resource.pk}"
@@ -618,10 +630,8 @@ def dashboard_panels(
                 refreshable=bool(routes),
             )
         )
-    now = timezone.now()
-    shown = tuple(_with_freshness(panel, freshness(DASHBOARD_GLANCE, panel["observed_at"], now)) for panel in panels)
     # Current readings lead; an outdated one steps aside.
-    return tuple(sorted(shown, key=lambda panel: panel["outdated"]))
+    return tuple(sorted(panels, key=lambda panel: panel["outdated"]))
 
 
 def _standing(payload: dict[str, Any], *, refreshing: bool) -> Standing:
@@ -669,16 +679,6 @@ def glance_context(
         "dashboard_due": any(panel.get("due") for panel in panels),
         "dashboard_glance_settings": configuration,
     }
-
-
-def _with_freshness(panel: dict[str, Any], found) -> dict[str, Any]:
-    """A panel with whether to ask for it again and whether it is out of date.
-
-    Due asks for a refresh when the dashboard opens; only stale says "Out of
-    date" and shows the reading as of its age.
-    """
-
-    return {**panel, "due": found.due, "outdated": found.stale, "freshness": found}
 
 
 def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[str, Any]:

@@ -464,12 +464,15 @@ class CertificateListTests(TestCase):
 
 
 class StaleGlanceTests(TestCase):
-    def test_a_reading_older_than_its_cadence_is_shown_as_of_its_age_and_steps_aside(self):
+    def test_an_old_reading_keeps_its_place_until_its_ask_goes_unanswered(self):
         DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
         machine_spec = declare("example-host", "machine", {"name": "example-host"})
-        from hq.domains.control_plane.models import DashboardMachine
+        from hq.domains.control_plane.models import DashboardMachine, DashboardRefreshRequest
 
         DashboardMachine.objects.create(machine=machine_spec, position=0)
+        ProviderConnection.objects.create(
+            connection_ref="example-ssh", controller_id="example-host", provider="ssh", observed_at=timezone.now()
+        )
         readings.record(
             readings.machine_telemetry("example-host"),
             reported_machine("example-host", host=HOST),
@@ -480,42 +483,21 @@ class StaleGlanceTests(TestCase):
             reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
             observed_at=timezone.now() - timedelta(minutes=1),
         )
+        machine = f"machine-{machine_spec.pk}"
 
+        # Aged while nobody looked: shown with its age, in its place.
         panels = dashboard_panels()
-
-        self.assertEqual([panel["id"] for panel in panels][-1], f"machine-{machine_spec.pk}")
-        old = panels[-1]
-        self.assertTrue(old["outdated"])
-        self.assertFalse(panels[0]["outdated"])
+        self.assertEqual(panels[0]["id"], machine)
+        self.assertFalse(any(panel["outdated"] for panel in panels))
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
         self.assertTrue(elements(html, "time"))
 
-    def test_a_current_reading_is_not_outdated(self):
-        from ..freshness import DASHBOARD_GLANCE, stale_after
-
-        DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        readings.record(
-            readings.weather("41.8781,-87.6298"),
-            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
-            observed_at=timezone.now() - stale_after(DASHBOARD_GLANCE) + timedelta(minutes=1),
-        )
-
-        weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
-
-        self.assertFalse(weather["outdated"])
-
-
-class OldGlanceTests(TestCase):
-    def test_an_old_reading_stays_on_the_dashboard_with_its_age(self):
-        DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        readings.record(
-            readings.weather("41.8781,-87.6298"),
-            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
-            observed_at=timezone.now() - timedelta(days=20),
-        )
-        weather = next(panel for panel in dashboard_panels() if panel["id"] == "weather")
-
-        self.assertTrue(weather["outdated"])
+        # Its refresh went unanswered: out of date, and it steps aside.
+        DashboardRefreshRequest.objects.create(panel_id=machine, requested_at=timezone.now() - timedelta(minutes=5))
+        panels = dashboard_panels()
+        self.assertEqual([panel["id"] for panel in panels][-1], machine)
+        self.assertTrue(panels[-1]["outdated"])
+        self.assertFalse(panels[0]["outdated"])
 
 
 class ActionItemTests(TestCase):
