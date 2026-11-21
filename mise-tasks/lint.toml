@@ -232,7 +232,8 @@ sources = [
 outputs = []
 depends = ["setup:lint-tools"]
 usage = 'flag "--fix" help="Write what the tool fixes itself, then report the rest: fast runs it first"'
-run = 'stylelint --config tools/lint/stylelint.config.mjs $([ "${usage_fix:-}" != true ] || echo --fix) "static/css/**/*.css"'
+# A plugin rule's cases (tools/lint/*.test.mjs) prove it before its scan is trusted.
+run = 'node --test --test-reporter=dot tools/lint/*.test.mjs && stylelint --config tools/lint/stylelint.config.mjs $([ "${usage_fix:-}" != true ] || echo --fix) "static/css/**/*.css"'
 
 ["lint:js"]
 description = "ESLint holds the browser scripts to its recommended rules and the modern forms (const and let, strict equality), every name they use defined, no unsanitized markup sink, fetching, parsing and polling to fragment.js, and tables.js's layout reads to the places that say why"

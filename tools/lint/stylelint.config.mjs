@@ -242,6 +242,7 @@ export default {
     "./stylelint-ground-cover.mjs",
     "./stylelint-restyled-primitive.mjs",
     "./stylelint-browser-floor.mjs",
+    "./stylelint-layered.mjs",
   ],
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
@@ -273,7 +274,7 @@ export default {
     "selector-no-invalid": true,
     // An unlayered rule beats every layer at any specificity, so nothing in
     // `components` could override it but another unlayered rule.
-    "rule-nesting-at-rule-required-list": ["layer"],
+    "hq/layered": true,
     "layer-name-pattern": layers,
     // A sheet another one imports is fetched once its parent arrives (`fetched`).
     "at-rule-disallowed-list": ["import"],
@@ -386,7 +387,7 @@ export default {
         "property-disallowed-list": disallowedProperties([...frameProperties, ...caseProperties, "font-family"]),
         "rule-selector-property-disallowed-list": null,
         // Unlayered, to outrank the layers the viewer declares after HQ's (its header).
-        "rule-nesting-at-rule-required-list": null,
+        "hq/layered": null,
         "declaration-property-value-disallowed-list": disallowedValues({
           "/(^|-)font-size$/": ["/^[\\d.]/"],
           ...spacingLiteral,
