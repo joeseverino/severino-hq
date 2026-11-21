@@ -472,7 +472,9 @@ PARTS = (
         the same part with `inline=True`: its words, quiet, in the line that holds them, with no frame.
 
         The message is the fact alone, one sentence ("No playbooks adopted yet."), with no how-to after
-        it: the action and the page's controls say what to do.
+        it: the action and the page's controls say what to do. An absence every page shares (nothing
+        read yet) is `absent="no reading yet"`, said in the words `tone.Absent` declares, which the
+        `absent` filter also hands `{% status %}` and refuses any other wording for.
         """,
         example=records.EMPTY_STATE,
         states=records.EMPTY_STATE_STATES,

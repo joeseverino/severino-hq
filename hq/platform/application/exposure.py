@@ -14,10 +14,11 @@ from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.observations.host import PERIMETER_KIND
 
 from .facts import Subject, readings
+from .labels import sentence
 from .path_model import Route
 from .projection import read_once
 from .reach import LOCAL_NETWORK, PUBLIC, UNKNOWN as UNKNOWN_REACH, Reach, narrowed, network_of, reach_of
-from .tone import Tone, TonedChoices
+from .tone import Absent, Tone, TonedChoices
 lazy from . import paths
 lazy from .paths import path_to, routed_names
 
@@ -34,7 +35,7 @@ class Level(TonedChoices):
     """
 
     OPEN = "open", Tone.NEUTRAL, "Open to the internet"
-    UNKNOWN = "unknown", Tone.ATTENTION, "Not known who can reach it"
+    UNKNOWN = "unknown", Tone.ATTENTION, f"Reach {Absent.NOT_CHECKED}"
     GATED = "gated", Tone.NEUTRAL, "Open to the internet, behind a login"
     PRIVATE = "private", Tone.NEUTRAL, "Private"
     UNROUTED = "unrouted", Tone.NEUTRAL, "Not reachable"
@@ -42,7 +43,12 @@ class Level(TonedChoices):
 
 OPEN, UNKNOWN, GATED, PRIVATE, UNROUTED = LEVELS = tuple(Level)
 # A few words each, for a table column; the sentence says the rest.
-SHORT = {OPEN: "Internet", GATED: "Internet, behind a login", UNKNOWN: "Unknown", UNROUTED: "Not reachable"}
+SHORT = {
+    OPEN: "Internet",
+    GATED: "Internet, behind a login",
+    UNKNOWN: sentence(Absent.NOT_CHECKED),
+    UNROUTED: "Not reachable",
+}
 # What a serious problem becomes at each exposure. Unknown keeps it serious.
 _SERIOUS_AT = {
     OPEN: Tone.SERIOUS,

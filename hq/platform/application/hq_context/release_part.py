@@ -72,7 +72,7 @@ class Release:
 
     @property
     def standing(self) -> str:
-        """Where the release stands, in a few words."""
+        """Where the release stands, in a few words; empty while HQ cannot tell."""
 
         if self.behind:
             return f"{self.repository.default_branch or 'Its branch'} is ahead"
@@ -80,7 +80,7 @@ class Release:
             return "Not what production last deployed"
         if self.behind is False:
             return "Up to date"
-        return "Not known"
+        return ""
 
     @property
     def tone(self) -> Tone:
@@ -157,7 +157,7 @@ def release_json(release: Release) -> dict[str, Any]:
     return {
         "revision": release.revision,
         "source": release.source,
-        "standing": release.standing,
+        "standing": release.standing or None,
         "image": release.image,
         "digest": release.digest,
         "built": iso(release.built),

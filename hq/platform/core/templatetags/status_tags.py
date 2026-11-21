@@ -15,7 +15,7 @@ from django.utils.safestring import SafeString, mark_safe
 from hq.platform.application.describe import Describe
 from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.application.tone import Tone, Toned
+from hq.platform.application.tone import Absent, Tone, Toned
 from hq.platform.core.template_parts import Part, slotted
 from hq.platform.core.templatetags.value_tags import breakable
 lazy from hq.platform.application.ui import ended, severity_tone as _severity_tone
@@ -146,6 +146,19 @@ def status_pill(
     attributes += [(f"data-{name.removeprefix('data_').replace('_', '-')}", value) for name, value in data.items()]
     element = "a" if href else "span"
     return format_html("<{}{}>{}</{}>", element, html_attributes(dict(attributes)), label, element)
+
+
+@register.filter
+def absent(words):
+    """``{% status "not set up"|absent %}``: what is not there yet, in its one
+    wording (``tone.Absent``); words of any other wording are refused."""
+
+    try:
+        return Absent(words)
+    except ValueError:
+        raise ValueError(
+            f"An absence is said as one of {', '.join(repr(str(member)) for member in Absent)}; got {words!r}."
+        ) from None
 
 
 @register.filter

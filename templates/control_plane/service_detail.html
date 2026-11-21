@@ -50,7 +50,7 @@ none open about it.
 {% endsection %}
 
 {% if missing_facets or record.origin.parked or record.origin and not record.origin.external and not record.origin.known %}
-{% section "Not set up" id="parts" %}
+{% section "not set up"|absent|capfirst id="parts" %}
 {% comment %}
 The headline is the value, not the word "Declared". Each line comes from the
 provider's own readout, so a new provider describes itself here without this
@@ -160,7 +160,7 @@ close every one.
         {% if not read_only %}{% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=record.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}{% endif %}
       {% endfact %}
     {% elif read_only %}
-      {% fact facet.label %}{% status "Not set up" tone="neutral" pill=False %}{% detail %}{% partial reading_lines %}{% endfact %}
+      {% fact facet.label %}{% status "not set up"|absent pill=False %}{% detail %}{% partial reading_lines %}{% endfact %}
     {% else %}
       {% comment %}
       Each offer is named by the provider's own label. The bare kind reads as
@@ -173,7 +173,7 @@ close every one.
       sentence turns it into an answer, and each one names the alternative
       that does work.
       {% endcomment %}
-      {% fact facet.label %}{% status "Not set up" tone="neutral" pill=False %}{% detail %}
+      {% fact facet.label %}{% status "not set up"|absent pill=False %}{% detail %}
         <small>{% status "HQ has none for" record.hostname|add:"." tone="neutral" pill=False %}</small>
         {% for kind, label in facet.declarable %}{% url 'control_plane:create' as create_url %}<small><a class="subtle-link" href="{% with_query create_url kind=kind hostname=record.hostname %}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}
         {% for label, reason in facet.unavailable %}<small>{{ label|breakable }} {{ reason|breakable }}</small>{% endfor %}

@@ -137,7 +137,7 @@ class ZoneInsightTests(TestCase):
 
         card = self._insight("example.com", "Certificates")
 
-        self.assertEqual(card.value, "None managed here")
+        self.assertEqual(card.value, "Not managed")
         self.assertIn("letsencrypt.org", card.detail)
 
     def test_email_names_who_receives_the_mail(self):
@@ -183,7 +183,7 @@ class ZoneInsightTests(TestCase):
 
         card = self._insight("example.com", "Email")
 
-        self.assertEqual(card.value, "Not configured")
+        self.assertEqual(card.value, "Not set up")
 
     def test_one_failing_contributor_does_not_lose_the_page(self):
         """This is the screen opened to find out what is wrong."""

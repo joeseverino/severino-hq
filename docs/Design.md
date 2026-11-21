@@ -98,7 +98,9 @@ A capability and the button that runs it say the same words.
 
 **A sentence says what is true, in a few plain words.** A value HQ does not
 have is left out, and its row with it: never "Not known yet", never an
-explanation of why. A detail is one short sentence the reader needs in order to
+explanation of why. A part that is not there yet is said in `tone.Absent`'s
+words ("not set up", "not checked", "not managed", "no reading yet"), which a
+template takes through the `absent` filter. A detail is one short sentence the reader needs in order to
 act, or nothing, and deleting a line is the first fix; past about twenty words
 it is carrying a second thought. No sentence argues with itself, hedges,
 explains HQ's machinery, or narrates the page, as "Open one to see" or "Each

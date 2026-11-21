@@ -77,7 +77,7 @@ class PostureViewTests(SignedInTestCase):
     def test_nothing_read_says_so(self):
         response = self.client.get(reverse("posture"))
 
-        self.assertContains(response, "No repository read yet.")
+        self.assertContains(response, "No reading yet")
         self.assertContains(response, "Connect GitHub App")
 
 

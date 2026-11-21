@@ -365,7 +365,7 @@ class CleanPageTests(SignedInTestCase):
     def test_nothing_read_is_not_no_problems(self):
         response = self.page(None)
 
-        self.assertContains(response, "Nothing read yet.")
+        self.assertContains(response, "No reading yet")
         self.assertNotContains(response, "found no problems")
 
     def test_no_problems_says_what_was_checked_and_when(self):

@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 {% if not_read %}
-{% include "partials/_empty_state.html" with message="No messages read yet." remedy=page.remedy %}
+{% include "partials/_empty_state.html" with absent="no reading yet" remedy=page.remedy %}
 {% else %}
 {% if problem %}{% notice tone="warning" %}{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}{% endnotice %}{% endif %}
 {% if waiting_note %}{% notice tone="info" %}{{ waiting_note|breakable }}{% endnotice %}{% endif %}

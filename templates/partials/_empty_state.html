@@ -1,8 +1,9 @@
 {% comment %}
 The one empty state (docs/Design.md, "Nothing empty takes space"): a card
 holding one line, what is missing, then what would fill it. `message`,
-and `why` where a second sentence qualifies it (what was checked), in the
-same line;
+or `absent`, an absence in its one wording (`"no reading yet"`, as the
+`absent` filter takes it), and `why` where a second sentence qualifies it
+(what was checked), in the same line;
 `remedy`, anything with a `label` and a `url` (`page.remedy` derives the
 connection that reads the page, else its own lead action), or a plain link
 as `action_url` and `action_label`. Inside another frame the card draws
@@ -10,7 +11,7 @@ nothing of its own; as the last thing on a page it holds the page's width.
 `inline=True` is the same message where a value would stand (a fact, a
 cell, a row): quiet words in the line that holds it, never a frame.
 {% endcomment %}
-{% if inline %}{% muted %}{{ message|breakable }}{% if why %} {{ why|breakable }}{% endif %}{% endmuted %}{% else %}
+{% if inline %}{% muted %}{% if absent %}{{ absent|absent|capfirst|breakable }}{% else %}{{ message|breakable }}{% endif %}{% if why %} {{ why|breakable }}{% endif %}{% endmuted %}{% else %}
 {% card element="div" css="empty" data_empty_state=True %}
-  <p>{{ message|breakable }}{% if why %} {{ why|breakable }}{% endif %}{% if remedy %} {% if remedy.url %}<a class="empty-cta" href="{{ remedy.url }}">{{ remedy.label|breakable }}{% arrow %}</a>{% else %}<span class="empty-cta">{{ remedy.label|breakable }}</span>{% endif %}{% elif action_url and action_label %} <a class="empty-cta" href="{{ action_url }}">{{ action_label|breakable }}{% arrow %}</a>{% endif %}</p>
+  <p>{% if absent %}{{ absent|absent|capfirst|breakable:"." }}{% else %}{{ message|breakable }}{% endif %}{% if why %} {{ why|breakable }}{% endif %}{% if remedy %} {% if remedy.url %}<a class="empty-cta" href="{{ remedy.url }}">{{ remedy.label|breakable }}{% arrow %}</a>{% else %}<span class="empty-cta">{{ remedy.label|breakable }}</span>{% endif %}{% elif action_url and action_label %} <a class="empty-cta" href="{{ action_url }}">{{ action_label|breakable }}{% arrow %}</a>{% endif %}</p>
 {% endcard %}{% endif %}

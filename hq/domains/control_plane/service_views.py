@@ -33,6 +33,7 @@ from hq.platform.application.service_context import (
 from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
 from hq.platform.application.service_list import listed_service, listed_services
 from hq.platform.application.services import alias_summary, alias_target, fault_rows
+from hq.platform.application.tone import Absent
 from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted
@@ -194,7 +195,7 @@ class ServiceDetailView(RecordPageMixin, TemplateView):
             (
                 PageSection("overview", "Overview"),
                 PageSection("path", "Path"),
-                *((PageSection("parts", "Not set up"),) if self.missing_facets else ()),
+                *((PageSection("parts", sentence(Absent.NOT_SET_UP)),) if self.missing_facets else ()),
                 *(PageSection(section.id, section.label) for section in self.sections),
                 *((PageSection("relationships", "Relationships"),) if self.relationships.groups else ()),
                 *((PageSection("resources", "Other names"),) if self.record["alias_records"] else ()),

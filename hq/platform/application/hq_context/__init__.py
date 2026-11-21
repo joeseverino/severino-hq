@@ -170,11 +170,11 @@ def _worse(tile: Tile, problems: Iterable[Mapping[str, Any]]) -> Tile:
     return replace(tile, tone=Tone.worst((tile.tone, *acted_on)))
 
 
-def _runs_tile(found: HQContext) -> Tile:
+def _runs_tile(found: HQContext) -> Tile | None:
     if found.machine is None:
-        return Tile("Runs on", "Not known", "No machine HQ reads answers at HQ's addresses.", icon="server")
+        return None
     container = found.container
-    detail = dotted(container.running.name, container.uptime) if container is not None else "Its container is not known"
+    detail = dotted(container.running.name, container.uptime) if container is not None else ""
     healthy = container is not None and container.running.state.running
     return Tile(
         "Runs on", found.machine.name, detail, found.machine.url, Tone.GOOD if healthy else Tone.ATTENTION, "server"

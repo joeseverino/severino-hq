@@ -381,6 +381,8 @@ EMPTY_STATE_STATES = {
         '{% fact "Example image" value="example-1.2.3" %}'
         "{% endfacts %}{% endsection %}"
     ),
+    # An absence every page says in one wording.
+    "absent": Example('{% include "partials/_empty_state.html" with absent="no reading yet" %}'),
 }
 
 

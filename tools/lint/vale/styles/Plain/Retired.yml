@@ -1,4 +1,5 @@
-# Labels replaced by one name for one thing, matched as written.
+# Labels replaced by one name for one thing, matched as written. An absence
+# is said in tone.Absent's words, which the absent filter takes.
 extends: substitution
 message: "Say '%s', the one name for it, in place of '%s'"
 level: error
@@ -32,3 +33,7 @@ swap:
   Sync documentation: Update docs
   Topology: Map
   topology: map
+  Not configured: Not set up
+  Unchecked: Not checked
+  Not managed by HQ: Not managed
+  None managed here: Not managed

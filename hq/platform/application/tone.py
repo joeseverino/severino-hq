@@ -74,6 +74,17 @@ class Toned(StrEnum):
         return self.value
 
 
+class Absent(Toned):
+    """What is not there yet, each in the one wording every page says it in:
+    ``{% status "not set up"|absent %}`` in a template, which refuses any other
+    words. A value HQ does not have is left out, never worded (docs/Design.md)."""
+
+    NOT_SET_UP = "not set up", Tone.NEUTRAL
+    NOT_CHECKED = "not checked", Tone.NEUTRAL
+    NOT_MANAGED = "not managed", Tone.NEUTRAL
+    NOT_READ = "no reading yet", Tone.NEUTRAL
+
+
 # The metaclass Python derives from the bases anyway, written out because
 # CodeQL cannot derive it through two enum bases and reads the class as a
 # plain ``type``, so every loop over a member set would be reported.

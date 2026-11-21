@@ -60,9 +60,9 @@ _GLANCE = (
 _GLANCE_EMPTY = (
     '<div data-example-region>{% facts layout="band" label="Example glance" %}'
     '{% fact "Example controller" icon="activity" url="/example/controller/" %}'
-    '{% status "Not configured" dot=True ink="context" %}{% endfact %}'
+    '{% status "not set up"|absent dot=True ink="context" %}{% endfact %}'
     '{% fact "Example host" icon="server" id="example-empty" data_fragment_part="example-empty" %}{% empty_value %}'
-    "{% detail %}<small>No reading yet</small>"
+    '{% detail %}<small>{% status "no reading yet"|absent pill=False %}</small>'
     "{% heading %}<strong>Example host</strong>{% panel %}<p>An example host has not been read yet.</p>{% endfact %}"
     '{% fact "Example weather" icon="cloud" id="example-long" data_fragment_part="example-long" %}71°'
     '{% detail %}{% list kind="dots" %}<li>Example Mostly Cloudy with an example chance of showers later</li>'

@@ -27,7 +27,7 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
 | `partials/_document_picture.html` | `alt`, `src` | nothing | A picture of a document (a scan, a photo of a receipt), held in a page's shape before it arrives. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
-| `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
+| `partials/_empty_state.html` | `message` | `absent`, `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
 | `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
 | `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
@@ -828,7 +828,9 @@ sense over data wait for the data. An absence where a value would stand (a fact,
 the same part with `inline=True`: its words, quiet, in the line that holds them, with no frame.
 
 The message is the fact alone, one sentence ("No playbooks adopted yet."), with no how-to after
-it: the action and the page's controls say what to do.
+it: the action and the page's controls say what to do. An absence every page shares (nothing
+read yet) is `absent="no reading yet"`, said in the words `tone.Absent` declares, which the
+`absent` filter also hands `{% status %}` and refuses any other wording for.
 
 ### partials/_error_page.html (host only)
 

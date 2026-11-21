@@ -146,7 +146,7 @@ row in the flow.
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.sight|not_urgent only %}
   {% comment %}A table where every row says "Never read" says one thing; it is said once.{% endcomment %}
   {% if sight.never == sight.rows|length %}
-  <p>None read yet. Once the controller runs, HQ reads {% for row in sight.rows %}{{ row.label|breakable }}{% if forloop.revcounter == 2 %} and {% elif not forloop.last %}, {% endif %}{% endfor %}.</p>
+  {% include "partials/_empty_state.html" with absent="no reading yet" only %}
   {% else %}
   {% table_region "Readings by connection" %}
     <table class="data-table">

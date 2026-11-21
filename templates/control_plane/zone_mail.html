@@ -47,7 +47,7 @@ not designed. Adding or removing one is a record, through the domain's own
             {% if record.resource_key %}
               {% with edit=record.edit %}{% if edit %}<a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label|breakable }}</a>{% endif %}{% endwith %}
             {% else %}
-              {% status "Not managed by HQ" tone="attention" %}
+              {% status "not managed"|absent tone="attention" %}
             {% endif %}
           </li>
         {% endfor %}
