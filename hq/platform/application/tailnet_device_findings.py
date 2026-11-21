@@ -18,6 +18,7 @@ from .images import compare, version
 from .moments import moment, when_day
 from .projection import read_once
 from .reading_facts import by_node, stands
+from .thresholds import Threshold
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
@@ -29,8 +30,8 @@ lazy from .tailnet_signers import signers
 # more of the cycle than not, and a queue that is always non-empty is one nobody
 # reads. Forty-five days is several unhurried weekends; fourteen is the point at
 # which it stops being a plan and starts being a date.
-KEY_EXPIRY_ATTENTION_DAYS = 45
-KEY_EXPIRY_SERIOUS_DAYS = 14
+KEY_EXPIRY_ATTENTION_DAYS = Threshold(45, "days")
+KEY_EXPIRY_SERIOUS_DAYS = Threshold(14, "days")
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,13 +139,13 @@ def _key_expiring(estate: FindingEstate) -> tuple[Finding, ...]:
     def says(node: TopologyNode, row: TailnetDevice) -> Finding | None:
         expires = moment(row.key_expires)
         # A device with key expiry disabled has no date, so it is silent here.
-        if expires is None or (days := days_until(expires, estate.now)) > KEY_EXPIRY_ATTENTION_DAYS:
+        if expires is None or (days := days_until(expires, estate.now)) > KEY_EXPIRY_ATTENTION_DAYS.value:
             return None
         name = node.label
         return Finding(
             rule="tailnet-key-expiring",
             subject=node.id,
-            severity=Tone.SERIOUS if days <= KEY_EXPIRY_SERIOUS_DAYS else Tone.ATTENTION,
+            severity=Tone.SERIOUS if days <= KEY_EXPIRY_SERIOUS_DAYS.value else Tone.ATTENTION,
             title=f"{name} leaves the tailnet in {counted(days, 'day')}"
             if days > 0
             else f"{name} has left the tailnet",
@@ -338,10 +339,10 @@ RULES: tuple[FindingRule, ...] = (
         no_help_reason="HQ cannot sign a machine in to the tailnet.",
         card=TAILNET_CARD,
         bars={
-            Tone.SERIOUS: f"a machine's tailnet key runs out within {KEY_EXPIRY_SERIOUS_DAYS} days",
-            Tone.ATTENTION: f"a machine's tailnet key runs out within {KEY_EXPIRY_ATTENTION_DAYS} days",
+            Tone.SERIOUS: f"a machine's tailnet key runs out within {KEY_EXPIRY_SERIOUS_DAYS}",
+            Tone.ATTENTION: f"a machine's tailnet key runs out within {KEY_EXPIRY_ATTENTION_DAYS}",
         },
-        clears=f"the key runs more than {KEY_EXPIRY_ATTENTION_DAYS} days out, or key expiry is off",
+        clears=f"the key runs more than {KEY_EXPIRY_ATTENTION_DAYS} out, or key expiry is off",
     ),
     FindingRule(
         "tailnet-device-locked-out",

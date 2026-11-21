@@ -25,7 +25,7 @@ from .github_estate import (
     repositories,
 )
 from .github_posture import COMMANDS, REASONS, STANDARD, calls_workflows, left_out, postures
-from .moments import duration, moment
+from .moments import moment
 from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
@@ -94,7 +94,7 @@ def _waiting(repo: Repository) -> Iterator[Said]:
             WAITING,
             str(run.get("id")),
             title=f"{name} waits for your approval to deploy to {where}",
-            severity=Tone.SERIOUS if started and reached(started + WAITING_SERIOUS_AFTER) else Tone.ATTENTION,
+            severity=Tone.SERIOUS if started and reached(started + WAITING_SERIOUS_AFTER.value) else Tone.ATTENTION,
             explanation=f"Commit {run.get('sha', '')[:7]} of {repo.short}",
             evidence=(("Waiting", f"{hours}h"),),
             primary=opens("Review deployment", web_url(run.get("url")) or repo.url),
@@ -198,7 +198,7 @@ def _lapsing(repo: Repository) -> Iterator[Said]:
             LAPSING,
             artifact["name"],
             title=f"{repo.short}'s admission lapses in {days} days",
-            severity=Tone.SERIOUS if days <= ARTIFACT_SERIOUS_DAYS else Tone.ATTENTION,
+            severity=Tone.SERIOUS if days <= ARTIFACT_SERIOUS_DAYS.value else Tone.ATTENTION,
             explanation="Once it lapses, HQ's next build leaves it out. Run its admission again to renew it.",
             evidence=(("Lapses in", counted(days, "day")),),
             primary=opens("Open actions", f"{repo.url}/actions"),
@@ -267,7 +267,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Approve or reject the run on GitHub, as one of its required reviewers.",
         no_help_reason="Only a required reviewer can approve a deployment, and HQ reads GitHub with read-only tokens.",
         bars={
-            Tone.SERIOUS: f"a run has waited on a reviewer for {duration(WAITING_SERIOUS_AFTER)}",
+            Tone.SERIOUS: f"a run has waited on a reviewer for {WAITING_SERIOUS_AFTER}",
             Tone.ATTENTION: "a run waits on a reviewer",
         },
         clears="a reviewer approves or rejects the run",
@@ -325,8 +325,8 @@ RULES: tuple[FindingRule, ...] = (
             "The reading names the artifact but not the workflow that makes it, so HQ cannot name the run to repeat."
         ),
         bars={
-            Tone.SERIOUS: f"an admission artifact lapses within {counted(ARTIFACT_SERIOUS_DAYS, 'day')}",
-            Tone.ATTENTION: f"an admission artifact lapses within {counted(ARTIFACT_ATTENTION_DAYS, 'day')}",
+            Tone.SERIOUS: f"an admission artifact lapses within {ARTIFACT_SERIOUS_DAYS}",
+            Tone.ATTENTION: f"an admission artifact lapses within {ARTIFACT_ATTENTION_DAYS}",
         },
         clears="its admission runs again, which renews the artifact",
         domain=PROJECTS,
