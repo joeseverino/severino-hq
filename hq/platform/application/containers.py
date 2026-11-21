@@ -27,7 +27,7 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .container_state import ContainerState, HealthCheck, uptime_of
+from .container_state import ContainerCount, ContainerState, HealthCheck, uptime_of
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
 from .display_words import as_members, display
 from .github_public import github_repository
@@ -41,13 +41,11 @@ lazy from .attestations import github_source
 lazy from .container_hardening import hardening_of
 lazy from .container_standard import posture_of, runtime_path
 lazy from .container_usage import usage_of
-lazy from .docker_sections import unused_images
 lazy from .entity_links import entity_link
 lazy from .facts import inventory_records
 lazy from .github_estate import build_of, repositories
 lazy from .infrastructure import enabled_resources
 lazy from .inventory import record_token
-lazy from .labels import human_bytes
 lazy from .machines import machine as machine_named, served_by
 lazy from .moments import ago
 lazy from .projects import projects_by_repository, repository_key
@@ -551,7 +549,7 @@ class Container:
 
 
 def containers() -> list[Container]:
-    """Every running container on every machine, worst standing first.
+    """Every container the sweep found on every machine, worst standing first.
 
     Its own projection scope, so every container's standing shares one read of
     each reading however many run; a caller already in one shares that.
@@ -589,9 +587,9 @@ def _containers() -> list[Container]:
 
 @display
 class Tally:
-    """What a set of running containers comes to, as a band counts it."""
+    """What a set of containers comes to, as a band counts it."""
 
-    running: int
+    count: ContainerCount
     # Containers with a known vulnerability, and the images they run.
     vulnerable: int
     vulnerable_images: int
@@ -602,15 +600,14 @@ class Tally:
     pinned: int
     # Checked against its source's advisories or its packages against OSV.
     checkable: int
-    stopped: int
 
     @property
     def update_unknown(self) -> int:
-        return self.running - self.update_available - self.up_to_date
+        return self.count.total - self.update_available - self.up_to_date
 
     @property
     def unchecked(self) -> int:
-        return self.running - self.checkable
+        return self.count.total - self.checkable
 
     @property
     def vulnerable_tone(self) -> str:
@@ -622,17 +619,17 @@ class Tally:
 
         if self.update_available:
             return Tone.ATTENTION
-        return Tone.GOOD if self.up_to_date == self.running else ""
+        return Tone.GOOD if self.up_to_date == self.count.total else ""
 
     @property
     def pinned_tone(self) -> str:
-        return Tone.GOOD if self.pinned == self.running else ""
+        return Tone.GOOD if self.pinned == self.count.total else ""
 
     @property
     def tone(self) -> str:
         """All of it in one tone, as a machine's band says it."""
 
-        if self.vulnerable or self.stopped:
+        if self.vulnerable or self.count.stopped:
             return Tone.SERIOUS
         return Tone.ATTENTION if self.update_available else Tone.GOOD
 
@@ -643,14 +640,13 @@ def tally(found: list[Container]) -> Tally:
     vulnerable = [item.standing for item in found if item.standing.state == VULNERABLE]
     updates = [item.standing.update_state for item in found]
     return Tally(
-        running=len(found),
+        count=ContainerCount.of(item.running.state for item in found),
         vulnerable=len(vulnerable),
         vulnerable_images=len({standing.label for standing in vulnerable}),
         update_available=updates.count(UPDATE_AVAILABLE),
         up_to_date=updates.count(UP_TO_DATE),
         pinned=sum(1 for item in found if item.standing.pinned),
         checkable=sum(1 for item in found if item.standing.checkable),
-        stopped=sum(1 for item in found if not item.running.state.running),
     )
 
 
@@ -661,21 +657,17 @@ def standings_on(machine: str) -> dict[str, ImageStanding]:
 
 
 def on_machine(machine: Any) -> dict[str, Any]:
-    """One machine's containers as its page counts them: each one's standing,
-    how many are behind, vulnerable or stopped, and the images it keeps that
-    nothing runs, with the space they take."""
+    """One machine's containers as its page counts them: each one's standing
+    and how many are behind, vulnerable or stopped."""
 
     here = [item for item in containers() if item.machine.name == machine.name]
     standings = {item.running.name: item.standing for item in here}
-    unused = unused_images(machine)
     return {
         "shown_containers": machine.on_show,
         "folded_containers": machine.folded,
         "standings": standings,
         "uptimes": {item.running.name: item.uptime for item in here},
         "container_counts": tally(here),
-        "unused_images": unused,
-        "unused_size": human_bytes(sum(record.get("size") or 0 for record in unused)),
     }
 
 

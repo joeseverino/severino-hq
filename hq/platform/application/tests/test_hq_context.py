@@ -472,7 +472,6 @@ class PageTests(TestCase):
         response = self.client.get(reverse("control_plane:machine", args=["example-box"]))
 
         self.assertEqual(response.context["standings"]["app"].update_state, UP_TO_DATE)
-        self.assertContains(response, "sudo docker image prune -a")
 
     def test_it_is_in_the_system_menu(self):
         response = self.client.get(reverse("dashboard"))

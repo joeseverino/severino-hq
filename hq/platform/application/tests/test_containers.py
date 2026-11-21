@@ -298,7 +298,7 @@ class ToneTests(TestCase):
         found = tally(containers())
 
         self.assertEqual(
-            (found.running, found.vulnerable, found.vulnerable_images, found.update_available, found.up_to_date),
+            (found.count.total, found.vulnerable, found.vulnerable_images, found.update_available, found.up_to_date),
             (3, 1, 1, 2, 1),
         )
         self.assertEqual(
@@ -307,19 +307,20 @@ class ToneTests(TestCase):
         )
 
     def test_a_tally_is_good_only_when_every_container_is(self):
+        from ..container_state import ContainerCount
+
         clean = Tally(
-            running=2,
+            count=ContainerCount(running=2, total=2),
             vulnerable=0,
             vulnerable_images=0,
             update_available=0,
             up_to_date=2,
             pinned=2,
             checkable=2,
-            stopped=0,
         )
 
         self.assertEqual((clean.vulnerable_tone, clean.updates_tone, clean.pinned_tone, clean.tone), ("good",) * 4)
-        self.assertEqual(replace(clean, stopped=1).tone, "serious")
+        self.assertEqual(replace(clean, count=ContainerCount(running=1, total=2)).tone, "serious")
         self.assertEqual(replace(clean, update_available=1, up_to_date=1).tone, "attention")
         self.assertEqual(replace(clean, up_to_date=1).updates_tone, "")
 

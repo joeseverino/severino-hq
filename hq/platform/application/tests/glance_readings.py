@@ -15,9 +15,8 @@ HOST = {
     "storage_total": 107_374_182_400,
 }
 
-# A machine read through Docker: three containers using 37% of its CPU.
+# A machine read through Docker: its containers using 37% of its CPU.
 DOCKER = {
-    "containers": 3,
     "cpu_percent": 37.0,
     "cores": 4,
     "memory_used": 2_147_483_648,

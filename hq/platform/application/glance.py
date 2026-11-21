@@ -25,6 +25,7 @@ from .asks import FAILED, REFRESHING, RUNNING, Standing
 from .card_items import Kpi
 from .command_fields import Describe, stored_in
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
+from .container_state import ContainerCount
 from .contracts import Effect
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted, human_bytes
@@ -34,6 +35,7 @@ from .security import Capability, Principal
 from .tone import Tone
 from .ui import MISSING, counted, measured, severity_tone
 lazy from .glance_refresh import refresh_ask
+lazy from .machines import machine as machine_named
 lazy from .projection import read_once
 
 # The National Weather Service API. The connection shows it and the glance plan
@@ -405,16 +407,19 @@ def _failed(failure: str) -> dict[str, Any]:
     }
 
 
-def machine_words(machine: Machine) -> dict[str, Any]:
+def machine_words(machine: Machine, containers: ContainerCount | None = None) -> dict[str, Any]:
     """A machine's reading as its panel and its page say it: a tone, a summary
-    and its metrics, each a label, a value and a detail."""
+    and its metrics, each a label, a value and a detail, led by ``containers``
+    where the panel says them."""
 
     failed = {"refresh_failed": machine.refresh_failed} if machine.refresh_failed else {}
+    counted_here = [_metric("Containers", measured(containers.running, ""), "running")] if containers else []
     if host := machine.host:
         return {
             "status": Tone.GOOD,
             "summary": f"Host load {measured(host.load_1m, '', 2)}",
             "metrics": [
+                *counted_here,
                 _metric("CPU", measured(host.cpu_percent, "%", 0), counted(host.cores, "core")),
                 _metric(
                     "Memory",
@@ -434,7 +439,7 @@ def machine_words(machine: Machine) -> dict[str, Any]:
             "status": Tone.GOOD,
             "summary": dotted(counted(docker.cores, "core"), f"{human_bytes(docker.memory_total)} memory"),
             "metrics": [
-                _metric("Containers", str(docker.containers), "running"),
+                *counted_here,
                 _metric("CPU", measured(docker.cpu_percent, "%", 0), f"of {counted(docker.cores, 'core')}"),
                 _metric(
                     "Memory",
@@ -600,10 +605,13 @@ def dashboard_panels(
             ),
         )
         machine = stored_reading(Machine, reading.value if reading else None)
+        found = machine_named(str(resource.spec.get("name") or resource.key))
         panels.append(
             _panel(
                 spec,
-                payload=machine_words(machine) if machine else {},
+                payload=machine_words(machine, found.container_count if found and found.containers else None)
+                if machine
+                else {},
                 observed_at=reading.observed_at if reading else None,
                 # A request nothing can answer is not a refresh in progress.
                 pending=pending.get(panel_id) if resource.pk in routes else None,

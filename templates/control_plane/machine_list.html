@@ -30,7 +30,7 @@ anyway, and would go on meaning nothing after it stopped being.
           </td>
           <td>
             {% if machine.containers %}
-              {{ machine.running|breakable }} of {{ machine.containers|length|measured:"running" }}
+              {% include "control_plane/_container_count.html" with running=machine.running total=machine.containers|length only %}
             {% elif not machine.containers_visible %}
               {% muted title="No connection reads containers." %}Not visible{% endmuted %}
             {% endif %}

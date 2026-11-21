@@ -691,6 +691,16 @@ instead: the production deploy, whether it passed its checks, and, for whether
 anything is newer, whether the default branch has moved past it. Which
 container is HQ's is derived (`hq_self.own_container`).
 
+An image no container runs is one to remove unless HQ keeps it
+(`docker_estate.kept_names`): HQ's own, whose earlier releases each deploy
+prunes, and each image the release pins under `deploy/` (the automation
+worker's, the dependency run's), which hq-host runs only from the copy the host
+holds. The finding about the rest removes them by name, never with `prune -a`.
+
+How many containers a machine has, and how many run, is counted once from the
+sweep (`ContainerCount`): the machine page, the machines list, the containers
+page and the dashboard all read it.
+
 The containers page, each container's page and each machine's container table
 show one `ImageStanding`. The action queue holds one item per affected image
 and version, and one for every image with a newer release.

@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% comment %}
-Every running container (application.containers), led by what to act on. The
+Every container (application.containers), led by what to act on. The
 band counts; what to act on is a section per reason ("Update now", or
 vulnerable with nothing newer), each image and version once, however many
 containers run it, with what is newer and what is known against it; the last
@@ -10,21 +10,21 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
 {% block page %}
 {% if containers %}
   {% card element="div" %}{% facts layout="band" %}
-    {% fact "Running" icon="container" %}{{ tally.running|breakable }}{% detail %}<small>on {{ machines|counted:"machine" }}</small>{% endfact %}
+    {% fact "Containers" icon="container" %}{% include "control_plane/_container_count.html" with running=tally.count.running total=tally.count.total only %}{% detail %}<small>on {{ machines|counted:"machine" }}</small>{% endfact %}
     {% fact "Known vulnerabilities" icon="shield" tone=tally.vulnerable_tone %}
       {% if tally.vulnerable %}{{ tally.vulnerable|counted:"container" }}{% else %}None serious{% endif %}
     {% detail %}
-      <small>{% if tally.vulnerable %}in {{ tally.vulnerable_images|counted:"image" }}{% endif %}{% if tally.unchecked %}{% if tally.vulnerable %}{% dot %}{% endif %}{{ tally.unchecked|breakable }} of {{ tally.running|breakable }} cannot be checked{% endif %}</small>
+      <small>{% if tally.vulnerable %}in {{ tally.vulnerable_images|counted:"image" }}{% endif %}{% if tally.unchecked %}{% if tally.vulnerable %}{% dot %}{% endif %}{{ tally.unchecked|breakable }} of {{ tally.count.total|breakable }} cannot be checked{% endif %}</small>
     {% endfact %}
     {% fact "Updates" icon="deploy" tone=tally.updates_tone %}
-      {% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.running %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date|breakable }} of {{ tally.running|measured:"up to date" }}{% else %}Unknown{% endif %}
+      {% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.count.total %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date|breakable }} of {{ tally.count.total|measured:"up to date" }}{% else %}Unknown{% endif %}
     {% detail %}
-      <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|measured:"up to date" }}{% if tally.update_unknown and tally.up_to_date != tally.running %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.running %}{{ tally.update_unknown|measured:"unknown" }}{% endif %}{% if tally.update_available and tally.up_to_date or tally.update_unknown and tally.up_to_date != tally.running %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
+      <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|measured:"up to date" }}{% if tally.update_unknown and tally.up_to_date != tally.count.total %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.count.total %}{{ tally.update_unknown|measured:"unknown" }}{% endif %}{% if tally.update_available and tally.up_to_date or tally.update_unknown and tally.up_to_date != tally.count.total %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
     {% endfact %}
     {% fact "Pinned" icon="lock" tone=tally.pinned_tone %}
-      {{ tally.pinned|breakable }} of {{ tally.running|breakable }}
+      {{ tally.pinned|breakable }} of {{ tally.count.total|breakable }}
     {% detail %}
-      <small>{% if tally.pinned == tally.running %}All by digest{% else %}The rest run by tag{% endif %}</small>
+      <small>{% if tally.pinned == tally.count.total %}All by digest{% else %}The rest run by tag{% endif %}</small>
     {% endfact %}
   {% endfacts %}{% endcard %}
 

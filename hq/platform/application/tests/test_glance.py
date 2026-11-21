@@ -41,6 +41,7 @@ from ..glance_refresh import DASHBOARD_REFRESH, GLANCE_REGION, dashboard_refresh
 from ..report_testing import bridged
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from .glance_readings import DOCKER, HOST, reported_hour, reported_machine, reported_weather
+from .test_containers import inventory, running
 
 AN_OPERATOR = Principal("operator", "web", OPERATOR_CAPABILITIES)
 
@@ -70,11 +71,18 @@ CLEAR = reported_weather(POINT, reported_hour("2026-07-01T13:00:00-05:00", forec
 
 
 class DashboardGlanceTests(TestCase):
-    def test_the_head_leads_with_containers_and_says_the_share_under_it(self):
+    def test_the_head_leads_with_the_sweeps_container_count_and_says_the_share_under_it(self):
         readings.record(readings.machine_telemetry(self.machine.key), reported_machine("app-server", docker=DOCKER))
+        inventory(
+            "portainer.container",
+            [running("web", "example/web:1", "app"), {**running("job", "example/job:1", "app"), "state": "exited"}],
+        )
         panel = self.machine_panel()
 
-        self.assertEqual((panel["lead"]["label"], panel["lead"]["value"]), ("Containers", "3"))
+        self.assertEqual(
+            (panel["lead"]["label"], panel["lead"]["value"], panel["lead"]["detail"]),
+            ("Containers", "1", "running"),
+        )
         self.assertEqual(
             {(m["label"], m["value"]) for m in panel["caption"]},
             {("CPU", "37%"), ("Memory", "25%"), ("Docker storage", "3.0 GB")},

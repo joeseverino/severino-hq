@@ -296,7 +296,6 @@ def host():
         {
             "key": MACHINE,
             "docker": {
-                "containers": len(CONTAINERS),
                 "cpu_percent": 12.0,
                 "cores": 4,
                 "memory_used": 4_123_000_000,

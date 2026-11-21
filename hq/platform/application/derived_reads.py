@@ -122,14 +122,7 @@ def _presence(machine: Any) -> PresencePart | None:
 def _load(machine: Any) -> LoadPart | None:
     if not machine.telemetry:
         return None
-    # The container list is the count of what runs, so a reading taken at
-    # another moment does not state a second one beside it.
-    metrics = [
-        metric
-        for metric in machine_metrics(machine.telemetry)
-        if not (machine.containers and metric["label"] == "Containers")
-    ]
-    return {"metrics": metrics, "observed_at": _moment(machine.telemetry_observed_at)}
+    return {"metrics": machine_metrics(machine.telemetry), "observed_at": _moment(machine.telemetry_observed_at)}
 
 
 def serialize_machine(machine: Any) -> MachineRecord:
@@ -137,6 +130,7 @@ def serialize_machine(machine: Any) -> MachineRecord:
         machine,
         MachineRecord,
         node=Kind.MACHINE.of(machine.name),
+        running=machine.container_count.running,
         state=machine.state.label,
         tone=machine.state.tone,
         tailnet_device=machine.route_approval_key,

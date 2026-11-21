@@ -120,6 +120,15 @@ def _reading(owner) -> None:
     apps.get_model("control_plane", "ProviderConnection").objects.update(manages=False)
 
 
+def _images_left(owner) -> None:
+    """The example estate with images nothing runs on its machine, so the
+    finding about those HQ can remove, and its silence about those it keeps,
+    are drawn."""
+
+    _estate(owner)
+    example_estate.docker.images_left()
+
+
 def _advised(owner) -> None:
     """The example estate with advisories against what runs and newer
     releases, so each upgrade a card can offer, or say is not worth making,
@@ -218,6 +227,7 @@ SEEDS: dict[str, Seed] = {
     "reading": Seed(_reading, _SET_UP),
     "read-empty": Seed(_read_empty, _SET_UP),
     "advised": Seed(_advised, _SET_UP),
+    "images-left": Seed(_images_left, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
     "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),

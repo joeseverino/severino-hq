@@ -6,6 +6,8 @@ and one that asks whether it is well never read the same word two ways.
 """
 
 import re
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .tone import Tone, Toned
 
@@ -36,6 +38,24 @@ class ContainerState(Toned):
     @property
     def running(self) -> bool:
         return self is ContainerState.RUNNING
+
+
+@dataclass(frozen=True, slots=True)
+class ContainerCount:
+    """How many containers the sweep found and how many of them run: the one
+    count a machine, the estate and the dashboard say."""
+
+    running: int
+    total: int
+
+    @classmethod
+    def of(cls, states: Iterable[ContainerState]) -> ContainerCount:
+        found = list(states)
+        return cls(running=sum(1 for state in found if state.running), total=len(found))
+
+    @property
+    def stopped(self) -> int:
+        return self.total - self.running
 
 
 class HealthCheck(Toned):

@@ -36668,6 +36668,7 @@
                 "unrecognized-container",
                 "container-image-behind",
                 "container-image-untagged",
+                "container-images-unused",
                 "container-image-advisory",
                 "container-image-update",
                 "container-image-unpinned",

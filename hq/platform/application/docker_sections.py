@@ -17,7 +17,7 @@ from hq.domains.control_plane.observations.portainer import (
     image_title,
 )
 
-from .docker_estate import IMAGE_BEHIND, image_verdicts
+from .docker_estate import IMAGE_BEHIND, image_names, image_verdicts, kept_names
 from .entity_links import entity_link
 from .facts import Subject, readings
 from .labels import human_bytes
@@ -54,7 +54,7 @@ def _environments(machine) -> ServiceSection | None:
         id="docker-environment",
         renders=(ENVIRONMENT_KIND,),
         label="Docker environment",
-        columns=("Environment", "Type", "Status", "Agent", "Docker", "Containers", "Read through"),
+        columns=("Environment", "Type", "Status", "Agent", "Docker", "Read through"),
         records=tuple(
             (
                 Cell(str(record.get("name", ""))),
@@ -62,11 +62,6 @@ def _environments(machine) -> ServiceSection | None:
                 _text(record.get("status")),
                 _text(record.get("agent_version")),
                 _text(record.get("docker_version")),
-                _text(
-                    f"{record['containers_running']} of {record['containers_total']} running"
-                    if record.get("containers_total") is not None and record.get("containers_running") is not None
-                    else ""
-                ),
                 Cell.of(entity_link("connection", str(record.get("connection_ref", ""))))
                 if record.get("connection_ref")
                 else Cell(MISSING, muted=True),
@@ -154,17 +149,12 @@ def _data(machine) -> ServiceSection | None:
     )
 
 
-def unused_images(machine) -> tuple[Mapping[str, Any], ...]:
-    """Images on the machine no container runs: what removing them would free."""
-
-    return tuple(record for record in _records(machine, IMAGE_KIND) if not record.get("containers"))
-
-
-def _image_state(verdicts: Mapping[str, str], record: Mapping[str, Any]) -> Cell | None:
-    """What needs doing about an image, or None when nothing does."""
+def _image_state(verdicts: Mapping[str, str], record: Mapping[str, Any], kept: frozenset[str]) -> Cell | None:
+    """What needs doing about an image, or None when nothing does, as for one
+    HQ keeps (``kept_names``) that nothing runs."""
 
     if not record.get("containers"):
-        return Cell("Unused", muted=True)
+        return None if kept & image_names(record) else Cell("Unused", muted=True)
     if verdicts.get(str(record.get("id", ""))) == IMAGE_BEHIND:
         # Pulled, and not yet what runs: recreating the container runs it.
         return Cell("Newer build pulled, recreate the container to run it")
@@ -179,7 +169,8 @@ def _images(machine) -> ServiceSection | None:
 
     records = sorted(_records(machine, IMAGE_KIND), key=image_title)
     verdicts = {running: fact for fact, _c, _r, running, _t, _s in image_verdicts(records)}
-    rows = [(record, state) for record in records if (state := _image_state(verdicts, record)) is not None]
+    kept = kept_names()
+    rows = [(record, state) for record in records if (state := _image_state(verdicts, record, kept)) is not None]
     if not rows:
         return None
     return ServiceSection(

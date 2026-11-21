@@ -13,6 +13,7 @@ from hq.domains.control_plane.observations.public_registry import (
     UPSTREAM_KIND,
     VULNERABILITY_KIND,
 )
+from hq.platform.application.docker_estate import release_pins
 from hq.platform.application.images import ImageRef
 from hq.platform.application.services import CONTAINER_KIND
 
@@ -62,8 +63,6 @@ def containers():
             "status": "up",
             "agent_version": "2.24.0",
             "docker_version": "27.3.1",
-            "containers_running": len(CONTAINERS),
-            "containers_total": len(CONTAINERS),
             "snapshot_at": iso(timedelta(minutes=4)),
         },
     )
@@ -232,6 +231,26 @@ ADVISED = {
     "jellyfin": [_advisory("jellyfin", "< 10.11.0")],
     "forgejo": [_advisory("forgejo-running", "< 9.0.2", "9.0.2"), _advisory("forgejo-target", ">= 9.0.2")],
 }
+
+
+def images_left():
+    """Images nothing runs: an earlier pull of a container's image and an
+    untagged one, which HQ offers to remove, and each image the release pins,
+    which it keeps."""
+
+    _name, _port, image = CONTAINERS[0]
+    earlier = _ref(image).name
+    pins = [ref for pin in release_pins() if (ref := ImageRef.parse(pin)) is not None]
+    store(
+        portainer.IMAGE_KIND,
+        *(_pulled(name, image) for name, _port, image in CONTAINERS),
+        _on_machine(id=digest("image-id", "earlier"), tags=[f"{earlier}:0.9"], size=240_000_000, containers=[]),
+        _on_machine(id=digest("image-id", "untagged"), size=60_000_000, containers=[]),
+        *(
+            _on_machine(id=digest("image-id", ref.name), digests=[f"{ref.name}@{ref.digest}"], size=900_000_000)
+            for ref in pins
+        ),
+    )
 
 
 def advised():

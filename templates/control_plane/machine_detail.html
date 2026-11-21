@@ -22,14 +22,12 @@ last done to it is read before its parts.
 {% endcomment %}
 {% layout %}{% include "partials/_page_sections.html" with sections=runs spans_row=True %}{% endlayout %}
 
-{% if machine.containers or unused_images %}
+{% if machine.containers %}
   {% comment %}
   Where they are read from, beside the heading, and what they leave behind
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
 {% section "Containers" %}
-  {% if unused_images %}{% list kind="dots" %}<li>{% status unused_images|length|counted:"unused image,unused images"|add:"," unused_size "can be freed" tone="attention" pill=False %}</li>{% endlist %}{% endif %}
-  {% if unused_images %}{% command text="ssh "|add:machine.name|add:' "sudo docker image prune -a"' %}{% endif %}
   {% include "partials/_problems.html#rest" with rest=problems_in.containers %}
   {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=shown_containers label="Shown containers" %}{% endif %}
   {% if folded_containers %}
