@@ -207,6 +207,9 @@ class ConnectionRow:
             instance,
             ConnectionStandingRecord,
             credential_model=None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
+            # How it stands is its row's lifecycle, never the bare probe beneath it.
+            status=self.lifecycle.tone,
+            status_label=self.state_label,
             lifecycle=connection.lifecycle,
             authority=connection.authority,
             actions=connection.actions,

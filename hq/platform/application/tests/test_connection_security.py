@@ -1,6 +1,7 @@
 """The connections page's security story is the standards' checks, measured once."""
 
 from dataclasses import replace
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
@@ -20,6 +21,7 @@ from ..connections import (
     ConnectionSpec,
 )
 from ..facts import stored_snapshots
+from ..moments import ago
 from ..posture import Inputs, posture
 from ..projection import projection_scope
 from ..request_connection import connection
@@ -137,8 +139,8 @@ class OneStateModelTests(TestCase):
                 self.assertEqual(counts[bucket], 1, counts)
                 self.assertEqual(sum(counts.values()), 1, counts)
 
-    def test_the_posture_is_serious_for_a_connection_needing_attention_and_neutral_for_an_unverified_one(self):
-        for lifecycle, state in (("ready", "good"), ("configured", "neutral"), ("stale", "serious")):
+    def test_the_posture_is_the_worst_its_rows_show(self):
+        for lifecycle, state in {"configured": "neutral", "stale": "attention", "revoked": "serious"}.items():
             with self.subTest(lifecycle=lifecycle):
                 self.assertEqual(self._posture_with(lifecycle).state, state)
 
@@ -278,10 +280,15 @@ class ConnectionSecurityPostureTests(TestCase):
         keyless = replace(
             view, instance=replace(view.instance, label="Lookups", credential_model="none", observed_at=None)
         )
+        # One that is read is as old as its reading, keyless or not.
+        old = timezone.now() - timedelta(days=54)
+        read = replace(keyless, instance=replace(keyless.instance, observed_at=old))
 
         found = _posture((replace(group, connections=(view, keyless)),), self.request())
 
         self.assertTrue(_result(found, "freshness").met)
+        aged = _result(_posture((replace(group, connections=(view, read)),), self.request()), "freshness")
+        self.assertEqual(aged.reading.evidence, f"Oldest reading {ago(old)}")
 
     def test_a_keyless_service_is_counted_once_and_alike_by_every_check(self):
         (group,) = _groups()
