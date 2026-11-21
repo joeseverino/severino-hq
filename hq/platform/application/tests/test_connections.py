@@ -278,7 +278,7 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         (tr,) = [element for element in page if element.tag == "tr" and "cloudflare-dns" in element.attrs.get("id", "")]
         reads_cell = [element for element in page if element.tag == "td" and element.ancestors[-1:] == (tr,)][1]
 
-        # Every item of the cell's lists, a read past the first few in the
+        # Every item of the cell's list, a read past the first few in the
         # list's rest included. Elements compare by their markup, so the cell
         # is matched by identity.
         items = [
@@ -286,18 +286,15 @@ class ConnectionPageTests(SentinelMixin, TestCase):
             for element in page
             if element.tag == "li"
             and "line-rest" not in element.attrs.get("class", "").split()
-            and (
-                any(ancestor is reads_cell for ancestor in element.ancestors)
-                or (element.inside(tr) and any("row-below" in ancestor.classes for ancestor in element.ancestors))
-            )
+            and any(ancestor is reads_cell for ancestor in element.ancestors)
         ]
-        changes = [item.words for item in items if any(a.attrs.get("data-label") == "Changes" for a in item.ancestors)]
+        # What it changes is a block of the row's open line, under its label.
+        after = page[page.index(tr) :]
+        label = next(element for element in after if element.tag == "dt" and element.words.strip() == "Changes")
+        block = next(element for element in after[after.index(label) :] if element.tag == "dd")
+        changes = [item.words for item in after if item.tag == "li" and any(up is block for up in item.ancestors)]
         # Each read's name is its first element; a state word may follow it.
-        named = [
-            next(element for element in page if element.ancestors[-1:] == (item,)).words
-            for item in items
-            if item.words not in changes
-        ]
+        named = [next(element for element in page if element.ancestors[-1:] == (item,)).words for item in items]
 
         self.assertTrue(named)
         self.assertEqual(sorted(named), sorted(sight.label for sight in row.sight.sights))

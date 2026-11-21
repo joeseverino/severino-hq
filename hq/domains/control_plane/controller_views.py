@@ -7,6 +7,7 @@ from django.views.generic import TemplateView
 from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.controller_page import controller_page
 from hq.platform.application.entity_links import entity_link
+from hq.platform.application.freshness import reading_age
 from hq.platform.application.moments import ago
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
@@ -17,6 +18,30 @@ PENDING = (
     TableColumn("Change", drop=2, cell=lambda work: Cell(work.action)),
     TableColumn("State", kind="status", css="key-col", cell=lambda work: Cell(work.state)),
     TableColumn("Asked", kind="status", drop=1, cell=lambda work: Cell(ago(work.created_at))),
+)
+
+
+def _result(reading) -> Cell:
+    """How a reading ended: its result, or that it failed and what it said."""
+
+    if reading.ok:
+        return Cell(reading.result, tone="good")
+    return Cell("Failed", tone="serious", lines=(Cell(reading.result, muted=True, cut=True),))
+
+
+READINGS = (
+    TableColumn("Reading", cell=lambda reading: Cell(reading.label, name=True, title=reading.kind)),
+    TableColumn(
+        "Last tried", kind="status", drop=3, cell=lambda reading: Cell(moment=reading.attempted_at, form="ago")
+    ),
+    TableColumn(
+        "Reading",
+        kind="status",
+        drop=2,
+        cell=lambda reading: Cell(piece=reading_age(reading.reading)),
+    ),
+    TableColumn("Items", kind="numeric", drop=1, cell=lambda reading: Cell(str(reading.records))),
+    TableColumn("Result", kind="status", css="key-col", cell=_result),
 )
 
 
@@ -43,5 +68,6 @@ class ControllerView(PageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         controller = context["controller"] = controller_page()
         context["pending"] = DataTable.of("Pending changes", PENDING, controller.queue)
+        context["readings"] = DataTable.of("Readings", READINGS, controller.readings)
         context["start_guide"] = docs_url("Install.md", "11-the-controllers-first-reading")
         return context

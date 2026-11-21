@@ -24,7 +24,7 @@ from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane.models import OperationRequest, SourceProposal
 lazy from hq.platform.application.approvals import awaiting_ids
 lazy from hq.platform.application.automation_adoption import procedures as adopted_procedures
-lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_rows
+lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_table
 
 from .audit import audited_labels, audited_subjects, subject_of
 from .audit_words import change_rows, words_of
@@ -322,7 +322,7 @@ class AuditLogDetailView(PageMixin, DetailView):
                 rejected_by=rejected.get(str(proposal.pk)),
                 adopted_revision=adopted_revision(),
                 # Each playbook it changes, with Adopt and Reject while it waits.
-                scan_rows=playbook_rows(adopted_procedures(), scan, web_principal(self.request.user), every=False),
+                scan_rows=playbook_table(adopted_procedures(), scan, web_principal(self.request.user), every=False),
             )
         groups, page = self._other_events(event, with_operation=approval is None)
         context["other_events"] = groups

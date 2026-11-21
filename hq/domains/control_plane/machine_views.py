@@ -1,5 +1,6 @@
 """Machines and the tailnet: the list, one machine's page, and what a change to either would reach."""
 
+from dataclasses import replace
 from functools import cached_property
 from typing import override
 
@@ -7,6 +8,8 @@ from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
 from hq.platform.application.connections import machines_once
+from hq.platform.application.container_state import ContainerCount
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.hq_self import LABEL as HQ_LABEL
 from hq.platform.application.machine_context import (
     machine_links,
@@ -15,6 +18,7 @@ from hq.platform.application.machine_context import (
     serves_links,
 )
 from hq.platform.application.machines import Machine, machine
+from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageDialog, PageMixin, RecordListMixin, RecordPageMixin
 from hq.platform.application.resource_capabilities import (
     CREATE_CAPABILITY,
@@ -26,7 +30,8 @@ from hq.platform.application.resource_capabilities import (
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.application.service_context import RUNS_SECTION
-from hq.platform.application.tailnet_context import tailnet_context
+from hq.platform.application.tables import Cell, DataTable, Row, StatusMark, TableColumn
+from hq.platform.application.tailnet_context import TailnetContext, tailnet_context
 from hq.platform.application.visit_refresh import page_visit
 lazy from hq.platform.application import tailnet
 lazy from hq.platform.application.automation_runs import HERE, RUN_HERE, PlaybookHere, playbooks_on
@@ -38,6 +43,8 @@ lazy from hq.platform.application.request_channel import forwarding_of
 lazy from hq.platform.application.resource_operations import ACTION_CAPABILITY
 lazy from hq.platform.application.tailnet import declaration, may_reach, ports, proposed_grant
 
+from .cells import codes, run
+from .container_tables import machine_containers
 from .models import ManagedResource, OperationRequest
 from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
@@ -77,11 +84,65 @@ class MachineListView(RecordListMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["hq_label"] = HQ_LABEL
+        context["table"] = DataTable(
+            "Machines",
+            MACHINE_COLUMNS,
+            tuple(Row(_machine_cells(item)) for item in self.records),
+            # What would fill it reads the database, so it is asked only of no machines.
+            region={"empty": "No machines yet.", **({} if self.records else {"remedy": context["page"].remedy})},
+        )
         # How many are in each state, in the order the states first appear.
         states = [item["state"] for item in self.records]
         context["state_counts"] = [(states.count(state), state) for state in dict.fromkeys(states)]
         return context
+
+
+MACHINE_COLUMNS = (
+    TableColumn("Machine", kind="identifier"),
+    TableColumn("Read through", kind="identifier", drop=3),
+    TableColumn("Containers", drop=2),
+    TableColumn("Serves", kind="identifier", drop=1),
+    TableColumn("State", kind="status", css="key-col"),
+)
+
+
+def _machine_cells(item: dict) -> tuple[Cell, ...]:
+    """A machine's row: its name and roles, the connections that read it, its
+    containers, what it serves and its one state."""
+
+    roles = tuple(Cell(status=StatusMark(role["label"], chip=True, title=role["detail"])) for role in item["roles"])
+    name = Cell.of(entity_link("machine", item["name"]), name=True)
+    unanswered = set(item["unanswered"])
+    if item["containers"]:
+        containers = Cell(ContainerCount(item["running"], len(item["containers"])).said)
+    else:
+        containers = (
+            Cell()
+            if item["containers_visible"]
+            else Cell("Not visible", muted=True, title="No connection reads containers.")
+        )
+    serves = (
+        *((Cell(HQ_LABEL),) if item["runs_hq"] else ()),
+        *(Cell.of(entity_link("service", hostname)) for hostname in item["hostnames"]),
+    )
+    presence = item.get("presence") or {}
+    since = moment(presence.get("last_seen")) if presence and not presence.get("online") else None
+    return (
+        replace(name, parts=roles, lines=(Cell(item["role"], muted=True),) if item["role"] else ()),
+        Cell(
+            lines=tuple(
+                replace(
+                    Cell.of(entity_link("connection", ref)),
+                    readout=True,
+                    parts=(Cell("not answering", muted=True),) if ref in unanswered else (),
+                )
+                for ref in item["reached_by"]
+            )
+        ),
+        containers,
+        Cell(parts=serves, fit=True),
+        Cell(item["state"], tone=item["tone"], lines=(Cell(moment=since, form="since", muted=True),) if since else ()),
+    )
 
 
 def policy_edit(key: str) -> PageAction | None:
@@ -109,6 +170,20 @@ def _route_approval(device: ManagedResource | None) -> PageAction | None:
 # The policy test's dialog, which the tailnet page's head and a machine's page open.
 POLICY_TEST = PageDialog(
     "whatif", "Policy test", "control_plane/_whatif_form.html", lede="Check whether the policy allows a connection."
+)
+
+
+# The rules that decided a policy test, each by its line, whom it admits and to what.
+MATCHING_RULES = (
+    TableColumn("Rule", kind="status", cell=lambda rule: Cell(f"line {rule['line']}" if rule.get("line") else "")),
+    TableColumn("Admits", kind="identifier", cell=lambda rule: codes(rule.get("who") or ())),
+    TableColumn("To", kind="identifier", cell=lambda rule: codes(rule.get("to") or ())),
+)
+# The grant that would allow what a policy test was refused.
+GRANT_NEEDED = (
+    TableColumn("From", kind="identifier", cell=lambda grant: codes(grant["src"])),
+    TableColumn("To", kind="identifier", cell=lambda grant: codes(grant["dst"])),
+    TableColumn("Ports", kind="identifier", cell=lambda grant: codes(grant["ip"])),
 )
 
 
@@ -140,12 +215,14 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
     if asked["source"] and asked["target"] and asked["port"].isdigit():
         verdict = may_reach(asked["source"], asked["target"], int(asked["port"]))
         context["verdict"] = verdict
+        context["rules"] = DataTable.of("Matching rules", MATCHING_RULES, verdict.rules)
         # A refusal is the moment somebody wants to change the policy, so the
         # grant that would allow it is worked out here rather than left as an
         # exercise. Shown, never applied: what to do about a denial is the
         # operator's call and the editor is where it is made.
         if verdict.known and not verdict.allowed:
-            context["proposal"] = proposed_grant(asked["source"], asked["target"], int(asked["port"]))
+            proposal = context["proposal"] = proposed_grant(asked["source"], asked["target"], int(asked["port"]))
+            context["grant"] = DataTable.of("Grant needed", GRANT_NEEDED, (proposal,) if proposal else ())
     return context
 
 
@@ -185,7 +262,131 @@ class TailnetView(PageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context.update(whatif_context(self.request))
         context["tailnet"] = self.tailnet
+        context["tables"] = tailnet_tables(self.tailnet)
         return context
+
+
+def tailnet_tables(found: TailnetContext) -> dict[str, DataTable]:
+    """The tailnet page's tables: its grants, its groups and tags, its
+    services, its shell rules and its app connectors."""
+
+    policy = found.policy
+    return {
+        "grants": DataTable(
+            "Grants",
+            (TableColumn("From"), TableColumn("To"), TableColumn("Ports", kind="identifier", drop=1)),
+            tuple(Row((_names(each.sources), _names(each.destinations), _ports(each.rule))) for each in found.grants),
+        ),
+        "groups": DataTable(
+            "Groups and tags",
+            (
+                TableColumn("Name", kind="identifier"),
+                TableColumn("Members", kind="identifier"),
+                TableColumn("Devices", drop=1),
+            ),
+            (
+                *(
+                    Row(
+                        (Cell(group.get("name", ""), readout=True), Cell(", ".join(group.get("members") or ())), Cell())
+                    )
+                    for group in policy.groups
+                ),
+                *(
+                    Row(
+                        (
+                            Cell(row.tag.get("name", ""), readout=True),
+                            Cell("owned by", muted=True, parts=(Cell(", ".join(row.tag.get("owners") or ())),)),
+                            run(Cell.of(link) for link in row.devices)
+                            if row.devices or not row.unworn
+                            else Cell("no device has this tag", muted=True),
+                        )
+                    )
+                    for row in found.tags
+                ),
+            ),
+        ),
+        "services": DataTable.of(
+            "Tailnet services",
+            (
+                TableColumn(
+                    "Service", kind="identifier", cell=lambda service: Cell(service.get("name", ""), readout=True)
+                ),
+                TableColumn(
+                    "Answers at", kind="identifier", cell=lambda service: codes(service.get("addresses") or ())
+                ),
+                TableColumn(
+                    "Ports", kind="identifier", drop=2, cell=lambda service: Cell(" ".join(service.get("ports") or ()))
+                ),
+                TableColumn("Note", drop=1, cell=lambda service: Cell(service.get("comment", ""), muted=True)),
+            ),
+            policy.services,
+        ),
+        "ssh": DataTable(
+            "Shell access",
+            (
+                TableColumn("From"),
+                TableColumn("To"),
+                TableColumn("As", kind="identifier", drop=2),
+                TableColumn("Re-authenticate", kind="status", drop=1),
+            ),
+            tuple(
+                Row(
+                    (
+                        _names(each.sources),
+                        _names(each.destinations),
+                        codes(each.rule.get("users") or ()),
+                        _checks(each.rule),
+                    )
+                )
+                for each in found.ssh_rules
+            ),
+        ),
+        "connectors": DataTable.of(
+            "App connectors",
+            (
+                TableColumn(
+                    "Name", kind="identifier", cell=lambda connector: Cell(connector.get("name", ""), readout=True)
+                ),
+                TableColumn(
+                    "Routed by", kind="identifier", cell=lambda connector: codes(connector.get("connectors") or ())
+                ),
+                TableColumn(
+                    "For",
+                    kind="identifier",
+                    cell=lambda connector: run(
+                        replace(Cell.of(entity_link("service", domain)), readout=True)
+                        for domain in connector.get("domains") or ()
+                    ),
+                ),
+            ),
+            policy.app_connectors,
+        ),
+    }
+
+
+def _names(names) -> Cell:
+    """Names a tailnet policy writes, each that stands for a machine its link."""
+
+    return run(
+        replace(Cell.of(name.link), readout=True) if name.link else Cell(name.text, readout=True) for name in names
+    )
+
+
+def _ports(rule: dict) -> Cell:
+    """A grant's ports, each followed by its name where it has one."""
+
+    return run(
+        part
+        for ip, name in rule.get("ports") or ()
+        for part in (Cell(ip, readout=True), *((Cell(name),) if name else ()))
+    )
+
+
+def _checks(rule: dict) -> Cell:
+    """Whether a shell rule asks its person to sign in again before the shell opens."""
+
+    action = rule.get("action", "")
+    return Cell("Yes") if action == "check" else Cell("No", name=True) if action == "accept" else Cell(action)
 
 
 class MachineDetailView(RecordPageMixin, TemplateView):
@@ -289,7 +490,10 @@ class MachineDetailView(RecordPageMixin, TemplateView):
 
         # Whether what each container runs is current and safe, as the
         # containers page says it, and what the machine keeps that nothing runs.
-        context.update(on_machine(found))
+        context.update(held := on_machine(found))
+        standings, uptimes = held["standings"], held["uptimes"]
+        context["shown_table"] = machine_containers("Shown containers", held["shown_containers"], standings, uptimes)
+        context["folded_table"] = machine_containers("Hidden containers", held["folded_containers"], standings, uptimes)
         # Each line under the part it is about, as HQ's own page draws them.
         context["problems_in"] = grouped(problems_by_part(problem_parts(record), principal))
         # The same panel as the tailnet page, started on this machine. Asked

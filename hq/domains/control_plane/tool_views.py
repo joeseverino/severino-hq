@@ -14,7 +14,7 @@ from hq.platform.core.web_refusals import refused
 lazy from hq.platform.application import security
 lazy from hq.platform.application.capabilities import command_spec
 lazy from hq.platform.application.command_forms import command_form_class
-lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS
+lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS, LOOK_UP_NAME, answers_table
 lazy from hq.platform.application.toolkit import tab_named, tabs_for
 lazy from hq.platform.application.url_query import with_query
 
@@ -64,6 +64,9 @@ class ToolsView(PageMixin, TemplateView):
             stamp = reading.get("observed_at") if isinstance(reading, dict) else None
             if (when := moment(stamp, naive="keep")) is not None:
                 reading["observed_at"] = when
+        name = context["results"].get(LOOK_UP_NAME)
+        if isinstance(name, dict) and name.get("ok"):
+            context["answers"] = answers_table(name["answers"])
         # A stored answer is read again by a POST of its own, beside the moment it was read.
         address = context["results"].get(LOOK_UP_ADDRESS)
         if isinstance(address, dict) and address.get("observed_at"):

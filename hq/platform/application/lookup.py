@@ -27,6 +27,7 @@ from .integration_specs import CapabilitySpec, command_adapter
 from .projection import iso
 from .reach import is_documentation, is_public, network_of
 from .security import Capability, Principal
+from .tables import Cell, DataTable, TableColumn
 lazy from . import readings
 
 # A hostname, conservatively. The value becomes a query parameter on a URL the
@@ -184,6 +185,20 @@ class NameAnswer(TypedDict):
     type: Annotated[str, Describe("The record's type, such as `A` or `MX`.")]
     name: Annotated[str, Describe("The name the record is for.")]
     value: Annotated[str, Describe("What the record holds, in one line.")]
+
+
+# The public records a name answers with, each by its type, its name and what it says.
+NAME_ANSWERS = (
+    TableColumn("Type", kind="identifier", cell=lambda answer: Cell(answer["type"], readout=True)),
+    TableColumn("Name", kind="identifier", drop=1, cell=lambda answer: Cell(answer["name"])),
+    TableColumn("Answer", kind="identifier", cell=lambda answer: Cell(answer["value"], readout=True)),
+)
+
+
+def answers_table(answers: list[NameAnswer]) -> DataTable:
+    """The public records a lookup of a name found."""
+
+    return DataTable.of("Public records", NAME_ANSWERS, answers, region={"empty": "No public records."})
 
 
 class NameLookedUp(TypedDict):

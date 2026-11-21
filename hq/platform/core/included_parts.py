@@ -307,6 +307,55 @@ POLICY_SETTING = Part(
     example=tags.POLICY_TABLE,
 )
 
+CHANGE = _part(
+    "change",
+    "One value changed: what it was, an arrow, what it is.",
+    "change",
+    "change-arrow",
+    "change-to",
+    rules="""
+    **A change is one primitive.** A value and the one it changes into (a running version and the
+    newer release, an installed package and the version that fixes it) is `{% include
+    "partials/_change.html" with from=… to=… %}`, with `code=True` for identifiers and `url` to link
+    the new value. Old value, arrow and new value share one baseline. A narrow line breaks only between
+    the two values, with the arrow kept beside the new one, and a reader hears "1.2.3 to 1.3.0" rather
+    than an arrow.
+    """,
+    states=records.CHANGE_STATES,
+)
+
+CREDENTIAL_FIX = Part(
+    name="",
+    partial="control_plane/_credential_fix.html",
+    about="What a connection's credential lacks, and the one approved fix in numbered steps.",
+    example=tags.CREDENTIAL_FIX,
+    rules="""
+    **A credential's fix is one notice.** The permissions it lacks, then the steps of the one fix
+    `application.credential_mint` approves, a warning notice a connection's row opens to; the row's
+    own line says what is missing.
+    """,
+)
+
+CONNECTION_READ = Part(
+    name="",
+    partial="control_plane/_connection_read.html",
+    about="One thing a connection reads: its name, and opened, how its last reading went.",
+    rules="""
+    A part of a connection's Reads, given the `read` and its `connection`: its name, quiet where its
+    credential cannot use it, then on the row's open line its state word in its tone where it was not
+    read cleanly, its record count where it was, and why it was not read.
+    """,
+)
+CONNECTION_ABILITY = Part(
+    name="",
+    partial="control_plane/_connection_ability.html",
+    about="One thing a connection's credential lets HQ do, quiet where HQ cannot use it.",
+    rules="""
+    A part of a connection's row, given the `state` and its `connection`: the ability's name, and its
+    permission note in its tone where it differs from its neighbors or cannot be used.
+    """,
+)
+
 PARTS = (
     FIELD,
     POLICY_SETTING,
@@ -391,22 +440,10 @@ PARTS = (
         """,
         example=records.CALENDAR_SOURCES,
     ),
-    _part(
-        "change",
-        "One value changed: what it was, an arrow, what it is.",
-        "change",
-        "change-arrow",
-        "change-to",
-        rules="""
-        **A change is one primitive.** A value and the one it changes into (a running version and the
-        newer release, an installed package and the version that fixes it) is `{% include
-        "partials/_change.html" with from=… to=… %}`, with `code=True` for identifiers and `url` to link
-        the new value. Old value, arrow and new value share one baseline. A narrow line breaks only between
-        the two values, with the arrow kept beside the new one, and a reader hears "1.2.3 to 1.3.0" rather
-        than an arrow.
-        """,
-        states=records.CHANGE_STATES,
-    ),
+    CHANGE,
+    CONNECTION_ABILITY,
+    CONNECTION_READ,
+    CREDENTIAL_FIX,
     _part(
         "chart_tabs",
         "Up to four charts of one thing in the space of one.",

@@ -52,21 +52,7 @@ declaration's machinery: the controller's actions are the buttons above, and
     {% endsection %}
     {% section "Installed on" %}
       {% if resource.consumers %}
-      {% table_region "Installed on" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Place" "identifier" local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
-        <tbody>
-          {% for consumer in resource.consumers %}
-            <tr>
-              <td>
-                {% cell_line %}<strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name }}</a>{% else %}{{ consumer.name }}{% endif %}</strong>{% detail %}through {% entity "connection"|entity_of:consumer.connection_ref %}{% endcell_line %}
-              </td>
-              <td>{% for domain in consumer.domains %}{% entity "service"|entity_of:domain mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% endtable_region %}
+      {% data_table installed %}
       {% elif resource.resolution_error %}
         {% comment %}Why it is installed nowhere, where the list would be.{% endcomment %}
         {% notice tone="warning" title="Not installed" %}<p>{{ resource.resolution_error }}</p>{% endnotice %}
@@ -212,30 +198,7 @@ certificate, so the relation reads from both ends.
   {% endcomment %}
   {% if resource.status.published_facts %}
     {% section "Saved to 1Password" %}
-      {% table_region "Saved to 1Password" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Item" "identifier" local_sort=True %}{% table_heading "Last saved" "status" local_sort=True %}</tr></thead>
-        <tbody>
-          {% for publication in resource.status.published_facts %}
-            <tr>
-              <td><strong>{{ publication.target }}</strong></td>
-              <td>
-                {% if publication.detail %}
-                  {% list %}<li>{% status "Not saved" tone="serious" %}</li><li>{% muted %}{{ publication.detail }}{% endmuted %}</li>{% endlist %}
-                {% elif publication.written %}
-                  {% list %}<li>{% status "Saved" tone="good" %}</li>
-                  {% if publication.fields or publication.material == "written" %}
-                    <li>{% muted %}{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}</li>
-                  {% endif %}{% endlist %}
-                {% else %}
-                  {% status "Already up to date" tone="good" %}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% endtable_region %}
+      {% data_table saved %}
     {% endsection %}
   {% endif %}
 {% include "partials/_relationships.html" %}

@@ -19,47 +19,14 @@
 
   {% section "Grants" count=tailnet.grants|length %}
   {% if tailnet.grants %}
-  {% table_region "Grants" %}
-    <table class="data-table">
-      <thead><tr>{% table_heading "From" local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "Ports" "identifier" drop=1 local_sort=True %}</tr></thead>
-      <tbody>
-        {% for grant in tailnet.grants %}
-          <tr>
-            <td>{% include "control_plane/_policy_names.html" with names=grant.sources %}</td>
-            <td>{% include "control_plane/_policy_names.html" with names=grant.destinations %}</td>
-            <td>{% list kind="codes" %}{% for ip, name in grant.rule.ports %}<li><span><code>{{ ip }}</code>{% if name %} {{ name }}{% endif %}</span></li>{% endfor %}{% endlist %}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endtable_region %}
+  {% data_table tables.grants %}
   {% endif %}
   {% empty %}No grants.
   {% endsection %}
 
   {% section "Groups and tags" count=tailnet.group_rows %}
   {% if tailnet.group_rows %}
-  {% table_region "Groups and tags" %}
-    <table class="data-table">
-      <thead><tr>{% table_heading "Name" "identifier" local_sort=True %}{% table_heading "Members" "identifier" local_sort=True %}{% table_heading "Devices" drop=1 local_sort=True %}</tr></thead>
-      <tbody>
-        {% for group in tailnet.policy.groups %}
-          <tr>
-            <td><code>{{ group.name }}</code></td>
-            <td>{{ group.members|join:", " }}</td>
-            <td></td>
-          </tr>
-        {% endfor %}
-        {% for row in tailnet.tags %}
-          <tr>
-            <td><code>{{ row.tag.name }}</code></td>
-            <td>{% muted %}owned by{% endmuted %} {{ row.tag.owners|join:", " }}</td>
-            <td>{% for link in row.devices %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% empty %}{% if row.unworn %}{% muted %}no device has this tag{% endmuted %}{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endtable_region %}
+  {% data_table tables.groups %}
   {% endif %}
   {% empty %}No groups or tags.
   {% endsection %}
@@ -76,21 +43,7 @@
   {% endcomment %}
   {% if tailnet.policy.services %}
     {% section "Services" count=tailnet.policy.services|length %}
-    {% table_region "Tailnet services" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Service" "identifier" local_sort=True %}{% table_heading "Answers at" "identifier" local_sort=True %}{% table_heading "Ports" "identifier" drop=2 local_sort=True %}{% table_heading "Note" drop=1 local_sort=True %}</tr></thead>
-        <tbody>
-          {% for service in tailnet.policy.services %}
-            <tr>
-              <td><code>{{ service.name }}</code></td>
-              <td>{% for address in service.addresses %}<code>{{ address }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
-              <td>{{ service.ports|join:" "|or_empty }}</td>
-              <td>{% muted %}{{ service.comment|or_empty }}{% endmuted %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
+    {% data_table tables.services %}
     {% endsection %}
   {% endif %}
 
@@ -102,40 +55,13 @@
     they are not.
     {% endcomment %}
     {% section "Shell access" count=tailnet.ssh_rules|length %}
-    {% table_region "Shell access" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "From" local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "As" "identifier" drop=2 local_sort=True %}{% table_heading "Re-authenticate" "status" drop=1 local_sort=True %}</tr></thead>
-        <tbody>
-          {% for row in tailnet.ssh_rules %}
-            <tr>
-              <td>{% include "control_plane/_policy_names.html" with names=row.sources %}</td>
-              <td>{% include "control_plane/_policy_names.html" with names=row.destinations %}</td>
-              <td>{% for user in row.rule.users %}<code>{{ user }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-              <td>{% if row.rule.action == "check" %}Yes{% elif row.rule.action == "accept" %}<strong>No</strong>{% else %}{{ row.rule.action }}{% endif %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
+    {% data_table tables.ssh %}
     {% endsection %}
   {% endif %}
 
   {% if tailnet.policy.app_connectors %}
     {% section "App connectors" count=tailnet.policy.app_connectors|length %}
-    {% table_region "App connectors" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Name" "identifier" local_sort=True %}{% table_heading "Routed by" "identifier" local_sort=True %}{% table_heading "For" "identifier" local_sort=True %}</tr></thead>
-        <tbody>
-          {% for connector in tailnet.policy.app_connectors %}
-            <tr>
-              <td><code>{{ connector.name }}</code></td>
-              <td>{% for node in connector.connectors %}<code>{{ node }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
-              <td>{% for domain in connector.domains %}{% entity "service"|entity_of:domain code=True %}{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
+    {% data_table tables.connectors %}
     {% endsection %}
   {% endif %}
 {% else %}

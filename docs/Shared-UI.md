@@ -254,7 +254,6 @@ and those that hold across parts in [Design](Design.md).
 | `table_region` | `action_url` |  |  | With no rows, where the link that fills it leads. |
 | `table_region` | `chart` | `False` |  | A chart's table, read whole in the chart's order and scrolled. |
 | `table_region` | `clear` |  |  | The way back from that search. |
-| `table_region` | `compare` | `False` |  | Two values side by side in each row, after the row's name. |
 | `table_region` | `css` |  |  | The classes of where it stands. |
 | `table_region` | `declared` | `False` |  | A table `{% data_table %}` draws, its marks written already. |
 | `table_region` | `empty` |  |  | With no rows, what is missing. |
@@ -268,7 +267,7 @@ and those that hold across parts in [Design](Design.md).
 
 Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `count`, `danger`, `data-table`, `date-col`, `eyebrow`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
+Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `count`, `danger`, `data-table`, `date-col`, `eyebrow`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 
@@ -392,9 +391,8 @@ of its own. No template writes a `<br>`: the `line-break` shape refuses one, in 
 ### change_table (host only)
 
 A change's before and after is `{% change_table preview %}`: a section named by its label. Each
-value that moves stands under Field, Before and After, which share the room evenly
-(`table_region ... compare=True`), each row's kind of change under Status, or under Field and
-Value where nothing stood before. A redacted value is said only to have changed, and a document
+value that moves stands under Field, Before and After, each row's kind of change under Status,
+or under Field and Value where nothing stood before. A redacted value is said only to have changed, and a document
 that would not parse is shown as its line diff. A comparison of many records of one kind (the
 adopted playbooks, from `approval_review.grouped`) names each field a record moves by the
 record and the field ("Empty a cache › Access"), says a record that comes or goes whole on one
@@ -434,6 +432,23 @@ alone.
 
 A control's visible name is `{% control_label "From" control="id" %}`, the `<label>` of the
 control with that id; with no `control` it names what follows.
+
+### control_plane/_connection_ability.html (host only)
+
+A part of a connection's row, given the `state` and its `connection`: the ability's name, and its
+permission note in its tone where it differs from its neighbors or cannot be used.
+
+### control_plane/_connection_read.html (host only)
+
+A part of a connection's Reads, given the `read` and its `connection`: its name, quiet where its
+credential cannot use it, then on the row's open line its state word in its tone where it was not
+read cleanly, its record count where it was, and why it was not read.
+
+### control_plane/_credential_fix.html (host only)
+
+**A credential's fix is one notice.** The permissions it lacks, then the steps of the one fix
+`application.credential_mint` approves, a warning notice a connection's row opens to; the row's
+own line says what is missing.
 
 ### core/_policy_setting.html (host only)
 

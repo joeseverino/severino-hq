@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .tone import Tone, Toned
+lazy from .ui import measured
 
 # Docker's status ends with its health check's verdict: "Up 11 hours (healthy)".
 _CHECK = re.compile(r"\s*\((healthy|unhealthy|health: [^)]*)\)\s*$")
@@ -56,6 +57,12 @@ class ContainerCount:
     @property
     def stopped(self) -> int:
         return self.total - self.running
+
+    @property
+    def said(self) -> str:
+        """The count as every page says it (``_container_count.html``)."""
+
+        return f"{self.running} of {measured(self.total, 'running')}"
 
 
 class HealthCheck(Toned):

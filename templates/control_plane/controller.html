@@ -57,22 +57,7 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% if controller.standing.known %}
 {% section "Readings" count=controller.readings|length %}
   {% if controller.readings %}
-  {% table_region "Readings" %}
-    <table class="data-table">
-      <thead><tr>{% table_heading "Reading" local_sort=True %}{% table_heading "Last tried" "status" drop=3 local_sort=True %}{% table_heading "Reading" "status" drop=2 local_sort=True %}{% table_heading "Items" "numeric" drop=1 local_sort=True %}{% table_heading "Result" "status" css="key-col" local_sort=True %}</tr></thead>
-      <tbody>
-        {% for reading in controller.readings %}
-          <tr>
-            <td><strong title="{{ reading.kind }}">{{ reading.label }}</strong></td>
-            <td>{{ reading.attempted_at|when:"ago" }}</td>
-            <td>{% include "partials/_reading_age.html" with reading=reading.reading only %}</td>
-            <td>{{ reading.records }}</td>
-            <td>{% if reading.ok %}{% status reading.result tone="good" %}{% else %}{% list %}<li>{% status "Failed" tone="serious" %}</li><li>{% muted %}{% cell_line text=reading.result %}{% endmuted %}</li>{% endlist %}{% endif %}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endtable_region %}
+  {% data_table readings %}
   {% endif %}
 {% empty %}{% status "no reading yet"|absent pill=False %}
 {% endsection %}

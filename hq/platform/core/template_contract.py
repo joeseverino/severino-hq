@@ -111,7 +111,6 @@ CLASSES = (
     "swatch",
     "swatch-key",
     "table-scroll",
-    "tight-col",
     "tone-attention",
     "tone-good",
     "tone-neutral",

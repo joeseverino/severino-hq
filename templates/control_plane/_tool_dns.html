@@ -6,22 +6,7 @@
     {% with reading=results|dictkey:"lookup.name.read" %}
       {% if reading %}
         {% if reading.ok %}
-          {% table_region "Public records" %}
-            <table class="data-table">
-              <thead><tr>{% table_heading "Type" "identifier" %}{% table_heading "Name" "identifier" drop=1 %}{% table_heading "Answer" "identifier" %}</tr></thead>
-              <tbody>
-                {% for answer in reading.answers %}
-                  <tr>
-                    <td><code>{{ answer.type }}</code></td>
-                    <td>{{ answer.name }}</td>
-                    <td><code class="cell-whole">{{ answer.value }}</code></td>
-                  </tr>
-                {% empty %}
-                  <tr><td colspan="3">{% include "partials/_empty_state.html" with message="No public records." only %}</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% endtable_region %}
+          {% data_table answers %}
           {% if reading.resolver %}
             <p class="help">Answered by {{ reading.resolver }}.</p>
           {% endif %}

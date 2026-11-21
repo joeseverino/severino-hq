@@ -30,7 +30,7 @@ from hq.platform.application.service_context import (
     sections_for,
     service_badges,
 )
-from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET
+from hq.platform.application.service_facets import RUNTIME_FACET
 from hq.platform.application.service_list import listed_service, listed_services
 from hq.platform.application.services import alias_summary, alias_target, fault_rows
 from hq.platform.application.tone import Absent
@@ -45,6 +45,7 @@ from .forms import ServiceStartForm
 from .models import ManagedResource
 from .provider_adapters.portainer import CONTAINER_KIND
 from .providers import service_facets
+from .service_tables import aliases_table, parts_table, services_table, unmanaged_table
 from .views import verb_action
 
 
@@ -95,23 +96,24 @@ class ServiceListView(PageMixin, TemplateView):
         # keeps both on one set of columns without fixing their widths.
         pinned = [item for item in found if item.pinned]
         rest = [item for item in found if not item.pinned]
-        context["service_groups"] = tuple(
+        groups = tuple(
             (label, _arranged(items, reorderable))
             for label, items, reorderable in ((sentence(FAVORITES), pinned, True), ("Other services", rest, False))
             if items
         )
-        # Both groups are one table, sorted on the page with two rows in all.
-        context["service_count"] = len(found)
-        # One answer for both groups, which share the table's columns.
-        context["service_projects"] = any(item.project for item in found)
         # Where a service runs is one column, not two. The runtime facet named
         # the container declaration and the origin named the machine it runs
-        # on, side by side, in two different vocabularies for one fact.
-        context["runtime_facet"] = RUNTIME_FACET
-        # The column headers come from the providers, so a provider that
-        # declares a new facet gets a column without this template being
-        # touched, and a facet no provider supplies yet gets none.
-        context["facets"] = [facet for facet in service_facets() if facet[0] != RUNTIME_FACET]
+        # on, side by side, in two different vocabularies for one fact. The
+        # columns come from the providers, so a provider that declares a new
+        # facet gets a column without this page being touched, and a facet no
+        # provider supplies yet gets none.
+        context["services"] = services_table(
+            groups,
+            [facet for facet in service_facets() if facet[0] != RUNTIME_FACET],
+            projects=any(item.project for item in found),
+            empty="No services yet.",
+            start_url=reverse("control_plane:service_start"),
+        )
         # Everything the providers hold that no declaration accounts for. Shown
         # beside the managed services rather than on a page of its own: a
         # hostname HQ does not manage is still a hostname that is serving, and
@@ -129,9 +131,8 @@ class ServiceListView(PageMixin, TemplateView):
             )
             for service in unmanaged
         ]
+        context["unmanaged_table"] = unmanaged_table(context["unmanaged_rows"])
         context["inventory"] = inventory_state()
-        context["certificate_facet"] = CERTIFICATE_FACET
-        context["dns_facet"] = DNS_FACET
         return context
 
 
@@ -247,7 +248,14 @@ class ServiceDetailView(RecordPageMixin, TemplateView):
         context["container_kind"] = CONTAINER_KIND
         context["sections"] = self.sections
         context["relationships"] = self.relationships
-        context["read_only"] = self.own is not None
+        context["read_only"] = read_only = self.own is not None
+        here = self.request.get_full_path()
+        context["route_tables"] = [
+            (route, parts_table(parts, read_only=read_only, here=here)) for route, parts in context["route_parts"]
+        ]
+        if "declared_parts" in context:
+            context["declared_table"] = parts_table(context["declared_parts"], read_only=read_only, here=here)
+        context["aliases"] = aliases_table(self.record["alias_records"])
         # When anyone on the internet reaches it unasked, the gate HQ can put in front.
         context["gate_fixes"] = gate_links(self.service) if self.record["exposure"]["level"] == OPEN else ()
         context["fault_rows"] = fault_rows(self.record["hostname"], faults) if (faults := self.record["faults"]) else ()

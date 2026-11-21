@@ -1,12 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
-{% url 'control_plane:service_start' as start_url %}
 
-{% comment %}
-Columns come from SERVICE_FACETS, not from this markup: minus the runtime one,
-which shares the "Runs on" column with the origin it would duplicate.
-{% endcomment %}
-{% include "control_plane/_service_rows.html" with groups=service_groups row_count=service_count show_service_projects=service_projects empty_message="No services yet." %}
+{% data_table services %}
 
 {% if unmanaged %}
   {% comment %}
@@ -15,28 +10,7 @@ which shares the "Runs on" column with the origin it would duplicate.
   manage, kept out by an operator, or a spec HQ could not validate.
   {% endcomment %}
   {% section "Unmanaged names" count=unmanaged|length fold=True lede="From a read-only connection, an unmanaged domain, or settings HQ could not read." %}
-    {% table_region "Unmanaged names" %}
-      <table class="data-table">
-        <thead>
-          <tr>
-            {% table_heading "Name" "identifier" local_sort=True %}
-            {% for id, label, value in unmanaged.0.facets %}{% table_heading label "identifier" drop=forloop.revcounter|add:1 local_sort=True %}{% endfor %}
-            {% table_heading "Actions" "control" hidden=True %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for service, actions in unmanaged_rows %}
-            <tr>
-              <td><strong>{{ service.hostname }}</strong></td>
-              {% for id, label, value in service.facets %}
-                <td>{% present value %}<code>{{ value }}</code>{% endpresent %}</td>
-              {% endfor %}
-              {% if actions %}{% row_actions actions %}{% else %}<td>{% muted %}Read only{% endmuted %}</td>{% endif %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
+    {% data_table unmanaged_table %}
   {% endsection %}
 {% endif %}
 

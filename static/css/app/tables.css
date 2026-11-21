@@ -239,7 +239,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 }
 
 /* The classes a template may say about columns, named here since an extension's templates are held to this sheet; they carry no style. */
-.data-table :is(.key-col, .optional-col, .tight-col) { }
+.data-table :is(.key-col, .optional-col) { }
 /* A table of marks (`data-marks`): one row a thing, one column a period, a mark in each cell, read down a column against the rows around it (the cadence matrix). Every heading but the names stands centered over its column. Its cells stand closer where it shares a row with a chart (`data-marks="compact"`), and in a narrow box, where the marks are what is read. */
 .data-table[data-marks] > thead > tr > :not(:first-child) { text-align: center; }
 .data-table[data-marks="compact"] > * > tr > * { padding: var(--space-3) var(--space-2); }

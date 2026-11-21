@@ -1,10 +1,12 @@
 import json
 from collections.abc import Iterable
+from dataclasses import replace
 from functools import cached_property
 from typing import Any, override
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.text import Truncator
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -14,13 +16,15 @@ from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.conditions import DRIFTED, holding
 from hq.platform.application.contracts import Effect
 from hq.platform.application.doors import NOBODY
-from hq.platform.application.entity_links import kind_label, page_url, record_name, web_url
+from hq.platform.application.entity_links import entity_link, kind_label, page_url, record_name, web_url
+from hq.platform.application.freshness import reading_age
 from hq.platform.application.history import asked_by
 from hq.platform.application.infrastructure import (
     serialize_resource,
 )
 from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
+from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, RecordListMixin, RecordPageMixin, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.references import Kind
@@ -51,6 +55,7 @@ from hq.platform.application.resource_refusals import INFRASTRUCTURE
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.service_context import operation_history
+from hq.platform.application.tables import Cell, DataTable, Group, Row, StatusMark, TableColumn
 from hq.platform.application.topology_model import RELATIONS
 from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted
@@ -59,6 +64,7 @@ from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.web_refusals import refusal_response, refused
 lazy from hq.platform.application.page_relations import for_container
 
+from .cells import run
 from .models import ApprovalRequest, ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
@@ -262,12 +268,77 @@ class InfrastructureListView(RecordListMixin, TemplateView):
             for operation, run in zip(listed, run_rows(listed), strict=True)
         ]
         context["provider_catalog"] = describe_providers()
-        context["records"] = record_list(
+        records = context["records"] = record_list(
             self.records,
             query=self.request.GET.get("q", ""),
             kind=self.request.GET.get("type", ""),
         )
+        context["table"] = DataTable(
+            "Records",
+            RECORD_COLUMNS,
+            groups=tuple(
+                Group(group.label, tuple(Row(_record_cells(row)) for row in group.rows), count=len(group.rows))
+                for group in records.groups
+            ),
+            region={"empty": "No records yet.", "filtered": records.filtered, "clear": reverse("control_plane:list")},
+        )
+        context["changed"] = DataTable(
+            "Recent changes",
+            CHANGE_COLUMNS,
+            tuple(Row(_change_cells(change)) for change in context["changes"]),
+        )
         return context
+
+
+RECORD_COLUMNS = (
+    TableColumn("Name", kind="identifier"),
+    TableColumn("State", kind="status", css="key-col"),
+    TableColumn("Reading", kind="status", css="date-col", drop=1),
+)
+CHANGE_COLUMNS = (
+    TableColumn("Record", kind="identifier"),
+    TableColumn("Change", drop=3),
+    TableColumn("Result", css="key-col"),
+    TableColumn("By", drop=2),
+    TableColumn("Time", kind="status", css="date-col", drop=1),
+)
+# The characters of a change's note its row shows; its run's page says it whole.
+_NOTE_SHOWN = 120
+
+
+def _record_cells(row: dict) -> tuple[Cell, ...]:
+    """A record's row: its name, what it is and the machine a proxy forwards
+    to beneath; its state, and since when; and when it was last read."""
+
+    machine = row["origin_machine"]
+    standing = row["standing"]
+    since = moment(standing.get("since"))
+    lines = (
+        *((Cell(row["summary"], muted=True, role="data"),) if row["summary"] else ()),
+        *((Cell("on", muted=True, parts=(Cell.of(entity_link("machine", machine["name"])),)),) if machine else ()),
+    )
+    return (
+        replace(Cell.of(entity_link("resource", row["key"], label=row["name"]), name=True), lines=lines),
+        Cell(
+            status=StatusMark(standing["label"], tone=standing["tone"], title=standing.get("detail", "")),
+            lines=(Cell(moment=since, form="ago", muted=True),) if since else (),
+        ),
+        Cell(piece=reading_age(at=moment(row["last_observed_at"])), muted=True),
+    )
+
+
+def _change_cells(change: dict) -> tuple[Cell, ...]:
+    """A change's row: its record, what was asked, how it ended, who asked and when."""
+
+    asked = change["run"]
+    note = Truncator(asked.note).chars(_NOTE_SHOWN)
+    return (
+        Cell.of(entity_link("resource", change["resource"])),
+        Cell(asked.title),
+        Cell(status=StatusMark(asked.word, tone=asked.tone), parts=(Cell(note),) if note else ()),
+        Cell(asked.by.words),
+        Cell(moment=asked.created_at, muted=True),
+    )
 
 
 class InfrastructureDetailView(RecordPageMixin, TemplateView):
@@ -437,7 +508,51 @@ class InfrastructureDetailView(RecordPageMixin, TemplateView):
         context["history"] = (history,) if history else ()
         context["spec_json"] = _json(record["spec"])
         context["diagnostic_status"] = _json(record["status"])
+        context["installed"] = DataTable.of("Installed on", CONSUMER_COLUMNS, record.get("consumers") or ())
+        context["saved"] = DataTable.of(
+            "Saved to 1Password", SAVED_COLUMNS, record["status"].get("published_facts") or ()
+        )
         return context
+
+
+def _consumer(consumer: dict) -> Cell:
+    """Where a certificate is installed, and the connection that installs it there."""
+
+    through = consumer["connection_ref"]
+    return Cell(
+        consumer["name"],
+        consumer["url"],
+        name=True,
+        lines=(Cell("through", muted=True, parts=(Cell.of(entity_link("connection", through)),)),) if through else (),
+    )
+
+
+def _saved(publication: dict) -> Cell:
+    """Whether the last reconcile saved a certificate's facts to its item, and which."""
+
+    if publication.get("detail"):
+        return Cell("Not saved", tone="serious", lines=(Cell(publication["detail"], muted=True),))
+    if not publication.get("written"):
+        return Cell("Already up to date", tone="good")
+    fields = [
+        *(("certificate", "key") if publication.get("material") == "written" else ()),
+        *(field.lower() for field in publication.get("fields") or ()),
+    ]
+    return Cell("Saved", tone="good", lines=(Cell(", ".join(fields), muted=True),) if fields else ())
+
+
+CONSUMER_COLUMNS = (
+    TableColumn("Place", kind="identifier", cell=_consumer),
+    TableColumn(
+        "Names checked",
+        kind="identifier",
+        cell=lambda consumer: run(Cell.of(entity_link("service", domain)) for domain in consumer["domains"]),
+    ),
+)
+SAVED_COLUMNS = (
+    TableColumn("Item", kind="identifier", cell=lambda publication: Cell(publication["target"], name=True)),
+    TableColumn("Last saved", kind="status", cell=_saved),
+)
 
 
 def is_destructive(verb: str) -> bool:

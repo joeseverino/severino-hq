@@ -293,6 +293,21 @@ SELECT = Example(
 POLICY_TABLE = Example("{% data_table table %}", _policy)
 
 
+# A credential that lacks permissions: the one approved fix, as a
+# connection's open line draws it.
+CREDENTIAL_FIX = Example(
+    '{% section "Example connection" %}{% include "control_plane/_credential_fix.html" %}{% endsection %}',
+    lambda: {
+        "fix": CredentialFix(
+            connection_ref="example-main",
+            provider="example",
+            missing=("example.read", "example.write"),
+            command="example-mint --account example-01 --item example-token",
+            by_hand="the example provider's console",
+        )
+    },
+)
+
 STEPS_STATES = {
     # Steps done in order, each numbered: said in words, and a command to run
     # with its notes, as a credential's fix draws one.
@@ -307,23 +322,6 @@ STEPS_STATES = {
                 "Make a new example token on your Mac",
                 "example-mint --account example-01 --item example-token --permission example.read",
                 notes=("HQ could not tell which example account holds it.", "Then press Refresh."),
-            )
-        },
-    ),
-    # A connection whose credential lacks permissions: its headline in the
-    # row, its fix opened beneath it.
-    "credential-fix": Example(
-        '{% section "Example connections" %}{% table_region "Example connections" %}<table class="data-table">'
-        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Provider" %}</tr></thead>'
-        '<tbody><tr><td>example-main{% include "control_plane/_credential_fix.html" %}</td><td>Example</td></tr>'
-        "</tbody></table>{% endtable_region %}{% endsection %}",
-        lambda: {
-            "fix": CredentialFix(
-                connection_ref="example-main",
-                provider="example",
-                missing=("example.read", "example.write"),
-                command="example-mint --account example-01 --item example-token",
-                by_hand="the example provider's console",
             )
         },
     ),

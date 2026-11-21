@@ -14,20 +14,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     to a line of policy is one they have to take on faith, and the next thing
     they want is to go and change it.
     {% endcomment %}
-    {% table_region "Matching rules" %}
-    <table class="data-table">
-      <thead><tr>{% table_heading "Rule" "status" %}{% table_heading "Admits" "identifier" %}{% table_heading "To" "identifier" %}</tr></thead>
-      <tbody>
-        {% for rule in verdict.rules %}
-          <tr>
-            <td>{% present rule.line %}line {{ rule.line }}{% endpresent %}</td>
-            <td>{% for who in rule.who %}<code>{{ who }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-            <td>{% for to in rule.to %}<code>{{ to }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endtable_region %}
+    {% data_table rules %}
   {% endif %}
   {% if proposal and policy_edit %}
     {% comment %}
@@ -38,18 +25,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     policy is a decision, not a side effect of asking a question.
     {% endcomment %}
     {% muted element="p" %}Grant needed to allow it:{% endmuted %}
-    {% table_region "Grant needed" %}
-    <table class="data-table">
-      <thead><tr>{% table_heading "From" "identifier" %}{% table_heading "To" "identifier" %}{% table_heading "Ports" "identifier" %}</tr></thead>
-      <tbody>
-        <tr>
-          <td>{% for src in proposal.src %}<code>{{ src }}</code>{% endfor %}</td>
-          <td>{% for dst in proposal.dst %}<code>{{ dst }}</code>{% endfor %}</td>
-          <td>{% for ip in proposal.ip %}<code>{{ ip }}</code>{% endfor %}</td>
-        </tr>
-      </tbody>
-    </table>
-    {% endtable_region %}
+    {% data_table grant %}
     <p>{% button "Edit policy" policy_edit.url arrow=True %}</p>
   {% endif %}
 {% endif %}

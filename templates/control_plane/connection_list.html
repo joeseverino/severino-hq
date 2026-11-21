@@ -1,104 +1,9 @@
 {% extends "page.html" %}
 {% block page %}
-{% comment %}
-One table of every connection HQ has, a tbody for each part of HQ that uses
-some (`connections.purposes`), so every part shares one set of columns. A
-part's heading shows only when there is more than one.
-{% endcomment %}
 {% if connections.groups %}
-  {% table_region "Connections" %}
-    <table class="data-table">
-      <thead>
-        <tr>
-          {% table_heading "Connection" "identifier" local_sort=True %}
-          {% table_heading "Reads" drop=3 local_sort=True %}
-          {% table_heading "Reaches" css="optional-col" drop=1 local_sort=True %}
-          {% table_heading "State" "status" css="tight-col key-col" local_sort=True %}
-          {% table_heading "Actions" css="actions-col" hidden=True %}
-        </tr>
-      </thead>
-      {% for purpose, purpose_rows in connections.purposes %}
-      <tbody>
-        {% if forloop.length > 1 %}{% row_group purpose purpose_rows|length %}{% endif %}
-        {% for row in purpose_rows %}
-          {% with connection=row.connection group=row.group %}
-          <tr id="{{ connection.instance.label|connection_anchor }}">
-            <td>
-              <strong>{% entity connection.name_link %}</strong>
-              {% list %}
-              {% if connection.instance.endpoint %}<li><code title="{{ connection.instance.endpoint }}">{{ connection.instance.endpoint }}</code></li>{% endif %}
-              {% comment %}Where a group starts: every row under it shares this, and repeating it on each says nothing new.{% endcomment %}
-              {% ifchanged group.spec.label group.spec.secret_store connection.instance.keyless %}<li>{% muted css="narrow-more prose" %}{% if group.spec.label != connection.instance.label %}{{ group.spec.label|breakable:"·" }}{% endif %}{% if connection.instance.keyless %}No key needed{% else %}Secrets in {{ group.spec.secret_store }}{% endif %}{% if group.spec.documentation_url %}{% dot %}<a href="{{ group.spec.documentation_url }}">Docs</a>{% endif %}{% if group.spec.management_route %}{% dot %}<a href="{% url group.spec.management_route %}">Manage</a>{% endif %}{% endmuted %}</li>{% endifchanged %}
-              {% comment %}How HQ reaches it, a refusal, then the count of what it reads, said once for the connection, which alone stays in a narrow box: each read is in the Reads column.{% endcomment %}
-              {% if row.reach.summary or connection.instance.facts %}<li>{% muted css="narrow-more" %}{% if row.reach.summary %}{% with mark=row.reach.relay|then:"," %}{% if row.reach.machine %}{{ row.reach.label }} {{ row.reach.machine_word }} {% entity row.reach.machine mark=mark %}{% else %}{{ row.reach.label|breakable:mark }}{% endif %}{% endwith %}{% if row.reach.relay %} {{ row.reach.relay }}{% endif %}{% if connection.instance.facts %}{% dot %}{% endif %}{% endif %}{% for fact in connection.instance.facts %}{% if fact.label == "Controller" %}via {{ fact.value }}{% else %}{{ fact.label }}: {{ fact.value }}{% endif %}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}</li>{% endif %}
-              {% with sight=row.sight %}
-              {% if sight.credential_refusal %}<li>{% status sight.label "refused this credential:" sight.credential_refusal tone="serious" pill=False %}</li>{% endif %}
-              {% if sight.sights %}<li>{% muted %}{{ sight.summary }}{% if sight.read_at %}{% dot %}{% include "partials/_reading_age.html" with at=sight.read_at only %}{% endif %}{% endmuted %}</li>{% endif %}
-              {% endwith %}
-              {% endlist %}
-              {% if row.more_scope %}<div class="row-below" data-label="Also sees">{% line_list row.more_scope as line kind="dots" %}<li>{{ line }}</li>{% endline_list %}</div>{% endif %}
-              {% if row.fix %}{% include "control_plane/_credential_fix.html" with fix=row.fix %}{% endif %}
-            </td>
-            {% comment %}
-            A family earns a name only when it groups more than one connection.
-            A single-instance API is its own family, and printing "National
-            Weather Service" beside "National Weather Service" says nothing.
-            {% endcomment %}
-            <td>
-              {% comment %}
-              As many as the line has room for: a controller credential reads a
-              dozen kinds, and a dozen stacked would make the row a dozen lines
-              tall. Opened, the row shows them all, and what the credential
-              lets HQ change runs beneath it.
-              {% endcomment %}
-              {% if row.changes_only %}
-                {% muted %}Changes only:{% endmuted %}
-                {% line_list row.changes as state kind="dots" %}{% include "control_plane/_connection_ability.html" %}{% endline_list %}
-              {% else %}
-                {% present row.reads %}{% line_list row.reads as read kind="dots" %}{% include "control_plane/_connection_read.html" %}{% endline_list %}{% endpresent %}
-              {% endif %}
-              {% if row.changes and not row.changes_only %}<div class="row-below" data-label="Changes">{% line_list row.changes as state kind="dots" %}{% include "control_plane/_connection_ability.html" %}{% endline_list %}</div>{% endif %}
-            </td>
-            {% comment %}
-            Inline and wrapping rather than one line per link: stacked links make
-            this the tallest cell in the table, and slicing to one would hide a
-            machine the connection genuinely reaches. The targets and the
-            dependencies are a list each, every name an item of its own.
-            {% endcomment %}
-            <td class="optional-col">
-              {% with targets=connection.instance.targets dependencies=connection.instance.dependencies %}
-              {% line_list targets as link kind="dots" %}<li>{% entity link|declared_link %}</li>{% endline_list %}
-              {% line_list dependencies as link kind="dots" %}<li>{% entity link|declared_link code=True %}</li>{% endline_list %}
-              {% if not targets and not dependencies %}{% empty_value %}{% endif %}
-              {% endwith %}
-            </td>
-            {% comment %}
-            One word, and at most one plain line under it: since when, what is
-            missing, or what happens next. Both come from the connection's
-            lifecycle and authority, so they cannot disagree.
-            {% endcomment %}
-            <td class="tight-col">
-              {% list %}<li>{% status row.state_label tone=row.lifecycle.tone dot=True %}</li>
-              {% if row.read_requested_at %}<li>{% muted css="narrow-more" %}Read asked {{ row.read_requested_at|when_text:"ago" }}{% endmuted %}</li>
-              {% elif row.state_line %}<li>{% muted css=row.state_line_quiet|yesno:"row-more,narrow-more" %}{% if row.state_line_tone %}{% status row.state_line tone=row.state_line_tone pill=False %}{% else %}{{ row.state_line }}{% endif %}{% endmuted %}</li>
-              {% elif row.changes_only and connection.instance.observed_at %}<li>{% muted css="narrow-more" %}Checked {{ connection.instance.observed_at|when_text:"ago" }}{% endmuted %}</li>
-              {% elif not row.sight.sights and connection.instance.observed_at %}<li>{% muted css="narrow-more" %}{% include "partials/_reading_age.html" with at=connection.instance.observed_at only %}{% endmuted %}</li>{% endif %}
-              {% if row.problems %}<li>{% status row.problems|counted:"problem" tone="attention" pill=False href=row.problems_url %}</li>{% endif %}{% endlist %}
-            </td>
-            <td>
-              {% if connection.recommended_action %}{% include "partials/_page_action.html" with action=connection.recommended_action|workflow_action extra="compact" only %}{% endif %}
-              {% include "partials/_action_links.html" with actions=connection.row_actions only %}
-              {% if row.read_now %}{% include "partials/_ask.html" with ask=row.read_now|as_ask %}{% endif %}
-            </td>
-          </tr>
-          {% endwith %}
-        {% endfor %}
-      </tbody>
-      {% endfor %}
-    </table>
-  {% endtable_region %}
+  {% data_table table %}
 {% comment %}What is not connected yet, here; once everything is, how to connect a second account closes the page, so the page always has a way to add one.{% endcomment %}
-{% if connections.setups or connections.unconfigured %}{% include "control_plane/_connection_setup.html" with setups=connections.setups others=connections.unconfigured count=connections.to_connect guide=connections.guide opened=request.GET.setup only %}{% endif %}
+{% if connections.setups or connections.unconfigured %}{% include "control_plane/_connection_setup.html" with setups=connections.setups others=connections.unconfigured count=connections.to_connect guide=connections.guide opened=request.GET.setup fields=setup_fields only %}{% endif %}
 {% else %}
   {% include "partials/_empty_state.html" with message="No connection types installed." %}
 {% endif %}
@@ -127,7 +32,7 @@ part's heading shows only when there is more than one.
   {% endlayout %}
 {% aside %}{% muted %}This request and each connection's credentials: {{ connections.posture.check_summary }}{% endmuted %}
 {% endsection %}
-{% if connections.groups and not connections.setups and not connections.unconfigured and connections.again %}{% include "control_plane/_connection_setup.html" with setups=connections.again count=connections.again|length guide=connections.guide again=True only %}{% endif %}
+{% if connections.groups and not connections.setups and not connections.unconfigured and connections.again %}{% include "control_plane/_connection_setup.html" with setups=connections.again count=connections.again|length guide=connections.guide again=True fields=setup_fields only %}{% endif %}
 {% endblock %}
 {% comment %}
 HQ's standard (application.posture), in a section, given its ``posture``

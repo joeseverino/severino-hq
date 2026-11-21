@@ -11,6 +11,8 @@ lazy from hq.platform.application.machines import container_context
 lazy from hq.platform.application.resource_capabilities import offered_changes
 lazy from hq.platform.application.upgrades import plan_for, readiness_of
 
+from .container_tables import every_container, need_table
+
 
 def container_detail(resource: Any, request: Any) -> dict[str, Any]:
     """A watched container's page: which machine that name is, what it is
@@ -73,6 +75,7 @@ class ContainerListView(PageMixin, TemplateView):
                 "heading": heading,
                 "lede": lede,
                 "groups": listed,
+                "table": need_table(heading, listed),
                 "running": sum(len(group["containers"]) for group in listed),
             }
             for heading, lede, listed in (
@@ -87,6 +90,7 @@ class ContainerListView(PageMixin, TemplateView):
         ]
         context.update(
             containers=found,
+            every=every_container(found),
             need_sections=need_sections,
             machines=len({item.machine.name for item in found}),
             tally=tally(found),

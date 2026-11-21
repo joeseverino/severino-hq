@@ -20,12 +20,14 @@ lazy from django.core.exceptions import ImproperlyConfigured
 
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.platform.core.included_parts import READING_AGE
 
 from .derivations import reached
 from .moments import ago
 from .process_caches import kept
 lazy from . import plugins, readings
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
+lazy from .tables import Piece
 
 CURRENT = "current"
 DUE = "due"
@@ -42,6 +44,18 @@ def last_read(at: datetime | str) -> str:
     """When a reading was taken, as a sentence in plain text."""
 
     return f"{LAST_READ} {ago(at)}"
+
+
+def reading_age(reading: Freshness | None = None, *, at: datetime | None = None, unread: str = "") -> Piece:
+    """A reading and its age as a table's cell draws it, in the one wording
+    every page uses (``partials/_reading_age.html``), given as it takes them."""
+
+    if reading is not None:
+        words = reading.last_read
+        words += f" · {reading.label.lower()}" if reading.observed_at and reading.stale else ""
+    else:
+        words = last_read(at) if at else unread or "No reading yet"
+    return Piece(READING_AGE, {"reading": reading, "at": at, "unread": unread}, words)
 
 
 # Cadence names for readings that are not observation kinds.

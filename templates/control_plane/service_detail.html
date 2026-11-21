@@ -30,7 +30,7 @@ none open about it.
     <p>{% for fix in gate_fixes %}{% button fix.label fix.url look="compact" title=fix.reason %} {% endfor %}</p>
   {% endnotice %}
 {% endif %}
-{% for route, parts in route_parts %}
+{% for route, parts in route_tables %}
   {% if routes|length > 1 %}
     {% comment %}Two answers of one kind (an A and an AAAA record) are two routes via the same DNS, so each is named by its answer too.{% endcomment %}
     {% firstof "Via "|add:route.via_phrase as heading %}{% if route.hops.0.name %}{% firstof heading|add:" to "|add:route.hops.0.name as heading %}{% endif %}
@@ -38,9 +38,9 @@ none open about it.
   {% else %}
     {% include "core/_connection_panel.html#route" with route=route only %}
   {% endif %}
-  {% include "control_plane/_service_parts.html" %}
+  {% data_table parts %}
 {% empty %}
-  {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
+  {% if declared_table %}{% data_table declared_table %}{% endif %}
   {% muted element="p" %}{% for gap in record.path.unread %}{{ gap|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}
   {% for hop in service.path.observed %}
     <p>{{ hop.phrase }}: {% entity hop.link %}{% if hop.source %}{% muted %}{% dot %}{{ hop.source.phrase }}{% if hop.source.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}{% endmuted %}{% endif %}</p>
@@ -228,21 +228,7 @@ no page at all.
 So: present, attached to the service it belongs to, and out of the way, because
 it is not what anyone opens this page to read.
 {% endcomment %}
-    {% table_region "Other names" %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Record" "identifier" local_sort=True %}{% table_heading "Type" drop=2 local_sort=True %}{% table_heading "For" "identifier" drop=1 local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}</tr></thead>
-        <tbody>
-          {% for each in record.alias_records %}
-            <tr>
-              <td><strong>{% entity each.link %}</strong></td>
-              <td>{{ each.kind|kind_label }}</td>
-              <td>{{ each.alias }}</td>
-              <td>{% status each.health.label tone=each.health.state %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
+    {% data_table aliases %}
 {% aside %}{% muted %}{{ alias_summary }}{% endmuted %}
 {% endsection %}
 {% endif %}
