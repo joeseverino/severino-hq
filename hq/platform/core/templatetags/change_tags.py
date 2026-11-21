@@ -24,12 +24,12 @@ class _Kind(NamedTuple):
 
 
 # What a row's kind of change is called: as a change made says it, and as one
-# held for approval says what it would do. Its tone: what comes is good news,
+# held for approval says what it would do (a changed row is pending). Its tone: what comes is good news,
 # what moves asks attention, what goes is serious. A record that comes or goes
 # whole with no summary of its own says the same on its row.
 _KINDS = {
     "added": _Kind("New", "Would add", Tone.GOOD),
-    "changed": _Kind("Changed", "Would change", Tone.ATTENTION),
+    "changed": _Kind("Changed", "Pending", Tone.ATTENTION),
     "removed": _Kind("Removed", "Would remove", Tone.SERIOUS),
 }
 
