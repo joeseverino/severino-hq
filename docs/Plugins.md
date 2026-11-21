@@ -984,6 +984,11 @@ with its own filter, sort and toggle declarations and its projected rows, and
 whose sorts, filters, toggles and search the `ResourceSpec` declares once.
 `PLUGIN_API_VERSION` 23 retires `Kpi`'s `singular` and its int value: a figure
 that counts takes a `hq_sdk.ui.Counted` as its label, as a dashboard card does.
+`PLUGIN_API_VERSION` 24 retires `{% table_region %}`, `{% table_heading %}`,
+`{% row_group %}`, `{% row_actions %}` and `{% row_toggle %}`: a table is
+`{% data_table table %}` of a `DataTable`, which draws every heading, group,
+row and control, and `hq plugin check` refuses a `<td>` or `<th>` written by
+hand.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
