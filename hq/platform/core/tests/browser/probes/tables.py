@@ -1083,14 +1083,24 @@ _CUT_THEM = """() => {
 
 # Two rows whose open line draws nothing (their state has not left): one the
 # table clamps, which opening releases in place, and one with a short value.
+# The ranked column is empty in both, so the state stays a state, which
+# leaves only below every rank's width.
 _CLAMP_TABLE = "{% data_table clamps %}"
 
 
 def _clamp_values() -> dict[str, DataTable]:
     up = Cell("Up", tone="good")
-    columns = (TableColumn("Name"), TableColumn("Value", css="key-col"), TableColumn("State", kind="status"))
+    columns = (
+        TableColumn("Name"),
+        TableColumn("Value", css="key-col"),
+        TableColumn("Note", drop=1),
+        TableColumn("State", kind="status"),
+    )
     clamped = " ".join(["a value that runs well past the three lines its clamp holds"] * 6)
-    rows = (Row((Cell("Clamped"), Cell(clamped), up)), Row((Cell("Plain"), Cell("Short"), up), data={"probe": "plain"}))
+    rows = (
+        Row((Cell("Clamped"), Cell(clamped), Cell(""), up)),
+        Row((Cell("Plain"), Cell("Short"), Cell(""), up), data={"probe": "plain"}),
+    )
     return {"clamps": DataTable("Clamps", columns, rows)}
 
 
