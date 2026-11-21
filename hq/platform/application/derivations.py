@@ -10,6 +10,7 @@ docs/Architecture.md#derived-once-per-change.
 import hashlib
 import logging
 import math
+import pickle
 import re
 import threading
 import time as monotonic_time
@@ -339,12 +340,14 @@ def _answer(
 
     key = None if _UNCACHED.get() else _key(declared, variant)
     value, until, found = _stored(key)
-    if not found and _awaited(key):
-        # Another thread was deriving this very answer: it is stored now.
-        value, until, found = _stored(key)
+    if not found and (handed := _awaited(key)) is not None:
+        # Another thread derived this very answer and is storing it.
+        value, until = handed
+        return value, until, None
     if not found:
-        with _deriving(key), _for_a_request():
+        with _deriving(key) as derived, _for_a_request():
             value, until, learned = _compute(declared, args, kwargs)
+            derived(value, until)
             if learned and key is not None:
                 # Stored under a key that moves with what it was seen to read.
                 key = _key(declared, variant)
@@ -356,27 +359,40 @@ def _answer(
     return value, until, None
 
 
-# The answers being derived right now, by key, each with the event its
-# derivation sets when it has stored. A second thread that wants one waits for
-# it, so an answer two requests need at once is derived by one of them.
-_IN_FLIGHT: dict[str, threading.Event] = {}
+@dataclass(slots=True)
+class _InFlight:
+    """An answer being derived: set once it is derived, before it is stored,
+    since storing waits for the write lock and a waiter needs only the answer."""
+
+    done: threading.Event = field(default_factory=threading.Event)
+    # The answer and its moment, pickled as the cache would keep them, so no
+    # two threads share one object.
+    answer: bytes = b""
+
+
+# The answers being derived right now, by key. A second thread that wants one
+# waits for it, so an answer two requests need at once is derived by one of them.
+_IN_FLIGHT: dict[str, _InFlight] = {}
 _IN_FLIGHT_LOCK = threading.Lock()
 # The longest a thread waits for another's answer before deriving its own, in seconds.
 WAITS = 5.0
 
 
-def _awaited(key: str | None) -> bool:
-    """Wait for the thread deriving ``key``, if one is; whether one was.
+def _awaited(key: str | None) -> tuple[Any, datetime | None] | None:
+    """The answer and its moment another thread derives for ``key``, waited
+    for; None when none is deriving it, or it failed or took too long.
 
-    Never inside a transaction: this thread may then hold the write lock the
-    other needs to store its answer, and would wait on itself.
+    Never inside a transaction: the other thread may need the write lock this
+    one holds to read what it derives from, and would wait on it.
     """
 
     if key is None or connection.in_atomic_block:
-        return False
+        return None
     with _IN_FLIGHT_LOCK:
-        stored = _IN_FLIGHT.get(key)
-    return stored is not None and stored.wait(WAITS)
+        flight = _IN_FLIGHT.get(key)
+    if flight is None or not flight.done.wait(WAITS) or not flight.answer:
+        return None
+    return pickle.loads(flight.answer)  # noqa: S301 - pickled by this process, as the cache's values are
 
 
 # Set unless a request is deriving for itself. Two threads deriving at once
@@ -412,19 +428,29 @@ def _for_a_request() -> Iterator[None]:
 
 
 @contextmanager
-def _deriving(key: str | None) -> Iterator[None]:
-    """Say that ``key`` is being derived, until it has been stored or failed."""
+def _deriving(key: str | None) -> Iterator[Callable[[Any, datetime | None], None]]:
+    """Say that ``key`` is being derived, until it has been stored or failed;
+    what it yields hands the answer to those waiting, as soon as it is derived."""
 
-    stored = threading.Event()
+    flight = _InFlight()
     with _IN_FLIGHT_LOCK:
-        mine = key is not None and _IN_FLIGHT.setdefault(key, stored) is stored
+        mine = key is not None and _IN_FLIGHT.setdefault(key, flight) is flight
+
+    def derived(value: Any, until: datetime | None) -> None:
+        if mine:
+            try:
+                flight.answer = pickle.dumps((value, until))
+            except Exception:  # an answer that cannot be pickled is not handed on, nor stored
+                logger.debug("A derived answer could not be handed on.", exc_info=True)
+            flight.done.set()
+
     try:
-        yield
+        yield derived
     finally:
         if mine and key is not None:
             with _IN_FLIGHT_LOCK:
                 _IN_FLIGHT.pop(key, None)
-            stored.set()
+            flight.done.set()
 
 
 def _key(declared: Derivation, variant: str) -> str | None:

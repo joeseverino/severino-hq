@@ -10,7 +10,7 @@ from unittest import mock
 from django.conf import settings
 from django.core.cache import caches
 from django.core.exceptions import ImproperlyConfigured
-from django.db import connection, transaction
+from django.db import connection, connections, transaction
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -184,6 +184,53 @@ class AutocommitRevisionTests(TransactionTestCase):
             self.assertEqual(_revision(READING), before)
             self.assertEqual(count(), 0)
             self.assertEqual(len(calls), 2)
+
+
+class ConcurrentDerivationTests(TransactionTestCase):
+    def test_a_thread_waiting_on_another_is_answered_before_that_one_has_stored(self):
+        """Storing waits for the write lock, which another writer may hold for
+        long; a request that wanted the same answer is handed it as soon as it
+        is derived, without deriving it again."""
+
+        import threading
+
+        derived, release = threading.Event(), threading.Event()
+        store = derivations._store()
+
+        class HeldStore:
+            def __getattr__(self, name):
+                return getattr(store, name)
+
+            def set(self, *args, **kwargs):
+                # The first deriver's store, behind a writer that holds the lock.
+                if threading.current_thread() is not threading.main_thread():
+                    derived.set()
+                    release.wait(30)
+                return store.set(*args, **kwargs)
+
+        with (
+            declared("test.handed", reads=("core.UpstreamReading",)) as (register, calls),
+            mock.patch.object(derivations, "_store", HeldStore),
+        ):
+            count = register(_readings)
+            UpstreamReading.objects.create(key="one", value={}, observed_at=MOMENT)
+
+            def derive():
+                try:
+                    count()
+                finally:
+                    connections.close_all()
+
+            first = threading.Thread(target=derive)
+            first.start()
+            try:
+                self.assertTrue(derived.wait(30))
+                self.assertEqual(count(), 1)
+                self.assertFalse(release.is_set())
+                self.assertEqual(len(calls), 1)
+            finally:
+                release.set()
+                first.join(30)
 
 
 class DerivationTests(TestCase):
