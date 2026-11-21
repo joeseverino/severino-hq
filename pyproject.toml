@@ -87,6 +87,9 @@ DEP004 = [
 # Every package of the code is a root, so a path through the SDK is in the graph.
 [tool.importlinter]
 root_packages = ["hq", "hq_sdk", "hq_runner", "tools", "tests", "demo"]
+# A TYPE_CHECKING import is a name for the type checker and loads nothing, so it
+# is no edge; a lazy import still is one.
+exclude_type_checking_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside tools/ imports it: it is development and CI code the image does not ship"

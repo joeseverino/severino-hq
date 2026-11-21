@@ -24,7 +24,6 @@ from .drawings import LegendKey
 from .labels import dotted, plural
 from .money import signed_number
 from .tone import Tone
-lazy from .freshness import last_read
 
 if TYPE_CHECKING:
     from .freshness import Freshness
@@ -852,7 +851,7 @@ class DomainOverview:
             return self.period
         if self.reading.observed_at is None:
             return self.reading.label
-        return dotted(last_read(self.reading.observed_at), "out of date" if self.reading.stale else "")
+        return dotted(self.reading.last_read, "out of date" if self.reading.stale else "")
 
 
 def stacked_bar_chart(

@@ -227,6 +227,12 @@ class Freshness:
         return self.state == STALE
 
     @property
+    def last_read(self) -> str:
+        """When the reading was taken, as a sentence; its label when none was."""
+
+        return last_read(self.observed_at) if self.observed_at else self.label
+
+    @property
     def label(self) -> str:
         return {
             CURRENT: "Current",
