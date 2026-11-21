@@ -130,12 +130,12 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
         """The head's ask, pressed beside the title, or in the head's menu
         where the head keeps it there."""
 
-        beside = self.page.locator(SELECTORS["head_ask_button"]).first
+        beside = self.page.locator(self.css(SELECTORS["head_ask_button"])).first
         if beside.count() and beside.is_visible():
             pressing = beside
         else:
-            self.page.locator(f"{SELECTORS['head_menu']} > button").first.click()
-            pressing = self.page.locator(f"{SELECTORS['head_menu_panel']} [data-ask-button]").first
+            self.page.locator(self.css(SELECTORS["head_menu"] + " > button")).first.click()
+            pressing = self.page.locator(self.css(SELECTORS["head_menu_panel"] + " [data-ask-button]")).first
         self.pressed = urlsplit(pressing.get_attribute("formaction") or "").path
         self.page.evaluate(_MARK)
         pressing.click()
@@ -150,26 +150,28 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
                     self.visit(path, width)
                     self.page.evaluate(LAID_OUT_AFRESH)
                     self.page.evaluate(SETTLE)
-                    drawn = self.page.evaluate(BOXES, BOXES_ARGS)
-                    sizes = self.page.evaluate(SIZES, SELECTORS["content"])
+                    drawn = self.page.evaluate(BOXES, self.css(BOXES_ARGS))
+                    sizes = self.page.evaluate(SIZES, self.css(SELECTORS["content"]))
                     self.press()
                     self.page.wait_for_function(_BUSY)
                     self.settle()
-                    self.assertEqual(self.page.evaluate(BOXES, BOXES_ARGS), drawn, "moved while under way")
+                    self.assertEqual(self.page.evaluate(BOXES, self.css(BOXES_ARGS)), drawn, "moved while under way")
 
                     self.page.wait_for_function(_IDLE)
                     self.in_flight.settle(f"{path} at {width}px, landed")
                     self.settle()
                     self.assertTrue(self.page.evaluate(_STILL_DRAWN), "loaded the page again")
-                    as_swapped = self.page.evaluate(BOXES, BOXES_ARGS)
+                    as_swapped = self.page.evaluate(BOXES, self.css(BOXES_ARGS))
                     self.page.evaluate(LAID_OUT_AFRESH)
                     self.page.evaluate(SETTLE)
-                    grew = _innermost(sizes, self.page.evaluate(SIZES, SELECTORS["content"]))
+                    grew = _innermost(sizes, self.page.evaluate(SIZES, self.css(SELECTORS["content"])))
                     self.assertEqual(
-                        self.page.evaluate(BOXES, BOXES_ARGS),
+                        self.page.evaluate(BOXES, self.css(BOXES_ARGS)),
                         drawn,
                         f"moved once landed (as swapped: {as_swapped}; what differs: {grew})",
                     )
-                    self.assertFalse(self.page.locator(SELECTORS["head_offer"]).count(), "offered the reading")
+                    self.assertFalse(
+                        self.page.locator(self.css(SELECTORS["head_offer"])).count(), "offered the reading"
+                    )
                     self.assertTrue(self.redrawn, "drew nothing in place")
                     self.assertEqual(self.unanswered, [])

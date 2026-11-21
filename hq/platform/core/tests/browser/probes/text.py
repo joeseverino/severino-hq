@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from hq.platform.core.tests.browser.probes import Check, Plant
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, LINES, PAINTED_PART, TEXT_SHOWN
-from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.selectors import SELECTORS, written
 
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width. A word
@@ -16,7 +16,7 @@ BROKEN_WORDS = (
     "(identifier) => {"
     + DESCRIBE
     + TEXT_SHOWN
-    + f"const anywhere = '{SELECTORS['breaks_anywhere']}';"
+    + f"const anywhere = '{written(SELECTORS['breaks_anywhere'])}';"
     + """
   const found = [];
   const range = document.createRange();

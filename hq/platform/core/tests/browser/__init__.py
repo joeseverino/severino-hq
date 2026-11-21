@@ -16,7 +16,7 @@ every request is answered locally: nothing here can reach a real endpoint. Asser
 invariants rather than pixels, so a page can change and still pass as long as
 it stays readable.
 
-Every CSS selector the checks use is in SELECTORS (selectors.py), and
-core/tests/test_browser_selectors.py fails when one names nothing the templates
-render. JavaScript in the probes queries by tag only.
+Every CSS selector the checks use is in SELECTORS (selectors.py), and reaches
+the page through its ``css``, which fails where one matches nothing on a page
+expected to hold it. JavaScript in the probes queries by tag only.
 """

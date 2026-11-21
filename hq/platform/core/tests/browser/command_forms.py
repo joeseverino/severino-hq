@@ -150,14 +150,16 @@ class CommandFormBrowserTests(BrowserGate):
     def test_an_edit_pins_the_closing_row_and_moves_nothing_below_it(self):
         self.open_settings()
         self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        before = self.page.evaluate(_BELOW, [SELECTORS["save_bar"], SELECTORS["section_frame"]])
+        before = self.page.evaluate(_BELOW, self.css([SELECTORS["save_bar"], SELECTORS["section_frame"]]))
 
-        self.page.locator(SELECTORS["choice"]).last.select_option("Example")
+        self.page.locator(self.css(SELECTORS["choice"])).last.select_option("Example")
 
-        self.assertTrue(self.page.evaluate(_MARKED, SELECTORS["save_bar"]))
-        self.assertEqual(self.page.evaluate(_BELOW, [SELECTORS["save_bar"], SELECTORS["section_frame"]]), before)
+        self.assertTrue(self.page.evaluate(_MARKED, self.css(SELECTORS["save_bar"])))
         self.assertEqual(
-            self.page.evaluate(_BAND, [SELECTORS["save_bar"], SELECTORS["section_frame"]]),
+            self.page.evaluate(_BELOW, self.css([SELECTORS["save_bar"], SELECTORS["section_frame"]])), before
+        )
+        self.assertEqual(
+            self.page.evaluate(_BAND, self.css([SELECTORS["save_bar"], SELECTORS["section_frame"]])),
             [],
             "the row paints a band in its place",
         )
@@ -166,18 +168,18 @@ class CommandFormBrowserTests(BrowserGate):
         self.open_settings()
         if not self.page.evaluate("CSS.supports('container-type: scroll-state')"):
             self.skipTest("this engine cannot tell a stuck row from one in its place")
-        self.page.locator(SELECTORS["choice"]).first.select_option("Example")
+        self.page.locator(self.css(SELECTORS["choice"])).first.select_option("Example")
         self.page.evaluate("window.scrollTo(0, 0)")
         self.page.evaluate(PAINTED)
 
         self.assertTrue(
-            self.page.evaluate(_GROUND_SHOWN, SELECTORS["save_bar"]),
+            self.page.evaluate(_GROUND_SHOWN, self.css(SELECTORS["save_bar"])),
             "a stuck row leaves what scrolls beneath it showing",
         )
         self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         self.page.evaluate(PAINTED)
         self.assertFalse(
-            self.page.evaluate(_GROUND_SHOWN, SELECTORS["save_bar"]), "a row in its place paints its ground"
+            self.page.evaluate(_GROUND_SHOWN, self.css(SELECTORS["save_bar"])), "a row in its place paints its ground"
         )
 
     def test_a_rows_posting_button_posts_its_own_form_and_marks_nothing(self):
@@ -187,4 +189,4 @@ class CommandFormBrowserTests(BrowserGate):
             self.page.get_by_role("button", name="Remove").first.click(no_wait_after=True)
 
         self.assertEqual(len(self.posted), 1)
-        self.assertFalse(self.page.evaluate(_MARKED, SELECTORS["save_bar"]))
+        self.assertFalse(self.page.evaluate(_MARKED, self.css(SELECTORS["save_bar"])))

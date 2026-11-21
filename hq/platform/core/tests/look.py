@@ -1510,15 +1510,15 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             super().open(name, width)
         # The viewer mounts on its root wherever a page carries one: the
         # reference HQ serves and the gate's copy in the operator's dark theme.
-        reference = self.page.locator(SELECTORS["reference"]).count() > 0
+        reference = self.page.locator(self.css(SELECTORS["reference"])).count() > 0
         self.on_reference = reference and self.runs_script
         if self.on_reference:
             wait_for_reference(self.page)
             draw_whole_reference(self.page)
         # On every load, so each state shot again from a fresh page (a tag of
         # the reference opened) draws under it too.
-        if self.css:
-            add_css(self.page, self.css)
+        if self.sheet:
+            add_css(self.page, self.sheet)
             self.settle()
 
     @override
@@ -1722,7 +1722,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
         self.widths_asked = [int(width) for width in _listed("widths")]
         rule = self.rule_asked()
-        self.css = _css(_asked().text("css"))
+        self.sheet = _css(_asked().text("css"))
         self.script = _script(_asked().text("eval"))
         self.shooting = _shooting(rule)
         self.dialogs = _listed("dialog")
@@ -1892,7 +1892,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         disclosure in it open too. The page's own wiring opens it, so that is
         looked at as well. Whether it opened."""
 
-        openers = SELECTORS["dialog_opener"].format(id=dialog)
+        openers = self.css(SELECTORS["dialog_opener"].format(id=dialog))
         place = self.page.evaluate(_REACH, openers)
         if place < 0:
             print(f"{name} at {width}: no control a reader can reach opens dialog {dialog!r}", flush=True)
@@ -1999,7 +1999,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         """The shot of ``opened`` captioned with the files that show it."""
 
         method, path = opened.name.split(" ", 1)
-        boxes = self.page.evaluate(_OPERATION_BOX, [SELECTORS["reference"], f"/{method}{path}"])
+        boxes = self.page.evaluate(_OPERATION_BOX, self.css([SELECTORS["reference"], f"/{method}{path}"]))
         shown = _shown_in(boxes[0], bands) if boxes else "not drawn by the viewer"
         path, caption = self.shots[-1]
         self.shots[-1] = (path, f"{caption}, {opened.name} {shown}")

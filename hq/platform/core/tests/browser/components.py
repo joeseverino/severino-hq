@@ -276,11 +276,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in WIDTHS:
             with self.subTest(width=width):
                 self.open("action-items", width)
-                rows = self.page.locator(SELECTORS["decisions"])
-                self.assertGreater(rows.count(), 0)
+                rows = self.page.locator(self.css(SELECTORS["decisions"]))
                 for row in rows.all():
                     for part in ("decision_title", "decision_detail", "decision_actions"):
-                        for shown in row.locator(SELECTORS[part]).all():
+                        for shown in row.locator(self.css(SELECTORS[part])).all():
                             self.assertTrue(shown.is_visible(), part)
 
     @with_script
@@ -292,29 +291,28 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], WIDTHS[-1]):
             with self.subTest(width=width):
                 self.open("action-items", width)
-                families = self.page.locator(SELECTORS["decision_family"])
-                self.assertGreater(families.count(), 0)
+                families = self.page.locator(self.css(SELECTORS["decision_family"]))
                 for family in families.all():
                     family.click()
-                rows = self.page.locator(SELECTORS["decisions"])
+                rows = self.page.locator(self.css(SELECTORS["decisions"]))
                 opened = 0
                 for row in rows.all():
-                    self.assertTrue(row.locator(SELECTORS["decision_title"]).is_visible())
+                    self.assertTrue(row.locator(self.css(SELECTORS["decision_title"])).is_visible())
                     # Its controls never leave its end, at every width (tables.css).
-                    controls = row.locator(SELECTORS["decision_controls"])
+                    controls = row.locator(self.css(SELECTORS["decision_controls"]))
                     self.assertGreater(controls.count(), 0)
                     self.assertEqual(controls.filter(visible=True).count(), controls.count())
                     # The row's steps are in its line beneath, drawn by the server.
-                    if not row.evaluate(_HELD_BENEATH, SELECTORS["decision_steps"]):
+                    if not row.evaluate(_HELD_BENEATH, self.css(SELECTORS["decision_steps"])):
                         continue
 
                     def steps_shown(row=row):
-                        return row.evaluate(_SHOWN_BENEATH, SELECTORS["decision_steps"])
+                        return row.evaluate(_SHOWN_BENEATH, self.css(SELECTORS["decision_steps"]))
 
                     self.assertFalse(steps_shown())
-                    row.locator(SELECTORS["row_toggle"]).click()
+                    row.locator(self.css(SELECTORS["row_toggle"])).click()
                     self.assertTrue(steps_shown())
-                    row.locator(SELECTORS["row_toggle"]).click()
+                    row.locator(self.css(SELECTORS["row_toggle"])).click()
                     self.assertFalse(steps_shown())
                     opened += 1
                 self.assertGreater(opened, 0)
@@ -327,7 +325,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], WIDTHS[-1]):
             with self.subTest(width=width):
                 self.open("action-items", width)
-                toggle = self.page.locator(SELECTORS["decision_family"]).first
+                toggle = self.page.locator(self.css(SELECTORS["decision_family"])).first
                 family = toggle.evaluate("(toggle) => toggle.closest('tr').id")
                 rows = self.page.locator(f'tr[data-folded="{family}"]')
                 self.assertGreater(rows.count(), 0)
@@ -416,7 +414,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                   return [edges(fact.getBoundingClientRect()), edges(fact.querySelector(label).getBoundingClientRect()),
                     [...words.getClientRects()].map(edges)];
                 }""",
-                    [SELECTORS["band_fact"], SELECTORS["band_label"], SELECTORS["fact_value"]],
+                    self.css([SELECTORS["band_fact"], SELECTORS["band_label"], SELECTORS["fact_value"]]),
                 )
                 self.assertGreater(len({top for top, _bottom in lines}), 1, "the value wraps")
                 self.assertGreaterEqual(min(top for top, _bottom in lines), fact[0])
@@ -458,8 +456,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (NARROWEST, *WIDTHS):
             with self.subTest(width=width):
                 self.open("calendar-probe", width)
-                self.assertTrue(self.page.locator(SELECTORS["one_line"]).is_visible())
-                self.assertEqual(self.page.evaluate(WRAPPED, SELECTORS["one_line"]), [])
+                self.assertTrue(self.page.locator(self.css(SELECTORS["one_line"])).is_visible())
+                self.assertEqual(self.page.evaluate(WRAPPED, self.css(SELECTORS["one_line"])), [])
 
     def test_a_chart_tab_shows_which_is_chosen_and_where_the_keyboard_is(self):
         """With no script, the chosen tab is drawn apart from the others and
@@ -485,8 +483,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         drawn = "(tab) => { const s = getComputedStyle(tab); return [s.borderColor, s.backgroundColor, s.color]; }"
         ring = "(tab) => getComputedStyle(tab).outlineStyle"
         self.open("chart-tabs-probe", WIDE)
-        tabs = self.page.locator(SELECTORS["chart_tab"])
-        panels = self.page.locator(SELECTORS["chart_panel"])
+        tabs = self.page.locator(self.css(SELECTORS["chart_tab"]))
+        panels = self.page.locator(self.css(SELECTORS["chart_panel"]))
 
         def chosen():
             looks = [tab.evaluate(drawn) for tab in tabs.all()]
@@ -527,31 +525,32 @@ class ComponentLayoutTests(LayoutBrowserTests):
             with self.subTest(width=width):
                 self.open("connections", width)
                 row = (
-                    self.page.locator(SELECTORS["row_ask"])
+                    self.page.locator(self.css(SELECTORS["row_ask"]))
                     .first.evaluate_handle("(ask) => ask.closest('tr')")
                     .as_element()
                 )
-                button = row.query_selector(SELECTORS["ask_button"])
+                button = row.query_selector(self.css(SELECTORS["ask_button"]))
                 opened = not button.is_visible()
                 if opened:
-                    row.query_selector(SELECTORS["row_toggle"]).click()
+                    row.query_selector(self.css(SELECTORS["row_toggle"])).click()
                     button = row.evaluate_handle(
-                        "(row, button) => row.nextElementSibling?.querySelector(button)", SELECTORS["ask_button"]
+                        "(row, button) => row.nextElementSibling?.querySelector(button)",
+                        self.css(SELECTORS["ask_button"]),
                     ).as_element()
                     self.assertTrue(
                         button and button.is_visible(), "the row's ask is on neither its row nor its open line"
                     )
-                control = button.evaluate_handle("(button, ask) => button.closest(ask)", SELECTORS["ask"])
+                control = button.evaluate_handle("(button, ask) => button.closest(ask)", self.css(SELECTORS["ask"]))
                 tall = row.bounding_box()["height"]
                 button.click()
                 self.page.wait_for_function("(control) => control.dataset.askState === 'failed'", arg=control)
                 self.assertLessEqual(row.bounding_box()["height"], tall + 1)
                 if not opened:
-                    row.query_selector(SELECTORS["row_toggle"]).click()
+                    row.query_selector(self.css(SELECTORS["row_toggle"])).click()
                 said = row.evaluate(
                     "(row, why) => { const shown = row.nextElementSibling?.querySelector(why);"
                     " return shown?.checkVisibility() ? shown.textContent : null; }",
-                    SELECTORS["ask_note"] if opened else SELECTORS["ask_why"],
+                    self.css(SELECTORS["ask_note"] if opened else SELECTORS["ask_why"]),
                 )
                 self.assertIsNotNone(said, "the open line says nothing of the ask")
                 self.assertIn(button.get_attribute("title"), said)
@@ -585,10 +584,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
             "example/ask": json.dumps(Standing(asks.DONE).as_json()),
         }
         self.open("ask-probe", WIDE)
-        button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+        button = self.page.locator(self.css(SELECTORS["row_ask"] + " [data-ask-button]"))
         self.assertIn("could not be read", button.get_attribute("title"))
         button.press("Enter")
-        self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="done"]')
+        self.page.wait_for_selector(self.css(SELECTORS["row_ask"] + '[data-ask-state="done"]'))
         self.assertEqual(button.get_attribute("title"), "Read the example again.")
 
     @with_script
@@ -615,7 +614,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], WIDE):
             with self.subTest(width=width):
                 self.open("ask-actions-probe", width)
-                button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+                button = self.page.locator(self.css(SELECTORS["row_ask"] + " [data-ask-button]"))
                 remove = self.page.get_by_role("link", name="Remove")
                 middles = [box["y"] + box["height"] / 2 for box in (button.bounding_box(), remove.bounding_box())]
                 self.assertLessEqual(abs(middles[0] - middles[1]), 1.5)
@@ -624,8 +623,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
                 tall = row.bounding_box()["height"]
                 button.press("Enter")
-                self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="failed"]')
-                self.assertTrue(self.page.locator(SELECTORS["ask_note"]).first.is_visible())
+                self.page.wait_for_selector(self.css(SELECTORS["row_ask"] + '[data-ask-state="failed"]'))
+                self.assertTrue(self.page.locator(self.css(SELECTORS["ask_note"])).first.is_visible())
                 self.assertLessEqual(row.bounding_box()["height"], tall + 1)
 
     def test_a_probe_that_throws_hides_no_other(self):
@@ -680,7 +679,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # A box that wraps each name, where the column of free text leaves for
         # the row's open line.
         self.open("word-before-a-name-probe", WIDE)
-        self.page.locator("main " + SELECTORS["row_toggle"]).click()
+        self.page.locator(self.css("main " + SELECTORS["row_toggle"])).click()
         lines = self.page.evaluate(
             """() => [
               // The line under the row's name, and the free text on its open line.
@@ -748,7 +747,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.open(next(iter(PAGES)), WIDE)
         self.page.evaluate(_A_SHARE_ROW)
         # The page's own shot, which drops the style WebKit adds to take one.
-        shot = self.page.screenshot(clip=self.page.locator(SELECTORS["share_bar"]).first.bounding_box())
+        shot = self.page.screenshot(clip=self.page.locator(self.css(SELECTORS["share_bar"])).first.bounding_box())
         fill = self.page.evaluate(_FILL_ROWS, base64.b64encode(shot).decode())
         self.assertGreater(fill["rows"], 2)
         self.assertGreaterEqual(fill["filled"], fill["rows"] - 1, fill)
@@ -757,14 +756,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.open("dashboard", 1280)
         for key in ("highlights", "patterns"):
             with self.subTest(cards=key):
-                self.assertGreater(max(len(row) for row in self.card_rows(key)), 1)
+                self.assertGreater(max(len(row) for row in self.card_rows(SELECTORS[key])), 1)
 
     def test_the_dashboard_stacks_its_cards_on_a_phone(self):
         for width in (NARROWEST, PHONE_SCREEN[0]):
             self.open("dashboard", width)
             for key in ("highlights", "patterns"):
                 with self.subTest(cards=key, width=width):
-                    rows = self.card_rows(key)
+                    rows = self.card_rows(SELECTORS[key])
                     self.assertGreater(len(rows), 1)
                     self.assertEqual({len(row) for row in rows}, {1})
                     self.assertEqual({round(row[0]["left"]) for row in rows}, {round(rows[0][0]["left"])})
@@ -822,7 +821,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         reader's own doing; nothing else moves, at any width, so the page
         stays under `CLS_LIMIT`."""
 
-        read = [SELECTORS["vendored"], CLS_LIMIT]
+        read = self.css([SELECTORS["vendored"], CLS_LIMIT])
         folds = "main " + SELECTORS["row_toggle"] + "[data-fold-toggle]"
         rows = "main " + SELECTORS["row_toggle"] + ":not([data-fold-toggle])"
         for name in ("action-items", "containers"):
@@ -831,14 +830,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.open(name, width)
                     self.settle()
                     for toggles in (folds, rows):
-                        shown = self.page.locator(toggles).evaluate_all(
+                        shown = self.page.locator(self.css(toggles)).evaluate_all(
                             "(all) => all.map((toggle, place) => toggle.checkVisibility() ? place : -1)"
                             ".filter((place) => place >= 0)"
                         )
                         for place in shown:
-                            self.page.locator(toggles).nth(place).click()
+                            self.page.locator(self.css(toggles)).nth(place).click()
                         self.settle()
-                    self.assertTrue(self.page.locator(rows + '[aria-expanded="true"]').count())
+                    self.assertTrue(self.page.locator(self.css(rows + '[aria-expanded="true"]')).count())
                     self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, read), [])
 
     @with_script
@@ -879,7 +878,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             route.fallback()
         self.page.evaluate(FONTS_READY)
         self.settle()
-        self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, [SELECTORS["vendored"], 0]), [])
+        self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, self.css([SELECTORS["vendored"], 0])), [])
 
     @with_script
     def test_a_fragment_that_is_not_percent_encoding_breaks_no_table(self):
@@ -888,7 +887,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         self.page.goto(f"{ORIGIN}/projects/#%", wait_until="load")
         ready = self.page.eval_on_selector_all(
-            SELECTORS["selectable_table"], "(tables) => tables.map((table) => table.dataset.selectionReady)"
+            self.css(SELECTORS["selectable_table"]), "(tables) => tables.map((table) => table.dataset.selectionReady)"
         )
         self.kept_the_policy()
         self.assertTrue(ready)
@@ -906,18 +905,18 @@ class ComponentLayoutTests(LayoutBrowserTests):
             for how in ("toggle", "class"):
                 with self.subTest(width=width, opened_by=how):
                     self.open("action-items", width)
-                    self.page.locator(SELECTORS["decision_family"]).evaluate_all(PRESS_EVERY_SHOWN)
+                    self.page.locator(self.css(SELECTORS["decision_family"])).evaluate_all(PRESS_EVERY_SHOWN)
                     self.page.evaluate(SETTLE)
-                    columns = [SELECTORS["queue_table"], SELECTORS["queue_act"]]
+                    columns = self.css([SELECTORS["queue_table"], SELECTORS["queue_act"]])
                     closed = self.page.evaluate(_QUEUE_COLUMNS, columns)
                     # In a narrow box the buttons stand beneath the words and their column leaves.
                     self.assertTrue(closed["acts"] or closed["narrow"])
                     if how == "toggle":
-                        self.page.locator(toggles).evaluate_all(PRESS_EVERY_SHOWN)
-                        self.assertTrue(self.page.locator(toggles + '[aria-expanded="true"]').count())
+                        self.page.locator(self.css(toggles)).evaluate_all(PRESS_EVERY_SHOWN)
+                        self.assertTrue(self.page.locator(self.css(toggles + '[aria-expanded="true"]')).count())
                     else:
-                        self.assertTrue(self.page.evaluate(_OPEN_BY_CLASS, toggles))
-                    self.page.evaluate(_CHANGE_IN_THE_QUEUE, SELECTORS["queue_what"])
+                        self.assertTrue(self.page.evaluate(_OPEN_BY_CLASS, self.css(toggles)))
+                    self.page.evaluate(_CHANGE_IN_THE_QUEUE, self.css(SELECTORS["queue_what"]))
                     self.page.evaluate(SETTLE)
                     self.assertEqual(self.page.evaluate(_QUEUE_COLUMNS, columns), closed)
 
@@ -930,8 +929,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in (PHONE_SCREEN[0], WIDE):
             with self.subTest(width=width):
                 self.open("containers", width)
-                self.assertGreaterEqual(self.page.evaluate(_LAND_ON_A_ROW, SELECTORS["table_scroll"]), 0)
-                above = self.page.evaluate(_FOCUS_THE_ROW_ABOVE, [SELECTORS["table_scroll"], SELECTORS["target"]])
+                self.assertGreaterEqual(self.page.evaluate(_LAND_ON_A_ROW, self.css(SELECTORS["table_scroll"])), 0)
+                above = self.page.evaluate(
+                    _FOCUS_THE_ROW_ABOVE, self.css([SELECTORS["table_scroll"], SELECTORS["target"]])
+                )
                 self.assertGreaterEqual(above, 0)
 
     @with_script
@@ -949,7 +950,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             ),
         }
         self.open("headerless-probe", WIDE)
-        self.assertEqual(self.page.evaluate(_STUCK_HEADING_TOP, SELECTORS["table_scroll"]), 0)
+        self.assertEqual(self.page.evaluate(_STUCK_HEADING_TOP, self.css(SELECTORS["table_scroll"])), 0)
 
     @with_script
     def test_any_table_sorts_by_a_heading(self):
@@ -963,15 +964,15 @@ class ComponentLayoutTests(LayoutBrowserTests):
             ".map((body) => [...body.querySelectorAll(':scope > tr')]"
             ".filter((row) => !row.querySelector('[colspan]'))"
             ".map((row) => row.children[0].textContent.trim().replace(/\\s+/g, ' ')))",
-            SELECTORS["table_scroll"],
+            self.css(SELECTORS["table_scroll"]),
         )
-        up = self.page.evaluate(SORT_BY, [SELECTORS["table_scroll"], 0])
+        up = self.page.evaluate(SORT_BY, self.css([SELECTORS["table_scroll"], 0]))
         self.assertEqual(up["sort"], "ascending")
         self.assertEqual(up["values"], [sorted(group, key=str.lower) for group in came])
-        down = self.page.evaluate(SORT_BY, [SELECTORS["table_scroll"], 0])
+        down = self.page.evaluate(SORT_BY, self.css([SELECTORS["table_scroll"], 0]))
         self.assertEqual(down["sort"], "descending")
         self.assertEqual(down["values"], [sorted(group, key=str.lower, reverse=True) for group in came])
-        back = self.page.evaluate(SORT_BY, [SELECTORS["table_scroll"], 0])
+        back = self.page.evaluate(SORT_BY, self.css([SELECTORS["table_scroll"], 0]))
         self.assertEqual(back["sort"], "none")
         self.assertEqual(back["values"], came)
 
@@ -985,8 +986,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         for width in WIDTHS:
             with self.subTest(width=width):
                 self.open("dashboard", width)
-                self.page.locator(SELECTORS["page_note"]).wait_for(state="visible")
-                self.assertEqual(self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"]), [])
+                self.page.locator(self.css(SELECTORS["page_note"])).wait_for(state="visible")
+                self.assertEqual(self.page.evaluate(OVERLAPPING_TEXT, self.css(SELECTORS["floating"])), [])
 
     @with_script
     def test_a_name_a_cell_cuts_is_drawn_whole_on_its_line_where_its_cell_has_room(self):
@@ -1044,7 +1045,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.start(java_script_enabled=True, device_scale_factor=scale)
                 self.open("name-room-probe", WIDE)
                 self.page.evaluate(SETTLE)
-                drawn = self.page.evaluate(short, [SELECTORS["name_box"], SELECTORS["part"]])
+                drawn = self.page.evaluate(short, self.css([SELECTORS["name_box"], SELECTORS["part"]]))
                 self.assertGreater(drawn["read"], 0)
                 self.assertEqual(drawn["found"], [])
 
@@ -1066,7 +1067,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # every sentence now asks for its whole line.
         self.page.evaluate("() => { document.querySelector('main table').style.whiteSpace = 'nowrap'; }")
         self.page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))")
-        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"])["found"], [])
+        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, self.css(SELECTORS["table_scroll"]))["found"], [])
         self.assertEqual(self.page.evaluate(COLUMNS_SHOWN), shown)
 
     @with_script

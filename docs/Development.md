@@ -1083,9 +1083,12 @@ and markup it must pass (`clear`), and one test walks them all in each engine
 (`hq/platform/core/tests/browser/plants.py`), so a check needs no test of its
 own.
 
-A check selects markup only through `SELECTORS`, and
-`hq/platform/core/tests/test_browser_selectors.py` fails on a selector no
-template renders.
+A check selects markup only through `SELECTORS`, handing a selector to the
+page through `css` (`hq/platform/core/tests/browser/selectors.py`), which
+fails where the selector matches nothing on a page the check asks it of,
+naming the part it belongs to and the fix. A selector some pages lack (one a
+sweep reads on every page) is declared `optional`, and is then held only on
+its part's catalog entry.
 
 A browser test that fails only sometimes is a race a reader can meet.
 Reproduce it by taking the reader's steps back to back, which opens the race

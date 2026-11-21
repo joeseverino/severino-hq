@@ -55,7 +55,7 @@ from hq.platform.core.tests.browser.probes.settle import (
 )
 from hq.platform.core.tests.browser.probes.tables import PRESS, TABLE_LAYOUT, UNPRESS, tables_read
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
-from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.selectors import SELECTORS, css
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.shards import share, sweeps
 from hq.platform.core.tests.browser.shots import shoot_page
@@ -178,7 +178,7 @@ def unfold(page) -> None:
     """Opens the Filters control of a filter bar that folds its choices
     behind it, so they can be pressed as a reader presses them there."""
 
-    fold = page.locator(SELECTORS["filter_fold"])
+    fold = page.locator(css(page, SELECTORS["filter_fold"]))
     if fold.count() and fold.is_visible():
         fold.click()
 
@@ -633,6 +633,8 @@ class BrowserGate(SimpleTestCase):
             self.context.add_init_script(DEAF_WHILE_PROBED)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
+        # The selectors a page has held, which no page is asked again (`css`).
+        self.held_here: set[str] = set()
         # The sheets a test laid over the page (``lay_css``), which a load drops.
         self.laid: list[str] = []
         self.page.on("load", lambda _page: self.laid.clear())
@@ -671,6 +673,18 @@ class BrowserGate(SimpleTestCase):
 
     def where_and_width(self):
         return f"{self.where()} at {self.page.viewport_size['width']}px"
+
+    def css(self, value):
+        """``value`` as the page reads it, each selector in it held to the
+        page it is asked of (`selectors.css`): a catalog entry's page draws
+        its part."""
+
+        return css(
+            self.page,
+            value,
+            drawn=lambda: catalog.part_of(urlsplit(self.page.url).path.strip("/")),
+            seen=self.held_here,
+        )
 
     def refusals_so_far(self):
         """Every policy refusal, console error and uncaught script error the
@@ -729,7 +743,7 @@ class BrowserGate(SimpleTestCase):
         sources, args = zip(*probes, strict=True)
         return [
             (returned, value, ms / 1000)
-            for returned, value, ms in self.page.evaluate(hushed(_in_one_trip(sources)), list(args))
+            for returned, value, ms in self.page.evaluate(hushed(_in_one_trip(sources)), self.css(args))
         ]
 
     def outcomes(self, probes):
@@ -1011,7 +1025,7 @@ class BrowserGate(SimpleTestCase):
         with the folds open, so every row is read open."""
 
         loaded = self.page.viewport_size
-        layout = [SELECTORS["table_scroll"], viewport_queries(stylesheet())]
+        layout = self.css([SELECTORS["table_scroll"], viewport_queries(stylesheet())])
         probes = table_probes()
         sources, args = zip(*probes.values(), strict=True)
         script = tables_read(hushed(_in_one_trip(sources)))
@@ -1051,7 +1065,7 @@ class BrowserGate(SimpleTestCase):
             for width in [NARROWEST, *(width for before, width in pairwise(widths) if shapes[width] != shapes[before])]:
                 self.page.set_viewport_size(viewport(width))
                 states, moved = self.page.evaluate(
-                    script, [layout[0], state, rows, SELECTORS["own_records"], list(args)]
+                    script, self.css([layout[0], state, rows, SELECTORS["own_records"], args])
                 )
                 for said_state, outcomes in states:
                     where = f"at {width}px" + (f", {said_state}" if said_state else "")
@@ -1060,7 +1074,7 @@ class BrowserGate(SimpleTestCase):
                         take(check, findings_of(check, returned, value), where)
                 take("opening rows moves", moved, f"at {width}px")
 
-        folds = self.page.evaluate_handle(PRESS, SELECTORS["row_fold"])
+        folds = self.page.evaluate_handle(PRESS, self.css(SELECTORS["row_fold"]))
         if self.page.evaluate("(pressed) => pressed.length", folds):
             sweep("its folds open", SELECTORS["row_opener"])
             folds.evaluate(UNPRESS)
@@ -1080,7 +1094,9 @@ class BrowserGate(SimpleTestCase):
         reads, before = {}, []
         for palette in ("light", "dark"):
             before.append(self.in_scheme(palette))
-            reads[palette] = self.page.evaluate(FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
+            reads[palette] = self.page.evaluate(
+                FILL_STEPS, self.css([SELECTORS["contrast_scope"], SELECTORS["vendored"]])
+            )
         # A box only one reading saw came or went between them.
         both = {str(at) for at in reads["light"]["seen"]} & {str(at) for at in reads["dark"]["seen"]}
         steps = {
