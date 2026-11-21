@@ -54,7 +54,7 @@ from .moments import duration
 from .record_errors import Sentence
 from .refusal_codes import Code
 from .security import Capability, Principal
-from .tone import Tone
+from .tone import Tone, Toned
 from .ui import ended
 lazy from .adoption import manages_through, observes_only
 lazy from .credential_sight import fed_kinds
@@ -202,6 +202,15 @@ CONTROLLER_NAMED = "controller"
 PLAYBOOK_WORKER_NAMED = "playbook worker"
 
 
+class WorkerState(Toned):
+    """Whether a worker that pulls HQ's work arrives, as its one state says it."""
+
+    ONLINE = "online", Tone.GOOD
+    SILENT = "silent", Tone.ATTENTION
+    # Never run is known to be neither online nor silent.
+    NOT_CONFIGURED = "not configured", Tone.NEUTRAL
+
+
 @dataclass(frozen=True, slots=True)
 class WorkerStanding:
     """When a worker that pulls HQ's work (the controller, or HQ's playbook
@@ -219,13 +228,10 @@ class WorkerStanding:
         return self.seen_at is not None
 
     @property
-    def tone(self) -> str:
-        """Good while it arrives, attention once it has gone quiet, neutral
-        where it has never run, which is known to be neither."""
-
+    def state(self) -> WorkerState:
         if self.silent:
-            return Tone.ATTENTION
-        return Tone.GOOD if self.known else Tone.NEUTRAL
+            return WorkerState.SILENT
+        return WorkerState.ONLINE if self.known else WorkerState.NOT_CONFIGURED
 
     @property
     def takes_reads(self) -> bool:

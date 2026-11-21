@@ -9,4 +9,4 @@ rule: green only while it arrives, the attention color once it has gone quiet,
 and gray where it has never run, which is not known to be either.
 {% endcomment %}
 {% url 'control_plane:controller' as address %}
-{% fact "Controller" icon="activity" url=address %}{% if not controller.known %}{% status "Not configured" tone=controller.tone dot=True ink="context" %}{% elif controller.silent %}{% status "Silent" tone=controller.tone dot=True ink="context" %}{% else %}{% status "Arriving" tone=controller.tone dot=True ink="context" %}{% endif %}{% detail %}{% if controller.known %}<small>{% include "partials/_reading_age.html" with at=controller.seen_at only %}</small>{% endif %}{% endfact %}
+{% fact "Controller" icon="activity" url=address %}{% status controller.state dot=True ink="context" %}{% detail %}{% if controller.known %}<small>{% include "partials/_reading_age.html" with at=controller.seen_at only %}</small>{% endif %}{% endfact %}
