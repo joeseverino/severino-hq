@@ -22,6 +22,7 @@ lazy from .freshness import last_read
 if TYPE_CHECKING:
     from hq.platform.core.template_parts import Part
 
+    from .asks import Ask
     from .entity_links import EntityLink
     from .freshness import Freshness
     from .pages import PageAction, RowMark, RowOrder
@@ -218,6 +219,9 @@ class Cell:
     fold: bool = False
     # What follows it on its line, then its lines beneath, each one value.
     parts: tuple[Cell, ...] = ()
+    # Its parts run as a line list draws them (``{% line_list %}``, dots):
+    # the first few size the column, the rest show as far as the line holds.
+    fit: bool = False
     lines: tuple[Cell, ...] = ()
     # A field of the page's form the reader fills in, standing in for a value.
     field: Any = None
@@ -369,6 +373,8 @@ class Row:
     # ``WriteGap``), and the reader's own way to set it aside, last of them.
     gap: Any = None
     put_away: PageAction | None = None
+    # Work a press asks for now, each after its actions (``partials/_ask.html``).
+    asks: tuple[Ask, ...] = ()
     # It asks to be weighed first, washed in the attention tone: a change
     # that lets a record do more.
     attention: bool = False
@@ -381,7 +387,7 @@ class Row:
     def controls(self) -> bool:
         """Whether it ends with a cell of controls."""
 
-        return bool(self.actions or self.mark or self.order or self.gap or self.put_away)
+        return bool(self.actions or self.mark or self.order or self.gap or self.put_away or self.asks)
 
 
 @dataclass(frozen=True, slots=True)

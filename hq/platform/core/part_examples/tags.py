@@ -17,6 +17,7 @@ lazy from hq.domains.jobs.models import JobState
 lazy from hq.platform.application.adoption import ONLY_READS, WriteGap
 lazy from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
 lazy from hq.platform.application.approvals import DECISIONS, NO_OFFER, Offer, _decision_link
+lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capability_policy import Column, Group, PolicyCell, Row, Rule
 lazy from hq.platform.application.contracts import Effect
 lazy from hq.platform.application.credential_mint import CredentialFix
@@ -734,8 +735,8 @@ def _every_kind() -> DataTable:
     shows, and the count of a fold's rest across the row; an entity named
     as code, a state drawn as ``status_pill`` draws it (a chip, an icon), a
     tip and a title, blocks kept for the open line, a declared part, a row's
-    id, data, mark and order, a blank cell, a total in the foot, and a
-    region of its own height."""
+    id, data, mark, order and ask, a run of parts as far as its line holds,
+    a blank cell, a total in the foot, and a region of its own height."""
 
     from hq.platform.application import tables
 
@@ -766,7 +767,8 @@ def _every_kind() -> DataTable:
     )
     rest = tables.Row((Cell("1 more change", "/example/rest/", name=True),), folded="example-fold", across=True)
     blank = row("example-host-03")
-    blank = replace(blank, cells=(*blank.cells[:-1], Cell(blank=True)))
+    run = tuple(Cell(status=tables.StatusMark(name, chip=True)) for name in ("Debian", "Caddy", "Tailscale", "SQLite"))
+    blank = replace(blank, cells=(blank.cells[0], Cell(fit=True, parts=run), *blank.cells[2:-1], Cell(blank=True)))
     from hq.platform.core.included_parts import READING_AGE
 
     marked = tables.Row(
@@ -800,6 +802,7 @@ def _every_kind() -> DataTable:
         data={"example": "host-04"},
         mark=RowMark("/example/pin/", True, "example-host-04", "favorites"),
         order=RowOrder("/example/move/", "example-host-04", True, False),
+        asks=(Ask("Refresh", "/example/read/", compact=True),),
     )
     return DataTable(
         "Example kinds",

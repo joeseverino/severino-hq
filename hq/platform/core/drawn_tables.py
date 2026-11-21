@@ -11,6 +11,7 @@ from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, column_kind
 from hq.platform.core.held_values import format_html
+from hq.platform.core.templatetags.list_tags import LINE_LEAD
 from hq.platform.core.templatetags.table_tags import LINE_FRAME, table_heading
 from hq.platform.core.templatetags.value_tags import money, when_text
 from hq.platform.core.templatetags.write_tags import row_editor
@@ -249,7 +250,9 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         editor = row_editor(
             context, asked.form, asked.key, label=asked.label, action=asked.action, verb=asked.verb, **asked.initial
         )
-    parts = [part for part in cell.parts if part.shows not in _OFF_LINE]
+    # A run's parts past its lead ask its column for nothing (``line_list``).
+    parts = [part for part in cell.parts[: LINE_LEAD if cell.fit else None] if part.shows not in _OFF_LINE]
+    runs = cell.fit and len(cell.parts) > LINE_LEAD
     on_line = [_length(cell), *(_length(part, after=True) for part in parts)]
     line = sum(on_line) + (len(str(cell.count)) if cell.count is not None else 0) + cell.fold
     lines = [
@@ -258,7 +261,7 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         if each.shows not in _OFF_LINE
     ]
     tops = [bool(cell.tone or (cell.status and cell.status.pill))] + [False] * (
-        len(cell.parts) + bool(cell.lines) + (cell.count is not None) + cell.fold
+        (bool(cell.parts) if cell.fit else len(cell.parts)) + bool(cell.lines) + (cell.count is not None) + cell.fold
     )
     facts = CellFacts(
         says_nothing=cell.says_nothing,
@@ -268,7 +271,8 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         moved=[Moved("editor", None, editor)]
         if editor and editor["open"]
         else [] + [Moved("below", block.label or None, block) for block in cell.below],
-        holds={SHOWN[part.shows] for part in (cell, *cell.parts, *cell.lines) if part.shows in ("more", "narrow-more")},
+        holds={SHOWN[part.shows] for part in (cell, *cell.parts, *cell.lines) if part.shows in ("more", "narrow-more")}
+        | ({"line-rest"} if runs else set()),
         names=int(cell.name),
         row_header=cell.header,
         parted=any(part.role for part in (*cell.parts, *cell.lines)),
