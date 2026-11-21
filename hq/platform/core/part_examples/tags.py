@@ -21,6 +21,7 @@ lazy from hq.platform.application.capability_policy import Column, Group, Policy
 lazy from hq.platform.application.contracts import Effect
 lazy from hq.platform.application.credential_mint import CredentialFix
 lazy from hq.platform.application.doors import NOBODY, Attribution
+lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_steps import Run
 lazy from hq.platform.application.pages import PageAction, RowMark, RowOrder
 lazy from hq.platform.application.payload_words import ChangeRow
@@ -730,10 +731,11 @@ def _every_kind() -> DataTable:
     """A table of every kind of cell: a group, a row that folds others under
     it with its count and a muted line, a readout, a cut line, a moment, an
     amount, a state, free text, a part only a narrow box or the open line
-    shows, and the count of a fold's rest across the row; a state drawn as
-    ``status_pill`` draws it (a chip, an icon), a tip and a title, blocks
-    kept for the open line, a declared part, a row's id, data, mark and
-    order, a total in the foot, and a region of its own height."""
+    shows, and the count of a fold's rest across the row; an entity named
+    as code, a state drawn as ``status_pill`` draws it (a chip, an icon), a
+    tip and a title, blocks kept for the open line, a declared part, a row's
+    id, data, mark and order, a total in the foot, and a region of its own
+    height."""
 
     from hq.platform.application import tables
 
@@ -777,7 +779,11 @@ def _every_kind() -> DataTable:
                     tables.Below("Also sees", (Cell("example-zone"), Cell("example-bucket"))),
                 ),
             ),
-            Cell("example.com", readout=True, tip="Locked to an example digest"),
+            replace(
+                Cell.of(EntityLink("example.com", "/example/zone/", kind="zone", kind_label="zone")),
+                readout=True,
+                tip="Locked to an example digest",
+            ),
             Cell(piece=tables.Piece(READING_AGE, {"at": DRAWN_AT - timedelta(days=1)}, words="Last read a day ago")),
             Cell(amount=Decimal(3)),
             Cell(status=tables.StatusMark("Update", tone="attention", pill=False, icon="deploy", tip="1.4.2")),

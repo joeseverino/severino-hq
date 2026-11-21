@@ -13,14 +13,17 @@ from django.db import models
 from django.db.models import Model
 
 from hq.platform.core.table_layout import SAYS_NOTHING, leaving_order
+lazy from hq.platform.core.included_parts import READING_AGE
 lazy from hq.platform.core.templatetags import status_tags, table_tags
 
 from .display_words import display
+lazy from .freshness import last_read
 
 if TYPE_CHECKING:
     from hq.platform.core.template_parts import Part
 
     from .entity_links import EntityLink
+    from .freshness import Freshness
     from .pages import PageAction, RowMark, RowOrder
     from .tone import Toned
     from .work_runs import RunEvidence
@@ -182,6 +185,8 @@ class Cell:
     tone: str = ""
     # In bold, the name its row is read by.
     name: bool = False
+    # It heads its row (``th scope="row"``), its label in the heading's voice.
+    header: bool = False
     role: Role = ""
     # Its words as a readout draws them, an identifier in code; or as a line
     # its box cuts, read whole on a press (``{% cell_line %}``).
@@ -247,6 +252,18 @@ class Cell:
 
         return cls(state.label, tone=str(state.tone))
 
+    @classmethod
+    def reading(
+        cls, *, reading: Freshness | None = None, at: datetime | None = None, unread: str = "", muted: bool = False
+    ) -> Cell:
+        """A reading's age as every page words it (``partials/_reading_age.html``):
+        of its ``Freshness``, of the moment ``at`` it was taken, else why there is none."""
+
+        taken = reading.observed_at if reading is not None else at
+        words = last_read(taken) if taken else (reading.label if reading is not None else unread or "No reading yet")
+        context = {"reading": reading, "at": at, "unread": unread}
+        return cls(piece=Piece(READING_AGE, context, words=words), muted=muted)
+
     @property
     def says_nothing(self) -> bool:
         """Whether it shows nothing: no value, nothing after it, nothing beneath."""
@@ -298,6 +315,8 @@ class TableColumn:
     drop: int = 0
     # Its one plain value in a row, for a table drawn whole (``DataTable.of``).
     cell: Callable[[Any], Cell] | None = None
+    # Its heading unseen, its words still said to a screen reader.
+    hidden: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "kind", column_kind(self.kind, self.css, otherwise=""))
@@ -333,6 +352,13 @@ class Row:
     # reader's order, first of its controls (``{% row_actions %}``).
     mark: RowMark | None = None
     order: RowOrder | None = None
+    # What stands for its actions where the connection cannot make them (a
+    # ``WriteGap``), and the reader's own way to set it aside, last of them.
+    gap: Any = None
+    put_away: PageAction | None = None
+    # It asks to be weighed first, washed in the attention tone: a change
+    # that lets a record do more.
+    attention: bool = False
 
     def __post_init__(self) -> None:
         if not all(_DATA_NAME.fullmatch(name) for name in self.data):
@@ -342,7 +368,7 @@ class Row:
     def controls(self) -> bool:
         """Whether it ends with a cell of controls."""
 
-        return bool(self.actions or self.mark or self.order)
+        return bool(self.actions or self.mark or self.order or self.gap or self.put_away)
 
 
 @dataclass(frozen=True, slots=True)

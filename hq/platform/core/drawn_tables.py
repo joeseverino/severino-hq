@@ -128,7 +128,7 @@ def _headings(table: DataTable) -> list[tuple[dict[str, Any], CellFacts]]:
                     "kind": column.kind,
                     "css": column.css,
                     "sort": column.sort,
-                    "hidden": not column.label,
+                    "hidden": column.hidden or not column.label,
                 },
                 CellFacts(
                     classes=tuple(column.css.split()), kind=column_kind(column.kind, column.css), drop=column.drop
@@ -196,7 +196,7 @@ def _mark(row: DrawnRow, width: int) -> None:
             cell.facts.marks.insert(0, f' colspan="{width}"')
         # The tick-box's and the actions' partials write their own class.
         own = "select-column" if cell is row.select else "row-actions" if cell is row.actions else ""
-        cell.attributes = _attributes(cell.facts, cell.role, own)
+        cell.attributes = _attributes(cell.facts, cell.role, own, cell.cell.sort)
         cell.box, cell.toggle, cell.named = cell.facts.box, cell.facts.toggle, cell.facts.named
     attributes = [*row.facts.marks]
     if row.row.id:
@@ -209,8 +209,10 @@ def _mark(row: DrawnRow, width: int) -> None:
         attributes.append(format_html(' data-folded="{}"', row.row.folded))
     if row.row.emphasized:
         attributes.append(" data-emphasized")
-    if row.facts.added:
-        attributes.insert(0, format_html(' class="{}"', " ".join(row.facts.added)))
+    if row.row.attention:
+        attributes.append(" data-attention")
+    if classes := [*(["tone-attention"] if row.row.attention else []), *row.facts.added]:
+        attributes.insert(0, format_html(' class="{}"', " ".join(classes)))
     row.attributes = mark_safe("".join(attributes))  # noqa: S308 - each piece escaped above or the layout's own
     if row.facts.detail:
         row.detail, blocks, entries = row.facts.detail
@@ -218,12 +220,14 @@ def _mark(row: DrawnRow, width: int) -> None:
         row.entries = [moved.content for moved in entries if isinstance(moved.content, Below)]
 
 
-def _attributes(facts: CellFacts, role: str, own: str = "") -> SafeString:
+def _attributes(facts: CellFacts, role: str, own: str = "", sort: str = "") -> SafeString:
     classes = [name for name in (*facts.classes, *facts.added) if name != own]
     return format_html(
-        "{}{}{}",
+        "{}{}{}{}{}",
+        ' scope="row"' if facts.row_header else "",
         format_html(' class="{}"', " ".join(classes)) if classes else "",
         format_html(' data-cell="{}"', role) if role else "",
+        format_html(' data-sort="{}"', sort) if sort else "",
         mark_safe("".join(facts.marks)),  # noqa: S308 - the layout's own attributes
     )
 
@@ -258,6 +262,7 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         else [] + [Moved("below", block.label or None, block) for block in cell.below],
         holds={SHOWN[part.shows] for part in (cell, *cell.parts, *cell.lines) if part.shows in ("more", "narrow-more")},
         names=int(cell.name),
+        row_header=cell.header,
         parted=any(part.role for part in (*cell.parts, *cell.lines)),
         toggled=cell.fold,
         folds=cell.fold,
