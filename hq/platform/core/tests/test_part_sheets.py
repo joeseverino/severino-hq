@@ -16,6 +16,7 @@ from django.test import SimpleTestCase, tag
 
 from hq.platform.core.hand_drawn import Source
 from hq.platform.core.template_contract import FRAMES, parts
+from hq.platform.core.template_parts import Part
 from hq.platform.core.tests.css_usage import rules_naming
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -101,6 +102,28 @@ def one_place_rules(templates: dict[str, str], modules: dict[str, str], sheets: 
         classes |= {word: label for word in part.owned() if not word.endswith("*")}
     faults += [f"{path}:{line}  {what}" for path, line, what in rules_naming(classes, sheets, frozenset(shared))]
     return faults
+
+
+class PlacesTests(SimpleTestCase):
+    def test_a_part_is_placed_on_the_pages_that_draw_it_through_every_partial_between(self) -> None:
+        templates = {
+            "example/page.html": '{% extends "page.html" %}{% include "partials/_example_wrap.html" %}',
+            "partials/_example_wrap.html": '{% include "partials/_example.html" %}',
+            "partials/_example.html": "<p>A</p>",
+            "base.html": '{% include "partials/_example_chrome.html" %}',
+            "partials/_example_chrome.html": "<p>B</p>",
+            "partials/_example_fragment.html": "<p>C</p>",
+            "page.html": "",
+        }
+        modules = {"hq/domains/example/views.py": 'template_name = "partials/_example_fragment.html"'}
+        examples = [
+            Part(name="", partial=f"partials/_example{suffix}.html", about="An example.")
+            for suffix in ("", "_chrome", "_fragment")
+        ]
+        places = _places(templates, modules, examples)
+        self.assertEqual(places("partials/_example.html"), {"example/page.html"})
+        self.assertEqual(places("partials/_example_chrome.html"), {_EVERY})
+        self.assertEqual(places("partials/_example_fragment.html"), {"hq/domains/example/views.py"})
 
 
 @tag("source", "tree")

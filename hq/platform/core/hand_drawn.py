@@ -617,8 +617,6 @@ SHAPES = (
             "partials/_dropzone.html": "the dropzone part, the files its script lists as they are chosen",
             "partials/_page_navigation.html": "the page's section navigation",
             # Held for the one-place CSS wave, which moves each onto the list part.
-            "partials/_calendar_sources.html": "held for the one-place CSS wave",
-            "projects/_repository_postures.html": "held for the one-place CSS wave",
         },
     ),
     Shape(

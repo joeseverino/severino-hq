@@ -45,11 +45,3 @@ hide = true
 dir = "controller"
 usage = 'arg "[linters]" help="Linters to count, comma-separated, as --enable-only takes them (nilerr,gocritic); the configured set without"'
 run = '''golangci-lint run --issues-exit-code=0 --output.text.path=/dev/null ${usage_linters:+--enable-only="${usage_linters}"} ./...'''
-
-# tools/audit_hand_drawn.py reads the sheets through audit:css-usage's rule reader.
-["audit:hand-drawn"]
-extends = "audit"
-depends = ["setup:lint-tools", "setup:sandbox"]
-description = "The rules HQ's stylesheets keep for a part only one page draws, with the shared primitive that should draw it, its count and each rule as file:line; reach for it before and after a UI wave, read-only"
-hide = true
-run = "uv run python -m tools.audit_hand_drawn"
