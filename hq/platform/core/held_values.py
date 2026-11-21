@@ -33,6 +33,7 @@ from django.utils.html import (
 )
 from django.utils.safestring import SafeString, mark_safe
 
+lazy from hq.platform.core.hand_drawn import UNBOXED
 lazy from hq.platform.core.templatetags.line_breaks import breakable
 
 # Elements whose text is never a token: a span inside one is not markup, is
@@ -43,6 +44,8 @@ PLAIN_TEXT = {"title", "option", "textarea", "script", "style", "svg", "time"}
 _TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)")
 # The marks a sentence puts straight after a value.
 _MARK = re.compile(r"[.,;:!?)\]]+")
+# The name of a value's last filter, which says whether it is drawn as a box.
+_LAST_FILTER = re.compile(r"\|(\w+)\b[^|]*$")
 _EXTENDS = re.compile(r"""extends\s+["']([^"']+)["']""")
 # A format string's placeholder, by position or by name.
 _PLACEHOLDER = re.compile(r"\{(\w*)\}")
@@ -227,7 +230,8 @@ def _read(source: str, inherited: Callable[[], frozenset[str]]) -> tuple[str, fr
 def _hold(contents: str, tokens, index: int, source: str) -> str:
     following = tokens[index + 1] if index + 1 < len(tokens) else None
     mark = following and following.token_type is TokenType.TEXT and _MARK.match(following.contents)
-    if not mark:
+    last = _LAST_FILTER.search(contents)
+    if not mark or (last and last[1] in UNBOXED):
         return f"{{{{ {contents}|breakable }}}}"
     # The mark moves into the hold: the next token's text starts after it.
     start, end = following.position

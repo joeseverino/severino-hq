@@ -311,7 +311,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `open-comment` | A comment left open on its line, which Django prints on the page. | {# #} closed on its line, or `{% comment %}` for a longer note |
 | `page-title` | A page title that is empty, or names the site, which the layout appends after it. | `{% block title %}` naming the page alone |
 | `dollar-amount` | A dollar sign before a value, which writes a negative amount as "$-5.00". | {{ amount\|money }} |
-| `stranded-mark` | A mark written after a held value, which has no room left on its line, so the mark starts the next alone. | the mark through the hold: \|breakable:".", \|breakable:forloop for a list's commas, `{% entity link mark="," %}`; a run of code chips takes no commas |
+| `stranded-mark` | A mark written after a value's tag or branch, which has no room left on its line, so it starts the next alone. | the mark straight after the value ({{ host }}.), or through its hold: \|breakable:forloop for a list's commas, `{% entity link mark="," %}`; a run of code chips takes no commas |
 | `command-url` | A command's address built by hand, which encodes its target as the form does not read it. | the link command_url builds (action_links) |
 
 ## Each part's rules

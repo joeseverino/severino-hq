@@ -324,6 +324,17 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(select(html, "title", name)[0].attrs["href"], f"/{name}/")
         self.assertIn("<b><i>x-y</i></b>", html)
 
+    def test_a_mark_after_a_figure_in_its_words_stays_the_sentences_text(self):
+        """A count is text, no box, so its mark has its line already and is
+        read with the sentence."""
+
+        from hq.platform.core.testing import render
+
+        printed = render('<p>{% load value_tags %}At {{ n|counted:"bank" }}.</p>', n=1)
+
+        self.assertEqual(text(printed), "At 1 bank.")
+        self.assertEqual(with_class(printed, "mark"), [])
+
     def test_a_list_takes_a_comma_between_its_items(self):
         self.assertIn('aria-hidden="true">,<', breakable("example-host", {"last": False}))
         self.assertNotIn("mark", breakable("example-host", {"last": True}))

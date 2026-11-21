@@ -277,31 +277,6 @@ def _cut_counts(source: Source) -> Iterator[int]:
     yield from (match.start() for match in _COUNT_IN_PARENTHESES.finditer(text))
 
 
-# Filters whose output holds every name in it: `breakable` itself, and the
-# filters that build on it (`button_words`) or print a `<time>` (`last_read`).
-HOLDING = frozenset({"breakable", "code_spans", "button_words", "or_empty", "readout", "when", "last_read", "readable"})
-# A held value is a box as wide as its line at most; a mark written after it
-# has no room there, so it starts the next line alone. A `<time>` is no box.
-_BOXED = (
-    r"\{\{[^{}]*\|(?:" + "|".join(sorted(HOLDING - {"when"})) + r")(?::(?:\"[^\"]*\"|\w+))?\s*\}\}"
-    r"|\{%\s*(?:entity|cell_line)\b[^%]*%\}"
-)
-_SILENT = (
-    r"(?:</[a-z]+>|\{%\s*(?:endif|endfor|endwith)\s*%\}|\{%\s*if\b[^%]*%\}"
-    r"|\{%\s*if not forloop\.last\s*%\}[^{]*\{%\s*endif\s*%\})*"
-)
-_STRANDED = re.compile(rf"(?:{_BOXED}){_SILENT}[.,;:!?)\]]")
-# Text only a screen reader hears has no line for a mark to start.
-_UNSEEN = re.compile(r'<span class="visually-hidden">.*?</span>', re.DOTALL)
-
-
-def _stranded_marks(source: Source) -> Iterator[int]:
-    """Each mark written after a held value rather than through its hold."""
-
-    seen = _UNSEEN.sub(lambda match: _blank(match.group()), source.text)
-    return (match.start() for match in _STRANDED.finditer(seen))
-
-
 def _nested_forms(source: Source) -> Iterator[int]:
     """Each form opened while another is open."""
 
@@ -328,6 +303,33 @@ WORDED_FIGURES = {
     "span": "a length of time",
     "when_text": "a moment in words",
 }
+
+# A value is held as it is printed (held_values), a box as wide as its line at
+# most; a mark written after it has no room there, so it starts the next line
+# alone. The engine takes a mark written straight after a value into its hold,
+# so a mark is stranded only past a closing tag or a branch's end, or after a
+# tag's value, which the engine does not hold. A value whose last filter is
+# UNBOXED is no box: a `<time>` (`|when`), or a figure in its words or a
+# count, held as text, so the engine leaves its mark as text too.
+UNBOXED = frozenset(("when", "length", *WORDED_FIGURES))
+_VALUE = r"\{\{(?![^{}]*\|(?:" + "|".join(UNBOXED) + r")\b[^{}|]*\}\})[^{}]*\}\}"
+_TAG_VALUE = r"\{%\s*(?:entity|cell_line)\b[^%]*%\}"
+_SILENT = (
+    r"(?:</[a-z]+>|\{%\s*(?:endif|endfor|endwith)\s*%\}|\{%\s*if\b[^%]*%\}"
+    r"|\{%\s*if not forloop\.last\s*%\}[^{]*\{%\s*endif\s*%\})"
+)
+_STRANDED = re.compile(rf"(?:{_VALUE}{_SILENT}+|{_TAG_VALUE}{_SILENT}*)[.,;:!?)\]]")
+# Text only a screen reader hears has no line for a mark to start.
+_UNSEEN = re.compile(r'<span class="visually-hidden">.*?</span>', re.DOTALL)
+
+
+def _stranded_marks(source: Source) -> Iterator[int]:
+    """Each mark written past a value's closing tag or branch, or after a tag's value, out of its hold's reach."""
+
+    seen = _UNSEEN.sub(lambda match: _blank(match.group()), source.text)
+    return (match.start() for match in _STRANDED.finditer(seen))
+
+
 # The filters whose value is words, so no unit follows it.
 _WORDED = (*WORDED_FIGURES, "capfirst", "door_words", "interface_label", "kind_label", "lower", "readable")
 _WORDED += ("title", "upper", "when", "yesno")
@@ -866,23 +868,24 @@ SHAPES = (
     ),
     Shape(
         name="stranded-mark",
-        said="A mark written after a held value, which has no room left on its line, so the mark starts the next alone.",
-        instead='the mark through the hold: |breakable:".", |breakable:forloop for a list\'s commas, '
-        '{% entity link mark="," %}; a run of code chips takes no commas',
+        said="A mark written after a value's tag or branch, which has no room left on its line, so it starts the next alone.",
+        instead="the mark straight after the value ({{ host }}.), or through its hold: |breakable:forloop for a "
+        'list\'s commas, {% entity link mark="," %}; a run of code chips takes no commas',
         find=_stranded_marks,
         refuses=(
-            "<p>Runs on {{ host|breakable }}.</p>",
-            "<p>At <code>{{ host|breakable }}</code>, which</p>",
+            "<p>At <code>{{ host }}</code>, which</p>",
+            "<p>{% entity link %}.</p>",
             "<p>{% entity link %}{% if x %}, {{ y }}{% endif %}</p>",
-            "<p>{% for h in hosts %}{{ h|breakable }}{% if not forloop.last %} {% endif %}{% endfor %}.</p>",
+            "<p>{% for h in hosts %}{{ h }}{% if not forloop.last %} {% endif %}{% endfor %}.</p>",
         ),
         keeps=(
             (
-                '<p>{{ host|breakable:"." }} {% entity link mark=forloop %}'
-                '{% with mark=x|then:"," %}{{ y|breakable:mark }}{% endwith %} {{ z|breakable }} or</p>'
+                "<p>Runs on {{ host }}. {% entity link mark=forloop %}"
+                '{% with mark=x|then:"," %}{{ y|breakable:mark }}{% endwith %} {{ z }} or</p>'
             ),
-            '<a><span class="visually-hidden">{{ x|breakable }}: {{ y }}</span></a>',
-            '{% if x %}<code>{{ x|breakable:"." }}</code>{% else %}.{% endif %}',
+            '<a><span class="visually-hidden">{{ x }}: {{ y }}</span></a>',
+            "{% if x %}<code>{{ x }}.</code>{% else %}.{% endif %}",
+            "<p>Read {{ at|when }}</time>.</p>",
         ),
     ),
     Shape(
