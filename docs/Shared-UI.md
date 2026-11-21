@@ -1473,13 +1473,13 @@ a cell or a heading squeezed below what it needs while another column holds the 
 counting each share itself.
 
 The region turns a table's ranks (`table_heading drop=`) into at most four levels from the widest
-(`data-drop`, `table_cells`): its first rank leaves while the region is narrower than 64rem, its
+(`data-drop`, `table_layout`): its first rank leaves while the region is narrower than 64rem, its
 next below 56rem, then 48rem and 40rem, by four container-query rules written once in tables.css,
 and any rank past the fourth leaves with it. So a narrow box holds only the columns a row keeps.
 Nothing is measured, so a column may leave a box that could still hold it. What leaves shows on
 the row's open line. The gates fail a table that runs past its card.
 
-A table whose headings rank no column has its ranks derived by the region (`table_cells`), by the
+A table whose headings rank no column has its ranks derived by the region (`table_layout`), by the
 rule `ranked` follows, and lets them go only at the narrowest widths: its far column at the widest
 of them and its nearest below 40rem, so it keeps every column until a narrow box and a
 hand-written table needs no rank of its own to fit a phone. A column holding a button stands,
@@ -1599,14 +1599,14 @@ the host or an extension loads, and the host's suite reads every installed exten
 for a heading, a region or a drop rank written by hand. *Gates:* the `table` shape,
 `test_every_table_is_declared_through_the_tags`.
 
-A long value in a cell (a line past `table_cells.LONG`) wraps, and in a narrow box is held to its
+A long value in a cell (a line past `table_layout.LONG`) wraps, and in a narrow box is held to its
 third line by a clamp with its mark (`.cell-clamp`, cuts.css), its whole value where its row
 opens; a wide box holds it whole. The name a row is read by is never held, nor is a row with no
 toggle (a table with no headings, a fold's head), so their values wrap whole, and no cell carries
 its value again as a title. Only words are held: each part of words in it (`data-cell`) is clamped
 on its own, so a pill or a toggle beside them stays whole, and a cell holding such parts is the
 clamp itself, with no box drawn around them. A value of words of 32 characters at most
-(`table_cells.SHORT`: an address and its port, a host, a project's name) is one box (`cell-short`,
+(`table_layout.SHORT`: an address and its port, a host, a project's name) is one box (`cell-short`,
 the value's own list where it is one) as wide as the value up to its column's share, and as wide
 as its column where that is more, so its column holds it whole while the table is laid out as
 one, and past its share it wraps inside its box. Its column still asks for the value whole

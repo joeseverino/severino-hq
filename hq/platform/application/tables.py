@@ -8,7 +8,7 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.db.models import Model
 
-from hq.platform.core.table_cells import leaving_order
+from hq.platform.core.table_layout import leaving_order
 
 from .display_words import display
 

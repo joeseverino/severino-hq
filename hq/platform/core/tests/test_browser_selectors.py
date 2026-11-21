@@ -30,7 +30,7 @@ AUDIT = ROOT / "hq/platform/core" / "browser_audit.js"
 TEMPLATE_ROOTS = (ROOT / "templates", ROOT / "tests/fixtures/example_hq_plugin" / "templates")
 # The tag libraries write markup into those templates.
 TAG_LIBRARIES = ROOT / "hq/platform/core/templatetags"
-TABLE_MARKS = ROOT / "hq/platform/core/table_cells.py"
+TABLE_MARKS = ROOT / "hq/platform/core/table_layout.py"
 
 _CLASS = re.compile(r"\.(-?[A-Za-z_][\w-]*)")
 _ID = re.compile(r"#(-?[A-Za-z_][\w-]*)")
@@ -141,7 +141,7 @@ def markup() -> tuple[set[str], set[str], str]:
     classes.update(*(part.owned() for part in parts()))
     # A button's class and looks are written in code: each one it can draw.
     classes.update(button_classes(" ".join(BUTTON_LOOKS)).split())
-    # A table's marks are written in code too: each attribute `table_cells`
+    # A table's marks are written in code too: each attribute `table_layout`
     # adds to a row, a cell or what a cell holds.
     marks = re.findall(r'" (data-[a-z-]+)', TABLE_MARKS.read_text(encoding="utf-8"))
     text.append(f"<td {' '.join(sorted(set(marks)))}>")
