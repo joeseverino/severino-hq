@@ -25,12 +25,14 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_cadence_matrix.html` | `matrix` | `compact`, `label` | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
 | `partials/_chart.html` | `chart` | nothing | A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from `hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`. |
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
+| `partials/_document_picture.html` | `alt`, `src` | nothing | A picture of a document (a scan, a photo of a receipt), held in a page's shape before it arrives. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
 | `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
 | `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
 | `partials/_icon.html` | `name` | nothing | One of the host's icons, by `name`, the height of the text beside it. |
+| `partials/_identity.html` | `name`, `tip`, `tone`, `url` | `about`, `badge`, `handle`, `picture` | An account's picture, name and handle. |
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_reading_age.html` | nothing | `at`, `reading`, `unread` | When a reading was taken, `at` the moment, in the one wording every page uses; `unread` why there is none. |
@@ -883,7 +885,7 @@ control, its label for a screen reader alone (the column's heading names it on t
 errors under it. A row's own buttons are posting `{% button %}`s, which post the page's own form,
 so they sit in this one.
 
-### partials/_identity.html (host only)
+### partials/_identity.html
 
 **An account is named by this part.** It draws its picture (a `data:` URI or an HQ path, never
 another host's address) and its name, with a state beside it drawn by `{% status %}`. Its handle

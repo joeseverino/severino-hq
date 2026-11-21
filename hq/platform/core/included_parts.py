@@ -409,8 +409,9 @@ PARTS = (
     ),
     _part(
         "document_picture",
-        "A receipt's scan, held in its shape before it arrives.",
+        "A picture of a document (a scan, a photo of a receipt), held in a page's shape before it arrives.",
         "document-picture",
+        public=True,
         example=records.DOCUMENT_PICTURE,
         states=records.DOCUMENT_PICTURE_STATES,
     ),
@@ -563,6 +564,7 @@ PARTS = (
         "identity",
         "An account's picture, name and handle.",
         *("identity", "identity-name", "identity-picture", "identity-words"),
+        public=True,
         rules="""
         **An account is named by this part.** It draws its picture (a `data:` URI or an HQ path, never
         another host's address) and its name, with a state beside it drawn by `{% status %}`. Its handle
