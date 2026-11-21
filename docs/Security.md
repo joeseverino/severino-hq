@@ -584,13 +584,16 @@ is refused the audit log (`read_audit_log`) and the calendar
     holds no device for (HQ's own loopback, the LAN, a tailnet address no
     peer has) is refused `device_unknown` at both doors, and one the daemon
     did not answer for is refused `tailnet_unavailable` with the daemon's
-    words and a retry, both stopped where the two doors meet
-    (`agent_admission.admit`) so neither door can admit it as the client
-    alone. A token copied off a device and presented from a process on HQ's
-    host therefore runs nothing, and a fresh database before its first tailnet
-    reading places and holds a device like any other. Each refused address
-    shows on the Agents page under its agent as refused, with nothing to
-    approve. The refusal itself writes nothing past its denial.
+    words, on the answer and on its denial's audit row, and a retry, both
+    stopped where the two doors meet (`agent_admission.admit`) so neither
+    door can admit it as the client alone. A token copied off a device and
+    presented from a process on HQ's host therefore runs nothing, and a fresh
+    database before its first tailnet reading places and holds a device like
+    any other. Each address no device sent a call from shows on the Agents
+    page under its agent as refused, with nothing to approve; a call the
+    daemon did not answer for is HQ's failure, counted with the agent's
+    refusals and never drawn as a device. The refusal itself writes nothing
+    past its denial.
   - Only a deployment with no tailnet (no socket: a developer's machine, a
     host without Tailscale) places nothing, and there the client is the finest
     unit and the client's rules alone apply. The Agents page says which of the

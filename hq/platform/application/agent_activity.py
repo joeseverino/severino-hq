@@ -17,9 +17,8 @@ from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 
 from . import agent_devices, agent_limits, denials, roles
-from .agent_access import UNPLACED_CODES
 from .agent_devices import DeviceStanding
-from .refusal_codes import LATER_CODES
+from .refusal_codes import LATER_CODES, Code
 from .security import (
     MCP_INTERFACE,
     Capability,
@@ -54,8 +53,9 @@ class DeviceRow:
     """One device an agent called from, as its row on the Agents page shows it.
 
     A device HQ has a record of (``record``) stands as that record says. A call
-    the tailnet could not place has none, so nothing can be approved: it is
-    ``UNPLACEABLE``, named by the ``address`` it was refused from.
+    no tailnet device sent has none, so nothing can be approved: it is
+    ``UNPLACEABLE``, named by the ``address`` it was refused from, with the
+    code it was refused with (``refusal``).
     """
 
     standing: DeviceStanding
@@ -68,6 +68,7 @@ class DeviceRow:
     owner: str = ""
     record: AgentDevice | None = None
     address: str = ""
+    refusal: Code | None = None
     # Whether the person reading may approve it: theirs, or a machine's.
     yours: bool = False
 
@@ -270,14 +271,15 @@ def _device_calls(clients: list[str]) -> dict[tuple[str, str], tuple[int, int]]:
 
 
 def _unplaced(clients: list[str]) -> dict[str, list[DeviceRow]]:
-    """The addresses each client was refused from because the tailnet could
-    not place the call there: no device sent it, or tailscaled did not answer."""
+    """The addresses each client was refused from because no tailnet device
+    sent the call. tailscaled not answering is HQ's failure, not a device's,
+    so it stands with the agent's refusals and never as a device."""
 
     rows = (
         _calls_of(clients)
         .filter(DENIED, device="")
         .annotate(reason=_text("reason"), address=_text("source"))
-        .filter(reason__in=UNPLACED_CODES)
+        .filter(reason=Code.DEVICE_UNKNOWN)
         .exclude(address="")
         .values("actor", "address")
         .annotate(calls=_counted(), first=Min("created_at"), last=Max("created_at"))
@@ -294,6 +296,7 @@ def _unplaced(clients: list[str]) -> dict[str, list[DeviceRow]]:
                 row["calls"] or 0,
                 row["calls"] or 0,
                 address=row["address"],
+                refusal=Code.DEVICE_UNKNOWN,
             )
         )
     return found

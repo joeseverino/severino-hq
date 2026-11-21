@@ -275,6 +275,10 @@ class ApprovalAtTheDoorsTests(Doors, TestCase):
         self.assertEqual(answer.status_code, 503)
         self.assertIn("connection refused", answer.json()["error"]["message"])
         self.assertFalse(Project.objects.exists())
+        # The daemon's words outlive the container's log, on each refusal's row.
+        refused = AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__reason=UNAVAILABLE)
+        self.assertTrue(refused.exists())
+        self.assertTrue(all("connection refused" in row.message for row in refused))
 
     def test_a_forwarded_header_does_not_move_a_call_off_the_device_that_sent_it(self):
         with _serving():

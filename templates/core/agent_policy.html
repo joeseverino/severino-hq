@@ -140,8 +140,8 @@ this links to it only for how a provider's permission list is written.
 
 {% comment %}
 The tailnet devices each agent called from, a group per agent that has any: the devices it
-has a record of, then any address it was refused from because the tailnet
-could not place the call there. A call from a device runs once it is
+has a record of, then any address it was refused from because no tailnet
+device sent the call there. A call from a device runs once it is
 approved, and a block stops that device alone.
 {% endcomment %}
 {% if device_groups %}
@@ -168,7 +168,7 @@ approved, and a block stops that device alone.
                 {{ device.name|breakable }}
                 {% list kind="dots" muted=True %}
                   {% if device.os %}<li>{{ device.os|breakable }}</li>{% endif %}
-                  {% if device.owner %}<li data-owner>Owned by {{ device.owner|breakable }}</li>{% elif device.record %}<li>Tagged</li>{% else %}<li data-unplaced>Not on the tailnet, so its calls are refused</li>{% endif %}
+                  {% if device.owner %}<li data-owner>Owned by {{ device.owner|breakable }}</li>{% elif device.record %}<li>Tagged</li>{% elif device.refusal %}<li data-unplaced>{{ device.refusal.said|capfirst }}</li>{% endif %}
                 {% endlist %}
                 {% with record=device.record %}{% if record %}
                 <div class="row-below">
