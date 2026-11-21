@@ -13,7 +13,7 @@ from django.db import models
 from django.db.models import Model
 
 from hq.platform.core.table_layout import SAYS_NOTHING, leaving_order
-lazy from hq.platform.core.included_parts import READING_AGE
+lazy from hq.platform.core.included_parts import METER, READING_AGE
 lazy from hq.platform.core.templatetags import status_tags, table_tags
 
 from .display_words import display
@@ -277,6 +277,13 @@ class Cell:
         words = last_read(taken) if taken else (reading.label if reading is not None else unread or "No reading yet")
         context = {"reading": reading, "at": at, "unread": unread}
         return cls(piece=Piece(READING_AGE, context, words=words), muted=muted)
+
+    @classmethod
+    def meter(cls, marks: Iterable[Any], label: str) -> Cell:
+        """A segment for each of ``marks`` in its tone, named and tipped by
+        ``label``, as every meter draws them (``partials/_meter.html``)."""
+
+        return cls(piece=Piece(METER, {"marks": tuple(marks), "label": label}, words=""))
 
     @property
     def says_nothing(self) -> bool:

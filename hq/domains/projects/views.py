@@ -19,9 +19,9 @@ from hq.platform.application import related
 from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
-from hq.platform.application.entity_links import entity_link, page_url, web_url
+from hq.platform.application.entity_links import entity_link, page_url, record_link, web_url
 from hq.platform.application.list_pages import ListPageMixin
-from hq.platform.application.moments import moment
+from hq.platform.application.moments import ago, moment
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RecordPageMixin
 from hq.platform.application.projects import (
     DEPENDENCY_UPDATES,
@@ -34,7 +34,6 @@ from hq.platform.application.record_errors import Sentence
 from hq.platform.application.references import Kind
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Cell, DataTable, Row, StatusMark, TableColumn
-from hq.platform.core.templatetags.value_tags import when_text
 from hq.platform.application.ui import counted, severity_tone
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -63,7 +62,7 @@ class ProjectListView(ListPageMixin, TemplateView):
     page_title = "Projects"
     table_selectable = True
     table_columns = (
-        TableColumn("Name", "name", cell=lambda row: _named(row)),
+        TableColumn("Name", "name", cell=lambda row: _named(row)),  # noqa: PLW0108 - _named is defined below the class
         TableColumn("Status", "status", css="key-col", cell=lambda row: Cell.state(row["state"])),
         TableColumn("Updates", cell=lambda row: Cell(lines=_updates(row))),
         TableColumn(
@@ -117,7 +116,13 @@ def _updates(row) -> tuple[Cell, ...]:
         if pulls := len(repository.update_pulls) if repository else 0:
             found.append(Cell.of(replace(row["updates_link"], label=counted(pulls, "open update", "open updates"))))
     if repository and repository.open_alerts:
-        found.append(Cell(status=StatusMark(counted(repository.open_alerts, "open alert", "open alerts"), tone="attention", pill=False)))
+        found.append(
+            Cell(
+                status=StatusMark(
+                    counted(repository.open_alerts, "open alert", "open alerts"), tone="attention", pill=False
+                )
+            )
+        )
     return tuple(found)
 
 
@@ -291,16 +296,16 @@ class ProjectDeleteView(ProjectPage, RecordDeleteMixin, DeleteView):
     context_object_name = "project"
 
 
-def _ago(at) -> Cell:
+def _published(at) -> Cell:
     """How long ago, quiet, as words that leave the cell's sort to its value."""
 
-    return Cell(when_text(at, "ago"), muted=True) if at else Cell()
+    return Cell(moment=moment(at), form="ago", muted=True) if moment(at) else Cell()
 
 
 def _release(repo) -> Cell:
     if not (release := repo["release"]):
         return Cell()
-    return Cell(release["tag"], release["url"], external=True, role="prose", parts=(_ago(release["published"]),))
+    return Cell(release["tag"], release["url"], external=True, role="prose", parts=(_published(release["published"]),))
 
 
 def _advisories(repo) -> Cell:
@@ -314,7 +319,7 @@ def _advisories(repo) -> Cell:
             parts=(
                 Cell(item["id"], item["url"], external=True),
                 Cell(Truncator(item.get("summary") or "").chars(90)),
-                _ago(item["published"]),
+                _published(item["published"]),
             ),
         )
         for item in advisories[:2]
@@ -443,6 +448,65 @@ class WatchingRefreshView(AskMixin, View):
         return {"login": self.login}
 
 
+def _checked(row) -> Cell:
+    """A repository's name, over whether it is public and its meter: a
+    segment per check it is held to, so one check stands in the same place
+    on every row."""
+
+    posture, subject = row["posture"], row["posture"].subject
+    if row["project"] is not None:
+        named = Cell.of(replace(record_link(row["project"]), label=subject.short))
+    else:
+        named = Cell(subject.short, web_url(subject.url), external=True)
+    shown = Cell("Private" if subject.private else "Public", muted=True)
+    return replace(named, lines=(shown, Cell.meter(posture.results, posture.summary)))
+
+
+def _access(subject) -> Cell:
+    """Who can reach a repository: the people beside you, each deploy key and
+    whether it can write and was used, and its Actions variables."""
+
+    access = subject.access
+    if not access:
+        return Cell("Access not read", muted=True)
+    others = len(access["collaborators"]) - 1
+    reach = (
+        Cell(
+            status=StatusMark(
+                counted(others, "other person has", "other people have"), "access", tone="serious", pill=False
+            )
+        )
+        if others > 0
+        else Cell("Only you")
+    )
+    parts = []
+    for key in access["deploy_keys"]:
+        parts.append(Cell(status=StatusMark(key["title"], icon="lock", pill=False, ink="context"), dot=True))
+        if not key["read_only"]:
+            parts.append(Cell(status=StatusMark("Can write", tone="serious", pill=False), dot=True))
+        used = moment(key.get("last_used") or "")
+        parts.append(Cell(f"used {ago(used)}" if used else "never used", dot=True))
+    if not access["deploy_keys"]:
+        parts.append(Cell("no deploy keys", dot=True))
+    if variables := subject.variables:
+        named = counted(len(variables), "Actions variable", "Actions variables")
+        parts.append(Cell(f"{named}: {', '.join(variables)}", dot=True))
+    return replace(reach, muted=True, parts=tuple(replace(part, muted=True) for part in parts))
+
+
+def _met(posture) -> Cell:
+    tone = "serious" if posture.unmet else "good"
+    mark = StatusMark(posture.met, "of", posture.measured, tone=tone, pill=False)
+    return Cell(status=mark, sort=str(posture.met))
+
+
+_POSTURE_COLUMNS = (
+    TableColumn("Repository", kind="identifier", css="key-col", cell=_checked),
+    TableColumn("Met", kind="numeric", drop=2, cell=lambda row: _met(row["posture"])),
+    TableColumn("Access", drop=1, cell=lambda row: _access(row["posture"].subject)),
+)
+
+
 class PostureView(PageMixin, TemplateView):
     """Every repository the GitHub App reads, against the standard it is held to.
 
@@ -467,6 +531,7 @@ class PostureView(PageMixin, TemplateView):
         context["repositories"] = [
             {"posture": item, "project": projects.get(repository_key(item.subject.name))} for item in found
         ]
+        context["postures"] = DataTable.of("Repositories", _POSTURE_COLUMNS, context["repositories"])
         everywhere = []
         for check in STANDARD:
             held = [state for item in found if (state := item.state_of(check.id))]

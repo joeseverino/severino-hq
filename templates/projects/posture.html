@@ -12,7 +12,7 @@ what is not met. A check met everywhere is a word in one closing line.
   {% endif %}
 
   {% section "By repository" count=repositories|length %}
-  {% include "projects/_repository_postures.html" with repositories=repositories only %}
+  {% data_table postures %}
   {% endsection %}
 
   {% if everywhere %}

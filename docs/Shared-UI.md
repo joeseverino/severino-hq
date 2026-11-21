@@ -13,7 +13,7 @@ and those that hold across parts in [Design](Design.md).
 | --- | --- | --- |
 | `confirm_page.html` | `consequences` | A destructive action's confirmation: `consequences` says what will happen. |
 | `form_page.html` | nothing | A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and `cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says what saving does, each from the view, so the page fills no block. |
-| `list_page.html` | `foot`, `row` (given `forloop`, `row`), `summary` | A `ListPageMixin` list: toolbar, table, empty state and pagination. `row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or filter changes, `foot` is its `<tfoot>`. |
+| `list_page.html` | `summary` | A `ListPageMixin` list: toolbar, the table its columns declare, empty state and pagination. `summary` sits above the table and is redrawn with it when a search or filter changes. |
 | `page.html` | `page`, `print_footer` | Any page: the head, actions, dialogs and section navigation, drawn from `page`. |
 
 | Partial | Required | Optional | What it is |
@@ -1204,12 +1204,6 @@ healthy estate.
 Every page that would offer a change its connection cannot make offers this instead: what the change
 needs, linked to the setup step that gives it, with the whole reason as its title (`data-write-gap`).
 A row draws it through `{% row_actions gap=... %}` and a form through its `gap`.
-
-### projects/_repository_postures.html (host only)
-
-Repositories against their standard, a table's row each: its name over a meter with a segment per
-check, then its score and who can reach it. Every meter starts where its name does, so one check
-sits in the same place on every row.
 
 ### row_actions
 

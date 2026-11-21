@@ -18,8 +18,6 @@ lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_model import CHECK_AGAIN, Finding, opens
 lazy from hq.platform.application.finding_steps import Do, Run
-lazy from hq.platform.application.github_estate import Repository
-lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
 lazy from hq.platform.application.relationships import Relationships
@@ -76,37 +74,6 @@ def _problems(*titles, family="", status="attention"):
             ),
         )
     )
-
-
-def _repository_postures():
-    """Repositories against their standard: a public one others can reach
-    through a key that can write, a private one that meets it all, and one
-    whose access was never read."""
-
-    kept = {
-        "collaborators": [{"login": "example", "role": "admin"}],
-        "deploy_keys": [
-            {"title": "example deploy", "read_only": True, "last_used": (DRAWN_AT - timedelta(days=2)).isoformat()}
-        ],
-        "token": "read",
-        "pinning_required": True,
-        "vulnerability_alerts": True,
-    }
-    reached = {
-        **kept,
-        "collaborators": [{"login": "example", "role": "admin"}, {"login": "example-two", "role": "write"}],
-        "deploy_keys": [{"title": "example release", "read_only": False, "last_used": None}],
-        "token": "write",
-    }
-    records = (
-        ("example/example-site", {"private": False, "access": reached, "variables": ["EXAMPLE_HOST"]}),
-        ("example/example-app", {"private": True, "access": kept, "variables": []}),
-        ("example/example-notes", {"private": True}),
-    )
-    return [
-        {"posture": posture_of(Repository(name, {"url": f"https://example.com/{name}", **record}, DRAWN_AT))}
-        for name, record in records
-    ]
 
 
 def _paged(number):
@@ -688,14 +655,6 @@ RELATIONSHIPS = Example(
             focus_url="/example/topology/",
         )
     },
-)
-
-
-# Repositories against their standard, each a row of its name, its meter
-# and its score: one failing that others can reach, one meeting it all,
-# and one whose access was never read.
-REPOSITORY_POSTURES = Example(
-    context=lambda: {"repositories": _repository_postures()},
 )
 
 

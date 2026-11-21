@@ -852,16 +852,4 @@ PARTS = (
         states=pages.VISIT_REFRESH_STATES,
     ),
     METER,
-    Part(
-        name="",
-        partial="projects/_repository_postures.html",
-        about="Each repository's checks as a meter of those met.",
-        draws=(METER,),
-        rules="""
-        Repositories against their standard, a table's row each: its name over a meter with a segment per
-        check, then its score and who can reach it. Every meter starts where its name does, so one check
-        sits in the same place on every row.
-        """,
-        example=records.REPOSITORY_POSTURES,
-    ),
 )
