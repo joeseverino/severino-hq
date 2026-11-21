@@ -53,6 +53,13 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .page-head-copy > :is(.page-trail-row, .page-name) { grid-column: 1; }
 .page-head > .page-actions { grid-column: 2; grid-row: 1 / span 2; }
 .page-head:not(:has(> .page-head-copy > .page-trail-row)) > .page-actions { grid-row: 1; }
+/* A phone's head leaves the trail too little room beside the controls for a
+   note's sentence, so there a trail holding a note takes the head's width and
+   the controls stand beside the name alone. */
+@container page-head (width < 30rem) {
+  .page-head-copy > .page-trail-row:has(> .visit-slot) { grid-column: 1 / -1; }
+  .page-head:has(> .page-head-copy > .page-trail-row > .visit-slot) > .page-actions { grid-row: 2; }
+}
 /* The head's first line: the trail, then at its end the note of a page about
    one thing (partials/_visit_refresh.html) in the room it keeps (cuts.css).
    A trail longer than the line wraps between its steps inside it, leaving the
