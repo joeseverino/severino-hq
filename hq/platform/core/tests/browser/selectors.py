@@ -120,7 +120,7 @@ SELECTORS = {
     "head_facts": ".page-head .page-facts",
     # A head's controls, and what it says beside its title, its lede and its facts.
     "head_actions": ".page-head > .page-actions",
-    "head_said": ".page-head-copy > :not(.page-trail-row, .page-name), .page-title-row > :not(h1, .pill)",
+    "head_said": ".page-head-copy > :not(.page-trail-row, .page-name), .page-name > :not(h1, .pill)",
     # What holds the content and so stays inside its gutter: a card, a block
     # of code.
     "gutter_bound": "pre, .card",
@@ -141,7 +141,7 @@ SELECTORS = {
     # What a parser leaves where a <p> was closed early by a block inside it.
     "broken_paragraph": "main p:empty:not([hidden])",
     # A share's bar, a <meter> behind its row's words (analytics).
-    "share_bar": "main .bar-track",
+    "share_bar": "main .bar-row > .meter",
     # What an open menu or a dialog draws over the page.
     "floating": "dialog, [popover]",
     # Where the contrast check samples text: the page and the header over it.

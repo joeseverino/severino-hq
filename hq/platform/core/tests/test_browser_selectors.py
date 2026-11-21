@@ -18,7 +18,9 @@ from hq.platform.application.page_parts import SectionPart
 from hq.platform.application.ui import BUTTON_LOOKS, button_classes
 from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.template_contract import parts
+from hq.platform.core.templatetags.action_tags import BUTTON_ATTRIBUTES
 from hq.platform.core.templatetags.part_tags import SectionNode
+from hq.platform.core.templatetags.status_tags import status_pill
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
 ROOT = Path(settings.BASE_DIR)
@@ -86,13 +88,18 @@ def _template_markup(source: str, classes: set[str], ids: set[str], text: list[s
     for options in re.findall(r"\{%\s*\w+\s([^%]*)%\}", source):
         classes.update(" ".join(re.findall(r'\bcss="([^"]*)"', options)).split())
     # A button's, a card's, a filter bar's, a section's or a status's id and
-    # data- attributes are its tag's options, and so is each part's class but
-    # the button's, which `button_classes` draws.
+    # data- attributes are its tag's options, as are the attributes a button
+    # may carry, and so is each part's class but the button's, which
+    # `button_classes` draws.
     for part, options in re.findall(r"\{%\s*(button|card|filter_bar|section|status)\s([^%]*)%\}", source):
         if part != "button":
             classes.add(part.replace("_", "-"))
         ids.update(re.findall(r'\bid="([^"{}]+)"', options))
-        drawn = (name.replace("_", "-") for name in re.findall(r"\b(data_\w+)=", options))
+        drawn = (
+            name.replace("_", "-")
+            for name in re.findall(r"\b(\w+)=", options)
+            if name.startswith("data_") or (part == "button" and name in BUTTON_ATTRIBUTES)
+        )
         text.append(f"<div {' '.join(drawn)}>")
 
 
@@ -125,10 +132,10 @@ def markup() -> tuple[set[str], set[str], str]:
         text.append(source)
         for value in re.findall(r'\bclass="([\w\s{}-]*)"', source):
             classes.update(value.replace("{}", " ").split())
-        # One that sets its class as an attribute's value (status_tags'
-        # `classes`), its interpolations aside.
-        for value in re.findall(r'\bclasses = f?"([\w\s{}-]*)"', source):
-            classes.update(re.sub(r"\{\w*\}", " ", value).split())
+    # A status writes its class in code: each form it takes.
+    alone = {"pill": False, "icon": "info", "shown": False}
+    for form in ({}, {"pill": False}, {"dot": True, "ink": "context"}, {"chip": True}, alone):
+        classes.update(*(value.split() for value in re.findall(r'\bclass="([^"]*)"', status_pill("x", **form))))
     # A part's own classes are drawn by its partial or its shape, which the
     # page-class check holds to every one it declares.
     classes.update(*(part.owned() for part in parts()))

@@ -231,7 +231,7 @@ _A_SHARE_ROW = """() => {
   const row = document.createElement('li');
   row.className = 'bar-row';
   const meter = document.createElement('meter');
-  meter.className = 'bar-track';
+  meter.className = 'meter';
   Object.assign(meter, { min: 0, max: 100, value: 50 });
   const label = document.createElement('span');
   label.className = 'bar-label';
@@ -742,8 +742,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual([selector for selector in dropped if not anothers_part_alone(selector)], [])
 
     def test_a_share_fills_its_bar_from_edge_to_edge(self):
-        """A share's fill is as tall as its bar, in every engine (`.bar-track`
-        in pages.css)."""
+        """A share's fill is as tall as its bar, in every engine (`.meter`
+        in figures.css)."""
 
         self.open(next(iter(PAGES)), WIDE)
         self.page.evaluate(_A_SHARE_ROW)
