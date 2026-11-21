@@ -104,13 +104,13 @@ const PATH_HYPHEN = /-(?=\S)/g;
 //
 // The viewer keeps its own node, the first part, and may write a new path
 // into it later, so the parts split off after it are kept to be taken out
-// then. The <wbr> and the box are the page's (`template[data-path-break]`,
-// `template[data-path-hyphen]`), each cloned where it goes.
+// then. The <wbr> and the box are frames the document draws in its
+// `[data-document-page]`, each cloned where it goes.
 const splitOff = new WeakMap();
-const drawnByThePage = (name) =>
-  document.querySelector(`template[data-path-${name}]`).content.firstElementChild.cloneNode(true);
 const markPaths = (node) => {
   if (!node.isConnected || !node.data.includes("/")) return;
+  const region = node.parentElement.closest("[data-document-page]");
+  const frame = (template) => template.content.firstElementChild.cloneNode(true);
   const breaks = new Set();
   const hyphens = new Set();
   for (const word of node.data.matchAll(/\S*\/\S*/g)) {
@@ -123,14 +123,14 @@ const markPaths = (node) => {
     parts.push(rest);
     if (hyphens.has(place)) {
       parts.push(rest.splitText(2));
-      const joined = drawnByThePage("hyphen");
+      const joined = frame(region.querySelector("template[data-path-hyphen]"));
       rest.replaceWith(joined);
       joined.append(rest);
       rest = joined;
       parts.push(joined);
     }
     if (breaks.has(place)) {
-      const wbr = drawnByThePage("break");
+      const wbr = frame(region.querySelector("template[data-path-break]"));
       rest.before(wbr);
       parts.push(wbr);
     }
