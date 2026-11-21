@@ -1,4 +1,4 @@
-"""Every HQ connection is in WAL mode, from the settings' init_command."""
+"""Every HQ connection is in WAL mode, from the settings' init_command, and migrates a table with rows."""
 
 import re
 import sqlite3
@@ -6,9 +6,10 @@ import tempfile
 from pathlib import Path
 
 from django.conf import settings
-from django.db import connection
+from django.db import connection, models
 from django.db.utils import load_backend
 from django.test import SimpleTestCase, tag
+from django.test.utils import isolate_apps
 
 
 def opened(path: Path, **options: object):
@@ -46,6 +47,37 @@ class JournalModeTests(SimpleTestCase):
             finally:
                 reader.close()
                 writer.close()
+
+
+class SchemaTests(SimpleTestCase):
+    @isolate_apps("hq.platform.core")
+    def test_a_stored_generated_column_is_added_to_a_table_with_rows(self):
+        class Priced(models.Model):  # noqa: DJ008 - a table for the schema editor, never shown
+            cost = models.IntegerField(null=True)
+
+            class Meta:
+                app_label = "core"
+                db_table = "example_priced"
+
+        with tempfile.TemporaryDirectory() as directory:
+            fresh = opened(Path(directory) / "hq.sqlite3")
+            try:
+                with fresh.schema_editor(atomic=False) as editor:
+                    editor.create_model(Priced)
+                with fresh.cursor() as cursor:
+                    cursor.execute("INSERT INTO example_priced (cost) VALUES (21), (NULL)")
+                # Nullable with no default: the field Django adds by ALTER TABLE.
+                doubled = models.GeneratedField(
+                    expression=models.F("cost") * 2, output_field=models.IntegerField(), db_persist=True, null=True
+                )
+                doubled.contribute_to_class(Priced, "doubled")
+                with fresh.schema_editor(atomic=False) as editor:
+                    editor.add_field(Priced, doubled)
+                with fresh.cursor() as cursor:
+                    cursor.execute("SELECT doubled FROM example_priced ORDER BY id")
+                    self.assertEqual(cursor.fetchall(), [(42,), (None,)])
+            finally:
+                fresh.close()
 
 
 @tag("source")

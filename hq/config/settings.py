@@ -493,7 +493,7 @@ if not _DATABASE_PATH:
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
+        "ENGINE": "hq.platform.core.sqlite",
         "NAME": _DATABASE_PATH,
         "OPTIONS": {
             # No foreign_keys pragma: Django turns it on for every connection.
