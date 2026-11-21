@@ -21,6 +21,7 @@ lazy from hq.platform.application.approval_review import title as approval_title
 lazy from hq.platform.application.automation_adoption import playbook_titles
 lazy from hq.platform.application.automation_runs import run_title
 lazy from hq.platform.application.capabilities import capability_title
+lazy from hq.platform.application.glance import _panel_names
 lazy from hq.platform.application.security import subject_parts
 lazy from hq.platform.application.work_runs import scan_title
 
@@ -330,7 +331,8 @@ class DashboardRefreshRequest(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        return f"A fresh reading of the {self.panel_id} panel"
+        # Its panel by the name the panel's head shows.
+        return f"A fresh reading of the {_panel_names([self.panel_id])[0]} panel"
 
 
 class ReadRequest(TimestampedModel):
