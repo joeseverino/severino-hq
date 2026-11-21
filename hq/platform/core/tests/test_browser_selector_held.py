@@ -40,4 +40,4 @@ class SelectorHeldTests(SimpleTestCase):
         from hq.platform.core.tests.browser.selectors import SELECTORS
 
         with self.assertRaises(TypeError):
-            f"{SELECTORS['row_ask']} [data-ask-button]"
+            format(SELECTORS["row_ask"])
