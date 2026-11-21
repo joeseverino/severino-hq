@@ -109,9 +109,7 @@ class PlaybooksPageTests(TestCase):
 
         adopted = procedures()
         self.assertTrue(adopted)
-        links = {
-            element.attrs["href"] for element in within(self.page(), "data-adopted-playbooks") if element.tag == "a"
-        }
+        links = {element.attrs["href"] for element in within(self.page(), "class", "data-table") if element.tag == "a"}
         for procedure in adopted:
             with self.subTest(procedure=procedure.id):
                 self.assertIn(command_url(capability_name(procedure.id)), links)
@@ -120,7 +118,7 @@ class PlaybooksPageTests(TestCase):
         from hq.platform.application.automation_adoption import procedures
         from hq.platform.application.automation_runs import access_words
 
-        said = " ".join(element.words for element in within(self.page(), "data-adopted-playbooks"))
+        said = " ".join(element.words for element in within(self.page(), "class", "data-table"))
         for procedure in procedures():
             with self.subTest(procedure=procedure.id):
                 self.assertNotIn(procedure.id, said, "the title links its page, so its id is not said again")
@@ -129,7 +127,9 @@ class PlaybooksPageTests(TestCase):
                 if not procedure.hosts:
                     self.assertIn("Any machine", said)
         self.assertIn("No sudo", said)
-        self.assertNotIn("–", said)
+        # Every playbook says each fact; only a change's state is missing for one the commit keeps.
+        facts = [cell for cell in within(self.page(), "class", "data-table") if cell.tag == "td"]
+        self.assertNotIn("–", " ".join(cell.words for cell in facts if cell.attrs.get("data-kind") != "status"))
 
     def test_the_page_is_the_table_alone_under_no_heading_of_its_own(self):
         html = self.page()
@@ -197,7 +197,7 @@ class PlaybooksPageTests(TestCase):
         changes = {change.key: change.change for change in judged(newest.pk).changes}
         self.assertEqual(set(changes.values()), {"added", "changed", "removed"}, "the estate's commit holds each kind")
         html = self.page()
-        rows = [element for element in within(html, "data-adopted-playbooks") if element.tag == "tr"]
+        rows = [element for element in within(html, "class", "data-table") if element.tag == "tr"]
         said = " ".join(row.words for row in rows)
         for procedure in procedures():
             self.assertIn(procedure.title, said, "an adopted playbook keeps its row")

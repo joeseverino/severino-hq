@@ -15,6 +15,7 @@ from django.utils.text import get_text_list
 from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.core.models import AgentIdentity
 lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.platform.core.included_parts import POLICY_SETTING
 
 from .approvals import is_destructive, no_rule_allows, waits
 from .command_fields import Describe
@@ -34,7 +35,7 @@ from .security import (
     subject_of,
 )
 from .tone import Tone
-lazy from . import capabilities
+lazy from . import capabilities, tables
 lazy from .agent_registry import identity_of
 lazy from .entity_links import kind_label
 lazy from .integrations import held_graph
@@ -269,6 +270,44 @@ def split_by_default(groups: tuple[Group, ...]) -> tuple[tuple[Group, ...], tupl
         return tuple(group for group in rows if group.rows)
 
     return kept(changed=True), kept(changed=False)
+
+
+def table(label: str, columns: tuple[Column, ...], groups: tuple[Group, ...], *, settable: bool) -> tables.DataTable:
+    """The rules as one table, a group per resource, headed once since the
+    columns are the same for every resource. A column per agent, so a rule is
+    read and changed where it sits, each a setting a row's open line cannot
+    copy, so a narrow box keeps only the action and its default
+    (``wide-only``). Each setting is a select where ``settable``, else its
+    words."""
+
+    def action(row: Row) -> tables.Cell:
+        does = tables.StatusMark(row.effect_label, tone=row.effect_tone, pill=False)
+        return tables.Cell(row.label, header=True, parts=(tables.Cell(status=does),) if row.effect_label else ())
+
+    def setting(cell: PolicyCell) -> tables.Cell:
+        context = {"cell": cell, "rules_settable": settable}
+        return tables.Cell(
+            piece=tables.Piece(
+                POLICY_SETTING, context, words=cell.unavailable or cell.words, field=settable and not cell.unavailable
+            )
+        )
+
+    heads = (
+        tables.TableColumn("Action"),
+        tables.TableColumn("Default", css="key-col"),
+        *(tables.TableColumn(each.label, kind="control", css="wide-only", title=each.detail) for each in columns),
+    )
+    rows = (
+        tables.Group(
+            group.label,
+            tuple(
+                tables.Row((action(row), tables.Cell(row.default, muted=True), *map(setting, row.cells)))
+                for row in group.rows
+            ),
+        )
+        for group in groups
+    )
+    return tables.DataTable(label, heads, groups=tuple(rows))
 
 
 def columns() -> tuple[Column, ...]:

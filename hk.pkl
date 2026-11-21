@@ -3,7 +3,7 @@
 // <gate> reads each file it is handed that its glob matches, and <gate>-whole
 // reads the whole tree, run when a file it names changed (the tool's own
 // config, its pins) or when the gate is run alone, on every file.
-amends "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Config.pkl"
 
 // What every gate reads besides its files: the tools' pins and the tasks.
 local toolchain = List("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env")
@@ -58,6 +58,16 @@ hooks {
       ["prose-whole"] {
         glob = List("tools/lint/vale/**", "hq/platform/core/plain_words.py", "hq/platform/core/interface_text.py") + toolchain
         check = "uv run python -m hq.platform.core.plain_words --whole"
+      }
+      // mise.toml's SEVERINO_FILE_LINE_* say which files the ceiling holds, so
+      // the step is handed every file and keeps those.
+      ["file-lines"] {
+        glob = List("**/*")
+        check = "uv run python -m tools.file_lines {{files}}"
+      }
+      ["file-lines-whole"] {
+        glob = List("tools/file_lines.py") + toolchain
+        check = "uv run python -m tools.file_lines"
       }
       // mise runs a file under mise-tasks/ only when it is executable, and
       // hides one that is not; each starts with a shebang.

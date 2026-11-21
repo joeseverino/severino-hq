@@ -132,8 +132,13 @@ def hold(gate: int, landed: int, record: Path) -> None:
     """Take the gate, then LANDED, which says a landing holds it, then say who holds it the way mise's holders
     do, for the line its waiters print."""
 
-    fcntl.flock(gate, fcntl.LOCK_EX)
-    fcntl.flock(landed, fcntl.LOCK_EX)
+    try:
+        fcntl.flock(gate, fcntl.LOCK_EX)
+        fcntl.flock(landed, fcntl.LOCK_EX)
+    except OSError:
+        # The command can end before the gate frees up, and closing the files ends the wait here; a
+        # traceback from this daemon thread at interpreter shutdown would abort the landing.
+        return
     held_by = {"pid": os.getpid(), "task": "landing", "root": str(Path.cwd()), "started_at": int(time.time())}
     record.write_text(json.dumps(held_by))
 

@@ -48,16 +48,16 @@ class PostureTests(TestCase):
 
 class PostureViewTests(SignedInTestCase):
     def test_the_page_leads_with_what_is_not_met(self):
-        store(private=True, access=kept(token="write"), variables=["HQ_IMAGE"])
+        store(private=True, access=kept(token="write"), variables=["DEPLOY_TOKEN"])
 
         response = self.client.get(reverse("posture"))
 
         checks = {check.id: check for check in STANDARD}
         gaps = [gap["label"] for gap in response.context["unmet"]]
-        self.assertEqual(gaps, [checks["token-read-only"].unmet, checks["no-variables"].unmet])
+        self.assertEqual(gaps, [checks["token-read-only"].unmet, checks["no-secret-variables"].unmet])
         self.assertIn("only-you", [check.id for check in response.context["everywhere"]])
         self.assertContains(response, "6 of 8")
-        self.assertContains(response, "HQ_IMAGE")
+        self.assertContains(response, "DEPLOY_TOKEN")
         # A failing check is titled by what is wrong, never by what passing is.
         titles = [element.words for element in select(response, "data-attention-title")]
         self.assertEqual(titles, gaps)
@@ -77,7 +77,7 @@ class PostureViewTests(SignedInTestCase):
     def test_nothing_read_says_so(self):
         response = self.client.get(reverse("posture"))
 
-        self.assertContains(response, "No repository read yet.")
+        self.assertContains(response, "No reading yet")
         self.assertContains(response, "Connect GitHub App")
 
 
@@ -220,15 +220,15 @@ class PostureHelpTests(TestCase):
         self.assertIn("example/gone@v1", item.no_help_reason)
         self.assertNotIn("sha_pinning_required", str(item.steps))
 
-    def test_a_wired_secret_kept_as_a_variable_moves_before_it_is_deleted(self):
-        item = self.item("no-variables", variables=["HQ_APP_CLIENT_ID", "DEPLOY_TARGET"])
+    def test_a_secret_kept_as_a_variable_moves_before_it_is_deleted_and_a_public_one_stays(self):
+        store(private=True, access=kept(), variables=["HQ_APP_CLIENT_ID", "PUBLIC_TURNSTILE_SITE_KEY", "DEPLOY_TARGET"])
+        (item,) = raised_items()
 
         self.assertEqual(
             [summary for _label, summary in runs(item)],
             [
                 'gh secret set HQ_APP_CLIENT_ID -R example/alpha --body "$(gh variable get HQ_APP_CLIENT_ID -R example/alpha)"',
                 "gh variable delete HQ_APP_CLIENT_ID -R example/alpha",
-                "gh variable delete DEPLOY_TARGET -R example/alpha",
             ],
         )
         self.assertIn("only after its workflows read secrets.HQ_APP_CLIENT_ID", runs(item)[1][0])

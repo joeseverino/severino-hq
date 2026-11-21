@@ -30,6 +30,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.labels import dotted
 
 from .connections import connections_for, reachable_through
+from .tone import Absent
 lazy from .tailnet_presence import observed_addresses
 
 
@@ -218,7 +219,7 @@ def _known_zones() -> tuple[tuple[str, str], ...]:
         if record.get("zone")
     }
     options = [(zone, zone) for zone in sorted(declared)]
-    options.extend((zone, dotted(zone, "not managed")) for zone in sorted(seen - declared))
+    options.extend((zone, dotted(zone, Absent.NOT_MANAGED)) for zone in sorted(seen - declared))
     return tuple(options)
 
 

@@ -1,12 +1,14 @@
 """Small shared validators and resolvers for HQ's declarative registries."""
 
 import re
+from typing import override
 from urllib.parse import urlsplit
 
 from django.urls import NoReverseMatch
 from pydantic import BaseModel, ConfigDict
 
 from hq.platform.application.effects import Effect
+from hq.platform.application.reasons import declared_only
 from hq.platform.application.routes import reverse
 
 DOTTED_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
@@ -18,9 +20,15 @@ class Closed(BaseModel):
     """The base of every Pydantic model HQ reads input with that is not a
     command (a manifest, a query, a provider's spec): a field it does not
     declare is refused, never dropped. A command is a dataclass or TypedDict,
-    which ``command_adapter`` closes."""
+    which ``command_adapter`` closes. One whose validator says its own words
+    does not load (``reasons.declared_only``)."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    @override
+    def __pydantic_on_complete__(cls) -> None:
+        declared_only(cls.__pydantic_core_schema__, f"Model {cls.__qualname__}")
 
 
 def effect_glossary(field: str) -> str:

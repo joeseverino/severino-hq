@@ -10,18 +10,18 @@ of one: use _activity_calendar.html for what actually happened on given dates.
   <ol class="week-plan">
     {% for day in plan.days %}
       <li class="week-plan-day{% if day.planned %} is-planned{% endif %}">
-        <span class="week-plan-label eyebrow" aria-hidden="true">{{ day.label|breakable }}</span>
+        <span class="week-plan-label eyebrow" aria-hidden="true">{{ day.label }}</span>
         <span class="week-plan-mark">
-          <span class="visually-hidden">{{ day.full_label|breakable }}: {{ day.detail|default:"nothing scheduled"|breakable }}</span>
+          <span class="visually-hidden">{{ day.full_label }}: {{ day.detail|default:"nothing scheduled" }}</span>
           {% for slot in day.slots %}<i class="swatch series-{{ slot }}" aria-hidden="true"></i>{% endfor %}
         </span>
-        {% if day.note %}<span class="week-plan-note" aria-hidden="true">{{ day.note|breakable }}</span>{% endif %}
+        {% if day.note %}<span class="week-plan-note" aria-hidden="true">{{ day.note }}</span>{% endif %}
       </li>
     {% endfor %}
   </ol>
   {% if plan.notes %}
     <ul class="week-plan-notes">
-      {% for note in plan.notes %}<li>{% muted %}{{ note.label|breakable }}{% endmuted %}<strong>{{ note.value|breakable }}</strong></li>{% endfor %}
+      {% for note in plan.notes %}<li>{% muted %}{{ note.label }}{% endmuted %}<strong>{{ note.value }}</strong></li>{% endfor %}
     </ul>
   {% endif %}
 {% aside %}{% if plan.url %}<a class="subtle-link" href="{{ plan.url }}">Change plan</a>{% endif %}

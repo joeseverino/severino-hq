@@ -3,25 +3,28 @@
 lazy import json
 lazy from dataclasses import replace
 lazy from datetime import UTC, datetime, timedelta
+lazy from decimal import Decimal
 lazy from uuid import UUID
 
 lazy from django import forms
 lazy from django.contrib.auth import get_user_model
 lazy from django.test import RequestFactory
 
-from hq.platform.core.part_examples import DRAWN_AT
+from hq.platform.core.part_examples import DRAWN_AT, table
 from hq.platform.core.template_parts import Example
 lazy from hq.domains.control_plane.models import ApprovalRequest
 lazy from hq.domains.jobs.models import JobState
+lazy from hq.platform.application import capability_policy, tables
 lazy from hq.platform.application.adoption import ONLY_READS, WriteGap
 lazy from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
 lazy from hq.platform.application.approvals import DECISIONS, NO_OFFER, Offer, _decision_link
+lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capability_policy import Column, Group, PolicyCell, Row, Rule
 lazy from hq.platform.application.contracts import Effect
 lazy from hq.platform.application.credential_mint import CredentialFix
 lazy from hq.platform.application.doors import NOBODY, Attribution
+lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_steps import Run
-lazy from hq.platform.application.money import money
 lazy from hq.platform.application.pages import PageAction, RowMark, RowOrder
 lazy from hq.platform.application.payload_words import ChangeRow
 lazy from hq.platform.application.security import MCP_INTERFACE
@@ -82,37 +85,34 @@ def _policy():
         )
         return Row(name, label, effect, default, (cell,))
 
-    return {
-        "columns": (column,),
-        "label": "Example rules",
-        "groups": (
-            Group(
-                "Example records",
-                (
-                    row("example.edit", "Edit an example record", Effect.REMOTE_WRITE, "On", "allow"),
-                    row("example.move", "Move an example record", Effect.REMOTE_WRITE, "On", None),
-                    row(
-                        "example.stop",
-                        "Stop an example container",
-                        Effect.DESTRUCTIVE,
-                        "Ask me first",
-                        "approve",
-                    ),
-                    row(
-                        "example.delete",
-                        "Delete an example record",
-                        Effect.DESTRUCTIVE,
-                        "Ask me first",
-                        "deny",
-                    ),
+    groups = (
+        Group(
+            "Example records",
+            (
+                row("example.edit", "Edit an example record", Effect.REMOTE_WRITE, "On", "allow"),
+                row("example.move", "Move an example record", Effect.REMOTE_WRITE, "On", None),
+                row(
+                    "example.stop",
+                    "Stop an example container",
+                    Effect.DESTRUCTIVE,
+                    "Ask me first",
+                    "approve",
+                ),
+                row(
+                    "example.delete",
+                    "Delete an example record",
+                    Effect.DESTRUCTIVE,
+                    "Ask me first",
+                    "deny",
                 ),
             ),
-            Group(
-                "Example hosts",
-                (row("example.read", "Read an example host", Effect.READ, "On", None, "Not granted"),),
-            ),
         ),
-    }
+        Group(
+            "Example hosts",
+            (row("example.read", "Read an example host", Effect.READ, "On", None, "Not granted"),),
+        ),
+    )
+    return {"table": capability_policy.table("Example rules", (column,), groups, settable=True)}
 
 
 def _approval(state, decided_by=NOBODY, **decided):
@@ -148,7 +148,7 @@ def _approval(state, decided_by=NOBODY, **decided):
     }
 
 
-def _arranged_rows():
+def _arranged_rows() -> DataTable:
     """Services as the services table arranges them: three favorites, in the
     order kept, and one that is not."""
 
@@ -157,27 +157,38 @@ def _arranged_rows():
         (name, RowMark("/example/pin/", True, name, "favorites"), RowOrder("/example/move/", name, at > 0, at < 2))
         for at, name in enumerate(names)
     ]
-    return [*favorites, ("shop.example.com", RowMark("/example/pin/", False, "shop.example.com", "favorites"), None)]
+    arranged = [
+        *favorites,
+        ("shop.example.com", RowMark("/example/pin/", False, "shop.example.com", "favorites"), None),
+    ]
+    rows = tuple(
+        tables.Row((Cell(name, name=True), Cell("Example network")), mark=mark, order=order)
+        for name, mark, order in arranged
+    )
+    return DataTable("Example services", (TableColumn("Service", kind="identifier"), TableColumn("Open to")), rows)
 
 
 class _ExampleDistance(forms.Form):
     distance_miles = forms.DecimalField(label="Example miles", min_value=0)
 
 
-# A table whose rows each open an editor under them (`row_editor`).
+# A table whose rows each open an editor under them (`Cell(editor=)`).
 def _edited_rows(name, first, second):
-    """A table named ``name`` whose rows ``first`` and ``second`` each open an editor."""
+    """A section holding a table named ``name`` whose rows ``first`` and ``second`` each open an editor."""
 
-    return (
-        f'{{% section "{name}" %}}{{% table_region "{name}" %}}<table class="data-table"><thead><tr>'
-        '{% table_heading "Run" "identifier" %}{% table_heading "Miles" "numeric" %}'
-        '{% table_heading "Distance check" "control" %}</tr></thead><tbody>'
-        f'<tr><td>{first}</td><td>3.10</td><td>{{% row_editor form "{first}" label="Correct distance" '
-        'action="/example/distance/" verb="Save distance" distance_miles="3.10" %}</td></tr>'
-        f'<tr><td>{second}</td><td>5.00</td><td>{{% row_editor form "{second}" label="Correct distance" '
-        'action="/example/distance/" verb="Save distance" distance_miles="5.00" %}</td></tr>'
-        "</tbody></table>{% endtable_region %}{% endsection %}"
-    )
+    def context():
+        form = _ExampleDistance()
+
+        def row(key, miles):
+            editor = tables.RowEditor(
+                form, key, "Correct distance", "/example/distance/", "Save distance", {"distance_miles": miles}
+            )
+            return (key, Cell(miles), Cell(editor=editor))
+
+        columns = ("Run", TableColumn("Miles", kind="numeric"), TableColumn("Distance check", kind="control"))
+        return {"table": table(name, columns, row(first, "3.10"), row(second, "5.00"))}
+
+    return f'{{% section "{name}" %}}{{% data_table table %}}{{% endsection %}}', context
 
 
 def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "") -> dict:
@@ -271,8 +282,7 @@ MUTED_STATES = {
 # A choice of one ({% select %}) with a visible label, then one named by
 # its label alone in each status tone, as a rule's setting is.
 SELECT = Example(
-    '{% control_label "Example rule" control="example-rule" %}'
-    '{% select "example" options chosen="allow" id="example-rule" %}'
+    '{% select "example" options chosen="allow" label="Example rule" id="example-rule" %}'
     '{% for tone in tones %} {% select "example-"|add:tone options chosen=tone label="Example rule, "|add:tone '
     "tone=tone %}{% endfor %}",
     context={
@@ -289,13 +299,25 @@ SELECT = Example(
 )
 
 
-SELECT_STATES = {
-    # Agents' rules (core/_policy_table.html), each setting a toned select
-    # (core/_policy_setting.html): every state a rule can be in, and a cell
-    # past an agent's grant.
-    "policy-table": Example('{% include "core/_policy_table.html" %}', _policy),
-}
+# Agents' rules (capability_policy.table), each setting a toned select:
+# every state a rule can be in, and a cell past an agent's grant.
+POLICY_TABLE = Example("{% data_table table %}", _policy)
 
+
+# A credential that lacks permissions: the one approved fix, as a
+# connection's open line draws it.
+CREDENTIAL_FIX = Example(
+    '{% section "Example connection" %}{% include "control_plane/_credential_fix.html" %}{% endsection %}',
+    lambda: {
+        "fix": CredentialFix(
+            connection_ref="example-main",
+            provider="example",
+            missing=("example.read", "example.write"),
+            command="example-mint --account example-01 --item example-token",
+            by_hand="the example provider's console",
+        )
+    },
+)
 
 STEPS_STATES = {
     # Steps done in order, each numbered: said in words, and a command to run
@@ -311,23 +333,6 @@ STEPS_STATES = {
                 "Make a new example token on your Mac",
                 "example-mint --account example-01 --item example-token --permission example.read",
                 notes=("HQ could not tell which example account holds it.", "Then press Refresh."),
-            )
-        },
-    ),
-    # A connection whose credential lacks permissions: its headline in the
-    # row, its fix opened beneath it.
-    "credential-fix": Example(
-        '{% section "Example connections" %}{% table_region "Example connections" %}<table class="data-table">'
-        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Provider" %}</tr></thead>'
-        '<tbody><tr><td>example-main{% include "control_plane/_credential_fix.html" %}</td><td>Example</td></tr>'
-        "</tbody></table>{% endtable_region %}{% endsection %}",
-        lambda: {
-            "fix": CredentialFix(
-                connection_ref="example-main",
-                provider="example",
-                missing=("example.read", "example.write"),
-                command="example-mint --account example-01 --item example-token",
-                by_hand="the example provider's console",
             )
         },
     ),
@@ -373,13 +378,26 @@ PAGE_ACTION_STATES = {
     # the hyphenated part is a box of its own (`breakable`), set on the line of
     # the words before it.
     "in-rows": Example(
-        '{% table_region "Example plans" %}<table class="data-table"><tbody>{% for action in actions %}<tr><td>'
-        '{% include "partials/_action_links.html" with actions=action only %}</td></tr>{% endfor %}</tbody></table>'
-        "{% endtable_region %}",
+        "{% data_table table %}",
+        lambda: {
+            "table": DataTable(
+                "Example plans",
+                (TableColumn("Container"),),
+                tuple(
+                    tables.Row((Cell(name),), actions=(PageAction(f"Upgrade plan for {name}", f"/example/{name}/"),))
+                    for name in ("example", "example-app")
+                ),
+                headed=False,
+            )
+        },
+    ),
+    # The same buttons as a map's node lists them, outside a table.
+    "in-a-node": Example(
+        '<span class="row-actions">{% include "partials/_action_links.html" with actions=actions only %}</span>',
         lambda: {
             "actions": (
-                (PageAction("Upgrade plan for example", "/example/"),),
-                (PageAction("Upgrade plan for example-app", "/example/app/"),),
+                PageAction("Upgrade plan for example", "/example/"),
+                PageAction("Upgrade plan for example-app", "/example/app/"),
             )
         },
     ),
@@ -411,12 +429,32 @@ WRITE_GAP = Example(
 WRITE_GAP_STATES = {
     # In a row's controls, as a list of messages draws it beside what each says.
     "in-a-row": Example(
-        '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "From" "identifier" %}{% table_heading "Subject" %}{% table_heading "Received" "status" %}'
-        '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead><tbody><tr><td>example-01</td>'
-        "<td>An example subject a reader asked about the example service</td><td>2 hours ago</td>"
-        "{% row_actions gap=gap %}</tr></tbody></table>{% endtable_region %}{% endsection %}",
-        _gap,
+        '{% section "Example messages" %}{% data_table table %}{% endsection %}',
+        lambda: {
+            "table": DataTable(
+                "Example messages",
+                (
+                    TableColumn("From", kind="identifier"),
+                    TableColumn("Subject"),
+                    TableColumn("Received", kind="status"),
+                ),
+                (
+                    tables.Row(
+                        tuple(
+                            map(
+                                Cell,
+                                (
+                                    "example-01",
+                                    "An example subject a reader asked about the example service",
+                                    "2 hours ago",
+                                ),
+                            )
+                        ),
+                        gap=_gap()["gap"],
+                    ),
+                ),
+            )
+        },
     ),
 }
 
@@ -443,14 +481,24 @@ APPROVAL_CARD_STATES = {
 # a machine's page and a procedure's page draw it: a run with every field,
 # one with none, one whose names and messages run long, and one with many
 # tasks that stated readings.
+# A run's own page: its evidence as its facts.
 RUN_EVIDENCE = Example(
-    '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Playbook" %}{% table_heading "State" "status" %}'
-    '{% table_heading "Result" %}</tr></thead><tbody>'
-    "{% for title, word, tone, note, evidence in runs %}<tr><td><strong>{{ title|breakable }}</strong></td>"
-    "<td>{% status word tone=tone %}</td><td>{{ note }}{% run_evidence evidence %}</td></tr>{% endfor %}"
-    "</tbody></table>{% endtable_region %}{% endsection %}",
-    context=lambda: {"runs": _example_runs()},
+    '{% facts %}{% run_evidence evidence layout="facts" %}{% endfacts %}',
+    context=lambda: {"evidence": _example_runs()[0][4]},
+)
+# In each run's row of a declared table, its open line.
+RUN_EVIDENCE_IN_ROWS = Example(
+    '{% section "Example runs" %}{% data_table table %}{% endsection %}',
+    context=lambda: {
+        "table": DataTable(
+            "Example runs",
+            (TableColumn("Playbook"), TableColumn("State", kind="status"), TableColumn("Result")),
+            tuple(
+                tables.Row((Cell(title, name=True), Cell(word, tone=tone), Cell(note)), evidence=evidence)
+                for title, word, tone, note, evidence in _example_runs()
+            ),
+        )
+    },
 )
 
 
@@ -569,10 +617,10 @@ COMMAND_STATES = {
     # phone's, the words under it and its notes.
     "states": Example(
         '{% section "Example setup" %}{% command text="example-cli status" %}{% command text=long %}'
-        '{% command id="example-patch" %}{{ yaml|breakable }}'
-        "{% title %}Add to <code>{{ compose_file|breakable }}</code>"
+        '{% command id="example-patch" %}{{ yaml }}'
+        "{% title %}Add to <code>{{ compose_file }}</code>"
         "{% detail %}Where its service already has one of these keys, replace it. Then run "
-        "<code>docker compose up -d {{ service|breakable }}</code> in that directory."
+        "<code>docker compose up -d {{ service }}</code> in that directory."
         "{% notes %}<li><strong>Remove</strong> <code>pid: host</code></li>"
         '<li><code>user</code> <span class="muted">Its files must be readable by 1000:1000.</span></li>'
         '<li class="prose"><strong>Not included</strong> <span class="muted">An example reason it leaves out,'
@@ -623,7 +671,7 @@ CHECK_LADDER_STATES = {
         '{% section "Example path 5" %}{% check_ladder route=True %}'
         '{% check_rung state="met" kind="Device" %}example-laptop{% more %}Details'
         "{% body %}<p>Example HQ confirmed this example device.</p>{% endcheck_rung %}"
-        '{% check_rung icon="proxy" kind="Proxy" %}{{ proxy|breakable }}{% detail %}{{ address|breakable }}'
+        '{% check_rung icon="proxy" kind="Proxy" %}{{ proxy }}{% detail %}{{ address }}'
         "{% more %}Details{% body %}<p>An example proxy no check reads.</p>{% endcheck_rung %}"
         '{% check_rung icon="container" kind="Container" %}example-app{% detail %}Up 3 days{% more %}Details'
         "{% body %}<p>An example container no check reads.</p>{% endcheck_rung %}"
@@ -658,7 +706,7 @@ CHECK_LADDER_STATES = {
 ROW_EDITOR = Example(
     '{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" %}',
     context=lambda: {
-        "form": ROW_EDITOR_STATES["states"].given()["form"],
+        "form": _ExampleDistance(),
         "row": {"pk": 1, "edit_url": "/example/1/"},
     },
     address="/example/",
@@ -669,13 +717,11 @@ ROW_EDITOR_STATES = {
     # A row's editor: the way in, closed, and the address that opens the
     # first row's form in the line beneath it.
     "states": Example(
-        _edited_rows("Example runs to correct", "example-01", "example-02"),
-        lambda: {"form": _ExampleDistance()},
+        *_edited_rows("Example runs to correct", "example-01", "example-02"),
         address="/example/runs/",
     ),
     "open": Example(
-        _edited_rows("Example runs corrected", "example-11", "example-12"),
-        lambda: {"form": _ExampleDistance()},
+        *_edited_rows("Example runs corrected", "example-11", "example-12"),
         address="/example/runs/?edit=example-11",
     ),
 }
@@ -683,16 +729,24 @@ ROW_EDITOR_STATES = {
 
 # A row's actions: one that posts a value, and one that deletes.
 ROW_ACTIONS = Example(
-    '{% table_region "Example actions" %}<table class="data-table"><tbody><tr><td>{{ row.name }}</td>'
-    "{% row_actions row.actions %}</tr></tbody></table>{% endtable_region %}",
+    "{% data_table table %}",
     lambda: {
-        "row": {
-            "name": "example-01",
-            "actions": (
-                PageAction._built(label="Read", url="/example/1/status/", method="post", value="read", field="status"),
-                PageAction._built(label="Delete", url="/example/1/delete/", danger=True),
+        "table": DataTable(
+            "Example actions",
+            (TableColumn("Name"),),
+            (
+                tables.Row(
+                    (Cell("example-01"),),
+                    actions=(
+                        PageAction._built(
+                            label="Read", url="/example/1/status/", method="post", value="read", field="status"
+                        ),
+                        PageAction._built(label="Delete", url="/example/1/delete/", danger=True),
+                    ),
+                ),
             ),
-        }
+            headed=False,
+        )
     },
 )
 ROW_ACTIONS_STATES = {
@@ -700,13 +754,8 @@ ROW_ACTIONS_STATES = {
     # that moves them (the first with no way up, the last with no way down),
     # and a row that is not one, which draws its star alone.
     "arrangement": Example(
-        '{% section "Example services" %}{% table_region "Example services" %}<table class="data-table"><thead>'
-        '<tr>{% table_heading "Service" "identifier" %}{% table_heading "Open to" %}'
-        '{% table_heading "Actions" css="actions-col" hidden=True %}</tr></thead>'
-        "<tbody>{% for name, mark, order in rows %}<tr><td><strong>{{ name|breakable }}</strong></td>"
-        "<td>Example network</td>{% row_actions mark=mark order=order %}</tr>{% endfor %}"
-        "</tbody></table>{% endtable_region %}{% endsection %}",
-        lambda: {"rows": _arranged_rows()},
+        '{% section "Example services" %}{% data_table table %}{% endsection %}',
+        lambda: {"table": _arranged_rows()},
     ),
 }
 
@@ -719,12 +768,186 @@ DATA_TABLE = Example(
             (
                 TableColumn("Host", cell=lambda name: Cell(name, f"/example/{name}/")),
                 TableColumn("State", cell=lambda name: Cell("Online", tone="good")),
-                TableColumn("Cost", kind="numeric", cell=lambda name: Cell(money(len(name)))),
+                TableColumn("Cost", kind="numeric", cell=lambda name: Cell(amount=Decimal(len(name)))),
             ),
             ("example-host-01", "example-host-two"),
         )
     },
 )
+
+
+TABLE_HEADING = Example(
+    "{% data_table table %}",
+    context=lambda: {
+        "table": table(
+            "Example updates",
+            ("Name", TableColumn("Updated", kind="status", drop=2)),
+            ("example-host", "An hour ago"),
+        )
+    },
+)
+ROW_GROUP = Example(
+    "{% data_table table %}",
+    context=lambda: {
+        "table": DataTable(
+            "Example groups",
+            (TableColumn("Host"),),
+            groups=(tables.Group("Example group", (tables.Row((Cell("example-host"),)),), count=3),),
+        )
+    },
+)
+ROW_SELECT = Example(
+    "{% data_table table %}",
+    context=lambda: {
+        "table": DataTable(
+            "Example selections",
+            (TableColumn("Name", kind="identifier"), TableColumn("State", kind="status")),
+            (tables.Row((Cell("example-01"), Cell("Online", tone="good")), key=1),),
+            selectable=True,
+        )
+    },
+)
+
+
+def _every_kind() -> DataTable:
+    """A table of every kind of cell: a group, a row that folds others under
+    it with its count and a muted line, a readout, a cut line, a moment, an
+    amount, a state, one of whole parts, free text, a part only a narrow box or the open line
+    shows, and the count of a fold's rest across the row; an entity named
+    as code, a state drawn as ``status_pill`` draws it (a chip, an icon), a
+    tip and a title, blocks kept for the open line, a declared part, a row's
+    id, data, mark, order and ask, a run of parts as far as its line holds,
+    a blank cell, a total in the foot, and a region of its own height."""
+
+    def row(name: str, **options) -> tables.Row:
+        return tables.Row(
+            (
+                Cell(name, f"/example/{name}/", readout=True, name=True, fold=bool(options.get("folds"))),
+                Cell("example-operator, on the web", cut=True),
+                Cell(moment=DRAWN_AT - timedelta(hours=2), form="clock", muted=True),
+                Cell(amount=Decimal(12)),
+                Cell("Online", tone="good"),
+                Cell("an example note that wraps wherever it must", muted=True, role="data"),
+            ),
+            **options,
+        )
+
+    head = row("example-host-01", folds="example-fold")
+    head = replace(
+        head,
+        cells=(
+            replace(
+                head.cells[0],
+                count=2,
+                lines=(Cell("Machine", muted=True, parts=(Cell("Online", dot=True, shows="narrow"),)),),
+            ),
+            *head.cells[1:4],
+            Cell(
+                "Up 1 week,",
+                parts=(
+                    Cell("healthy", muted=True, title="An example health check"),
+                    Cell("example check", muted=True, dot=True, shows="narrow-more"),
+                ),
+            ),
+            *head.cells[5:],
+        ),
+    )
+    rest = tables.Row((Cell("1 more change", "/example/rest/", name=True),), folded="example-fold", across=True)
+    blank = row("example-host-03")
+    run = tuple(Cell(status=tables.StatusMark(name, chip=True)) for name in ("Debian", "Caddy", "Tailscale", "SQLite"))
+    blank = replace(blank, cells=(blank.cells[0], Cell(fit=True, parts=run), *blank.cells[2:-1], Cell(blank=True)))
+    from hq.platform.core.included_parts import READING_AGE
+
+    marked = tables.Row(
+        (
+            Cell(
+                "example-host-04",
+                name=True,
+                title="An example host",
+                parts=(Cell(status=tables.StatusMark("Edge", chip=True)),),
+                below=(
+                    tables.Below("", (Cell("An example note kept for the open line."),)),
+                    tables.Below("Also sees", (Cell("example-zone", data={"example": "zone"}), Cell("example-bucket"))),
+                ),
+            ),
+            replace(
+                Cell.of(EntityLink("example.com", "/example/zone/", kind="zone", kind_label="zone")),
+                readout=True,
+                tip="Locked to an example digest",
+            ),
+            Cell(piece=tables.Piece(READING_AGE, {"at": DRAWN_AT - timedelta(days=1)}, words="Last read a day ago")),
+            Cell(amount=Decimal(3)),
+            Cell(status=tables.StatusMark("Update", tone="attention", pill=False, icon="deploy", tip="1.4.2")),
+            Cell(
+                "an example note",
+                muted=True,
+                tip="What the note says in full",
+                parts=(Cell("…1234", muted=True, aloud="ending in 1234", data={"example": "digits"}),),
+            ),
+        ),
+        id="example-host-04",
+        data={"example": "host-04"},
+        mark=RowMark("/example/pin/", True, "example-host-04", "favorites"),
+        order=RowOrder("/example/move/", "example-host-04", True, False),
+        asks=(Ask("Example read", "/example/read/", compact=True),),
+    )
+    return DataTable(
+        "Example kinds",
+        (
+            TableColumn("Name"),
+            TableColumn("User", css="optional-col"),
+            TableColumn("Time", css="date-col key-col"),
+            TableColumn("Cost", kind="numeric"),
+            TableColumn("State", kind="status"),
+            TableColumn("Note"),
+        ),
+        groups=(
+            tables.Group(
+                "Example group",
+                (head, row("example-host-02", folded="example-fold"), rest, blank, marked),
+                count=4,
+                id="example-group",
+                data={"example": "group"},
+            ),
+        ),
+        footer=tables.Row((Cell("Total", name=True), Cell(), Cell(), Cell(amount=Decimal(39)), Cell(), Cell())),
+        region={"pane": True},
+    )
+
+
+def _queue_kind() -> DataTable:
+    """Rows as the queue reads them: a title, its urgency's mark, which only a
+    screen reader hears unless serious, and what it means cut to the line
+    until the row opens; open, what was read, what to do and where to look,
+    each a declared part."""
+
+    from hq.platform.application.decisions import decision
+    from hq.platform.core.included_queue import ICON_LINKS, INSIGHT_FACTS, OPERATOR_STEPS
+    from hq.platform.core.part_examples.records import ICON_LINKS as LINKS, opened_problems
+
+    def piece(part, **given) -> Cell:
+        # Each says on its line what it is about, so its line says something.
+        return Cell(piece=tables.Piece(part, given, words=part.about))
+
+    def row(item: dict) -> tables.Row:
+        css = "is-mark" if item["status"] == "serious" else "is-mark visually-hidden"
+        mark = Cell(status=tables.StatusMark(item["urgency"], tone=item["status"], css=css))
+        gist = Cell(item["detail"], shows="gist", data={"example": "gist"})
+        pieces = (
+            piece(INSIGHT_FACTS, facts=item["facts"]),
+            piece(OPERATOR_STEPS, steps=item["steps"]),
+            piece(ICON_LINKS, **LINKS.given()),
+        )
+        title = Cell(item["label"], "/example/", name=True, parts=(mark, gist), below=(tables.Below("", pieces),))
+        return tables.Row((title,))
+
+    return DataTable("Example queue", (TableColumn("Item"),), tuple(row(decision(each)) for each in opened_problems()))
+
+
+DATA_TABLE_STATES = {
+    "kinds": Example("{% data_table table %}", context=lambda: {"table": _every_kind()}),
+    "queue": Example("{% data_table table %}", context=lambda: {"table": _queue_kind()}),
+}
 
 
 DOT = Example("{{ count }}{% dot %}{{ age }}", context={"count": "3 example hosts", "age": "2 days ago"})
@@ -754,7 +977,13 @@ PAGE_MAIN = Example("{% page_main %}<h1>Example page</h1><p>An example line.</p>
 
 
 ROW_TOGGLE = Example(
-    '{% table_region "Example toggles" %}<table class="data-table"><tbody><tr>'
-    "<td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}",
-    context={"row": {"name": "example-host-01"}},
+    "{% data_table table %}",
+    context=lambda: {
+        "table": DataTable(
+            "Example toggles",
+            (TableColumn("Host"),),
+            (tables.Row((Cell("example-host-01", lines=(Cell("An example note", shows="more"),)),)),),
+            headed=False,
+        )
+    },
 )

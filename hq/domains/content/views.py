@@ -13,14 +13,23 @@ from hq.platform.application import related
 from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traffic, item_traffic
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
+from hq.platform.application.entity_links import entity_link, web_url
 from hq.platform.application.labels import adding, dotted_html
 from hq.platform.application.list_pages import ListPageMixin
+from hq.platform.application.moments import moment, stamp_day
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
-from hq.platform.application.tables import TableColumn
+from hq.platform.application.tables import Cell, TableColumn
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 
 from .models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
+
+
+def _live(row) -> Cell:
+    """The item's live page, where it is published at a web address."""
+
+    url = web_url(row["published_url"])
+    return Cell("Live", url, external=True) if url else Cell()
 
 
 class _ContentSectionView(ListPageMixin, TemplateView):
@@ -79,16 +88,39 @@ class _ContentSectionView(ListPageMixin, TemplateView):
 
     @cached_property
     def table_columns(self) -> tuple[TableColumn, ...]:
-        typed = (TableColumn("Type", "content_type", drop=6),) if len(self.types_held) > 1 else ()
+        typed = (
+            (TableColumn("Type", "content_type", drop=6, cell=lambda row: Cell(row["type_label"])),)
+            if len(self.types_held) > 1
+            else ()
+        )
         return (
-            TableColumn("Title", "title"),
+            TableColumn(
+                "Title",
+                "title",
+                cell=lambda row: Cell.of(entity_link("writeup", row["slug"], label=row["title"]), name=True),
+            ),
             *typed,
-            TableColumn("Status", "status", css="key-col"),
-            TableColumn("Description", drop=1),
-            TableColumn(f"Views ({CONTENT_TRAFFIC_DAYS} days)", kind="numeric", drop=5),
-            TableColumn("Published", "published_at", drop=3),
-            TableColumn("Updated", "updated_at", drop=2),
-            TableColumn("Live page", css="actions-col", drop=4),
+            TableColumn("Status", "status", css="key-col", cell=lambda row: Cell.state(row["state"])),
+            TableColumn("Description", drop=1, cell=lambda row: Cell(row["topic"] or "", muted=True)),
+            TableColumn(
+                f"Views ({CONTENT_TRAFFIC_DAYS} days)",
+                kind="numeric",
+                drop=5,
+                cell=lambda row: Cell("" if row["pageviews"] is None else str(row["pageviews"])),
+            ),
+            TableColumn(
+                "Published",
+                "published_at",
+                drop=3,
+                cell=lambda row: Cell(moment=stamp_day(row["published_at"]), muted=True),
+            ),
+            TableColumn(
+                "Updated",
+                "updated_at",
+                drop=2,
+                cell=lambda row: Cell(moment=moment(row["updated_at"]), form="ago", muted=True),
+            ),
+            TableColumn("Live page", css="actions-col", drop=4, cell=_live),
         )
 
     @override
@@ -100,15 +132,15 @@ class _ContentSectionView(ListPageMixin, TemplateView):
         }
 
     @override
+    def rows(self, items):
+        # Traffic for the rows on this page only, in one query whatever its size.
+        return attach_traffic(super().rows(items))
+
+    @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Traffic for the rows on this page only, in one query whatever its size.
-        attach_traffic(context["object_list"])
-        context.update(
-            # Where the section is published, said once when it is all one site.
-            site=published_on(url for _type, url in self._held),
-            show_type=len(self.types_held) > 1,
-        )
+        # Where the section is published, said once when it is all one site.
+        context["site"] = published_on(url for _type, url in self._held)
         return context
 
 

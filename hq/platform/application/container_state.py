@@ -6,8 +6,11 @@ and one that asks whether it is well never read the same word two ways.
 """
 
 import re
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .tone import Tone, Toned
+lazy from .ui import measured
 
 # Docker's status ends with its health check's verdict: "Up 11 hours (healthy)".
 _CHECK = re.compile(r"\s*\((healthy|unhealthy|health: [^)]*)\)\s*$")
@@ -36,6 +39,30 @@ class ContainerState(Toned):
     @property
     def running(self) -> bool:
         return self is ContainerState.RUNNING
+
+
+@dataclass(frozen=True, slots=True)
+class ContainerCount:
+    """How many containers the sweep found and how many of them run: the one
+    count a machine, the estate and the dashboard say."""
+
+    running: int
+    total: int
+
+    @classmethod
+    def of(cls, states: Iterable[ContainerState]) -> ContainerCount:
+        found = list(states)
+        return cls(running=sum(1 for state in found if state.running), total=len(found))
+
+    @property
+    def stopped(self) -> int:
+        return self.total - self.running
+
+    @property
+    def said(self) -> str:
+        """The count as every page says it (``_container_count.html``)."""
+
+        return f"{self.running} of {measured(self.total, 'running')}"
 
 
 class HealthCheck(Toned):

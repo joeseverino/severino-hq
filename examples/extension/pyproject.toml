@@ -15,7 +15,7 @@ dependencies = []
 
 # The host's own pins, so an update moves both in the one pull request.
 [dependency-groups]
-dev = ["django-stubs==6.1.2", "mypy==2.4.1", "ruff==0.17.5"]
+dev = ["django-stubs==6.1.2", "mypy==2.4.1", "ruff==0.17.6"]
 
 [tool.ruff]
 line-length = 120

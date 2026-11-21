@@ -365,15 +365,9 @@ is already root.
 The document is reported to HQ as data and decides nothing there. The worst a
 forged one can do is raise or hide the findings below.
 
-`hq/platform/application/render_status_findings.py` raises, on the machine the
-controller runs on:
-
-| Finding | When | Severity |
-|---|---|---|
-| `render-failing` | the last run failed; names the class | attention; serious once the last success is past the allowance |
-| `render-stale` | the last recorded run did not fail, and nothing had confirmed the files current within the allowance, or read them in full within a day and the allowance, when the reading was taken. The renderer is not running, or fails before it takes the lock and so records nothing | serious |
-| `connect-sync-stalled` | Connect's `sync` dependency is not `ACTIVE`, or is not reported | attention |
-| `render-status-unread` | the document is missing or was refused, or the reading is out of date (`freshness`: two of the slowest sweeps the controller ever runs); then it says when it was read and, while the bridge refuses the controller's sweep, why | attention |
+`hq/platform/application/render_status_findings.py` raises its rules on the
+machine the controller runs on; the Checks page
+(`/infrastructure/findings/checks/`) lists each with its bars.
 
 The allowance is three runs at their latest, derived from the timer's interval
 and randomized delay (`deploy/systemd/severino-hq-secrets.timer`). So a

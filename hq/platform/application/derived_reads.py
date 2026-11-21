@@ -38,6 +38,7 @@ lazy from .machine_context import header_addresses
 lazy from .machine_records import LoadPart, MachineRecord, PeeringPart, PresencePart
 lazy from .path_records import HopRow, ObservedPart, PathRecord, RoutePart
 lazy from .paths import path_to
+lazy from .plugins import checked_cards
 lazy from .reading_records import ReadingItem, ReadingRecord
 lazy from .record_parts import CheckPart, MeasurementPart
 lazy from .record_saves import row
@@ -81,12 +82,12 @@ def list_estate(*, principal: Principal) -> dict[str, Any]:
                 {
                     "id": card["id"],
                     "label": card["label"],
-                    "value": card["value"],
+                    "value": str(card["value"]),
                     "detail": card.get("detail", ""),
                     "status": card.get("status", ""),
                     "url": card["url"],
                 }
-                for card in estate.cards(principal=principal)
+                for card in checked_cards("hq.estate", estate.cards(principal=principal))
             ]
         )
 
@@ -122,14 +123,7 @@ def _presence(machine: Any) -> PresencePart | None:
 def _load(machine: Any) -> LoadPart | None:
     if not machine.telemetry:
         return None
-    # The container list is the count of what runs, so a reading taken at
-    # another moment does not state a second one beside it.
-    metrics = [
-        metric
-        for metric in machine_metrics(machine.telemetry)
-        if not (machine.containers and metric["label"] == "Containers")
-    ]
-    return {"metrics": metrics, "observed_at": _moment(machine.telemetry_observed_at)}
+    return {"metrics": machine_metrics(machine.telemetry), "observed_at": _moment(machine.telemetry_observed_at)}
 
 
 def serialize_machine(machine: Any) -> MachineRecord:
@@ -137,6 +131,7 @@ def serialize_machine(machine: Any) -> MachineRecord:
         machine,
         MachineRecord,
         node=Kind.MACHINE.of(machine.name),
+        running=machine.container_count.running,
         state=machine.state.label,
         tone=machine.state.tone,
         tailnet_device=machine.route_approval_key,

@@ -6,14 +6,14 @@ from django.test import RequestFactory, SimpleTestCase
 
 from hq.platform.application.markup_testing import elements
 from hq.platform.application.pages import PageAction
+from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
 
 
 class PostButtonFieldsTests(SimpleTestCase):
     def draw(self, *actions: PageAction) -> str:
         request = RequestFactory().get("/example/?page=2")
-        return Template("<table><tr>{% row_actions actions %}</tr></table>").render(
-            RequestContext(request, {"actions": actions})
-        )
+        table = DataTable("Example", (TableColumn("Name"),), (Row((Cell("example"),), actions=actions),))
+        return Template("{% data_table table %}").render(RequestContext(request, {"table": table}))
 
     def sent(self, html: str) -> dict[str, str]:
         return {

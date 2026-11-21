@@ -52,7 +52,7 @@ func TestEnvironmentGlanceMeasuresRunningContainers(t *testing.T) {
 	if machines[0].Key != "hq-node" || read == nil || machines[0].Host != nil {
 		t.Fatalf("%+v", machines[0])
 	}
-	if read.Containers != 2 || read.Cores != 4 || read.CPUPercent != 50 || read.MemoryTotal != 8589934592 ||
+	if read.Cores != 4 || read.CPUPercent != 50 || read.MemoryTotal != 8589934592 ||
 		read.MemoryUsed <= 0 || read.Storage != 3*1073741824 {
 		t.Errorf("%+v", *read)
 	}

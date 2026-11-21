@@ -18,11 +18,11 @@ and what needs you.
 {% endcomment %}
 <header class="page-head">
   <div class="page-head-copy{% if page_aside and page_facts %} is-column{% endif %}">
-    {% if page.trail or page_dateline or page_visit %}<div class="page-trail-row">{% if page.trail %}<div class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</div>{% elif page_dateline %}<p class="eyebrow">{{ page_dateline|when:"dateline" }}</p>{% endif %}{% if page_visit %}{% include "partials/_visit_refresh.html#note" %}{% endif %}</div>{% endif %}
-    <div class="page-name"><h1>{{ page.title|breakable }}</h1>{% for badge in page_badges %}{% status badge.label tone=badge.tone title=badge.title %}{% endfor %}</div>
+    {% if page.trail or page_dateline or page_visit %}<div class="page-trail-row">{% if page.trail %}<div class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label }}</a></span>{% endfor %}</div>{% elif page_dateline %}<p class="eyebrow">{{ page_dateline|when:"dateline" }}</p>{% endif %}{% if page_visit %}{% include "partials/_visit_refresh.html#note" %}{% endif %}</div>{% endif %}
+    <div class="page-name"><h1>{{ page.title }}</h1>{% for badge in page_badges %}{% status badge.label tone=badge.tone title=badge.title %}{% endfor %}</div>
     {% if page_aside and not page_facts %}{% include page_aside %}{% endif %}
-    {% if page.lede %}<p class="page-lede">{{ page.lede|breakable }}</p>{% endif %}
-    {% if page_facts %}<p class="page-facts">{{ page_facts|breakable }}</p>{% endif %}
+    {% if page.lede %}<p class="page-lede">{{ page.lede|ended }}</p>{% endif %}
+    {% if page_facts %}<p class="page-facts">{{ page_facts }}</p>{% endif %}
   </div>
   {% if page_aside and page_facts %}{% include page_aside %}{% endif %}
   {% if page.actions %}

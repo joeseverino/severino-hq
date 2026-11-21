@@ -2,14 +2,14 @@
 
 lazy from datetime import date
 
-lazy from django.template import Template
-
+from hq.platform.core import held_values
 from hq.platform.core.part_examples import runs
 from hq.platform.core.template_parts import Example
-lazy from hq.platform.application.card_items import Kpi
+lazy from hq.platform.application.card_items import Counted, Kpi
 lazy from hq.platform.application.drawings import AllocationBar, Dots, Share, Trend
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.pages import Page, PageVisit
+lazy from hq.platform.application.plugins import checked_cards
 lazy from hq.platform.application.tone import Tone
 
 
@@ -20,13 +20,14 @@ class _Drawn:
         self.source = source
 
     def render(self, context):
-        return Template(self.source).render(context)
+        return held_values.template(self.source).render(context)
 
 
 # A page head's band of facts, as the dashboard's glance draws it, in each
 # form a fact there takes: one leading to a dialog with a note of a problem,
 # one whose line needs attention, and a region holding facts that open a
-# panel, one needing attention and one past its time.
+# panel, one needing attention, its note a run longer than a phone's line,
+# and one past its time.
 _GLANCE = (
     '<div data-example-region>{% facts layout="band" label="Example glance" %}'
     '{% fact "Example connection" icon="network" url="/example/" modal="example" %}'
@@ -39,7 +40,7 @@ _GLANCE = (
     '{% fact "example-host-01" icon="server" id="example-host" tone="attention" title="Example containers" '
     'data_fragment_part="example-host" %}12 <small>containers</small>'
     '{% detail %}<small>{% status "2 example alerts" tone="attention" pill=False %}</small>'
-    '{% list kind="dots" %}<li>CPU 4%</li><li>Memory 48%</li>{% endlist %}'
+    '{% list kind="dots" %}<li>CPU 4%</li><li>Memory 48%</li><li>Storage 38.2 GB</li>{% endlist %}'
     "{% heading %}<strong>Example host</strong><span>An example summary</span>"
     '{% panel %}{% facts %}{% fact "Example CPU" value="4%" %}{% fact "Example memory" value="583 MB" %}{% endfacts %}'
     '{% foot %}<a href="/example/">Example containers</a><span><button type="button">Refresh</button>'
@@ -59,9 +60,9 @@ _GLANCE = (
 _GLANCE_EMPTY = (
     '<div data-example-region>{% facts layout="band" label="Example glance" %}'
     '{% fact "Example controller" icon="activity" url="/example/controller/" %}'
-    '{% status "Not configured" dot=True ink="context" %}{% endfact %}'
+    '{% status "not set up"|absent dot=True ink="context" %}{% endfact %}'
     '{% fact "Example host" icon="server" id="example-empty" data_fragment_part="example-empty" %}{% empty_value %}'
-    "{% detail %}<small>No reading yet</small>"
+    '{% detail %}<small>{% status "no reading yet"|absent pill=False %}</small>'
     "{% heading %}<strong>Example host</strong>{% panel %}<p>An example host has not been read yet.</p>{% endfact %}"
     '{% fact "Example weather" icon="cloud" id="example-long" data_fragment_part="example-long" %}71°'
     '{% detail %}{% list kind="dots" %}<li>Example Mostly Cloudy with an example chance of showers later</li>'
@@ -157,8 +158,8 @@ FACTS_STATES = {
         lambda: {
             "items": [
                 Kpi("Example expenses", "$1,204.50", "12 example expenses", detail_url="/example/expenses/"),
-                Kpi("Example docs due", 3, url="/example/docs/", icon="page"),
-                Kpi("Example assets", 0, "$0.00 total", is_zero=True),
+                Kpi(Counted(3, "Example doc due", "Example docs due"), url="/example/docs/", icon="page"),
+                Kpi(Counted(0, "Example asset", "Example assets"), detail="$0.00 total"),
             ]
         },
     ),
@@ -179,7 +180,7 @@ FACTS_STATES = {
         '{% fact "Example version" icon="layers" %}<code>example-1.2.3</code>{% detail %}'
         "<small>example.com/example/image</small><small>Tag only</small>{% endfact %}"
         '{% fact "An example label long enough to wrap onto a second line in its cell" icon="shield" tone="serious" %}'
-        '<a href="/example/">{{ "2\u00a0example findings"|breakable }}</a>{% detail %}<small>An example detail</small>{% endfact %}'
+        '<a href="/example/">{{ "2\u00a0example findings" }}</a>{% detail %}<small>An example detail</small>{% endfact %}'
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
         "{% endfacts %}{% endcard %}"
     ),
@@ -189,7 +190,7 @@ FACTS_STATES = {
     "band-code": Example(
         '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example running" icon="activity" value="Up 1 week" %}'
-        '{% fact "Example version" icon="layers" %}<code>{{ tag|breakable }}</code>{% endfact %}'
+        '{% fact "Example version" icon="layers" %}<code>{{ tag }}</code>{% endfact %}'
         "{% endfacts %}{% endcard %}"
         '{% card element="div" %}{% facts layout="band" %}'
         '{% fact "Example running" icon="activity" value="Up 1 week" %}'
@@ -246,16 +247,45 @@ FACTS_STATES = {
         {"lines": ("Example issuer", "24 example days left")},
     ),
     # A card's summary line, as the dashboard's counts across HQ draw it: a
-    # zero, a linked count, a toned count, one with its detail, enough to wrap
-    # at a phone's width.
+    # zero, a linked count, a toned count, one with its detail, a count of one
+    # saying its label for one, enough to wrap at a phone's width.
     "inline": Example(
         '{% card element="div" %}{% facts layout="inline" label="Example summary" %}'
-        '{% fact "Example rules" value=0 %}'
-        '{% fact "Example devices waiting" value=1 url="/example/?waiting=1" tone="serious" %}'
-        '{% fact "Example open updates" value=2 url="/example/updates/" detail="2 example alerts with no fix open" %}'
-        '{% fact "Example drafts" value=1 url="/example/drafts/" detail="22 published" %}'
-        '{% fact "Example expenses" value="$1,204.50" url="/example/expenses/" detail="All deductible est." %}'
-        "{% endfacts %}{% endcard %}",
+        "{% for card in cards %}{% fact card.label value=card.value url=card.url detail=card.detail tone=card.status %}"
+        "{% endfor %}{% endfacts %}{% endcard %}",
+        lambda: {
+            "cards": checked_cards(
+                "example",
+                (
+                    {"id": "rules", "label": Counted(0, "Example rule", "Example rules"), "url": "/example/"},
+                    {
+                        "id": "waiting",
+                        "label": Counted(1, "Example device waiting", "Example devices waiting"),
+                        "url": "/example/?waiting=1",
+                        "status": Tone.SERIOUS,
+                    },
+                    {
+                        "id": "updates",
+                        "label": Counted(2, "Example open update", "Example open updates"),
+                        "url": "/example/updates/",
+                        "detail": "2 example alerts with no fix open",
+                    },
+                    {
+                        "id": "drafts",
+                        "label": Counted(1, "Example draft", "Example drafts"),
+                        "url": "/example/drafts/",
+                        "detail": "22 published",
+                    },
+                    {
+                        "id": "expenses",
+                        "label": "Example expenses",
+                        "value": "$1,204.50",
+                        "url": "/example/expenses/",
+                        "detail": "All deductible est.",
+                    },
+                ),
+            )
+        },
         premise=(_WHOLE, ".fact"),
     ),
     # A few short pairs, one of them a long address that wraps in its own
@@ -263,7 +293,7 @@ FACTS_STATES = {
     "list": Example(
         '{% facts layout="list" %}'
         '{% fact "Address" %}<code>https://hq.example.com/mcp/</code>{% endfact %}'
-        '{% fact "Sign-in" %}<a href="/example/">{{ sign_in|breakable }}</a>{% endfact %}'
+        '{% fact "Sign-in" %}<a href="/example/">{{ sign_in }}</a>{% endfact %}'
         '{% fact "Protocol" %}<code>2025-06-18</code>{% endfact %}'
         "{% endfacts %}",
         {"sign_in": "https://auth.example.com/application/o/example-hq-agent/.well-known/openid-configuration"},
@@ -274,7 +304,7 @@ FACTS_STATES = {
     "list-identifiers": Example(
         '<div style="max-inline-size: 300px">{% facts %}'
         '{% fact "Example name" value="example-01" %}'
-        '{% fact "Example image" %}<code>{{ image|breakable }}</code>{% endfact %}'
+        '{% fact "Example image" %}<code>{{ image }}</code>{% endfact %}'
         '{% fact "Example kind" value="Renewal" %}'
         '{% fact "Example path" value=path %}'
         '{% fact "Example port" value="8123" %}'
@@ -346,7 +376,7 @@ FACTS_STATES = {
     "list-compact": Example(
         '{% section "Example settings" %}{% facts %}'
         '{% fact "Example name" value="example-01" %}'
-        '{% fact "Example image" %}<code>{{ image|breakable }}</code>{% endfact %}'
+        '{% fact "Example image" %}<code>{{ image }}</code>{% endfact %}'
         "{% endfacts %}"
         '{% section "Example other settings" fold=True open=True %}{% facts %}'
         '{% fact "Example port" value="8123" %}'

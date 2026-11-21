@@ -3,6 +3,7 @@
 from hq.platform.core.template_parts import Example
 lazy from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHANNEL
 lazy from hq.platform.application.request_connection import Connection, Peering
+lazy from hq.platform.application.request_headers import RESPONSE_CHECKS
 lazy from hq.platform.application.request_identity import Identity
 lazy from hq.platform.application.request_standard import RequestFacts, ServingDeviceResolution
 lazy from hq.platform.application.standards import Check, Reading, measure
@@ -169,3 +170,15 @@ EXAMPLE_CONNECTION_STATES = {
         settings={"SEVERINO_RENDERED_COPY": True},
     ),
 }
+
+
+# A header HQ sends and a directive of its policy, each its value and its
+# state as they stand before the browser has read the response.
+RESPONSE_CHECK = Example(
+    "{% for check in checks %}{% include part with check=check value=True %} "
+    "{% include part with check=check value=False %}{% endfor %}",
+    context=lambda: {
+        "checks": RESPONSE_CHECKS[:1] + tuple(c for c in RESPONSE_CHECKS if c.directive)[:1],
+        "part": "core/_response_check.html",
+    },
+)

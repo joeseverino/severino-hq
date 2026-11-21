@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 {% button_row %}
-  {% if gap %}{% muted element="p" %}{{ gap.reason|breakable }} {% include "partials/_write_gap.html" %}{% endmuted %}{% else %}
+  {% if gap %}{% muted element="p" %}{{ gap.reason }} {% include "partials/_write_gap.html" %}{% endmuted %}{% else %}
   {% for action in offered %}{% include "partials/_page_action.html" with action=action only %}{% endfor %}
   {% endif %}
 {% endbutton_row %}
@@ -10,7 +10,7 @@
 {% section "Message" %}
   {% facts %}
     {% fact "Name" value=submission.name %}
-    {% fact "Email" %}<a href="{{ reply_href }}">{{ submission.email|breakable }}</a>{% endfact %}
+    {% fact "Email" %}<a href="{{ reply_href }}">{{ submission.email }}</a>{% endfact %}
   {% endfacts %}
   {% include "partials/_linked_text.html" with parts=submission.message|named_links only %}
 {% aside %}{% status state %}{% if submission.pending %} {% waiting as waits %}{% status waits tone="attention" %}{% endif %}
@@ -18,7 +18,7 @@
 
 {% section "Delivery" %}
   {% facts %}
-    {% fact "Number" %}#{{ submission.id|breakable }}{% endfact %}
+    {% fact "Number" %}#{{ submission.id }}{% endfact %}
     {% fact "Bot check" %}{{ submission.turnstile|or_empty }}{% endfact %}
     {% fact "Sent" %}{{ submission.created_at|when }}{% endfact %}
     {% fact "Updated" %}{{ submission.updated_at|when }}{% endfact %}

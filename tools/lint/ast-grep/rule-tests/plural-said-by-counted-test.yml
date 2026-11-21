@@ -3,6 +3,10 @@ valid:
   - 'said = counted(n, "need output", "needs output")'
   - 'mark = "s" if strict else "x"'
   - 'name = "" if blank else name'
+  - 'more = f" and {n - 1} more" if n > 1 else ""'
+  - 'title = f"{jobs[0]} failed" if len(jobs) == 1 else f"{len(jobs)} jobs failed"'
 invalid:
   - 'said = f"{n} zone{"s" if n != 1 else ""}"'
   - "suffix = '' if n == 1 else 'es'"
+  - 'verb = "is" if len(parts) == 1 else "are"'
+  - 'said = "Reports are sent." if count == 1 else f"Reports go to {count} addresses."'

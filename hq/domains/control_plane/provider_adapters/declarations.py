@@ -11,7 +11,7 @@ from django.urls.converters import StringConverter
 from pydantic import Field, GetJsonSchemaHandler, WithJsonSchema, field_validator, model_validator
 from pydantic_core import CoreSchema
 
-from hq.platform.application.command_fields import RequiredText
+from hq.platform.application.command_fields import Reason, RequiredText, checked
 from hq.platform.application.labels import dotted
 from hq.platform.application.stored_columns import IPV4, IPV6
 from hq.platform.application.ui import ended
@@ -73,6 +73,9 @@ class NetworkSpec(ProviderModel):
     )
 
 
+_EXPIRES_ON = Reason("expires_on_day", "must be an ISO date, such as 2036-05-02, or blank")
+
+
 class CertificateAuthoritySpec(ProviderModel):
     """A certificate authority this estate trusts, and where its key lives.
 
@@ -117,9 +120,10 @@ class CertificateAuthoritySpec(ProviderModel):
 
     @field_validator("expires_on")
     @classmethod
+    @checked
     def a_real_date(cls, value: str) -> str:
         if value and stamp_day(value) is None:
-            raise ValueError("Use an ISO date, e.g. 2036-05-02.")
+            raise _EXPIRES_ON.refused()
         return value
 
 
@@ -229,25 +233,21 @@ class TLSDeliveryTargetSpec(ProviderModel):
     )
 
     @model_validator(mode="after")
+    @checked
     def kind_decides_which_settings_apply(self) -> TLSDeliveryTargetSpec:
         # Refused rather than ignored. A directory typed against an NPM target
         # would sit there looking configured while nothing ever read it.
         for field_name, kind in _ONLY_FOR:
             if getattr(self, field_name) and self.kind != kind:
-                raise ValueError(
-                    f"{TLSDeliveryTargetSpec.model_fields[field_name].title!r} "
-                    f"applies only to {kind} targets. This one is {self.kind}."
-                )
+                raise _ONLY_FOR_REASONS[field_name].refused()
         for kind, needed in _NEEDS.items():
             if self.kind == kind and not all(getattr(self, field_name) for field_name in needed):
-                titles = ((TLSDeliveryTargetSpec.model_fields[name].title or name).lower() for name in needed)
-                named = " and ".join(f"{'an' if title[0] in 'aeiou' else 'a'} {title}" for title in titles)
-                raise ValueError(f"A {_KIND_LABELS[kind]} target needs {named}.")
+                raise _NEEDS_REASONS[kind].refused()
         # Nothing is served here, so there is nothing to connect to and check.
         # Refused rather than ignored, for the same reason as the rest: a name
         # typed here would read as verified and never be probed.
         if self.kind in _SERVES_NOTHING and self.verify_domains:
-            raise ValueError(f"A {_KIND_LABELS[self.kind]} target serves nothing. Leave the names to check empty.")
+            raise _SERVES_NOTHING_REASONS[self.kind].refused()
         return self
 
     @classmethod
@@ -270,6 +270,28 @@ _ONLY_FOR = (
 _NEEDS = {"caddy": ("certificate_directory",), "onepassword": ("vault", "item")}
 _SERVES_NOTHING = ("onepassword",)
 _KIND_LABELS = {"npm": "Nginx Proxy Manager", "caddy": "Caddy", "cpanel": "cPanel", "onepassword": "1Password"}
+
+
+def _title(name: str) -> str:
+    return (TLSDeliveryTargetSpec.model_fields[name].title or name).lower()
+
+
+def _needs(kind: str) -> str:
+    named = (f"{'an' if title[0] in 'aeiou' else 'a'} {title}" for title in map(_title, _NEEDS[kind]))
+    return f"is a {_KIND_LABELS[kind]} target, which needs {' and '.join(named)}"
+
+
+_ONLY_FOR_REASONS = {
+    name: Reason(f"tls_target_{name}", f"sets {_title(name)}, which only a {_KIND_LABELS[kind]} target takes")
+    for name, kind in _ONLY_FOR
+}
+_NEEDS_REASONS = {kind: Reason(f"tls_target_{kind}_needs", _needs(kind)) for kind in _NEEDS}
+_SERVES_NOTHING_REASONS = {
+    kind: Reason(
+        f"tls_target_{kind}_checked", f"names a name to check, which a {_KIND_LABELS[kind]} target never serves"
+    )
+    for kind in _SERVES_NOTHING
+}
 # A setting left unset, by what it holds.
 _UNSET: dict[Any, dict[str, Any]] = {str: {"maxLength": 0}, bool: {"const": False}, list[str]: {"maxItems": 0}}
 

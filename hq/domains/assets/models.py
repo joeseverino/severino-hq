@@ -1,6 +1,5 @@
 """Assets / equipment."""
 
-from decimal import Decimal
 from typing import override
 
 from django.db import models
@@ -50,9 +49,10 @@ class Asset(TimestampedModel):
     vendor = models.CharField(max_length=120, blank=True)
     category = models.CharField(max_length=30, choices=ASSET_CATEGORY_CHOICES, default="other")
     purchase_date = models.DateField(null=True, blank=True)
-    total_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    # Null until it is known: a cost of zero is a free asset.
+    total_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     business_use_percentage = models.PositiveSmallIntegerField(default=100, validators=business_use.VALIDATORS)
-    estimated_deductible_amount = business_use.deductible()
+    estimated_deductible_amount = business_use.deductible(null=True)
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
     serial_number = models.CharField(max_length=120, blank=True)
     warranty_date = models.DateField(null=True, blank=True)

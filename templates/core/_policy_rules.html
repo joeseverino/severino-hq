@@ -1,17 +1,13 @@
 {% comment %}
 The rules form's tables (core/agent_policy.html), drawn in partials/_form.html
-as its `table_body`: the rules that differ from the default, then every other
-action folded under its own heading. Each row is in one table only, so the
-form posts each rule once. The folded table is drawn when opened, inside the
-form: a save before then posts only the changed rules, and a rule not posted
-is left as it holds.
+as its `table_body` inside the page's Rules section: the rules that differ
+from the default, then every other action folded under its own heading. Each
+row is in one table only, so the form posts each rule once. The folded table
+is drawn when opened, inside the form: a save before then posts only the
+changed rules, and a rule not posted is left as it holds.
 {% endcomment %}
-{% if changed_groups %}
-  {% section "Rules" %}
-    {% include "core/_policy_table.html" with groups=changed_groups label="Rules" %}
-  {% endsection %}
-{% endif %}
-{% if default_groups %}
+{% if changed_rules %}{% data_table changed_rules %}{% endif %}
+{% if default_rules %}
   {% section "Defaults" count=default_count fold=True id="every-action" open=every_read %}
     {% if every_read %}
       {% include "core/_every_rule.html" %}

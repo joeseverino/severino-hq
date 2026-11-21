@@ -83,8 +83,6 @@ def _focus_url(node_id: str) -> str:
 
 
 def _resource_status(resource: ManagedResource) -> tuple[Tone, str, str]:
-    if not resource.enabled:
-        return Tone.NEUTRAL, "Switched off in HQ", ""
     health = resource_health(resource)
     return ResourceState(health["state"]).tone, health["label"], health["message"]
 

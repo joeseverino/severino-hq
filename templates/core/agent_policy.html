@@ -8,7 +8,7 @@ the heading, then what the rules below allow and what they held or refused.
 {% section "Access" lede=said id="agent-access" %}
   {% url 'core:audit_list' as audit_url %}{% with_query audit_url awaiting=1 as held_url %}{% with_query audit_url action="denied" as refused_url %}
   {% facts layout="band" %}
-    {% if rule_count == 1 %}{% fact "Rule" value=rule_count %}{% else %}{% fact "Rules" value=rule_count %}{% endif %}
+    {% fact "Rules" value=rule_count %}
     {% if awaiting_count %}{% fact "Held for approval" value=awaiting_count url=held_url %}{% endif %}
     {% fact "Refused in the last day" value=refused_count url=refused_url %}
   {% endfacts %}
@@ -23,25 +23,8 @@ or a machine agent's, which anyone who governs agents approves. Pressed here
 or on the device's row below, the same form.
 {% endcomment %}
 {% if prompts %}
-  {% section "Needs approval" count=prompts|length id="device-prompts" %}
-    {% table_region "Needs approval" %}
-      <table class="data-table">
-        <thead>
-          <tr>
-            {% table_heading "Device" %}
-            {% table_heading "Approve or block" "control" hidden=True %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for prompt, actions in prompts %}
-            <tr data-prompt="{{ prompt.device.anchor }}">
-              <th scope="row" class="cell-data"><a href="#{{ prompt.device.anchor }}">{{ prompt.text|breakable }}</a></th>
-              {% row_actions actions %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
+  {% section "Needs approval" count=prompts.rows|length id="device-prompts" %}
+    {% data_table prompts %}
   {% endsection %}
 {% endif %}
 
@@ -55,50 +38,7 @@ it is not blocked, since removal never lifts a block.
 {% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
 {% section "Agents" count=standings|length id="agents" lede=lede %}
 {% if standings %}
-  {% table_region "Agents" %}
-    <table class="data-table">
-      <thead>
-        <tr>
-          {% table_heading "Agent" "identifier" local_sort=True %}
-          {% table_heading "Permissions" local_sort=True drop=2 %}
-          {% table_heading "Last seen" "status" local_sort=True drop=3 %}
-          {% table_heading "Activity" local_sort=True drop=1 %}
-          {% table_heading "Block or remove" "control" hidden=True %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for standing, actions in agent_rows %}{% with identity=standing.identity activity=standing.activity %}
-          <tr data-agent="{{ standing.subject }}" data-client="{{ identity.client_id }}"{% if identity.blocked_at %} data-blocked{% endif %}>
-            <th scope="row">
-              <code>{{ identity.client_id|breakable }}</code>{% if identity.blocked_at %} {% status "Blocked" tone="attention" %}{% endif %}
-              {% list kind="dots" muted=True %}
-                {% if identity.person %}<li data-person>For {{ identity.person.get_username|breakable:"," }} {% if standing.role %}{{ standing.role_label|lower|breakable }}{% else %}no role{% endif %}</li>{% endif %}
-                {% if identity.signs_in and not identity.person %}<li>Signs in {{ identity.get_signs_in_display|lower|breakable }}</li>{% endif %}
-                {% if identity.interfaces %}<li>Over {{ identity.interfaces|interface_label|breakable }}</li>{% endif %}
-                {% if standing.devices %}<li><a href="#devices-{{ identity.pk }}">From {{ standing.devices|length|counted:"device" }}</a></li>{% endif %}
-              {% endlist %}
-              <div class="row-below">
-                {% if identity.blocked_at %}<p>Blocked {{ identity.blocked_at|when:"ago" }}{% if identity.blocked_by %} by {{ identity.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
-                {% if identity.person %}{% if standing.acts_for_nobody %}<p data-role="none">{{ identity.person.get_username|breakable }} holds no role, so its calls are refused.</p>{% else %}<p data-role="{{ standing.role }}">Role confirmed {{ standing.role_confirmed|when:"ago" }}.</p>{% endif %}{% endif %}
-                {% with streams=standing.streams %}{% if streams.open and not streams.full %}<p data-streams="open">{{ streams.open|breakable }} of {{ streams.cap|counted:"live update stream,live update streams" }} open.</p>{% endif %}{% endwith %}
-                {% if standing.in_force %}<p>Permissions: {% for name in standing.in_force %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
-                {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
-                {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
-              </div>
-            </th>
-            <td data-sort="{{ standing.in_force|length }}">{% list %}<li>{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}</li>{% if standing.beyond_role %}<li>{% muted %}{{ standing.beyond_role|length|breakable }} beyond its person's role{% endmuted %}</li>{% endif %}{% if standing.missing %}<li>{% status standing.missing|length "not granted" tone="attention" pill=False %}</li>{% endif %}{% endlist %}</td>
-            <td>{{ identity.last_seen|when:"ago" }}</td>
-            <td data-sort="{{ activity.changes }}">
-              {% list %}<li>{{ activity.changes|counted:"change" }}</li>
-              {% if activity.refused %}<li>{% status activity.refused|measured:"refused" tone="attention" pill=False %}{% if activity.limited == activity.refused %} {% muted %}for calling too much{% endmuted %}{% elif activity.limited %} {% muted %}{{ activity.limited|breakable }} for calling too much{% endmuted %}{% endif %}</li>{% endif %}
-              {% with streams=standing.streams %}{% if streams.full %}<li>{% status streams.open "of" streams.cap|counted:"stream" "open" tone="attention" pill=False data_streams="full" %} {% muted %}so another is refused{% endmuted %}</li>{% endif %}{% endwith %}{% endlist %}
-            </td>
-            {% row_actions actions %}
-          </tr>
-        {% endwith %}{% endfor %}
-      </tbody>
-    </table>
-  {% endtable_region %}
+  {% data_table agents %}
 {% else %}
   {% include "partials/_empty_state.html" with message="No agent has connected yet." %}
 {% endif %}
@@ -140,56 +80,14 @@ this links to it only for how a provider's permission list is written.
 
 {% comment %}
 The tailnet devices each agent called from, a group per agent that has any: the devices it
-has a record of, then any address it was refused from because the tailnet
-could not place the call there. A call from a device runs once it is
+has a record of, then any address it was refused from because no tailnet
+device sent the call there. A call from a device runs once it is
 approved, and a block stops that device alone.
 {% endcomment %}
 {% if device_groups %}
-  {% with days=recent_days|counted:"day" %}{% with lede="Calls over the last "|add:days %}
+  {% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
   {% section "Devices" id="agent-devices" lede=lede %}
-  {% table_region "Devices" %}
-    <table class="data-table">
-      <thead>
-        <tr>
-          {% table_heading "Device" "identifier" %}
-          {% table_heading "Approval" "status" %}
-          {% table_heading "First seen" "status" drop=2 %}
-          {% table_heading "Last seen" "status" drop=3 %}
-          {% table_heading "Calls" drop=1 %}
-          {% table_heading "Approve or block" "control" hidden=True %}
-        </tr>
-      </thead>
-      {% for standing, devices in device_groups %}{% with identity=standing.identity %}
-        <tbody id="devices-{{ identity.pk }}" data-agent-devices="{{ standing.subject }}">
-          {% row_group standing.label devices|length %}
-          {% for device, actions in devices %}
-            <tr id="{{ device.anchor }}" data-device-standing="{{ device.standing }}">
-              <th scope="row">
-                {{ device.name|breakable }}
-                {% list kind="dots" muted=True %}
-                  {% if device.os %}<li>{{ device.os|breakable }}</li>{% endif %}
-                  {% if device.owner %}<li data-owner>Owned by {{ device.owner|breakable }}</li>{% elif device.record %}<li>Tagged</li>{% else %}<li data-unplaced>Not on the tailnet, so its calls are refused</li>{% endif %}
-                {% endlist %}
-                {% with record=device.record %}{% if record %}
-                <div class="row-below">
-                    {% if record.person %}<p>Calls for {{ record.person.get_username|breakable:"," }} who approves it.</p>
-                    {% else %}<p>Calls as itself, so anyone who governs agents approves it.</p>{% endif %}
-                    {% if record.approved_at %}<p>Approved {{ record.approved_at|when:"ago" }}{% if record.approved_by %} by {{ record.approved_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
-                    {% if record.blocked_at %}<p>Blocked {{ record.blocked_at|when:"ago" }}{% if record.blocked_by %} by {{ record.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
-                </div>
-                {% endif %}{% endwith %}
-              </th>
-              <td>{% list %}<li>{% status device.standing %}</li>{% if device.waits_for %}<li>{% muted %}For {{ device.waits_for|breakable }}{% endmuted %}</li>{% endif %}{% endlist %}</td>
-              <td>{{ device.first_seen|when:"ago" }}</td>
-              <td>{{ device.last_seen|when:"ago" }}</td>
-              <td data-sort="{{ device.calls }}">{% list %}<li>{{ device.calls|counted:"call" }}</li>{% if device.refused %}<li>{% status device.refused|measured:"refused" tone="attention" pill=False %}</li>{% endif %}{% endlist %}</td>
-              {% row_actions actions %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      {% endwith %}{% endfor %}
-    </table>
-  {% endtable_region %}
+  {% data_table device_groups %}
   {% endsection %}
   {% endwith %}{% endwith %}
 {% endif %}
@@ -199,31 +97,8 @@ The signed-in person's own devices: a client registered here whose token also
 carries the device permission stands as them. Only theirs, never anybody else's.
 {% endcomment %}
 {% url 'own_device' as device_url %}
-{% section "Your apps" count=devices|length id="own-devices" lede="Apps that sign in as you." %}
-  {% if devices %}
-    {% table_region "Your apps" %}
-      <table class="data-table">
-        <thead>
-          <tr>
-            {% table_heading "App" "identifier" local_sort=True %}
-            {% table_heading "Registered" "status" local_sort=True %}
-            {% table_heading "Remove" "control" hidden=True %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for device, actions in devices %}
-            <tr data-device="{{ device.client_id }}">
-              <th scope="row"><code>{{ device.client_id|breakable }}</code></th>
-              <td>{{ device.registered_at|when:"ago" }}</td>
-              {% row_actions actions %}
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
-  {% else %}
-    {% include "partials/_empty_state.html" with message="None registered." %}
-  {% endif %}
+{% section "Your apps" count=devices.rows|length id="own-devices" lede="Apps that sign in as you." %}
+  {% data_table devices %}
   {% if device_form %}
     {% include "partials/_form.html" with form=device_form action=device_url fields="core/_command_fields.html" choices=device_choices choice_field="registered" %}
   {% endif %}
@@ -238,35 +113,12 @@ change. Asked for when opened: asking takes the server's SDK into the process.
 <div id="mcp-endpoint" data-fragment data-fragment-name="mcp_endpoint">
   {% if endpoint %}
     {% facts %}
-      {% fact "Address" %}<code>{{ endpoint.url|breakable }}</code>{% endfact %}
-      {% fact "Sign-in" %}{% outside_link url=endpoint.sign_in %}{{ endpoint.sign_in|breakable }}{% endoutside_link %}{% endfact %}
-      {% fact "Protocol" %}<code>{{ endpoint.protocol|breakable }}</code>{% endfact %}
+      {% fact "Address" %}<code>{{ endpoint.url }}</code>{% endfact %}
+      {% fact "Sign-in" %}{% outside_link url=endpoint.sign_in %}{{ endpoint.sign_in }}{% endoutside_link %}{% endfact %}
+      {% fact "Protocol" %}<code>{{ endpoint.protocol }}</code>{% endfact %}
     {% endfacts %}
     {% if endpoint.told %}{% include "partials/_about.html" with id="mcp-told" title="Agent instructions" lede="Sent by the MCP server before an agent's first call." body_template="core/_mcp_told.html" %}{% endif %}
-    {% table_region "MCP server" %}
-      <table class="data-table">
-        <thead>
-          <tr>
-            {% table_heading "Name" "identifier" local_sort=True %}
-            {% table_heading "Description" local_sort=True %}
-          </tr>
-        </thead>
-        {% for offer in endpoint.offers %}
-          <tbody>
-            {% row_group offer.label offer.items|length %}
-            {% for item in offer.items %}
-              <tr>
-                <th scope="row">
-                  {% cell_line %}<code>{{ item.name|breakable }}</code>{% detail %}{% if item.reads_only %}Reads only{% endif %}{% endcell_line %}
-                  {% for paragraph in item.more %}<p class="row-below">{{ paragraph|code_spans }}</p>{% endfor %}
-                </th>
-                <td class="cell-data">{% if item.title %}<strong>{{ item.title|breakable }}</strong> {% endif %}{{ item.summary|code_spans }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        {% endfor %}
-      </table>
-    {% endtable_region %}
+    {% data_table offers %}
   {% else %}
     {% muted element="p" %}Off: agents cannot connect until HQ's settings name the address their tokens are issued for.{% endmuted %}
   {% endif %}
@@ -283,14 +135,17 @@ change. Asked for when opened: asking takes the server's SDK into the process.
 {% endsection %}
 
 {% comment %}
-The rules, one form over their tables (core/_policy_rules.html) for whoever
-may save them, and the tables alone, read as they hold, for anyone else. The part
-the fold asks for when opened is drawn here, by its name on this page.
+The rules in one section: one form over their tables (core/_policy_rules.html)
+for whoever may save them, its closing row in the section with the tables it
+saves, and the tables alone, read as they hold, for anyone else. The part the
+fold asks for when opened is drawn here, by its name on this page.
 {% endcomment %}
 {% partialdef every_rule %}{% include "core/_every_rule.html" %}{% endpartialdef %}
-{% if rules_settable %}
-  {% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
-{% else %}
-  {% include "core/_policy_rules.html" %}
-{% endif %}
+{% section "Rules" %}
+  {% if rules_settable %}
+    {% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
+  {% else %}
+    {% include "core/_policy_rules.html" %}
+  {% endif %}
+{% endsection %}
 {% endblock %}

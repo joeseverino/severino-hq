@@ -12,15 +12,15 @@ what is not met. A check met everywhere is a word in one closing line.
   {% endif %}
 
   {% section "By repository" count=repositories|length %}
-  {% include "projects/_repository_postures.html" with repositories=repositories only %}
+  {% data_table postures %}
   {% endsection %}
 
   {% if everywhere %}
     {% section "Passing everywhere" count=everywhere|length fold=True %}
-      {% list kind="prose" %}{% for check in everywhere %}<li>{{ check.label|breakable }}</li>{% endfor %}{% endlist %}
+      {% list kind="prose" %}{% for check in everywhere %}<li>{{ check.label }}</li>{% endfor %}{% endlist %}
     {% endsection %}
   {% endif %}
 {% else %}
-  {% include "partials/_empty_state.html" with message="No repository read yet." remedy=page.remedy %}
+  {% include "partials/_empty_state.html" with absent="no reading yet" remedy=page.remedy %}
 {% endif %}
 {% endblock %}

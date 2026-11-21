@@ -6,27 +6,12 @@
     {% with reading=results|dictkey:"lookup.name.read" %}
       {% if reading %}
         {% if reading.ok %}
-          {% table_region "Public records" %}
-            <table class="data-table">
-              <thead><tr>{% table_heading "Type" "identifier" %}{% table_heading "Name" "identifier" drop=1 %}{% table_heading "Answer" "identifier" %}</tr></thead>
-              <tbody>
-                {% for answer in reading.answers %}
-                  <tr>
-                    <td><code>{{ answer.type|breakable }}</code></td>
-                    <td>{{ answer.name|breakable }}</td>
-                    <td><code class="cell-whole">{{ answer.value|breakable }}</code></td>
-                  </tr>
-                {% empty %}
-                  <tr><td colspan="3">{% include "partials/_empty_state.html" with message="No public records." only %}</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          {% endtable_region %}
+          {% data_table answers %}
           {% if reading.resolver %}
-            <p class="help">Answered by {{ reading.resolver|breakable:"." }}</p>
+            <p class="help">Answered by {{ reading.resolver }}.</p>
           {% endif %}
         {% else %}
-          <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>
+          <p class="help">{{ reading.message|default:"Lookup failed." }}</p>
         {% endif %}
       {% endif %}
     {% endwith %}
@@ -40,31 +25,31 @@
       {% if reading %}
         {% if reading.ok %}
           {% facts %}
-            {% fact "Address" %}<code>{{ reading.address|breakable }}</code> IPv{{ reading.version|breakable }}{% endfact %}
+            {% fact "Address" %}<code>{{ reading.address }}</code> IPv{{ reading.version }}{% endfact %}
             {% if reading.hostnames %}
-              {% fact "Reverse DNS" %}{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}{% endfact %}
+              {% fact "Reverse DNS" %}{% for hostname in reading.hostnames %}<code>{{ hostname }}</code> {% endfor %}{% endfact %}
             {% endif %}
             {% if reading.allocation.organization %}
-              {% fact "Allocated to" %}<strong>{{ reading.allocation.organization|breakable }}</strong>{% endfact %}
+              {% fact "Allocated to" %}<strong>{{ reading.allocation.organization }}</strong>{% endfact %}
             {% endif %}
             {% if reading.allocation.prefixes %}
-              {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}{% endfact %}
+              {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix }}</code> {% endfor %}{% endfact %}
             {% endif %}
             {% if reading.allocation.range %}
               {% fact "Range" value=reading.allocation.range %}
             {% endif %}
             {% if reading.allocation.handle %}
-              {% fact "Registry handle" %}<code>{{ reading.allocation.handle|breakable }}</code>{% endfact %}
+              {% fact "Registry handle" %}<code>{{ reading.allocation.handle }}</code>{% endfact %}
             {% endif %}
             {% if reading.note %}
-              {% fact "Note" %}{% muted %}{{ reading.note|breakable }}{% endmuted %}{% endfact %}
+              {% fact "Note" %}{% muted %}{{ reading.note }}{% endmuted %}{% endfact %}
             {% endif %}
           {% endfacts %}
           {% if reread %}
             <div class="help">Read {{ reading.observed_at|when }} {% include "partials/_page_action.html" with action=reread extra="ghost compact" only %}</div>
           {% endif %}
         {% else %}
-          <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>
+          <p class="help">{{ reading.message|default:"Lookup failed." }}</p>
         {% endif %}
       {% endif %}
     {% endwith %}

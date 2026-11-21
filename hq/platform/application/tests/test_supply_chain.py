@@ -154,13 +154,14 @@ class UpgradeTests(TestCase):
         inventory(
             "registry.vulnerabilities",
             [
-                checked(APP, [found("CLEARED"), found("KEPT", severity="low")]),
+                checked(APP, [found("CLEARED"), found("KEPT", severity="low"), found("MINOR", severity="low")]),
                 checked(APP_TARGET, [found("KEPT", severity="low"), found("BROUGHT", severity="critical")]),
             ],
         )
 
         plan = self.plan("app")
 
+        # It fixes what the title counts, never a finding the title leaves out.
         self.assertEqual([each["id"] for each in plan.fixes], ["CLEARED"])
         self.assertEqual([each["id"] for each in plan.introduces], ["BROUGHT"])
         self.assertIn("target-affected", [blocker.id for blocker in plan.blockers])

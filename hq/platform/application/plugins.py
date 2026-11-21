@@ -1,30 +1,22 @@
 """Versioned, explicitly allowlisted extension contract for trusted HQ plugins."""
 
-import hashlib
-import inspect
-import itertools
 import logging
-import marshal
 import os
-import pickle
 import re
 import sys
-import time
-import weakref
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import asdict, dataclass, fields, is_dataclass, replace
-from functools import lru_cache, partial
+from dataclasses import asdict, dataclass, fields, replace
 from importlib import import_module
-from types import CodeType
 from typing import TYPE_CHECKING, Any, get_args, get_origin
 
 from django.core.exceptions import ImproperlyConfigured
 
 from hq.platform.application.routes import reverse
 
-from .demo import showing_demo
-from .derivations import derivation, forget, holds_until, present
+from .card_items import Counted
+from .composed_providers import DERIVED_PROVIDERS, derived_calendars, provided, provided_under
+from .derivations import forget, holds_until, present
 from .lists import split_list
 from .tone import Tone
 from .ui import DomainOverview
@@ -41,7 +33,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("severino.composition")
 
-PLUGIN_API_VERSION = 22
+PLUGIN_API_VERSION = 24
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -453,167 +445,16 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
     return tuple(integrations)
 
 
-# ----- An extension's part of a shared composition, derived once per change ---
-#
-# What an extension contributes to a page many domains share (the queue, the
-# dashboard, the calendar) is asked for on every request that composes one. The
-# host therefore asks through a derivation of its own, named for the plugin
-# and the provider: the answer is kept until a table the provider was seen to
-# read is written, and an extension is cached without knowing a cache exists.
-#
-# The host cannot see where a provider reads the clock, so each is ``unseen``:
-# its answer stands a minute at most and never past local midnight. It varies
-# by the one thing a provider is given that is not a row or the clock: whether
-# the reader asked for a demo.
-
-# The providers answered with one value for everybody, by field.
-DERIVED_PROVIDERS = ("attention", "dashboard", "overview")
-# How many windows of one calendar source are kept current: the one the
-# dashboard shows and the one last paged to.
-CALENDAR_WINDOWS = 2
-
-_PROVIDERS: dict[str, Callable[..., Any]] = {}
-_ANSWERS: dict[str, Callable[..., Any]] = {}
-
-
-# This process, and each provider met in it that nothing else tells apart.
-_PROCESS = time.time_ns()
-_UNNAMED: weakref.WeakKeyDictionary[Any, int] = weakref.WeakKeyDictionary()
-_SERIAL = itertools.count(1)
-
-
-def _itself(provider: Any) -> str:
-    """A provider known only as the object it is, and only in this process."""
-
-    try:
-        serial = _UNNAMED.get(provider)
-        if serial is None:
-            serial = _UNNAMED[provider] = next(_SERIAL)
-    except TypeError:
-        # Not weakly referable: its address names it while it lives.
-        return f"{_PROCESS}:at:{id(provider)}"
-    return f"{_PROCESS}:{serial}"
-
-
-def _holding(values: Any) -> str | None:
-    """What a provider was built holding, as a digest; None when it cannot be told."""
-
-    try:
-        return hashlib.sha256(pickle.dumps(values)).hexdigest()[:16]
-    except Exception:  # noqa: BLE001 - whatever cannot be pickled cannot be compared
-        return None
-
-
-@lru_cache(maxsize=1024)
-def _written(code: CodeType) -> str:
-    """A function's own code as a digest: two functions of one name differ by it."""
-
-    return hashlib.sha256(marshal.dumps(code)).hexdigest()[:16]
-
-
-def _identity(provider: Callable[..., Any]) -> str:
-    """Which function answers, so one provider is never answered with what
-    another stored.
-
-    Named by where it is defined, what it is written to do (which every process
-    running one release agrees on) and what it was built holding, so a closure
-    made again on every call is the same provider while it holds the same
-    things. Anything that cannot be told apart that way is known only as itself.
-    """
-
-    if isinstance(provider, partial):
-        held = _holding((provider.args, sorted(provider.keywords.items())))
-        return _itself(provider) if held is None else f"{_identity(provider.func)}({held})"
-    if not inspect.isfunction(provider):
-        return _itself(provider)
-    name = f"{provider.__module__}:{provider.__qualname__}:{_written(provider.__code__)}"
-    if provider.__closure__ is None:
-        return name
-    try:
-        held = _holding(tuple(cell.cell_contents for cell in provider.__closure__))
-    except ValueError:
-        # A cell not yet filled.
-        held = None
-    return _itself(provider) if held is None else f"{name}[{held}]"
-
-
-def answered_by(provider: Callable[..., Any]) -> str:
-    """Which function answers when ``provider`` is asked: the one registered
-    behind a derived provider, the provider itself otherwise."""
-
-    for name, answer in _ANSWERS.items():
-        if answer is provider:
-            return _identity(_PROVIDERS[name])
-    return _identity(provider)
-
-
-def _kept(value: Any) -> Any:
-    """What a provider returned, as a value that can be stored: a generator's
-    items, anything else as it is."""
-
-    if isinstance(value, (str, bytes, dict)) or not isinstance(value, Iterable):
-        return value
-    return tuple(value)
-
-
-def provided(name: str, provider: Callable[..., Any], *, ahead: int | None = None) -> Callable[..., Any]:
-    """``provider`` asked through the derivation ``name``, declared on first use.
-
-    The derivation outlives one composition: it answers with whichever
-    provider is registered under its name now.
-    """
-
-    _PROVIDERS[name] = provider
-    answer = _ANSWERS.get(name)
-    if answer is None:
-
-        def vary(*args: Any) -> tuple[Any, ...]:
-            return (*args, showing_demo(), _identity(_PROVIDERS[name]))
-
-        def compute(*args: Any) -> Any:
-            return _kept(_PROVIDERS[name](*args))
-
-        declare = (
-            derivation(name, reads=(), vary=vary, unseen=True)
-            if ahead is None
-            else derivation(name, reads=(), vary=vary, unseen=True, ahead=ahead)
-        )
-        answer = _ANSWERS[name] = declare(compute)
-    return answer
-
-
-def _is_source(source: Any) -> bool:
-    """Whether this is a calendar source to wrap; anything else is the
-    calendar's to refuse, by name."""
-
-    return is_dataclass(source) and not isinstance(source, type) and callable(getattr(source, "events", None))
-
-
-def _derived_calendars(plugin_id: str, provider: Callable[[], Iterable[Any]]) -> Callable[[], tuple[Any, ...]]:
-    """The provider's sources, each reading its window through a derivation."""
-
-    def derived(source: Any) -> Any:
-        if not _is_source(source):
-            return source
-        events = provided(f"extension.{plugin_id}.calendar.{source.id}", source.events, ahead=CALENDAR_WINDOWS)
-        return replace(source, events=events)
-
-    def sources() -> tuple[Any, ...]:
-        return tuple(derived(source) for source in provider())
-
-    return sources
-
-
 def _derived(plugin_id: str, integration: PluginIntegration) -> PluginIntegration:
     """``integration`` with each provider of a shared composition derived."""
 
     derived: dict[str, Any] = {
-        field: provided(f"extension.{plugin_id}.{field}", provider)
+        field: provided(f"{provided_under(plugin_id)}.{field}", provider)
         for field in DERIVED_PROVIDERS
         if (provider := getattr(integration, field)) is not None
     }
     if integration.calendars is not None:
-        derived["calendars"] = _derived_calendars(plugin_id, integration.calendars)
+        derived["calendars"] = derived_calendars(plugin_id, integration.calendars)
     return replace(integration, **derived)
 
 
@@ -770,11 +611,19 @@ def _refused_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...
 
 
 def checked_cards(source_id: str, cards: tuple[Any, ...]) -> tuple[dict[str, Any], ...]:
+    """``cards`` held to the card contract, each count said in its words: its
+    label agreeing with its value, as every surface and transport reads it."""
+
     _validate_dashboard_cards(cards)
     ids = [card["id"] for card in cards]
     if len(ids) != len(set(ids)):
         raise ImproperlyConfigured(f"{source_id!r} produced two dashboard cards with one id.")
-    return cards
+    return tuple(
+        card | {"label": card["label"].words, "value": card["label"].count}
+        if isinstance(card["label"], Counted)
+        else card
+        for card in cards
+    )
 
 
 def checked_overview(source_id: str, overview: Any) -> DomainOverview | None:
@@ -793,8 +642,10 @@ SOURCE_CHECKS: dict[str, Callable[[str, Any], Any]] = {
 # A card is a scalar and a link, plus optional interpretation. Kept deliberately
 # small: the aggregate is rendered by surfaces that compose many extensions at
 # once, so a card must be cheap to produce and safe to show beside any other.
-CARD_REQUIRED_KEYS = frozenset({"id", "label", "value", "url"})
-CARD_OPTIONAL_KEYS = frozenset({"detail", "status", "trend"})
+# A card that counts things gives a ``Counted`` as its label and no value, so a
+# line that sets the label after the count says "1 Draft", never "1 Drafts".
+CARD_REQUIRED_KEYS = frozenset({"id", "label", "url"})
+CARD_OPTIONAL_KEYS = frozenset({"value", "detail", "status", "trend"})
 # Direction of travel, not a judgment: whether "up" is good is the domain's
 # business, which is what `status` is for.
 CARD_TREND_VALUES = frozenset({"up", "down", "flat"})
@@ -850,12 +701,19 @@ def plugin_overviews() -> tuple[dict[str, Any], ...]:
 def _validate_dashboard_cards(cards: Iterable[object]) -> None:
     for card in cards:
         if not isinstance(card, dict) or not card.keys() >= CARD_REQUIRED_KEYS:
-            raise ImproperlyConfigured("Plugin dashboard cards require id, label, value, and url.")
+            raise ImproperlyConfigured("Plugin dashboard cards require id, label, and url.")
         # Unknown keys are rejected rather than ignored: a typo'd optional key
         # would otherwise silently render nothing at all.
         unknown = card.keys() - CARD_REQUIRED_KEYS - CARD_OPTIONAL_KEYS
         if unknown:
             raise ImproperlyConfigured(f"Unknown dashboard card keys: {', '.join(sorted(unknown))}.")
+        if isinstance(card["label"], Counted) == ("value" in card):
+            raise ImproperlyConfigured(
+                f"A dashboard card gives a value in words, or a Counted as its label and no value; got {card!r}."
+            )
+        value = card.get("value", "")
+        if not isinstance(value, str) or value.replace(",", "").isdigit():
+            raise ImproperlyConfigured(f"A dashboard card's count is a Counted as its label; got {value!r}.")
         status = card.get("status")
         if status is not None and status not in Tone:
             raise ImproperlyConfigured(f"Dashboard card status must be one of {', '.join(Tone)}; got {status!r}.")

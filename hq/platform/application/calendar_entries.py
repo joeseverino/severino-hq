@@ -15,14 +15,14 @@ from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from pydantic import AfterValidator, Field, WithJsonSchema
+from pydantic import Field, WithJsonSchema
 
 from hq.domains.calendars.models import INTERVAL_MAXIMUM, INTERVAL_MINIMUM, Entry, Preference
 from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 
 from .calendar import CalendarEvent, CalendarSource, gather
-from .command_fields import Choices, Describe, Refers, stored_in
+from .command_fields import Checked, Choices, Describe, Reason, Refers, stored_in
 from .derivations import derivation
 from .integration_specs import Kept, keeps
 from .moments import when_day
@@ -219,13 +219,13 @@ type CalendarEntryRepeatUntil = Annotated[
 def _of_the_clock(value: time) -> time:
     # A time column stores a time of day and no offset: SQLite refuses one.
     if value.tzinfo is not None:
-        raise ValueError("A time of day takes no offset.")
+        raise ValueError
     return value
 
 
 type ClockTime = Annotated[
     time,
-    AfterValidator(_of_the_clock),
+    Checked(_of_the_clock, Reason("time_of_day", "must be a time of day with no offset")),
     WithJsonSchema(
         {
             "type": "string",

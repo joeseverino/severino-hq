@@ -79,7 +79,7 @@ class PublicAddressViewTests(TestCase):
     def test_a_malformed_address_is_refused(self):
         response = self.client.get(self.url, {"address": "not-an-address"})
 
-        self.assertIn("lookup.address.read: address is invalid.", text(response))
+        self.assertIn("lookup.address.read: address is not a valid IPv4 or IPv6 address.", text(response))
 
     def test_a_get_without_the_grant_is_refused_and_recorded(self):
         readings.record(KEY, STORED)
@@ -118,7 +118,7 @@ class PublicAddressViewTests(TestCase):
         with resolver, registry:
             response = self.look_up("not-an-address")
 
-        self.assertIn("lookup.address.read: address is invalid.", text(response))
+        self.assertIn("lookup.address.read: address is not a valid IPv4 or IPv6 address.", text(response))
         self.assertIsNone(readings.stored(KEY))
 
     def test_an_operator_without_the_grant_is_refused_in_the_fragment(self):
@@ -146,7 +146,9 @@ class PublicAddressViewTests(TestCase):
             a_device("a-laptop", A_TAILNET_ADDRESS, direct_endpoint=f"{ADDRESS}:41641"),
             a_device("hq-host", "100.64.0.9", observer=True),
         )
-        panel = render_to_string("core/_connection_panel.html", {"connection": connection(a_request())})
+        panel = render_to_string(
+            "partials/_connection_peering.html#carriage", {"peering": connection(a_request()).peering}
+        )
         (region,) = select(panel, "data-fragment-load")
         readings.record(KEY, STORED)
 

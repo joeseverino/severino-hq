@@ -14,7 +14,7 @@ from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, Asset
 from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
 from hq.domains.projects.models import Project
-from hq.platform.application.card_items import Kpi, ListRow
+from hq.platform.application.card_items import Counted, Kpi, ListRow
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.expenses import cost_totals, costs_by_category
 from hq.platform.application.money import money
@@ -91,7 +91,10 @@ class ReportsView(PageMixin, TemplateView):
                     detail_url=expenses_url if spent.count else "",
                 ),
                 Kpi(f"Deductible (est.) {year}", money(spent.deductible)),
-                Kpi(f"Assets purchased {year}", bought.count, f"{money(bought.total)} total"),
+                Kpi(
+                    Counted(bought.count, f"Asset purchased {year}", f"Assets purchased {year}"),
+                    detail=f"{money(bought.total)} total",
+                ),
             ),
             year=year,
             available_years=sorted(

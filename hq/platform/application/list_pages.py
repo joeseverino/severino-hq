@@ -1,5 +1,6 @@
 """A table page drawn from one page of its resource's list read."""
 
+from dataclasses import replace
 from math import ceil
 from typing import Any
 
@@ -9,7 +10,7 @@ from django.db.models import QuerySet
 from .integration_specs import SEARCH_FIELD, ListRead, ResourceSpec
 from .page_reads import Remedy
 from .pages import PageMixin
-from .tables import TableColumn, ranked, typed
+from .tables import Cell, DataTable, Row, TableColumn, ranked, typed
 from .ui import ended
 lazy from .resources import InvalidResourceInput, list_resource, resource_registry
 lazy from .security import web_principal
@@ -88,8 +89,44 @@ class ListPageMixin(PageMixin):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        rows = [self.row(item) for item in self.collection["items"]]
-        return {**context, "object_list": rows, "table": self.table(), "pages": self.pages()}
+        rows = self.rows(self.collection["items"])
+        table = self.table()
+        table["drawn"] = self.drawn(context["page"].title, table, rows)
+        return {**context, "object_list": rows, "table": table, "pages": self.pages()}
+
+    def drawn(self, label: str, table: dict[str, Any], rows: list[Any]) -> DataTable:
+        """The page's rows as its columns declare each cell, one page of the
+        list's own order, each keyed for its tick-box where rows are selected."""
+
+        if undrawn := [column.label for column in table["columns"] if column.cell is None]:
+            raise ImproperlyConfigured(f"{type(self).__name__}'s columns {undrawn} declare no cell.")
+        key = self.spec.identifier
+        return DataTable(
+            label,
+            table["columns"],
+            tuple(
+                replace(
+                    self.table_row(row, tuple(column.cell(row) for column in table["columns"])),
+                    key=(row[key] if key else row.pk) if table["selectable"] else None,
+                )
+                for row in rows
+            ),
+            selectable=table["selectable"],
+            sorted_by=table["selected_sort"],
+        )
+
+    def table_row(self, row: Any, cells: tuple[Cell, ...]) -> Row:
+        """A row of the table, its cells as its columns declare them: with
+        what may be done to its record and what it shows on its open line,
+        where the page says so."""
+
+        return Row(cells)
+
+    def rows(self, items: list[dict[str, Any]]) -> list[Any]:
+        """The page's items as its rows draw them, each by ``row``: for a page
+        that adds to them what it reads for all of them in one query."""
+
+        return [self.row(item) for item in items]
 
     def row(self, item: dict[str, Any]) -> Any:
         """One item as its row draws it: the item itself, or with what only

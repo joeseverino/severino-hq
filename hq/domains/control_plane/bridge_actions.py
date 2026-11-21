@@ -25,7 +25,7 @@ from hq.platform.application.controller import (
     report_operation,
     schedule_automatic_operations,
 )
-from hq.platform.application.glance import dashboard_refresh_plan, record_dashboard_observations
+from hq.platform.application.glance_refresh import dashboard_refresh_plan, record_dashboard_observations
 from hq.platform.application.infrastructure import controller_contract
 from hq.platform.application.inventory import record_connections, record_step_failures
 from hq.platform.application.outbound_work import run_for_host

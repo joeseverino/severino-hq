@@ -231,6 +231,20 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         # Addressed where a page's control for the command is: the route whose view runs it.
         self.assertEqual(runs_at(action.url), "project.create")
 
+    def test_a_command_about_another_resources_records_is_never_aimed_at_the_connection(self):
+        # A project command offered beside a bank connection: the bank's id is
+        # no project's slug, so the link opens the form that chooses one.
+        # (A command about the connection itself: test_refused_links.)
+        base = _finance_spec()
+        ability = replace(base.abilities[0], capability="project.update")
+        instance = replace(base.instance_provider()[0], ability_names=(ability.name,))
+        spec = replace(base, abilities=(ability,), instance_provider=lambda: (instance,))
+        with offering(spec):
+            action = connection_catalog(principal=FINANCE_OPERATOR)[0].connections[0].abilities[0].action
+
+        self.assertEqual(action.target, "")
+        self.assertNotIn(instance.id, action.url)
+
     def test_machine_catalog_emits_the_same_safe_actions_as_the_web_projection(self):
         with offering(_finance_spec()):
             instance = next(item for item in _standing(FINANCE_READER) if item["family"] == "example.finance")
@@ -495,7 +509,6 @@ class ConnectionRegistrationTests(TestCase):
         cases = (
             ("non-ConnectionInstance", object()),
             ("incomplete instance", replace(good, kind=" ")),
-            ("no status label", replace(good, status_label=" ")),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts:read", "accounts:read"))),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts read",))),
             ("invalid relationship", replace(good, dependencies=(ConnectionLink("Box", resource_key=" box"),))),
@@ -567,7 +580,7 @@ class ConnectionWorkspaceTests(SignedInTestCase):
                 self.page_for(model)
 
     def test_a_connection_that_does_not_say_its_credential_model_is_refused(self):
-        made = {"id": "one", "label": "One", "kind": "example", "status": "good", "status_label": "ok"}
+        made = {"id": "one", "label": "One", "kind": "example"}
 
         for unsaid in ("", "password"):
             with self.subTest(unsaid), self.assertRaises(ValueError) as refused:
@@ -590,7 +603,6 @@ class GrantEvidenceTests(TestCase):
             "label": "One",
             "kind": "example",
             "status": "good",
-            "status_label": "ok",
             "credential_model": "unknown",
         }
         return ConnectionInstance(**{**base, **overrides})

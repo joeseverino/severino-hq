@@ -1,0 +1,4 @@
+{% comment %}
+What was read that shows a problem (`application.decisions`), given `facts`:
+each label once, with every value it was given, a page outside HQ linked.
+{% endcomment %}{% facts %}{% for fact in facts %}{% fact fact.label %}{% list kind="dots" %}{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}{% endfor %}{% endfacts %}

@@ -65,13 +65,14 @@
   place-content: flex-start center;
   align-items: stretch;
   gap: 0 var(--space-3);
+  padding-inline: var(--mark-inset);
   white-space: nowrap; overflow: hidden;
 }
 /* The name asks for only a few characters of the line and takes what there
    is, up to its own length: a long one is cut short beside the mark rather
    than wrapping away and leaving the control wide and empty. Only when not
    even those few characters fit does it leave the line. */
-.user-menu .user-name { flex: 1 1 5ch; min-width: 0; max-width: max-content; line-height: calc(var(--control-size) - 2px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-menu .user-name { flex: 1 1 5ch; min-width: 0; max-width: max-content; padding-inline-start: calc(var(--space-5) - var(--mark-inset)); line-height: calc(var(--control-size) - 2px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .menu-identity-who strong { color: var(--ink); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* What a row's status says in a word, after its mark, and light. */
 .menu-item-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -79,7 +80,7 @@
 /* What a row means (`row-gist`) follows its title on the first line, quiet, and takes a line of its own where the two do not fit. With script it is one line, cut at its end, which opening the row releases in place, so every row holding one offers its toggle, as a clamp does; with none it wraps whole. Its line is contained, so it asks its column for no width and the column takes the room the controls leave, never widening the table past them. */
 .data-table .row-line > .row-gist { flex: 1 1 var(--row-words); min-inline-size: 0; font-weight: 400; overflow-wrap: anywhere; }
 @media (scripting: enabled) { .data-table > tbody > tr:not(.is-expanded) .row-gist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; contain: inline-size; } }
-/* A long value in a table's cell (`cell-clamp`, table_cells) wraps and, in
+/* A long value in a table's cell (`cell-clamp`, table_layout) wraps and, in
    a narrow box, is held to its third line, with its mark; its row offers its
    toggle there (tables.css), and opening it releases the clamp in place. A
    wide box holds it whole, so its row owes no toggle for it. Only words are
@@ -107,13 +108,14 @@
   }
   /* A list inside a clamp uses its inline line boxes. A flex item's padded
      rows can cross the clamp's last line and leave half a glyph visible. */
-  .cell-clamp .line-list { display: inline; }
+  .cell-clamp:not(.row-detail *) .line-list { display: inline; }
   .cell-clamp .tag { padding-block: 0; }
 }
-/* A hash or a key, which has no break in it, may break anywhere, so it asks
-   its column for no more than a letter. A name or a host breaks only at its
-   words and the breaks it is drawn with, so its column asks for its longest
-   word and another column gives way first. */
+/* An identifier in a cell (a name, a host, an address, a key) wraps at the
+   breaks it is drawn with (line_breaks), and a piece between them longer
+   than its column breaks inside it: a piece of any length would otherwise
+   hold its column, and the table, past the box. So its column asks for no
+   more than a letter of it, and gives way as a column of words does. */
 .data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
@@ -126,11 +128,14 @@
 .data-table > tbody > tr > td :is(.stack-list > li, .cell-line, .cell-detail) a[href]:not(.btn) {
   padding-block: calc((var(--target-min) - 1.2em) / 2);
 }
+/* A link in a cell of words (its prose role, read as base.css reads `.prose`) is a word of its sentence: its line keeps the words' height and it takes no target's padding. */
+.data-table > tbody > tr > td[data-cell~=prose] :is(li, a[href]:not(.btn)) { line-height: inherit; }
+.data-table > tbody > tr > td[data-cell~=prose] :is(.stack-list > li, .cell-line, .cell-detail) a[href]:not(.btn) { padding-block: 0; }
 /* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css); a short value's box (`cell-short`, tables.css) is the cell's own. */
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]):not(.btn),
 .data-table > tbody > tr > [data-kind="identifier"] > .cell-short > :is(a[href], [tabindex]):not(.btn) { line-height: var(--target-min); }
-/* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. On a cell's detail line and the open line they are words of a sentence, held to the words and dots around them. */
-.data-table > tbody > tr:not(.row-detail) > td span[data-tip][tabindex]:not(.pill, .cell-detail *) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
+/* Words that open a tip are a box of their own a target tall, no wider than the cell, alone in it or on one of its lines; a chip or a pill keeps its one size. On a cell's detail line and the open line they are words of a sentence, held to the words and dots around them, as they are where a mark held to them follows (a dot, an arrow): a box ends a line wherever it may, so the mark after it would open the next. */
+.data-table > tbody > tr:not(.row-detail) > td span[data-tip][tabindex]:not(.pill, .cell-detail *, :has(+ span[aria-hidden="true"])) { display: inline-block; max-inline-size: 100%; line-height: var(--target-min); vertical-align: top; }
 /* An identifier's link, bare, and the link that is a row's bold name, stay text of their line, a target tall by their padding as a name's is. */
 .data-table > tbody > tr > [data-kind="identifier"] > a[href]:not(.btn),
 .data-table > tbody > tr > [data-kind="identifier"] > .cell-short > a[href]:not(.btn),

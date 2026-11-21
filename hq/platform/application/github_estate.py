@@ -31,6 +31,7 @@ from .expiry import days_until
 from .freshness import Freshness, freshness
 from .moments import ago, moment
 from .projection import read_once
+from .thresholds import Threshold
 from .tone import Tone
 from .ui import severity_tone
 from .workflow_contracts import ActionLink
@@ -40,11 +41,11 @@ lazy from .projects import repository_key
 
 # An admission artifact that lapses stops the composition admitting its
 # extension, and nothing else says so until a deploy fails.
-ARTIFACT_ATTENTION_DAYS = 14
-ARTIFACT_SERIOUS_DAYS = 3
+ARTIFACT_ATTENTION_DAYS = Threshold(14, "days")
+ARTIFACT_SERIOUS_DAYS = Threshold(3, "days")
 # A deploy held for approval is fine for a while; hours later it is a
 # scheduled run about to be cancelled.
-WAITING_SERIOUS_AFTER = timedelta(hours=1)
+WAITING_SERIOUS_AFTER = Threshold(timedelta(hours=1), "time")
 # A run's conclusions that fail it, as the reading's checks count them.
 FAILED = frozenset({"failure", "timed_out", "action_required", "startup_failure"})
 # The one severity secret scanning reports: a credential found in the code.
@@ -401,7 +402,7 @@ class Repository:
             return None
         return head != deployed
 
-    def expiring(self, *, within_days: int = ARTIFACT_ATTENTION_DAYS) -> list[dict[str, Any]]:
+    def expiring(self, *, within_days: int = ARTIFACT_ATTENTION_DAYS.value) -> list[dict[str, Any]]:
         """Admission artifacts that lapse within ``within_days``, soonest first.
 
         Each admission run uploads its own under one name, and Compose reads the

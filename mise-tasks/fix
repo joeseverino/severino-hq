@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="When a lint gate fails, a derived file is behind its source, or a rebase conflicts in one: rewrite every derived file, lower each fallen lint suppression count, then Ruff's fixes and format and mise fmt's"
+#MISE description="When a lint gate fails, a derived file is behind its source, or a rebase conflicts in one: rewrite every derived file, lower each fallen lint suppression count, then Ruff's fixes and format, Stylelint's fixes and mise fmt's"
 
 # Each format gate's own fix mode, so a fix run leaves them nothing to
 # report. The derived files load Django, so fix:derived writes them on an
@@ -9,3 +9,5 @@ set -eu
 mise run fix:derived
 mise run fix:suppressions
 mise run lint:ruff --fix ::: lint:mise-format --fix
+# Stylelint fails on what it cannot fix, which lint:css names.
+mise run lint:css --fix >/dev/null || echo 'fix: lint:css finds what it cannot fix; mise run lint:css names it'

@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_typ
 
 from django import template
 from django.template.base import token_kwargs
-from django.utils.safestring import SafeData, mark_safe
+from django.utils.safestring import SafeData, SafeString, mark_safe
 
 from hq.platform.application.describe import Describe
 
@@ -286,6 +286,28 @@ def _drawn_by(part: Part) -> Callable:
     return held
 
 
+def _placed(compile_: Callable) -> Callable:
+    """A function tag's ``compile_``, its failure as it draws noted with the
+    tag as its template writes it, since the value it was handed no longer
+    says which variable it was read from."""
+
+    def compiled(parser, token):
+        node = compile_(parser, token)
+        render = node.render
+
+        def rendered(context):
+            try:
+                return render(context)
+            except Exception as error:
+                error.add_note(f"drawing {{% {token.contents} %}} in {parser.origin}")
+                raise
+
+        node.render = rendered
+        return node
+
+    return compiled
+
+
 def slotted(part: Part, *, library: template.Library) -> None:
     """Register the part as its tag in ``library``. A function part is
     Django's simple tag, or with a partial its inclusion tag, taking the
@@ -303,6 +325,7 @@ def slotted(part: Part, *, library: template.Library) -> None:
             library.inclusion_tag(part.partial, takes_context=takes_context, name=part.name)(drawn)
         else:
             library.simple_tag(drawn, takes_context=takes_context, name=part.name)
+        library.tags[part.name] = _placed(library.tags[part.name])
         # The template contract reads a tag's declaration from what it wraps.
         library.tags[part.name].__wrapped__ = part  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
         return
@@ -330,6 +353,15 @@ def slotted(part: Part, *, library: template.Library) -> None:
     # The template contract reads a tag's declaration from what it wraps.
     compile_.__wrapped__ = part  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
     library.tag(part.name, compile_)
+
+
+def enclosed(part: Part, content: str, **given: Any) -> SafeString:
+    """``part`` drawn from Python around markup drawn already, as its tag
+    draws what it encloses (``SlotsNode``)."""
+
+    values = part.values(given) | {"content": mark_safe(content.strip())}  # noqa: S308 - escaped by what drew it
+    drawn = template.Engine.get_default().get_template(part.partial).render(template.Context(values))
+    return mark_safe(drawn.strip())  # noqa: S308 - the part's own escaped output
 
 
 def answers(library: template.Library, *, takes_context: bool = False) -> Callable[[Callable], Callable]:

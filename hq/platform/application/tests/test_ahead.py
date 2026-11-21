@@ -249,45 +249,32 @@ class AskedAgainTests(Remembering):
         self.assertEqual(seen, [(False, False), (True, True)])
 
 
-class UnseenTests(Remembering):
-    """An answer whose computation may read the clock unseen stands a minute at most."""
+def _instant() -> int:
+    timezone.now()
+    return _readings()
 
-    def _until(self, now: datetime, **options):
+
+class ClockReadTests(Remembering):
+    """An answer stands as long as the clock its computation read through Django says."""
+
+    def _until(self, now: datetime, compute):
         with (
             frozen(now),
-            declared("test.unseen", reads=(READING,), **options) as (register, _calls),
+            declared("test.clock.read", reads=(READING,), learns=True) as (register, _calls),
         ):
-            read = register(_readings)
+            read = register(compute)
             with projection_scope():
                 read()
                 return derivations.standing(read).until
 
-    def test_it_stands_a_minute(self):
-        self.assertEqual(self._until(MOMENT, unseen=True), MOMENT + derivations.UNSEEN)
-
-    def test_it_never_stands_past_local_midnight(self):
+    def test_an_instant_holds_it_a_minute_and_a_day_until_local_midnight(self):
         midnight = timezone.make_aware(
             datetime.combine(timezone.localtime(MOMENT).date() + timedelta(days=1), datetime.min.time())
         )
 
-        self.assertEqual(self._until(midnight - timedelta(seconds=20), unseen=True), midnight)
-
-    def test_a_derivation_the_host_follows_to_the_clock_names_no_moment(self):
-        self.assertIsNone(self._until(MOMENT))
-
-    def test_what_asks_it_stands_no_longer_than_it_does(self):
-        with (
-            frozen(MOMENT),
-            declared("test.unseen.part", reads=(READING,), unseen=True) as (register_part, _),
-            declared("test.unseen.whole", reads=(READING,)) as (register, _calls),
-        ):
-            part = register_part(_readings)
-            whole = register(lambda: part() + 1)
-            with projection_scope():
-                whole()
-                until = derivations.standing(whole).until
-
-        self.assertEqual(until, MOMENT + derivations.UNSEEN)
+        self.assertEqual(self._until(MOMENT, _instant), MOMENT + derivations.UNSEEN)
+        self.assertEqual(self._until(midnight - timedelta(seconds=20), _instant), midnight)
+        self.assertEqual(self._until(MOMENT, lambda: (timezone.localdate(), _readings())), midnight)
 
 
 class AskedTwiceTests(Remembering):
@@ -297,10 +284,10 @@ class AskedTwiceTests(Remembering):
     def test_an_answer_already_given_still_bounds_the_one_that_asks_next(self):
         with (
             frozen(MOMENT),
-            declared("test.twice.part", reads=(READING,), unseen=True) as (register_part, _),
+            declared("test.twice.part", reads=(READING,), learns=True) as (register_part, _),
             declared("test.twice.whole", reads=(READING,)) as (register, _calls),
         ):
-            part = register_part(_readings)
+            part = register_part(_instant)
             whole = register(lambda: part() + 1)
             with projection_scope():
                 part()
@@ -311,8 +298,8 @@ class AskedTwiceTests(Remembering):
 
     def test_an_answer_already_given_still_says_what_it_reads(self):
         with (
-            declared("test.twice.reads", reads=(), unseen=True) as (register_part, _),
-            declared("test.twice.asks", reads=(), unseen=True) as (register, calls),
+            declared("test.twice.reads", reads=(), learns=True) as (register_part, _),
+            declared("test.twice.asks", reads=(), learns=True) as (register, calls),
         ):
             part = register_part(_readings)
             whole = register(lambda: part() + 1)
@@ -327,10 +314,10 @@ class AskedTwiceTests(Remembering):
         self.assertEqual(len(calls), 2)
 
     def test_what_the_request_already_read_is_read_again_where_it_is_seen(self):
-        """An unseen computation learns its tables from the statements it runs,
+        """A learning computation learns its tables from the statements it runs,
         so a read the request made before it does not hide one."""
 
-        with declared("test.twice.memo", reads=(), unseen=True) as (register, calls):
+        with declared("test.twice.memo", reads=(), learns=True) as (register, calls):
             read = register(lambda: read_once("example.shared", _readings))
             with projection_scope():
                 read_once("example.shared", _readings)
@@ -357,7 +344,7 @@ class AskedTwiceTests(Remembering):
     def test_one_whose_reads_are_learned_may_ask_any(self):
         with (
             declared("test.twice.any", reads=(READING,)) as (register_part, _),
-            declared("test.twice.learns", reads=(), unseen=True) as (register, _calls),
+            declared("test.twice.learns", reads=(), learns=True) as (register, _calls),
         ):
             part = register_part(_readings)
             whole = register(lambda: part())  # noqa: PLW0108 - a function of its own, so it registers apart from the one it calls

@@ -13,7 +13,7 @@ from hq.platform.application.action_links import read_link
 from hq.platform.application.contracts import Effect
 from hq.platform.application.decisions import decision
 from hq.platform.application.finding_steps import Do, Press, Run
-from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, texts, with_class
+from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, with_class
 from hq.platform.application.tests.links import example_command
 
 
@@ -126,7 +126,7 @@ class DecisionTests(SimpleTestCase):
 
         self.assertEqual(shown["reason"], "Only the registrar can renew it.")
         self.assertEqual(shown["steps"], [])
-        self.assertIn("Only the registrar can renew it.", texts(html, "p"))
+        self.assertEqual([element.words for element in select(html, "data-attention-reason")], [shown["reason"]])
         self.assertEqual(with_class(html, "step-list"), [])
         self.assertNotIn("Why HQ cannot", text(html))
 

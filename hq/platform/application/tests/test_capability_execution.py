@@ -94,7 +94,7 @@ class CapabilityTests(TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertIn("target must be a valid integer", result["error"]["message"])
+        self.assertIn("target must be the id of the record it acts on", result["error"]["message"])
 
     def test_an_unauthorized_caller_is_refused_before_its_target_is_read(self):
         result = execute_capability(
@@ -251,11 +251,11 @@ class CapabilityTests(TestCase):
         self.assertEqual(error["message"], "example.decide: counts[1] must be a valid integer.")
 
     def test_a_refusal_never_repeats_the_value_it_refused(self):
-        """Field names and choices only: a payload can carry a secret."""
+        """Field names, choices and declared reasons only: a payload can carry a secret."""
 
         from typing import Annotated, Literal
 
-        from pydantic import AfterValidator
+        from ..command_fields import Checked, Reason
 
         secret = "hunter2-not-for-logs"
 
@@ -265,19 +265,42 @@ class CapabilityTests(TestCase):
         @dataclass(frozen=True, slots=True)
         class SecretCommand:
             verdict: Literal["applies", "does_not_apply"]
-            token: Annotated[str, AfterValidator(_check)]
+            token: Annotated[str, Checked(_check, Reason("example_token", "must be a token"))]
 
         error = self._refusal(SecretCommand, {"verdict": secret, "token": secret})
 
         self.assertNotIn(secret, json.dumps(error, default=repr))
         self.assertEqual(
             error["message"],
-            "example.decide: verdict must be one of applies, does_not_apply; token is invalid.",
+            "example.decide: verdict must be one of applies, does_not_apply; token must be a token.",
         )
         self.assertEqual(
-            [detail["msg"] for detail in error["details"]],
-            ["Input should be 'applies' or 'does_not_apply'", "Input is invalid"],
+            [(detail["type"], detail["msg"]) for detail in error["details"]],
+            [("literal_error", "Input should be 'applies' or 'does_not_apply'"), ("example_token", "must be a token")],
         )
+
+    def test_a_validator_that_refuses_in_words_of_its_own_does_not_load(self):
+        from typing import Annotated
+
+        from pydantic import AfterValidator, create_model, field_validator
+
+        from ..contracts import Closed
+        from ..integration_specs import command_adapter
+
+        @dataclass(frozen=True, slots=True)
+        class WordyCommand:
+            token: Annotated[str, AfterValidator(str.strip)]
+
+        with self.assertRaisesRegex(TypeError, "Checked"):
+            command_adapter(WordyCommand)
+
+        def _token(cls, value):
+            return value
+
+        with self.assertRaisesRegex(TypeError, "Checked"):
+            create_model(
+                "WordyModel", __base__=Closed, __validators__={"_token": field_validator("token")(_token)}, token=str
+            )
 
     def test_a_domain_refusal_names_the_field_not_the_value(self):
         # An end before the start, which only the model's rule checks, past the

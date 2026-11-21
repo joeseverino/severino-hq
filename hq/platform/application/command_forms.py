@@ -458,7 +458,7 @@ def command_form_class(
     required = frozenset(capability_schema(spec).get("required", ()))
     agents_only = for_agents(spec.command_type)
     if asked := sorted(agents_only & required):
-        raise ValueError(f"{spec.name} must be sent {', '.join(asked)}, so a person's form cannot leave it out.")
+        raise ValueError(f"{spec.name} must be sent {', '.join(asked)}, so a form cannot leave it out.")
     # A command that keeps its retry key is handed the one key the form
     # posts, which ``{% write_token %}`` draws (``web_writes``).
     properties = {

@@ -11,13 +11,16 @@ from django.views.generic import (
 from hq.platform.application import related
 from hq.platform.application.assets import managed_domain
 from hq.platform.application.documentation import related_documents
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.expenses import said_totals
 from hq.platform.application.labels import dotted_html
 from hq.platform.application.list_pages import ListPageMixin
+from hq.platform.application.moments import stamp_day
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.references import reference_of, referenced_by_row
 from hq.platform.application.security import web_principal
-from hq.platform.application.tables import TableColumn
+from hq.platform.application.tables import Cell, TableColumn
+from hq.platform.application.ui import measured
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 from hq.platform.core.templatetags.status_tags import status_pill
 
@@ -34,24 +37,34 @@ class AssetListView(ListPageMixin, TemplateView):
     page_title = "Assets"
     table_selectable = True
     table_columns = (
-        TableColumn("Item", "item_name"),
-        TableColumn("Vendor", "vendor"),
-        TableColumn("Category", "category"),
-        TableColumn("Purchased", "purchase_date"),
-        TableColumn("Cost", "total_cost", css="key-col"),
-        TableColumn("Business use", "business_use_percentage"),
-        TableColumn("Deductible (est.)", "estimated_deductible_amount"),
-        TableColumn("Status", "status"),
+        TableColumn(
+            "Item",
+            "item_name",
+            cell=lambda row: Cell.of(entity_link("asset", row["slug"], label=row["item_name"]), name=True),
+        ),
+        TableColumn("Vendor", "vendor", cell=lambda row: Cell(row["vendor"])),
+        TableColumn("Category", "category", cell=lambda row: Cell(_CATEGORIES[row["category"]])),
+        TableColumn(
+            "Purchased", "purchase_date", cell=lambda row: Cell(moment=stamp_day(row["purchase_date"]), muted=True)
+        ),
+        TableColumn("Cost", "total_cost", css="key-col", cell=lambda row: Cell(amount=row["total_cost"])),
+        TableColumn(
+            "Business use",
+            "business_use_percentage",
+            cell=lambda row: Cell(measured(row["business_use_percentage"], "%"), muted=True),
+        ),
+        TableColumn(
+            "Deductible (est.)",
+            "estimated_deductible_amount",
+            cell=lambda row: Cell(amount=row["estimated_deductible_amount"]),
+        ),
+        TableColumn("Status", "status", cell=lambda row: Cell.state(Asset.Status(row["status"]))),
     )
     table_search_placeholder = "Search assets, vendors, serials, and notes…"
 
     @override
     def get_page_actions(self):
         return (PageAction.command("asset.create", primary=True),)
-
-    @override
-    def row(self, item):
-        return {**item, "state": Asset.Status(item["status"]), "category_label": _CATEGORIES[item["category"]]}
 
     @override
     def get_context_data(self, **kwargs):

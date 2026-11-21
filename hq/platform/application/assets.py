@@ -15,7 +15,7 @@ from .business_use import BusinessUseShare
 from .command_fields import Describe, Names, Refers
 from .entity_links import EntityLink, entity_link
 from .projection import addressable, listing
-from .record_fields import Notes, Slug, TotalCost, one_of
+from .record_fields import Notes, Slug, one_of
 from .record_links import linked
 from .record_saves import Held, Link, linked_saver, row, saved_type
 from .references import Kind
@@ -32,6 +32,25 @@ type AssetVendor = Annotated[str, Describe("Who it was bought from.", api="Empty
 type AssetCategory = Annotated[_CATEGORY, Describe("What type of asset it is.")]
 type AssetStatus = Annotated[_STATUS, Describe("Whether it is in use, or how it left.")]
 type PurchaseDate = Annotated[date | None, Describe("When it was bought.", api="Null when not recorded.")]
+type AssetCost = Annotated[
+    Decimal | None, Describe("What it cost in all.", api="Null when not recorded; zero for a free asset.")
+]
+type AssetCostAmount = Annotated[
+    str | None,
+    Describe(
+        "What it cost in all, a decimal string with two places.",
+        api="Null when not recorded; zero for a free asset.",
+        examples=("12.50",),
+    ),
+]
+type AssetDeductible = Annotated[
+    str | None,
+    Describe(
+        "An estimate of what may be deducted: `total_cost` times `business_use_percentage`, "
+        "rounded to the cent, as a decimal string.",
+        api="Null while its cost is not recorded.",
+    ),
+]
 type SerialNumber = Annotated[str, Describe("The maker's serial number.", api="Empty when not recorded.")]
 type WarrantyDate = Annotated[date | None, Describe("When its warranty ends.", api="Null for none recorded.")]
 type AssetProjects = Annotated[tuple[str, ...], Names("projects"), Describe("The projects this asset serves.")]
@@ -68,7 +87,7 @@ class AssetCommand:
     vendor: AssetVendor = ""
     category: AssetCategory = "other"
     purchase_date: PurchaseDate = None
-    total_cost: TotalCost = Decimal("0.00")
+    total_cost: AssetCost = None
     business_use_percentage: BusinessUseShare = 100
     payment_method: PaymentMethod = ""
     serial_number: SerialNumber = ""

@@ -42,9 +42,9 @@ class Host(_Shape):
 
 class Docker(_Shape):
     """A machine read through its Docker environment: what its running
-    containers take of it. ``cpu_percent`` is a share of the whole machine."""
+    containers take of it. ``cpu_percent`` is a share of the whole machine.
+    How many there are is the sweep's to count (``ContainerCount``)."""
 
-    containers: int
     cpu_percent: Double
     cores: int
     memory_used: Bytes

@@ -55,18 +55,16 @@ func orDefault(value, fallback string) string {
 
 // PortainerEnvironment is one environment from GET /endpoints, as HQ files it.
 type PortainerEnvironment struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Address           string `json:"address"`
-	Local             bool   `json:"local"`
-	Reachable         bool   `json:"reachable"`
-	Type              string `json:"type"`
-	Status            string `json:"status"`
-	AgentVersion      string `json:"agent_version"`
-	DockerVersion     string `json:"docker_version"`
-	ContainersRunning *int64 `json:"containers_running"`
-	ContainersTotal   *int64 `json:"containers_total"`
-	SnapshotAt        string `json:"snapshot_at"`
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	Address       string `json:"address"`
+	Local         bool   `json:"local"`
+	Reachable     bool   `json:"reachable"`
+	Type          string `json:"type"`
+	Status        string `json:"status"`
+	AgentVersion  string `json:"agent_version"`
+	DockerVersion string `json:"docker_version"`
+	SnapshotAt    string `json:"snapshot_at"`
 }
 
 // PortainerContainerRecord is what Portainer knows about one container.
@@ -316,17 +314,15 @@ func portainerEnvironment(endpoint portainerEndpoint, address, portainerAt strin
 		located = portainerAt
 	}
 	environment := PortainerEnvironment{
-		ID:                endpoint.ID,
-		Name:              endpoint.Name,
-		Address:           located,
-		Local:             address == "",
-		Reachable:         endpoint.Status == portainerReachable,
-		Type:              typeName,
-		Status:            portainerEnvironmentState[endpoint.Status],
-		DockerVersion:     snapshot.DockerVersion,
-		ContainersRunning: snapshot.RunningContainerCount,
-		ContainersTotal:   snapshot.ContainerCount,
-		SnapshotAt:        unixStamp(snapshot.Time),
+		ID:            endpoint.ID,
+		Name:          endpoint.Name,
+		Address:       located,
+		Local:         address == "",
+		Reachable:     endpoint.Status == portainerReachable,
+		Type:          typeName,
+		Status:        portainerEnvironmentState[endpoint.Status],
+		DockerVersion: snapshot.DockerVersion,
+		SnapshotAt:    unixStamp(snapshot.Time),
 	}
 	if endpoint.Agent != nil {
 		environment.AgentVersion = endpoint.Agent.Version

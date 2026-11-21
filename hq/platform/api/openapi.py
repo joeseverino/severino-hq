@@ -33,6 +33,7 @@ from hq.platform.application.integration_specs import (
     typed_keys,
 )
 from hq.platform.application.json_schemas import LOCAL, sent_schema
+from hq.platform.application.process_caches import kept
 from hq.platform.application.refusal_codes import LATER_CODES, Code
 from hq.platform.application.resource_operations import RunAsked
 from hq.platform.application.resources import describe_resources, mask_paths, masked_kind, resource_registry
@@ -780,8 +781,17 @@ def _body(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def document() -> dict[str, Any]:
-    """The OpenAPI 3.2 document for this deployment's machine API."""
+    """The OpenAPI 3.2 document for this deployment's machine API, shared by
+    every caller and never changed by one.
 
+    It is a function of the routes and the registries alone, so a process
+    builds it once for the commands and resources it has now."""
+
+    return _document(capability_registry(), resource_registry())
+
+
+@kept
+def _document(_commands: tuple[CapabilitySpec, ...], _resources: dict[str, Any]) -> dict[str, Any]:
     builder = _Builder()
     for route, pattern in routes():
         builder.route(route, pattern)

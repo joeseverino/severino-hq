@@ -5,7 +5,10 @@ rule of a period with no data (drawn as its own mark, counted in no total) is
 in one short module.
 """
 
+lazy from hq.platform.core.included_parts import CADENCE_MARK
+
 from .display_words import display
+from .tables import Cell, DataTable, Piece, Row, TableColumn
 lazy from .ui import MISSING
 
 
@@ -132,3 +135,43 @@ class CadenceMatrix:
                     f"has {len(self.periods)}. Columns that do not line up "
                     "make the comparison wrong rather than merely ugly."
                 )
+
+    def table(self, label: str = "", *, compact: bool = False) -> DataTable:
+        """The matrix as a table of marks (``data-marks``): a row per thing
+        under ``label``, linked where it has a page with its line under it,
+        then a mark per period, the newest three kept in a narrow box, and its
+        tally."""
+
+        named = label or "Tracked"
+        newest = len(self.periods) - 3
+        columns = (
+            TableColumn(named),
+            *(
+                TableColumn(
+                    period,
+                    kind="status",
+                    css="cadence-period key-col wide-only" if at < newest else "cadence-period key-col",
+                )
+                for at, period in enumerate(self.periods)
+            ),
+            TableColumn("Hit", kind="numeric", css="cadence-total key-col"),
+        )
+        rows = tuple(
+            Row(
+                (
+                    Cell(
+                        row.label,
+                        row.url,
+                        header=True,
+                        lines=(Cell(row.detail, muted=True, shows="narrow-more"),) if row.detail else (),
+                    ),
+                    *(
+                        Cell(piece=Piece(CADENCE_MARK, {"week": week}, words=week.said or week.label))
+                        for week in row.weeks
+                    ),
+                    Cell(row.tally),
+                )
+            )
+            for row in self.rows
+        )
+        return DataTable(named, columns, rows, data={"marks": "compact" if compact else ""}, region={"chart": True})

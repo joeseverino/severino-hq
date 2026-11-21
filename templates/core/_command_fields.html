@@ -19,7 +19,7 @@ names, not fields to fill, so they are drawn as facts.
   {% if field.name == "__target" %}
     {% if chosen_target or switch.state %}
       {% facts %}
-        {% if chosen_target %}{% fact chosen_target.field %}{{ chosen_target.label|breakable }} <a class="subtle-link" href="{{ chosen_target.change_url }}">Change</a>{% endfact %}{% endif %}
+        {% if chosen_target %}{% fact chosen_target.field %}{{ chosen_target.label }} <a class="subtle-link" href="{{ chosen_target.change_url }}">Change</a>{% endfact %}{% endif %}
         {% if switch.state %}{% fact switch.label value=switch.state %}{% endif %}
       {% endfacts %}
     {% endif %}

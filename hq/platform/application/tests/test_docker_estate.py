@@ -77,8 +77,6 @@ def estate():
             "type": "docker",
             "status": "up",
             "docker_version": "27.1.1",
-            "containers_running": 2,
-            "containers_total": 3,
         },
     )
     store(

@@ -1,18 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-{% section "Notes" id="example-notes" count=notes|length %}
-  {% table_region "Notes" %}
-    <table class="data-table">
-      <thead><tr>{% table_heading "Note" %}{% table_heading "Written" %}</tr></thead>
-      <tbody>
-        {% for note in notes %}
-        <tr>
-          <td>{% entity note|record %}</td>
-          <td>{{ note.written_on|when_text:"day" }}<span class="row-more">, filed as {{ note.slug|breakable }}</span></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endtable_region %}
+{% section "Notes" id="example-notes" count=notes.rows|length %}
+  {% data_table notes %}
 {% endsection %}
 {% endblock %}

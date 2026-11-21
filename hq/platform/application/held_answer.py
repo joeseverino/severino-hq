@@ -76,7 +76,7 @@ class ApprovalApplied(TypedDict):
 
 
 class ApprovalRejected(TypedDict):
-    """A held change an operator declined, so nothing it asked was done."""
+    """A held change an operator rejected, so nothing it asked was done."""
 
     ok: Literal[True]
     rejected: Annotated[str, Describe("The id of the request rejected.")]

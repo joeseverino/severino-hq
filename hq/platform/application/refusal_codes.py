@@ -37,7 +37,7 @@ class Door(StrEnum):
     RETRY_KEY = "retry_key"
     # A change a person must agree to, which could not be held.
     HOLD = "hold"
-    # A held change, once a person declined it or it lapsed.
+    # A held change, once an operator rejected it or it lapsed.
     DECISION = "decision"
 
 
@@ -84,8 +84,8 @@ class Code(StrEnum):
     )
     # A held call that could not be made to wait; its kinds say why.
     REFUSED_HOLD = auto(), 409, "it could not be held for a person to decide", (Door.HOLD,)
-    # A held call a person refused: asking again the same way gets the same answer.
-    DECLINED = auto(), 403, "a person declined it", (Door.DECISION,)
+    # A held call an operator rejected: asking again the same way gets the same answer.
+    OPERATOR_REJECTED = auto(), 403, "an operator rejected it", (Door.DECISION,)
     # A held call nobody decided in time, or whose subject moved before it ran.
     EXPIRED = auto(), 409, "nobody decided it in time", (Door.DECISION,)
     STALE = auto(), 409, "what it acts on changed before it ran", (Door.DECISION,)

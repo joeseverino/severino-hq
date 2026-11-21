@@ -45,6 +45,7 @@ lazy from .dependency_updates import plan as dependency_updates
 lazy from .derivations import present
 lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
 lazy from .findings import auto_remediable
+lazy from .freshness import freshness
 lazy from .github_profile import plan as github_profiles
 lazy from .github_repositories import plan as github_repositories
 lazy from .resource_capabilities import LIFECYCLE_VERBS
@@ -275,6 +276,13 @@ def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
         said = "|".join(str(item.get("message", "")) for item in problems)
         digest = hashlib.sha256(said.encode()).hexdigest()[:16]
         return True, "Automatic: it was changed outside HQ.", f"drift-{digest}"
+    # No sweep reads it, so the reconcile is what reads it again, once per
+    # reading, and the next day again if that one failed.
+    provider = PROVIDERS.get(resource.kind)
+    if provider is not None and provider.rechecked_every:
+        read_at = resource.last_observed_at
+        if freshness(resource.kind, read_at).due:
+            return True, "Automatic: HQ checks it again on its schedule.", f"recheck-{iso(read_at)}"
     return False, "", ""
 
 

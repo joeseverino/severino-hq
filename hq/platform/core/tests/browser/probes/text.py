@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from hq.platform.core.tests.browser.probes import Check, Plant
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, LINES, PAINTED_PART, TEXT_SHOWN
-from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.selectors import SELECTORS, written
 
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width. A word
@@ -16,7 +16,7 @@ BROKEN_WORDS = (
     "(identifier) => {"
     + DESCRIBE
     + TEXT_SHOWN
-    + f"const anywhere = '{SELECTORS['breaks_anywhere']}';"
+    + f"const anywhere = '{written(SELECTORS['breaks_anywhere'])}';"
     + """
   const found = [];
   const range = document.createRange();
@@ -275,8 +275,9 @@ STRAYS_OPENING_A_LINE = (
     for (const row of rows.slice(1)) {
       const [opening] = row.items.reduce((first, one) => (start(one[1]) < start(first[1]) ? one : first));
       const first = (pieces.get(opening) || []).find((piece) => piece.rect);
-      const mark = drawnSeparator(opening) || (first && SEPARATOR.test(first.ch) && !first.el.closest(identifier) ? first.ch : null);
-      if (mark) found.push(`${describe(box)} opens a row with "${mark[0]}": "${opening.textContent.trim().slice(0, 30)}"`);
+      const mark = drawnSeparator(opening) || (first && SEPARATOR.test(first.ch) && !(first.opens ?? first.el).closest(identifier) ? first.ch : null);
+      // What the row shows, never the text of what it holds hidden (a closed popover).
+      if (mark) found.push(`${describe(box)} opens a row with "${mark[0]}": "${opening.innerText.trim().slice(0, 30)}"`);
     }
   }
   return [...new Set(found)];
@@ -910,9 +911,23 @@ CHECKS = {
         ),
     ),
     "lines opening on a stray": Check(
-        (STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER]),
+        # The empty value's mark (`present`'s) is a value standing for none, never a separator.
+        (STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], f"{IDENTIFIER}, .empty-value"]),
         reader_sees="a line opening on a lone separator, a mark, or a word cut from its number",
         plants=(
+            # A dash opening a wrapping flex row reads as a separator; the
+            # empty value's mark opening one, a button's words, is a value.
+            Plant(
+                "".join(
+                    '<div style="display: flex; flex-wrap: wrap; inline-size: 12ch">'
+                    f'<span style="inline-size: 12ch">Example</span><span>{mark} example-{name}</span></div>'
+                    for name, mark in (
+                        ("loose", "–"),
+                        ("none", '<button type="button"><span class="empty-value">–</span></button>'),
+                    )
+                ),
+                finds=('"– example-loose"',),
+            ),
             # A slash standing between two words reads as a separator when a
             # line opens on it; a path ("/api") opening a line is a value.
             Plant(

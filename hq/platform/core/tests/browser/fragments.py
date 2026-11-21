@@ -538,7 +538,7 @@ class FragmentBrowserTests(BrowserGate):
         )
         self.page.clock.run_for(1000)
         self.page.wait_for_function("() => document.querySelector('[data-fragment-poll]') === null")
-        state = self.page.evaluate(_PROBE_STATE, SELECTORS["fragment_failure"])
+        state = self.page.evaluate(_PROBE_STATE, self.css(SELECTORS["fragment_failure"]))
 
         # The part that did not change is the same node, still open; the one
         # that did was replaced, its menu open as the reader left it.
@@ -554,14 +554,14 @@ class FragmentBrowserTests(BrowserGate):
 
     def test_a_placeholder_waits_for_its_disclosure_and_refuses_a_whole_page(self):
         self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
-        self.page.wait_for_selector(SELECTORS["fragment_failure"])
-        state = self.page.evaluate(_PROBE_STATE, SELECTORS["fragment_failure"])
+        self.page.wait_for_selector(self.css(SELECTORS["fragment_failure"]))
+        state = self.page.evaluate(_PROBE_STATE, self.css(SELECTORS["fragment_failure"]))
 
         self.assertNotIn(("/probe-slot/", ""), self.asked)
         self.assertEqual(state["page"], ["Could not be read."])
         self.assertEqual(state["titles"], 0)
 
-        self.page.locator(SELECTORS["fragment_fold"]).click()
+        self.page.locator(self.css(SELECTORS["fragment_fold"])).click()
         self.page.wait_for_function(
             "() => document.querySelector('[data-probe=\"fold\"]').textContent.includes('read when opened')"
         )
@@ -608,7 +608,7 @@ class FragmentBrowserTests(BrowserGate):
     def test_a_pages_ask_outlives_the_swap(self):
         self.visit = _VISIT_LIVE
         self.page.goto(f"{ORIGIN}/probe-asking-head/", wait_until="load")
-        note = SELECTORS["page_note"]
+        note = self.css(SELECTORS["page_note"])
         self.page.evaluate(
             "(note) => { document.querySelector('[data-ask]').kept = true; document.querySelector(note).was = true; }",
             note,
@@ -626,13 +626,13 @@ class FragmentBrowserTests(BrowserGate):
 
     def test_paging_the_calendar_asks_for_its_part_and_keeps_the_page(self):
         self.page.goto(f"{ORIGIN}{self.calendar}", wait_until="load")
-        was = self.page.locator(SELECTORS["calendar_period"]).text_content()
+        was = self.page.locator(self.css(SELECTORS["calendar_period"])).text_content()
         self.page.evaluate("() => { window.kept = true; }")
-        self.page.locator(SELECTORS["calendar_next"]).focus()
+        self.page.locator(self.css(SELECTORS["calendar_next"])).focus()
         self.page.keyboard.press("Enter")
         self.page.wait_for_function(
             "([period, was]) => document.querySelector(period).textContent !== was",
-            arg=[SELECTORS["calendar_period"], was],
+            arg=self.css([SELECTORS["calendar_period"], was]),
         )
 
         self.assertIn((self.following, "calendar"), self.asked)

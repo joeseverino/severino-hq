@@ -98,6 +98,6 @@ class LongestValueLayoutTests(LayoutBrowserTests):
                     self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
                     continue
                 self.hold(name, width, [self.every_layout_check_holds, *held], script="on")
-                self.page.locator(SELECTORS["row_toggle"]).evaluate_all(PRESS_EVERY_SHOWN)
+                self.page.locator(self.css(SELECTORS["row_toggle"])).evaluate_all(PRESS_EVERY_SHOWN)
                 self.page.evaluate(SETTLE)
                 self.hold(name, width, [self.nothing_runs_out_of_its_table_cell, *held], script="on", rows="open")

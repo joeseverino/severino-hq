@@ -46,6 +46,7 @@ from hq.platform.application.ui import PageNavigation, PageSection, counted
 from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, run_posted
 from hq.platform.core.web_refusals import refusal_response, refused
+lazy from hq.platform.application import connection_tables
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
 lazy from hq.platform.application.hq_context import hq_context
@@ -55,7 +56,7 @@ lazy from hq.platform.application.request_path import request_path
 lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
-from . import design_gallery
+from . import agent_tables, design_gallery
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
 lazy from .network import client_ip
@@ -352,32 +353,34 @@ class AgentPolicyView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         part = fragments.requested(self.request)
-        if part == self.ENDPOINT_PART or "endpoint" in self.request.GET:
-            context["endpoint"] = listing.endpoint()
+        # The endpoint is read for its own part, or for the whole page asked
+        # with it open; another part asked at that address draws without it.
+        if part == self.ENDPOINT_PART or (not part and "endpoint" in self.request.GET):
+            context["endpoint"] = endpoint = listing.endpoint()
             context["endpoint_read"] = True
-            if part:
-                return context
-        context.update(self._rules())
+            context["offers"] = agent_tables.offers(endpoint) if endpoint else None
+        if part == self.ENDPOINT_PART:
+            return context
         # The rules are drawn as a form only for whoever may save them, and
         # read as they hold for anyone else.
-        context["rules_settable"] = runs_here(capability_policy.SET_POLICY)
+        context.update(self._rules(settable=runs_here(capability_policy.SET_POLICY)))
         context["every_read"] = part == self.EVERY_PART or "all" in self.request.GET
         if part == self.EVERY_PART:
             return context
         context["standings"] = standings = agent_activity.standings(self.request.user)
         # Each row with what may be done to it, which returns to this view.
         here = self.request.get_full_path()
-        context["agent_rows"] = [(standing, agent_actions(standing, here)) for standing in standings]
-        context["prompts"] = [
-            (prompt, device_actions(prompt.device, here)) for prompt in agent_activity.prompts(standings)
-        ]
+        context["agents"] = agent_tables.agents([(standing, agent_actions(standing, here)) for standing in standings])
+        prompts = [(prompt, device_actions(prompt.device, here)) for prompt in agent_activity.prompts(standings)]
+        context["prompts"] = agent_tables.prompts(prompts) if prompts else None
         # The steps for adding an agent start open until one has connected.
         context["setup_open"] = not standings
-        context["device_groups"] = [
+        device_groups = [
             (standing, [(device, device_actions(device, here)) for device in standing.devices])
             for standing in standings
             if standing.devices
         ]
+        context["device_groups"] = agent_tables.devices(device_groups) if device_groups else None
         context["recent_days"] = agent_activity.RECENT.days
         # Each agent's latest events, drawn as the audit log draws its rows.
         context["agent_events"] = tuple(
@@ -392,7 +395,8 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
-        context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
+        own = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
+        context["devices"] = agent_tables.own_devices(own)
         context["access_action"] = access_action(agent_access.agents_paused())
         if runs_here(SET_OWN_DEVICE):
             context["device_form"] = own_device_form(initial={"next": here})
@@ -406,17 +410,23 @@ class AgentPolicyView(PageMixin, TemplateView):
         return context
 
     @staticmethod
-    def _rules() -> dict:
+    def _rules(*, settable: bool) -> dict:
         """The policy form's tables and what their headings say."""
 
         current = capability_policy.rules()
-        policy = {"rule_count": len(current)}
-        policy["columns"], policy["groups"] = capability_policy.matrix(current)
+        columns, groups = capability_policy.matrix(current)
         # Nearly every rule is at its default, so the page opens on the ones
         # that are not, and the rest fold under their own heading.
-        policy["changed_groups"], policy["default_groups"] = capability_policy.split_by_default(policy["groups"])
-        policy["default_count"] = sum(len(group.rows) for group in policy["default_groups"])
-        return policy
+        changed, defaults = capability_policy.split_by_default(groups)
+        return {
+            "rule_count": len(current),
+            "rules_settable": settable,
+            "changed_rules": capability_policy.table("Rules", columns, changed, settable=settable) if changed else None,
+            "default_rules": capability_policy.table("Defaults", columns, defaults, settable=settable)
+            if defaults
+            else None,
+            "default_count": sum(len(group.rows) for group in defaults),
+        }
 
     def post(self, request):
         form = forms.Form(request.POST)
@@ -676,6 +686,7 @@ class ConnectionPageView(PageMixin, TemplateView):
         context["request_path"] = found
         context["connection"] = found.connection
         context["posture"] = estate_posture(connection_catalog(principal=web_principal(self.request.user)))
+        context["tables"] = connection_tables.panel(context["posture"], found)
         # Whoever opened the panel is looking at these readings now, so it
         # asks for those that are due once it is showing.
         context["ask_readings"] = worth_asking("page", "connection")

@@ -12,8 +12,8 @@ band of page spent on the absence of news.
         <li class="timeline-item timeline-{{ item.status }}">
           {{ item.when|when:"mark" }}
           <span class="timeline-copy">
-            {% if item.url %}<a href="{{ item.url }}"><strong>{{ item.title|breakable }}</strong></a>{% else %}<strong>{{ item.title|breakable }}</strong>{% endif %}
-            {% if item.detail %}{% muted %}{{ item.detail|breakable }}{% endmuted %}{% endif %}
+            {% if item.url %}<a href="{{ item.url }}"><strong>{{ item.title }}</strong></a>{% else %}<strong>{{ item.title }}</strong>{% endif %}
+            {% if item.detail %}{% muted %}{{ item.detail }}{% endmuted %}{% endif %}
           </span>
           {% if item.badge %}{% status item.badge tone=item.status %}{% endif %}
         </li>

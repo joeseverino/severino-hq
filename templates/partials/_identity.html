@@ -12,8 +12,8 @@ account's name where it lives and the page there; `about` is its own words.
 <div class="identity">
   {% if picture %}<img class="identity-picture" src="{{ picture }}" alt="" width="64" height="64">{% endif %}
   <div class="identity-words">
-    <p class="identity-name">{{ name|breakable }}{% if badge %} {% status badge tone=tone tip=tip %}{% endif %}</p>
+    <p class="identity-name">{{ name }}{% if badge %} {% status badge tone=tone tip=tip %}{% endif %}</p>
     {% if handle %}<div>{% entity url|outside label=handle %}</div>{% endif %}
-    {% if about %}<p>{{ about|breakable }}</p>{% endif %}
+    {% if about %}<p>{{ about }}</p>{% endif %}
   </div>
 </div>

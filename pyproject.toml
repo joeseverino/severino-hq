@@ -19,7 +19,7 @@ dependencies = [
     "jsonschema==4.26.0",
     "mcp==2.3.0",
     "mozilla-django-oidc==5.0.2",
-    "pydantic==2.14.3",
+    "pydantic==2.14.4",
     "pyjwt==2.15.1",
     "referencing==0.37.0",
     # Strips comments from collected scripts (hq/platform/core/static.py); a
@@ -87,6 +87,9 @@ DEP004 = [
 # Every package of the code is a root, so a path through the SDK is in the graph.
 [tool.importlinter]
 root_packages = ["hq", "hq_sdk", "hq_runner", "tools", "tests", "demo"]
+# A TYPE_CHECKING import is a name for the type checker and loads nothing, so it
+# is no edge; a lazy import still is one.
+exclude_type_checking_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside tools/ imports it: it is development and CI code the image does not ship"
@@ -153,18 +156,20 @@ forbidden_modules = ["hq.**"]
 ignore_imports = ["hq.platform.application.answer_fields -> hq.platform.application.describe"]
 
 [[tool.importlinter.contracts]]
-name = "The operation manifest is a leaf: it imports nothing of HQ but three validators"
+name = "The operation manifest is a leaf: it imports nothing of HQ but four validators"
 type = "forbidden"
 source_modules = ["hq.platform.application.automation_manifest"]
 forbidden_modules = ["hq.**"]
 # HQ's one spelling of a dotted name (contracts.DOTTED_NAME), of a host name
 # (names.is_hostname) and of a value that must hold something
-# (non_empty.NonEmpty), which the manifest holds its ids, kinds, hosts and
-# statements to rather than restating them.
+# (non_empty.NonEmpty), and the one way a rule refuses (reasons.Checked), which
+# the manifest holds its ids, kinds, hosts and statements to rather than
+# restating them.
 ignore_imports = [
   "hq.platform.application.automation_manifest -> hq.platform.application.contracts",
   "hq.platform.application.automation_manifest -> hq.domains.control_plane.names",
   "hq.platform.application.automation_manifest -> hq.platform.application.non_empty",
+  "hq.platform.application.automation_manifest -> hq.platform.application.reasons",
 ]
 
 [[tool.importlinter.contracts]]
@@ -292,10 +297,10 @@ dev = [
 # plugin check installs this group beside them (tools/pipeline/check-plugin.sh).
 source-tests = [
     # The pipeline tests read the workflows through it, and the page tests their ast-grep rules.
-    "pyyaml==6.0.3",
+    "pyyaml==6.0.4",
 ]
 tools = [
-    "coverage==7.17.3",
+    "coverage==7.17.4",
     # Holds the runtime dependencies to what host code imports (lint:deptry).
     "deptry==0.25.1",
     "django-stubs==6.1.2",
@@ -303,12 +308,12 @@ tools = [
     "fonttools==4.68.0",
     # Compares hq_sdk's public shape with the base's (lint:sdk-breaking).
     "griffelib==2.4.1",
-    "hypothesis==6.170.15",
+    "hypothesis==6.170.17",
     # Holds the layering contracts in [tool.importlinter] (lint:imports); its
     # graph, grimp, counts the imports between the layers (audit:layers).
-    "import-linter==2.16",
+    "import-linter==2.17",
     "mypy==2.4.1",
-    "ruff==0.17.5",
+    "ruff==0.17.6",
     # Holds a test's clock still (test_record_life.py).
     "time-machine==3.6.0",
     "types-jsonschema==4.26.0.20261006",
@@ -324,7 +329,7 @@ runner = [
     "ansible-core==2.22.0",
     "ansible-runner==2.4.3",
     # hq_runner/catalog.py reads each sidecar and playbook with it.
-    "pyyaml==6.0.3",
+    "pyyaml==6.0.4",
 ]
 # Generates the API cases of test:api-properties, the one task that installs it.
 fuzz = [
@@ -394,7 +399,9 @@ check-typed-exception = true
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
-"unittest.mock".msg = "Production code never patches: reach the code through a setting, an argument or a public name it reads. A stand-in only tests and demos use lives in a testing.py or *_testing.py module."
+"django.utils.html.format_html".msg = "Build markup with hq.platform.core.held_values.format_html, which holds each value it prints as text."
+"django.utils.html.format_html_join".msg = "Build markup with hq.platform.core.held_values.format_html_join, which holds each value it prints as text."
+"unittest.mock".msg ="Production code never patches: reach the code through a setting, an argument or a public name it reads. A stand-in only tests and demos use lives in a testing.py or *_testing.py module."
 
 [tool.ruff.lint.per-file-ignores]
 # OperationRequest distinguishes unknown legacy attribution (NULL) from a machine's known empty person key.
@@ -463,6 +470,7 @@ ignore = [".claude/worktrees"]
 files = [
     "hq/platform/application/security.py",
     "hq/platform/application/plugins.py",
+    "hq/platform/application/composed_providers.py",
     "hq/platform/application/outbound_work.py",
     "hq/platform/application/capabilities.py",
     "hq/platform/application/resources.py",

@@ -10,7 +10,7 @@ from unittest import mock
 from django.conf import settings
 from django.core.cache import caches
 from django.core.exceptions import ImproperlyConfigured
-from django.db import connection, transaction
+from django.db import connection, connections, transaction
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -186,6 +186,53 @@ class AutocommitRevisionTests(TransactionTestCase):
             self.assertEqual(len(calls), 2)
 
 
+class ConcurrentDerivationTests(TransactionTestCase):
+    def test_a_thread_waiting_on_another_is_answered_before_that_one_has_stored(self):
+        """Storing waits for the write lock, which another writer may hold for
+        long; a request that wanted the same answer is handed it as soon as it
+        is derived, without deriving it again."""
+
+        import threading
+
+        derived, release = threading.Event(), threading.Event()
+        store = derivations._store()
+
+        class HeldStore:
+            def __getattr__(self, name):
+                return getattr(store, name)
+
+            def set(self, *args, **kwargs):
+                # The first deriver's store, behind a writer that holds the lock.
+                if threading.current_thread() is not threading.main_thread():
+                    derived.set()
+                    release.wait(30)
+                return store.set(*args, **kwargs)
+
+        with (
+            declared("test.handed", reads=("core.UpstreamReading",)) as (register, calls),
+            mock.patch.object(derivations, "_store", HeldStore),
+        ):
+            count = register(_readings)
+            UpstreamReading.objects.create(key="one", value={}, observed_at=MOMENT)
+
+            def derive():
+                try:
+                    count()
+                finally:
+                    connections.close_all()
+
+            first = threading.Thread(target=derive)
+            first.start()
+            try:
+                self.assertTrue(derived.wait(30))
+                self.assertEqual(count(), 1)
+                self.assertFalse(release.is_set())
+                self.assertEqual(len(calls), 1)
+            finally:
+                release.set()
+                first.join(30)
+
+
 class DerivationTests(TestCase):
     def test_it_runs_once_per_change_of_what_it_reads(self):
         with declared("test.count", reads=("core.UpstreamReading",)) as (register, calls):
@@ -196,6 +243,10 @@ class DerivationTests(TestCase):
             self.assertEqual((count(), len(calls)), (0, 1))
             UpstreamReading.objects.create(key="one", value={}, observed_at=MOMENT)
             self.assertEqual((count(), count(), len(calls)), (1, 1, 2))
+            with self.captureOnCommitCallbacks(execute=True):
+                UpstreamReading.objects.create(key="two", value={}, observed_at=MOMENT)
+                derivations.derive_after_commit("test.other", "test")
+            self.assertEqual((len(calls), count(), len(calls)), (3, 2, 3))
 
     def test_a_value_stored_by_other_code_is_never_served_to_this_code(self):
         def running(code: str):
@@ -647,9 +698,10 @@ class ActionItemCountTests(TestCase):
         self.assertEqual(self.client.get(self.url, headers={"if-none-match": '"anything"'}).status_code, 200)
 
     def test_a_queue_an_extension_reports_work_to_carries_a_validator(self):
+        from hq.platform.application.composed_providers import provided
         from hq.platform.application.domains import Domain, all_domains
         from hq.platform.application.finding_model import Finding
-        from hq.platform.application.plugins import PluginIntegration, provided
+        from hq.platform.application.plugins import PluginIntegration
 
         item = Finding(rule="example", subject="", severity="attention", title="Something waits", explanation="Body.")
         extra = Domain(

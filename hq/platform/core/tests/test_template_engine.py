@@ -65,7 +65,8 @@ class DrawnTests(SimpleTestCase):
         self.loaded("<details><summary>Example</summary></details>", "partials/_check_rung.html")
 
     def test_each_shape_refuses_its_examples_and_keeps_the_rest(self):
-        from hq.platform.core.hand_drawn import SHAPES, Source
+        from hq.platform.core.hand_drawn import SHAPES
+        from hq.platform.core.template_source import Source
 
         for shape in SHAPES:
             for source in shape.refuses:

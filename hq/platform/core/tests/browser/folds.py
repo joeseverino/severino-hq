@@ -1,6 +1,7 @@
 """Folds as a reader opens them: a row that heads rows folded under it, and
 a fold within a fold, which the survey opens to judge what it holds."""
 
+from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
 from hq.platform.core.tests.browser.gate import with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.reading import probe
@@ -8,17 +9,35 @@ from hq.platform.core.tests.browser.survey import CLOSE_OPENED, open_every_fold
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE
 
 MESSAGE = "A sentence about the event, long enough that a phone has no room for it beside the rest"
-EVENT = (
-    '{% table_region "Events" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "What" %}{% table_heading "When" css="date-col key-col" %}'
-    '{% table_heading "Who" css="optional-col" drop=1 %}{% table_heading "Message" drop=2 %}</tr></thead><tbody>'
-    '<tr id="example-event" data-folds><td class="row-gutter">'
-    '{% include "partials/_row_fold.html" with label="Example event" only %}<strong>Example event</strong>'
-    '</td><td>Nov 1</td><td>example-actor</td><td class="cell-data"><div style="min-width: 320px">{{ message }}</div></td></tr>'
-    '<tr data-folded="example-event"><td>Example item</td>'
-    '<td>Nov 1</td><td>example-actor</td><td class="cell-data">Changed</td></tr>'
-    "</tbody></table>{% endtable_region %}"
-)
+
+
+def _event() -> DataTable:
+    """An event that heads the row folded under it, its message too long for a phone."""
+
+    columns = (
+        TableColumn("What"),
+        TableColumn("When", css="date-col key-col"),
+        TableColumn("Who", css="optional-col", drop=1),
+        TableColumn("Message", drop=2),
+    )
+    rows = (
+        Row(
+            (
+                Cell("Example event", name=True, fold=True),
+                Cell("Nov 1"),
+                Cell("example-actor"),
+                Cell(MESSAGE, role="data"),
+            ),
+            folds="example-event",
+        ),
+        Row(
+            (Cell("Example item"), Cell("Nov 1"), Cell("example-actor"), Cell("Changed", role="data")),
+            folded="example-event",
+        ),
+    )
+    return DataTable("Events", columns, rows)
+
+
 # What the event's columns that left say on its open line, as a reader sees it.
 SAID = """(id) => {
   const line = document.getElementById(id).nextElementSibling;
@@ -47,7 +66,7 @@ class FoldBrowserTests(LayoutBrowserTests):
         """On a phone, opening the fold shows who and what the event's dropped
         columns say beside its rows, and closing it hides them again."""
 
-        self.pages = {**self.pages, "event-probe": probe(EVENT, message=MESSAGE)}
+        self.pages = {**self.pages, "event-probe": probe("{% data_table table %}", table=_event())}
         self.open("event-probe", PHONE_SCREEN[0])
         self.assertEqual(self.page.evaluate(SAID, "example-event"), [])
 

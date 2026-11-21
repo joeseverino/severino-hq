@@ -56,7 +56,7 @@
     return String(left).localeCompare(String(right), undefined, { numeric: true });
   };
 
-  // The server writes each cell once (table_cells), and a row's open line
+  // The server writes each cell once (table_layout), and a row's open line
   // takes what the row holds back from the row as it first opens: each cell
   // of a ranked column (its `data-drop` copied, so the stylesheet still says
   // when it shows) and each cell holding a part only the open line shows

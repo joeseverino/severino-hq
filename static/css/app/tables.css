@@ -93,10 +93,10 @@
   font-weight: 650;
 }
 .data-table tbody tr:hover { background: var(--surface-2); }
-/* A column whose values keep their line (a state, a figure, a row's controls, a date) is as wide as its widest, and the columns that wrap share the rest. A state, a figure or what a row's controls say longer than a line of words (`data-long`, table_cells: a note, the setup a change needs) wraps and shares the room as words do; the row's controls stay as narrow as their line (below) asks, so the row's words keep theirs. */
+/* A column whose values keep their line (a state, a figure, a row's controls, a date) is as wide as its widest, and the columns that wrap share the rest. A state, a figure or what a row's controls say longer than a line of words (`data-long`, table_layout: a note, the setup a change needs) wraps and shares the room as words do; the row's controls stay as narrow as their line (below) asks, so the row's words keep theirs. */
 .data-table > thead th:is([data-kind="status"], [data-kind="numeric"], [data-kind="control"]):not([data-long]), .data-table .date-col { inline-size: 1px; }
 .data-table .date-col { white-space: nowrap; }
-/* A table's count of columns (`--share`, above), which the region writes (`data-columns`, table_cells): its headings, or with none its widest row, less a column with nothing in any row; one that has left its region (`--gone-N`, below) is taken off. */
+/* A table's count of columns (`--share`, above), which the region writes (`data-columns`, table_layout): its headings, or with none its widest row, less a column with nothing in any row; one that has left its region (`--gone-N`, below) is taken off. */
 .data-table[data-columns="2"] { --columns: 2; }
 .data-table[data-columns="3"] { --columns: 3; }
 .data-table[data-columns="4"] { --columns: 4; }
@@ -106,16 +106,18 @@
 .data-table[data-columns="8"] { --columns: 8; }
 .data-table[data-columns="9"] { --columns: 9; }
 .data-table[data-columns="10"] { --columns: 10; }
-/* A short value's box is no box on the open line, unless it is the value's own list. */
-.cell-short:not(ul, ol) { display: contents; }
-/* A state keeps its line; one of several parts (`cell-part`) keeps it up to its share, as a short value does, and past it wraps only between them, its one track `fit-content()` of the share (below). A short value of words keeps its line up to its share; a longer one (past `table_cells.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
+/* A short value's box is no box on the open line, unless it is the value's own list, and nor is a state's. */
+.cell-short:not(ul, ol), .cell-state { display: contents; }
+/* A state keeps its line; one of several parts (`cell-part`) keeps it up to its share, as a short value does, and past it wraps only between them, its one track `fit-content()` of the share (below). A short value of words keeps its line up to its share; a longer one (past `table_layout.SHORT`, or a state or figure longer than a line of words, `data-long`) wraps at its words in a line of `--row-words`, or its share where that is less, so no column of words is set a word to a line. */
 .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long], :has(.cell-part)) { white-space: nowrap; }
-.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) > .stack-list:has(.cell-part) { display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
+.data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) .stack-list:has(.cell-part) { display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
+/* A state's value is one box (`cell-state`, table_layout) holding one item, as wide as it says up to its share and never narrower than what it cannot break: its one track is `fit-content()` of the share, as a pill's is (below). So its column asks for its line up to its share at every width, and past it the value wraps where it may, between its parts or, in the narrowest box, its words. */
+.data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-state { display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; vertical-align: top; }
 /* The line is the words', so the cell's padding is added to it. */
 .data-table > tbody > tr:not(.row-detail) > :is(td, th):is([data-long], :is([data-kind="name"], [data-kind="prose"], [data-kind="identifier"]):not([data-blank], :has(> .cell-short))) {
   box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share));
 }
-/* A short value of words (`cell-short`, table_cells) is one box as wide as it says, up to its share, so its column holds it whole: broken, a project's name or an address and its port reads as two. Past its share it wraps inside its box. The box fills its cell, so a column given more than its share (the room a table has past every column's needs) holds the value on that wider line. A value that is one list is its own box, a block already. */
+/* A short value of words (`cell-short`, table_layout) is one box as wide as it says, up to its share, so its column holds it whole: broken, a project's name or an address and its port reads as two. Past its share it wraps inside its box. The box fills its cell, so a column given more than its share (the room a table has past every column's needs) holds the value on that wider line. A value that is one list is its own box, a block already. */
 .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short, .data-table > thead > tr > th > :is(.table-sort-link, .heading-words) { inline-size: max-content; max-inline-size: var(--share); min-inline-size: 100%; }
 .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-short:not(ul, ol), .data-table > thead > tr > th > .heading-words { display: inline-block; vertical-align: top; baseline-source: first; }
 /* Where an engine sizes by a box's own content (`calc-size`), only the room a short value is sure of is held to its share: its column still asks for the value whole, so a table with room past every column's needs gives it there rather than to a column already whole. */
@@ -124,11 +126,13 @@
 }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
+/* A row that asks to be read first (`Row(emphasized=True)`) is tinted, and its links weigh more, as an unread message does in a mail client. */
 .data-table > tbody > tr[data-emphasized] > * { background: var(--accent-tint); }
 .data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
 /* A `th[scope=row]` table with no `thead` is a description list: its label column as wide as its longest label. */
 .data-table th[scope=row] { padding-right: var(--space-10); font-weight: 600; color: var(--muted); }
+/* A row heading that is also the name its row is read by (`Cell(header=True, name=True)`) reads as a name. */
+.data-table th[scope=row] strong[data-cell="name"] { color: var(--ink); }
 .data-table:not(:has(> thead)) th[scope=row] { inline-size: 1px; white-space: nowrap; }
 /* A value of several parts marks each one and wraps only between them: "1 week" broken from "Up" reads as another fact. */
 .data-table td .cell-part { white-space: nowrap; }
@@ -239,14 +243,14 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 }
 
 /* The classes a template may say about columns, named here since an extension's templates are held to this sheet; they carry no style. */
-.data-table :is(.key-col, .optional-col, .tight-col) { }
+.data-table :is(.key-col, .optional-col) { }
 /* A table of marks (`data-marks`): one row a thing, one column a period, a mark in each cell, read down a column against the rows around it (the cadence matrix). Every heading but the names stands centered over its column. Its cells stand closer where it shares a row with a chart (`data-marks="compact"`), and in a narrow box, where the marks are what is read. */
 .data-table[data-marks] > thead > tr > :not(:first-child) { text-align: center; }
 .data-table[data-marks="compact"] > * > tr > * { padding: var(--space-3) var(--space-2); }
 
 /* ── How a table gives way ──────────────────────────────────────── */
 
-/* A ranked column (`data-drop`, table_cells: 1 for a table's first rank,
+/* A ranked column (`data-drop`, table_layout: 1 for a table's first rank,
    leaving at the widest) leaves while its region is narrower than its rank's
    width; its copy on each row's open line (tables.js) shows instead, and the
    row offers its toggle. A copy of a cell that also holds a part only the
@@ -257,7 +261,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .row-columns > [data-drop]:not([data-holds]), .row-columns > :not([data-drop]) [data-row-shows] { display: none; }
 /* A panel of entries that each wait for their column to leave is drawn only once one of them shows (below), so an open line never holds an empty panel. */
 .row-columns:not(:has(> :not([data-drop]:not([data-holds])))) { display: none; }
-/* Below every rank's width a row's state goes to its open line too (`STATES_LEAVE`, table_cells), the last to leave. */
+/* Below every rank's width a row's state goes to its open line too (`STATES_LEAVE`, table_layout), the last to leave. */
 @container table-region (width < 20rem) {
   .data-table > * > tr > [data-drop="5"] { display: none; }
   .data-table { --held-wraps: 1; }
@@ -274,9 +278,10 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 @container table-region (width >= 20rem) { .row-columns > [data-drop="5"] [data-row-shows] { display: none; } }
 /* A table that keeps the gutter (below) gives the column that names its rows `--row-gutter` in place of a cell's pad: the toggle's 1.5rem more, as its two edges are a narrow cell's pad. So its held values wrap at 20rem plus that 1.5rem, written out since a container query reads no variable. */
 @container table-region (width < 21.5rem) { .data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp)) { --held-wraps: 1; } }
-/* The narrowest box wraps a held value between its words, so a key stands whole: a pill is as wide as its words up to its column's share, as a short value is, past it wraps between them inside its own paint, and is never narrower than its longest word: its one track is `fit-content()` of the share, which a grid sizes from its words in every engine. */
+/* The narrowest box wraps a held value between its words, so a key stands whole: a pill is as wide as its words up to its column's share, as a short value is, past it wraps between them inside its own paint, and is never narrower than its longest word: its one track is `fit-content()` of the share, which a grid sizes from its words in every engine. A state's box claims no line there, so its words wrap as the cell's do. */
 @container style(--held-wraps: 1) {
   .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) { white-space: normal; }
+  .data-table > tbody > tr:not(.row-detail) > :is(td, th) > .cell-state { inline-size: auto; }
   .data-table > tbody > tr:not(.row-detail) > [data-kind="status"]:not([data-long]) .pill { white-space: normal; display: inline-grid; grid-template-columns: fit-content(var(--share)); inline-size: max-content; }
 }
 @container table-region (width < 40rem) {
@@ -341,7 +346,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-3); }
   .data-table [data-kind] .narrow-more, .data-table :is(.wide-only, [data-wide-only]) { display: none; }
   .data-table .narrow-only { display: inline; }
-  /* The columns a narrow box does not draw (`data-wide-columns`, table_cells) are taken off the count its share is reckoned over. */
+  /* The columns a narrow box does not draw (`data-wide-columns`, table_layout) are taken off the count its share is reckoned over. */
   .data-table[data-wide-columns="1"] { --gone-wide: 1; }
   .data-table[data-wide-columns="2"] { --gone-wide: 2; }
   .data-table[data-wide-columns="3"] { --gone-wide: 3; }
@@ -384,14 +389,14 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 
 /* ── A row's toggle and its open line ───────────────────────────── */
 
-/* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_cells: a part the row never shows, a block or buttons moved to its open line; a meaning cut on its first line, `row-gist`, cuts.css), where a column of it has left or a narrow box has let a part go (above), and on an open row whose line is drawn (below), so a row opened narrow and widened offers no toggle that opens nothing. */
+/* The server draws a toggle in every row that can open; it shows where the row holds something back: at any width (`data-below`, table_layout: a part the row never shows, a block or buttons moved to its open line; a meaning cut on its first line, `row-gist`, cuts.css), where a column of it has left or a narrow box has let a part go (above), and on an open row whose line is drawn (below), so a row opened narrow and widened offers no toggle that opens nothing. */
 .data-table .row-expand { display: none; }
 .data-table > tbody > tr:is([data-below], :has(.row-gist), .is-expanded:has(+ .row-detail > td > :not(.row-columns), + .row-detail > td > .row-columns > :not([data-drop]:not([data-holds])))) .row-expand { display: grid; }
 /* What a row shows only on its open line is never drawn on the row. */
 .data-table [data-kind] :is(.row-more, .line-rest) { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
 .data-table > tbody > tr > .row-gutter { position: relative; }
-/* A table says a row of it can open (`data-rows-can-open`, table_cells), since a row's open line is drawn only as it opens unless it holds a block the server moved there. */
+/* A table says a row of it can open (`data-rows-can-open`, table_layout), since a row's open line is drawn only as it opens unless it holds a block the server moved there. */
 .data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp, .row-gist)) { --row-inset: var(--row-gutter); }
 .data-table > * > tr > .row-gutter { padding-inline-start: var(--row-inset, var(--cell-pad)); }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--row-edge); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
@@ -408,6 +413,9 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
 .row-detail > td > :last-child { margin-block-end: 0; }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
+/* The declared lines inside a block space their parts with a gap, leaving only the cell's pad after the last line. */
+.data-table .row-detail .row-below > .stack-list { row-gap: var(--row-pad); }
+.row-detail .row-below > .stack-list > li > * { margin-block-end: 0; }
 .data-table .row-detail:hover { background: none; }
 /* An entry: its label in a column as wide as the labels, its labels wrapping past two fifths of the line, what it shows beside it in the rest of the row, on a panel. */
 .row-columns {

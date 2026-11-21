@@ -44,12 +44,8 @@
 /* A cell line's quiet second line (`{% cell_line %}`) is a line of its own under the first; either line that holds something to press is a target tall. */
 .cell-detail { display: block; }
 :is(.cell-line:has(+ .cell-detail), .cell-line + .cell-detail):is(a[href], :has(a[href], [tabindex])) { line-height: var(--target-min); }
-/* Anywhere else the box the filter puts in a name is no box, and in a link a part is text, as in the link's token (base.css). */
-.cut { display: contents; }
-:is(td, th) [data-entity] > .token > .cut > .whole { display: contents; }
-/* A value quoted in a cell can hold a run with no seam (a link, a digest), which `breakable` makes a token, so the token breaks wherever it must and never widens its column; marked on the cell when the whole cell is such text. Its words stay whole, so the column is never narrower than its longest. */
+/* A value quoted in a cell breaks a word longer than its line wherever it must, marked on the cell when the whole cell is such text; an identifier in it breaks anywhere it must (cuts.css). Its words stay whole, so the column is never narrower than its longest. */
 .data-table :is(td[data-cell~=data], td [data-cell~=data]) { overflow-wrap: break-word; }
-.data-table :is(td[data-cell~=data], td [data-cell~=data]) .token { overflow-wrap: anywhere; }
 /* A list row's actions (`_record_list.html`) read as several: the span gets the flex box. A table row's are its cell's (tables.css). */
 span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); white-space: nowrap; }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
@@ -291,7 +287,7 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .external-link:not(td *, th *) > code > .token { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 /* Each line of such a chip draws its padding, so a part on a line of its own takes the line less the chip's two sides. A part longer than that wraps inside its own box, which the chip's ground reaches only if the box paints it too. */
 .external-link:not(td *, th *) > code .whole { max-width: calc(100% - 2 * var(--space-2)); }
-.external-link:not(td *, th *) > code :is(.token, .cut, .whole) { background: inherit; border-radius: inherit; }
+.external-link:not(td *, th *) > code :is(.token, .whole) { background: inherit; border-radius: inherit; }
 
 /* A band of facts (`{% facts layout="band" %}`): the few figures that sum up a page or a part, each a cell drawn as a figure is: its label, its mark before it, over its value over its detail. `size="large"` sets the values as a page's headline figures. */
 /* Its cells are counted into whole rows (`data-band`, above) at a narrower floor than an insight's, so a long detail wraps in its cell and never takes a row for the cell alone. Each cell is its own stack, top-aligned, its value right under its label. The band draws no box and no edges of its own: its facts stand apart by gaps, the frame's padding (a card, a section's body) their inset, as a card's figures do. */
@@ -317,10 +313,9 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 /* A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside the title while its facts fit there, on a line of its own under it, from the page's edge, where not. */
 :is(.page-head, .page-head-copy) > :has(> .facts-band) { flex: 1 1 32rem; min-width: 0; }
 .page-head .facts-band { margin-block: 0; }
-/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; in a head under 30rem they stand from the page's edge, as many to a row as a label beside its value fits, each two lines: its label and value, then its note on one line. */
+/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; in a head under 30rem they stand from the page's edge, as many to a row as a label beside its value fits, each its label beside its value over its note, whose run wraps whole parts to the lines it needs. */
 @container band (width >= 24rem) { .page-head .facts-band > .fact { justify-self: center; } }
-/* stylelint-disable-next-line declaration-property-value-disallowed-list -- a note keeps the whole parts of its run that fit one line, never cutting text; the rest is in its panel */
-@container page-head (width < 30rem) { .page-head .facts-band { --band-floor: 10rem; --band-row-gap: var(--space-5); --band-column-gap: var(--space-6); & > .fact { flex-flow: row wrap; align-content: start; align-items: baseline; gap: 0 var(--space-3); } & > .fact > .fact-detail { flex-basis: 100%; } & .fact-detail .dot-list { max-block-size: 1lh; overflow-y: clip; } & .fact-value { font-size: var(--text-md); } } }
+@container page-head (width < 30rem) { .page-head .facts-band { --band-floor: 10rem; --band-row-gap: var(--space-5); --band-column-gap: var(--space-6); & > .fact { flex-flow: row wrap; align-content: start; align-items: baseline; gap: 0 var(--space-3); } & > .fact > .fact-detail { flex-basis: 100%; } & .fact-value { font-size: var(--text-md); } } }
 /* What names a value is sentence case in the muted voice; capitals are for a kicker over a group (`.eyebrow`), never a value's name. Its mark is quieter than its words, and a label too long for its cell wraps beside its mark, never under it. */
 .facts-band dt { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; color: var(--muted); font-size: var(--text-xs); }
 .facts-band .fact-label { min-width: 0; }
@@ -396,7 +391,7 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 /* A fact whose one target is its value's link is that link whole, its label and detail pressed as its value is; one holding another target (a link in its detail, a drawing's dots, a panel's button) keeps each its own, so none covers another. */
 .fact:has(> .fact-value > a:only-child, > .fact-figure > :first-child > a:only-child):not(:has(> dd:not(.fact-value) :is(a, button, [tabindex], [data-tip]), > .fact-figure > :not(:first-child) :is(a, button, [tabindex], [data-tip]))) { position: relative; & > .fact-value a::after { content: ""; position: absolute; inset: 0; } }
 
-/* A line of facts (`{% facts layout="inline" %}`): a card's summary, each fact one phrase, its value bold then its words ("3 rules"), a fixed gap apart, wrapping fact by fact. Under the card's head it takes a rule above. A fact with an address is a link whole, every line of which is a target tall. */
+/* A line of facts (`{% facts layout="inline" %}`): a card's summary, each fact one phrase, its value bold then its words ("3 rules"), then a dot and its detail, a fixed gap apart, wrapping fact by fact. Under the card's head it takes a rule above. A fact with an address is a link whole, every line of which is a target tall. */
 .facts-inline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-10); margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--target-min); }
 .facts-inline:not(:first-child) { padding-block-start: var(--space-6); border-block-start: 1px solid var(--line-2); }
 /* A fact too long for its line wraps part by part, its detail under its words rather than a column beside them. */
@@ -406,6 +401,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .facts-inline .fact-value { order: 1; margin: 0; color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
 .facts-inline .fact-value a { color: inherit; text-decoration: none; }
 .facts-inline .fact-label { order: 2; min-width: 0; }
+/* The dot ends the words, so a detail that wraps opens its line with its own words, never a dot. */
+.facts-inline .fact:has(> .fact-detail) .fact-label::after { content: "\00a0·" / ""; color: var(--muted-2); }
 .facts-inline .fact-detail { order: 3; margin: 0; }
 .facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) :is(.fact-value, .fact-label) { color: var(--ink); }
 
@@ -421,9 +418,9 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 /* A list read down (`{% list %}`): items read down, each its parts inline. */
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
 /* In a table's cell its items are the cell's own lines, read at the row's rhythm: one that opens the cell starts on the row's first line, and one that holds something to press is a target tall, so links one to a line are a target apart. Each wraps as its cell does, so a state's lines keep theirs as the state does (tables.css), where a list's items in a cell otherwise wrap. */
-.data-table td .stack-list { gap: 0; margin: 0; }
-.data-table td .stack-list > li { text-wrap-mode: inherit; }
-.data-table td .stack-list > li:has(a[href], [tabindex]) { line-height: var(--target-min); }
+.data-table :is(td, th) .stack-list { gap: 0; margin: 0; }
+.data-table :is(td, th) .stack-list > li { text-wrap-mode: inherit; }
+.data-table :is(td, th) .stack-list > li:has(a[href], [tabindex]) { line-height: var(--target-min); }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
 

@@ -58,6 +58,7 @@ class ConstructionTests(SimpleTestCase):
     def test_a_value_that_is_not_text_is_refused(self):
         for build in (
             lambda: Kpi("Enabled", value=True),
+            lambda: Kpi("Open", value=3),
             lambda: ListRow("Message", meta=date(2026, 10, 22)),
             lambda: Cell(None),
         ):
@@ -66,7 +67,7 @@ class ConstructionTests(SimpleTestCase):
 
     def test_a_label_or_a_facts_label_is_refused_as_a_fields_name(self):
         for build in (
-            lambda: Kpi("confirm_prune", value=3),
+            lambda: Kpi("confirm_prune", value="Off"),
             lambda: Finding(
                 "example", "example", "Device", "good", "Body", evidence=(("device_address", "192.0.2.10"),)
             ),
@@ -74,7 +75,7 @@ class ConstructionTests(SimpleTestCase):
             with self.assertRaises(ValueError):
                 build()
         Cell("hq_web")
-        Kpi("Containers", value=3)
+        Kpi("Containers", value="Running")
 
 
 class EveryDisplayTypeTests(SimpleTestCase):

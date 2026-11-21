@@ -13,43 +13,43 @@ internet, a lookup of the address it crosses from.
     <div class="conn-peer">
       <span class="eyebrow">You</span>
       {% if connection.peer_label and connection.machine_url %}
-        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label|breakable }}</a>
+        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label }}</a>
       {% elif connection.peer_label %}
-        <strong>{{ connection.peer_label|breakable }}</strong>
+        <strong>{{ connection.peer_label }}</strong>
       {% endif %}
-      <code>{{ connection.peer_address|breakable }}</code>
+      <code>{{ connection.peer_address }}</code>
       {% if connection.reported_device %}
         <span class="conn-row-note">From the proxy's header</span>
       {% elif connection.identity.tailnet_user %}
-        <span class="conn-row-note">{{ connection.identity.tailnet_user|breakable }}</span>
+        <span class="conn-row-note">{{ connection.identity.tailnet_user }}</span>
       {% endif %}
     </div>
     <div class="conn-link conn-link-{{ connection.path }}">
       <p class="conn-headline">{% status connection.channel.label tone=connection.tone dot=True ink="context" %}</p>
       <span class="conn-link-line" aria-hidden="true"></span>
-      <p class="conn-sub">This request: {{ connection.tally|lower|breakable:"·" }}{% if connection.path_label %}{{ connection.path_label|breakable:"·" }}{% endif %}{{ connection.transport|breakable }}</p>
-      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.enforced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line|breakable }}</p>
+      <p class="conn-sub">This request: {{ connection.tally|lower|breakable:"·" }}{% if connection.path_label %}{{ connection.path_label|breakable:"·" }}{% endif %}{{ connection.transport }}</p>
+      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.enforced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line }}</p>
       {% endif %}
     </div>
     <div class="conn-peer">
       <span class="eyebrow">HQ</span>
       {% if connection.serves_url %}
-        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.label|default:connection.host|breakable }}</a>
+        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.label|default:connection.host }}</a>
       {% else %}
-        <strong>{{ connection.serves.label|default:connection.host|breakable }}</strong>
+        <strong>{{ connection.serves.label|default:connection.host }}</strong>
       {% endif %}
-      {% if connection.serves %}<code>{{ connection.serves.addresses.0|breakable }}</code>{% endif %}
-      <span class="conn-row-note">{{ connection.host|breakable }}</span>
+      {% if connection.serves %}<code>{{ connection.serves.addresses.0 }}</code>{% endif %}
+      <span class="conn-row-note">{{ connection.host }}</span>
     </div>
   </div>
 </div>
 
 {% partialdef carriage %}<div class="conn-carriage conn-carriage-{{ peering.id }}{% if peering.tone %} {{ peering.tone|tone_class }}{% endif %}">
-  <strong>{{ peering.label|breakable }}</strong>
+  <strong>{{ peering.label }}</strong>
   {% if peering.public %}
     <details data-peering-detail>
       <summary>
-        About <code>{{ peering.address|breakable }}</code>
+        About <code>{{ peering.address }}</code>
       </summary>{% url 'tool_public_address' as lookup_url %}
       <div data-fragment="{% with_query lookup_url address=peering.address %}"
            data-fragment-load

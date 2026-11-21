@@ -37,22 +37,22 @@ not designed. Adding or removing one is a record, through the domain's own
       {% list %}
         {% for record in section.records %}
           <li>
-            <code>{{ record.name|breakable }}</code>
+            <code>{{ record.name }}</code>
             {% if section.null_mx %}
               {% muted %}Null MX: this domain receives no mail{% endmuted %}
             {% else %}
               {% if record.priority is not None %}{% status "Priority" record.priority %}{% endif %}
-              {% muted %}{{ record.content|breakable }}{% endmuted %}
+              {% muted %}{{ record.content }}{% endmuted %}
             {% endif %}
             {% if record.resource_key %}
-              {% with edit=record.edit %}{% if edit %}<a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label|breakable }}</a>{% endif %}{% endwith %}
+              {% with edit=record.edit %}{% if edit %}<a class="subtle-link" href="{{ edit.url|returning_to:request.get_full_path }}">{{ edit.label }}</a>{% endif %}{% endwith %}
             {% else %}
-              {% status "Not managed by HQ" tone="attention" %}
+              {% status "not managed"|absent tone="attention" %}
             {% endif %}
           </li>
         {% endfor %}
       {% endlist %}
-      {% if section.source %}<p class="help">{{ section.source|breakable }}</p>{% endif %}
+      {% if section.source %}<p class="help">{{ section.source }}</p>{% endif %}
     {% endsection %}
   {% endif %}
 {% endfor %}

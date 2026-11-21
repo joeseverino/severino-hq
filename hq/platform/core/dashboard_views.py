@@ -24,13 +24,8 @@ from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
 from hq.platform.application.entity_links import entity_link, page_url
-from hq.platform.application.glance import (
-    DASHBOARD_REFRESH,
-    DASHBOARD_REFRESH_STALE,
-    DASHBOARD_SETTINGS,
-    dashboard_configuration,
-    glance_context,
-)
+from hq.platform.application.glance import DASHBOARD_SETTINGS, dashboard_configuration, glance_context
+from hq.platform.application.glance_refresh import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE
 from hq.platform.application.moments import moment, stamp_day
 from hq.platform.application.outward_links import link_choices, outward_links
 from hq.platform.application.pages import PageVisit, page_context
@@ -143,7 +138,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         highlights = dashboard_highlights(principal)
         glance = glance_context()
         for project in snapshot["active_projects"]:
-            project["updated_at"] = moment(project["updated_at"], naive="keep")
+            project["last_active_at"] = moment(project["last_active_at"])
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
             for item in collection:
                 item["updated_at"] = moment(item["updated_at"], naive="keep")
@@ -184,7 +179,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
                 link=entity_link("project", project["slug"], label=project["name"]),
                 detail=project["category_label"],
                 category=project["category"],
-                at=project["updated_at"],
+                at=project["last_active_at"],
             )
             for project in snapshot["active_projects"]
         ]

@@ -137,7 +137,7 @@ class ZoneInsightTests(TestCase):
 
         card = self._insight("example.com", "Certificates")
 
-        self.assertEqual(card.value, "None managed here")
+        self.assertEqual(card.value, "Not managed")
         self.assertIn("letsencrypt.org", card.detail)
 
     def test_email_names_who_receives_the_mail(self):
@@ -183,7 +183,7 @@ class ZoneInsightTests(TestCase):
 
         card = self._insight("example.com", "Email")
 
-        self.assertEqual(card.value, "Not configured")
+        self.assertEqual(card.value, "Not set up")
 
     def test_one_failing_contributor_does_not_lose_the_page(self):
         """This is the screen opened to find out what is wrong."""
@@ -237,13 +237,12 @@ class RecordedResponsibilityTests(TestCase):
     """
 
     def test_a_domain_is_recorded_rather_than_unobserved(self):
-        from hq.platform.application.infrastructure import resource_health
+        from hq.platform.application.infrastructure import ResourceState, resource_health
 
         resource = declare("a-domain", "cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns-account"})
 
-        health = resource_health(resource)
-        self.assertEqual(health["state"], "declared")
-        self.assertEqual(health["message"], "")
+        # Recorded, and never good: nothing checks it.
+        self.assertEqual(ResourceState(resource_health(resource)["state"]).tone, "neutral")
 
     def test_it_does_not_reach_the_attention_queue(self):
         from hq.platform.application.attention import infrastructure

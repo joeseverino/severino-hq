@@ -16,7 +16,7 @@ from django.urls import reverse
 
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.tests.browser.gate import answered
-from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.selectors import SELECTORS, css
 
 # The API reference: a vendored viewer mounted inside HQ's frame. Its markup is
 # the vendor's, so what reads it finds it by tag and ARIA, never by class.
@@ -56,7 +56,7 @@ _DRAW_WHOLE = """async (root) => {
 def draw_whole_reference(page):
     """Every entry of the reference drawn, as a reader scrolling through it sees each."""
 
-    return page.evaluate(_DRAW_WHOLE, SELECTORS["reference"])
+    return page.evaluate(_DRAW_WHOLE, css(page, SELECTORS["reference"]))
 
 
 # The label of the viewer's button that shows the rest of a group or a tag
@@ -81,7 +81,7 @@ def scalar_slug(name):
 def served_document(page):
     """The document the viewer on ``page`` was given, fetched from the address it read it from."""
 
-    return page.evaluate(_SERVED, SELECTORS["reference"])
+    return page.evaluate(_SERVED, css(page, SELECTORS["reference"]))
 
 
 _SERVED = "async (root) => (await fetch(document.querySelector(root).dataset.url)).json()"
@@ -330,13 +330,13 @@ def open_tag(page, opened):
     press draws what it shows, every entry drawn; the slugs and parts the
     viewer drew nothing for, none when the look reached all of it."""
 
-    arg = [SELECTORS["reference"], SHOW_MORE, list(opened.tags), list(opened.parts), list(opened.shared)]
+    arg = css(page, [SELECTORS["reference"], SHOW_MORE, list(opened.tags), list(opened.parts), list(opened.shared)])
     for _round in range(20):
         draw_whole_reference(page)
         if not page.evaluate(_OPEN_ROUND, arg):
             break
     draw_whole_reference(page)
-    return page.evaluate(_UNDRAWN, [SELECTORS["reference"], list(opened.tags), list(opened.parts)])
+    return page.evaluate(_UNDRAWN, css(page, [SELECTORS["reference"], list(opened.tags), list(opened.parts)]))
 
 
 def render_reference():

@@ -11,6 +11,8 @@ lazy from hq.platform.application.machines import container_context
 lazy from hq.platform.application.resource_capabilities import offered_changes
 lazy from hq.platform.application.upgrades import plan_for, readiness_of
 
+from .container_tables import every_container, need_table
+
 
 def container_detail(resource: Any, request: Any) -> dict[str, Any]:
     """A watched container's page: which machine that name is, what it is
@@ -42,8 +44,8 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
 
 
 class ContainerListView(PageMixin, TemplateView):
-    """Led by what to act on (``needs_you``): a version with a newer release,
-    or a vulnerable one the internet may reach, each once however many
+    """Led by what to act on (``needs_you``): a version with an upgrade worth
+    making, or a vulnerable one the internet may reach, each once however many
     containers run it. Then every container, one row each."""
 
     template_name = "control_plane/container_list.html"
@@ -62,24 +64,25 @@ class ContainerListView(PageMixin, TemplateView):
                 )["containers"].append(item)
         read = [item.standing.read_at for item in found if item.standing.read_at]
         needs = [group for group in groups.values() if needs_you(group["standing"], group["containers"])]
-        # An image is listed to update when a newer version is published. One
-        # with a vulnerability and no newer version is listed only while the
-        # internet may reach it.
-        update_now = [group for group in needs if group["standing"].newer]
-        no_update = [group for group in needs if not group["standing"].newer]
+        # An image is listed to update when its plan recommends the move
+        # (``Plan.recommended``). A vulnerable one with no such move is listed
+        # only while the internet may reach it.
+        update_now = [group for group in needs if group["plan"] is not None and group["plan"].recommended]
+        no_update = [group for group in needs if group not in update_now]
         # Each reason is a section of its own, so its heading says what it holds.
         need_sections = [
             {
                 "heading": heading,
                 "lede": lede,
                 "groups": listed,
+                "table": need_table(heading, listed),
                 "running": sum(len(group["containers"]) for group in listed),
             }
             for heading, lede, listed in (
                 ("Update now", "", update_now),
                 (
                     "No update yet",
-                    "Vulnerable images with no newer release, listed while the internet may reach them.",
+                    "Vulnerable images no release is known to fix, listed while the internet may reach them.",
                     no_update,
                 ),
             )
@@ -87,6 +90,7 @@ class ContainerListView(PageMixin, TemplateView):
         ]
         context.update(
             containers=found,
+            every=every_container(found),
             need_sections=need_sections,
             machines=len({item.machine.name for item in found}),
             tally=tally(found),

@@ -114,8 +114,9 @@ def a_task(name: str, tasks: set[str]) -> bool:
 # a pull request runs, the cache writer, the composition and the two verdicts.
 NOT_TASK_JOBS = {"proven", "legs", "caches", "compose", "ready", "release"}
 # A second job of a task: a pull request's image, verified from the registry
-# beside its composition, and main's build that writes the layer cache.
-SECOND_JOBS = {"build-verify": "build", "build-cache": "build"}
+# beside its composition, main's build that writes the layer cache, and the
+# verdict over every browser leg's findings.
+SECOND_JOBS = {"build-verify": "build", "build-cache": "build", "browser-verdict": "browser"}
 # The tasks CI's gate jobs are named for: the gates `mise run check` runs.
 GATE_JOBS = set(tasks_named(GATES[2:]))
 

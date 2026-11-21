@@ -15,6 +15,7 @@ from hq_sdk.testing import plain
 
 from ..doors import door_words
 from ..entity_links import entity_link, record_name
+from ..infrastructure import ResourceState, resource_health
 from ..inventory import confirm_observed
 from ..projection import projection_scope
 from ..resource_context import record_status
@@ -113,9 +114,11 @@ class RecordPageTests(TestCase):
         now = timezone.now()
         drift = [{"type": "Drifted", "status": True, "reason": "Drifted", "message": "Points at 192.0.2.99."}]
         fault = [{"type": "Degraded", "status": True, "reason": "Unreachable", "message": "AdGuard answered 502."}]
-        kind_read("adguard.rewrite", now)
+        # Its kind was last read two days ago, longer than a reading stays current.
+        kind_read("adguard.rewrite", now - timedelta(days=2))
         for state, fields in {
             "working": {"conditions": READY, "last_observed_at": now},
+            "stale": {"conditions": READY, "last_observed_at": now - timedelta(days=2)},
             "drifted": {"conditions": drift, "last_observed_at": now},
             "degraded": {"conditions": fault, "last_observed_at": now},
             "pending": {"generation": 2, "conditions": READY, "last_observed_at": now},
@@ -140,8 +143,9 @@ class RecordPageTests(TestCase):
                 }
 
                 self.assertTrue(status.detail)
+                self.assertEqual(ResourceState(resource_health(record)["state"]).tone, status.tone)
                 self.assertTrue(tones.get(status.label))
-                self.assertEqual(tones.get(status.detail), tones[status.label])
+                self.assertEqual(tones.get(" ".join(status.detail.split())), tones[status.label])
 
     def test_a_row_about_its_own_service_shows_where_the_record_leads(self):
         from ..service_declarations import Claim
@@ -158,27 +162,6 @@ class RecordStatusTests(TestCase):
 
         managing_everything()
         self.now = timezone.now()
-
-    def test_a_record_found_as_set_is_working(self):
-        status = record_status(rewrite(conditions=READY, last_observed_at=self.now))
-
-        self.assertEqual((status.state, status.label), ("working", "Working"))
-        self.assertEqual(status.detail, "Matches HQ's config.")
-
-    def test_a_record_not_read_with_the_rest_of_its_type_is_never_working(self):
-        stale = rewrite(conditions=READY, last_observed_at=self.now - timedelta(days=14))
-        kind_read("adguard.rewrite", self.now)
-
-        status = record_status(stale)
-
-        self.assertEqual((status.state, status.label), ("unseen", "Not found lately"))
-
-    def test_a_record_switched_off_says_only_that(self):
-        off = rewrite(conditions=READY, enabled=False, last_observed_at=self.now - timedelta(days=14))
-
-        kind_read("adguard.rewrite", self.now)
-
-        self.assertEqual(record_status(off).label, "Switched off in HQ")
 
     def test_a_change_made_outside_hq_says_since_when_and_the_two_ways_out(self):
         since = (self.now - timedelta(minutes=4)).isoformat()
@@ -199,11 +182,6 @@ class RecordStatusTests(TestCase):
         self.assertEqual((status.state, status.label), ("drifted", "Changed outside HQ"))
         self.assertEqual(status.since.isoformat(), since)
         self.assertTrue(status.detail.endswith("Keep the live version, or restore HQ's version."))
-
-    def test_a_change_not_yet_applied_is_waiting(self):
-        status = record_status(rewrite(generation=2, conditions=READY))
-
-        self.assertEqual((status.state, status.label), ("pending", "Change waiting to apply"))
 
 
 class ReportedFieldTests(TestCase):

@@ -5,7 +5,6 @@ from collections.abc import Mapping
 from typing import ClassVar
 
 from django import forms
-from django.utils.html import format_html
 
 from hq.platform.application.asks import APPLIES_SHORTLY
 from hq.platform.application.command_forms import command_fields
@@ -24,6 +23,7 @@ from hq.platform.application.mail_policy import (
 )
 from hq.platform.application.provider_forms import ResourceIdentityForm
 from hq.platform.application.ui import counted
+from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .names import is_hostname, normalized_hostname

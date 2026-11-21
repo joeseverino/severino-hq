@@ -28,7 +28,7 @@ from .finding_model import (
     per_connection,
     reconcile_remedy,
 )
-from .freshness import LAST_READ, behind, freshness
+from .freshness import LAST_READ, OUT_OF_DATE, behind, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
 from .moments import ago, duration
@@ -586,8 +586,8 @@ def _never_observed(estate: FindingEstate) -> tuple[Finding, ...]:
 
 
 def _unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
-    """A record whose kind HQ reads that reports no state of its own, so HQ can
-    vouch for it neither way. One the sweep missed, never found, read without
+    """A record whose kind HQ reads that reports no state of its own, or whose
+    last reading is out of date, so HQ can vouch for it neither way. One the sweep missed, never found, read without
     the settings HQ set, or of a kind not read lately is those rules' to say,
     which subsume this."""
 
@@ -601,7 +601,7 @@ def _unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
             remedies=reconcile_remedy(node),
         )
         for node in estate.nodes()
-        if node.kind == "resource" and node.managed and node.status_label == NOT_READ_LABEL
+        if node.kind == "resource" and node.managed and node.status_label in (NOT_READ_LABEL, OUT_OF_DATE)
     )
 
 

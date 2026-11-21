@@ -24,6 +24,7 @@ app_name = "control_plane"
 urlpatterns = [
     path("", views.InfrastructureListView.as_view(), name="list"),
     path("findings/", finding_views.FindingsView.as_view(), name="findings"),
+    path("findings/checks/", finding_views.ChecksView.as_view(), name="checks"),
     path("topology/", topology_views.TopologyView.as_view(), name="topology"),
     path("topology/node/", topology_views.TopologyNodeView.as_view(), name="topology_node"),
     path("providers.json", views.ProviderSchemaView.as_view(), name="providers"),

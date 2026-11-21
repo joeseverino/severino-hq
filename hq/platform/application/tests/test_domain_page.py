@@ -1,17 +1,15 @@
 """A domain's page says each thing once, in the owner's words."""
 
-from types import SimpleNamespace
-
-from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
-from hq.domains.control_plane.zone_views import _page_relationships, _records_lede
+from hq.domains.control_plane.zone_views import _page_relationships, _records_lede, records_table
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.infrastructure import ResourceState
 from hq.platform.application.markup_testing import elements, select, text, texts, with_class
 from hq.platform.application.relationships import Relationships
 from hq.platform.application.topology_model import RelationGroup, Relationship
 from hq.platform.application.zones import ZoneRecord, told_apart
+from hq.platform.core.testing import render
 
 
 def group(phrase: str, *ends: EntityLink) -> RelationGroup:
@@ -94,21 +92,11 @@ class RecordTableTests(SimpleTestCase):
             "declaration": "example-record",
             "health": {"state": ResourceState.HEALTHY, "label": "Healthy"},
         }
-        return SimpleNamespace(**{**base, **fields})
+        return {**base, **fields}
 
-    def table(self, *rows, policy=(), **context):
-        return render_to_string(
-            "control_plane/_zone_records.html",
-            {
-                "routing": [(row, ()) for row in rows],
-                "policy": [(row, ()) for row in policy],
-                "managed": True,
-                "ttl_set": any(row.ttl != 1 for row in (*rows, *policy)),
-                "public_dns_enabled": True,
-                "request": SimpleNamespace(get_full_path=lambda: "/domains/example.com/"),
-                **context,
-            },
-        )
+    def table(self, *rows, policy=()):
+        table = records_table([(row, ()) for row in rows], [(row, ()) for row in policy], managed=True)
+        return render("{% data_table table %}", table=table)
 
     def test_a_state_is_said_only_where_it_is_not_healthy(self):
         html = self.table(
@@ -130,9 +118,8 @@ class RecordTableTests(SimpleTestCase):
 
         self.assertNotIn("TTL", texts(html, "th"))
 
-    def test_an_empty_half_says_where_the_records_are(self):
+    def test_a_zone_with_no_records_says_so(self):
         self.assertIn("No records.", self.table())
-        self.assertIn("No routing records.", self.table(policy=(self.record(record_type="CAA"),)))
 
     def test_policy_records_are_a_group_of_the_same_table_folded_away(self):
         html = self.table(self.record(), policy=(self.record(name="example.com", record_type="CAA"),))
@@ -142,7 +129,6 @@ class RecordTableTests(SimpleTestCase):
         folded = select(html, "data-folded")
         self.assertEqual([row.attrs["data-folded"] for row in folded], [fold.attrs["id"]])
         self.assertIn("example.com", folded[0].words)
-        self.assertEqual(len(elements(html, "tbody")), 2)
 
     def test_two_records_of_one_name_and_type_say_what_tells_them_apart_where_their_value_has_left(self):
         records = (
@@ -150,7 +136,12 @@ class RecordTableTests(SimpleTestCase):
             ZoneRecord("example.com", "MX", "mx2.example.net", priority=20),
             ZoneRecord("mail.example.com", "MX", "mx1.example.net", priority=10),
         )
-        html = self.table(*told_apart(records))
+        html = self.table(
+            *(
+                self.record(name=each.name, record_type=each.record_type, value=each.content, summary=each.summary)
+                for each in told_apart(records)
+            )
+        )
 
         said = {row.words for row in with_class(html, "narrow-only")}
         self.assertEqual(said, {"10 mx1.example.net", "20 mx2.example.net"})

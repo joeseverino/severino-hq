@@ -242,6 +242,10 @@ EXAMPLES = (
         "resource-unchecked",
         fires=(
             estate(held("silent", conditions=[]), raises=offering("Internal DNS record silent could not be checked")),
+            estate(
+                held("wildcard", "tls.certificate", seen=ago(days=14), spec={"domains": ["*.example.com"]}),
+                raises=offering("TLS certificate wildcard could not be checked"),
+            ),
         ),
         quiet=(HEALTHY,),
     ),

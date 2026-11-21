@@ -28,6 +28,7 @@ from django.urls import reverse
 from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.core import verdicts
 from hq.platform.core.csp_views import _blocked, _csp_violations, _directive
 from hq.platform.core.run_report import Cost, tally
 from hq.platform.core.speculation import rules_document
@@ -55,12 +56,13 @@ from hq.platform.core.tests.browser.probes.settle import (
 )
 from hq.platform.core.tests.browser.probes.tables import PRESS, TABLE_LAYOUT, UNPRESS, tables_read
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
-from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.selectors import SELECTORS, css
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.shards import share, sweeps
 from hq.platform.core.tests.browser.shots import shoot_page
 from hq.platform.core.tests.browser.survey import (
     CHECKS,
+    drawn_by,
     findings_of,
     geometry_probes,
     palette_probes,
@@ -138,7 +140,9 @@ def pickles_beside(test, value):
 
 class _Watched:
     """A test's result, marking the test ``failed`` when it fails outside a
-    subtest, and having a failed subtest's page shot as it fails.
+    subtest, having a failed subtest's page shot as it fails, and handing a
+    subtest's findings to the run, which fails once per defect
+    (`run_report.Findings`), in place of the subtest's own failure.
 
     A parallel worker's result keeps no list of failures to look in: it
     sends each one to the parent as it happens. The mark is a plain flag on
@@ -161,9 +165,13 @@ class _Watched:
         self.result.addFailure(test, err)
 
     def addSubTest(self, test, subtest, err):
-        # Reported as the subtest ends, so the page is still the one it failed on.
-        if err is not None and (err := self.test.as_reported(subtest.params, err)) is not None:
+        # Shot as the subtest ends, so the page is still the one it failed on.
+        found = self.test.recorded(subtest.params, err) if hasattr(self.result, "addFindings") else None
+        if err is not None and (found is None or found[1]):
             self.test.subtest_failed(subtest.params)
+        if found is not None:
+            self.result.addFindings(test, found[0])
+            err = None
         self.result.addSubTest(test, subtest, err)
 
 
@@ -178,7 +186,7 @@ def unfold(page) -> None:
     """Opens the Filters control of a filter bar that folds its choices
     behind it, so they can be pressed as a reader presses them there."""
 
-    fold = page.locator(SELECTORS["filter_fold"])
+    fold = page.locator(css(page, SELECTORS["filter_fold"]))
     if fold.count() and fold.is_visible():
         fold.click()
 
@@ -501,14 +509,6 @@ def findings_in(said, check):
     return None
 
 
-def signature(check, finding):
-    """What a finding says, its measures aside: the same defect at another
-    width or on another load differs only in its numbers."""
-
-    said = finding if isinstance(finding, str) else json.dumps(finding, sort_keys=True)
-    return check, re.sub(r"\d+", "#", said)
-
-
 class BrowserGate(SimpleTestCase):
     """A browser over pages rendered once, every request answered locally.
 
@@ -633,6 +633,8 @@ class BrowserGate(SimpleTestCase):
             self.context.add_init_script(DEAF_WHILE_PROBED)
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
+        # The selectors a page has held, which no page is asked again (`css`).
+        self.held_here: set[str] = set()
         # The sheets a test laid over the page (``lay_css``), which a load drops.
         self.laid: list[str] = []
         self.page.on("load", lambda _page: self.laid.clear())
@@ -671,6 +673,18 @@ class BrowserGate(SimpleTestCase):
 
     def where_and_width(self):
         return f"{self.where()} at {self.page.viewport_size['width']}px"
+
+    def css(self, value):
+        """``value`` as the page reads it, each selector in it held to the
+        page it is asked of (`selectors.css`): a catalog entry's page draws
+        its part."""
+
+        return css(
+            self.page,
+            value,
+            drawn=lambda: catalog.part_of(urlsplit(self.page.url).path.strip("/")),
+            seen=self.held_here,
+        )
 
     def refusals_so_far(self):
         """Every policy refusal, console error and uncaught script error the
@@ -729,7 +743,7 @@ class BrowserGate(SimpleTestCase):
         sources, args = zip(*probes, strict=True)
         return [
             (returned, value, ms / 1000)
-            for returned, value, ms in self.page.evaluate(hushed(_in_one_trip(sources)), list(args))
+            for returned, value, ms in self.page.evaluate(hushed(_in_one_trip(sources)), self.css(args))
         ]
 
     def outcomes(self, probes):
@@ -787,17 +801,12 @@ class BrowserGate(SimpleTestCase):
         self.failed = False
         self.failures = None
         self.costs: dict[str, dict[str, Cost]] = {}
-        # Each finding a failed subtest reported, by its signature, with
-        # every place it was found.
-        self.places: dict[tuple[str, str], tuple[str, list[str]]] = {}
+        # What each finding says, measures aside, once its page is shot.
+        self.shot: set[tuple[str, str]] = set()
         # _Watched stands in for the result, passing on what it does not keep.
         ran = super().run(result if result is None else cast(TestResult, _Watched(result, self)))
         if result is not None and self.costs and (keep := getattr(result, "addCosts", None)):
             keep(self, self.costs)
-        if again := [(said, places) for said, places in self.places.values() if len(places) > 1]:
-            print(f"{self.id()}: each finding reported once, at its first place, and found again:")
-            for said, places in again:
-                print(f"  {said}\n    at {', '.join(places)}")
         return ran
 
     @override
@@ -829,7 +838,7 @@ class BrowserGate(SimpleTestCase):
         """As unittest's, but what was to be found empty and was not fails
         as its findings, whole, in JSON: a rule's ``assertEqual(found, [])``
         says every finding, never unittest's shortened repr, and the subtest
-        that fails reads them by check (``as_reported``)."""
+        that fails hands them to the run by check (``recorded``)."""
 
         if msg is None and second in ([], {}) and first != second and isinstance(first, list | dict):
             self.fail(json.dumps(first, indent=1, default=str))
@@ -850,37 +859,28 @@ class BrowserGate(SimpleTestCase):
         rest = ", ".join(f"{key}={value}" for key, value in params.items() if key not in ("page", "width", "rule"))
         return ", ".join(part for part in (place, rest) if part) or self.id()
 
-    def as_reported(self, params, err):
-        """A failed subtest's error as it is reported: each finding the test
-        already reported dropped, the place it was found again kept for the
-        test's closing lines, and the look that finds the rest again added.
-        None when nothing is left to report."""
+    def recorded(self, params, err):
+        """A failed subtest's findings as the run records them, each with
+        where it was found (the engine, the class, the page, the width and
+        the state), the Part that draws what it names and the look that finds
+        it again, and whether any is new to this test, so its page is shot;
+        None for a subtest that passed or failed saying no findings."""
 
-        kind, value, trace = err
-        said = str(value)
-        rule = params.get("rule") or "findings"
-        place = self.where_found(params)
-        found = findings_in(said, rule)
-        new: dict[str, list] = {}
-        for check, lines in (found or {rule: [said]}).items():
-            for line in lines:
-                key = signature(check, line)
-                if key in self.places:
-                    self.places[key][1].append(place)
-                else:
-                    self.places[key] = (f"{check}: {line}", [place])
-                    new.setdefault(check, []).append(line)
-        if not new:
+        if err is None or not issubclass(err[0], self.failureException):
             return None
-        if found is not None:
-            said = json.dumps(new.get(rule, []) if isinstance(json.loads(said), list) else new, indent=1)
-        if command := self.rerun(params, new):
-            said += f"\n\nFound again by: {command}"
-        if len(value.args) == 1 and str(value) == value.args[0]:
-            value.args = (said,)
-        else:
-            print(said)
-        return kind, value, trace
+        rule = params.get("rule") or "findings"
+        if not (found := findings_in(str(err[1]), rule)) or not any(found.values()):
+            return None
+        place = f"{browser_engine()} {type(self).__name__}: {self.where_found(params)}"
+        again = self.rerun(params, found)
+        findings = [
+            verdicts.Finding(check, said, place, *drawn_by(check, said), self.id(), again)
+            for check, lines in found.items()
+            for said in (line if isinstance(line, str) else json.dumps(line, sort_keys=True) for line in lines)
+        ]
+        new = {verdicts.signature(finding.check, finding.said) for finding in findings} - self.shot
+        self.shot |= new
+        return findings, bool(new)
 
     def rerun(self, params, checks=()):
         """The `dev:look` that draws a failed subtest's page as it was drawn
@@ -1011,7 +1011,7 @@ class BrowserGate(SimpleTestCase):
         with the folds open, so every row is read open."""
 
         loaded = self.page.viewport_size
-        layout = [SELECTORS["table_scroll"], viewport_queries(stylesheet())]
+        layout = self.css([SELECTORS["table_scroll"], viewport_queries(stylesheet())])
         probes = table_probes()
         sources, args = zip(*probes.values(), strict=True)
         script = tables_read(hushed(_in_one_trip(sources)))
@@ -1051,7 +1051,7 @@ class BrowserGate(SimpleTestCase):
             for width in [NARROWEST, *(width for before, width in pairwise(widths) if shapes[width] != shapes[before])]:
                 self.page.set_viewport_size(viewport(width))
                 states, moved = self.page.evaluate(
-                    script, [layout[0], state, rows, SELECTORS["own_records"], list(args)]
+                    script, self.css([layout[0], state, rows, SELECTORS["own_records"], args])
                 )
                 for said_state, outcomes in states:
                     where = f"at {width}px" + (f", {said_state}" if said_state else "")
@@ -1060,7 +1060,7 @@ class BrowserGate(SimpleTestCase):
                         take(check, findings_of(check, returned, value), where)
                 take("opening rows moves", moved, f"at {width}px")
 
-        folds = self.page.evaluate_handle(PRESS, SELECTORS["row_fold"])
+        folds = self.page.evaluate_handle(PRESS, self.css(SELECTORS["row_fold"]))
         if self.page.evaluate("(pressed) => pressed.length", folds):
             sweep("its folds open", SELECTORS["row_opener"])
             folds.evaluate(UNPRESS)
@@ -1080,7 +1080,9 @@ class BrowserGate(SimpleTestCase):
         reads, before = {}, []
         for palette in ("light", "dark"):
             before.append(self.in_scheme(palette))
-            reads[palette] = self.page.evaluate(FILL_STEPS, [SELECTORS["contrast_scope"], SELECTORS["vendored"]])
+            reads[palette] = self.page.evaluate(
+                FILL_STEPS, self.css([SELECTORS["contrast_scope"], SELECTORS["vendored"]])
+            )
         # A box only one reading saw came or went between them.
         both = {str(at) for at in reads["light"]["seen"]} & {str(at) for at in reads["dark"]["seen"]}
         steps = {

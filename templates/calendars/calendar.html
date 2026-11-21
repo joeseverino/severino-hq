@@ -18,9 +18,9 @@ opening a day ask this page for the `calendar` part and take it in place.
       {% section day.name moment=day.day when="day" id="day-panel" %}
         {% if entry %}
           {% section entry.object.title id="day-entry" %}
-            <p>{{ entry.when|breakable }}</p>
-            {% if entry.object.location or entry.repeat %}{% muted element="p" %}{% if entry.object.location %}{{ entry.object.location|breakable }}{% endif %}{% if entry.object.location and entry.repeat %}{% dot %}{% endif %}{{ entry.repeat|breakable }}{% endmuted %}{% endif %}
-            {% if entry.about %}{% muted element="p" %}About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}{% endmuted %}{% endif %}
+            <p>{{ entry.when }}</p>
+            {% if entry.object.location or entry.repeat %}{% muted element="p" %}{% if entry.object.location %}{{ entry.object.location }}{% endif %}{% if entry.object.location and entry.repeat %}{% dot %}{% endif %}{{ entry.repeat }}{% endmuted %}{% endif %}
+            {% if entry.about %}{% muted element="p" %}About {{ entry.about.kind_label|lower }} {% entity entry.about %}{% endmuted %}{% endif %}
             {% if entry.next %}{% muted element="p" %}Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endmuted %}{% endif %}
             {% if entry.object.notes %}{% include "partials/_linked_text.html" with parts=entry.object.notes|named_links only %}{% endif %}
             {% button_row %}{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}{% endbutton_row %}

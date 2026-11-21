@@ -3,7 +3,9 @@
 import re
 from typing import Annotated, Any, Literal
 
-from pydantic import BeforeValidator, ConfigDict, Field
+from pydantic import ConfigDict, Field
+
+from hq.platform.application.reasons import Checked
 
 from .contract import ObservationRecord, ObservationSpec, Stamp
 
@@ -73,7 +75,7 @@ def _word(value: Any) -> str:
     return value if isinstance(value, str) and _STATUS_WORD.fullmatch(value) else UNREADABLE_WORD
 
 
-Word = Annotated[str, BeforeValidator(_word)]
+Word = Annotated[str, Checked(_word, mode="before")]
 
 
 class SecretRenderAttempt(ObservationRecord):

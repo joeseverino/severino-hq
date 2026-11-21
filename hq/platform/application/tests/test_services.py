@@ -278,7 +278,7 @@ class ServiceSurfaceTests(TestCase):
     def test_the_estate_card_counts_services_and_names_the_incomplete_ones(self):
         card = next(c for c in estate.cards(principal=security.cli_principal()) if c["id"] == "hq.estate.services")
 
-        self.assertEqual(card["value"], "1")
+        self.assertEqual(card["label"].count, 1)
         self.assertEqual(card["detail"], "1 not fully set up")
         self.assertEqual(card["url"], reverse("control_plane:services"))
 

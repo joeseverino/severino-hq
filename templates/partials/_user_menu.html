@@ -18,7 +18,7 @@ switches and theme they set, and the places and verbs of their session.
     {% else %}
     {% include "partials/_icon.html" with name="person" only %}
     {% endif %}
-    <span class="user-name" id="user-name">{{ user.get_username|breakable }}</span>
+    <span class="user-name" id="user-name">{{ user.get_username }}</span>
   </button>
   <div class="user-menu-panel" id="user-menu" popover>
     {% comment %}
@@ -29,10 +29,10 @@ switches and theme they set, and the places and verbs of their session.
     <div class="menu-identity">
       {% if avatar %}<img class="menu-identity-picture" src="{% url 'avatar' avatar %}" alt="" width="36" height="36" decoding="async">{% endif %}
       <div class="menu-identity-who">
-        <strong>{{ user.get_full_name|default:user.get_username|breakable }}</strong>
+        <strong>{{ user.get_full_name|default:user.get_username }}</strong>
         {% if user.is_superuser %}<span class="role-mark">Admin</span>{% elif user.is_staff %}<span class="role-mark">Staff</span>{% endif %}
       </div>
-      {% with when=request|signed_in %}{% if when %}<span class="menu-identity-when">{{ when|breakable }}</span>{% endif %}{% endwith %}
+      {% with when=request|signed_in %}{% if when %}<span class="menu-identity-when">{{ when }}</span>{% endif %}{% endwith %}
     </div>
     {% endwith %}
     {% comment %}

@@ -13,7 +13,6 @@ from django.db.models import Count
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
-from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -23,9 +22,10 @@ from django.views.generic import (
 )
 
 from hq.domains.expenses.models import Expense
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.labels import dotted, dotted_html, human_bytes
 from hq.platform.application.list_pages import ListPageMixin
-from hq.platform.application.moments import moment, when
+from hq.platform.application.moments import moment, stamp_day, when
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.receipts import (
@@ -37,10 +37,11 @@ from hq.platform.application.receipts import (
     served_type,
     stored_file,
 )
-from hq.platform.application.tables import TableColumn
+from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
 from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.writes import CapabilityFormMixin, CommandFormPage, RecordDeleteMixin
+from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.value_tags import breakable
 from hq.platform.core.web_refusals import refused
 
@@ -55,19 +56,39 @@ RECEIPTS_TRAIL = (("Receipts", reverse_lazy("receipts:list")),)
 _DETAILS = ("vendor", "date", "amount", "notes", "related_asset")
 
 
+def _paid_for(row) -> tuple[Cell, ...]:
+    """What the receipt is for: its expense, its asset, or both."""
+
+    found = []
+    if row["related_expense"]:
+        found.append(Cell.of(entity_link("expense", row["related_expense"], label=row["expense_item"])))
+    if row["related_asset"]:
+        found.append(Cell.of(entity_link("asset", row["related_asset"], label=row["asset_name"])))
+    return tuple(found)
+
+
 class ReceiptListView(ListPageMixin, TemplateView):
     resource = "receipts"
     table_empty = "No receipts yet."
-    template_name = "receipts/receipt_list.html"
+    template_name = "list_page.html"
     page_title = "Receipts"
     table_selectable = True
     table_columns = (
-        TableColumn("Vendor", "vendor"),
-        TableColumn("Date", "date", kind="status"),
-        TableColumn("Amount", "amount", css="key-col", kind="numeric"),
-        TableColumn("For"),
-        TableColumn("File", "original_filename"),
-        TableColumn("Uploaded", "uploaded_at", kind="status"),
+        TableColumn(
+            "Vendor",
+            "vendor",
+            cell=lambda row: Cell.of(entity_link("receipt", row["id"], label=row["label"]), name=True),
+        ),
+        TableColumn("Date", "date", kind="status", cell=lambda row: Cell(moment=stamp_day(row["date"]))),
+        TableColumn("Amount", "amount", css="key-col", kind="numeric", cell=lambda row: Cell(amount=row["amount"])),
+        TableColumn("For", cell=lambda row: Cell(lines=_paid_for(row))),
+        TableColumn("File", "original_filename", cell=lambda row: Cell(row["original_filename"] or "", muted=True)),
+        TableColumn(
+            "Uploaded",
+            "uploaded_at",
+            kind="status",
+            cell=lambda row: Cell(moment=moment(row["uploaded_at"]), form="ago", muted=True),
+        ),
     )
     table_search_placeholder = "Search vendors, filenames, and notes…"
 
@@ -127,6 +148,14 @@ class ReceiptDetailView(RecordPageMixin, TemplateView):
         )
 
 
+_MATCH_COLUMNS = (
+    TableColumn("Date", kind="status"),
+    TableColumn("Vendor"),
+    TableColumn("Item"),
+    TableColumn("Cost", kind="numeric", drop=2),
+)
+
+
 class ReceiptMatchView(ReceiptPage, TemplateView):
     """Suggest potential Expense links for an unlinked receipt."""
 
@@ -179,18 +208,25 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
             matches = list(potential_expenses.filter(vendor__icontains=receipt.vendor))
 
         # Each match with its one control, which links it to this receipt.
-        ctx.update(
-            matches=[
-                (
-                    expense,
+        ctx["matches"] = DataTable(
+            "Matching expenses",
+            _MATCH_COLUMNS,
+            tuple(
+                Row(
                     (
+                        Cell(moment=expense.date),
+                        Cell(expense.vendor, name=True),
+                        Cell(expense.item),
+                        Cell(amount=expense.total_cost),
+                    ),
+                    actions=(
                         PageAction.command(
                             UPDATE, receipt.pk, variant="link", primary=True, field="expense_id", value=str(expense.pk)
                         ),
                     ),
                 )
                 for expense in matches[:10]
-            ],
+            ),
         )
         return ctx
 

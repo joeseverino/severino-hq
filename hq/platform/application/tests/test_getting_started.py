@@ -89,7 +89,7 @@ class ControllerTileTests(SignedInTestCase):
     """The dashboard's controller reading never says "not set up" over readings."""
 
     def test_with_nothing_read_it_is_not_set_up(self):
-        self.assertContains(self.client.get("/"), "Not configured")
+        self.assertContains(self.client.get("/"), "Not set up")
 
     def test_readings_without_a_heartbeat_here_count_as_its_arrival(self):
         # A copy of another host's database: readings, and no heartbeat here.
@@ -98,4 +98,4 @@ class ControllerTileTests(SignedInTestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.context["controller"].state, cadence.WorkerState.ONLINE)
-        self.assertNotContains(response, "Not configured")
+        self.assertNotContains(response, "Not set up")

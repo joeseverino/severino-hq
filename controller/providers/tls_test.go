@@ -424,20 +424,27 @@ func TestTLSFailureStagePrecedence(t *testing.T) {
 }
 
 // An uploaded certificate is installed with the key the worker opened from
-// its sealed slot, and refused when that slot did not arrive opened.
+// its sealed slot, only read once a target serves it, and refused when that
+// slot did not arrive opened.
 func TestAnUploadedCertificateInstallsTheKeyOpenedFromItsSlot(t *testing.T) {
 	pki := newTestPKI(t)
-	chain, key, _ := pki.leaf(3, tlsNow.AddDate(0, 0, 90), "a.example")
+	chain, key, der := pki.leaf(3, tlsNow.AddDate(0, 0, 90), "a.example")
 	spec := func(secrets map[string]string) Object {
 		return Object{"certificate_name": "a", "consumers": []any{
-			Object{"kind": "caddy", "name": "edge", "connection_ref": "caddy"},
+			Object{"kind": "caddy", "name": "edge", "connection_ref": "caddy", "verify_domains": []any{"a.example"}},
 		}, "material": runtime.OpenedMaterial{Fullchain: string(chain), Domains: []string{"a.example"}, Secrets: secrets}}
 	}
 
 	h := newTLSHarness(t, tlsEnv(t), tlsConsumers()...)
 	h.command.outcomes = map[string]fakeOutcome{"ssh deploy": {}}
-	if _, err := h.r.runAction(t.Context(), runtime.ResourceKindTLSUploadedCertificate, "reconcile", spec(map[string]string{uploadedKeySlot: string(key)}), nil, true); err != nil {
-		t.Fatal(err)
+	h.dialer.certs, h.dialer.phases = map[string][]byte{"a": der}, []map[string]fakeServe{{}, {"edge.example|a.example": {Cert: "a"}}}
+	for range 2 {
+		if _, err := h.r.runAction(t.Context(), runtime.ResourceKindTLSUploadedCertificate, "reconcile", spec(map[string]string{uploadedKeySlot: string(key)}), nil, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if h.dialer.deployments() != 1 {
+		t.Fatalf("a certificate a target already serves was installed again: %v", h.http.requests)
 	}
 	deployed := false
 	for _, call := range h.http.requests {

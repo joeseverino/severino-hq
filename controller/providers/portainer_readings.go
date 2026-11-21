@@ -21,19 +21,17 @@ import (
 
 // PortainerEnvironmentRecord is one environment a Portainer connection reaches, up or down.
 type PortainerEnvironmentRecord struct {
-	ConnectionRef     string `json:"connection_ref"`
-	Host              string `json:"host"`
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Address           string `json:"address"`
-	Local             bool   `json:"local"`
-	Type              string `json:"type"`
-	Status            string `json:"status"`
-	AgentVersion      string `json:"agent_version"`
-	DockerVersion     string `json:"docker_version"`
-	ContainersRunning *int64 `json:"containers_running"`
-	ContainersTotal   *int64 `json:"containers_total"`
-	SnapshotAt        string `json:"snapshot_at"`
+	ConnectionRef string `json:"connection_ref"`
+	Host          string `json:"host"`
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	Address       string `json:"address"`
+	Local         bool   `json:"local"`
+	Type          string `json:"type"`
+	Status        string `json:"status"`
+	AgentVersion  string `json:"agent_version"`
+	DockerVersion string `json:"docker_version"`
+	SnapshotAt    string `json:"snapshot_at"`
 }
 
 // portainerSite is a reachable environment and the machine it is; every
@@ -199,8 +197,7 @@ func (r *Registry) portainerEnvironmentReading(ctx context.Context) ([]any, erro
 			found = append(found, PortainerEnvironmentRecord{
 				ConnectionRef: ref, Host: machineName(item, local), ID: item.ID, Name: item.Name,
 				Address: item.Address, Local: item.Local, Type: item.Type, Status: item.Status,
-				AgentVersion: item.AgentVersion, DockerVersion: item.DockerVersion,
-				ContainersRunning: item.ContainersRunning, ContainersTotal: item.ContainersTotal, SnapshotAt: item.SnapshotAt,
+				AgentVersion: item.AgentVersion, DockerVersion: item.DockerVersion, SnapshotAt: item.SnapshotAt,
 			})
 		}
 	}

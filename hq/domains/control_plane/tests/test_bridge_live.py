@@ -32,7 +32,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application import cadence
 from hq.platform.application.capabilities import execute_capability
-from hq.platform.application.glance import DASHBOARD_REFRESH
+from hq.platform.application.glance_refresh import DASHBOARD_REFRESH
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.resource_operations import OperationCommand, request_reconcile
 from hq.platform.application.security import cli_principal
@@ -218,7 +218,6 @@ class ControllerPassTests(TransactionTestCase):
         calls = self.bridge.calls
         for step in (
             "registry",
-            "glance-plan",
             "sweep-due",
             "connections",
             "inventory",
@@ -227,6 +226,8 @@ class ControllerPassTests(TransactionTestCase):
             "steps",
         ):
             self.assertEqual(calls.count(step), 1, step)
+        # A dashboard panel is the glance pass's alone, so it is read once.
+        self.assertNotIn("glance-plan", calls)
         writes = [calls.index(step) for step in ("connections", "inventory", "analytics", "schedule", "steps")]
         self.assertIn("claim", calls)
         self.assertLess(calls.index("claim"), min(writes))

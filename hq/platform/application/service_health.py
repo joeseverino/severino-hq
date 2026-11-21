@@ -1,8 +1,8 @@
 """One health rule for every service: the list's State, the page's Health, the API.
 
 A declared service is as healthy as its parts. HQ's own name is up while it
-answers the request asking, and needs attention when a finding names HQ's
-machine, its service or a controller. A name nothing declares reads as what
+answers the request asking, and stands as the ``hq`` record does when a
+problem about HQ needs acting on (``hq_context.hq_problems``). A name nothing declares reads as what
 the readings observing it say, and whether a DNS record names it.
 """
 
@@ -14,12 +14,9 @@ from django.utils.text import capfirst, get_text_list
 from hq.platform.application.labels import dotted
 
 from .projection import read_once
-from .references import Kind
 from .tone import Tone
-from .ui import counted, ended
-lazy from . import connections
-lazy from .findings import estate_findings
-lazy from .hq_self import hq_service
+from .ui import agreed, counted, ended
+lazy from . import hq_context
 lazy from .moments import ago
 lazy from .security import INTERNAL_INTERFACE, Capability, Principal
 lazy from .whereabouts import reads_containers_on
@@ -31,12 +28,21 @@ class Health:
     state: Tone | None
     label: str
     detail: str = ""
+    # Each part of a label that counts several kinds, in its own tone, so a
+    # row says them as separate states that wrap between them.
+    counts: tuple[tuple[Tone, str], ...] = ()
 
     @property
     def tone(self) -> Tone:
         """The state as a tone: no health reading is neutral."""
 
         return self.state or Tone.NEUTRAL
+
+    @property
+    def parts(self) -> tuple[tuple[Tone, str], ...]:
+        """The states a row draws: each count, or the label alone."""
+
+        return self.counts or ((self.tone, self.label),)
 
 
 def service_health(service: Any, *, own_findings: bool = True) -> Health:
@@ -93,26 +99,26 @@ def _in_place(service: Any) -> Health:
         for facet in service.facets
         if any(claim in service.declared_claims for claim in facet.claims)
     ]
-    checked = f"{get_text_list(parts, 'and')} {'is' if len(parts) == 1 else 'are'} in place" if parts else ""
+    checked = f"{get_text_list(parts, 'and')} {agreed(len(parts), 'is', 'are')} in place" if parts else ""
     checked = capfirst(checked)
     if parts == [_PART_NOUNS["dns"]]:
         return Health(None, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")
-    behind = _behind_the_proxy(service)
-    if behind is None:
+    route = service.path.primary
+    end = route.forwards[-1] if route is not None and route.forwards else None
+    if end is None or not end.machine:
         return Health(None, "In place", ended(checked))
-    address, machine, container, reads_containers = behind
-    if container:
-        return _running(service.container, ended(f"{checked} and forward to {container} on {machine}"))
-    if reads_containers:
+    if end.container:
+        return _running(service.container, ended(f"{checked} and forward to {end.container} on {end.machine}"))
+    if reads_containers_on(end.machine):
         return Health(
             Tone.ATTENTION,
             "Nothing on that port",
-            f"{ended(checked)} The proxy forwards to {address}, and no container on {machine} publishes that port.",
+            f"{ended(checked)} The proxy forwards to {end.address}, and no container on {end.machine} publishes that port.",
         )
     return Health(
         None,
         "In place",
-        f"{ended(checked)} The proxy forwards to {ended(address)} HQ does not read what runs there.",
+        f"{ended(checked)} The proxy forwards to {ended(end.address)} HQ does not read what runs there.",
     )
 
 
@@ -144,23 +150,6 @@ def _as_last_read(found: Health, service: Any) -> Health:
     )
 
 
-def _behind_the_proxy(service: Any) -> tuple[str, str, str, bool] | None:
-    """``(address, machine, container, whether HQ reads that machine's containers)``
-    for where the proxy forwards, or None when no proxy forwards anywhere HQ can place."""
-
-    route = service.path.primary
-    hops = list(route.hops) if route is not None else []
-    upstream = next((index for index, hop in enumerate(hops) if hop.step == "upstream"), None)
-    if upstream is None:
-        return None
-    after = hops[upstream + 1 :]
-    machine = next((hop.name for hop in after if hop.step == "machine"), "")
-    if not machine:
-        return None
-    container = next((hop.name for hop in after if hop.step == "container"), "")
-    return hops[upstream].name, machine, container, reads_containers_on(machine)
-
-
 def _undeclared(service: Any) -> Health:
     """What the readings observing the name say, and whether DNS names it."""
 
@@ -178,37 +167,22 @@ def _dns_state(gap: str) -> str:
 
 
 def _with_own_findings(found: Health) -> Health:
-    """HQ's health, worsened to attention by each finding about HQ itself.
+    """HQ's health, worsened by the problems about HQ itself, in the words the
+    ``hq`` record says them.
 
-    A word that is not already a problem gives way to the count: "Health
+    A word that is not already a problem gives way to that count: "Health
     check passing" drawn in the attention tone would contradict itself.
     """
 
-    own = hq_findings()
-    if not own:
+    problems = read_once("service_health.hq_problems", _hq_problems)
+    tone, said = hq_context.status(problems)
+    if not tone.acted_on:
         return found
     if found.state in (Tone.ATTENTION, Tone.SERIOUS):
-        about = counted(len(own), "open problem is about HQ", "open problems are about HQ")
-        return Health(found.state, found.label, " ".join(part for part in (found.detail, ended(about)) if part))
-    return Health(Tone.ATTENTION, counted(len(own), "open problem", "open problems"), found.detail)
+        return Health(Tone.worst((found.state, tone)), found.label, " ".join(filter(None, (found.detail, ended(said)))))
+    return Health(tone, said, found.detail, counts=hq_context.counts(problems))
 
 
-def hq_findings() -> tuple[Any, ...]:
-    """Findings whose subject is HQ's machine, one of its names, or a controller."""
-
-    return read_once("service_health.hq_findings", _hq_findings)
-
-
-def _hq_findings() -> tuple[Any, ...]:
-    own = hq_service(catalog=connections.machines_once())
-    if own is None:
-        return ()
-    subjects = {Kind.SERVICE.of(name) for name in own.hostnames}
-    if own.machine:
-        subjects.add(Kind.MACHINE.of(own.machine))
+def _hq_problems() -> tuple[Any, ...]:
     reader = Principal("hq-health", INTERNAL_INTERFACE, frozenset({Capability.READ}))
-    return tuple(
-        finding
-        for finding in estate_findings(principal=reader)
-        if finding.subject in subjects or Kind.CONTROLLER.identity_in(finding.subject)
-    )
+    return hq_context.hq_problems(reader)

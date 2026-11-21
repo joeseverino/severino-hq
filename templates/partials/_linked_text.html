@@ -7,4 +7,4 @@ knows in it as links and its line breaks kept by the class, not by markup:
 `named_links` (`application.where_it_runs.named_links`) splits the text into
 its plain stretches and the links of the names in it.
 {% endcomment %}
-<p class="linked-text">{% for part in parts %}{% if part.url %}{% entity part %}{% else %}{{ part|breakable }}{% endif %}{% endfor %}</p>
+<p class="linked-text">{% for part in parts %}{% if part.url %}{% entity part %}{% else %}{{ part }}{% endif %}{% endfor %}</p>

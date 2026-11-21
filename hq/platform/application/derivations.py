@@ -3,14 +3,18 @@
 A derivation is a function of the rows of the tables it reads, its arguments
 and the clock, declared once with ``@derivation`` and answered from the
 projection in progress, then the ``derived`` cache, then by running it. Its
-keys, the revisions, the clock, ``unseen`` answers and asking ahead are
+keys, the revisions, the clock, learned reads and asking ahead are
 docs/Architecture.md#derived-once-per-change.
 """
 
 import hashlib
+import inspect
 import logging
 import math
+import os
+import pickle
 import re
+import sys
 import threading
 import time as monotonic_time
 from collections import Counter
@@ -19,14 +23,17 @@ from contextlib import contextmanager, nullcontext
 from contextvars import Context, ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from functools import wraps
+from functools import partial, wraps
+from pathlib import Path
+from types import FrameType
 from typing import Any
 
+import django
 from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 lazy from django.apps import apps
 lazy from django.core.cache import caches
-lazy from django.db import DatabaseError, OperationalError, connection
+lazy from django.db import DatabaseError, OperationalError, connection, transaction
 
 lazy from hq.platform.core import revisions
 lazy from hq.platform.core.database import without_waiting
@@ -37,16 +44,18 @@ from .projection import projection_scope, read_once, seeded
 logger = logging.getLogger("severino.derivations")
 
 
-# The clock, as the module holds it. Derivations reach it only through the
-# functions below, which is what lets a test forbid every other way in, and
-# ``derivation_testing.frozen`` hold it still.
+# The clock, as the module holds it. The host's derivations reach it only
+# through the functions below, which is what lets a test forbid every other way
+# in, and ``derivation_testing.frozen`` hold it still.
 clock = timezone.now
+_localdate = timezone.localdate
 
 
 # The longest a stored value is kept, in seconds; its key outlives its use.
 _LONGEST = 24 * 60 * 60
-# The longest an answer stands when its computation may read the clock where
-# this module cannot see: the finest unit HQ words an age in.
+# The longest an answer stands when its computation reads the instant itself,
+# through Django's clock (``timezone.now``, ``localtime()``): the finest unit
+# HQ words an age in.
 UNSEEN = timedelta(minutes=1)
 # How many ways of asking one derivation are asked again ahead of a request
 # unless it says otherwise, and how long after a request last asked that way.
@@ -193,6 +202,53 @@ def _midnight_after(local: datetime) -> datetime:
     return timezone.make_aware(following, timezone.get_current_timezone())
 
 
+# ----- Django's clock, read inside a derivation ----------------------------------
+#
+# An extension's code is not the host's to hold to the functions above, so
+# Django's own clock says what it was asked: read inside a derivation, the day
+# (``localdate()``) holds the answer until local midnight and the instant
+# (``now()``, ``localtime()``) for one ``UNSEEN``. What a derivation reads
+# nowhere else stands until a table it reads is written. Django's own
+# machinery (the cache's expiry, a session) reads the clock for itself, never
+# for the answer, and is not counted.
+
+_DJANGO = str(Path(django.__file__).parent) + os.sep
+_TIMEZONE = timezone.__file__
+
+
+def _read_for_the_answer() -> bool:
+    """Whether the code that read Django's clock is a derivation's own."""
+
+    caller: FrameType | None = sys._getframe(2)
+    while caller is not None and caller.f_code.co_filename == _TIMEZONE:
+        caller = caller.f_back
+    return caller is not None and not caller.f_code.co_filename.startswith(_DJANGO)
+
+
+def _now() -> datetime:
+    """``django.utils.timezone.now``, held to the instant inside a derivation."""
+
+    if _FRAME.get() is None or not _read_for_the_answer():
+        return _django_now()
+    now = clock()
+    local = timezone.localtime(now)
+    holds_until(min(local + UNSEEN, _midnight_after(local)))
+    return now
+
+
+def _local_day(value: datetime | None = None, timezone: Any = None) -> date:
+    """``django.utils.timezone.localdate``, held to the day inside a derivation."""
+
+    if value is None and timezone is None and _FRAME.get() is not None and _read_for_the_answer():
+        return today()
+    return _localdate(value, timezone)
+
+
+_django_now = clock
+timezone.now = _now
+timezone.localdate = _local_day
+
+
 # ----- Declaring and answering -------------------------------------------------
 
 
@@ -202,14 +258,17 @@ class Derivation:
     reads: tuple[str, ...]
     compute: Callable[..., Any]
     vary: Callable[..., Any] | None
-    # Whether the computation may read the clock where this module cannot see.
-    unseen: bool = False
+    # Whether what the computation reads is learned from the statements it
+    # runs: an extension's, whose tables the host cannot name.
+    learns: bool = False
     # How many ways a request asked it are asked again ahead of the next one.
     ahead: int = REMEMBERED
     _tables: list[frozenset[str]] = field(default_factory=list, compare=False, repr=False)
     # Tables a computation was seen to read beyond ``reads``: an installed
     # extension's, which the host cannot name. Kept for the life of the process.
     _learned: set[str] = field(default_factory=set, compare=False, repr=False)
+    # The function that answers it, as ``@derivation`` returned it.
+    _answer: list[Callable[..., Any]] = field(default_factory=list, compare=False, repr=False)
 
     @property
     def declared(self) -> frozenset[str]:
@@ -244,7 +303,7 @@ def derivation[**P, T](
     *,
     reads: tuple[str, ...],
     vary: Callable[..., Any] | None = None,
-    unseen: bool = False,
+    learns: bool = False,
     ahead: int = REMEMBERED,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Declare a function as a derived fact of the tables in ``reads``.
@@ -252,14 +311,14 @@ def derivation[**P, T](
     ``reads`` names every model it queries, directly or through another
     derivation, as ``app_label.Model``; ``vary`` maps the call's arguments to
     what the answer depends on, with a stable ``repr`` (left out, they must be
-    plain values). ``unseen`` bounds its answer by ``UNSEEN``, as it may read the
-    clock out of sight; ``ahead`` is how many ways of asking are kept current.
+    plain values). ``learns`` keys it on every table it is seen to read besides;
+    ``ahead`` is how many ways of asking are kept current.
     """
 
     def declare(function: Callable[P, T]) -> Callable[P, T]:
         if name in DERIVATIONS:
             raise ImproperlyConfigured(f"Derivation {name!r} is declared twice.")
-        declared = Derivation(name, tuple(sorted(set(reads))), function, vary, unseen, ahead)
+        declared = Derivation(name, tuple(sorted(set(reads))), function, vary, learns, ahead)
         DERIVATIONS[name] = declared
 
         @wraps(function)
@@ -276,6 +335,7 @@ def derivation[**P, T](
             return value
 
         answer.derivation = declared  # type: ignore[attr-defined]  # a function carries its declaration
+        declared._answer.append(answer)
         return answer
 
     return declare
@@ -339,12 +399,14 @@ def _answer(
 
     key = None if _UNCACHED.get() else _key(declared, variant)
     value, until, found = _stored(key)
-    if not found and _awaited(key):
-        # Another thread was deriving this very answer: it is stored now.
-        value, until, found = _stored(key)
+    if not found and (handed := _awaited(key)) is not None:
+        # Another thread derived this very answer and is storing it.
+        value, until = handed
+        return value, until, None
     if not found:
-        with _deriving(key), _for_a_request():
+        with _deriving(key) as derived, _for_a_request():
             value, until, learned = _compute(declared, args, kwargs)
+            derived(value, until)
             if learned and key is not None:
                 # Stored under a key that moves with what it was seen to read.
                 key = _key(declared, variant)
@@ -356,27 +418,40 @@ def _answer(
     return value, until, None
 
 
-# The answers being derived right now, by key, each with the event its
-# derivation sets when it has stored. A second thread that wants one waits for
-# it, so an answer two requests need at once is derived by one of them.
-_IN_FLIGHT: dict[str, threading.Event] = {}
+@dataclass(slots=True)
+class _InFlight:
+    """An answer being derived: set once it is derived, before it is stored,
+    since storing waits for the write lock and a waiter needs only the answer."""
+
+    done: threading.Event = field(default_factory=threading.Event)
+    # The answer and its moment, pickled as the cache would keep them, so no
+    # two threads share one object.
+    answer: bytes = b""
+
+
+# The answers being derived right now, by key. A second thread that wants one
+# waits for it, so an answer two requests need at once is derived by one of them.
+_IN_FLIGHT: dict[str, _InFlight] = {}
 _IN_FLIGHT_LOCK = threading.Lock()
 # The longest a thread waits for another's answer before deriving its own, in seconds.
 WAITS = 5.0
 
 
-def _awaited(key: str | None) -> bool:
-    """Wait for the thread deriving ``key``, if one is; whether one was.
+def _awaited(key: str | None) -> tuple[Any, datetime | None] | None:
+    """The answer and its moment another thread derives for ``key``, waited
+    for; None when none is deriving it, or it failed or took too long.
 
-    Never inside a transaction: this thread may then hold the write lock the
-    other needs to store its answer, and would wait on itself.
+    Never inside a transaction: the other thread may need the write lock this
+    one holds to read what it derives from, and would wait on it.
     """
 
     if key is None or connection.in_atomic_block:
-        return False
+        return None
     with _IN_FLIGHT_LOCK:
-        stored = _IN_FLIGHT.get(key)
-    return stored is not None and stored.wait(WAITS)
+        flight = _IN_FLIGHT.get(key)
+    if flight is None or not flight.done.wait(WAITS) or not flight.answer:
+        return None
+    return pickle.loads(flight.answer)  # noqa: S301 - pickled by this process, as the cache's values are
 
 
 # Set unless a request is deriving for itself. Two threads deriving at once
@@ -412,19 +487,29 @@ def _for_a_request() -> Iterator[None]:
 
 
 @contextmanager
-def _deriving(key: str | None) -> Iterator[None]:
-    """Say that ``key`` is being derived, until it has been stored or failed."""
+def _deriving(key: str | None) -> Iterator[Callable[[Any, datetime | None], None]]:
+    """Say that ``key`` is being derived, until it has been stored or failed;
+    what it yields hands the answer to those waiting, as soon as it is derived."""
 
-    stored = threading.Event()
+    flight = _InFlight()
     with _IN_FLIGHT_LOCK:
-        mine = key is not None and _IN_FLIGHT.setdefault(key, stored) is stored
+        mine = key is not None and _IN_FLIGHT.setdefault(key, flight) is flight
+
+    def derived(value: Any, until: datetime | None) -> None:
+        if mine:
+            try:
+                flight.answer = pickle.dumps((value, until))
+            except Exception:  # an answer that cannot be pickled is not handed on, nor stored
+                logger.debug("A derived answer could not be handed on.", exc_info=True)
+            flight.done.set()
+
     try:
-        yield
+        yield derived
     finally:
         if mine and key is not None:
             with _IN_FLIGHT_LOCK:
                 _IN_FLIGHT.pop(key, None)
-            stored.set()
+            flight.done.set()
 
 
 def _key(declared: Derivation, variant: str) -> str | None:
@@ -463,18 +548,15 @@ def _compute(declared: Derivation, args: tuple, kwargs: dict) -> tuple[Any, date
     was a change to a table it had read, so the stored answer was sound.
     """
 
-    frame = _Frame(declared.tables, learns=declared.unseen)
+    frame = _Frame(declared.tables, learns=declared.learns)
     with _FRAME.set(frame):
-        # What an unseen computation reads is learned from the statements it
+        # What a learning computation reads, the clock included, is seen as it
         # runs, so it runs in a projection of its own: a read another part of
         # the request already made is made again here, where it is seen.
-        apart = projection_scope(seeded(), apart=True) if declared.unseen else nullcontext()
+        apart = projection_scope(seeded(), apart=True) if declared.learns else nullcontext()
         with apart, connection.execute_wrapper(frame.note):
             value = declared.compute(*args, **kwargs)
     COMPUTED[declared.name] += 1
-    if declared.unseen:
-        local = timezone.localtime(clock())
-        frame.hold_until(min(local + UNSEEN, _midnight_after(local)))
     learned = declared.learn(frame.undeclared)
     if learned:
         UNDECLARED.setdefault(declared.name, set()).update(frame.undeclared)
@@ -692,6 +774,38 @@ def _again(ask: _Ask) -> tuple[bool, str]:
             raise LookupError(f"The answer of {declared.name} could not be kept.")
         ask.until = answered[kept]
         return True, kept
+
+
+def derive_after_commit(*namespaces: str) -> None:
+    """Once the transaction in progress commits, derive and store every
+    derivation named within one of ``namespaces`` that is asked with no
+    arguments, so the first request after a write that changes them all (an
+    import) finds each one stored.
+
+    Unlike ``derive_ahead`` it needs no request to have asked first, and it runs
+    in the writer's own process. One that fails is logged, never raised.
+    """
+
+    transaction.on_commit(partial(_derive_every, namespaces))
+
+
+def _derive_every(namespaces: tuple[str, ...]) -> None:
+    with _AHEAD.set(True), projection_scope(apart=True):
+        for name, declared in list(DERIVATIONS.items()):
+            if not name.startswith(tuple(f"{within}." for within in namespaces)) or not _asked_bare(declared.compute):
+                continue
+            try:
+                declared._answer[0]()
+            except Exception:  # one failing must not stop the rest
+                logger.exception("Derivation %s could not be derived after a write.", name)
+
+
+def _asked_bare(function: Callable[..., Any]) -> bool:
+    try:
+        inspect.signature(function).bind()
+    except TypeError:
+        return False
+    return True
 
 
 def _standing_stored(key: str) -> bool:

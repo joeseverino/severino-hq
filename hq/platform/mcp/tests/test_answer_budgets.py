@@ -1,12 +1,10 @@
 """Every declared tool's answer stays within the bytes its declaration budgets, on the standard data set.
 
-The calls are the declarations' own (``shapes.Budget``), so a tool declared
-later is held here as it is declared. Each is answered in a savepoint rolled
+Each call is the one the tool's input schema shows (``shapes.example_call``),
+so a tool declared later is held here as it is declared. Each is answered in a savepoint rolled
 back after it, so no call's writes (a project, an export's audit row) weigh
 on another's answer.
 """
-
-import json
 
 from asgiref.sync import async_to_sync
 from django.db import transaction
@@ -19,16 +17,10 @@ from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..identity import set_principal
 from ..server import mcp
-from ..shapes import declared
+from ..shapes import declared, example_call
 
 # An agent holding every grant, an extension's too, so each tool answers rather than refuses.
 READER = Principal("example-reader", "mcp", operator_capabilities())
-
-
-def plain(call):
-    """A declared call as JSON sends it."""
-
-    return json.loads(json.dumps(call, default=dict))
 
 
 class AnswerBudgetTests(TestCase):
@@ -50,7 +42,7 @@ class AnswerBudgetTests(TestCase):
     def test_every_tools_answer_is_within_its_budget(self):
         for name, tool in mcp.tools.items():
             budget = declared(tool.handler).budget
-            answer = self._answered(name, plain(budget.call))
+            answer = self._answered(name, example_call(tool.input_schema))
             with self.subTest(tool=name):
                 self.assertFalse(answer.is_error, answer.structured_content)
                 size = len(answer.content[0].text.encode())

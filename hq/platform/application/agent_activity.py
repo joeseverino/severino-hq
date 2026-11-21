@@ -4,11 +4,12 @@ One windowed query over the indexed audit columns reads every agent's events,
 so the page costs the same however long the log.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from django.conf import settings
-from django.db.models import Case, CharField, Count, F, IntegerField, Max, Min, Q, Sum, Value, When, Window
+from django.db.models import Aggregate, Case, CharField, Count, F, IntegerField, Max, Min, Q, Sum, Value, When, Window
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, Coalesce, RowNumber
 from django.utils import timezone
@@ -17,9 +18,8 @@ from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 
 from . import agent_devices, agent_limits, denials, roles
-from .agent_access import UNPLACED_CODES
 from .agent_devices import DeviceStanding
-from .refusal_codes import LATER_CODES
+from .refusal_codes import LATER_CODES, Code
 from .security import (
     MCP_INTERFACE,
     Capability,
@@ -50,24 +50,40 @@ def agent_name(identity: AgentIdentity) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class Activity:
+    """What an agent, or one of its devices, did over the window: its latest
+    events, newest first, and the counts of all of them (``_tally``).
+
+    A read records no event, so it is in none of the counts: the last seen
+    beside them is what says an agent called.
+    """
+
+    latest: tuple[AuditLog, ...] = ()
+    changes: int = 0
+    refused: int = 0
+    limited: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class DeviceRow:
     """One device an agent called from, as its row on the Agents page shows it.
 
     A device HQ has a record of (``record``) stands as that record says. A call
-    the tailnet could not place has none, so nothing can be approved: it is
-    ``UNPLACEABLE``, named by the ``address`` it was refused from.
+    no tailnet device sent has none, so nothing can be approved: it is
+    ``UNPLACEABLE``, named by the ``address`` it was refused from, with the
+    code it was refused with (``refusal``).
     """
 
     standing: DeviceStanding
     name: str
     first_seen: datetime | None
     last_seen: datetime | None
-    calls: int = 0
-    refused: int = 0
+    activity: Activity = Activity()
     os: str = ""
     owner: str = ""
     record: AgentDevice | None = None
     address: str = ""
+    refusal: Code | None = None
     # Whether the person reading may approve it: theirs, or a machine's.
     yours: bool = False
 
@@ -103,16 +119,6 @@ class DevicePrompt:
         owner = f"owned by {self.device.owner}" if self.device.owner else "a tagged device"
         acts = "wants to act for you from" if self.for_you else "wants to act from"
         return f"{self.agent} {acts} {self.device.name}, {owner}"
-
-
-@dataclass(frozen=True, slots=True)
-class Activity:
-    """What one agent did over the window: its latest events, newest first, and the counts of all of them."""
-
-    latest: tuple[AuditLog, ...] = ()
-    changes: int = 0
-    refused: int = 0
-    limited: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,21 +220,20 @@ def prompts(found: list[AgentStanding]) -> list[DevicePrompt]:
 
 def device_rows(identities: list[AgentIdentity], viewer=None) -> dict[int, tuple[DeviceRow, ...]]:
     """Each of ``identities``' devices, by the identity's key: its records, then
-    the addresses its client was refused from as unplaceable, each with its calls
-    over the window. A refused address names the client alone, so it is listed
+    the addresses its client was refused from as unplaceable, each with what it
+    did over the window. A refused address names the client alone, so it is listed
     once, under the client's first row."""
 
     if not identities:
         return {}
     clients = {identity.pk: identity.client_id for identity in identities}
     governs = viewer is not None and web_principal(viewer).permits(Capability.GOVERN_AGENTS)
-    calls = _device_calls(sorted(set(clients.values())))
+    activity = _device_activity(sorted(set(clients.values())))
     found: dict[int, list[DeviceRow]] = {}
     for record in AgentDevice.objects.filter(identity_id__in=clients).select_related(
         "person", "approved_by", "blocked_by"
     ):
         client = clients[record.identity_id]
-        counted = calls.get((client, record.node_id), (0, 0))
         yours = governs and (record.person_id is None or (viewer is not None and record.person_id == viewer.pk))
         found.setdefault(record.identity_id, []).append(
             DeviceRow(
@@ -236,7 +241,7 @@ def device_rows(identities: list[AgentIdentity], viewer=None) -> dict[int, tuple
                 record.name or record.node_id,
                 record.first_seen,
                 record.last_seen,
-                *counted,
+                activity.get((client, record.node_id), Activity()),
                 os=record.os,
                 owner=record.owner,
                 record=record,
@@ -260,27 +265,25 @@ def _record_standing(record: AgentDevice) -> DeviceStanding:
     return DeviceStanding.APPROVED
 
 
-def _device_calls(clients: list[str]) -> dict[tuple[str, str], tuple[int, int]]:
-    """Each client's calls and refusals from each device since ``RECENT`` ago, in one query."""
+def _device_activity(clients: list[str]) -> dict[tuple[str, str], Activity]:
+    """What each client did from each device since ``RECENT`` ago, in one query."""
 
-    rows = (
-        _calls_of(clients).exclude(device="").values("actor", "device").annotate(calls=_counted(), refused=_refusals())
-    )
-    return {(row["actor"], row["device"]): (row["calls"] or 0, row["refused"] or 0) for row in rows}
+    rows = _events_of(clients).exclude(device="").values("actor", "device").annotate(**_tally())
+    return {(row["actor"], row["device"]): _counts(row) for row in rows}
 
 
 def _unplaced(clients: list[str]) -> dict[str, list[DeviceRow]]:
-    """The addresses each client was refused from because the tailnet could
-    not place the call there: no device sent it, or tailscaled did not answer."""
+    """The addresses each client was refused from because no tailnet device
+    sent the call. tailscaled not answering is HQ's failure, not a device's,
+    so it stands with the agent's refusals and never as a device."""
 
     rows = (
-        _calls_of(clients)
-        .filter(DENIED, device="")
-        .annotate(reason=_text("reason"), address=_text("source"))
-        .filter(reason__in=UNPLACED_CODES)
+        _events_of(clients)
+        .filter(DENIED, device="", reason=Code.DEVICE_UNKNOWN)
+        .annotate(address=_text("source"))
         .exclude(address="")
         .values("actor", "address")
-        .annotate(calls=_counted(), first=Min("created_at"), last=Max("created_at"))
+        .annotate(**_tally(), first=Min("created_at"), last=Max("created_at"))
         .order_by("actor", "address")
     )
     found: dict[str, list[DeviceRow]] = {}
@@ -291,21 +294,39 @@ def _unplaced(clients: list[str]) -> dict[str, list[DeviceRow]]:
                 row["address"],
                 row["first"],
                 row["last"],
-                row["calls"] or 0,
-                row["calls"] or 0,
+                _counts(row),
                 address=row["address"],
+                refusal=Code.DEVICE_UNKNOWN,
             )
         )
     return found
 
 
-def _calls_of(clients: list[str]):
+def _events_of(clients: list[str]):
     # HQ noting it saw an agent or one of its devices, or a person changing
     # either, is not something the agent did.
     labels = audited_labels()
-    return AuditLog.objects.filter(actor__in=clients, created_at__gte=timezone.now() - RECENT).exclude(
-        object_type__in=(labels[AgentIdentity], labels[AgentDevice])
+    return (
+        AuditLog.objects.filter(actor__in=clients, created_at__gte=timezone.now() - RECENT)
+        .exclude(object_type__in=(labels[AgentIdentity], labels[AgentDevice]))
+        .annotate(reason=_text("reason"))
     )
+
+
+def _tally() -> dict[str, Aggregate]:
+    """The counts an ``Activity`` holds, over ``_events_of``'s events."""
+
+    return {
+        "changes": Count("id", filter=~DENIED),
+        "refused": _refusals(),
+        "limited": _refusals(Q(reason__in=LATER_CODES)),
+    }
+
+
+def _counts(row: Mapping[str, object]) -> Activity:
+    """The ``Activity`` a row annotated with ``_tally`` holds."""
+
+    return Activity(**{name: row[name] for name in _tally()})
 
 
 def _standing(identity: AgentIdentity, activity: Activity) -> AgentStanding:
@@ -340,13 +361,10 @@ def recent_activity(clients: list[str]) -> dict[str, Activity]:
         return {}
     by_agent = {"partition_by": [F("actor")]}
     events = (
-        _calls_of(clients)
-        .annotate(reason=_text("reason"))
+        _events_of(clients)
         .annotate(
             rank=Window(RowNumber(), order_by=[F("created_at").desc(), F("id").desc()], **by_agent),
-            changes=Window(Count("id", filter=~DENIED), **by_agent),
-            refused=Window(_refusals(), **by_agent),
-            limited=Window(_refusals(Q(reason__in=LATER_CODES)), **by_agent),
+            **{name: Window(count, **by_agent) for name, count in _tally().items()},
         )
         .filter(rank__lte=SHOWN)
         .select_related("user")
@@ -355,10 +373,7 @@ def recent_activity(clients: list[str]) -> dict[str, Activity]:
     found: dict[str, list[AuditLog]] = {}
     for event in events:
         found.setdefault(event.actor, []).append(event)
-    return {
-        agent: Activity(tuple(latest), latest[0].changes, latest[0].refused or 0, latest[0].limited or 0)
-        for agent, latest in found.items()
-    }
+    return {agent: replace(_counts(vars(latest[0])), latest=tuple(latest)) for agent, latest in found.items()}
 
 
 def refused_since(since: datetime) -> int:
@@ -369,12 +384,6 @@ def refused_since(since: datetime) -> int:
 
 def _refusals(among: Q | None = None) -> Sum:
     return Sum(Case(When(DENIED & among if among else DENIED, then=_each()), default=Value(0)))
-
-
-def _counted() -> Sum:
-    """Every call the rows stand for."""
-
-    return Sum(_each())
 
 
 def _each() -> Coalesce:

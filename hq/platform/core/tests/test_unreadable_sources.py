@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from django.test import TestCase
 
 from hq.platform.application import roles
-from hq.platform.application.card_items import Kpi
+from hq.platform.application.card_items import Counted, Kpi
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot, work_queue
 from hq.platform.application.domains import Domain, host_domains
 from hq.platform.application.finding_model import Finding
@@ -55,7 +55,12 @@ def good_source(domain: str) -> tuple[Finding, ...]:
 
 def cards(name, count=3):
     return tuple(
-        {"id": f"example-{name}-{n}", "label": f"{name} reading {n}", "value": n, "url": "/"} for n in range(count)
+        {
+            "id": f"example-{name}-{n}",
+            "label": Counted(n, f"{name} reading {n}", f"{name} readings {n}"),
+            "url": "/",
+        }
+        for n in range(count)
     )
 
 
@@ -150,7 +155,7 @@ class UnreadableSourceTests(SignedInTestCase):
 
     def test_a_raising_overview_leaves_its_section_to_its_cards(self):
         overview = DomainOverview(
-            "Example", "/example/", (Kpi("Good overview reading", 4), Kpi("Second", 5), Kpi("Third", 6))
+            "Example", "/example/", (Kpi("Good overview reading", "4"), Kpi("Second", "5"), Kpi("Third", "6"))
         )
         self.composing(
             contributor("good", dashboard=lambda: cards("good"), overview=lambda: overview),

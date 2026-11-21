@@ -24,7 +24,7 @@ from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane.models import OperationRequest, SourceProposal
 lazy from hq.platform.application.approvals import awaiting_ids
 lazy from hq.platform.application.automation_adoption import procedures as adopted_procedures
-lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_rows
+lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_table
 
 from .audit import audited_labels, audited_subjects, subject_of
 from .audit_words import change_rows, words_of
@@ -44,7 +44,7 @@ class AuditLogListView(ListPageMixin, TemplateView):
     # A security log: read apart from the baseline READ a viewer holds.
     required_capability = Capability.READ_AUDIT_LOG
     resource = "audit"
-    template_name = "core/auditlog_list.html"
+    template_name = "list_page.html"
     page_size = 50
     page_title = "Audit log"
     table_empty_remedy = False
@@ -101,20 +101,35 @@ class AuditLogListView(ListPageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["awaiting"] = self._awaiting()
+        return {**context, "awaiting": self._awaiting(), "events": context["object_list"]}
+
+    @cached_property
+    def _entries(self) -> tuple:
         page = self.records(AuditLog.objects.select_related("user"))
         asked = self.list_query()
-        if asked.get("events"):
-            # What each operation changed is read from the rows its filters keep.
-            within = audit_rows(about=self._about(), on=self._day()).filter(self.listing.keeps(asked, searched=False))
-            with projection_scope():
-                moments = history.external(self._external_sources(asked), **self._span(page, within))
-            lines = history.entries(page, moments, within=within)
-        else:
-            lines = history.entries(page)
-        # Each event, then what it changed, folded beneath it in the same columns.
-        context["object_list"] = context["events"] = [line for event in lines for line in event.lines]
-        return context
+        if not asked.get("events"):
+            return tuple(history.entries(page))
+        # What each operation changed is read from the rows its filters keep.
+        within = audit_rows(about=self._about(), on=self._day()).filter(self.listing.keeps(asked, searched=False))
+        with projection_scope():
+            moments = history.external(self._external_sources(asked), **self._span(page, within))
+        return tuple(history.entries(page, moments, within=within))
+
+    @override
+    def rows(self, items):
+        """Each event, then what it changed, folded beneath it in the same columns."""
+
+        return [line for event in self._entries for line in event.lines]
+
+    @override
+    def drawn(self, label, table, rows):
+        return history.table(
+            label,
+            (history.HistoryGroup(self._entries),),
+            table["columns"],
+            selectable=table["selectable"],
+            sorted_by=table["selected_sort"],
+        )
 
     @override
     def table(self):
@@ -307,7 +322,7 @@ class AuditLogDetailView(PageMixin, DetailView):
                 rejected_by=rejected.get(str(proposal.pk)),
                 adopted_revision=adopted_revision(),
                 # Each playbook it changes, with Adopt and Reject while it waits.
-                scan_rows=playbook_rows(adopted_procedures(), scan, web_principal(self.request.user), every=False),
+                scan_rows=playbook_table(adopted_procedures(), scan, web_principal(self.request.user), every=False),
             )
         groups, page = self._other_events(event, with_operation=approval is None)
         context["other_events"] = groups

@@ -8,11 +8,12 @@ from collections.abc import Iterator, Mapping
 from types import MappingProxyType
 from typing import Annotated, Any, Literal, Self, get_args, get_origin
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.platform.application.contracts import DOTTED_NAME, Closed, Effect
 from hq.platform.application.non_empty import NonEmpty, RequiredText
+from hq.platform.application.reasons import Checked, Reason, checked
 
 # An hour: a procedure that needs longer is more than one procedure, and a
 # stalled run holds what it acts on no longer than this.
@@ -84,12 +85,24 @@ PLAYBOOK = r"^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*/)*[A-Za-z0-9_][A-Za-z0-9_.-]*\.yml$
 PLAYBOOK_LONGEST = 200
 
 
+_HOST_NAMES = Reason("host_names", "must each be a host name in HQ's spelling, lowercase with no trailing dot")
+_CLOSED = Reason("input_closed", "must take no field beyond its own: base it and each model it holds on Closed")
+_NO_EXECUTION_FIELD = Reason(
+    "input_execution_field", "must name no execution field, which the manifest and HQ's facts choose"
+)
+_NAMED_FIELDS = Reason("input_free_form", "must name each field it allows, never take free-form values")
+_READ_PRIVILEGE = Reason("read_privilege", "is a read, which takes no privilege")
+_CHANGE_CHECKED = Reason(
+    "change_checked", "is a change, which needs preconditions and verification: its play's pre_tasks and post_tasks"
+)
+
+
 def host_names(names: tuple[str, ...]) -> tuple[str, ...]:
     """``names`` as host names in HQ's spelling, sorted once each; refuses any other."""
 
     for name in names:
         if name != normalized_hostname(name) or not is_hostname(name):
-            raise ValueError(f"{name!r} is not a host name in HQ's spelling (lowercase, no trailing dot).")
+            raise _HOST_NAMES.refused()
     return sorted_unique(names)
 
 
@@ -119,15 +132,15 @@ def _closed(model: type[BaseModel], seen: set[type[BaseModel]]) -> None:
         return
     seen.add(model)
     if model.model_config.get("extra") != "forbid":
-        raise ValueError(f"{model.__name__} accepts fields beyond its own; base it on Closed.")
+        raise _CLOSED.refused()
     for name, field in model.model_fields.items():
         spellings = {name, field.alias, field.validation_alias if isinstance(field.validation_alias, str) else None}
         if {re.sub(r"[^a-z0-9]", "", spelling.lower()) for spelling in spellings if spelling} & EXECUTION_FIELDS:
-            raise ValueError(f"{model.__name__}.{name} is an execution field; the manifest and HQ's facts choose that.")
+            raise _NO_EXECUTION_FIELD.refused()
         for annotation in _annotations(field.annotation):
             kind = get_origin(annotation) or annotation
             if annotation is Any or annotation is object or (isinstance(kind, type) and issubclass(kind, Mapping)):
-                raise ValueError(f"{model.__name__}.{name} takes free-form values; name each field it allows.")
+                raise _NAMED_FIELDS.refused()
             if isinstance(annotation, type) and issubclass(annotation, BaseModel):
                 _closed(annotation, seen)
 
@@ -143,9 +156,9 @@ class ProcedureTerms(Closed):
     model_config = ConfigDict(frozen=True, strict=True)
 
     id: DottedName
-    target_kinds: Annotated[tuple[DottedName, ...], NonEmpty(), AfterValidator(sorted_unique)]
+    target_kinds: Annotated[tuple[DottedName, ...], NonEmpty(), Checked(sorted_unique)]
     # Empty: any host of those kinds.
-    hosts: Annotated[tuple[str, ...], AfterValidator(host_names)] = ()
+    hosts: Annotated[tuple[str, ...], Checked(host_names)] = ()
     # None, or the reviewed profile a run escalates through.
     privilege: DottedName | None
     effect: PlaybookEffect
@@ -155,12 +168,13 @@ class ProcedureTerms(Closed):
     # The findings a run of it fixes, by rule: a finding of one about a
     # machine it may run on offers its Run page as a remedy. It grants nothing:
     # the run is asked for, approved and held as any other.
-    fixes: Annotated[tuple[RuleName, ...], AfterValidator(sorted_unique)] = ()
+    fixes: Annotated[tuple[RuleName, ...], Checked(sorted_unique)] = ()
 
     @model_validator(mode="after")
+    @checked
     def _read_needs_no_privilege(self) -> Self:
         if not self.effect.changes and self.privilege is not None:
-            raise ValueError("A read takes no privilege, so remove it.")
+            raise _READ_PRIVILEGE.refused()
         return self
 
 
@@ -177,14 +191,16 @@ class OperationManifest(ProcedureTerms):
 
     @field_validator("input_type")
     @classmethod
+    @checked
     def _input_is_closed(cls, model: type[BaseModel]) -> type[BaseModel]:
         _closed(model, set())
         return model
 
     @model_validator(mode="after")
+    @checked
     def _a_change_says_how_it_is_checked(self) -> Self:
         if self.effect.changes and not (self.preconditions and self.verification):
-            raise ValueError("A change needs preconditions and verification: its play's pre_tasks and post_tasks.")
+            raise _CHANGE_CHECKED.refused()
         return self
 
     def admits(self, kind: str, host: str) -> bool:

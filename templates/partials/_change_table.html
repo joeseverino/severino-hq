@@ -1,7 +1,7 @@
 {% comment %}
-Expects `preview`, an approval_review.ChangePreview, and `bodies`, what
-belongs to no record and then each record that changes, from
-change_tags.change_table. A record that changes is one row, its name and its
+Expects `preview`, an approval_review.ChangePreview, and `table`, the
+declared table of what belongs to no record and then each record that
+changes, from change_tags.change_table. A record that changes is one row, its name and its
 status, with its fields folded under it. One that comes or goes whole says
 what it is on the side it is on, and its fields each give their value on that
 same side and leave the other blank, since the record's row says its change;
@@ -15,37 +15,11 @@ Before leaves a narrow box for the row's open line. Where nothing stood before, 
 is Field and Value alone.
 {% endcomment %}{% if not preview.empty %}
 {% section preview.label count=preview.moves|default:"" %}
-  {% if bodies %}
-    {% table_region preview.label compare=preview.compares %}
-      <table class="data-table">
-        <thead><tr>{% table_heading "Field" "identifier" local_sort=False %}{% if preview.compares %}{% table_heading "Before" local_sort=False %}{% table_heading "After" css="key-col" local_sort=False %}{% table_heading "Status" "status" local_sort=False %}{% else %}{% table_heading "Value" local_sort=False %}{% endif %}</tr></thead>
-        {% for body in bodies %}
-        <tbody>
-          {% if body.head %}
-          <tr id="{{ body.folds }}"{% if body.rows %} data-folds{% endif %}{% if body.attention %} class="tone-attention" data-attention{% endif %}>
-            <th>{% if body.rows %}{% include "partials/_row_fold.html" with label=body.head.label only %}{% endif %}{{ body.head.label|breakable }}</th>
-            {% if preview.compares %}<td class="cell-data" data-side="before">{% if body.head.before %}{{ body.head.before|breakable }}{% elif body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
-            <td class="cell-data" data-side="after">{% if body.head.after %}{{ body.head.after|breakable }}{% elif body.whole %}{% empty_value %}{% endif %}</td>
-            {% if preview.compares %}<td>{% change_status body.head.change preview %}</td>{% endif %}
-          </tr>
-          {% endif %}
-          {% for row in body.rows %}
-          <tr{% if body.head %} data-folded="{{ body.folds }}"{% elif body.attention %} class="tone-attention" data-attention{% endif %}>
-            <th>{{ row.label|breakable }}</th>
-            {% if preview.compares %}<td class="cell-data" data-side="before">{% if row.redacted and row.change != "added" %}{% muted %}redacted{% endmuted %}{% elif row.before %}{{ row.before|breakable }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
-            <td class="cell-data" data-side="after">{% if row.redacted and row.change != "removed" %}{% muted %}redacted{% endmuted %}{% elif row.after %}{{ row.after|breakable }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>
-            {% if preview.compares %}<td>{% if not body.whole %}{% change_status row.change preview %}{% endif %}</td>{% endif %}
-          </tr>
-          {% endfor %}
-        </tbody>
-        {% endfor %}
-      </table>
-    {% endtable_region %}
-  {% endif %}
+  {% if table %}{% data_table table %}{% endif %}
   {% if preview.lines %}
-    <pre tabindex="0"><code>{% for line in preview.lines %}{{ line|breakable }}
+    <pre tabindex="0"><code>{% for line in preview.lines %}{{ line }}
 {% endfor %}</code></pre>
   {% endif %}
-{% foot %}{% if preview.unchanged %}Unchanged: {{ preview.unchanged|join:", "|breakable }}{% endif %}
+{% foot %}{% if preview.unchanged %}Unchanged: {{ preview.unchanged|join:", " }}{% endif %}
 {% endsection %}
 {% endif %}

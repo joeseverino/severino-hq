@@ -1,10 +1,10 @@
 {% comment %}
 A choice of one, drawn by
 {% select "rule" choices chosen=rule label="What it sets" tone="good" %}:
-an option for each (value, words), the chosen one selected, id the one a
-{% control_label %} names it by, label the name a reader hears where no
-visible label names it, submit_on_change its form sent as it changes, and with a tone the choice said in that tone
-(forms.css).
-{% endcomment %}<select name="{{ name }}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{% if classes %} class="{{ classes }}"{% endif %}{% if submit_on_change %} data-submit-on-change{% endif %}>
+an option for each (value, words), the chosen one selected, label the name a
+reader hears, or with an id the control label drawn before it for that id,
+submit_on_change its form sent as it changes, and with a tone the choice said
+in that tone (forms.css).
+{% endcomment %}{% if id and label %}{% control_label label control=id %}{% endif %}<select name="{{ name }}"{% if id %} id="{{ id }}"{% elif label %} aria-label="{{ label }}"{% endif %}{% if classes %} class="{{ classes }}"{% endif %}{% if submit_on_change %} data-submit-on-change{% endif %}>
   {% for value, words, selected in choices %}<option value="{{ value }}"{% if selected %} selected{% endif %}>{{ words }}</option>{% endfor %}
 </select>

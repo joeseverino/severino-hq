@@ -8,14 +8,14 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.platform.application import derivations
 from hq.platform.application.card_items import Insight
-from hq.platform.application.demo import demo_scope, showing_demo
-from hq.platform.application.derivation_testing import frozen
-from hq.platform.application.derivations import DERIVATIONS, counting
-from hq.platform.application.plugins import (
+from hq.platform.application.composed_providers import (
     _identity,
     answered_by,
     provided,
 )
+from hq.platform.application.demo import demo_scope, showing_demo
+from hq.platform.application.derivation_testing import frozen
+from hq.platform.application.derivations import DERIVATIONS, counting
 from hq.platform.application.projection import projection_scope
 from hq.platform.core.models import UpstreamReading
 
@@ -23,10 +23,6 @@ from .test_derivations import MOMENT
 
 WINDOW = (date(2026, 1, 1), date(2026, 12, 31))
 ITEM = Insight("serious", "Alpha", "Something is wrong", "1", "Body.")
-CARDS = (
-    {"id": "alpha-open", "label": "Open", "value": 3, "url": "/alpha/"},
-    {"id": "alpha-late", "label": "Late", "value": 1, "url": "/alpha/"},
-)
 
 
 def _readings() -> int:
@@ -77,15 +73,14 @@ class ProvidedTests(TestCase):
         self.assertEqual(declared.reads, ())
         self.assertIn(UpstreamReading._meta.db_table, declared.tables)
 
-    def test_it_stands_a_minute_because_the_host_cannot_see_its_clock(self):
-        items = provided("extension.example.unseen.attention", _counting_items)
+    def test_one_that_reads_no_clock_stands_until_a_table_it_read_is_written(self):
+        items = provided("extension.example.clockless.attention", _counting_items)
 
         with frozen(MOMENT), projection_scope():
             items()
             until = derivations.standing(items).until
 
-        self.assertTrue(DERIVATIONS["extension.example.unseen.attention"].unseen)
-        self.assertEqual(until, MOMENT + derivations.UNSEEN)
+        self.assertIsNone(until)
 
     def test_a_demo_is_answered_apart_from_the_real_reading(self):
         items = provided("extension.example.demo.attention", lambda: (showing_demo(), _readings()))

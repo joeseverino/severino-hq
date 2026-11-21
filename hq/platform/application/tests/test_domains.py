@@ -105,11 +105,11 @@ class ComposedQueueTests(TestCase):
         )
 
         cards = domain_dashboard_cards(cli_principal())
-        labels = [card["label"] for card in cards]
+        ids = [card["id"] for card in cards]
 
         # Build (100) before Web (110), matching the nav, so the row does not
         # tell a different story about what matters than the bar above it.
-        self.assertLess(labels.index("Open updates"), labels.index("Drafts"))
+        self.assertLess(ids.index("hq.projects.updates"), ids.index("hq.content.drafts"))
 
     def test_extension_items_share_the_queue_with_host_items(self):
         """An extension on fire has to be visible on the page that lists work.

@@ -25,7 +25,7 @@ from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
-from .tables import Cell, DataTable, TableColumn
+from .tables import Cell, DataTable, Row, TableColumn
 from .tone import Tone
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
 lazy from . import history, machines
@@ -40,6 +40,7 @@ lazy from .pages import PageBadge, principal_opens
 lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
 lazy from .paths import hq_path
+lazy from .projects import last_push
 lazy from .reach import network_of
 lazy from .record_timeline import record_timeline
 lazy from .security import Capability, Principal
@@ -99,13 +100,6 @@ class ServiceSection:
             raise ValueError("ServiceSection below holds one entry for each record.")
         if self.actions and len(self.actions) != len(self.records):
             raise ValueError("ServiceSection actions holds one entry for each record.")
-        # A column no row has anything in is a heading over nothing. Dropped
-        # here, so no section has to check its own; an unknown value (the dash placeholder) is
-        # something to say and keeps its column.
-        keep = filled_columns(len(self.columns), self.records)
-        if self.records and len(keep) < len(self.columns):
-            object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
-            object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
 
     @property
     def count(self) -> int:
@@ -123,9 +117,13 @@ class ServiceSection:
     def spans_row(self) -> bool:
         """Whether it takes the whole row of the flow it is drawn in: a fold,
         or a table too wide to share one. A page writes these ahead of the
-        short ones, which then collect to share rows."""
+        short ones, which then collect to share rows. A column no row says
+        anything in is not drawn, so it does not count."""
 
-        return self.folded or bool(self.history) or len(self.columns) >= ROW_COLUMNS
+        said = sum(
+            any(at < len(row) and not row[at].says_nothing for row in self.records) for at in range(len(self.columns))
+        )
+        return self.folded or bool(self.history) or said >= ROW_COLUMNS
 
     @property
     def table(self) -> DataTable:
@@ -136,20 +134,11 @@ class ServiceSection:
         return DataTable(
             self.label,
             tuple(TableColumn(name) for name in self.columns),
-            tuple(zip(self.records, below, actions, strict=True)),
+            tuple(
+                Row(cells, actions=done, evidence=evidence)
+                for cells, evidence, done in zip(self.records, below, actions, strict=True)
+            ),
         )
-
-
-def filled_columns(width: int, records: tuple[tuple[Cell, ...], ...]) -> tuple[int, ...]:
-    """The positions of the columns at least one row says something in."""
-
-    return tuple(index for index in range(width) if any(index < len(row) and _says(row[index]) for row in records))
-
-
-def _says(cell: Cell) -> bool:
-    """Whether a cell shows anything: text, a link, or an entity."""
-
-    return bool(cell.text.strip() or cell.url or cell.link)
 
 
 def sections_for(service) -> tuple[ServiceSection, ...]:
@@ -480,7 +469,7 @@ def _project(service) -> SummaryItem | None:
             _repository_detail(repo)
             or (_repository_label(project.repository_url) if project and project.repository_url else "",)
         ),
-        f"pushed {ago(project.last_push_at)}" if project and project.last_push_at else "",
+        f"pushed {ago(pushed)}" if project and (pushed := last_push(project)) else "",
     )
     return SummaryItem("Project", service.project["name"], link, lines(*parts), icon="commit")
 

@@ -52,7 +52,7 @@ class EmptyStateTemplateTests(SimpleTestCase):
             for arguments in include.findall(text):
                 with self.subTest(template=name, arguments=arguments):
                     self.assertNotIn("compact=", arguments, "the surface rule frames it, or not")
-                    self.assertIn("message=", arguments)
+                    self.assertRegex(arguments, r"\b(?:message|absent)=")
 
     def test_no_page_names_an_identity_provider(self):
         comment = re.compile(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", re.DOTALL)

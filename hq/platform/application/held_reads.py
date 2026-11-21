@@ -42,7 +42,7 @@ class HeldRequestRecord(HeldRequestItem):
     said: Annotated[str, Describe("Where it stands, in a sentence.")]
     done: Annotated[
         bool,
-        Describe("Whether it is settled: declined, lapsed, overtaken or withdrawn, or approved and its work ended."),
+        Describe("Whether it is settled: rejected, lapsed, overtaken or withdrawn, or approved and its work ended."),
     ]
     operation: Annotated[
         str,
@@ -55,7 +55,8 @@ class HeldRequestRecord(HeldRequestItem):
         dict[str, Any],
         Describe(
             "What the call answered once done: its command's own answer, carrying its work as it ended, or a "
-            "refusal coded `declined`, `expired`, `stale`, `withdrawn` or `operation_failed`; empty until then."
+            "refusal coded `operator_rejected`, `expired`, `stale`, `withdrawn` or `operation_failed`; "
+            "empty until then."
         ),
     ]
 

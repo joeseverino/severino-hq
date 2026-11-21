@@ -1,10 +1,9 @@
-"""Hold mise.lock to mise.toml.
+"""Hold the images and mise.toml to the one toolchain mise.lock records.
 
-Every pinned tool is locked for each of mise.toml's lockfile_platforms, and
-the images install their build tools from the same lock. An image takes
-nothing from another image but the Python it runs on and mise from its own
-image, by digest, at the release min_version names, so no build tool has a
-second pin.
+`mise lock --check` holds mise.lock to mise.toml (lint:toolchain). The
+images install their build tools from the same lock: an image takes nothing
+from another image but the Python it runs on and mise from its own image, by
+digest, at the release min_version names, so no build tool has a second pin.
 """
 
 from __future__ import annotations
@@ -52,18 +51,6 @@ def pinned() -> dict[str, str]:
     }
 
 
-def missing(platforms: list[str], tools: dict[str, str], lock: dict) -> list[str]:
-    found = []
-    for name, version in tools.items():
-        entries = [entry for entry in lock.get("tools", {}).get(name, []) if entry.get("version") == version]
-        found.extend(
-            f"{name}@{version} has no checksum for {platform}"
-            for platform in platforms
-            if not any(entry.get(f"platforms.{platform}", {}).get("checksum") for entry in entries)
-        )
-    return found
-
-
 def foreign_image(ref: str, mise: str) -> str | None:
     pinned = MISE_PINNED.fullmatch(ref)
     if pinned and pinned["tag"] == mise:
@@ -88,17 +75,13 @@ def foreign_images(images: dict[str, str], mise: str) -> list[str]:
 
 def main() -> int:
     config = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))
-    lock = tomllib.loads((ROOT / "mise.lock").read_text(encoding="utf-8"))
     tools = pinned()
-    unlocked = missing(config["settings"]["lockfile_platforms"], tools, lock)
     images = {name: (ROOT / name).read_text(encoding="utf-8") for name in IMAGES}
     drift = foreign_images(images, config["min_version"])
     drift += [f"mise resolves {name} from another config than mise.toml" for name in config["tools"].keys() - tools]
-    for line in unlocked + drift:
+    for line in drift:
         print(line, file=sys.stderr)
-    if unlocked:
-        print("Run: mise lock", file=sys.stderr)
-    return 1 if unlocked or drift else 0
+    return 1 if drift else 0
 
 
 if __name__ == "__main__":

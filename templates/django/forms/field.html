@@ -9,12 +9,12 @@ nothing in this template knows which fields those are.
 {% endcomment %}
 <div class="field{% if field.errors %} has-errors tone-serious{% endif %}{% if field.field.wide %} is-wide{% endif %}{% if field.field.starts_pair %} is-pair-start{% endif %}{% if field.field.confirms %} command-confirm{% if not field.errors %} tone-attention{% endif %}{% endif %}"{% if field.field.change_effect %} data-change-effect="{{ field.field.change_effect }}"{% endif %}>
   {% if field.widget_type == "checkbox" %}
-    <label class="check-row">{{ field }} <span>{{ field.label|breakable }}{% if field.field.required %}&nbsp;*{% endif %}</span></label>
+    <label class="check-row">{{ field }} <span>{{ field.label }}{% if field.field.required %}&nbsp;*{% endif %}</span></label>
   {% else %}
-    <label{% if field.id_for_label %} for="{{ field.id_for_label }}"{% endif %}{% if field.auto_id %} id="{{ field.auto_id }}_label"{% endif %}>{{ field.label|breakable }}{% if field.field.required %}&nbsp;*{% endif %}</label>
+    <label{% if field.id_for_label %} for="{{ field.id_for_label }}"{% endif %}{% if field.auto_id %} id="{{ field.auto_id }}_label"{% endif %}>{{ field.label }}{% if field.field.required %}&nbsp;*{% endif %}</label>
     {{ field }}
   {% endif %}
-  {% if field.help_text %}<p class="help"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|breakable }}</p>{% endif %}
-  {% if field.field.change_effect %}<p class="help field-effect tone-attention">{{ field.field.change_effect|breakable }}</p>{% endif %}
+  {% if field.help_text %}<p class="help"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text }}</p>{% endif %}
+  {% if field.field.change_effect %}<p class="help field-effect tone-attention">{{ field.field.change_effect }}</p>{% endif %}
   {{ field.errors }}
 </div>

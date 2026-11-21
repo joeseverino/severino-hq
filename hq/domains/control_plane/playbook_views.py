@@ -22,7 +22,7 @@ from hq.platform.application.automation_sources import (
     SourceStanding,
     decisions,
     entry_url,
-    playbook_rows,
+    playbook_table,
     scan_standing,
     scan_status_url,
     standing,
@@ -101,7 +101,7 @@ class PlaybooksView(PageMixin, TemplateView):
             sources=sources,
             # When HQ last reached the repository: a scan result is kept only by a read that succeeded.
             read_at=SourceProposal.objects.order_by("-pk").values_list("created_at", flat=True).first(),
-            rows=playbook_rows(sources.procedures, sources.pending, self.principal),
+            rows=playbook_table(sources.procedures, sources.pending, self.principal),
             # HQ's playbook worker absent, with how to set it up: about no
             # record with a page, so found by its key.
             problems=worker_problems(self.principal),

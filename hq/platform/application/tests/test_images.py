@@ -48,6 +48,11 @@ class AdvisoryTests(SimpleTestCase):
     def test_a_stated_fix_clears_an_open_ended_range(self):
         # As published: the range left open, the fix stated beside it.
         self.assertFalse(affected("v2.16.0", [(">= v2.2.0", "v2.12.0")]))
+        # Or a fix written as a comparator, never a version.
+        self.assertEqual([affected(tag, [("> v7.5.0", "> v7.15.4")]) for tag in ("v7.15.4", "v7.15.5")], [True, False])
+        from ..images import fixed_in
+
+        self.assertEqual(fixed_in(["> v7.15.4", "1.2.1, >= 2.0.3"]), "1.2.1, 2.0.3 and releases after v7.15.4")
 
     def test_a_fix_on_another_major_line_does_not_clear_this_one(self):
         self.assertTrue(affected("2.0.0", [("< 2.1.3", "1.8.5, 2.1.3")]))

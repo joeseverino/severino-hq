@@ -664,32 +664,6 @@ class HqHealthTests(TestCase):
 
         self.assertEqual(health["tone"], "good")
 
-    def test_a_finding_about_hq_needs_attention(self):
-        with mock.patch("hq.platform.application.service_health.hq_findings", return_value=("one",)):
-            health = self.summary()["Health"]
-
-        self.assertEqual(health["tone"], "attention")
-        # The word drawn in that tone is the problem, never the calm word ("Up").
-        self.assertEqual(health["value"], "1 open problem")
-
-    def test_only_findings_about_hq_count(self):
-        from ..finding_model import Finding
-        from ..service_health import _hq_findings
-
-        def finding(subject):
-            return Finding("example", subject, "t", "attention", "e")
-
-        raised = (
-            finding("service:hq.example.com"),
-            finding("controller:abc"),
-            finding("service:shop.example.com"),
-            finding("machine:edge-1"),
-        )
-        with projection_scope(), mock.patch("hq.platform.application.findings.derive_findings", return_value=raised):
-            found = _hq_findings()
-
-        self.assertEqual([item.subject for item in found], ["service:hq.example.com", "controller:abc"])
-
     def test_a_name_nothing_observes_or_declares_is_nothing_declared(self):
         from ..services import prospects
 

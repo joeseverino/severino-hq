@@ -4,6 +4,7 @@ working, and what a long form's closing row does as it is edited."""
 from typing import override
 from urllib.parse import parse_qs
 
+from django import forms
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -13,8 +14,9 @@ from django.test import Client
 from hq.domains.projects.models import Project
 from hq.platform.application.action_links import command_url
 from hq.platform.application.capabilities import capability_words
+from hq.platform.application.pages import PageAction
 from hq.platform.application.projects import DEPENDENCY_UPDATES
-from hq.platform.core.tests.browser.fragments import offer_of
+from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.probes.settle import PAINTED
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -34,17 +36,27 @@ _PAGE = """{% load stylesheet_tags %}<!doctype html><html lang="en"><head><meta 
 # then the closing row pinned once the form changes, and a part after the frame.
 _SETTINGS = (
     '{% section "Example settings" %}<form method="post" action="/example/settings/">'
-    '{% table_region "Example accounts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Account" "identifier" %}{% table_heading "Group" "control" %}'
-    '{% table_heading "Remove" "control" hidden=True %}</tr></thead><tbody>'
-    "{% for row in rows %}<tr><td>Example account {{ row }}</td>"
-    '<td><select name="group-{{ row }}" aria-label="Group"><option>No example group</option>'
-    "<option>Example</option></select></td>"
-    '<td>{% button "Remove" offer=remove %}</td></tr>{% endfor %}'
-    "</tbody></table>{% endtable_region %}"
+    "{% data_table accounts %}"
     '{% include "partials/_form_actions.html" with verb="Save changes" bar=True only %}'
     "</form>{% endsection %}<p data-after>An example line after the settings.</p>"
 )
+
+
+def _accounts() -> DataTable:
+    """The settings' table: a group to choose for each account, and its own posting button."""
+
+    form = forms.Form()
+    for row in range(1, 25):
+        form.fields[f"group-{row}"] = forms.ChoiceField(
+            label="Group", choices=[("", "No example group"), ("example", "Example")], required=False
+        )
+    remove = PageAction._built(label="Remove", url="/example/remove/", method="post")
+    columns = (TableColumn("Account", kind="identifier"), TableColumn("Group", kind="control"))
+    rows = tuple(
+        Row((Cell(f"Example account {row}"), Cell(field=form[f"group-{row}"])), actions=(remove,))
+        for row in range(1, 25)
+    )
+    return DataTable("Example accounts", columns, rows)
 
 
 def _page(content, title="Example", **values):
@@ -113,7 +125,7 @@ class CommandFormBrowserTests(BrowserGate):
             # Where a command's post lands: a page of HQ's, which takes part
             # in the fade between pages as every page of HQ's does.
             "example/done": _page("Done", title="Done"),
-            "example/settings": _page(_SETTINGS, rows=range(1, 25), remove=offer_of("/example/remove/")),
+            "example/settings": _page(_SETTINGS, accounts=_accounts()),
         }
 
     @override
@@ -150,14 +162,16 @@ class CommandFormBrowserTests(BrowserGate):
     def test_an_edit_pins_the_closing_row_and_moves_nothing_below_it(self):
         self.open_settings()
         self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        before = self.page.evaluate(_BELOW, [SELECTORS["save_bar"], SELECTORS["section_frame"]])
+        before = self.page.evaluate(_BELOW, self.css([SELECTORS["save_bar"], SELECTORS["section_frame"]]))
 
-        self.page.locator(SELECTORS["choice"]).last.select_option("Example")
+        self.page.locator(self.css(SELECTORS["choice"])).last.select_option("Example")
 
-        self.assertTrue(self.page.evaluate(_MARKED, SELECTORS["save_bar"]))
-        self.assertEqual(self.page.evaluate(_BELOW, [SELECTORS["save_bar"], SELECTORS["section_frame"]]), before)
+        self.assertTrue(self.page.evaluate(_MARKED, self.css(SELECTORS["save_bar"])))
         self.assertEqual(
-            self.page.evaluate(_BAND, [SELECTORS["save_bar"], SELECTORS["section_frame"]]),
+            self.page.evaluate(_BELOW, self.css([SELECTORS["save_bar"], SELECTORS["section_frame"]])), before
+        )
+        self.assertEqual(
+            self.page.evaluate(_BAND, self.css([SELECTORS["save_bar"], SELECTORS["section_frame"]])),
             [],
             "the row paints a band in its place",
         )
@@ -166,18 +180,18 @@ class CommandFormBrowserTests(BrowserGate):
         self.open_settings()
         if not self.page.evaluate("CSS.supports('container-type: scroll-state')"):
             self.skipTest("this engine cannot tell a stuck row from one in its place")
-        self.page.locator(SELECTORS["choice"]).first.select_option("Example")
+        self.page.locator(self.css(SELECTORS["choice"])).first.select_option("Example")
         self.page.evaluate("window.scrollTo(0, 0)")
         self.page.evaluate(PAINTED)
 
         self.assertTrue(
-            self.page.evaluate(_GROUND_SHOWN, SELECTORS["save_bar"]),
+            self.page.evaluate(_GROUND_SHOWN, self.css(SELECTORS["save_bar"])),
             "a stuck row leaves what scrolls beneath it showing",
         )
         self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         self.page.evaluate(PAINTED)
         self.assertFalse(
-            self.page.evaluate(_GROUND_SHOWN, SELECTORS["save_bar"]), "a row in its place paints its ground"
+            self.page.evaluate(_GROUND_SHOWN, self.css(SELECTORS["save_bar"])), "a row in its place paints its ground"
         )
 
     def test_a_rows_posting_button_posts_its_own_form_and_marks_nothing(self):
@@ -187,4 +201,4 @@ class CommandFormBrowserTests(BrowserGate):
             self.page.get_by_role("button", name="Remove").first.click(no_wait_after=True)
 
         self.assertEqual(len(self.posted), 1)
-        self.assertFalse(self.page.evaluate(_MARKED, SELECTORS["save_bar"]))
+        self.assertFalse(self.page.evaluate(_MARKED, self.css(SELECTORS["save_bar"])))

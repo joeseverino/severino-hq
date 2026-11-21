@@ -17,6 +17,8 @@ DB_REWRITE = {"domain": "db.example.com", "answer": "100.64.0.10", "connection_r
 APP_REWRITE = {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"}
 SPLIT = {"cloudflare.dns_record": (OLD[0], DB), "adguard.rewrite": (APP_REWRITE, DB_REWRITE)}
 CHANGE = "infrastructure.resource.update"
+UNPUBLISHED = "app.example.com forwards to 100.64.0.10:8099 on lab-1, where no container publishes that port"
+UNPUBLISHED_ROUTE = {"domain_names": ["app.example.com"], "forward_host": "100.64.0.10", "forward_port": 8099}
 SPLIT_TITLE = "db.example.com goes to edge-1 from the internet and lab-1 from home"
 
 
@@ -117,6 +119,10 @@ EXAMPLES = (
             on_estate(
                 {"portainer.container": (APP, {**SHOP, "state": "exited"})},
                 raises=("shop.example.com leads to shop on edge-1, which is stopped",),
+            ),
+            on_estate(
+                {"npm.proxy_host": ({**UNPUBLISHED_ROUTE, "forward_scheme": "http", "connection_ref": "example-npm"},)},
+                raises=(Raised(title=UNPUBLISHED, severity=Tone.ATTENTION),),
             ),
         ),
         quiet=(CONSISTENT,),

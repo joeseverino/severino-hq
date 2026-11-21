@@ -10,10 +10,12 @@ lazy from django.db.models import Max, Q
 
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND, unescaped
 lazy from hq.domains.jobs.models import Job as JobRow
+lazy from hq.platform.core.included_parts import DOTS
 
 from ..drawings import Dot, Dots
 from ..moments import moment
 from ..projection import iso, read_once
+from ..tables import Cell, DataTable, Piece, TableColumn
 from ..tone import Tone
 from ..ui import counted
 lazy from .. import outbound_work
@@ -91,6 +93,66 @@ class Work:
         serves HQ is one of these."""
 
         return tuple(job for job in self.jobs if job.next_run is None and job.result == "Running")
+
+    @property
+    def jobs_table(self) -> DataTable:
+        return DataTable.of("Jobs", _JOB_COLUMNS, self.jobs)
+
+    @property
+    def scheduled_table(self) -> DataTable:
+        return DataTable.of("Scheduled work", _SCHEDULED_COLUMNS, self.scheduled)
+
+    @property
+    def renderers_table(self) -> DataTable:
+        return DataTable.of("Credentials refresh", _RENDERER_COLUMNS, self.renderers)
+
+
+def _unit(job: WorkUnit) -> Cell:
+    """A systemd unit as a person reads it: its unit file's title over its
+    name, its escapes decoded; the name alone when it has no title."""
+
+    name = Cell(job.name, readout=True)
+    return Cell(lines=(Cell(job.title), name)) if job.title else name
+
+
+_JOB_COLUMNS = (
+    TableColumn("Unit", kind="identifier", cell=_unit),
+    TableColumn("Runs", kind="identifier", drop=3, cell=lambda job: Cell(job.runs, readout=job.runs_unit)),
+    TableColumn("Last run", kind="status", drop=2, cell=lambda job: Cell(moment=job.last_run, form="ago")),
+    TableColumn("Result", kind="status", css="key-col", cell=lambda job: Cell(job.result, tone=str(job.tone))),
+    TableColumn("Next run", kind="status", css="optional-col", drop=1, cell=lambda job: Cell(moment=job.next_run)),
+)
+
+
+def _runs(item: Scheduled) -> Cell:
+    """Its recent runs as dots, each that succeeded filled."""
+
+    if not item.runs:
+        return Cell()
+    return Cell(piece=Piece(DOTS, {"dots": item.runs}, words="•" * len(item.runs.shown)))
+
+
+_SCHEDULED_COLUMNS = (
+    TableColumn("Scheduled work", cell=lambda item: Cell(item.label)),
+    TableColumn("Schedule", kind="status", css="optional-col", drop=2, cell=lambda item: Cell(item.every)),
+    TableColumn("Recent runs", kind="status", drop=3, cell=_runs),
+    TableColumn("Last result", kind="status", css="key-col", cell=lambda item: Cell(item.result, tone=str(item.tone))),
+    TableColumn(
+        "Next due",
+        kind="status",
+        css="optional-col",
+        drop=1,
+        cell=lambda item: Cell(moment=item.next_due) if item.next_due else Cell("Now"),
+    ),
+)
+_RENDERER_COLUMNS = (
+    TableColumn("Credentials refresh", kind="identifier", cell=lambda item: Cell(item.name, readout=True)),
+    TableColumn("Result", kind="status", css="key-col", cell=lambda item: Cell(item.result, tone=str(item.tone))),
+    TableColumn("Tried", kind="status", drop=2, cell=lambda item: Cell(moment=item.attempted, form="ago")),
+    TableColumn(
+        "Last confirmed current", kind="status", drop=1, cell=lambda item: Cell(moment=item.succeeded, form="ago")
+    ),
+)
 
 
 def work() -> Work:

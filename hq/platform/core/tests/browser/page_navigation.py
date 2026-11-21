@@ -74,7 +74,7 @@ class PageNavigationBrowserTests(BrowserGate):
         self.page.evaluate(PAINTED)
 
     def seen(self, link=None):
-        seen = self.page.evaluate(_SEEN, [SELECTORS["page_nav_list"], link])
+        seen = self.page.evaluate(_SEEN, self.css([SELECTORS["page_nav_list"], link]))
         self.assertTrue(seen["overflows"], "the map fits its row, so nothing here is past its edge")
         return seen
 
@@ -85,7 +85,9 @@ class PageNavigationBrowserTests(BrowserGate):
         stays where it was."""
 
         self.open_map()
-        links = [" ".join(text.split()) for text in self.page.locator(SELECTORS["page_nav_link"]).all_inner_texts()]
+        links = [
+            " ".join(text.split()) for text in self.page.locator(self.css(SELECTORS["page_nav_link"])).all_inner_texts()
+        ]
         reached = []
         for _ in links:
             self.page.keyboard.press(tab_key(self.browser))
@@ -132,10 +134,10 @@ class PageNavigationBrowserTests(BrowserGate):
         page is scrolled."""
 
         self.open_map("#example-5", page="page-navigation-answered")
-        self.assertEqual(self.page.evaluate(_MARKED, SELECTORS["page_nav_current"]), ["Example history"])
+        self.assertEqual(self.page.evaluate(_MARKED, self.css(SELECTORS["page_nav_current"])), ["Example history"])
         self.assertTrue(self.page.evaluate(_ANSWERED), "the region's answer was not placed")
         self.page.evaluate(PAINTED)
-        self.assertEqual(self.page.evaluate(_MARKED, SELECTORS["page_nav_current"]), ["Example history"])
+        self.assertEqual(self.page.evaluate(_MARKED, self.css(SELECTORS["page_nav_current"])), ["Example history"])
         self.page.evaluate(_SCROLL_TO, "example-0")
         self.page.evaluate(PAINTED)
-        self.assertEqual(self.page.evaluate(_MARKED, SELECTORS["page_nav_current"]), ["Overview"])
+        self.assertEqual(self.page.evaluate(_MARKED, self.css(SELECTORS["page_nav_current"])), ["Overview"])

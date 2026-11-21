@@ -68,6 +68,7 @@ class PlanTests(TestCase):
         self.assertEqual((plan.change, plan.risk, plan.target_digest), (PATCH, LOW, TARGET))
         self.assertEqual([advisory["id"] for advisory in plan.fixes], ["GHSA-high"])
         self.assertEqual(plan.verified_by, ("its health check",))
+        self.assertEqual((plan.fixes_tone, plan.data_tone, plan.verified_tone), ("good", "", ""))
         # Nothing was snapshotted, so only the override comes back.
         self.assertEqual(plan.steps[-1].detail, "The override as it was is restored if verification fails.")
         # Nothing sends it to the machine, and the reason says that step, not
@@ -75,18 +76,6 @@ class PlanTests(TestCase):
         (blocker,) = plan.blockers
         self.assertEqual(blocker.id, "no-apply-path")
         self.assertEqual(blocker.reason, f"HQ does not send upgrades to {plan.container.machine.name}.")
-
-    def test_a_plan_s_facts_say_their_tones(self):
-        estate(advisories=[{**HIGH, "vulnerabilities": [["< 1.2.1", "1.2.1"]]}])
-        published()
-        inventory("portainer.runtime", [runtime("app", healthcheck=True)])
-        container("app")
-
-        plan = self.plan("app")
-        risky = replace(plan, fixes=(), data=({"type": "volume", "source": "app_data"},), verified_by=())
-
-        self.assertEqual((plan.fixes_tone, plan.data_tone, plan.verified_tone), ("good", "", ""))
-        self.assertEqual((risky.fixes_tone, risky.data_tone, risky.verified_tone), ("", "attention", "attention"))
 
     def test_data_is_snapshotted_and_restored(self):
         estate()
@@ -113,7 +102,7 @@ class PlanTests(TestCase):
 
         plan = self.plan("app")
 
-        self.assertEqual([mount["source"] for mount in plan.data], ["app_data"])
+        self.assertEqual(([mount["source"] for mount in plan.data], plan.data_tone), (["app_data"], "attention"))
         self.assertEqual([step.id for step in plan.steps][:2], ["pull", "snapshot"])
         self.assertIn("the snapshot", plan.steps[-1].detail)
 

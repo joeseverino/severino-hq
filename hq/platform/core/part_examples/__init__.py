@@ -8,6 +8,7 @@ part's examples builds nothing of HQ's records."""
 from django.utils import timezone
 
 lazy from hq.platform.application.drawings import Dot, Dots
+lazy from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
 
 # The moment every example is drawn at, and its times are told from, so a
 # time a part counts from now draws the same between two renders.
@@ -28,4 +29,16 @@ def runs():
             for index, done in enumerate((True, True, False, True, False, True), 1)
         ),
         ordered=True,
+    )
+
+
+def table(label: str, columns: tuple, *rows: tuple, **options) -> DataTable:
+    """An example's table, declared: each column a heading's words or a
+    ``TableColumn``, each row its cells as words or ``Cell``s."""
+
+    return DataTable(
+        label,
+        tuple(column if isinstance(column, TableColumn) else TableColumn(column) for column in columns),
+        tuple(Row(tuple(cell if isinstance(cell, Cell) else Cell(cell) for cell in row)) for row in rows),
+        **options,
     )

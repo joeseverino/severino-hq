@@ -9,7 +9,7 @@ from django.test import SimpleTestCase, TestCase
 from hq.platform.application.finding_steps import Do
 
 from .. import plugins
-from ..card_items import Kpi
+from ..card_items import Counted, Kpi
 from ..finding_model import Finding
 from ..plugin_testing import installed, providers_derived_again, sibling
 from ..plugins import PLUGIN_API_VERSION, PluginIntegration, PluginManifest
@@ -17,7 +17,7 @@ from ..ui import DomainOverview
 
 LOGGER = "severino.composition"
 EVENT = "composition.source.unreadable"
-GOOD_CARD = {"id": "example-good-1", "label": "Good reading", "value": 1, "url": "/"}
+GOOD_CARD = {"id": "example-good-1", "label": Counted(1, "Good reading", "Good readings"), "url": "/"}
 GOOD_ITEM = Finding(
     rule="example-good",
     subject="",
@@ -70,12 +70,12 @@ class UnreadableSiblingTests(SimpleTestCase):
         with self.assertLogs(LOGGER, "ERROR") as logs:
             sections = {section["id"]: section["cards"] for section in plugins.plugin_dashboard_sections()}
         self.assertLogsTheFailure(logs)
-        self.assertEqual(sections["example.good"], (GOOD_CARD,))
+        self.assertEqual(sections["example.good"], (GOOD_CARD | {"label": "Good reading", "value": 1},))
         (unreadable,) = sections["example.broken"]
         return unreadable
 
     def overviews(self, failing):
-        overview = DomainOverview("Example", "/example/", (Kpi("Good reading", 1),))
+        overview = DomainOverview("Example", "/example/", (Kpi("Good reading", "1"),))
         self.installed(PluginIntegration(overview=lambda: overview), PluginIntegration(overview=failing))
         with self.assertLogs(LOGGER, "ERROR") as logs:
             overviews = plugins.plugin_overviews()
@@ -153,16 +153,15 @@ class UnreadableSiblingTests(SimpleTestCase):
         self.assertEqual(unreadable["value"], "Unreadable")
         self.assertEqual(unreadable["status"], "attention")
 
-    def test_a_card_with_a_key_the_host_does_not_know_is_its_sources_failure(self):
-        unreadable = self.cards(lambda: ({**GOOD_CARD, "id": "example-broken-1", "tint": "red"},))
+    def test_a_card_the_host_cannot_draw_as_it_says_is_its_sources_failure(self):
+        """An unknown key, a Counted beside a value, a count not given as a Counted, or one id twice."""
 
-        self.assertEqual(unreadable["value"], "Unreadable")
-
-    def test_two_cards_of_one_source_sharing_an_id_are_its_sources_failure(self):
         card = {**GOOD_CARD, "id": "example-broken-1"}
-        unreadable = self.cards(lambda: (card, card))
-
-        self.assertEqual(unreadable["value"], "Unreadable")
+        plain = {**card, "label": "Good readings"}
+        cases = ({**card, "tint": "red"}, {**card, "value": "Good"}, {**plain, "value": 1}, {**plain, "value": "1"})
+        for cards in (*((case,) for case in cases), (card, card)):
+            with self.subTest(cards=cards):
+                self.assertEqual(self.cards(lambda cards=cards: cards)["value"], "Unreadable")
 
     def test_overviews_leave_out_an_unreadable_sibling(self):
         self.overviews(broken)
@@ -203,7 +202,7 @@ class KitNamesARefusedAnswerTests(TestCase):
         self.assertEqual([line.partition(":")[0] for line in found], ["attention"])
 
     def test_the_kit_names_nothing_of_a_well_formed_provider(self):
-        overview = DomainOverview("Example", "/example/", (Kpi("Good reading", 1),))
+        overview = DomainOverview("Example", "/example/", (Kpi("Good reading", "1"),))
         manifest, contribution = sibling(
             identifier="example.wellformed",
             name="Well formed",

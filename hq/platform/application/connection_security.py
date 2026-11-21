@@ -25,7 +25,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.core.network import split_host_port
 lazy from hq.domains.control_plane.models import ProviderInventory
 
-from .connection_lifecycle import ATTENTION, WORKING
+from .connection_lifecycle import ATTENTION, WORKING, Lifecycle
 from .posture import SCOPE, STANDARD, Inputs, advanced
 from .reach import TAILNET
 from .request_standard import ADMISSION
@@ -224,17 +224,18 @@ def _custody(inputs: Inputs) -> Reading:
 def _freshness(inputs: Inputs) -> Reading:
     """Whether every connection has a reading, and how old the oldest is.
 
-    A keyless public service is left out: it has no connection of its own to
-    read, only the lookups made through it, which carry their own times.
+    A keyless public service unread is left out: it has no connection of its
+    own to read, only the lookups made through it, which carry their own
+    times. One that is read counts toward the oldest like any other.
     """
 
-    connections = tuple(connection for connection in _connections(inputs) if not connection.instance.keyless)
-    if not connections:
+    read = tuple(connection for connection in _connections(inputs) if connection.instance.observed_at)
+    owed = tuple(connection for connection in _connections(inputs) if not connection.instance.keyless)
+    if not read and not owed:
         return Reading.unavailable("Nothing read yet")
-    read = tuple(connection for connection in connections if connection.instance.observed_at)
     oldest = min(read, key=lambda connection: connection.instance.observed_at, default=None)
     evidence = f"Oldest reading {ago(oldest.instance.observed_at)}" if oldest is not None else "Nothing read yet"
-    if unread := len(connections) - len(read):
+    if unread := sum(not connection.instance.observed_at for connection in owed):
         return Reading.unmet(evidence, detail=f"{counted(unread, 'connection has', 'connections have')} no reading.")
     return Reading.met(evidence, detail="This page shows the last reading of each connection.")
 
@@ -311,6 +312,8 @@ class ConnectionSecurityPosture:
     connection_count: int
     healthy_count: int
     attention_count: int
+    # The worst tone a row shows.
+    rows: Tone
     unverified_count: int
     ability_count: int
     external_custody_count: int
@@ -328,15 +331,14 @@ class ConnectionSecurityPosture:
 
     @property
     def state(self) -> str:
-        """Serious when a connection needs a person or a check counting against
-        HQ is not met; neutral when something is unread or a pass is limited."""
+        """The worst its rows show, unless a check counting against HQ is not
+        met, which is serious; neutral at best when a check is unread or limited."""
 
         every = (*self.results, *self.standard.results)
-        if self.attention_count or any(result.state == Standing.UNMET and result.enforced for result in every):
+        if any(result.state == Standing.UNMET and result.enforced for result in every):
             return Tone.SERIOUS
-        if self.unverified_count or any(result.tone != Tone.GOOD for result in self.results):
-            return Tone.NEUTRAL
-        return Tone.GOOD
+        checks = Tone.NEUTRAL if any(result.tone != Tone.GOOD for result in self.results) else Tone.GOOD
+        return Tone.worst((self.rows, checks))
 
     @property
     def admitted(self) -> bool:
@@ -400,6 +402,7 @@ def connection_security_posture(
         connection_count=len(connections),
         healthy_count=healthy,
         attention_count=attention,
+        rows=Tone.worst(Lifecycle(connection.lifecycle).tone for connection in connections),
         unverified_count=len(connections) - healthy - attention,
         ability_count=sum(len(connection.abilities) for connection in connections),
         external_custody_count=sum(len(group.connections) for group in inputs.groups if group.spec.secret_store),

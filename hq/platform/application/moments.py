@@ -324,6 +324,17 @@ def expiry_words(when: datetime | int, now: datetime | None = None) -> str:
     return f"expired {span(since)} ago" if since else "expired today"
 
 
+def since_when(value: date) -> str:
+    """Since when a state has held: "since 9:29 AM" today, else "since Oct 3".
+
+    The form owns its "since", so a page never writes one before an age
+    ("since 3 days ago")."""
+
+    if isinstance(value, datetime) and _local(value).date() == _local(timezone.now()).date():
+        return f"since {_written(_local(value), CLOCK_FORMAT)}"
+    return f"since {when_day(value)}"
+
+
 def _ago_or_day(value: date) -> str:
     """An age for a moment; a bare date, which has no time of day, as its day."""
 
@@ -345,5 +356,6 @@ WHEN_FORMS = {
     "numeral": numeral,  # "3", the day of the month in a calendar's cell
     "length": length,  # "5 minutes", how far it lies from now either way
     "ahead": ahead,  # "in 3 days", or "5 days ago" once it has passed
+    "since": since_when,  # "since 9:29 AM" today, "since Oct 3" before
     "expiry": expiry_words,  # "expires in 3 days", "expired 4 days ago"
 }

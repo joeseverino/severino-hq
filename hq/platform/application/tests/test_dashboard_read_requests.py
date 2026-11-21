@@ -13,7 +13,7 @@ from hq.platform.core.bindings import audit_operation
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare, operator
 
-from ..glance import DashboardRefreshCommand, request_dashboard_refresh
+from ..glance_refresh import DashboardRefreshCommand, request_dashboard_refresh
 from ..security import cli_principal
 
 # Written out, so the module imports at a ref that files the ask elsewhere.
@@ -46,7 +46,8 @@ class DashboardAskTests(TestCase):
         rows = self.ask()
 
         self.assertEqual({row.object_type for row in rows}, {READ_REQUEST})
-        said = " ".join(row.message for row in rows)
+        # The row's message and the record it names both call a panel by its head's name.
+        said = " ".join(f"{row.object_repr} {row.message}" for row in rows)
         self.assertIn("app", said)
         self.assertIn("Example town", said)
         self.assertNotIn(f"machine-{self.machine.pk}", said)

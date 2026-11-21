@@ -17,6 +17,7 @@ from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
 from hq.domains.control_plane.providers import PROVIDERS, read_spec
 
+from .container_state import ContainerCount
 from .containers import Running, container_watchers
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
 from .integration_specs import ListRead, ResourceSpec, typed_keys
@@ -174,8 +175,8 @@ class Machine:
         return bool(self.containers) or CONTAINER_KIND in connected_kinds()
 
     @property
-    def running(self) -> int:
-        return sum(1 for container in self.containers if container.state.running)
+    def container_count(self) -> ContainerCount:
+        return ContainerCount.of(container.state for container in self.containers)
 
     # Whether any credential that reaches this answered on the last sweep. A
     # machine nothing can reach is not necessarily down (the credential may be

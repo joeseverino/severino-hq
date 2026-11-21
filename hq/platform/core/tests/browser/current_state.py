@@ -90,7 +90,7 @@ class CurrentStateBrowserTests(BrowserGate):
     def marks(self, items, marked="[aria-current]", groups="html"):
         """Each group's count of items and of those marked, as ``_MARKED`` reads them; the whole page is one group."""
 
-        found = self.page.evaluate(_MARKED, [groups, items, marked])
+        found = self.page.evaluate(_MARKED, self.css([groups, items, marked]))
         return found if groups != "html" else found[0]
 
     def assert_marked(self, marks, marked=1):
@@ -112,37 +112,39 @@ class CurrentStateBrowserTests(BrowserGate):
     def test_the_node_the_page_opens_on_is_marked_with_its_details_beside_it(self):
         self.open_map()
         self.assert_marked(self.marks(SELECTORS["map_node"]))
-        self.assertEqual(self.page.evaluate(_COLUMNS, SELECTORS["map_detail"]), 2)
+        self.assertEqual(self.page.evaluate(_COLUMNS, self.css(SELECTORS["map_detail"])), 2)
 
     @with_script
     def test_the_mark_moves_with_the_node_selected_and_leaves_with_its_details(self):
         self.open_map()
-        select = self.page.locator(f'[data-topology-node="{self.neighbor}"]').locator(SELECTORS["map_select"])
+        select = self.page.locator(f'[data-topology-node="{self.neighbor}"]').locator(self.css(SELECTORS["map_select"]))
         select.click()
         self.page.wait_for_function(
             '(id) => document.querySelector(`[data-topology-node="${id}"] [aria-current]`)', arg=self.neighbor
         )
         self.assert_marked(self.marks(SELECTORS["map_node"]))
-        self.assertEqual(self.page.evaluate(_COLUMNS, SELECTORS["map_detail"]), 2)
+        self.assertEqual(self.page.evaluate(_COLUMNS, self.css(SELECTORS["map_detail"])), 2)
 
         # Selecting the selected node clears it, and its details go with it.
         select.click()
-        self.page.wait_for_function("(detail) => document.querySelector(detail).hidden", arg=SELECTORS["map_detail"])
+        self.page.wait_for_function(
+            "(detail) => document.querySelector(detail).hidden", arg=self.css(SELECTORS["map_detail"])
+        )
         self.assert_marked(self.marks(SELECTORS["map_node"]), marked=0)
-        self.assertEqual(self.page.evaluate(_COLUMNS, SELECTORS["map_detail"]), 1)
+        self.assertEqual(self.page.evaluate(_COLUMNS, self.css(SELECTORS["map_detail"])), 1)
 
     @with_script
     def test_the_command_center_marks_the_option_enter_opens(self):
         self.open_map()
         self.page.keyboard.press("Control+k")
-        options = self.page.locator(SELECTORS["palette_option"])
+        options = self.page.locator(self.css(SELECTORS["palette_option"]))
         options.first.wait_for(state="visible")
-        self.assertTrue(self.page.evaluate(_SHOWN, SELECTORS["palette_hint"]))
+        self.assertTrue(self.page.evaluate(_SHOWN, self.css(SELECTORS["palette_hint"])))
 
-        self.page.locator(SELECTORS["palette_input"]).press("ArrowDown")
+        self.page.locator(self.css(SELECTORS["palette_input"])).press("ArrowDown")
         self.assert_marked(self.marks(SELECTORS["palette_option"], '[aria-selected="true"]'))
-        self.assertFalse(self.page.evaluate(_SHOWN, SELECTORS["palette_hint"]))
+        self.assertFalse(self.page.evaluate(_SHOWN, self.css(SELECTORS["palette_hint"])))
 
-        self.page.locator(SELECTORS["palette_input"]).press("ArrowUp")
+        self.page.locator(self.css(SELECTORS["palette_input"])).press("ArrowUp")
         self.assert_marked(self.marks(SELECTORS["palette_option"], '[aria-selected="true"]'), marked=0)
-        self.assertTrue(self.page.evaluate(_SHOWN, SELECTORS["palette_hint"]))
+        self.assertTrue(self.page.evaluate(_SHOWN, self.css(SELECTORS["palette_hint"])))

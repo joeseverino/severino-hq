@@ -10,6 +10,7 @@ import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import timedelta
 from functools import cache
 from typing import Annotated, Any, Literal, get_args
 
@@ -23,7 +24,7 @@ from pydantic import (
     model_validator,
 )
 
-from hq.platform.application.command_fields import NonEmpty
+from hq.platform.application.command_fields import NonEmpty, Reason, checked
 from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.labels import dotted
@@ -167,6 +168,7 @@ class ProviderModel(Closed):
     # discriminated union's discriminator, and this one matches every field.
     @field_validator("*", mode="after")
     @classmethod
+    @checked
     def _settle_line_endings(cls, value: Any) -> Any:
         """Store one newline, whatever the browser sent.
 
@@ -180,14 +182,20 @@ class ProviderModel(Closed):
         return value
 
 
+_INTERVAL_FITS = Reason("verification_interval", "must check no less often than its timeout")
+_LOCKED_AUTOMATIC = Reason("locked_automatic", "is locked, so it is never automatic")
+_LOCKED_REASON = Reason("locked_reason", "is locked, so it needs a reason")
+
+
 class ControllerVerification(ProviderModel):
     timeout_seconds: int = Field(ge=30, le=600)
     interval_seconds: int = Field(ge=1, le=30)
 
     @model_validator(mode="after")
+    @checked
     def interval_fits_timeout(self) -> ControllerVerification:
         if self.interval_seconds > self.timeout_seconds:
-            raise ValueError("verification interval must not exceed its timeout")
+            raise _INTERVAL_FITS.refused()
         return self
 
 
@@ -203,11 +211,12 @@ class ControllerActionPolicy(ProviderModel):
         return self.reason or "HQ cannot run this action."
 
     @model_validator(mode="after")
+    @checked
     def validate_mode(self) -> ControllerActionPolicy:
         if self.mode == "locked" and self.automatic:
-            raise ValueError("locked controller actions cannot be automatic")
+            raise _LOCKED_AUTOMATIC.refused()
         if self.mode == "locked" and not self.reason:
-            raise ValueError("locked controller actions require a reason")
+            raise _LOCKED_REASON.refused()
         return self
 
 
@@ -416,6 +425,11 @@ class ProviderSpec:
     # collector has been written yet" are different states, and the second is
     # work rather than a fact about the world.
     unobserved_reason: str = ""
+    # For a kind no sweep reads, how often the controller's reconcile reads
+    # again what it applied, where something outside HQ moves it (a
+    # certificate's installs, and so what each serves). None: only HQ's own
+    # change moves it, so its last apply holds until the next.
+    rechecked_every: timedelta | None = None
     # Why removing this declaration is not offered, or "" when it is.
     #
     # Removal queues a controller delete unless the provider is

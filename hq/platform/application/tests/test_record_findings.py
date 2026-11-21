@@ -12,7 +12,7 @@ from hq.platform.core.testing import READER
 from ..attention import readable_by
 from ..dashboard import work_queue
 from ..findings import findings
-from ..security import Capability, Principal
+from ..security import Capability, Principal, cli_principal
 
 CONTACTS = Principal("contacts", "test", frozenset({Capability.READ, Capability.MANAGE_CONTACTS}))
 CALENDAR = Principal("calendar", "test", frozenset({Capability.READ, Capability.READ_CALENDAR}))
@@ -43,3 +43,17 @@ class RecordFindingTests(TestCase):
 
         self.assertNotIn(UNREAD_TITLE, told)
         self.assertNotIn("Check links to gone, which HQ does not have", told)
+
+    def test_each_asset_is_named_with_what_it_lacks(self):
+        from hq.domains.assets.models import Asset
+
+        Asset.objects.create(item_name="Example router", total_cost=40)
+        Asset.objects.create(item_name="Example hub", purchase_date=date(2030, 1, 2))
+
+        (said,) = (
+            finding["explanation"]
+            for finding in findings(principal=cli_principal(), rule="assets-missing-purchase")["findings"]
+        )
+
+        self.assertIn("Example router (no purchase date)", said)
+        self.assertIn("Example hub (no cost)", said)

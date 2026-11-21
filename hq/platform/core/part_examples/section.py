@@ -2,22 +2,24 @@
 
 lazy from datetime import date
 
+from hq.platform.core.part_examples import table
 from hq.platform.core.template_parts import Example
 lazy from hq.platform.application.card_items import ListRow
 lazy from hq.platform.application.drawings import AllocationBar, Share
+lazy from hq.platform.application.tables import TableColumn
 
 SECTION_STATES = {
     # A table in a section of its own name, one that fits and one that
     # scrolls in a card of its own name, as a record page and a ledger draw
     # them: each name is one landmark on the page.
     "around-table": Example(
-        '{% section "Example records" %}{% table_region "Example records" %}'
-        '<table class="data-table"><tbody><tr><td>Example</td></tr></tbody></table>'
-        "{% endtable_region %}{% endsection %}"
+        '{% section "Example records" %}{% data_table records %}{% endsection %}'
         '{% card heading="example-ledger" %}<h2 id="example-ledger">Example ledger</h2>'
-        '{% table_region "Example ledger" pane=True %}'
-        '<table class="data-table"><tbody><tr><td>Example</td></tr></tbody></table>'
-        "{% endtable_region %}{% endcard %}"
+        "{% data_table ledger %}{% endcard %}",
+        lambda: {
+            "records": table("Example records", ("Name",), ("Example",), headed=False),
+            "ledger": table("Example ledger", ("Name",), ("Example",), headed=False, region={"pane": True}),
+        },
     ),
     # The section part ({% section %}) in each state a page can give it; a new
     # option of the tag comes with an entry here (test_catalog's source check).
@@ -50,10 +52,11 @@ SECTION_STATES = {
     ),
     # A table whose region carries the heading's name, as a list's sections draw one.
     "table": Example(
-        '{% section "Example hosts 2" count=2 %}{% table_region "Example hosts 2" %}'
-        '<table class="data-table"><thead><tr><th scope="col">Name</th><th scope="col">State</th></tr></thead>'
-        "<tbody><tr><td>example-01</td><td>Online</td></tr><tr><td>example-02</td><td>Online</td></tr></tbody>"
-        "</table>{% endtable_region %}{% aside %}<span>Example source</span>{% endsection %}"
+        '{% section "Example hosts 2" count=2 %}{% data_table hosts %}{% aside %}<span>Example source</span>'
+        "{% endsection %}",
+        lambda: {
+            "hosts": table("Example hosts 2", ("Name", "State"), ("example-01", "Online"), ("example-02", "Online"))
+        },
     ),
     # A band of facts, which draws its own cells, fills the frame as a table
     # does, the prose after it in the frame's padding; as a project's GitHub
@@ -71,36 +74,38 @@ SECTION_STATES = {
     "edge": Example(
         '{% section "Example request" edge="attention" lede="An example agent wants to change an example record." '
         'more_label="example.com" more_url="/example/" %}<p>An example line of prose in the frame.</p>'
-        '{% endsection %}{% section "Example hosts 3" edge="serious" %}{% table_region "Example hosts 3" %}'
-        '<table class="data-table"><thead><tr><th scope="col">Name</th></tr></thead>'
-        "<tbody><tr><td>example-01</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
+        '{% endsection %}{% section "Example hosts 3" edge="serious" %}{% data_table hosts %}{% endsection %}',
+        lambda: {"hosts": table("Example hosts 3", ("Name",), ("example-01",))},
     ),
     "fold": Example(
         '{% section "Example readings" count=3 fold=True lede="An example lede of a folded section."'
         " %}<p>An example line behind the fold.</p>{% aside %}<span>Example source</span>{% endsection %}"
     ),
     "fold-open": Example(
-        '{% section "Example names" fold=True open=True %}{% table_region "Example names" %}'
-        '<table class="data-table"><thead><tr><th scope="col">Name</th></tr></thead>'
-        "<tbody><tr><td>example.com</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
+        '{% section "Example names" fold=True open=True %}{% data_table names %}{% endsection %}',
+        lambda: {"names": table("Example names", ("Name",), ("example.com",))},
     ),
     "head-above": Example('{% section "Example" head="above" %}<p>An example line.</p>{% endsection %}'),
     "head-inside": Example(
-        '{% section "Example 2" head="inside" %}{% table_region "Example 2" %}<table class="data-table"><thead><tr>'
-        "<th>Name</th></tr></thead><tbody><tr><td>Example</td></tr></tbody></table>{% endtable_region %}"
-        "{% endsection %}"
+        '{% section "Example 2" head="inside" %}{% data_table names %}{% endsection %}',
+        lambda: {"names": table("Example 2", ("Name",), ("Example",))},
     ),
     # A line under a body that says how to read it, after a table that would
     # otherwise end the frame, and the aside's link to the whole, after a
     # line of its own and alone.
     "foot": Example(
         '{% section "Example trends" more_label="All example trends" more_url="/example/" %}'
-        '{% table_region "Example trends" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Example" "identifier" %}{% table_heading "Slope" "numeric" %}</tr></thead>'
-        "<tbody><tr><td>Example pace</td><td>0.4</td></tr></tbody></table>{% endtable_region %}"
+        "{% data_table trends %}"
         '{% aside %}<span class="count">2 example weeks</span>'
         "{% foot %}R² is how much of the example movement the fitted line explains. It does not show cause."
-        "{% endsection %}"
+        "{% endsection %}",
+        lambda: {
+            "trends": table(
+                "Example trends",
+                (TableColumn("Example", kind="identifier"), TableColumn("Slope", kind="numeric")),
+                ("Example pace", "0.4"),
+            )
+        },
     ),
     "more": Example(
         '{% section "Example renewals" count=1 more_label="View example renewals" more_url="/example/" %}'
@@ -145,10 +150,9 @@ SECTION_STATES = {
     # table reaching the outer frame's sides and foot.
     "nested": Example(
         '{% section "Example path 3" %}<p>An example line before the steps.</p>'
-        '{% section "Example steps" %}{% table_region "Example steps" %}'
-        '<table class="data-table"><thead><tr><th scope="col">Step</th><th scope="col">State</th></tr></thead>'
-        "<tbody><tr><td>Example DNS</td><td>Working</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
-        "{% endsection %}"
+        '{% section "Example steps" %}{% data_table steps %}{% endsection %}'
+        "{% endsection %}",
+        lambda: {"steps": table("Example steps", ("Step", "State"), ("Example DNS", "Working"))},
     ),
     # A section inside a card, as a topology node or a held request's preview
     # draws it: part of the card's frame, its head with no rule or inset.

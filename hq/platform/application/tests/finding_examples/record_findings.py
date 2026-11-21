@@ -87,7 +87,8 @@ EXAMPLES = (
     Examples(
         "assets-missing-purchase",
         fires=(held(asset("A router"), asset("A switch", **PRICED), raises=("1 asset has no purchase date or cost",)),),
-        quiet=(held(asset("A switch", **PRICED)),),
+        # A cost of zero is a free asset, recorded.
+        quiet=(held(asset("A switch", **PRICED), asset("A license", **{**PRICED, "total_cost": Decimal("0.00")})),),
     ),
     Examples(
         "asset-links-to-nothing",

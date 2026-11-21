@@ -54,8 +54,6 @@ class EnvironmentRecord(ObservationRecord):
     status: str = ""
     agent_version: str = ""
     docker_version: str = ""
-    containers_running: int | None = None
-    containers_total: int | None = None
     snapshot_at: Stamp = None
 
 

@@ -50,7 +50,13 @@ def finding_why(finding: Finding, rule: FindingRule | None) -> str:
     if more:
         read += f" (and {more} more)"
     bar = rule.bars.get(finding.severity, "") if rule is not None else ""
-    return ended(f"{read}; {_RATED.get(finding.severity, _RATED[Tone.ATTENTION])} {bar}" if bar else read)
+    return ended(f"{read}; {rated(finding.severity, bar)}" if bar else read)
+
+
+def rated(severity: str, bar: str) -> str:
+    """A rule's ``bar`` as the clause its severity reads in: "urgent once free space is under 512 MB"."""
+
+    return f"{_RATED.get(Tone(severity), _RATED[Tone.ATTENTION])} {bar}"
 
 
 def raising_domains() -> frozenset[str]:
@@ -147,7 +153,7 @@ def waiting_for_approval() -> tuple[Finding, ...]:
                 severity=Tone.ATTENTION,
                 title=str(sentence),
                 explanation="" if sentence.whole else _asked_change(shown),
-                why="An agent asked for this change, and HQ writes nothing until a person approves or rejects it.",
+                why="An agent asked for this change, and HQ writes nothing until an operator approves or rejects it.",
                 primary=opens("", _approval_entry(held)),
                 since=held.created_at,
                 held=True,

@@ -423,7 +423,7 @@ class CredentialSightPageTests(TestCase):
         rows = self.rows(response)
 
         self.assertEqual(
-            {ref: row.sight.provider for ref, row in rows.items() if row.sight},
+            {ref: row.sight.provider for ref, row in rows.items() if ref and row.sight},
             {"example-ssh": "ssh", "example-api": "cloudflare_api", "example-tailnet": "tailscale"},
         )
         # The refusal is the product's words: said once, for the credential.

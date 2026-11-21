@@ -109,11 +109,11 @@ same address:
 | Who asks | For what |
 |---|---|
 | The refresh button | every panel |
-| The dashboard, opening on a reading older than five minutes (`freshness.GLANCE_EVERY`) | the due panels only (`scope=stale`) |
+| The dashboard, opening on a reading older than five minutes (`freshness.GLANCE_EVERY`), or on an ask that went unanswered | the due panels only (`scope=stale`) |
 
 Either way HQ records a credential-free `DashboardRefreshRequest` and rings the
-glance doorbell. That starts a glance pass beside any controller pass
-([Units](Deployment.md#units)), and the controller derives target and
+glance doorbell. That starts a glance pass, the only reader of a dashboard
+panel ([Units](Deployment.md#units)), and the controller derives target and
 connection from the machine graph. The browser follows that one request for a
 bounded interval and keeps no page-lifetime polling loop.
 
@@ -121,9 +121,11 @@ An SSH-capable connection yields whole-host readings. A Portainer fallback is
 labeled as container and Docker scope, not machine utilization.
 
 Machine and weather readings show their observation time at every width. A
-reading three intervals old (15 minutes) is marked out of date. That is
-presentation freshness, separate from the provider's reported health, and a
-refresh keeps the previous reading visible until a new one arrives.
+glance is read only when the dashboard opens, so its age is no fault: it is
+marked out of date only when an ask went unanswered for a minute
+(`freshness.ANSWER_WITHIN`) or its last reading failed. That is presentation
+freshness, separate from the provider's reported health, and a refresh keeps
+the previous reading visible until a new one arrives.
 
 Dashboard cards are grouped by contributing domain. Card providers run once per
 projection scope and are still checked for cross-domain collisions. A
@@ -462,12 +464,14 @@ asked through a derivation the host declares as it meets the provider,
 learned from the statements the provider runs, in a projection of its own. It
 varies by whether the reader asked for a demo and by which function answers.
 
-The host cannot follow an extension to the clock, so the answer is `unseen`. It
-stands until what it asked of the helpers changes, at most one minute
-(`UNSEEN`), and never past local midnight. A count of days turns at midnight,
-and nothing HQ words is finer than a minute. So that bound keeps every
-statement within one unit of the truth. Whatever asks an unseen derivation
-stands no longer than it does. The rules an extension keeps are in
+An extension's code is not the host's to hold to the clock functions above,
+so Django's own clock says what it was asked. Read inside a derivation, the day
+(`timezone.localdate()`) holds the answer until local midnight, and the instant
+(`timezone.now()`, `localtime()`) for one minute (`UNSEEN`), the finest unit
+HQ words an age in, never past local midnight. What reads neither stands until
+a table it reads is written. Django's own machinery (the cache's expiry) reads
+the clock for itself and is not counted. Whatever asks a derivation stands no
+longer than it does. The rules an extension keeps are in
 [Extensions](Plugins.md#derived-reads).
 
 **Asked again when the change lands.** The controller reports every few
@@ -491,6 +495,7 @@ remembered answer's moment comes.
 | A request | never waits on the pass: it derives what it does not find stored, and the pass waits between questions while a request is deriving |
 | `ahead=` on a derivation | how many ways of asking are kept current (eight by default); a way nobody asked for in a day is forgotten |
 | A question asked ahead | counts as HQ being in use |
+| A write that changes a whole family (an import) | `derive_after_commit(*namespaces)` derives every one within a namespace asked with no arguments once it commits, in the writer's process, remembered or not |
 
 The declared derivations:
 
@@ -725,6 +730,9 @@ The Command Center is a projection of that graph:
 
 That ability is the only authored connection-to-capability edge. Capabilities
 keep no reciprocal list, and no command is invented from a credential scope.
+A connection's row aims the command at the connection only when the command's
+`subject_resource` is unset; a command about a resource's records opens its
+form, which chooses one.
 
 The form is derived from the JSON Schema. Unknown and repeated fields are
 rejected, and targets use the registered label. Eligible choices come from the

@@ -276,6 +276,8 @@ WAITING = "wants to act for you from"
 LAPTOP, LAPTOP_ID, LAPTOP_OWNER = "example-laptop", "nLAPTOP7CNTRL", "op@example.com"
 # HQ's own loopback: nowhere the tailnet places a call.
 UNPLACED_AT = "127.0.0.1"
+# An address an approved device calls from, refused while tailscaled did not answer.
+APPROVED_AT = "100.64.0.7"
 
 
 class AgentDeviceTests(TestCase):
@@ -371,13 +373,16 @@ class AgentDeviceTests(TestCase):
     def test_an_address_no_device_sent_is_on_the_page_as_refused_with_nothing_to_press(self):
         with operation_context(interface="mcp", actor=AGENT, operation="example"):
             denials.record_denial(interface="mcp", reason=Code.DEVICE_UNKNOWN, actor=AGENT, source=UNPLACED_AT)
+            # tailscaled not answering is HQ's failure, never a device's.
+            denials.record_denial(interface="mcp", reason=Code.TAILNET_UNAVAILABLE, actor=AGENT, source=APPROVED_AT)
 
         page = self.page()
 
         (row,) = select(page, "data-device-standing", "unplaceable")
         self.assertIn(UNPLACED_AT, row.words)
         inside = within(page, "id", row.attrs["id"])
-        self.assertTrue([element for element in inside if "data-unplaced" in element.attrs], "why it was refused")
+        (why,) = [element for element in inside if "data-unplaced" in element.attrs]
+        self.assertIn(Code.DEVICE_UNKNOWN.said, why.words.lower())
         self.assertFalse(
             [element for element in inside if element.attrs.get("type") == "submit" or element.tag == "form"],
             "nothing can be approved",
@@ -391,16 +396,16 @@ class AgentDeviceTests(TestCase):
         self.assertEqual(none.attrs["data-placement"], "none")
         self.assertEqual(placed, [], "a tailnet device placing each call is the normal case, said by the Devices table")
 
-    def test_a_devices_calls_are_counted_on_its_row(self):
+    def test_a_devices_changes_are_counted_on_its_row_as_its_agents_are(self):
         device = self.device(approved_at=timezone.now(), approved_by=self.person)
         for _ in range(3):
             AuditLog.objects.create(
                 action=AuditLog.Action.UPDATED, metadata={"actor": AGENT, "interface": "mcp", "device": LAPTOP_ID}
             )
+        page = self.page()
 
-        row = " ".join(element.words for element in within(self.page(), "id", f"device-{device.pk}"))
-
-        self.assertIn("3 calls", row)
+        for row in (within(page, "id", f"device-{device.pk}"), within(page, "data-client", AGENT)):
+            self.assertIn("3 changes", " ".join(element.words for element in row))
 
     def test_a_refusal_from_a_device_points_at_its_row(self):
         device = self.device()
