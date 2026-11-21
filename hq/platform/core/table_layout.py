@@ -9,10 +9,14 @@ toggles, and each row's open line. The stylesheet never reads a cell's
 content.
 """
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+# A value that says nothing: dashes and space, and nothing drawn but the
+# empty value's own mark.
+SAYS_NOTHING = re.compile(r"[\s\u2013\u2014-]*")
 # The characters of a line of a value past which it is longer than a line of
 # words (`data-long`): it wraps, never to fewer than a line of words, and its
 # column shares the room whatever its kind (tables.css); one of a kind that

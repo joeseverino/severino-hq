@@ -24,6 +24,9 @@ the pages.
 {% block summary %}{% endblock %}
 {% if not object_list %}
 {% if table.active_count %}{% include "partials/_empty_state.html" with message="Nothing matches." remedy=table.clear %}{% elif table.empty_link %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=table.empty_link %}{% elif table.empty_remedy %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=page.remedy %}{% else %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why %}{% endif %}
+{% elif table.drawn %}
+{% data_table table.drawn %}
+{% include "partials/_pagination.html" %}
 {% else %}
 {% table_region page.title %}
   <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}>

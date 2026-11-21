@@ -616,6 +616,7 @@ SHAPES = (
             "partials/_week_plan.html": "the week plan part, its days in order",
             "partials/_dropzone.html": "the dropzone part, the files its script lists as they are chosen",
             "partials/_page_navigation.html": "the page's section navigation",
+            "partials/_data_table.html": "a row's open line, its entries under their columns' names",
         },
     ),
     Shape(

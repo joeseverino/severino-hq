@@ -9,7 +9,7 @@ from django.db.models import QuerySet
 from .integration_specs import SEARCH_FIELD, ListRead, ResourceSpec
 from .page_reads import Remedy
 from .pages import PageMixin
-from .tables import TableColumn, ranked, typed
+from .tables import DataTable, Row, TableColumn, ranked, typed
 from .ui import ended
 lazy from .resources import InvalidResourceInput, list_resource, resource_registry
 lazy from .security import web_principal
@@ -89,7 +89,29 @@ class ListPageMixin(PageMixin):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         rows = [self.row(item) for item in self.collection["items"]]
-        return {**context, "object_list": rows, "table": self.table(), "pages": self.pages()}
+        table = self.table()
+        if self.table_columns and all(column.cell for column in self.table_columns):
+            table["drawn"] = self.drawn(context["page"].title, table, rows)
+        return {**context, "object_list": rows, "table": table, "pages": self.pages()}
+
+    def drawn(self, label: str, table: dict[str, Any], rows: list[Any]) -> DataTable:
+        """The page's rows as its columns declare each cell, one page of the
+        list's own order, each keyed for its tick-box where rows are selected."""
+
+        key = self.spec.identifier
+        return DataTable(
+            label,
+            table["columns"],
+            tuple(
+                Row(
+                    tuple(column.cell(row) for column in table["columns"] if column.cell),
+                    key=(row[key] if key else row.pk) if table["selectable"] else None,
+                )
+                for row in rows
+            ),
+            selectable=table["selectable"],
+            sorted_by=table["selected_sort"],
+        )
 
     def row(self, item: dict[str, Any]) -> Any:
         """One item as its row draws it: the item itself, or with what only

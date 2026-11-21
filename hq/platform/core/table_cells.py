@@ -7,12 +7,7 @@ import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
-from .table_layout import HELD, CellFacts, Moved, RowFacts, lay_out
-
-# A cell that says nothing: dashes and space, and nothing drawn but the empty
-# value's own mark.
-SAYS_NOTHING = re.compile(r"[\s\u2013\u2014-]*")
-
+from .table_layout import HELD, SAYS_NOTHING, CellFacts, Moved, RowFacts, lay_out
 
 _SECTIONS = ("thead", "tbody", "tfoot")
 

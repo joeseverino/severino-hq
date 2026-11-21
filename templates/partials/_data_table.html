@@ -1,16 +1,20 @@
-{% comment %}A table drawn whole from its declaration (`tables.DataTable`): a toned cell is a state, a row's run evidence opens under its last cell, and its actions end it.{% endcomment %}
-{% table_region table.label %}
-  <table class="data-table">
-    <thead><tr>{% for column in table.columns %}{% table_heading column.label column.kind css=column.css drop=column.drop local_sort=True %}{% endfor %}{% if table.has_actions %}{% table_heading "Actions" css="actions-col" hidden=True %}{% endif %}</tr></thead>
+{% comment %}A table drawn whole from its declaration (`tables.DataTable`), as `drawn_tables.drawn` lays it out: every mark the stylesheet reads is the layout's, written here on the element it belongs to, so the region reads nothing back. A cell draws its value by what it is, then what follows it on its line and its lines beneath; a row's editor and run evidence stand on its open line.{% endcomment %}
+{% table_region table.label declared=True empty=empty %}{% if rows %}
+  <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}{{ marks }}>
+    <thead><tr>{% for heading in headings %}{% include "partials/_table_heading.html" with label=heading.label kind=heading.kind css=heading.css drop=heading.drop server_sort=heading.server_sort local_sort=heading.local_sort hidden=heading.hidden title=heading.title select_all=heading.select_all marks=heading.marks only %}{% endfor %}</tr></thead>
+    {% for group in groups %}
     <tbody>
-      {% for cells, below, actions in table.rows %}
-        <tr>
-          {% for cell in cells %}
-            <td>{% if cell.tone and cell.link %}{% entity cell.link %} {% status cell.text tone=cell.tone %}{% elif cell.tone %}{% status cell.text tone=cell.tone href=cell.url %}{% elif cell.link %}{% entity cell.link %}{% elif cell.url %}{% if cell.external %}{% entity cell.url|outside label=cell.text %}{% else %}<a href="{{ cell.url }}">{{ cell.text|breakable }}</a>{% endif %}{% elif cell.muted %}{% muted %}{{ cell.text|breakable }}{% endmuted %}{% else %}{{ cell.text|breakable }}{% endif %}{% if forloop.last %}{% run_evidence below %}{% endif %}</td>
-          {% endfor %}
-          {% if table.has_actions %}{% row_actions actions %}{% endif %}
-        </tr>
+      {% if group.group.label %}{% include "partials/_row_group.html" with label=group.group.label count=group.group.count folds=group.group.folds href=group.group.href attention=group.group.attention across=group.across only %}{% endif %}
+      {% for row in group.rows %}
+        <tr{{ row.attributes }}>{% if row.select %}{% include "partials/_row_select.html" with pk=row.row.key marks=row.select.attributes only %}{% endif %}{% for cell in row.cells %}<td{{ cell.attributes }}>{% if cell.box %}<div class="{{ cell.box }}">{% partial content %}</div>{% else %}{% partial content %}{% endif %}{% if cell.toggle is not None %}{% include "partials/_row_toggle.html" with open=cell.toggle only %}{% endif %}</td>{% endfor %}{% if row.actions %}{% include "partials/_row_actions.html" with actions=row.row.actions marks=row.actions.attributes only %}{% endif %}</tr>
+        {% if row.detail %}<tr class="row-detail" data-row-detail><td colspan="{{ row.detail }}">{% if row.editor %}{% include "partials/_row_editor.html#form" with open=row.editor.open slug=row.editor.slug form=row.editor.form action=row.editor.action verb=row.editor.verb close_url=row.editor.close_url only %}{% endif %}{% if row.row.evidence %}<dl class="row-columns">{% run_evidence row.row.evidence layout="line" %}</dl>{% endif %}</td></tr>{% endif %}
       {% endfor %}
     </tbody>
-  </table>
-{% endtable_region %}
+    {% endfor %}
+  </table>{{ frame }}
+{% endif %}{% endtable_region %}
+{% partialdef content %}{% with value=cell.cell %}{% if value.fold %}{% include "partials/_row_fold.html" with label=value.text only %}{% endif %}{% if value.field %}{% include "partials/_row_field.html" with field=value.field only %}{% elif cell.editor %}{% include "partials/_row_editor.html#way_in" with open=cell.editor.open slug=cell.editor.slug label=cell.editor.label open_url=cell.editor.open_url close_url=cell.editor.close_url only %}{% else %}{% partial value %}{% for part in value.parts %}{% with value=part named=False %}{% partial value %}{% endwith %}{% endfor %}{% if value.lines %}{% list %}{% for line in value.lines %}<li>{% with value=line named=False %}{% partial value %}{% endwith %}{% for part in line.parts %}{% with value=part named=False %}{% partial value %}{% endwith %}{% endfor %}</li>{% endfor %}{% endlist %}{% endif %}{% endif %}{% endwith %}{% endpartialdef %}
+{% partialdef value %}{% if value.shows == "more" %}<span class="row-more">{% partial dotted %}</span>{% elif value.shows == "narrow" %}<span class="narrow-only">{% partial dotted %}</span>{% elif value.shows == "narrow-more" %}<span class="narrow-more">{% partial dotted %}</span>{% else %}{% partial dotted %}{% endif %}{% if value.count is not None %} <span class="count">{{ value.count|breakable }}</span>{% endif %}{% endpartialdef %}
+{% partialdef dotted %}{% if value.dot %}{% dot %}{% endif %}{% if value.muted %}{% muted %}{% partial named %}{% endmuted %}{% else %}{% partial named %}{% endif %}{% endpartialdef %}
+{% partialdef named %}{% if value.name %}<strong{% if cell.named and named is not False %} data-cell="name"{% endif %}>{% partial words %}</strong>{% elif value.role %}<span data-cell="{{ value.role }}">{% partial words %}</span>{% else %}{% partial words %}{% endif %}{% endpartialdef %}
+{% partialdef words %}{% if value.tone and value.link %}{% entity value.link %} {% status value.text tone=value.tone %}{% elif value.tone %}{% status value.text tone=value.tone href=value.url %}{% elif value.link %}{% entity value.link %}{% elif value.url and value.external %}{% entity value.url|outside label=value.text %}{% elif value.url %}<a href="{{ value.url }}">{{ value.text|breakable }}</a>{% elif value.moment %}{{ value.moment|when:value.form }}{% elif value.amount is not None %}{{ value.amount|money }}{% elif value.text %}{{ value.text|breakable }}{% elif cell.cell.says_nothing %}{% empty_value %}{% endif %}{% endpartialdef %}

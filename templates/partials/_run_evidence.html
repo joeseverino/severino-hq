@@ -19,7 +19,7 @@ evidence.
   {% if evidence.affected or evidence.matched %}{% include "partials/_run_evidence.html#piece" with label="Certificate" part="partials/_run_evidence.html#certificate" %}{% endif %}
   {% if evidence.raw %}{% include "partials/_run_evidence.html#piece" with label="Raw result" part="partials/_run_evidence.html#raw" %}{% endif %}
 {% endif %}
-{% partialdef piece %}{% if facts %}{% fact label %}{% include part %}{% endfact %}{% else %}<div class="row-below" data-label="{{ label }}">{% include part %}</div>{% endif %}{% endpartialdef %}
+{% partialdef piece %}{% if facts %}{% fact label %}{% include part %}{% endfact %}{% elif line %}<div><dt>{{ label }}</dt><dd><div class="row-below" data-label="{{ label }}">{% include part %}</div></dd></div>{% else %}<div class="row-below" data-label="{{ label }}">{% include part %}</div>{% endif %}{% endpartialdef %}
 {% partialdef machines %}{% for host in evidence.hosts %}{% entity "machine"|entity_of:host mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endpartialdef %}
 {% partialdef correlation %}<code>{{ evidence.correlation|breakable }}</code>{% endpartialdef %}
 {% partialdef lease %}{{ evidence.worker|breakable:"," }} until {{ evidence.lease_until|when }}{% endpartialdef %}

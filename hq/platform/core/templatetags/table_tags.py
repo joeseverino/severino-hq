@@ -26,6 +26,7 @@ from hq.platform.core.table_cells import (
     Span,
 )
 from hq.platform.core.template_parts import Example, Part, slotted
+lazy from hq.platform.core.drawn_tables import drawn
 
 register = template.Library()
 
@@ -116,7 +117,7 @@ def _open_line(width: int, held: str, listed: list[tuple[str, str]]) -> str:
 # The open line a region whose rows hold cells back draws once, which
 # tables.js clones for a row as it opens, an entry for each cell it holds back
 # and a box for what the row's line already shows of one.
-_LINE_FRAME = f"<template data-open-line>{_open_line(1, '', [('', '<span data-row-shows></span>')])}</template>"
+LINE_FRAME = f"<template data-open-line>{_open_line(1, '', [('', '<span data-row-shows></span>')])}</template>"
 
 
 @register.simple_block_tag
@@ -177,7 +178,7 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
         last = offset
     parts.append(_cut(markup, last, len(markup), cuts))
     if cells.held:
-        parts.append(_LINE_FRAME)
+        parts.append(LINE_FRAME)
     return "".join(parts)
 
 
@@ -239,6 +240,7 @@ def _region(
     action_label: Annotated[str, Describe("That link's label.")] = "",
     filtered: Annotated[bool, Describe("Its own search narrows it, so no rows says nothing matches.")] = False,
     clear: Annotated[str, Describe("The way back from that search.")] = "",
+    declared: Annotated[bool, Describe("A table `{% data_table %}` draws, its marks written already.")] = False,
 ) -> dict[str, Any]:
     """The region a table sits in, named by ``label`` (``TABLE_REGION``'s rules)."""
 
@@ -262,6 +264,7 @@ def _region(
         "chart": chart,
         "scrolls": pane or chart,
         "empty": nothing,
+        "declared": declared,
     }
 
 
@@ -281,7 +284,11 @@ class RegionNode(template.Node):
         # asked only of a table with no rows, which is the only one to show it.
         options = {name: value.resolve(context) for name, value in self.options.items() if name != "remedy"}
         region = _region(label, **options)
-        content = mark_cells(self.nodelist.render(context), sorts=not region["chart"])
+        rendered = self.nodelist.render(context)
+        if region["declared"]:
+            content = rendered if rendered.strip() else None
+        else:
+            content = mark_cells(rendered, sorts=not region["chart"])
         if content is None:
             # A table with no rows would draw its headings over nothing, so the
             # region says it has nothing instead.
@@ -645,11 +652,16 @@ def row_actions(
     }
 
 
-def data_table(table: Annotated[Any, Describe("A `DataTable`: its columns and its rows.")]) -> dict[str, Any]:
+def data_table(
+    context: Any,
+    table: Annotated[Any, Describe("A `DataTable`: its columns and its rows, or its groups of rows.")],
+    *,
+    empty: Annotated[str, Describe("With no rows, what is missing.")] = "",
+) -> dict[str, Any]:
     """A table drawn whole from its declaration, so a page writes no heading
     or cell of its own."""
 
-    return {"table": table}
+    return {**drawn(table, context), "empty": empty}
 
 
 def row_toggle() -> dict[str, Any]:

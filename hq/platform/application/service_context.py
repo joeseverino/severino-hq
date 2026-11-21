@@ -25,7 +25,7 @@ from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
-from .tables import Cell, DataTable, TableColumn
+from .tables import Cell, DataTable, Row, TableColumn
 from .tone import Tone
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
 lazy from . import history, machines
@@ -137,7 +137,10 @@ class ServiceSection:
         return DataTable(
             self.label,
             tuple(TableColumn(name) for name in self.columns),
-            tuple(zip(self.records, below, actions, strict=True)),
+            tuple(
+                Row(cells, actions=done, evidence=evidence)
+                for cells, evidence, done in zip(self.records, below, actions, strict=True)
+            ),
         )
 
 

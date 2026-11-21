@@ -11,10 +11,12 @@ lazy from hq.platform.application import work_runs
 register = template.Library()
 
 
-def run_evidence(evidence, layout: Literal["below", "facts"] = "below") -> dict:
-    """A run's evidence, or nothing for a row that has none."""
+def run_evidence(evidence, layout: Literal["below", "facts", "line"] = "below") -> dict:
+    """A run's evidence, or nothing for a row that has none: blocks its row
+    moves to its open line, the facts of a run's page, or the entries of the
+    open line a declared table draws (``layout="line"``)."""
 
-    return {"evidence": evidence, "facts": layout == "facts"}
+    return {"evidence": evidence, "facts": layout == "facts", "line": layout == "line"}
 
 
 slotted(
