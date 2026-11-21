@@ -13,6 +13,7 @@ from .routes import reverse
 from .security import Principal
 from .tables import Cell, DataTable, Group, Row, TableColumn
 from .tone import Tone
+from .ui import ended
 from .url_query import with_query
 lazy from .domains import host_domains
 
@@ -100,4 +101,4 @@ def tones() -> str:
 
     every = get_text_list([tone.urgency for tone in Tone], "and")
     reach = get_text_list([tone.urgency for tone in Tone if tone.acted_on], "and")
-    return f"Severities, most severe first: {every}. {reach} reach Needs you."
+    return f"Severities, most severe first: {ended(every)} {reach} reach Needs you."
