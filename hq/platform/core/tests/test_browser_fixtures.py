@@ -101,10 +101,16 @@ def _highlights():
         # A strip of counts as an installation fills it, some with a detail
         # after their words, wide enough to wrap on a phone.
         "compact": [
-            {"label": "Example count", "value": 3, "url": "/example/"},
-            {"label": "Example open updates", "value": 2, "url": "/example/updates/"},
-            {"label": "Example new security advisories", "value": 15, "url": "/example/advisories/"},
-            {"label": "Example drafts", "value": 1, "url": "/example/drafts/", "detail": "22 published"},
+            {"label": "Example counts", "singular": "Example count", "value": 3, "url": "/example/"},
+            {"label": "Example open updates", "singular": "Example open update", "value": 2, "url": "/example/u/"},
+            {"label": "Example new advisories", "singular": "Example new advisory", "value": 15, "url": "/example/a/"},
+            {
+                "label": "Example drafts",
+                "singular": "Example draft",
+                "value": 1,
+                "url": "/example/drafts/",
+                "detail": "22 published",
+            },
             {
                 "label": "Example expenses",
                 "value": "$1,204.50",

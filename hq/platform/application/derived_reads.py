@@ -81,7 +81,7 @@ def list_estate(*, principal: Principal) -> dict[str, Any]:
                 {
                     "id": card["id"],
                     "label": card["label"],
-                    "value": card["value"],
+                    "value": str(card["value"]),
                     "detail": card.get("detail", ""),
                     "status": card.get("status", ""),
                     "url": card["url"],

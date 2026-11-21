@@ -32,7 +32,7 @@ lazy from .moments import moment
 Card = dict[str, Any]
 
 
-def _card(*, id: str, label: str, value: str, url: str, detail: str = "") -> tuple[Card, ...]:
+def _card(*, id: str, label: str, value: str | int, url: str, detail: str = "", singular: str = "") -> tuple[Card, ...]:
     """One card, as the tuple a section answers.
 
     A section with nothing to report answers ``()`` instead, so it stops
@@ -41,6 +41,8 @@ def _card(*, id: str, label: str, value: str, url: str, detail: str = "") -> tup
     """
 
     card: Card = {"id": id, "label": label, "value": value, "url": url}
+    if singular:
+        card["singular"] = singular
     if detail:
         card["detail"] = detail
     return (card,)
@@ -89,7 +91,8 @@ def projects() -> tuple[Card, ...]:
     return _card(
         id="hq.projects.updates",
         label="Open updates",
-        value=str(reading["open"]),
+        singular="Open update",
+        value=reading["open"],
         url=f"{reverse('projects:list')}?updates_on=1",
         detail=counted(reading["unmatched"], "security alert with no fix open", "security alerts with no fix open")
         if reading["unmatched"]
@@ -125,7 +128,8 @@ def content() -> tuple[Card, ...]:
     return _card(
         id="hq.content.drafts",
         label="Drafts",
-        value=str(reading["drafts"]),
+        singular="Draft",
+        value=reading["drafts"],
         url=f"{reverse('content:list')}?status=draft",
         detail=f"{reading['published']} published" if reading["published"] else "",
     )
@@ -255,5 +259,13 @@ def watching() -> tuple[Card, ...]:
     releases = sum(1 for repo in found["watched"] if repo["release"] and recent(repo["release"]["published_at"]))
     # A number and what it counts, like the cards beside it; the rest is the page.
     if advisories:
-        return _card(id="hq.watching", label="New security advisories", value=str(advisories), url=reverse("watching"))
-    return _card(id="hq.watching", label="New releases", value=str(releases), url=reverse("watching"))
+        return _card(
+            id="hq.watching",
+            label="New security advisories",
+            singular="New security advisory",
+            value=advisories,
+            url=reverse("watching"),
+        )
+    return _card(
+        id="hq.watching", label="New releases", singular="New release", value=releases, url=reverse("watching")
+    )

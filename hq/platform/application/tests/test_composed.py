@@ -47,8 +47,8 @@ ITEM = Finding(
     steps=(Do("Look into it."),),
 )
 CARDS = (
-    {"id": "alpha-open", "label": "Open", "value": 3, "url": "/alpha/"},
-    {"id": "alpha-late", "label": "Late", "value": 1, "url": "/alpha/"},
+    {"id": "alpha-open", "label": "Open", "singular": "Open", "value": 3, "url": "/alpha/"},
+    {"id": "alpha-late", "label": "Late", "singular": "Late", "value": 1, "url": "/alpha/"},
 )
 
 

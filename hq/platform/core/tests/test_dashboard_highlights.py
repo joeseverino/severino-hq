@@ -33,18 +33,21 @@ def contributor(number, *, overview=None):
                     {
                         "id": f"example-{number}-a",
                         "label": "First",
+                        "singular": "First",
                         "value": 1,
                         "url": "/",
                     },
                     {
                         "id": f"example-{number}-b",
                         "label": "Second",
+                        "singular": "Second",
                         "value": 2,
                         "url": "/",
                     },
                     {
                         "id": f"example-{number}-c",
                         "label": "Third",
+                        "singular": "Third",
                         "value": 3,
                         "url": "/",
                     },

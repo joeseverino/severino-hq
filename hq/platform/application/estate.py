@@ -284,7 +284,8 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
         {
             "id": "hq.estate.machines",
             "label": "Machines online",
-            "value": str(len(estate.online)),
+            "singular": "Machine online",
+            "value": len(estate.online),
             "url": reverse("control_plane:machines"),
             "detail": (f"{len(estate.offline)} offline" if estate.offline else f"of {len(estate.watched)}"),
             **({"status": Tone.ATTENTION} if estate.offline else {}),
@@ -292,14 +293,16 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
         {
             "id": "hq.estate.services",
             "label": "Services",
-            "value": str(services["total"]),
+            "singular": "Service",
+            "value": services["total"],
             "url": reverse("control_plane:services"),
             **({"detail": f"{services['incomplete']} not fully set up"} if services["incomplete"] else {}),
         },
         {
             "id": "hq.estate.domains",
             "label": "Domains",
-            "value": str(len(estate.domains)),
+            "singular": "Domain",
+            "value": len(estate.domains),
             "url": reverse("zones:index"),
         },
     ]
@@ -338,7 +341,8 @@ def _connections_card(estate: Estate, total: int) -> dict[str, Any]:
     card = {
         "id": "hq.estate.connections",
         "label": "Connections",
-        "value": str(total),
+        "singular": "Connection",
+        "value": total,
         "url": reverse("control_plane:connections"),
     }
     if len(troubled) == 1:
@@ -435,7 +439,7 @@ def overview(*, principal: Principal):
                 value=card["value"],
                 detail=notes.get(card["id"]) or card.get("detail", ""),
                 url=card["url"],
-                is_zero=card["value"] == "0",
+                is_zero=card["value"] == 0,
                 icon=icons.get(card["id"], ""),
                 drawing=drawings.get(card["id"]),
             )

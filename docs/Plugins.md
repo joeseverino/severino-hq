@@ -516,7 +516,10 @@ the host compiles these into one graph is in
 reporting window. Put the actual window or data cutoff in the card's `detail`
 when it differs from today or coverage is incomplete, since a render time does
 not establish freshness. The host never infers dates from a card label or
-recalculates an extension's totals.
+recalculates an extension's totals. A card that counts things gives its count as
+an int and its label for one beside its label for many (`"label": "Drafts",
+"singular": "Draft"`), since the dashboard's line sets the label after the count; a
+count without `singular`, or one written as text, is refused.
 
 An attention provider emits `serious` or `attention` only for a decision that
 needs the operator, and `neutral` or `good` for observations. An item whose

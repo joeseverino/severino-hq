@@ -678,7 +678,7 @@ class ComposedPluginTestKitTests(TestCase):
         from ..plugin_testing import sibling
         from ..plugins import plugin_dashboard_sections
 
-        card = {"id": "alpha-open", "label": "Open", "value": 3, "url": "/alpha/"}
+        card = {"id": "alpha-open", "label": "Open", "singular": "Open", "value": 3, "url": "/alpha/"}
         self.case(siblings=(sibling(cards=(card,)),))
 
         sections = {section["id"]: section for section in plugin_dashboard_sections()}

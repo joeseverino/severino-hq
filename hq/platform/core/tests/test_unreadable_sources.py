@@ -55,7 +55,14 @@ def good_source(domain: str) -> tuple[Finding, ...]:
 
 def cards(name, count=3):
     return tuple(
-        {"id": f"example-{name}-{n}", "label": f"{name} reading {n}", "value": n, "url": "/"} for n in range(count)
+        {
+            "id": f"example-{name}-{n}",
+            "label": f"{name} readings {n}",
+            "singular": f"{name} reading {n}",
+            "value": n,
+            "url": "/",
+        }
+        for n in range(count)
     )
 
 
@@ -145,7 +152,7 @@ class UnreadableSourceTests(SignedInTestCase):
         self.assertContains(home, "good reading 1")
         self.assertContains(home, "Unreadable")
         shown = {card["label"]: card["value"] for card in snapshot["cards"]}
-        self.assertEqual(shown["good reading 1"], 1)
+        self.assertEqual(shown["good readings 1"], 1)
         self.assertEqual(shown["Example broken"], "Unreadable")
 
     def test_a_raising_overview_leaves_its_section_to_its_cards(self):

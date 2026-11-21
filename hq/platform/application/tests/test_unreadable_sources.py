@@ -17,7 +17,7 @@ from ..ui import DomainOverview
 
 LOGGER = "severino.composition"
 EVENT = "composition.source.unreadable"
-GOOD_CARD = {"id": "example-good-1", "label": "Good reading", "value": 1, "url": "/"}
+GOOD_CARD = {"id": "example-good-1", "label": "Good readings", "singular": "Good reading", "value": 1, "url": "/"}
 GOOD_ITEM = Finding(
     rule="example-good",
     subject="",
@@ -153,16 +153,14 @@ class UnreadableSiblingTests(SimpleTestCase):
         self.assertEqual(unreadable["value"], "Unreadable")
         self.assertEqual(unreadable["status"], "attention")
 
-    def test_a_card_with_a_key_the_host_does_not_know_is_its_sources_failure(self):
-        unreadable = self.cards(lambda: ({**GOOD_CARD, "id": "example-broken-1", "tint": "red"},))
+    def test_a_card_the_host_cannot_draw_as_it_says_is_its_sources_failure(self):
+        """An unknown key, a count with no label for one or written as text, or one id twice."""
 
-        self.assertEqual(unreadable["value"], "Unreadable")
-
-    def test_two_cards_of_one_source_sharing_an_id_are_its_sources_failure(self):
         card = {**GOOD_CARD, "id": "example-broken-1"}
-        unreadable = self.cards(lambda: (card, card))
-
-        self.assertEqual(unreadable["value"], "Unreadable")
+        alone = {key: value for key, value in card.items() if key != "singular"}
+        for cards in (({**card, "tint": "red"},), (alone,), ({**card, "value": "1"},), (card, card)):
+            with self.subTest(cards=cards):
+                self.assertEqual(self.cards(lambda cards=cards: cards)["value"], "Unreadable")
 
     def test_overviews_leave_out_an_unreadable_sibling(self):
         self.overviews(broken)

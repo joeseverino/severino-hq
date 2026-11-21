@@ -131,6 +131,7 @@ and those that hold across parts in [Design](Design.md).
 | `fact` | `icon` |  |  | The icon beside it. |
 | `fact` | `id` |  |  | The id of the panel its value opens in place, given a `panel` part. |
 | `fact` | `modal` |  |  | The dialog its value's link opens where script runs. |
+| `fact` | `singular` |  |  | Its label when its value counts one thing; the label itself says many. |
 | `fact` | `title` |  |  | What pointing at it says. |
 | `fact` | `tone` |  |  | A status tone the fact is colored by, for what it means. |
 | `fact` | `url` |  |  | The page in HQ its value links to; an outside one is the block form's `{% entity %}`. |
@@ -465,7 +466,9 @@ before each held mark, over the host's templates and an extension's.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=... detail=... %}` inside `{%
 facts %}`, or the block form `{% fact "Label" %}markup{% detail %}lines{% endfact %}` for a value
-that is markup. A zero and a linked count stand alike. A fact is drawn as a figure is: its label
+that is markup. A zero and a linked count stand alike. A value that counts things gives its label
+for one beside the label for many (`singular="Draft"`), so the label agrees with it ("1 Draft",
+"2 Drafts"). A fact is drawn as a figure is: its label
 with its mark before it, its value large under it, its detail under that. What a figure counts may
 follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
 ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value
@@ -561,9 +564,9 @@ list, or a `codes` list of two or more) takes a row of its own, so it never wrap
 pair and leaves that pair's row a gap.
 
 A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
-each fact one phrase, its bold value then its words ("3 rules") then its detail, a fixed gap
-apart, wrapping fact by fact, so a wide card holds them on one line. Under the card's head it
-takes a rule above.
+each fact one phrase, its bold value then its words ("3 rules"), agreeing with it, then a dot
+and its detail ("1 Draft · 22 published"), a fixed gap apart, wrapping fact by fact, so a wide
+card holds them on one line. Under the card's head it takes a rule above.
 
 **A frame is filled.** A list of facts lays its pairs across its frame. A card of only a pair or
 two shares a row with the sections beside it, so its values never end a third of the way across

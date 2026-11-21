@@ -81,7 +81,7 @@ class TheReadersOwnReadsTests(ReaderTestCase):
         with uncached(), projection_scope():
             found = read(principal)
         return [
-            item["value"] if isinstance(item, dict) else item.value
+            str(item["value"] if isinstance(item, dict) else item.value)
             for item in found
             if (item.get("id") if isinstance(item, dict) else item.label) in (CONNECTIONS, "Connections")
         ]

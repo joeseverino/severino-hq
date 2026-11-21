@@ -794,7 +794,9 @@ SOURCE_CHECKS: dict[str, Callable[[str, Any], Any]] = {
 # small: the aggregate is rendered by surfaces that compose many extensions at
 # once, so a card must be cheap to produce and safe to show beside any other.
 CARD_REQUIRED_KEYS = frozenset({"id", "label", "value", "url"})
-CARD_OPTIONAL_KEYS = frozenset({"detail", "status", "trend"})
+# A card whose value counts things (an int) gives its label for one, so a line
+# that sets the label after the value says "1 Draft", never "1 Drafts".
+CARD_OPTIONAL_KEYS = frozenset({"detail", "singular", "status", "trend"})
 # Direction of travel, not a judgment: whether "up" is good is the domain's
 # business, which is what `status` is for.
 CARD_TREND_VALUES = frozenset({"up", "down", "flat"})
@@ -856,6 +858,13 @@ def _validate_dashboard_cards(cards: Iterable[object]) -> None:
         unknown = card.keys() - CARD_REQUIRED_KEYS - CARD_OPTIONAL_KEYS
         if unknown:
             raise ImproperlyConfigured(f"Unknown dashboard card keys: {', '.join(sorted(unknown))}.")
+        value = card["value"]
+        if isinstance(value, str) and value.replace(",", "").isdigit():
+            raise ImproperlyConfigured(f"A dashboard card's count is an int, with its label for one; got {value!r}.")
+        if isinstance(value, int) and not card.get("singular"):
+            raise ImproperlyConfigured(
+                f"A dashboard card counting {card['label']!r} gives its label for one (`singular`)."
+            )
         status = card.get("status")
         if status is not None and status not in Tone:
             raise ImproperlyConfigured(f"Dashboard card status must be one of {', '.join(Tone)}; got {status!r}.")

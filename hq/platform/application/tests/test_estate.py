@@ -251,20 +251,20 @@ class EstateCardTests(TestCase):
         with projection_scope():
             return {card["id"]: card for card in cards(principal=cli_principal())}
 
-    def listed(self) -> str:
+    def listed(self) -> int:
         from ..connection_catalog import connection_total
 
         with projection_scope():
-            return str(connection_total(principal=cli_principal()))
+            return connection_total(principal=cli_principal())
 
     def test_every_figure_links_to_its_page_and_the_nearest_expiries_to_their_subject(self):
         found = self.cards()
 
-        self.assertEqual(found["hq.estate.machines"]["value"], "1")
+        self.assertEqual(found["hq.estate.machines"]["value"], 1)
         self.assertIn("1", found["hq.estate.machines"]["detail"])
         self.assertEqual(found["hq.estate.machines"]["url"], reverse("control_plane:machines"))
         self.assertEqual(found["hq.estate.services"]["url"], reverse("control_plane:services"))
-        self.assertEqual(found["hq.estate.domains"]["value"], "1")
+        self.assertEqual(found["hq.estate.domains"]["value"], 1)
         self.assertEqual(found["hq.estate.domains"]["url"], reverse("zones:index"))
         self.assertEqual(found["hq.estate.connections"]["value"], self.listed())
         self.assertIn("example-ssh", found["hq.estate.connections"]["detail"])
@@ -782,5 +782,5 @@ class ConnectionFigureTests(TestCase):
             listed = connections_context(principal=admin).connection_count
 
         self.assertIn("hq.estate.machines", found)
-        self.assertEqual(found["hq.estate.connections"]["value"], str(listed))
+        self.assertEqual(found["hq.estate.connections"]["value"], listed)
         self.assertTrue(all(card["url"] for card in found.values()))

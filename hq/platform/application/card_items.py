@@ -49,6 +49,8 @@ class Kpi:
     # What pointing at the figure says, its whole sentence, where the cell
     # holds only a word or two of it (an hour's forecast).
     tip: str = ""
+    # The label for a count of one, where ``label`` says many.
+    singular: str = ""
 
     def __post_init__(self) -> None:
         if self.detail_url and not self.detail:
