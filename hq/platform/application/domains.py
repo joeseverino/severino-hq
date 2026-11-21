@@ -465,6 +465,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Findings",
         description="What HQ finds wrong across the estate, with the evidence and a remedy.",
         navigation=(
+            # Checks, the rules every finding comes from, opens from the
+            # Findings page's own action rather than a nav entry of its own.
             NavigationItem(
                 "Findings",
                 "control_plane:findings",
@@ -472,8 +474,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 128,
                 "Infrastructure",
             ),
-            # Beside Findings: the rules every finding comes from.
-            NavigationItem("Checks", "control_plane:checks", "control_plane", 128, "Infrastructure"),
         ),
     ),
     DomainDescriptor(
