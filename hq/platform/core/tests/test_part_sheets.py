@@ -17,8 +17,10 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.core import included_parts
 from hq.platform.core.hand_drawn import Source
 from hq.platform.core.template_contract import FRAMES, parts
+from hq.platform.core.template_parts import Part
 from hq.platform.core.tests.css_usage import blocks_of, named
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -57,6 +59,8 @@ def one_place_rules() -> list[str]:
     included = {name: _EXTENDS.sub("", Source(text).text) for name, text in templates.items()}
     modules = {name: text for folder in ("hq", "hq_sdk") for name, text in _read(ROOT / folder, "*.py").items()}
     owner = {name: part for part in every for name in part.files()}
+    # A module draws a part it imports by name too, as a table's piece (`tables.Piece`).
+    imported = {id(value): name for name, value in vars(included_parts).items() if isinstance(value, Part)}
     seen: dict[str, set[str]] = {}
 
     def places(name: str) -> set[str]:
@@ -77,6 +81,8 @@ def one_place_rules() -> list[str]:
             quoted = rf"[\"']{re.escape(part.partial.partition('#')[0] if part else name)}(?:#[\w-]+)?[\"']"
             tagged = re.compile(quoted + (rf"|\{{%\s*{re.escape(part.name)}\b" if part and part.name else ""))
             found = {other for other, text in included.items() if other not in own and tagged.search(text)}
+            if part and id(part) in imported:
+                quoted += rf"|from hq\.platform\.core\.included_parts import [^\n]*\b{imported[id(part)]}\b"
             seen[name] = set().union(*(places(other) for other in found)) | {
                 module
                 for module, text in modules.items()

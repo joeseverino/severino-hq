@@ -128,6 +128,9 @@
 .data-table > tbody > tr > td :is(.stack-list > li, .cell-line, .cell-detail) a[href]:not(.btn) {
   padding-block: calc((var(--target-min) - 1.2em) / 2);
 }
+/* A link in a cell of words (its prose role, read as base.css reads `.prose`) is a word of its sentence: its line keeps the words' height and it takes no target's padding. */
+.data-table > tbody > tr > td[data-cell~=prose] :is(li, a[href]:not(.btn)) { line-height: inherit; }
+.data-table > tbody > tr > td[data-cell~=prose] :is(.stack-list > li, .cell-line, .cell-detail) a[href]:not(.btn) { padding-block: 0; }
 /* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css); a short value's box (`cell-short`, tables.css) is the cell's own. */
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]):not(.btn),
 .data-table > tbody > tr > [data-kind="identifier"] > .cell-short > :is(a[href], [tabindex]):not(.btn) { line-height: var(--target-min); }
