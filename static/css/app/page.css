@@ -423,9 +423,9 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 
 /* The sections' toggle belongs to the narrow layout only, where the
    sections leave the row; it and the queue's bell are a control square. */
-.nav-toggle { display: none; }
-.nav-toggle > svg { width: 15px; height: 12px; }
-.action-badge, .nav-toggle { inline-size: var(--control-size); padding: 0; }
+.site-header > [popovertarget="primary-navigation"] { display: none; }
+.site-header > [popovertarget="primary-navigation"] > svg { width: 15px; height: 12px; }
+.action-badge, .site-header > [popovertarget="primary-navigation"] { inline-size: var(--control-size); padding: 0; }
 /* The badge is one size whatever it counts, so the count arriving after the
    page (a fragment on every page but the two that count it) moves nothing in
    the bar: it is pinned to the corner, outside the flow. */
@@ -451,8 +451,8 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    Escape closes it. Open, it is the panel at any width, so a window widened
    with it open still shows a panel until it is dismissed. */
 @media (max-width: 1080px) {
-  .nav-toggle { display: inline-flex; grid-area: toggle; }
-  .nav-toggle:focus:not(:focus-visible) { outline: none; }
+  .site-header > [popovertarget="primary-navigation"] { display: inline-flex; grid-area: toggle; }
+  .site-header > [popovertarget="primary-navigation"]:focus:not(:focus-visible) { outline: none; }
   .primary-nav { display: none; grid-area: auto; }
 }
 .primary-nav:popover-open {

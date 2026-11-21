@@ -242,8 +242,9 @@ TOPOLOGY_MAP = _part(
     "The map of how things connect, laid out and filtered by its own script, each node's edges stated from it.",
     *("topology-detail", "topology-kind-*", "topology-kind-mark", "topology-lane", "topology-map"),
     *("topology-node", "topology-node-*", "topology-node-degree", "topology-node-link", "topology-node-list"),
-    *("topology-node-select", "topology-node-title", "topology-workspace", "relation-arrow", "relation-kind"),
-    *("relation-link", "relation-list", "relation-other", "relation-reading", "relation-values", "relation-verb"),
+    *("topology-node-select", "topology-node-slot", "topology-node-title", "topology-workspace"),
+    *("relation-arrow", "relation-kind", "relation-link", "relation-list", "relation-other", "relation-reading"),
+    *("relation-values", "relation-verb"),
     pieces=("partials/_relation_list.html",),
     drawing_of="control_plane/topology.html",
     rules="""
@@ -740,11 +741,11 @@ PARTS = (
         "site_header",
         "The header every page opens with: the brand, the places, the search and the user's menu.",
         *("action-badge", "brand", "demo-flag", "global-search", "nav-group", "nav-group-button", "nav-group-label"),
-        *("nav-group-panel", "nav-toggle", "primary-nav", "search-key", "search-label", "site-header", "skip-link"),
+        *("nav-group-panel", "primary-nav", "search-key", "search-label", "site-header", "skip-link"),
         *("menu-identity", "menu-identity-picture", "menu-identity-when", "menu-identity-who", "menu-item"),
         *("menu-item-note", "menu-item-split", "menu-item-status", "menu-places", "menu-setting", "menu-settings"),
-        *("menu-theme", "menu-theme-label", "menu-theme-option", "menu-theme-options", "role-mark", "switch-knob"),
-        *("switch-track", "user-avatar", "user-menu", "user-menu-panel", "user-name"),
+        *("menu-theme", "menu-theme-label", "menu-theme-option", "menu-theme-options", "role-mark"),
+        *("user-avatar", "user-menu", "user-menu-panel", "user-name"),
         pieces=("partials/_user_menu.html",),
         rules="""
         **The header is one row.** When room runs out, the search field collapses to a button that opens
@@ -768,7 +769,7 @@ PARTS = (
     _part(
         "table_toolbar",
         "A list's toolbar: its filters, its sort, its columns and what is selected.",
-        *("filter-count", "table-filter-menu", "table-filter-options", "table-selection", "table-sort", "table-toggle"),
+        *("table-filter-menu", "table-filter-options", "table-selection", "table-sort", "table-toggle"),
         rules="""
         **A table's filter is a popover.** Its button names its panel with `popovertarget`. The panel
         (`popover`, its id `table-filter-<name>`) opens in the top layer, placed against the button by

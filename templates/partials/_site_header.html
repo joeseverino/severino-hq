@@ -22,7 +22,7 @@ costs a pointer nothing.
     closes any other, and in the open drawer it opens beside the drawer,
     which stays open around it.
     {% endcomment %}
-    {% with toggle=bar_button|add:" nav-toggle" %}{% button "" css=toggle icon="menu" popovertarget="primary-navigation" heard="Menu" %}{% endwith %}
+    {% button "" look="bar" icon="menu" popovertarget="primary-navigation" heard="Menu" %}
     <nav class="primary-nav" id="primary-navigation" aria-label="Sections" popover>
       {% for entry in nav_entries %}
         {% if entry.kind == "group" %}
