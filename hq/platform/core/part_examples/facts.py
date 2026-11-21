@@ -26,7 +26,8 @@ class _Drawn:
 # A page head's band of facts, as the dashboard's glance draws it, in each
 # form a fact there takes: one leading to a dialog with a note of a problem,
 # one whose line needs attention, and a region holding facts that open a
-# panel, one needing attention and one past its time.
+# panel, one needing attention, its note a run longer than a phone's line,
+# and one past its time.
 _GLANCE = (
     '<div data-example-region>{% facts layout="band" label="Example glance" %}'
     '{% fact "Example connection" icon="network" url="/example/" modal="example" %}'
@@ -39,7 +40,7 @@ _GLANCE = (
     '{% fact "example-host-01" icon="server" id="example-host" tone="attention" title="Example containers" '
     'data_fragment_part="example-host" %}12 <small>containers</small>'
     '{% detail %}<small>{% status "2 example alerts" tone="attention" pill=False %}</small>'
-    '{% list kind="dots" %}<li>CPU 4%</li><li>Memory 48%</li>{% endlist %}'
+    '{% list kind="dots" %}<li>CPU 4%</li><li>Memory 48%</li><li>Storage 38.2 GB</li>{% endlist %}'
     "{% heading %}<strong>Example host</strong><span>An example summary</span>"
     '{% panel %}{% facts %}{% fact "Example CPU" value="4%" %}{% fact "Example memory" value="583 MB" %}{% endfacts %}'
     '{% foot %}<a href="/example/">Example containers</a><span><button type="button">Refresh</button>'
