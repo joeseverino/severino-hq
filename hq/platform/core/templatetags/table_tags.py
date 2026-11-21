@@ -234,7 +234,6 @@ def _region(
     css: Annotated[str, Describe("The classes of where it stands.")] = "",
     chart: Annotated[bool, Describe("A chart's table, read whole in the chart's order and scrolled.")] = False,
     pane: Annotated[bool, Describe("A box of its own height, which scrolls.")] = False,
-    compare: Annotated[bool, Describe("Two values side by side in each row, after the row's name.")] = False,
     empty: Annotated[str, Describe("With no rows, what is missing.")] = "",
     remedy: Annotated[Any, Describe("With no rows, what would fill it: a `label` and a `url`.")] = None,
     action_url: Annotated[str, Describe("With no rows, where the link that fills it leads.")] = "",
@@ -248,7 +247,6 @@ def _region(
     classes = [
         *([css] if css else []),
         *(["is-pane"] if pane else []),
-        *(["is-compare"] if compare else []),
     ]
     if filtered:
         nothing = {"message": "Nothing matches.", "action_url": clear, "action_label": "Clear filters"}

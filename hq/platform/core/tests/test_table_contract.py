@@ -166,7 +166,6 @@ class TableTagTests(SimpleTestCase):
 
         for options, stop in (
             ("", False),
-            (" compare=True", False),
             (" pane=True", True),
             (" chart=True", True),
         ):

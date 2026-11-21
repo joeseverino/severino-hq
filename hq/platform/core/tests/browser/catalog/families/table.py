@@ -121,17 +121,6 @@ ENTRIES = {
             )
         },
     ),
-    # Values set side by side ({% table_region compare=True %}): each row's
-    # field, then its two values sharing the room evenly, one long enough to
-    # wrap.
-    "table/compare": Example(
-        '{% section "Example changes 2" %}{% table_region "Example changes 2" compare=True %}'
-        '<table class="data-table"><thead><tr>{% table_heading "Field" "identifier" %}'
-        '{% table_heading "Before" %}{% table_heading "After" %}</tr></thead><tbody>'
-        "<tr><th>example_name</th><td>example-01</td><td>example-02</td></tr>"
-        "<tr><th>example_note</th><td>An example note long enough to take two lines on a phone.</td>"
-        "<td>Another example note.</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
-    ),
     # A table whose rows are selected together: the heading that selects
     # every row, then each row's tick-box ({% row_select %}), and a row with
     # no key whose cell stays empty.
