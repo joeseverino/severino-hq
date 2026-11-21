@@ -194,7 +194,7 @@ const primitives = [
     parts: [
       "btn", "button-words", "cell-clamp", "cell-controls", "cell-detail", "cell-line", "cell-part", "cell-short", "cell-whole", "code-list", "cut", "external-link", "is-expanded", "line-list", "line-rest", "line-run", "muted",
       "heading-words", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
-      "row-editor", "row-expand", "row-fold", "row-gist", "row-less", "row-more", "select-column", "stack-list", "strut", "table-clamp", "table-scroll", "table-sort-link", "tag", "token", "visually-hidden", "whole",
+      "row-editor", "row-expand", "row-fold", "row-gist", "row-more", "select-column", "stack-list", "strut", "table-clamp", "table-scroll", "table-sort-link", "tag", "token", "visually-hidden", "whole",
     ],
   },
   { name: "button", classes: "btn", sheets: ["page", "surfaces"] },

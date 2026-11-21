@@ -970,7 +970,7 @@ ROW_TOGGLE_TABLES = """
 {% table_region "Folding" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" %}{% table_heading "Value" css="key-col" %}</tr></thead><tbody>
 <tr data-probe="folded"><td>Folded</td>
-<td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
+<td><span class="tag">One</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
 <tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
 <td>a value far too long to show whole on one line of its column</td></tr>
 </tbody></table>{% endtable_region %}

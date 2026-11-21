@@ -238,7 +238,7 @@ def _figures_in_chips(source: Source) -> Iterator[int]:
 
 
 # What a row holds back until it opens, and a tag that decides by a count.
-_HELD_BACK = re.compile(r"""class=["'][^"']*\b(?:row-more|row-less)\b""")
+_HELD_BACK = re.compile(r"""class=["'][^"']*\brow-more\b""")
 _BY_A_COUNT = re.compile(r"""forloop\.counter|\|length\b|\|slice:["']-?\d*:?\d|\|add:["']-\d|[<>]=?\s*\d""")
 
 

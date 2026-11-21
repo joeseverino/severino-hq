@@ -468,8 +468,7 @@ TABLE_REGION = table_region.__wrapped__ = Part(  # type: ignore[attr-defined]  #
 
     A row's opening is its only disclosure. What is shown only once a row is open is marked
     `.row-more` (a word, a list item), or `.row-below` for a block, which opens on the line beneath
-    the row at the table's width. The face that stands in for it while closed is `.row-less`. Never a
-    `<details>` inside a cell.
+    the row at the table's width. Never a `<details>` inside a cell.
 
     **A table is laid out before any script runs.** Nothing is measured to lay a table out:
     `tables.js` only sorts, selects and opens rows, and loads deferred (*Gate:*

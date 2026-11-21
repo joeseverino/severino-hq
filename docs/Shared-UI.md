@@ -257,7 +257,7 @@ and those that hold across parts in [Design](Design.md).
 
 Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `count`, `danger`, `data-table`, `date-col`, `eyebrow`, `finding`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
+Classes: `actions-col`, `allocation`, `cell-data`, `cell-part`, `cell-whole`, `compact`, `count`, `danger`, `data-table`, `date-col`, `eyebrow`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tight-col`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
 
 Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`. Styled attributes: `data-chart`.
 
@@ -1546,8 +1546,7 @@ and the byte budgets `ROW_BYTES` and `CHROME_BYTES`.
 
 A row's opening is its only disclosure. What is shown only once a row is open is marked
 `.row-more` (a word, a list item), or `.row-below` for a block, which opens on the line beneath
-the row at the table's width. The face that stands in for it while closed is `.row-less`. Never a
-`<details>` inside a cell.
+the row at the table's width. Never a `<details>` inside a cell.
 
 **A table is laid out before any script runs.** Nothing is measured to lay a table out:
 `tables.js` only sorts, selects and opens rows, and loads deferred (*Gate:*

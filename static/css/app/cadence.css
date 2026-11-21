@@ -157,9 +157,6 @@
    they keep the face's own digits and the cell no wider than they need. */
 .toned:has(> .icon) { font-variant-numeric: normal; }
 
-/* A finding: the one claim a reading makes, stated once. */
-.finding { margin: var(--space-1) 0 var(--space-1); font-size: var(--text-lg); font-weight: 600; line-height: 1.4; }
-
 /* A path in its own coordinate system. An ordered band uses the same color
    for its stroke and its legend, and retraced paths remain visible. */
 .chart-path-frame { background: var(--bg-tint); border-radius: var(--radius); padding: var(--space-2); margin: var(--space-5) 0 var(--space-2); }

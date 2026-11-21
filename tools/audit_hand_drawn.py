@@ -3,7 +3,7 @@ hand, a class to a row in the order the UI waves take them, each with the
 shared primitive that should draw it. Each class is read by the reader its
 wave's guard will be: a template's by a hand_drawn ``Shape``, a sheet's rules
 by audit:css-usage's reader of them. An element a script builds is lint:js's
-to refuse.
+to refuse, and a public class nothing of the host writes is PublicClassTests'.
 """
 
 import os
@@ -13,8 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from hq.platform.core.hand_drawn import SHAPES, Shape, Source, tagged, within
-lazy from hq.platform.core.template_contract import CLASSES, FRAMES, class_words, parts, public_classes
-lazy from hq.platform.core.tests import look_reach
+lazy from hq.platform.core.template_contract import FRAMES, parts
 lazy from hq.platform.core.tests.css_usage import blocks_of, named
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -234,32 +233,6 @@ def one_place_css(templates: dict[str, str], sheets: dict[str, str]) -> Found:
     return Found("one-place-css", "a shared primitive's own rules, or the part shared", found)
 
 
-def extension_classes(templates: dict[str, str], sheets: dict[str, str]) -> Found:
-    """Each class the contract lets an extension write that nothing of the
-    host writes: no template, no script, and no part as its catalog entries
-    draw it, which renders what Python writes."""
-
-    words = {word for text in templates.values() for _, word in class_words(text)}
-    for path in sorted((ROOT / "static" / "js").rglob("*.js")):
-        words |= set(re.findall(r"[\w-]*\w", path.read_text(encoding="utf-8")))
-    words |= set().union(*(drawing.words for drawing in look_reach.drawings().values()))
-    built = tuple(word[:-1] for word in words if word.endswith("*"))
-    unwritten = {
-        name: "nothing of the host writes it"
-        for name in public_classes()
-        if name not in words and not name.startswith(built)
-    }
-    found = rules_naming(unwritten, sheets)
-    contract = (ROOT / "hq/platform/core/template_contract.py").read_text(encoding="utf-8").splitlines()
-    found += [
-        ("hq/platform/core/template_contract.py", number, f"{name}: in CLASSES")
-        for number, line in enumerate(contract, 1)
-        for name in unwritten
-        if name in CLASSES and line.strip() == f'"{name}",'
-    ]
-    return Found("extension-class", "the extension's own stylesheet, or a host part that writes it", sorted(found))
-
-
 def report(found: list[Found]) -> Iterator[str]:
     for each in found:
         yield f"{len(each.instances):>4}  {each.name}: {each.primitive}"
@@ -280,7 +253,6 @@ def main() -> None:
     found = [
         *(drawn(shape, templates) for shape in COUNTED),
         one_place_css(templates, sheets),
-        extension_classes(templates, sheets),
         drawn(BUTTON, templates),
     ]
     print("\n".join(report(found)))
