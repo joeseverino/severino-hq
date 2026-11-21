@@ -101,28 +101,35 @@ class AuditLogListView(ListPageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["awaiting"] = self._awaiting()
+        return {**context, "awaiting": self._awaiting(), "events": context["object_list"]}
+
+    @cached_property
+    def _entries(self) -> tuple:
         page = self.records(AuditLog.objects.select_related("user"))
         asked = self.list_query()
-        if asked.get("events"):
-            # What each operation changed is read from the rows its filters keep.
-            within = audit_rows(about=self._about(), on=self._day()).filter(self.listing.keeps(asked, searched=False))
-            with projection_scope():
-                moments = history.external(self._external_sources(asked), **self._span(page, within))
-            lines = history.entries(page, moments, within=within)
-        else:
-            lines = history.entries(page)
-        # Each event, then what it changed, folded beneath it in the same columns.
-        context["object_list"] = context["events"] = [line for event in lines for line in event.lines]
-        table = context["table"]
-        table["drawn"] = history.table(
-            context["page"].title,
-            (history.HistoryGroup(tuple(lines)),),
+        if not asked.get("events"):
+            return tuple(history.entries(page))
+        # What each operation changed is read from the rows its filters keep.
+        within = audit_rows(about=self._about(), on=self._day()).filter(self.listing.keeps(asked, searched=False))
+        with projection_scope():
+            moments = history.external(self._external_sources(asked), **self._span(page, within))
+        return tuple(history.entries(page, moments, within=within))
+
+    @override
+    def rows(self, items):
+        """Each event, then what it changed, folded beneath it in the same columns."""
+
+        return [line for event in self._entries for line in event.lines]
+
+    @override
+    def drawn(self, label, table, rows):
+        return history.table(
+            label,
+            (history.HistoryGroup(self._entries),),
             table["columns"],
             selectable=table["selectable"],
             sorted_by=table["selected_sort"],
         )
-        return context
 
     @override
     def table(self):

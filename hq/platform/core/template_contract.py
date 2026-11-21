@@ -35,7 +35,7 @@ lazy from hq.platform.core.templatetags.value_tags import PresentNode
 # public block is an empty slot, so an override never needs ``block.super``.
 FRAMES: dict[str, tuple[str, ...]] = {
     "page.html": ("page", "print_footer"),
-    "list_page.html": ("summary", "row", "foot"),
+    "list_page.html": ("summary",),
     "confirm_page.html": ("consequences",),
     "form_page.html": (),
 }
@@ -43,9 +43,8 @@ FRAMES: dict[str, tuple[str, ...]] = {
 FRAME_ABOUT = {
     "page.html": "Any page: the head, actions, dialogs and section navigation, drawn from `page`.",
     "list_page.html": (
-        "A `ListPageMixin` list: toolbar, table, empty state and pagination. "
-        "`row` is one row's cells, `summary` sits above the table and is redrawn with it when a search or "
-        "filter changes, `foot` is its `<tfoot>`."
+        "A `ListPageMixin` list: toolbar, the table its columns declare, empty state and pagination. "
+        "`summary` sits above the table and is redrawn with it when a search or filter changes."
     ),
     "confirm_page.html": "A destructive action's confirmation: `consequences` says what will happen.",
     "form_page.html": (

@@ -27,7 +27,6 @@ OUTSIDE = {
     "templates/example/shell.html": '{% extends "base.html" %}{% block content %}{% endblock %}',
     "templates/example/list.html": (
         '{% extends "list_page.html" %}\n{% block page %}{{ block.super }}{% endblock %}\n'
-        "{% block row %}<td>{{ row.name }}</td>{% endblock %}"
     ),
     "templates/example/includes.html": (
         '{% include "partials/_modal.html" with id="x" %}\n'
@@ -163,7 +162,6 @@ EVERY = {
     "example_pkg/templates/example/list.html": (
         '{% extends "list_page.html" %}\n{% block page %}\n{{ block.super }}\n'
         '{% include "partials/_modal.html" with id="import" %}\n{% endblock %}\n'
-        "{% block row %}<td>{{ row.name }}</td>{% endblock %}"
     ),
     "example_pkg/templates/example/detail.html": (
         '{% extends "page.html" %}\n{% block page %}\n{% if empty %}\n'
@@ -231,7 +229,7 @@ class TemplateRecordTests(SimpleTestCase):
 
     def test_a_public_block_the_frame_stops_drawing_fails_the_record(self):
         with (
-            mock.patch.dict(template_contract.FRAMES, {"list_page.html": ("row", "empty")}),
+            mock.patch.dict(template_contract.FRAMES, {"list_page.html": ("summary", "empty")}),
             self.assertRaisesMessage(ValueError, "empty"),
         ):
             template_contract.describe()

@@ -91,21 +91,22 @@ class ListPageMixin(PageMixin):
         context = super().get_context_data(**kwargs)
         rows = self.rows(self.collection["items"])
         table = self.table()
-        if self.table_columns and all(column.cell for column in self.table_columns):
-            table["drawn"] = self.drawn(context["page"].title, table, rows)
+        table["drawn"] = self.drawn(context["page"].title, table, rows)
         return {**context, "object_list": rows, "table": table, "pages": self.pages()}
 
     def drawn(self, label: str, table: dict[str, Any], rows: list[Any]) -> DataTable:
         """The page's rows as its columns declare each cell, one page of the
         list's own order, each keyed for its tick-box where rows are selected."""
 
+        if undrawn := [column.label for column in table["columns"] if column.cell is None]:
+            raise ImproperlyConfigured(f"{type(self).__name__}'s columns {undrawn} declare no cell.")
         key = self.spec.identifier
         return DataTable(
             label,
             table["columns"],
             tuple(
                 replace(
-                    self.table_row(row, tuple(column.cell(row) for column in table["columns"] if column.cell)),
+                    self.table_row(row, tuple(column.cell(row) for column in table["columns"])),
                     key=(row[key] if key else row.pk) if table["selectable"] else None,
                 )
                 for row in rows
