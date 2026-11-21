@@ -134,15 +134,16 @@ def _declaration_problems(declaration: Any) -> list[str]:
     return []
 
 
-def _unknown_fixes(declaration: Any) -> list[str]:
-    """A problem for each finding a sidecar says its playbook fixes that HQ raises none of."""
+def _unknown_rules(declaration: Any) -> list[str]:
+    """Each finding rule a sidecar names that HQ raises none of."""
 
-    fixes = declaration.get("fixes") if isinstance(declaration, dict) else None
-    if not isinstance(fixes, list):
+    if not isinstance(declaration, dict):
         return []
     return [
-        f"Its sidecar's fixes names {rule}, which is no finding HQ raises."
-        for rule in fixes
+        f"Its sidecar's {field} names {rule}, which is no finding HQ raises."
+        for field in ("fixes", "investigates")
+        if isinstance(rules := declaration.get(field), list)
+        for rule in rules
         if isinstance(rule, str) and rule_for(rule) is None
     ]
 
@@ -161,7 +162,7 @@ def judged(procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
         named = declaration.get("id") if isinstance(declaration, dict) else None
         if isinstance(named, str) and ids[named] > 1:
             problems.append(f"Another sidecar names the id {named} too.")
-        problems += _unknown_fixes(declaration)
+        problems += _unknown_rules(declaration)
         found.append({**procedure, "problems": problems[:MOST_PROBLEMS]})
     return found
 

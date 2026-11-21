@@ -549,6 +549,7 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
         "preconditions": list(procedure.preconditions),
         "verification": list(procedure.verification),
         "fixes": [found.title if (found := rule_for(rule)) else rule for rule in procedure.fixes],
+        "investigates": [found.title if (found := rule_for(rule)) else rule for rule in procedure.investigates],
         "inputs": [field_words(name) for name in procedure.inputs],
         "files": {path: name[:SHOWN_OBJECT] for path, name in procedure.files.items()},
         "shared_files": {path: name[:SHOWN_OBJECT] for path, name in procedure.shared.items()},

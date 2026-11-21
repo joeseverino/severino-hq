@@ -50,7 +50,6 @@ lazy from .capabilities import Consented, consent
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
-lazy from .finding_model import FindingRemedy
 lazy from .findings import rule_for
 lazy from .history import asked_by
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
@@ -216,14 +215,14 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
 
     Every field but the input type, which its schema's digest stands for, so a
     new revision or a changed input moves the spec and with it what a held run
-    is measured against, and but the findings it fixes, which say where it is
+    is measured against, and but its finding rules, which say where it is
     offered and nothing of what a run does.
     """
 
     return validate_spec(
         OPERATION_KIND,
         {
-            **manifest.model_dump(mode="json", exclude={"id", "input_type", "privilege", "fixes"}),
+            **manifest.model_dump(mode="json", exclude={"id", "input_type", "privilege", "fixes", "investigates"}),
             "operation": manifest.id,
             "privilege": manifest.privilege or "",
             "input_schema_sha256": digest(json_schema(manifest.input_type)),
@@ -605,10 +604,10 @@ def cancel_action(operation_id: str, playbook: str, state: str, effect: str, pri
     return _cancel_button(operation_id)
 
 
-def run_here_url(operation_id: str, hosts: tuple[str, ...]) -> str:
+def run_here_url(operation_id: str, hosts: tuple[str, ...], *, finding: str = "") -> str:
     """The Run page of the playbook ``operation_id`` with ``hosts`` chosen."""
 
-    return command_url(capability_name(operation_id), hosts=hosts)
+    return command_url(capability_name(operation_id), hosts=hosts, finding=finding)
 
 
 class PlaybookHere(NamedTuple):
@@ -635,29 +634,21 @@ def playbooks_on(machine: str, principal: Principal) -> tuple[PlaybookHere, ...]
     return tuple(sorted(found, key=lambda each: each.title.casefold()))
 
 
-def playbook_remedies(rule: str, machine: str) -> tuple[FindingRemedy, ...]:
-    """Each adopted playbook that says it fixes the finding ``rule`` and may
-    run on the machine ``machine``, as the remedy its Run page is, with the
-    machine chosen, said in its command's words. What its reader may run is
-    the finding's to judge."""
+def playbooks_for(rule: str, machine: str) -> Iterable[OperationManifest]:
+    """Adopted playbooks written for the machine and the finding's rule."""
 
-    return tuple(
-        FindingRemedy(
-            capability=capability_name(manifest.id),
-            target="",
-            url=run_here_url(manifest.id, (machine,)),
-        )
+    return (
+        manifest
         for manifest in operation_registry().values()
-        if rule in manifest.fixes and manifest.admits(MACHINE_KIND, machine)
+        if (rule in manifest.fixes or rule in manifest.investigates) and manifest.admits(MACHINE_KIND, machine)
     )
 
 
-def _fixes(manifest: OperationManifest) -> tuple[CommandFact, ...]:
-    """The findings a playbook says it fixes, each by its rule's title, or
-    no fact for one that fixes none."""
+def _rule_fact(label: str, rules: tuple[str, ...]) -> tuple[CommandFact, ...]:
+    """The findings a playbook names, in those rules' words."""
 
-    titles = "; ".join(found.title for rule in manifest.fixes if (found := rule_for(rule)))
-    return (CommandFact("Fixes", titles),) if titles else ()
+    titles = "; ".join(found.title for rule in rules if (found := rule_for(rule)))
+    return (CommandFact(label, titles),) if titles else ()
 
 
 def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[WorkRun]:
@@ -755,7 +746,8 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
         CommandFact("Verification", _statements(manifest.verification)),
         CommandFact("Recovery", _statements(manifest.recovery)),
         CommandFact("Retry", RETRY_WORDS[manifest.retry]),
-        *_fixes(manifest),
+        *_rule_fact("Fixes", manifest.fixes),
+        *_rule_fact("Investigates", manifest.investigates),
         CommandFact("Adopted commit", manifest.revision[:SHORT_REVISION]),
         CommandFact("Playbook file", manifest.playbook),
     )

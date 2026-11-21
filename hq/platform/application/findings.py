@@ -9,16 +9,18 @@ is a registered capability, absent for whoever cannot run it (``_resolved``).
 
 import inspect
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, cast
+from urllib.parse import parse_qs, urlsplit
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from pydantic import ConfigDict, Field, create_model, with_config
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, create_model, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
 lazy from hq.domains.control_plane.models import OperationRequest
@@ -67,6 +69,7 @@ from .derived_inputs import FINDINGS_READS, estate_variant
 from .describe import Describe, listed
 from .finding_model import (
     CHECK_AGAIN,
+    PLAYBOOK_INVESTIGATION,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -79,7 +82,7 @@ from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenS
 from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import held_graph
-from .projection import MAX_PAGE_SIZE, QUERY, projection_scope
+from .projection import MAX_PAGE_SIZE, QUERY, projection_scope, read_once
 from .security import Principal
 from .tone import Tone
 from .topology import derive_topology
@@ -91,8 +94,7 @@ from .topology_model import (
 from .ui import ended
 from .url_query import with_query
 from .workflows import WrittenAction, claim_identity
-lazy from . import cadence, capabilities
-lazy from .automation_runs import playbook_remedies
+lazy from . import automation_runs, cadence, capabilities
 lazy from .domains import resources_of
 lazy from .estate import estate_reading
 lazy from .gathered_findings import gather_findings
@@ -311,15 +313,41 @@ def _permitted(capability: str, principal: Principal) -> tuple[bool, Effect | No
     return False, None
 
 
-def _playbooks(finding: Finding, subject: TopologyNode | None) -> tuple[FindingRemedy, ...]:
-    """The adopted playbooks that say they fix a finding about a machine, each with that machine chosen."""
+_SERVICE_UNIT = "service_unit"
 
+
+def _playbooks(
+    finding: Finding, subject: TopologyNode | None, principal: Principal
+) -> tuple[list[FindingRemedy], list[ActionLink]]:
+    """Adopted fixes and read-only investigations for this rule and machine."""
+
+    remedies: list[FindingRemedy] = []
+    investigations: list[ActionLink] = []
     if subject is None or subject.kind != MACHINE_KIND:
-        return ()
-    return playbook_remedies(finding.rule, normalized_hostname(subject.label))
+        return remedies, investigations
+    machine = normalized_hostname(subject.label)
+    for manifest in automation_runs.playbooks_for(finding.rule, machine):
+        name = automation_runs.capability_name(manifest.id)
+        if finding.rule not in manifest.investigates:
+            remedies.append(
+                FindingRemedy(capability=name, target="", url=automation_runs.run_here_url(manifest.id, (machine,)))
+            )
+            continue
+        allowed, _ = _permitted(name, principal)
+        if not allowed:
+            continue
+        reachable = read_once(f"automation.reachable:{manifest.id}", partial(automation_runs.reachable, manifest))
+        host = next((item for item in reachable if normalized_hostname(item) == machine), "")
+        if host and (url := automation_runs.run_here_url(manifest.id, (host,), finding=finding_key(finding))):
+            investigations.append(
+                command_action(PLAYBOOK_INVESTIGATION, name, url, intent=capabilities.command_spec(name).label)
+            )
+    return remedies, investigations
 
 
-def _presses(finding: Finding, principal: Principal, subject: TopologyNode | None) -> tuple[Press, ...]:
+def _presses(
+    remedies: Iterable[FindingRemedy], principal: Principal, subject: TopologyNode | None
+) -> tuple[Press, ...]:
     """Each remedy this principal may run, as the press that runs it, each route once.
 
     Absent rather than disabled: an offer that cannot work is worse than no
@@ -329,7 +357,7 @@ def _presses(finding: Finding, principal: Principal, subject: TopologyNode | Non
     """
 
     pressed: dict[tuple[str, str], Press] = {}
-    for remedy in (*finding.remedies, *_playbooks(finding, subject)):
+    for remedy in remedies:
         allowed, effect = _permitted(remedy.capability, principal)
         if not allowed or effect is None or effect is Effect.DESTRUCTIVE:
             continue
@@ -364,19 +392,20 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     presses this principal may make, then its steps, its reason, its check and
     the pages about its subject."""
 
-    offers = finding.offers + tuple(
+    remedies, diagnostics = _playbooks(finding, subject, principal)
+    subject_reads = tuple(
         action
         for action in (subject.actions if subject else ())
         if action.effect == Effect.READ and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
-    presses = _presses(finding, principal, subject)
+    presses = _presses((*finding.remedies, *remedies), principal, subject)
     check, read_now = _verification(finding, principal, subject)
     # Every field the detector set carries through; only what derivation adds changes.
     return replace(
         finding,
         remedies=(),
-        offers=offers,
+        offers=(*finding.offers, *diagnostics, *subject_reads),
         investigations=investigations,
         steps=(*presses, *finding_steps(finding, pressed=bool(presses))),
         no_help_reason=_no_help_reason(finding),
@@ -646,6 +675,41 @@ def rule_of(item_key: str) -> str:
 
     _, found, rest = item_key.partition("finding:")
     return rest.split(":", 1)[0] if found else ""
+
+
+def investigation_initial(capability: str, key: str, principal: Principal) -> dict[str, Any]:
+    """Fill an investigation only while this reader's finding offers that command."""
+
+    if not automation_runs.runs_procedure(capability) or rule_for(rule := rule_of(key)) is None:
+        return {}
+    for finding in estate_findings(principal=principal, rule=rule):
+        if finding_key(finding) != key:
+            continue
+        for offer in finding.offers:
+            if offer.name == PLAYBOOK_INVESTIGATION and offer.capability == capability and not offer.refusal:
+                hosts = parse_qs(urlsplit(offer.url).query)["hosts"]
+                return _investigation_fields(capability, hosts, finding.service_unit)
+    return {}
+
+
+def _investigation_fields(capability: str, hosts: list[str], service: str) -> dict[str, Any]:
+    initial: dict[str, Any] = {"hosts": hosts}
+    if not service:
+        return initial
+    manifest = next(
+        (
+            each
+            for each in automation_runs.operation_registry().values()
+            if automation_runs.capability_name(each.id) == capability
+        ),
+        None,
+    )
+    if manifest and (field := manifest.input_type.model_fields.get(_SERVICE_UNIT)):
+        with suppress(ValidationError):
+            initial[f"parameters.{_SERVICE_UNIT}"] = TypeAdapter(field.rebuild_annotation()).validate_python(
+                service, strict=True
+            )
+    return initial
 
 
 class FindingEvidence(TypedDict):

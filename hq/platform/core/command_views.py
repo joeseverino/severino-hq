@@ -36,6 +36,7 @@ from hq.platform.application.service_context import Cell, ServiceSection
 from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import run_posted
 from hq.platform.core.web_refusals import refused
+lazy from hq.platform.application.findings import investigation_initial
 
 
 def _json_value(value):
@@ -290,7 +291,10 @@ class CommandView(View):
             initial["__target"] = target
             initial.update(capability_target_initial(self.spec, target, principal=self.principal))
         form = self.form_class(initial=initial)
-        if named := _named_records(form, request.GET):
+        named = _named_records(form, request.GET)
+        if finding := request.GET.get("finding"):
+            named.update(investigation_initial(self.spec.name, finding, self.principal))
+        if named:
             form = self.form_class(initial={**initial, **named})
         context = self._context(form, result=self._result())
         # A link that named a target the form cannot offer says so, rather than

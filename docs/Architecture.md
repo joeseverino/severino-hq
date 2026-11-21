@@ -1408,6 +1408,15 @@ Ansible's own, read from the playbook and its roles at the commit ([Refreshing
 the playbooks](#refreshing-the-playbooks)), and a sidecar names no playbook,
 revision or repository.
 
+A read-only playbook may declare `investigates` with the finding rule names it
+helps explain. Needs you offers its existing Run command when the adopted
+playbook can reach the finding's machine and the reader may run it. The link
+names the finding. Opening the form reads that finding again for the current
+reader and selects the machine. When it identifies one systemd service, HQ
+fills a declared `service_unit` input that accepts its exact name. Multiple
+services leave that field for the reader to fill. The form still validates
+every input and a run still goes through the canonical capability.
+
 The sidecar's format is published as a JSON Schema,
 `hq/platform/application/hq-procedure.schema.json`, written from
 `ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the

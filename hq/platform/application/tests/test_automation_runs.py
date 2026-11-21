@@ -465,3 +465,105 @@ class CapabilityShapeTests(RunTestCase):
         self.supply()
 
         self.assertIsNone(capability_spec(RESTART_RUN))
+
+
+class FindingInvestigationTests(TestCase):
+    """A queue link opens the adopted command with context from a readable finding."""
+
+    MACHINE = "docker-host-01"
+    SERVICE = "example-upload.service"
+    PLAYBOOK = "example.unit_history"
+    COMMAND = f"automation.{PLAYBOOK}.run"
+
+    @classmethod
+    def setUpTestData(cls):
+        from hq.platform.core import seeds
+        from hq.platform.core.example_estate.testing import throwaway_media
+
+        with throwaway_media(), seeds.built("showcase") as owner:
+            cls.owner = owner
+
+    def setUp(self):
+        from typing import Annotated
+
+        from pydantic import StringConstraints
+
+        from hq.platform.application.contracts import Closed
+
+        from ..machines import Machine
+
+        class Input(Closed):
+            service_unit: Annotated[str, StringConstraints(pattern=r"^[a-z.-]+[.]service$")]
+
+        self.supply = Supply(
+            self, manifest(id=self.PLAYBOOK, effect="read", input_type=Input, investigates=("unit-restarting",))
+        )
+        self.supply.know(Machine(self.MACHINE))
+        self.client.force_login(self.owner)
+
+    def offered(self):
+        from django.urls import reverse
+
+        queue = self.client.get(reverse("action_items"))
+        return [href for _, href in links(queue.content) if self.COMMAND in href]
+
+    def test_the_queue_opens_the_run_with_the_service_and_queues_what_it_prefilled(self):
+        from django.urls import reverse
+        from django.utils import timezone
+
+        (url,) = self.offered()
+        form = self.client.get(url).context["form"]
+        self.assertEqual(form.initial["hosts"], [self.MACHINE])
+        self.assertEqual(form.initial["parameters.service_unit"], self.SERVICE)
+        self.assertEqual(
+            self.client.get(f"{url}&parameters.service_unit=wrong.service").context["form"].initial,
+            form.initial,
+        )
+        self.assertFalse(
+            OperationRequest.objects.filter(action=OperationRequest.Action.RUN, input__operation=self.PLAYBOOK).exists()
+        )
+        OperationRequest.objects.filter(
+            action=OperationRequest.Action.RUN,
+            state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED),
+        ).update(state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now())
+        response = self.client.post(
+            url,
+            {"hosts": form.initial["hosts"], "parameters.service_unit": form.initial["parameters.service_unit"]},
+        )
+        self.assertEqual(response.status_code, 302, text(response))
+        queued = OperationRequest.objects.get(action=OperationRequest.Action.RUN, input__operation=self.PLAYBOOK)
+        self.assertEqual(queued.input["hosts"], [self.MACHINE])
+        self.assertEqual(queued.input["parameters"], {"service_unit": self.SERVICE})
+        self.assertEqual(self.client.get(reverse("jobs:run", kwargs={"pk": queued.pk})).status_code, 200)
+
+    def test_a_finding_the_reader_cannot_see_supplies_no_inputs(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        from hq.platform.core.testing import NOBODY
+
+        from ..findings import investigation_initial
+
+        (url,) = self.offered()
+        (key,) = parse_qs(urlsplit(url).query)["finding"]
+        self.assertEqual(investigation_initial(self.COMMAND, key, NOBODY), {})
+
+    def test_a_worker_that_cannot_reach_the_machine_is_offered_no_run(self):
+        self.supply.reach()
+        self.assertEqual(self.offered(), [])
+
+    def test_multiple_restarting_services_leave_the_input_open(self):
+        from hq.domains.control_plane.models import ProviderInventory
+
+        (url,) = self.offered()
+        for inventory in ProviderInventory.objects.filter(kind="host.unit"):
+            extra = next((row for row in inventory.records if row.get("unit") == self.SERVICE), None)
+            if extra:
+                inventory.records = [*inventory.records, {**extra, "unit": "example-second.service"}]
+                inventory.save(update_fields=["records"])
+                break
+        else:
+            self.fail("The showcase has no restarting service.")
+
+        form = self.client.get(url).context["form"]
+        self.assertEqual(form.initial["hosts"], [self.MACHINE])
+        self.assertNotIn("parameters.service_unit", form.initial)

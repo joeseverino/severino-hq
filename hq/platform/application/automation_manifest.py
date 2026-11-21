@@ -92,6 +92,7 @@ _NO_EXECUTION_FIELD = Reason(
 )
 _NAMED_FIELDS = Reason("input_free_form", "must name each field it allows, never take free-form values")
 _READ_PRIVILEGE = Reason("read_privilege", "is a read, which takes no privilege")
+_INVESTIGATION_READ = Reason("investigation_read", "must be read-only to investigate a finding")
 _CHANGE_CHECKED = Reason(
     "change_checked", "is a change, which needs preconditions and verification: its play's pre_tasks and post_tasks"
 )
@@ -169,12 +170,16 @@ class ProcedureTerms(Closed):
     # machine it may run on offers its Run page as a remedy. It grants nothing:
     # the run is asked for, approved and held as any other.
     fixes: Annotated[tuple[RuleName, ...], Checked(sorted_unique)] = ()
+    # Read-only playbooks can offer evidence for a finding without claiming to clear it.
+    investigates: Annotated[tuple[RuleName, ...], Checked(sorted_unique)] = ()
 
     @model_validator(mode="after")
     @checked
     def _read_needs_no_privilege(self) -> Self:
         if not self.effect.changes and self.privilege is not None:
             raise _READ_PRIVILEGE.refused()
+        if self.investigates and self.effect != Effect.READ:
+            raise _INVESTIGATION_READ.refused()
         return self
 
 

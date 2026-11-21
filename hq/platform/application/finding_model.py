@@ -130,6 +130,8 @@ class Finding:
     # out of date.
     observed_at: datetime | None = None
     reads: str = ""
+    # The exact systemd service the finding is about, if it names one.
+    service_unit: str = ""
     # The page a card leads with, where its subject's own page is not it: the
     # certificate to renew, the containers to upgrade.
     primary: ActionLink | None = None
@@ -388,6 +390,7 @@ def distinct(findings: Iterable[Finding]) -> tuple[Finding, ...]:
 # A problem card's own button: read what the claim rests on again, then run
 # the check against it.
 CHECK_AGAIN = "Check again"
+PLAYBOOK_INVESTIGATION = "playbook-investigation"
 # What a step says last when a fresh read is what confirms the fix. A problem
 # card carries Check again; a connection's own page carries the refresh.
 THEN_CHECK_AGAIN = f"Then press {CHECK_AGAIN}."

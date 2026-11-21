@@ -63,6 +63,15 @@
       },
       "type": "object"
     },
+    "investigates": {
+      "default": [],
+      "items": {
+        "maxLength": 64,
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        "type": "string"
+      },
+      "type": "array"
+    },
     "privilege": {
       "anyOf": [
         {
