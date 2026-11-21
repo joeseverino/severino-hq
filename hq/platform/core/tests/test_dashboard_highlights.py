@@ -12,7 +12,7 @@ from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from hq.platform.application.card_items import Kpi
+from hq.platform.application.card_items import Counted, Kpi
 from hq.platform.application.dashboard import dashboard_highlights
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.domains import Domain, domain_dashboard_cards
@@ -34,7 +34,7 @@ def contributor(number, *, overview=None):
         integration=PluginIntegration(
             dashboard=Mock(
                 return_value=tuple(
-                    {"id": f"example-{number}-{key}", "label": label, "singular": label, "value": value, "url": "/"}
+                    {"id": f"example-{number}-{key}", "label": Counted(value, label, label), "url": "/"}
                     for key, label, value in (("a", "First", 1), ("b", "Second", 2), ("c", "Third", 3))
                 )
             ),
@@ -63,9 +63,9 @@ class DashboardHighlightTests(SimpleTestCase):
             "A useful summary",
             "/example/",
             (
-                Kpi("Recent work", 12, "Through Aug 21, 2026", "/example/"),
-                Kpi("Another reading", 3),
-                Kpi("A third reading", 4),
+                Kpi("Recent work", "12", "Through Aug 21, 2026", "/example/"),
+                Kpi("Another reading", "3"),
+                Kpi("A third reading", "4"),
             ),
         )
         domain = contributor(1, overview=Mock(return_value=overview))
@@ -88,7 +88,7 @@ class DashboardHighlightTests(SimpleTestCase):
         """A dated source past its cadence is never headed by its window ("Latest 4 weeks")."""
 
         ended, cadence = timezone.now() - timedelta(days=60), timedelta(days=14)
-        overview = partial(DomainOverview, "A summary", "/example/", (Kpi("Recent work", 12),), period="Latest 4 weeks")
+        overview = partial(DomainOverview, "A summary", "/example/", (Kpi("Work", "9"),), period="Latest 4 weeks")
         stale = {"label": "Example", "cards": [], "overview": overview(reading=Freshness("stale", ended, cadence))}
         html = render_to_string("core/_dashboard_highlights.html", {"dashboard_highlights": [stale]})
 
@@ -136,11 +136,11 @@ class DashboardHighlightTests(SimpleTestCase):
         self.assertEqual([card["label"] for card in result["compact"]], ["First", "Second"])
 
     def test_an_overview_counts_its_own_figures_and_a_chart_holds_a_card(self):
-        short = DomainOverview("Example", "/example/", (Kpi("One", 1), Kpi("Two", 2)))
+        short = DomainOverview("Example", "/example/", (Kpi("One", "1"), Kpi("Two", "2")))
         charted = DomainOverview(
             "Example",
             "/example/",
-            (Kpi("One", 1),),
+            (Kpi("One", "1"),),
             (stacked_bar_chart("Example", "", ("One",), (ChartSeries("Example", (1,), 1),), unit="units"),),
         )
         self.assertFalse(self.highlights_of(contributor(1, overview=Mock(return_value=short)))["highlights"])
@@ -288,7 +288,7 @@ class DashboardHighlightQueryTests(TestCase):
         def overview():
             with connection.cursor() as cursor:
                 cursor.execute("SELECT 1")
-            return DomainOverview("Example", "/", (Kpi("Reading", 1),))
+            return DomainOverview("Example", "/", (Kpi("Reading", "1"),))
 
         for count in (1, 8):
             domains = tuple(contributor(i, overview=overview) for i in range(count))

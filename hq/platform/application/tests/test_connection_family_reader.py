@@ -22,6 +22,7 @@ from ..domains import domain_dashboard_sections
 from ..estate import cards, overview
 from ..inventory_testing import store
 from ..plugin_testing import offering
+from ..plugins import checked_cards
 from ..projection import projection_scope
 from ..resources import list_resource
 from ..security import Capability, cli_principal, web_principal
@@ -66,7 +67,7 @@ class TheReadersOwnReadsTests(ReaderTestCase):
     """Every read made under the reader's authority that says how many connections there are."""
 
     READS = {
-        "estate card": lambda principal: cards(principal=principal),
+        "estate card": lambda principal: checked_cards("hq.estate", cards(principal=principal)),
         "estate overview": lambda principal: overview(principal=principal).kpis,
         "dashboard sections": lambda principal: [
             card for section in domain_dashboard_sections(principal) for card in section["cards"]
@@ -83,7 +84,7 @@ class TheReadersOwnReadsTests(ReaderTestCase):
         return [
             str(item["value"] if isinstance(item, dict) else item.value)
             for item in found
-            if (item.get("id") if isinstance(item, dict) else item.label) in (CONNECTIONS, "Connections")
+            if (item.get("id") if isinstance(item, dict) else item.label) in (CONNECTIONS, "Connection", "Connections")
         ]
 
     def test_a_reader_the_family_does_not_permit_never_runs_its_provider(self):

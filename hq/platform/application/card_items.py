@@ -12,6 +12,31 @@ from typing import Literal, Protocol
 from .display_words import QUOTED, display
 from .drawings import AllocationBar, Dots, Trend
 from .tone import Tone
+lazy from .ui import agreed, counted_forms
+
+
+@display
+class Counted:
+    """A number of things and their words for one and for many: the label of a
+    figure that counts, which agrees with it ("1 Draft", "3 Drafts").
+
+    ``many`` may be left out for a single regular noun, as ``counted`` allows.
+    """
+
+    count: int
+    one: str
+    many: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "many", counted_forms(self.one, self.many or None)[1])
+
+    @property
+    def words(self) -> str:
+        return agreed(self.count, self.one, self.many)
+
+    @property
+    def figure(self) -> str:
+        return f"{self.count:,}"
 
 
 @display
@@ -19,11 +44,12 @@ class Kpi:
     """One figure: what it counts, its value, and a line saying more.
 
     The shape a band of facts draws as one of its facts (``{% facts
-    items=... %}``).
+    items=... %}``). A figure that counts things takes a ``Counted`` as its
+    label and no value: its label, value and ``is_zero`` are drawn from it.
     """
 
-    label: str
-    value: str | int
+    label: str | Counted
+    value: str = ""
     detail: str = ""
     url: str = ""
     is_zero: bool = False
@@ -49,10 +75,15 @@ class Kpi:
     # What pointing at the figure says, its whole sentence, where the cell
     # holds only a word or two of it (an hour's forecast).
     tip: str = ""
-    # The label for a count of one, where ``label`` says many.
-    singular: str = ""
 
     def __post_init__(self) -> None:
+        if isinstance(self.label, Counted):
+            if self.value:
+                raise ValueError("A Kpi counting things takes its figure from its Counted, and no value.")
+            count = self.label
+            object.__setattr__(self, "label", count.words)
+            object.__setattr__(self, "value", count.figure)
+            object.__setattr__(self, "is_zero", self.is_zero or not count.count)
         if self.detail_url and not self.detail:
             raise ValueError("Kpi detail_url needs a detail: a link is said by its words.")
 

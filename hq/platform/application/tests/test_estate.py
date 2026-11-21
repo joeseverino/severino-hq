@@ -260,13 +260,13 @@ class EstateCardTests(TestCase):
     def test_every_figure_links_to_its_page_and_the_nearest_expiries_to_their_subject(self):
         found = self.cards()
 
-        self.assertEqual(found["hq.estate.machines"]["value"], 1)
+        self.assertEqual(found["hq.estate.machines"]["label"].count, 1)
         self.assertIn("1", found["hq.estate.machines"]["detail"])
         self.assertEqual(found["hq.estate.machines"]["url"], reverse("control_plane:machines"))
         self.assertEqual(found["hq.estate.services"]["url"], reverse("control_plane:services"))
-        self.assertEqual(found["hq.estate.domains"]["value"], 1)
+        self.assertEqual(found["hq.estate.domains"]["label"].count, 1)
         self.assertEqual(found["hq.estate.domains"]["url"], reverse("zones:index"))
-        self.assertEqual(found["hq.estate.connections"]["value"], self.listed())
+        self.assertEqual(found["hq.estate.connections"]["label"].count, self.listed())
         self.assertIn("example-ssh", found["hq.estate.connections"]["detail"])
         # One connection with a problem leads to its own row.
         self.assertEqual(
@@ -299,7 +299,7 @@ class EstateCardTests(TestCase):
 
         card = self.cards()["hq.estate.connections"]
 
-        self.assertEqual(card["value"], self.listed())
+        self.assertEqual(card["label"].count, self.listed())
         self.assertEqual(card["url"], reverse("control_plane:connections"))
         self.assertNotIn("detail", card)
         self.assertNotIn("status", card)
@@ -782,5 +782,5 @@ class ConnectionFigureTests(TestCase):
             listed = connections_context(principal=admin).connection_count
 
         self.assertIn("hq.estate.machines", found)
-        self.assertEqual(found["hq.estate.connections"]["value"], listed)
+        self.assertEqual(found["hq.estate.connections"]["label"].count, listed)
         self.assertTrue(all(card["url"] for card in found.values()))

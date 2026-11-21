@@ -60,7 +60,7 @@ class UpdatesCardTests(TestCase):
 
         card = self.cards()["hq.projects.updates"]
 
-        self.assertEqual(card["value"], 1)
+        self.assertEqual(card["label"].count, 1)
         self.assertTrue(card["detail"].startswith("1 security alert"), card["detail"])
         self.assertTrue(card["url"].endswith("?updates_on=1"))
 

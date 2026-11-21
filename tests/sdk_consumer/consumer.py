@@ -99,6 +99,7 @@ def sentences(registrar: str) -> None:
     ui.status_pill("1 serious", pill=False, icon=True)  # type: ignore[arg-type]
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
     ui.Kpi("Net worth", "$1.00", tone="goood")  # type: ignore[arg-type]
+    ui.Kpi("Notes", 3)  # type: ignore[arg-type]
     ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
     ui.ListRow("Backup host", snippet="nightly backup")  # type: ignore[arg-type]
     ui.ListRow("Backup host", chips="Running")  # type: ignore[arg-type]

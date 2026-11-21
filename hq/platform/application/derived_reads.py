@@ -38,6 +38,7 @@ lazy from .machine_context import header_addresses
 lazy from .machine_records import LoadPart, MachineRecord, PeeringPart, PresencePart
 lazy from .path_records import HopRow, ObservedPart, PathRecord, RoutePart
 lazy from .paths import path_to
+lazy from .plugins import checked_cards
 lazy from .reading_records import ReadingItem, ReadingRecord
 lazy from .record_parts import CheckPart, MeasurementPart
 lazy from .record_saves import row
@@ -86,7 +87,7 @@ def list_estate(*, principal: Principal) -> dict[str, Any]:
                     "status": card.get("status", ""),
                     "url": card["url"],
                 }
-                for card in estate.cards(principal=principal)
+                for card in checked_cards("hq.estate", estate.cards(principal=principal))
             ]
         )
 

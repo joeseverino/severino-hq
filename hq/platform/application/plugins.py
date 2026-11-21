@@ -23,6 +23,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from hq.platform.application.routes import reverse
 
+from .card_items import Counted
 from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
 from .lists import split_list
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("severino.composition")
 
-PLUGIN_API_VERSION = 22
+PLUGIN_API_VERSION = 23
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -780,11 +781,19 @@ def _refused_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...
 
 
 def checked_cards(source_id: str, cards: tuple[Any, ...]) -> tuple[dict[str, Any], ...]:
+    """``cards`` held to the card contract, each count said in its words: its
+    label agreeing with its value, as every surface and transport reads it."""
+
     _validate_dashboard_cards(cards)
     ids = [card["id"] for card in cards]
     if len(ids) != len(set(ids)):
         raise ImproperlyConfigured(f"{source_id!r} produced two dashboard cards with one id.")
-    return cards
+    return tuple(
+        card | {"label": card["label"].words, "value": card["label"].count}
+        if isinstance(card["label"], Counted)
+        else card
+        for card in cards
+    )
 
 
 def checked_overview(source_id: str, overview: Any) -> DomainOverview | None:
@@ -803,10 +812,10 @@ SOURCE_CHECKS: dict[str, Callable[[str, Any], Any]] = {
 # A card is a scalar and a link, plus optional interpretation. Kept deliberately
 # small: the aggregate is rendered by surfaces that compose many extensions at
 # once, so a card must be cheap to produce and safe to show beside any other.
-CARD_REQUIRED_KEYS = frozenset({"id", "label", "value", "url"})
-# A card whose value counts things (an int) gives its label for one, so a line
-# that sets the label after the value says "1 Draft", never "1 Drafts".
-CARD_OPTIONAL_KEYS = frozenset({"detail", "singular", "status", "trend"})
+# A card that counts things gives a ``Counted`` as its label and no value, so a
+# line that sets the label after the count says "1 Draft", never "1 Drafts".
+CARD_REQUIRED_KEYS = frozenset({"id", "label", "url"})
+CARD_OPTIONAL_KEYS = frozenset({"value", "detail", "status", "trend"})
 # Direction of travel, not a judgment: whether "up" is good is the domain's
 # business, which is what `status` is for.
 CARD_TREND_VALUES = frozenset({"up", "down", "flat"})
@@ -862,19 +871,19 @@ def plugin_overviews() -> tuple[dict[str, Any], ...]:
 def _validate_dashboard_cards(cards: Iterable[object]) -> None:
     for card in cards:
         if not isinstance(card, dict) or not card.keys() >= CARD_REQUIRED_KEYS:
-            raise ImproperlyConfigured("Plugin dashboard cards require id, label, value, and url.")
+            raise ImproperlyConfigured("Plugin dashboard cards require id, label, and url.")
         # Unknown keys are rejected rather than ignored: a typo'd optional key
         # would otherwise silently render nothing at all.
         unknown = card.keys() - CARD_REQUIRED_KEYS - CARD_OPTIONAL_KEYS
         if unknown:
             raise ImproperlyConfigured(f"Unknown dashboard card keys: {', '.join(sorted(unknown))}.")
-        value = card["value"]
-        if isinstance(value, str) and value.replace(",", "").isdigit():
-            raise ImproperlyConfigured(f"A dashboard card's count is an int, with its label for one; got {value!r}.")
-        if isinstance(value, int) and not card.get("singular"):
+        if isinstance(card["label"], Counted) == ("value" in card):
             raise ImproperlyConfigured(
-                f"A dashboard card counting {card['label']!r} gives its label for one (`singular`)."
+                f"A dashboard card gives a value in words, or a Counted as its label and no value; got {card!r}."
             )
+        value = card.get("value", "")
+        if not isinstance(value, str) or value.replace(",", "").isdigit():
+            raise ImproperlyConfigured(f"A dashboard card's count is a Counted as its label; got {value!r}.")
         status = card.get("status")
         if status is not None and status not in Tone:
             raise ImproperlyConfigured(f"Dashboard card status must be one of {', '.join(Tone)}; got {status!r}.")

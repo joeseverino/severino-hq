@@ -17,6 +17,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.routes import reverse
 lazy from hq.domains.projects.specs import NEEDS_OUTPUT, UPDATES_ON
 
+from .card_items import Counted
 from .derivations import passed, today as local_today
 from .expenses import cost_totals
 from .money import money
@@ -33,7 +34,7 @@ lazy from .projects import last_active
 Card = dict[str, Any]
 
 
-def _card(*, id: str, label: str, value: str | int, url: str, detail: str = "", singular: str = "") -> tuple[Card, ...]:
+def _card(*, id: str, label: str | Counted, url: str, value: str = "", detail: str = "") -> tuple[Card, ...]:
     """One card, as the tuple a section answers.
 
     A section with nothing to report answers ``()`` instead, so it stops
@@ -41,9 +42,9 @@ def _card(*, id: str, label: str, value: str | int, url: str, detail: str = "", 
     the moment it has something to say, with no flag to set.
     """
 
-    card: Card = {"id": id, "label": label, "value": value, "url": url}
-    if singular:
-        card["singular"] = singular
+    card: Card = {"id": id, "label": label, "url": url}
+    if value:
+        card["value"] = value
     if detail:
         card["detail"] = detail
     return (card,)
@@ -91,9 +92,7 @@ def projects() -> tuple[Card, ...]:
         return ()
     return _card(
         id="hq.projects.updates",
-        label="Open updates",
-        singular="Open update",
-        value=reading["open"],
+        label=Counted(reading["open"], "Open update", "Open updates"),
         url=f"{reverse('projects:list')}?updates_on=1",
         detail=counted(reading["unmatched"], "security alert with no fix open", "security alerts with no fix open")
         if reading["unmatched"]
@@ -128,9 +127,7 @@ def content() -> tuple[Card, ...]:
         return ()
     return _card(
         id="hq.content.drafts",
-        label="Drafts",
-        singular="Draft",
-        value=reading["drafts"],
+        label=Counted(reading["drafts"], "Draft"),
         url=f"{reverse('content:list')}?status=draft",
         detail=f"{reading['published']} published" if reading["published"] else "",
     )
@@ -266,11 +263,7 @@ def watching() -> tuple[Card, ...]:
     if advisories:
         return _card(
             id="hq.watching",
-            label="New security advisories",
-            singular="New security advisory",
-            value=advisories,
+            label=Counted(advisories, "New security advisory", "New security advisories"),
             url=reverse("watching"),
         )
-    return _card(
-        id="hq.watching", label="New releases", singular="New release", value=releases, url=reverse("watching")
-    )
+    return _card(id="hq.watching", label=Counted(releases, "New release", "New releases"), url=reverse("watching"))

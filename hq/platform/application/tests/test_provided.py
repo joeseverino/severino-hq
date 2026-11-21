@@ -23,10 +23,6 @@ from .test_derivations import MOMENT
 
 WINDOW = (date(2026, 1, 1), date(2026, 12, 31))
 ITEM = Insight("serious", "Alpha", "Something is wrong", "1", "Body.")
-CARDS = (
-    {"id": "alpha-open", "label": "Open", "singular": "Open", "value": 3, "url": "/alpha/"},
-    {"id": "alpha-late", "label": "Late", "singular": "Late", "value": 1, "url": "/alpha/"},
-)
 
 
 def _readings() -> int:

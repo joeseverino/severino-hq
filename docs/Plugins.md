@@ -519,10 +519,10 @@ not establish freshness. The host never infers dates from a card label or
 recalculates an extension's totals. An overview drawn from data that arrives
 dated (an export) gives its `reading`, the `hq_sdk.reads.freshness` of that
 data's newest point; once that is past its cadence the dashboard says how old
-the data is (`Last read …`) in place of the overview's `period`. A card that counts things gives its count as
-an int and its label for one beside its label for many (`"label": "Drafts",
-"singular": "Draft"`), since the dashboard's line sets the label after the count; a
-count without `singular`, or one written as text, is refused.
+the data is (`Last read …`) in place of the overview's `period`. A card that counts things gives a
+`hq_sdk.ui.Counted` as its label and no `value` (`"label": Counted(3, "Draft")`),
+and the host words it to agree with its count ("1 Draft", "3 Drafts"), as a
+`Kpi` given one does; a count given as a value, an int or text, is refused.
 
 An attention provider emits `serious` or `attention` only for a decision that
 needs the operator, and `neutral` or `good` for observations. An item whose
@@ -979,6 +979,8 @@ with its own filter, sort and toggle declarations and its projected rows, and
 `hq_sdk.resources`' ranked query and its text and status filters: a list page is
 `hq_sdk.tables.ListPageMixin`, drawing one page of its resource's list read,
 whose sorts, filters, toggles and search the `ResourceSpec` declares once.
+`PLUGIN_API_VERSION` 23 retires `Kpi`'s `singular` and its int value: a figure
+that counts takes a `hq_sdk.ui.Counted` as its label, as a dashboard card does.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

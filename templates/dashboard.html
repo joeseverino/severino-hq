@@ -56,7 +56,7 @@ the row is gone once every step is done.
 {% include "core/_dashboard_highlights.html" %}
 
 {% if dashboard_cards %}{% card element="div" %}{% facts layout="inline" label="Across HQ" %}
-  {% for card in dashboard_cards %}{% fact card.label value=card.value singular=card.singular url=card.url detail=card.detail %}{% endfor %}
+  {% for card in dashboard_cards %}{% fact card.label value=card.value url=card.url detail=card.detail tone=card.status %}{% endfor %}
 {% endfacts %}{% endcard %}{% endif %}
 
 {% comment %}

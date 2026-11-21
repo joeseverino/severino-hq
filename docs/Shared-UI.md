@@ -131,7 +131,6 @@ and those that hold across parts in [Design](Design.md).
 | `fact` | `icon` |  |  | The icon beside it. |
 | `fact` | `id` |  |  | The id of the panel its value opens in place, given a `panel` part. |
 | `fact` | `modal` |  |  | The dialog its value's link opens where script runs. |
-| `fact` | `singular` |  |  | Its label when its value counts one thing; the label itself says many. |
 | `fact` | `title` |  |  | What pointing at it says. |
 | `fact` | `tone` |  |  | A status tone the fact is colored by, for what it means. |
 | `fact` | `url` |  |  | The page in HQ its value links to; an outside one is the block form's `{% entity %}`. |
@@ -468,9 +467,9 @@ before each held mark, over the host's templates and an extension's.
 
 Every label and its value is a fact: `{% fact "Label" value=n url=... detail=... %}` inside `{%
 facts %}`, or the block form `{% fact "Label" %}markup{% detail %}lines{% endfact %}` for a value
-that is markup. A zero and a linked count stand alike. A value that counts things gives its label
-for one beside the label for many (`singular="Draft"`), so the label agrees with it ("1 Draft",
-"2 Drafts"). A fact is drawn as a figure is: its label
+that is markup. A zero and a linked count stand alike. A `Kpi` or a card that counts things
+takes a `Counted` as its label, which words it to agree with its figure ("1 Draft", "2 Drafts").
+A fact is drawn as a figure is: its label
 with its mark before it, its value large under it, its detail under that. What a figure counts may
 follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
 ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value

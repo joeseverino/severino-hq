@@ -6,10 +6,11 @@ lazy from django.template import Template
 
 from hq.platform.core.part_examples import runs
 from hq.platform.core.template_parts import Example
-lazy from hq.platform.application.card_items import Kpi
+lazy from hq.platform.application.card_items import Counted, Kpi
 lazy from hq.platform.application.drawings import AllocationBar, Dots, Share, Trend
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.pages import Page, PageVisit
+lazy from hq.platform.application.plugins import checked_cards
 lazy from hq.platform.application.tone import Tone
 
 
@@ -158,8 +159,8 @@ FACTS_STATES = {
         lambda: {
             "items": [
                 Kpi("Example expenses", "$1,204.50", "12 example expenses", detail_url="/example/expenses/"),
-                Kpi("Example docs due", 3, url="/example/docs/", icon="page"),
-                Kpi("Example assets", 0, "$0.00 total", is_zero=True),
+                Kpi(Counted(3, "Example doc due", "Example docs due"), url="/example/docs/", icon="page"),
+                Kpi(Counted(0, "Example asset", "Example assets"), detail="$0.00 total"),
             ]
         },
     ),
@@ -251,13 +252,41 @@ FACTS_STATES = {
     # saying its label for one, enough to wrap at a phone's width.
     "inline": Example(
         '{% card element="div" %}{% facts layout="inline" label="Example summary" %}'
-        '{% fact "Example rules" value=0 %}'
-        '{% fact "Example devices waiting" value=1 url="/example/?waiting=1" tone="serious" %}'
-        '{% fact "Example open updates" value=2 singular="Example open update" url="/example/updates/" '
-        'detail="2 example alerts with no fix open" %}'
-        '{% fact "Example drafts" value=1 singular="Example draft" url="/example/drafts/" detail="22 published" %}'
-        '{% fact "Example expenses" value="$1,204.50" url="/example/expenses/" detail="All deductible est." %}'
-        "{% endfacts %}{% endcard %}",
+        "{% for card in cards %}{% fact card.label value=card.value url=card.url detail=card.detail tone=card.status %}"
+        "{% endfor %}{% endfacts %}{% endcard %}",
+        lambda: {
+            "cards": checked_cards(
+                "example",
+                (
+                    {"id": "rules", "label": Counted(0, "Example rule", "Example rules"), "url": "/example/"},
+                    {
+                        "id": "waiting",
+                        "label": Counted(1, "Example device waiting", "Example devices waiting"),
+                        "url": "/example/?waiting=1",
+                        "status": Tone.SERIOUS,
+                    },
+                    {
+                        "id": "updates",
+                        "label": Counted(2, "Example open update", "Example open updates"),
+                        "url": "/example/updates/",
+                        "detail": "2 example alerts with no fix open",
+                    },
+                    {
+                        "id": "drafts",
+                        "label": Counted(1, "Example draft", "Example drafts"),
+                        "url": "/example/drafts/",
+                        "detail": "22 published",
+                    },
+                    {
+                        "id": "expenses",
+                        "label": "Example expenses",
+                        "value": "$1,204.50",
+                        "url": "/example/expenses/",
+                        "detail": "All deductible est.",
+                    },
+                ),
+            )
+        },
         premise=(_WHOLE, ".fact"),
     ),
     # A few short pairs, one of them a long address that wraps in its own
