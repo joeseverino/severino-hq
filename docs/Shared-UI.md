@@ -72,7 +72,7 @@ and those that hold across parts in [Design](Design.md).
 | `{% row_group %}` | nothing | The heading row of one group of a table's rows, first in its `tbody`: its name and how many rows. | `{% table_region "Example groups" %}<table class="data-table"><tbody>{% row_group "Example group" 3 %}<tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
 | `{% row_state %}` | nothing | How a row stands among the others, written in its `tr`: one that asks to be read first. | `{% section "Example messages 2" %}{% table_region "Example messages 2" %}<table class="data-table"><thead><tr>{% table_heading "From" "identifier" %}{% table_heading "Message" %}</tr></thead><tbody>{% for row in rows %}<tr{% row_state emphasized=row.2 %}><td>{{ row.0 }}</td><td><a href="#">{{ row.1 }}</a></td></tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}` |
 | `{% row_toggle %}` | nothing | The toggle that opens a row to all it holds, last in the cell that names it, in a table with no headings. | `{% table_region "Example toggles" %}<table class="data-table"><tbody><tr><td>{{ row.name }}{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}` |
-| `{% section %}` | `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
+| `{% section %}` | `lead`, `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
 | `{% status %}` | nothing | One short state, drawn in its tone and said in sentence case, the one way a page draws a state. | `{% status "Blocked" tone="attention" %}` |
 | `{% table_heading %}` | nothing | One column heading of a table: its kind, the rank it leaves by and its sort control. | `{% table_region "Example updates" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}{% table_heading "Updated" "status" drop=2 %}</tr></thead><tbody><tr><td>example-host</td><td>An hour ago</td></tr></tbody></table>{% endtable_region %}` |
 | `{% table_region %}` | nothing | The box a table fits, which draws what follows from its headings, and, with no rows, the one empty state in its place. | `{% table_region "Hosts" empty="No hosts yet." %}<table class="data-table"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody><tr><td>example-host</td></tr></tbody></table>{% endtable_region %}` |
@@ -1313,6 +1313,13 @@ shows part of ("View Estate", "All runs"), after a dot when the aside says somet
 foot under the list. With no address the link is left out, so a page passes the one it has. A
 line that dates or sources a section goes beside its heading, not loose under it. A section whose
 rows are the latest of more names the rest as its `more_label` and `more_url`.
+
+`{% lead %}` is the start of the body, drawn in one box with the head, for a section whose body
+runs down columns: the head is kept whole, so it never ends a column with what it heads in the
+next. The body after it continues the same list (`{% section "Lane" %}the rest{% lead %}the
+first{% endsection %}`). The columns' container sets the space above each head as
+`--section-lead-above`, which the head holds as padding so every column starts level. A folded
+section's toggle and a figure's caption take none.
 
 `figure=True` draws the section as a `<figure>`, its head the `<figcaption>`, for a drawing (a
 chart, a calendar) whose title, line under it and legend are a section's head like any other. A
