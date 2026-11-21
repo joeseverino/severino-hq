@@ -227,7 +227,7 @@ def _need_lines(standing: Any, plan: Any) -> tuple[Cell, ...]:
 
     if plan:
         said = plan.risk_said
-        said += f" Snapshot {counted(len(plan.data), 'mount,mounts')} first." if plan.stateful else ""
+        said += f" Snapshot {counted(len(plan.data), 'mount')} first." if plan.stateful else ""
         said += f" {ended(f'Checked afterwards by {plan.verified_by[0]}')}" if plan.verified_by else ""
     else:
         said = f"{capfirst(standing.summary)}, and no newer release yet."

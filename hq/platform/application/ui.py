@@ -170,8 +170,10 @@ def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:
     if not one.strip():
         raise ValueError("A count needs the words it counts.")
     if many is None:
-        if " " in one.strip():
-            raise ValueError(f"Give the plural of {one!r}: a phrase has a verb to agree.")
+        # Only one word is pluralized by a rule; a phrase or a list of forms
+        # ("mount,mounts") passed as one argument is said by the caller.
+        if not re.fullmatch(r"[\w-]+", one.strip()):
+            raise ValueError(f"Give the plural of {one!r} as its own argument.")
         many = plural(one)
     return one, many
 
