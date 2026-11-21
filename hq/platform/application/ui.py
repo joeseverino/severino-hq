@@ -24,6 +24,7 @@ from .drawings import LegendKey
 from .labels import dotted, plural
 from .money import signed_number
 from .tone import Tone
+lazy from .freshness import Freshness, last_read
 
 # An advisory's severity as the tone it is drawn in, wherever one is listed:
 # critical and high serious, medium attention, the rest neutral. A weather
@@ -826,6 +827,22 @@ class DomainOverview:
     # The window every KPI shares, such as "Latest 4 weeks". Said once beside
     # the domain's name rather than repeated in each label.
     period: str = ""
+    # How current the data every figure is drawn from is, judged by its kind's
+    # cadence (``hq_sdk.reads.freshness``), for a domain whose data arrives
+    # dated (an export) rather than read today.
+    reading: Freshness | None = None
+
+    @property
+    def window(self) -> str:
+        """What the head says beside the domain's name: its window while its
+        data is current, else how old that data is, so a window whose data
+        ended long ago is never called the latest."""
+
+        if self.reading is None or not self.reading.due:
+            return self.period
+        if self.reading.observed_at is None:
+            return self.reading.label
+        return dotted(last_read(self.reading.observed_at), "out of date" if self.reading.stale else "")
 
 
 def stacked_bar_chart(
