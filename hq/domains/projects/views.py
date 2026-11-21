@@ -325,8 +325,8 @@ def _advisories(repo) -> Cell:
         for item in advisories[:2]
     ]
     if len(advisories) > 2:
-        more = f"and {len(advisories) - 2} more"
-        lines.append(Cell(more, f"{repo['url']}/security/advisories", external=True, muted=True))
+        more = Cell(f"{len(advisories) - 2} more", f"{repo['url']}/security/advisories", external=True)
+        lines.append(Cell("and", muted=True, parts=(more,)))
     return Cell(lines=tuple(lines), role="prose")
 
 
