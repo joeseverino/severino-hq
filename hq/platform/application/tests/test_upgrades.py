@@ -96,7 +96,18 @@ class ReviewedDeploymentTests(TestCase):
                 "compose_project_upgrade_image": self.image,
             },
         )
-        self.assertRedirects(response, reverse("jobs:run", kwargs={"pk": queued.pk}))
+        job_url = reverse("jobs:run", kwargs={"pk": queued.pk})
+        self.assertRedirects(response, job_url)
+        waiting = self.client.get(job_url, headers={"X-Fragment": "run_status"})
+        self.assertContains(waiting, 'data-fragment-poll="2"')
+        self.assertContains(waiting, "Cancel run")
+        OperationRequest.objects.filter(pk=queued.pk).update(
+            state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now(), result={"ok": True}
+        )
+        finished = self.client.get(job_url, headers={"X-Fragment": "run_status"})
+        self.assertContains(finished, 'data-fragment-name="run_status"')
+        self.assertNotContains(finished, "data-fragment-poll")
+        self.assertNotContains(finished, "Cancel run")
 
     def test_stale_review_cannot_submit_through_the_old_link(self):
         (url,) = self.offer()

@@ -9,7 +9,10 @@ outcomes) drawn as every row of work draws it, as facts here
 While it has not started because no worker reports, the problem that says
 so, with how to set one up, stands above it (`problems`).
 {% endcomment %}
-{% block page %}
+{% block content %}
+{% partialdef run_status inline %}
+<div data-fragment="" data-fragment-name="run_status"{% if following_run %} data-fragment-poll="2"{% endif %}>
+{% include "partials/_page_head.html" %}
 {% include "partials/_problems.html" with problems=problems %}
 {% layout %}
 {% section "Run" %}
@@ -26,4 +29,6 @@ so, with how to set one up, stands above it (`problems`).
   {% endfacts %}
 {% endsection %}
 {% endlayout %}
+</div>
+{% endpartialdef %}
 {% endblock %}
