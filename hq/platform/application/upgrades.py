@@ -97,21 +97,24 @@ class Plan:
         """A Compose service and the protections its reviewed update requires."""
 
         item = self.container
-        files = item.compose_files
+        files = tuple(map(PurePosixPath, item.compose_files))
+        if not files:
+            return None
+        file, *overrides = files
         service = (item.runtime or {}).get("service")
         if (
             not self.recommended
             or (self.stateful and not self.verified_by)
             or any(blocker.id != "no-apply-path" for blocker in self.blockers)
             or not item.running.state.running
-            or len(files) != 1
+            or (overrides and overrides != [file.parent / _standard_override(file.name)])
             or not item.running.stack
             or not isinstance(service, str)
             or not service
         ):
             return None
         return ComposeTarget(
-            PurePosixPath(files[0]),
+            file,
             item.machine.name,
             item.running.stack,
             service,
@@ -119,7 +122,7 @@ class Plan:
             self.target_tag,
             self.target_digest,
             needs_data_restore=self.stateful,
-            needs_owning_unit=bool(item.running.unit),
+            needs_owning_unit=bool(item.running.unit or overrides),
         )
 
     @property
@@ -358,6 +361,10 @@ OVERRIDES = (
     "docker-compose.override.yaml",
     "docker-compose.override.yml",
 )
+
+
+def _standard_override(base: str) -> str:
+    return {"compose.yaml": "compose.override.yaml", "docker-compose.yml": "docker-compose.override.yml"}.get(base, "")
 
 
 def _pinned_in(item: Container) -> str:
