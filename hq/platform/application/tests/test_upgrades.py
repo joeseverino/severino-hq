@@ -12,7 +12,7 @@ from ..machines import Machine
 from ..upgrades import HIGH as HIGH_RISK, LOW, MAJOR, PATCH, change_between, plans
 from .procedures import NEXT_REVISION, Supply, manifest
 from .test_container_standard import runtime
-from .test_containers import HIGH, container, estate, inventory
+from .test_containers import HIGH, container, estate, inventory, running
 from .test_image_findings import project
 
 TARGET = "sha256:" + "9" * 64
@@ -53,7 +53,7 @@ class ReviewedDeploymentTests(TestCase):
         inventory("portainer.runtime", [runtime("app", stack="app", service="web", healthcheck=True)])
         inventory("portainer.compose_project", [project("app", "/opt/example/app/compose.yaml")])
         container("app")
-        operator(self.client)
+        self.user = operator(self.client)
         self.procedure = manifest(
             id=self.operation,
             input_type=DeployInputs,
@@ -121,6 +121,42 @@ class ReviewedDeploymentTests(TestCase):
         self.supply(self.procedure)
         self.supply.reach()
         self.assertEqual(self.offer(), [])
+
+    def test_stateful_unit_requires_both_protections_in_the_reviewed_playbook(self):
+        from ..automation_runs import compose_deployment
+        from ..security import web_principal
+
+        reader = web_principal(self.user)
+        inventory(
+            "portainer.container",
+            [{**running("app", "ghcr.io/example/app:v1.2.0@sha256:aaa"), "unit": "example.service", "stack": "app"}],
+        )
+        inventory(
+            "portainer.runtime",
+            [
+                runtime(
+                    "app",
+                    stack="app",
+                    service="web",
+                    healthcheck=True,
+                    mounts=[{"type": "bind", "source": "/srv/app", "destination": "/data", "read_only": False}],
+                )
+            ],
+        )
+        (plan,) = plans()
+        self.assertTrue(plan.stateful)
+        target = plan.compose_target
+        assert target is not None
+        self.assertTrue(target.needs_owning_unit)
+        assert self.procedure.compose_updates is not None
+        for restore, unit in ((False, False), (True, False), (False, True), (True, True)):
+            with self.subTest(restore=restore, unit=unit):
+                updates = self.procedure.compose_updates.model_copy(
+                    update={"restores_data": restore, "uses_owning_unit": unit}
+                )
+                self.supply(self.procedure.model_copy(update={"compose_updates": updates}))
+                deployment = compose_deployment("container-image-update", "example", target.machine, target, reader)
+                self.assertEqual(deployment is not None, restore and unit)
 
 
 class ChangeTests(TestCase):

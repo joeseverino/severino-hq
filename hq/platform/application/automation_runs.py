@@ -694,6 +694,10 @@ def compose_deployment(
         updates = manifest.compose_updates
         if updates is None or not principal.permits(run_authority(manifest.effect)):
             continue
+        if (target.needs_data_restore and not updates.restores_data) or (
+            target.needs_owning_unit and not updates.uses_owning_unit
+        ):
+            continue
         for pin in manifest.compose_images:
             if (pin.project, pin.service) != (target.project, target.service):
                 continue

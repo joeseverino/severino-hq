@@ -53,6 +53,8 @@ class ComposeTarget:
     image: str
     tag: str
     digest: str
+    needs_data_restore: bool = False
+    needs_owning_unit: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,17 +94,16 @@ class Plan:
 
     @property
     def compose_target(self) -> ComposeTarget | None:
-        """A directly managed Compose service the reviewed deploy can update without a data snapshot."""
+        """A Compose service and the protections its reviewed update requires."""
 
         item = self.container
         files = item.compose_files
         service = (item.runtime or {}).get("service")
         if (
             not self.recommended
-            or self.stateful
+            or (self.stateful and not self.verified_by)
             or any(blocker.id != "no-apply-path" for blocker in self.blockers)
             or not item.running.state.running
-            or item.running.unit
             or len(files) != 1
             or not item.running.stack
             or not isinstance(service, str)
@@ -117,6 +118,8 @@ class Plan:
             item.standing.image.name,
             self.target_tag,
             self.target_digest,
+            needs_data_restore=self.stateful,
+            needs_owning_unit=bool(item.running.unit),
         )
 
     @property
