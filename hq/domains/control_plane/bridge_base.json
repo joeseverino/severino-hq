@@ -2610,6 +2610,11 @@
               "maxLength": 500
             }
           },
+          "compose_images": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {"$ref": "#/components/schemas/ScannedComposeImage"}
+          },
           "problems": {
             "type": "array",
             "maxItems": 20,
@@ -2630,6 +2635,18 @@
           "verification",
           "problems"
         ]
+      },
+      "ScannedComposeImage": {
+        "type": "object",
+        "description": "A literal image pin in a Compose service of the scanned commit.",
+        "properties": {
+          "project": {"type": "string", "maxLength": 63},
+          "file": {"type": "string", "enum": ["compose.yaml", "docker-compose.yml"]},
+          "service": {"type": "string", "maxLength": 128},
+          "image": {"type": "string", "maxLength": 320}
+        },
+        "required": ["project", "file", "service", "image"],
+        "additionalProperties": false
       },
       "ScannedRole": {
         "type": "object",

@@ -33,6 +33,10 @@ that work stands in its own row.
 {% endblock %}
 
 {% block form %}
+  {% if finding_changed %}
+    {% notice tone="info" %}<p>Open Needs you to see the latest finding and its available actions.</p>{% endnotice %}
+    {% url 'action_items' as needs_you_url %}{% button "Open Needs you" needs_you_url look="primary" %}
+  {% else %}
   {% comment %}
   A command that changes a live system, stops or deletes says so once, in the
   confirmation beside its button.
@@ -69,8 +73,18 @@ that work stands in its own row.
     {% title %}{{ unoffered_target }} cannot be used here{% endnotice %}
   {% endif %}
 
+  {% if reviewed %}
+    {% facts %}
+      {% fact "Machine" value=reviewed.machine %}
+      {% fact "Project" value=reviewed.pin.project %}
+      {% fact "Service" value=reviewed.pin.service %}
+      {% fact "Image" %}<code>{{ reviewed.pin.image }}</code>{% endfact %}
+      {% fact "Adopted commit" %}<code>{{ reviewed.revision|slice:":12" }}</code>{% endfact %}
+    {% endfacts %}
+  {% endif %}
   {% if hydrates_target %}{% firstof "data-command-form data-command-hydrate-target" as hooks %}{% else %}{% firstof "data-command-form" as hooks %}{% endif %}
   {% include "partials/_form.html" with form=form fields="core/_command_fields.html" hooks=hooks verb=command_label choices=switch.choices choice_field=switch.field cancel_url=cancel_url note="" %}
+  {% endif %}
 {% endblock %}
 
 {% block page %}{{ block.super }}

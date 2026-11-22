@@ -1408,6 +1408,28 @@ Ansible's own, read from the playbook and its roles at the commit ([Refreshing
 the playbooks](#refreshing-the-playbooks)), and a sidecar names no playbook,
 revision or repository.
 
+A read-only playbook may declare `investigates` with the finding rule names it
+helps explain. Needs you offers its existing Run command when the adopted
+playbook can reach the finding's machine and the reader may run it. The link
+names the finding. Opening the form reads that finding again for the current
+reader and selects the machine. When it identifies one systemd service, HQ
+fills a declared `service_unit` input that accepts its exact name. Multiple
+services leave that field for the reader to fill. The form still validates
+every input and a run still goes through the canonical capability.
+
+A Compose deploy procedure can declare `compose_updates` with its repository
+`source` directory and its absolute `destination` on the machines it serves.
+It names the image rules it fixes in `fixes` and accepts the existing Compose
+project, service and exact image inputs. The scan reads literal tag and digest
+pins directly from the files in that commit. Needs you offers **Review image
+update** when an adopted pin matches the recommended image, the observed
+service uses that file, and the runner and reader can run the procedure. This
+path covers running services with a single Compose file and no data that needs
+a snapshot. The review binds the service, host, image and commit through the
+normal run command. If the adopted revision or the match changes, the reader
+opens the finding again. The playbook checks the actual running service and
+effective Compose image before changing the machine.
+
 The sidecar's format is published as a JSON Schema,
 `hq/platform/application/hq-procedure.schema.json`, written from
 `ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the

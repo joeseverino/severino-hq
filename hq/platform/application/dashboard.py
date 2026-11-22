@@ -26,7 +26,7 @@ from .domains import (
     provided,
     reader_variant,
 )
-from .finding_model import Finding
+from .finding_model import PLAYBOOK_INVESTIGATION, Finding
 from .finding_steps import WrittenStep
 from .findings import finding_key, rule_for
 from .json_schemas import as_written
@@ -180,6 +180,7 @@ def gathered_rows(entries: Iterable[Mapping[str, Any]]) -> list[QueueItem]:
 def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str) -> QueueItem:
     rule = rule_for(finding.rule)
     primary = finding.primary
+    pages = finding.pages
     return {
         "key": item_key(source_id, finding_key(finding)),
         "revision": item_revision(finding),
@@ -195,7 +196,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "steps": [as_written(step) for step in finding.steps],
         "no_help_reason": finding.no_help_reason,
         "check": as_written(finding.check) if finding.check else None,
-        "actions": [],
+        "actions": [as_written(link) for link in pages if link.name == PLAYBOOK_INVESTIGATION],
         "subject": as_written(finding.subject_link) if finding.subject_link else None,
         "notice": finding.notice,
         "held": finding.held,
@@ -207,7 +208,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "observed_at": iso(finding.observed_at) or "",
         "reads": finding.reads,
         "facts": [list(fact) for fact in finding.evidence],
-        "links": [as_written(link) for link in finding.pages],
+        "links": [as_written(link) for link in pages if link.name != PLAYBOOK_INVESTIGATION],
         "read_capabilities": list(finding.read_capabilities),
     }
 

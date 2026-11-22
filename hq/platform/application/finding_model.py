@@ -25,8 +25,10 @@ lazy from .capabilities import capability_spec, capability_words
 lazy from .pages import command_reach
 
 if TYPE_CHECKING:
+    from .automation_runs import ComposeDeployment
     from .cadence import ControllerSweepCommand
     from .security import Principal
+    from .upgrades import ComposeTarget
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +158,10 @@ class Finding:
     # What kind of matter it is, as its owner heads a list of them; several
     # of one family from one source fold under it in the queue.
     family: str = ""
+    # Playbook context, derived from the observed service and adopted source.
+    service_unit: str = field(default="", kw_only=True)
+    compose_target: ComposeTarget | None = field(default=None, kw_only=True)
+    deployment: ComposeDeployment | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         as_members(self)
@@ -388,6 +394,7 @@ def distinct(findings: Iterable[Finding]) -> tuple[Finding, ...]:
 # A problem card's own button: read what the claim rests on again, then run
 # the check against it.
 CHECK_AGAIN = "Check again"
+PLAYBOOK_INVESTIGATION = "playbook-investigation"
 # What a step says last when a fresh read is what confirms the fix. A problem
 # card carries Check again; a connection's own page carries the refresh.
 THEN_CHECK_AGAIN = f"Then press {CHECK_AGAIN}."

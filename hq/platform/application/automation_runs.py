@@ -7,15 +7,17 @@ docs/Architecture.md, "Running a playbook".
 """
 
 from collections.abc import Iterable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field, make_dataclass, replace
 from functools import partial
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
-from pydantic import Field, StrictStr, StringConstraints
+from pydantic import Field, StrictStr, StringConstraints, ValidationError
 
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.application.url_query import with_query
@@ -32,7 +34,7 @@ lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE
 lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
-from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
+from .automation_manifest import COMPOSE_INPUTS, ComposeImage, OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
@@ -50,15 +52,16 @@ lazy from .capabilities import Consented, consent
 lazy from .controller import release_lapsed
 lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
-lazy from .finding_model import FindingRemedy
 lazy from .findings import rule_for
 lazy from .history import asked_by
+lazy from .images import ImageRef
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
 lazy from .labels import lower_first
 lazy from .machines import machine_catalog
 lazy from .moments import ago, moment, when
 lazy from .payload_words import ChangeRow, field_words, value_words
+lazy from .projection import read_once
 lazy from .resource_operations import (
     Prepared,
     RunAsked,
@@ -75,6 +78,7 @@ lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs, run_url
 
 if TYPE_CHECKING:
     from .pages import PageAction
+    from .upgrades import ComposeTarget
 
 
 # One catalog at a time: a process builds its commands from the catalog
@@ -216,14 +220,17 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
 
     Every field but the input type, which its schema's digest stands for, so a
     new revision or a changed input moves the spec and with it what a held run
-    is measured against, and but the findings it fixes, which say where it is
+    is measured against, and but its finding rules, which say where it is
     offered and nothing of what a run does.
     """
 
     return validate_spec(
         OPERATION_KIND,
         {
-            **manifest.model_dump(mode="json", exclude={"id", "input_type", "privilege", "fixes"}),
+            **manifest.model_dump(
+                mode="json",
+                exclude={"id", "input_type", "privilege", "fixes", "investigates", "compose_updates", "compose_images"},
+            ),
             "operation": manifest.id,
             "privilege": manifest.privilege or "",
             "input_schema_sha256": digest(json_schema(manifest.input_type)),
@@ -605,10 +612,10 @@ def cancel_action(operation_id: str, playbook: str, state: str, effect: str, pri
     return _cancel_button(operation_id)
 
 
-def run_here_url(operation_id: str, hosts: tuple[str, ...]) -> str:
+def run_here_url(operation_id: str, hosts: tuple[str, ...], *, finding: str = "", review: str = "") -> str:
     """The Run page of the playbook ``operation_id`` with ``hosts`` chosen."""
 
-    return command_url(capability_name(operation_id), hosts=hosts)
+    return command_url(capability_name(operation_id), hosts=hosts, finding=finding, review=review)
 
 
 class PlaybookHere(NamedTuple):
@@ -635,29 +642,80 @@ def playbooks_on(machine: str, principal: Principal) -> tuple[PlaybookHere, ...]
     return tuple(sorted(found, key=lambda each: each.title.casefold()))
 
 
-def playbook_remedies(rule: str, machine: str) -> tuple[FindingRemedy, ...]:
-    """Each adopted playbook that says it fixes the finding ``rule`` and may
-    run on the machine ``machine``, as the remedy its Run page is, with the
-    machine chosen, said in its command's words. What its reader may run is
-    the finding's to judge."""
+def playbooks_for(rule: str, machine: str) -> Iterable[OperationManifest]:
+    """Adopted playbooks written for the machine and the finding's rule."""
 
-    return tuple(
-        FindingRemedy(
-            capability=capability_name(manifest.id),
-            target="",
-            url=run_here_url(manifest.id, (machine,)),
-        )
+    return (
+        manifest
         for manifest in operation_registry().values()
-        if rule in manifest.fixes and manifest.admits(MACHINE_KIND, machine)
+        if (rule in manifest.fixes or rule in manifest.investigates) and manifest.admits(MACHINE_KIND, machine)
     )
 
 
-def _fixes(manifest: OperationManifest) -> tuple[CommandFact, ...]:
-    """The findings a playbook says it fixes, each by its rule's title, or
-    no fact for one that fixes none."""
+REVIEW_IMAGE_UPDATE = "Review image update"
 
-    titles = "; ".join(found.title for rule in manifest.fixes if (found := rule_for(rule)))
-    return (CommandFact("Fixes", titles),) if titles else ()
+
+class ComposeDeployment(NamedTuple):
+    """The reviewed procedure and exact values it can deploy from a finding."""
+
+    operation: str
+    finding: str
+    machine: str
+    pin: ComposeImage
+    revision: str
+
+    @property
+    def capability(self) -> str:
+        return capability_name(self.operation)
+
+    @property
+    def review(self) -> str:
+        return digest((self.revision, self.initial))
+
+    @property
+    def url(self) -> str:
+        return run_here_url(self.operation, (self.machine,), finding=self.finding, review=self.review)
+
+    @property
+    def parameters(self) -> dict[str, str]:
+        return dict(zip(COMPOSE_INPUTS, (self.pin.project, self.pin.service, self.pin.image), strict=True))
+
+    @property
+    def initial(self) -> dict[str, Any]:
+        return {"hosts": [self.machine], **{f"parameters.{name}": value for name, value in self.parameters.items()}}
+
+
+def compose_deployment(
+    rule: str, key: str, machine: str, target: ComposeTarget, principal: Principal
+) -> ComposeDeployment | None:
+    """Offer a run only when the adopted source and the observed service agree."""
+
+    for manifest in playbooks_for(rule, normalized_hostname(machine)):
+        updates = manifest.compose_updates
+        if updates is None or not principal.permits(run_authority(manifest.effect)):
+            continue
+        for pin in manifest.compose_images:
+            if (pin.project, pin.service) != (target.project, target.service):
+                continue
+            if target.file != PurePosixPath(updates.destination, pin.project, pin.file):
+                continue
+            image = ImageRef.parse(pin.image)
+            if image is None or (image.name, image.tag, image.digest) != (target.image, target.tag, target.digest):
+                continue
+            deployment = ComposeDeployment(manifest.id, key, machine, pin, manifest.revision)
+            with suppress(ValidationError):
+                manifest.input_type.model_validate(deployment.parameters, strict=True)
+                hosts = read_once(f"automation.reachable:{manifest.id}", partial(reachable, manifest))
+                if machine in hosts:
+                    return deployment
+    return None
+
+
+def _rule_fact(label: str, rules: tuple[str, ...]) -> tuple[CommandFact, ...]:
+    """The findings a playbook names, in those rules' words."""
+
+    titles = "; ".join(found.title for rule in rules if (found := rule_for(rule)))
+    return (CommandFact(label, titles),) if titles else ()
 
 
 def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[WorkRun]:
@@ -755,7 +813,8 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
         CommandFact("Verification", _statements(manifest.verification)),
         CommandFact("Recovery", _statements(manifest.recovery)),
         CommandFact("Retry", RETRY_WORDS[manifest.retry]),
-        *_fixes(manifest),
+        *_rule_fact("Fixes", manifest.fixes),
+        *_rule_fact("Investigates", manifest.investigates),
         CommandFact("Adopted commit", manifest.revision[:SHORT_REVISION]),
         CommandFact("Playbook file", manifest.playbook),
     )

@@ -39,6 +39,8 @@ ESTATE_READS: tuple[str, ...] = (
 # (``record_findings``).
 FINDINGS_READS: tuple[str, ...] = (
     *ESTATE_READS,
+    # The latest scan says which machines a playbook investigation can reach.
+    "control_plane.SourceProposal",
     "assets.Asset",
     "calendars.Entry",
     "content.ContentItem",

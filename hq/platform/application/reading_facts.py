@@ -192,6 +192,7 @@ class OnEachMachine[R: ReadingRow]:
     explanation: Callable[[tuple[R, ...]], str]
     evidence: Callable[[R], Iterable[tuple[str, str]]]
     steps: Callable[[TopologyNode, R], Iterable[Run | Do]]
+    service_unit: Callable[[R], str] | None = None
 
     def __call__(self, estate: FindingEstate) -> tuple[Finding, ...]:
         found = []
@@ -213,6 +214,7 @@ class OnEachMachine[R: ReadingRow]:
                     no_help_reason=cannot_run_commands(node.label),
                     observed_at=reading.taken,
                     reads=self.row.KIND,
+                    service_unit=self.service_unit(picked[0]) if self.service_unit and len(picked) == 1 else "",
                 )
             )
         return tuple(found)

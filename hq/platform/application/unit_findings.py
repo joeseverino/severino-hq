@@ -422,6 +422,7 @@ _restarting = OnEachMachine(
     rule="unit-restarting",
     row=UnitState,
     picked=lambda unit: bool(unit.unit) and unit.looping,
+    service_unit=lambda unit: unit.unit,
     severity=lambda _looping: Tone.SERIOUS,
     title=lambda node, looping: (
         f"{looping[0].named} keeps restarting on {node.label}"

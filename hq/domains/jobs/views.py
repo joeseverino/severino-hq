@@ -112,6 +112,10 @@ class RunView(RecordPageMixin, TemplateView):
     template_name = "jobs/run_detail.html"
     page_trail = (("Background jobs", reverse_lazy("jobs:list")),)
 
+    @property
+    def following_run(self) -> bool:
+        return self.record["state"] in {JobState.QUEUED, JobState.RUNNING}
+
     @override
     def get_page_title(self):
         return self.record["title"]
@@ -124,10 +128,9 @@ class RunView(RecordPageMixin, TemplateView):
             run["operation_id"], playbook, run["state"], run["effect"], web_principal(self.request.user)
         )
         # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
-        ended = run["state"] not in {JobState.QUEUED, JobState.RUNNING}
         again = (
             PageAction.command(run["capability"], variant=AGAIN, query={"hosts": tuple(run["hosts"])})
-            if ended and playbook and capability_spec(run["capability"])
+            if not self.following_run and playbook and capability_spec(run["capability"])
             else None
         )
         return tuple(action for action in (again, cancel) if action is not None)
@@ -136,6 +139,7 @@ class RunView(RecordPageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["page_badges"] = (PageBadge(self.record["state_label"], Tone(self.record["tone"])),)
+        context["following_run"] = self.following_run
         context.update(run_context(self.record, user=self.request.user))
         return context
 
