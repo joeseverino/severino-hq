@@ -122,11 +122,15 @@ class ReviewedDeploymentTests(TestCase):
         self.supply.reach()
         self.assertEqual(self.offer(), [])
 
-    def test_stateful_unit_requires_both_protections_in_the_reviewed_playbook(self):
+    def test_stateful_unit_with_an_override_requires_both_protections_in_the_reviewed_playbook(self):
         from ..automation_runs import compose_deployment
         from ..security import web_principal
 
         reader = web_principal(self.user)
+        inventory(
+            "portainer.compose_project",
+            [project("app", "/opt/example/app/compose.yaml", "/opt/example/app/compose.override.yaml")],
+        )
         inventory(
             "portainer.container",
             [{**running("app", "ghcr.io/example/app:v1.2.0@sha256:aaa"), "unit": "example.service", "stack": "app"}],
