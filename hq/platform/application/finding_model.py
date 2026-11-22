@@ -132,10 +132,6 @@ class Finding:
     # out of date.
     observed_at: datetime | None = None
     reads: str = ""
-    # The exact systemd service the finding is about, if it names one.
-    service_unit: str = ""
-    compose_target: ComposeTarget | None = None
-    deployment: ComposeDeployment | None = None
     # The page a card leads with, where its subject's own page is not it: the
     # certificate to renew, the containers to upgrade.
     primary: ActionLink | None = None
@@ -162,6 +158,10 @@ class Finding:
     # What kind of matter it is, as its owner heads a list of them; several
     # of one family from one source fold under it in the queue.
     family: str = ""
+    # Playbook context, derived from the observed service and adopted source.
+    service_unit: str = field(default="", kw_only=True)
+    compose_target: ComposeTarget | None = field(default=None, kw_only=True)
+    deployment: ComposeDeployment | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         as_members(self)
