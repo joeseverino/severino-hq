@@ -160,8 +160,8 @@ class Finding:
     family: str = ""
     # Playbook context, derived from the observed service and adopted source.
     service_unit: str = field(default="", kw_only=True)
-    compose_target: ComposeTarget | None = field(default=None, kw_only=True)
-    deployment: ComposeDeployment | None = field(default=None, kw_only=True)
+    compose_targets: tuple[ComposeTarget, ...] = field(default=(), kw_only=True)
+    deployments: tuple[ComposeDeployment, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         as_members(self)

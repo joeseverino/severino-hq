@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from pydantic import TypeAdapter, ValidationError
 
+from .action_links import command_action
 from .finding_model import PLAYBOOK_INVESTIGATION
 lazy from . import automation_runs, container_findings
 lazy from .findings import estate_findings, finding_key, rule_for, rule_of
@@ -32,7 +33,7 @@ class FindingRun:
         return self.deployment.review if self.deployment else ""
 
 
-def finding_run(capability: str, key: str, principal: Principal) -> FindingRun | None:
+def finding_run(capability: str, key: str, principal: Principal, *, review: str = "") -> FindingRun | None:
     """Fill the run only while this reader's finding offers that command."""
 
     if not automation_runs.runs_procedure(capability) or rule_for(rule := rule_of(key)) is None:
@@ -40,8 +41,15 @@ def finding_run(capability: str, key: str, principal: Principal) -> FindingRun |
     for finding in estate_findings(principal=principal, rule=rule):
         if finding_key(finding) != key:
             continue
-        if (deployment := finding.deployment) and deployment.capability == capability:
-            return FindingRun(deployment.initial, deployment)
+        for deployment in finding.deployments:
+            current = automation_runs.operation_registry().get(deployment.operation)
+            if (
+                deployment.capability == capability
+                and deployment.review == review
+                and current is not None
+                and deployment.revision == current.revision
+            ):
+                return FindingRun(deployment.initial, deployment)
         for offer in finding.offers:
             if offer.name == PLAYBOOK_INVESTIGATION and offer.capability == capability and not offer.refusal:
                 hosts = parse_qs(urlsplit(offer.url).query)["hosts"]
@@ -54,10 +62,21 @@ def container_deployment(target: ComposeTarget, principal: Principal) -> ActionL
 
     for rule in (container_findings.UPDATE, container_findings.ADVISORY):
         for finding in estate_findings(principal=principal, rule=rule):
-            if finding.compose_target != target:
+            if target not in finding.compose_targets:
                 continue
-            if (deployment := finding.deployment) is not None:
-                return next((press for press in finding.presses if press.capability == deployment.capability), None)
+            for deployment in finding.deployments:
+                if (deployment.machine, deployment.pin.project, deployment.pin.service) == (
+                    target.machine,
+                    target.project,
+                    target.service,
+                ):
+                    return command_action(
+                        "remedy",
+                        deployment.capability,
+                        deployment.url,
+                        intent=automation_runs.REVIEW_IMAGE_UPDATE,
+                        recommended=True,
+                    )
     return None
 
 

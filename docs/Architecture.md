@@ -1435,6 +1435,16 @@ normal run command. If the adopted revision or the match changes, the reader
 opens the finding again. The playbook checks the actual running service and
 effective Compose image before changing the machine.
 
+When the same adopted procedure can apply several updates, Needs you can
+offer them together. One review shows each machine and exact image in
+execution order. The shared approval binds the full set to the adopted
+revision and becomes stale if that set changes. The operation holds every
+target machine for its lease. The runner calls the existing playbook once
+per update, with only that update's machine and inputs. The plan stops on
+the first failure and records which updates completed. Earlier successful
+updates remain deployed. An interrupted batch needs fresh observations
+before a new review.
+
 The sidecar's format is published as a JSON Schema,
 `hq/platform/application/hq-procedure.schema.json`, written from
 `ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the

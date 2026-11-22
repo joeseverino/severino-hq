@@ -73,6 +73,19 @@ that work stands in its own row.
     {% title %}{{ unoffered_target }} cannot be used here{% endnotice %}
   {% endif %}
 
+  {% if batch %}
+    {% facts %}
+      {% fact "Images" %}
+        {% list kind="down" %}
+          {% for update in batch.updates %}
+            <li>{{ update.pin.project }} / {{ update.pin.service }} on {{ update.machine }}{% dot %}<code>{{ update.pin.image }}</code></li>
+          {% endfor %}
+        {% endlist %}
+      {% endfact %}
+      {% fact "Adopted commit" %}<code>{{ batch.manifest.revision|slice:":12" }}</code>{% endfact %}
+    {% endfacts %}
+    <p>HQ runs these updates in the order shown and stops at the first failure.</p>
+  {% endif %}
   {% if reviewed %}
     {% facts %}
       {% fact "Machine" value=reviewed.machine %}
