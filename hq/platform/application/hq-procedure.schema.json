@@ -9,10 +9,18 @@
           "pattern": "^(?:/[a-zA-Z0-9_-]+)+$",
           "type": "string"
         },
+        "restores_data": {
+          "default": false,
+          "type": "boolean"
+        },
         "source": {
           "maxLength": 64,
           "pattern": "^[a-zA-Z0-9_-]+$",
           "type": "string"
+        },
+        "uses_owning_unit": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [

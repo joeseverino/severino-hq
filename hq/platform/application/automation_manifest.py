@@ -158,6 +158,8 @@ class ComposeUpdates(Closed):
 
     source: Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9_-]+$", max_length=64)]
     destination: Annotated[str, StringConstraints(pattern=r"^(?:/[a-zA-Z0-9_-]+)+$", max_length=200)]
+    restores_data: bool = False
+    uses_owning_unit: bool = False
 
 
 class ComposeImage(Closed):

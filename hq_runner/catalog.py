@@ -554,7 +554,11 @@ def procedure(
     declaration = found.found["declaration"]
     updates = declaration.get("compose_updates") if isinstance(declaration, Mapping) else None
     if isinstance(updates, Mapping) and isinstance(source := updates.get("source"), str):
-        images = list(islice(_compose_images(project_dir, source, files), 1001))
+        images = list(
+            islice(
+                _compose_images(project_dir, source, files, owning_unit=updates.get("uses_owning_unit") is True), 1001
+            )
+        )
         if len(images) > 1000:
             found.problem("The declared Compose source has more than 1000 pinned services.")
         else:
@@ -562,7 +566,9 @@ def procedure(
     return found.found
 
 
-def _compose_images(project_dir: Path, source: str, files: frozenset[str]) -> Iterator[dict[str, str]]:
+def _compose_images(
+    project_dir: Path, source: str, files: frozenset[str], *, owning_unit: bool
+) -> Iterator[dict[str, str]]:
     """Read literal pins from independent Compose files in the scanned checkout."""
 
     if "/" in source or not procedures.safe_path(source):
@@ -583,7 +589,9 @@ def _compose_images(project_dir: Path, source: str, files: frozenset[str]) -> It
             document = _yaml(project_dir, f"{source}/{project}/{filename}", PLAYBOOK_BYTES)
         except Refused, OSError, ValueError, yaml.YAMLError:
             document = None
-        if not isinstance(document, Mapping) or document.get("x-started-by") or "include" in document:
+        if not isinstance(document, Mapping) or "include" in document:
+            continue
+        if document.get("x-started-by") and not owning_unit:
             continue
         services = document.get("services")
         if not isinstance(services, Mapping):

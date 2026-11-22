@@ -1424,8 +1424,12 @@ project, service and exact image inputs. The scan reads literal tag and digest
 pins directly from the files in that commit. Needs you offers **Review image
 update** when an adopted pin matches the recommended image, the observed
 service uses that file, and the runner and reader can run the procedure. This
-path covers running services with a single Compose file and no data that needs
-a snapshot. The review binds the service, host, image and commit through the
+path requires a running service with a single Compose file. A procedure must
+declare `restores_data` to offer a stateful service, and the service must have
+a known health check or endpoint. A Compose project started by systemd also
+requires the procedure to declare `uses_owning_unit`. These declarations
+describe what the adopted playbook verifies. The target host still enforces
+its own permission and recovery policy. The review binds the service, host, image and commit through the
 normal run command. If the adopted revision or the match changes, the reader
 opens the finding again. The playbook checks the actual running service and
 effective Compose image before changing the machine.
