@@ -10,6 +10,7 @@ from difflib import unified_diff
 from typing import Any
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
+lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .approvals import COMPARED, DECLARATIONS, NO_OFFER, WARNINGS, offers, shown_by
@@ -436,6 +437,8 @@ def _resource_label(held: ApprovalRequest, record: Any, sentence: Asked) -> str:
 
     if record is None:
         return ""
+    if held.resource_kind == OPERATION_KIND:
+        return capabilities.capability_title(held.capability)
     return sentence.target or (record.label if record.title else kind_label(held.resource_kind))
 
 

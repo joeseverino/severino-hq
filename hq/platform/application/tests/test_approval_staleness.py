@@ -4,18 +4,20 @@ moves; never when the controller only reads the same record again."""
 from contextlib import suppress
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
 from hq.domains.projects.models import Project
 from hq.platform.application.contracts import Closed
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import declare, operator
 
 from ..approval_review import preview
 from ..approvals import AUDIT_LABEL, ApprovalError, ApproveCommand, approve
 from ..capabilities import execute_capability, run_capability
 from ..domains import records_of
+from ..plugin_testing import form_keyed
 from ..projects import DEPENDENCY_UPDATES
 from ..report_testing import bridged
 from ..security import Capability, Principal, mcp_principal
@@ -213,6 +215,27 @@ class RunStalenessTests(TestCase):
         self.assertEqual(operation.action, OperationRequest.Action.RUN)
         self.assertEqual(operation.requested_actor, mcp_principal().actor)
         self.assertEqual(operation.input["approved_by"], "operator")
+
+    def test_approved_run_receipt_shows_the_playbook_link(self):
+        from ..automation_runs import capability_name
+        from .procedures import manifest, run_payload
+
+        playbook = "example_restart"
+        self.supply(manifest(id=playbook, effect="destructive"))
+        name = capability_name(playbook)
+        answer = run_capability(
+            name, run_payload(), principal=mcp_principal(), idempotency_key="example-receipt"
+        ).answer
+        approval_id = answer["approval"]["id"]
+        receipt = reverse("core:approval_entry", kwargs={"approval_id": approval_id})
+        decision = reverse("control_plane:approval_decide", kwargs={"approval_id": approval_id, "decision": "approve"})
+        operator(self.client)
+
+        page = self.client.post(decision, form_keyed({"next": receipt}), follow=True)
+
+        self.assertContains(page, "Approved")
+        self.assertContains(page, f'href="/commands/{name}/"')
+        self.assertEqual(OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).count(), 1)
 
     def stales(self, held: ApprovalRequest) -> None:
         self.assertEqual(decided(held), ApprovalRequest.State.STALE)
