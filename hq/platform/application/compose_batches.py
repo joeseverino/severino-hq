@@ -68,7 +68,7 @@ def available(principal: Principal) -> tuple[Batch, ...]:
     for finding in estate_findings(principal=principal):
         if finding.rule not in (container_findings.ADVISORY, container_findings.UPDATE):
             continue
-        for update in finding.deployments:
+        for update in finding.reviewed_updates:
             manifest = registry.get(update.operation)
             if manifest is None or manifest.revision != update.revision:
                 continue

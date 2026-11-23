@@ -177,7 +177,10 @@ def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
     return {
         "primary": opens(label, page.url),
         "steps": _by_hand(running, plan),
-        "compose_targets": tuple(
+        "compose_target": plan.compose_target if len(running) == 1 else None,
+        "compose_targets": ()
+        if len(running) == 1
+        else tuple(
             candidate.compose_target
             for item in running
             if (candidate := plan_for(item))

@@ -41,7 +41,7 @@ def finding_run(capability: str, key: str, principal: Principal, *, review: str 
     for finding in estate_findings(principal=principal, rule=rule):
         if finding_key(finding) != key:
             continue
-        for deployment in finding.deployments:
+        for deployment in finding.reviewed_updates:
             current = automation_runs.operation_registry().get(deployment.operation)
             if (
                 deployment.capability == capability
@@ -62,9 +62,9 @@ def container_deployment(target: ComposeTarget, principal: Principal) -> ActionL
 
     for rule in (container_findings.UPDATE, container_findings.ADVISORY):
         for finding in estate_findings(principal=principal, rule=rule):
-            if target not in finding.compose_targets:
+            if target not in finding.update_targets:
                 continue
-            for deployment in finding.deployments:
+            for deployment in finding.reviewed_updates:
                 if (deployment.machine, deployment.pin.project, deployment.pin.service) == (
                     target.machine,
                     target.project,
