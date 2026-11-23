@@ -4,8 +4,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import OperationRequest
-from hq.platform.core.testing import operator
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
+from hq.platform.core.testing import AGENT, operator
 
 from ..contracts import Closed
 from ..machines import Machine
@@ -108,6 +108,82 @@ class ReviewedDeploymentTests(TestCase):
         self.assertContains(finished, 'data-fragment-name="run_status"')
         self.assertNotContains(finished, "data-fragment-poll")
         self.assertNotContains(finished, "Cancel run")
+
+    def _batch(self):
+        from .. import compose_batches
+        from ..automation_manifest import ComposeImage
+        from ..security import web_principal
+
+        inventory(
+            "portainer.container",
+            [{**running(name, "ghcr.io/example/app:v1.2.0@sha256:aaa"), "stack": name} for name in ("app", "other")],
+        )
+        inventory(
+            "portainer.runtime",
+            [runtime(name, stack=name, service="web", healthcheck=True) for name in ("app", "other")],
+        )
+        inventory(
+            "portainer.compose_project",
+            [project(name, f"/opt/example/{name}/compose.yaml") for name in ("app", "other")],
+        )
+        container("other")
+        pins = (self.pin, {**self.pin, "project": "other"})
+        self.supply(
+            self.procedure.model_copy(
+                update={"compose_images": tuple(ComposeImage.model_validate(pin) for pin in pins)}
+            )
+        )
+        (batch,) = compose_batches.available(web_principal(self.user))
+        return batch
+
+    def test_batch_reviews_exact_pins_and_queues_one_guarded_job(self):
+        batch = self._batch()
+        response = self.client.get(reverse("action_items"))
+        self.assertContains(response, "Review image updates")
+        response = self.client.get(batch.url)
+        self.assertContains(response, "Deploy images")
+        self.assertContains(response, "9" * 64, count=2)
+        self.assertFalse(OperationRequest.objects.exists())
+        response = self.client.post(
+            batch.url,
+            {"review": "unreviewed", "__confirm_effect": "on", "__retry_key": "web:example-batch"},
+        )
+
+        self.assertEqual(response.status_code, 302, response.context_data if hasattr(response, "context_data") else "")
+        queued = OperationRequest.objects.get()
+        self.assertEqual(queued.input["hosts"], ["example-box"])
+        self.assertEqual(queued.input["steps"], batch.steps)
+        self.assertNotIn("parameters", queued.input)
+        self.assertRedirects(response, reverse("jobs:run", kwargs={"pk": queued.pk}))
+        self.supply(self.procedure.model_copy(update={"revision": NEXT_REVISION}))
+        self.assertContains(self.client.get(batch.url), "Open Needs you", status_code=409)
+
+    def test_agent_batch_approval_binds_all_updates_and_expires_when_the_review_changes(self):
+        from .. import compose_batches
+        from ..approvals import APPROVE
+        from ..capabilities import run_capability
+        from ..security import web_principal
+
+        batch = self._batch()
+        asked = run_capability(
+            compose_batches.NAME, batch.query, principal=AGENT, idempotency_key="example-update-batch"
+        ).answer
+        self.assertEqual(asked.get("status"), "awaiting_approval", asked)
+        approval = ApprovalRequest.objects.get()
+        self.assertEqual(approval.baseline["updates"], batch.steps)
+        self.assertFalse(OperationRequest.objects.exists())
+
+        self.supply(self.procedure.model_copy(update={"revision": NEXT_REVISION}))
+        refused = run_capability(
+            APPROVE,
+            {"approval_id": str(approval.id)},
+            principal=web_principal(self.user),
+            idempotency_key="example-approve-outdated-batch",
+        ).answer
+        self.assertFalse(refused["ok"], refused)
+        approval.refresh_from_db()
+        self.assertEqual(approval.state, ApprovalRequest.State.STALE)
+        self.assertFalse(OperationRequest.objects.exists())
 
     def test_stale_review_cannot_submit_through_the_old_link(self):
         (url,) = self.offer()

@@ -42,7 +42,7 @@ from .process_caches import kept
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
-lazy from . import approvals, automation_adoption, pages
+lazy from . import approvals, automation_adoption, compose_batches, pages
 lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
@@ -454,7 +454,6 @@ def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> Page
     return _cancel_button(str(holder.pk))
 
 
-@transaction.atomic
 def request_run(manifest: OperationManifest, command: RunCommand, *, consented: Consented) -> RunAsked:
     """Queue one run of ``manifest`` for the automation worker.
 
@@ -462,7 +461,12 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, consented: 
     procedure's one active run refuses the second.
     """
 
-    bound = _bound(manifest, command)
+    return queue_run(manifest, _bound(manifest, command), reason=command.reason, consented=consented)
+
+
+@transaction.atomic
+def queue_run(manifest: OperationManifest, bound: dict[str, Any], *, reason: str, consented: Consented) -> RunAsked:
+    """Queue a bound request through the same machine locks and audit trail."""
 
     def prepare() -> Prepared:
         # A run no worker will take would wait for nothing: the finding that
@@ -484,7 +488,7 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, consented: 
                 details=_held_by(holder, resource, bound["hosts"]),
             )
         return resource, asked_fields(
-            consent(consented).principal, reason=command.reason, generation=resource.generation, **bound
+            consent(consented).principal, reason=reason, generation=resource.generation, **bound
         )
 
     operation, queued = enqueue(OperationRequest.Action.RUN, prepare)
@@ -956,4 +960,8 @@ def capability_specs(generation: str | None = None) -> tuple[CapabilitySpec, ...
 
     digest = automation_adoption.generation() if generation is None else generation
     titles = automation_adoption.playbook_titles(digest)
-    return (_cancel_spec(), *(_capability(manifest, titles) for manifest in operation_registry(digest).values()))
+    return (
+        _cancel_spec(),
+        compose_batches.capability(),
+        *(_capability(manifest, titles) for manifest in operation_registry(digest).values()),
+    )

@@ -341,12 +341,6 @@ def _playbooks(
     return remedies, investigations
 
 
-def _compose_deployment(finding: Finding, principal: Principal) -> automation_runs.ComposeDeployment | None:
-    if (target := finding.compose_target) is None:
-        return None
-    return automation_runs.compose_deployment(finding.rule, finding_key(finding), target.machine, target, principal)
-
-
 def _presses(
     remedies: Iterable[FindingRemedy], principal: Principal, subject: TopologyNode | None
 ) -> tuple[Press, ...]:
@@ -395,8 +389,17 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     the pages about its subject."""
 
     remedies, diagnostics = _playbooks(finding, subject, principal)
-    deployment = _compose_deployment(finding, principal)
-    if deployment:
+    deployments = tuple(
+        deployment
+        for target in finding.update_targets
+        if (
+            deployment := automation_runs.compose_deployment(
+                finding.rule, finding_key(finding), target.machine, target, principal
+            )
+        )
+    )
+    if len(finding.update_targets) == 1 and deployments:
+        (deployment,) = deployments
         remedies.append(
             FindingRemedy(deployment.capability, "", intent=automation_runs.REVIEW_IMAGE_UPDATE, url=deployment.url)
         )
@@ -407,13 +410,16 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     presses = _presses((*finding.remedies, *remedies), principal, subject)
-    has_deployment = deployment is not None and any(press.link.capability == deployment.capability for press in presses)
+    has_deployment = len(finding.update_targets) == 1 and any(
+        press.link.url == deployment.url for press in presses for deployment in deployments
+    )
     check, read_now = _verification(finding, principal, subject)
     # Every field the detector set carries through; only what derivation adds changes.
     return replace(
         finding,
         remedies=(),
-        deployment=deployment if has_deployment else None,
+        deployment=deployments[0] if has_deployment else None,
+        deployments=() if has_deployment else deployments,
         offers=(*finding.offers, *diagnostics, *subject_reads),
         investigations=investigations,
         primary=container_findings.upgrade_plan_link(finding.primary) if has_deployment else finding.primary,

@@ -162,6 +162,16 @@ class Finding:
     service_unit: str = field(default="", kw_only=True)
     compose_target: ComposeTarget | None = field(default=None, kw_only=True)
     deployment: ComposeDeployment | None = field(default=None, kw_only=True)
+    compose_targets: tuple[ComposeTarget, ...] = field(default=(), kw_only=True)
+    deployments: tuple[ComposeDeployment, ...] = field(default=(), kw_only=True)
+
+    @property
+    def update_targets(self) -> tuple[ComposeTarget, ...]:
+        return (self.compose_target,) if self.compose_target else self.compose_targets
+
+    @property
+    def reviewed_updates(self) -> tuple[ComposeDeployment, ...]:
+        return (self.deployment,) if self.deployment else self.deployments
 
     def __post_init__(self) -> None:
         as_members(self)

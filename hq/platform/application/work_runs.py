@@ -30,6 +30,7 @@ from .tone import Tone, Toned
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, capability_specs
 lazy from .cadence import automation_standing
+lazy from .compose_batches import DEPLOY as DEPLOY_IMAGES
 lazy from .entity_links import entity_link
 lazy from .history import Acts, asked_by, asking, who_did_each
 lazy from .outbound_work import job_names
@@ -238,7 +239,12 @@ def _run_title() -> Collate:
         if title
     )
     unadopted = Concat(Value(run_title("", {})), operation, output_field=CharField())
-    run = Case(*titled, default=unadopted, output_field=CharField())
+    run = Case(
+        When(input__steps__isnull=False, then=Value(DEPLOY_IMAGES)),
+        *titled,
+        default=unadopted,
+        output_field=CharField(),
+    )
     acted = (
         When(action=action, then=Value(action.label)) for action in OperationRequest.Action if action not in _LISTED
     )

@@ -7,7 +7,7 @@ past the timeout, ansible-runner stops it.
 
 import time
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from . import tracing
@@ -15,8 +15,10 @@ from .bridge import BridgeError
 from .claim import CAPABILITIES, Claimed, Installed, Reach, Refused, Run, bind, claimed
 from .events import (
     ELSEWHERE,
+    MESSAGE_LIMIT,
     MISSHAPEN,
     PAST_BOUNDS,
+    TASK_LIMIT,
     Event,
     Stated,
     Stopped,
@@ -222,6 +224,12 @@ def run_claimed(
 
     secrets = learned(run.parameters) | frozenset(secrets) | {str(target.identity) for target in run.targets}
     hold = _Hold(bridge, controller_id, run, clock, secrets)
+    if run.steps:
+        return _run_batch(run, runner, hold, clock, secrets)
+    return _run_step(run, runner, hold, secrets)
+
+
+def _run_step(run: Run, runner: Runner, hold: _Hold, secrets: frozenset[str]) -> dict[str, Any]:
     events: list[Event] = []
     said: list[Stated] = []
     stopped = Stopped(run.procedure.project_dir, secrets)
@@ -343,3 +351,42 @@ def _pass(
     bridge.report(controller_id, claim.operation, report)
     journal.clear()
     return Outcome(claim.operation, report)
+
+
+def _run_batch(
+    run: Run, runner: Runner, hold: _Hold, clock: Callable[[], float], secrets: frozenset[str]
+) -> dict[str, Any]:
+    """Run each update in isolation under the batch's one lease and deadline."""
+
+    deadline = clock() + run.timeout_seconds
+    targets = dict(zip(run.hosts, run.targets, strict=True))
+    outcomes: list[Event] = []
+    for step in run.steps:
+        remaining = int(deadline - clock())
+        if remaining < 1 or hold.should_stop():
+            reason, message = hold.stopped or ("TimedOut", "The batch exhausted its playbook's time limit.")
+            return _report(run.generation, success=False, reason=reason, message=message, events=outcomes)
+        single = replace(
+            run,
+            hosts=(step.machine,),
+            targets=(targets[step.machine],),
+            parameters=step.parameters,
+            timeout_seconds=remaining,
+            steps=(),
+        )
+        result = _run_step(single, runner, hold, secrets | learned(step.parameters))
+        ok = result["success"]
+        outcomes.append(
+            Event(step.machine, step.label[:TASK_LIMIT], "ok" if ok else "failed", result["message"][:MESSAGE_LIMIT])
+        )
+        if not ok:
+            return _report(
+                run.generation,
+                success=False,
+                reason=result["conditions"][0]["reason"],
+                message=f"The batch stopped at {step.label} after completing {len(outcomes) - 1} of {len(run.steps)} updates.",
+                events=outcomes,
+            )
+    return _report(
+        run.generation, success=True, message=f"All {len(outcomes)} image updates completed.", events=outcomes
+    )

@@ -183,7 +183,7 @@ _SHOWN = "shown"
 
 
 def measured_by[Handler: Callable[..., Any]](
-    subject: Callable[[Any], ApprovalSubject],
+    subject: Callable[[Any], ApprovalSubject | None],
     *,
     shown: Callable[[ApprovalRequest], Any] | None = None,
 ) -> Callable[[Handler], Handler]:
