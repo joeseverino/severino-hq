@@ -37,3 +37,18 @@ vars.labels = """\
   hq.platform.core.tests.browser.plants.CheckExampleTests \
   hq.platform.core.tests.browser.components.ComponentLayoutTests.test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for \
   hq.platform.core.tests.browser.components.ComponentLayoutTests.test_the_face_arriving_late_is_the_gates_move_under_a_fixed_clock"""
+
+# Every shared part in the system faces of the machine it runs on, in the
+# engine HQ_BROWSER_ENGINE names (the test runner installs it): CI's macOS
+# legs, since macOS's monospace face is wider than Linux's and a part that
+# fits on Linux can wrap in Safari. The catalog is where a face moves a
+# layout, as every page draws its parts. Here, browser:webkit already runs
+# it, so `mise run browser` leaves it to CI.
+["browser:catalog"]
+description = "Every catalog entry's layout rules in this machine's fonts, in HQ_BROWSER_ENGINE's engine: CI's macOS legs, which mise run browser leaves out"
+hide = true
+extends = "django-browser"
+depends = ["setup:lint-tools"]
+vars.labels = """\
+  hq.platform.core.tests.browser.catalog.layout.CatalogLayoutTests \
+  hq.platform.core.tests.browser.catalog.layout.ScriptedCatalogLayoutTests"""
