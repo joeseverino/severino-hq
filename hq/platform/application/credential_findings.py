@@ -185,7 +185,7 @@ def expiring(estate: FindingEstate) -> tuple[Finding, ...]:
                 explanation=(
                     f"HQ cannot read {node.label} until it is replaced."
                     if expired
-                    else f"After that, HQ cannot read {node.label}."
+                    else ended(f"After that, HQ cannot read {node.label}")
                 ),
                 evidence=(("Expires", expiry_phrase(stamp)),),
                 steps=mint_steps(node),
