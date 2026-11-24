@@ -45,6 +45,9 @@ VARIABLES = ReadingPart("variables", "Actions variables", requires=(GitHub.VARIA
 # Each workflow's ``uses:`` lines and the commit each tag names now: what a
 # pinning fix replaces them with.
 WORKFLOW_PINS = ReadingPart("workflow_pins", "Workflow action pins", requires=(GitHub.CONTENTS_READ,))
+# Of a repository opted in to updates: each app's Compose files, the open
+# Dependency Dashboard, and the images each update moves.
+COMPOSE = ReadingPart("compose", "Compose apps", requires=(GitHub.CONTENTS_READ, GitHub.ISSUES_READ))
 PARTS = (
     CODE_SCANNING,
     DEPENDABOT,
@@ -56,7 +59,11 @@ PARTS = (
     ACCESS,
     VARIABLES,
     WORKFLOW_PINS,
+    COMPOSE,
 )
+# The most Compose files a record keeps, which the controller reads from the
+# record's schema in the bridge contract.
+COMPOSE_KEPT = 500
 
 
 # The parts a record counts open alerts of, by their part names.
@@ -131,13 +138,16 @@ class RepositoryRecord(ObservationRecord):
     pushed_at: Stamp = None
     head: dict[str, Any] = {}
     checks: dict[str, Any] = {}
-    # ``{number, title, url, author, draft, created_at, updated_at, head, branch,
-    # labels, checks, files}`` per open pull request, newest first. For a pull
-    # request Renovate opened (its branch under ``renovate/``), ``checks`` is
-    # the head's ``{state, total, failing, running, names}`` and ``files`` is
-    # ``{path, status, additions, deletions, patch?}`` per file it changes,
-    # ``patch`` only under ``compose/`` and only when short enough
-    # (``github_readings.go``); both are None for any other.
+    # ``{number, title, url, author, draft, created_at, updated_at, head, base,
+    # branch, labels, checks, files, apps}`` per open pull request, newest
+    # first. For a pull request Renovate opened (its branch under
+    # ``renovate/``), ``checks`` is the head's ``{state, total, failing,
+    # running, names}`` and ``files`` is ``{path, status, additions,
+    # deletions}`` per file it changes; both are None for any other. ``apps``
+    # is ``{app, read, images: [{service, before, after}]}`` per app whose
+    # Compose files it changes, each service whose image differs at its head,
+    # in a repository opted in to updates, and None otherwise
+    # (``github_compose.go``).
     pull_requests: list[dict[str, Any]] = []
     # The check names the newest pull request runs.
     pull_request_checks: list[str] = []
@@ -168,6 +178,11 @@ class RepositoryRecord(ObservationRecord):
     # Each ``uses:`` of a reusable workflow another repository holds, pinned or
     # not: what it uses in turn is not read here.
     called_workflows: list[str] | None = None
+    # Each app's Compose files on the default branch, ``compose/<app>/<file>``,
+    # and the open Dependency Dashboard's address, of a repository opted in to
+    # updates: empty for any other, or where the Compose part was refused.
+    compose: list[str] = Field(default=[], max_length=COMPOSE_KEPT)
+    dashboard: str = ""
     # What GitHub's change query answered when this record was read, hashed,
     # and when it was read in full: the plan HQ sends the controller.
     fingerprint: str = ""
@@ -337,6 +352,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
             GitHub.METADATA_READ,
             GitHub.CONTENTS_READ,
             GitHub.CHECKS_READ,
+            GitHub.ISSUES_READ,
             GitHub.PULL_REQUESTS_READ,
             GitHub.ACTIONS_READ,
             GitHub.DEPLOYMENTS_READ,

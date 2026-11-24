@@ -506,6 +506,7 @@ const (
 	PartBranchRules       ReadingPartName = "branch_rules"
 	PartClients           ReadingPartName = "clients"
 	PartCodeScanning      ReadingPartName = "code_scanning"
+	PartCompose           ReadingPartName = "compose"
 	PartConfiguration     ReadingPartName = "configuration"
 	PartConnections       ReadingPartName = "connections"
 	PartDNS               ReadingPartName = "dns"
@@ -551,6 +552,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartClients:
 		return true
 	case PartCodeScanning:
+		return true
+	case PartCompose:
 		return true
 	case PartConfiguration:
 		return true
@@ -1720,7 +1723,9 @@ type GitHubRepositoryRecord struct {
 	CalledWorkflows   []string                         `json:"called_workflows,omitempty"`
 	Carried           bool                             `json:"carried,omitempty"`
 	Checks            map[string]any                   `json:"checks,omitempty"`
+	Compose           []string                         `json:"compose,omitempty"`
 	ConnectionRef     string                           `json:"connection_ref"`
+	Dashboard         string                           `json:"dashboard,omitempty"`
 	DefaultBranch     string                           `json:"default_branch,omitempty"`
 	DependabotAlerts  []map[string]any                 `json:"dependabot_alerts,omitempty"`
 	Deployments       []map[string]any                 `json:"deployments,omitempty"`

@@ -175,6 +175,7 @@ Permissions, and no others:
 - `Dependabot alerts: Read-only (API: vulnerability_alerts)`
 - `Deployments: Read-only`
 - `Issues: Read & write`
+- `Issues: Read-only`
 - `Metadata: Read-only`
 - `Packages: Read-only`
 - `Pull requests: Read & write`

@@ -1640,6 +1640,59 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/contents/{path}": {
+   "get": {
+    "operationId": "repos/get-content",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "path",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "ref",
+      "description": "The name of the commit/branch/tag. Default: the repository\u2019s default branch.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/content-file"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/dependabot/alerts": {
    "get": {
     "operationId": "dependabot/list-alerts-for-repo",
@@ -1846,6 +1899,59 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/git/trees/{tree_sha}": {
+   "get": {
+    "operationId": "git/get-tree",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "tree_sha",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "recursive",
+      "description": "Setting this parameter to any value returns the objects or subtrees referenced by the tree specified in `:tree_sha`. For example, setting `recursive` to any of the following will enable returning objects or subtrees: `0`, `1`, `\"true\"`, and `\"false\"`. Omit this parameter to prevent recursively returning objects or subtrees.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/git-tree"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/installation": {
    "get": {
     "operationId": "apps/get-repo-installation",
@@ -1874,6 +1980,83 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/installation"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/repos/{owner}/{repo}/issues": {
+   "get": {
+    "operationId": "issues/list-for-repo",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "state",
+      "description": "Indicates the state of the issues to return.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "open",
+        "closed",
+        "all"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "sort",
+      "description": "What to sort results by.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "created",
+        "updated",
+        "comments"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/issue"
+         }
         }
        }
       }
@@ -3072,6 +3255,23 @@
      "author"
     ]
    },
+   "content-file": {
+    "title": "Content File",
+    "description": "Content File",
+    "type": "object",
+    "properties": {
+     "encoding": {
+      "type": "string"
+     },
+     "content": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "content",
+     "encoding"
+    ]
+   },
    "dependabot-alert": {
     "type": "object",
     "description": "A Dependabot alert.",
@@ -3379,10 +3579,6 @@
      "deletions": {
       "type": "integer",
       "example": 21
-     },
-     "patch": {
-      "type": "string",
-      "example": "@@ -132,7 +132,7 @@ module Test @@ -1000,7 +1000,7 @@ module Test"
      }
     },
     "required": [
@@ -3641,6 +3837,69 @@
      }
     ]
    },
+   "git-tree": {
+    "title": "Git Tree",
+    "description": "The hierarchy between files in a Git repository.",
+    "type": "object",
+    "properties": {
+     "truncated": {
+      "type": "boolean"
+     },
+     "tree": {
+      "description": "Objects specifying a tree structure",
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "path",
+        "mode",
+        "type",
+        "sha"
+       ],
+       "properties": {
+        "path": {
+         "type": "string",
+         "example": "test/file.rb"
+        },
+        "mode": {
+         "type": "string",
+         "example": "040000"
+        },
+        "type": {
+         "type": "string",
+         "example": "tree"
+        },
+        "sha": {
+         "type": "string",
+         "example": "23f6827669e43831def8a7ad935069c8bd418261"
+        },
+        "size": {
+         "type": "integer",
+         "example": 12
+        },
+        "url": {
+         "type": "string",
+         "example": "https://api.github.com/repos/owner-482f3203ecf01f67e9deb18e/BBB_Private_Repo/git/blobs/23f6827669e43831def8a7ad935069c8bd418261"
+        }
+       }
+      },
+      "example": [
+       {
+        "path": "file.rb",
+        "mode": "100644",
+        "type": "blob",
+        "size": 30,
+        "sha": "44b4fc6d56897b048c772eb4087f854f46256132",
+        "url": "https://api.github.com/repos/octocat/Hello-World/git/blobs/44b4fc6d56897b048c772eb4087f854f46256132"
+       }
+      ]
+     }
+    },
+    "required": [
+     "tree",
+     "truncated"
+    ]
+   },
    "installation": {
     "title": "Installation",
     "description": "Installation",
@@ -3698,6 +3957,116 @@
      }
     },
     "required": []
+   },
+   "issue": {
+    "title": "Issue",
+    "description": "Issues are a great way to keep track of tasks, enhancements, and bugs for your projects.",
+    "type": "object",
+    "properties": {
+     "html_url": {
+      "type": "string"
+     },
+     "title": {
+      "description": "Title of the issue",
+      "example": "Widget creation fails in Safari on OS X 10.8",
+      "type": "string"
+     },
+     "pull_request": {
+      "type": "object",
+      "properties": {
+       "merged_at": {
+        "type": "string",
+        "nullable": true
+       },
+       "diff_url": {
+        "type": "string",
+        "nullable": true
+       },
+       "html_url": {
+        "type": "string",
+        "nullable": true
+       },
+       "patch_url": {
+        "type": "string",
+        "nullable": true
+       },
+       "url": {
+        "type": "string",
+        "nullable": true
+       }
+      },
+      "required": [
+       "diff_url",
+       "html_url",
+       "patch_url",
+       "url"
+      ]
+     }
+    },
+    "required": [
+     "html_url",
+     "title"
+    ],
+    "x-github-breaking-changes": [
+     {
+      "changeset": "deprecate_beta_media_type",
+      "patch": {
+       "properties": {
+        "pull_request": {
+         "type": "object",
+         "properties": {
+          "merged_at": {
+           "nullable": false
+          },
+          "diff_url": {
+           "nullable": false
+          },
+          "html_url": {
+           "nullable": false
+          },
+          "patch_url": {
+           "nullable": false
+          },
+          "url": {
+           "nullable": false
+          }
+         }
+        }
+       }
+      },
+      "version": "2026-03-10"
+     },
+     {
+      "changeset": "remove_singular_assignee_from_issues_and_pull_requests",
+      "patch": {
+       "properties": {
+        "assignee": null
+       },
+       "required": [
+        "closed_at",
+        "comments",
+        "comments_url",
+        "events_url",
+        "html_url",
+        "id",
+        "node_id",
+        "labels",
+        "labels_url",
+        "milestone",
+        "number",
+        "repository_url",
+        "state",
+        "locked",
+        "title",
+        "url",
+        "user",
+        "created_at",
+        "updated_at"
+       ]
+      },
+      "version": "2026-03-10"
+     }
+    ]
    },
    "issue-comment": {
     "title": "Issue Comment",
@@ -4046,6 +4415,33 @@
        "user"
       ]
      },
+     "base": {
+      "type": "object",
+      "properties": {
+       "label": {
+        "type": "string"
+       },
+       "ref": {
+        "type": "string"
+       },
+       "repo": {
+        "$ref": "#/components/schemas/repository"
+       },
+       "sha": {
+        "type": "string"
+       },
+       "user": {
+        "$ref": "#/components/schemas/nullable-simple-user"
+       }
+      },
+      "required": [
+       "label",
+       "ref",
+       "repo",
+       "sha",
+       "user"
+      ]
+     },
      "draft": {
       "description": "Indicates whether or not the pull request is a draft.",
       "example": false,
@@ -4054,6 +4450,7 @@
     },
     "required": [
      "labels",
+     "base",
      "created_at",
      "head",
      "html_url",

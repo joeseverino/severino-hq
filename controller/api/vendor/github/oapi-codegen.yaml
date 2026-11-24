@@ -40,8 +40,10 @@ output-options:
     - checks/update
     - code-scanning/list-alerts-for-repo
     - dependabot/list-alerts-for-repo
+    - git/get-tree
     - issues/create-comment
     - issues/list-comments
+    - issues/list-for-repo
     - pulls/list
     - pulls/list-files
     - pulls/merge
@@ -51,6 +53,7 @@ output-options:
     - repos/get-all-environments
     - repos/get-branch-rules
     - repos/get-commit
+    - repos/get-content
     - repos/get-latest-release
     - repos/list-collaborators
     - repos/list-deploy-keys

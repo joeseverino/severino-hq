@@ -28,6 +28,7 @@ var githubRead = githubapi.AppPermissions{
 	Metadata:             githubapi.AppPermissionsMetadataRead,
 	Contents:             githubapi.AppPermissionsContentsRead,
 	Checks:               githubapi.AppPermissionsChecksRead,
+	Issues:               githubapi.AppPermissionsIssuesRead,
 	PullRequests:         githubapi.AppPermissionsPullRequestsRead,
 	Actions:              githubapi.AppPermissionsActionsRead,
 	Deployments:          githubapi.AppPermissionsDeploymentsRead,
@@ -87,6 +88,11 @@ type GitHubRepositoryRecord struct {
 	Variables         []string                                   `json:"variables"`
 	Pins              []GitHubPin                                `json:"pins"`
 	CalledWorkflows   []string                                   `json:"called_workflows"`
+	// Compose is each app's Compose files on the default branch and Dashboard
+	// the open Dependency Dashboard's address, read for a repository opted in
+	// to updates (github_compose.go).
+	Compose   []string `json:"compose"`
+	Dashboard string   `json:"dashboard"`
 	// Fingerprint is what GitHub's change query answered before the read,
 	// hashed, and ReadAt when the read was made: what HQ's plan sends back.
 	Fingerprint string `json:"fingerprint"`
@@ -121,38 +127,32 @@ type GitHubPull struct {
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
 	Head      string   `json:"head"`
+	Base      string   `json:"base"`
 	Branch    string   `json:"branch"`
 	Labels    []string `json:"labels"`
-	// Checks is the head commit's checks, and Files what it changes, read for
-	// an update's pull request (its branch under githubUpdateBranch) and nil
-	// for any other.
-	Checks *GitHubChecks    `json:"checks"`
-	Files  []GitHubPullFile `json:"files"`
+	// Checks is the head commit's checks, Files what it changes and Apps the
+	// images it moves, read for an update's pull request (its branch under
+	// githubUpdateBranch) and nil for any other; Apps is read in a repository
+	// opted in to updates.
+	Checks *GitHubChecks     `json:"checks"`
+	Files  []GitHubPullFile  `json:"files"`
+	Apps   []GitHubAppChange `json:"apps"`
 }
 
-// GitHubPullFile is one file a pull request changes. Patch is its diff, kept
-// only for a path under githubPatchedPaths and at most githubPatchBytes long;
-// GitHub itself leaves out the patch of a diff too large to show.
+// GitHubPullFile is one file a pull request changes.
 type GitHubPullFile struct {
 	Path      string `json:"path"`
 	Status    string `json:"status"`
 	Additions int    `json:"additions"`
 	Deletions int    `json:"deletions"`
-	Patch     string `json:"patch,omitempty"`
 }
 
 // githubUpdateBranch is the prefix of the branches Renovate opens its pull
 // requests from.
 const githubUpdateBranch = "renovate/"
 
-// What an update's files read keeps: one page of files, and the diff of a
-// Compose file only, each bounded, so a large update cannot grow the record
-// past what a page shows.
-const (
-	githubPullFilesPage = 100
-	githubPatchedPaths  = "compose/"
-	githubPatchBytes    = 16 << 10
-)
+// githubPullFilesPage is the one page of files an update's read keeps.
+const githubPullFilesPage = 100
 
 type GitHubRun struct {
 	ID         int    `json:"id"`
@@ -353,10 +353,17 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	}
 	record := GitHubRepositoryRecord{
 		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, Archived: repo.Archived, URL: repo.HTMLURL,
-		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit),
+		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit), Compose: []string{},
 	}
 	if uses, ok := part(ctx, g, runtime.PartWorkflowPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {
 		record.Pins, record.CalledWorkflows = uses.pins, uses.called
+	}
+	// layout is nil where the apps are not read, so no update's images are.
+	var layout []string
+	if g.optedIn() {
+		if apps, ok := part(ctx, g, runtime.PartCompose, func() (githubLayout, error) { return g.apps(ctx, branch) }); ok {
+			record.Compose, record.Dashboard, layout = apps.compose, apps.dashboard, apps.compose
+		}
 	}
 	githubs := githubOwnSuites(runs.WorkflowRuns)
 	if record.Checks, err = g.checks(ctx, commit.Sha, githubs); err != nil {
@@ -367,7 +374,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		return record, err
 	}
 	record.PullRequests = githubPulls(pulls)
-	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests, githubs); err != nil {
+	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests, githubs, layout); err != nil {
 		return record, err
 	}
 	workflows, err := json200(g.api.ActionsListRepoWorkflowsWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListRepoWorkflowsParams{PerPage: new(githubListPage)}))
@@ -527,17 +534,18 @@ func githubPulls(pulls []githubapi.PullRequestSimple) []GitHubPull {
 		}
 		found = append(found, GitHubPull{
 			Number: pull.Number, Title: pull.Title, URL: pull.HTMLURL, Author: pull.User.Login,
-			Draft: pull.Draft, CreatedAt: pull.CreatedAt, UpdatedAt: pull.UpdatedAt, Head: pull.Head.Sha,
+			Draft: pull.Draft, CreatedAt: pull.CreatedAt, UpdatedAt: pull.UpdatedAt, Head: pull.Head.Sha, Base: pull.Base.Sha,
 			Branch: pull.Head.Ref, Labels: labels,
 		})
 	}
 	return found
 }
 
-// pullChecks reads the checks of every update's pull request onto it, and
-// answers the check names the newest pull request runs: what a pull request
-// is checked by, for the rules to require.
-func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, githubs map[int]bool) ([]string, error) {
+// pullChecks reads the checks and files of every update's pull request onto
+// it, and the images it moves where compose holds the repository's Compose
+// files, and answers the check names the newest pull request runs: what a
+// pull request is checked by, for the rules to require.
+func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, githubs map[int]bool, compose []string) ([]string, error) {
 	for i := range pulls {
 		if pulls[i].Head == "" || !strings.HasPrefix(pulls[i].Branch, githubUpdateBranch) {
 			continue
@@ -552,6 +560,9 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, g
 			return nil, err
 		}
 		pulls[i].Files = pullFiles(files)
+		if compose != nil {
+			pulls[i].Apps = g.appChanges(ctx, pulls[i], compose)
+		}
 	}
 	if len(pulls) == 0 || pulls[0].Head == "" {
 		return []string{}, nil
@@ -566,11 +577,7 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, g
 func pullFiles(entries []githubapi.DiffEntry) []GitHubPullFile {
 	found := []GitHubPullFile{}
 	for _, entry := range entries {
-		file := GitHubPullFile{Path: entry.Filename, Status: string(entry.Status), Additions: entry.Additions, Deletions: entry.Deletions}
-		if strings.HasPrefix(entry.Filename, githubPatchedPaths) && len(entry.Patch) <= githubPatchBytes {
-			file.Patch = entry.Patch
-		}
-		found = append(found, file)
+		found = append(found, GitHubPullFile{Path: entry.Filename, Status: string(entry.Status), Additions: entry.Additions, Deletions: entry.Deletions})
 	}
 	return found
 }

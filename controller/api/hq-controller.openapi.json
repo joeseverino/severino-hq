@@ -4052,6 +4052,18 @@
             ],
             "default": null
           },
+          "compose": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "type": "array"
+          },
+          "dashboard": {
+            "default": "",
+            "type": "string"
+          },
           "fingerprint": {
             "default": "",
             "type": "string"
@@ -5908,6 +5920,7 @@
           "branch_rules",
           "clients",
           "code_scanning",
+          "compose",
           "configuration",
           "connections",
           "dead_hosts",
@@ -5944,6 +5957,7 @@
           "PartBranchRules",
           "PartClients",
           "PartCodeScanning",
+          "PartCompose",
           "PartConfiguration",
           "PartConnections",
           "PartDeadHosts",

@@ -1020,6 +1020,48 @@ func (e ChecksListForRefParamsFilter) Valid() bool {
 	}
 }
 
+// Defines values for IssuesListForRepoParamsState.
+const (
+	IssuesListForRepoParamsStateAll    IssuesListForRepoParamsState = "all"
+	IssuesListForRepoParamsStateClosed IssuesListForRepoParamsState = "closed"
+	IssuesListForRepoParamsStateOpen   IssuesListForRepoParamsState = "open"
+)
+
+// Valid indicates whether the value is a known member of the IssuesListForRepoParamsState enum.
+func (e IssuesListForRepoParamsState) Valid() bool {
+	switch e {
+	case IssuesListForRepoParamsStateAll:
+		return true
+	case IssuesListForRepoParamsStateClosed:
+		return true
+	case IssuesListForRepoParamsStateOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesListForRepoParamsSort.
+const (
+	IssuesListForRepoParamsSortComments IssuesListForRepoParamsSort = "comments"
+	IssuesListForRepoParamsSortCreated  IssuesListForRepoParamsSort = "created"
+	IssuesListForRepoParamsSortUpdated  IssuesListForRepoParamsSort = "updated"
+)
+
+// Valid indicates whether the value is a known member of the IssuesListForRepoParamsSort enum.
+func (e IssuesListForRepoParamsSort) Valid() bool {
+	switch e {
+	case IssuesListForRepoParamsSortComments:
+		return true
+	case IssuesListForRepoParamsSortCreated:
+		return true
+	case IssuesListForRepoParamsSortUpdated:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PullsListParamsState.
 const (
 	PullsListParamsStateAll    PullsListParamsState = "all"
@@ -1369,6 +1411,12 @@ type Commit_Author struct {
 	union json.RawMessage
 }
 
+// ContentFile Content File
+type ContentFile struct {
+	Content  string `json:"content"`
+	Encoding string `json:"encoding"`
+}
+
 // DependabotAlert A Dependabot alert.
 type DependabotAlert struct {
 	// Dependency Details for the vulnerable dependency.
@@ -1478,7 +1526,6 @@ type DiffEntry struct {
 	Additions int             `json:"additions"`
 	Deletions int             `json:"deletions"`
 	Filename  string          `json:"filename"`
-	Patch     string          `json:"patch,omitempty"`
 	Status    DiffEntryStatus `json:"status"`
 }
 
@@ -1581,6 +1628,20 @@ type FullRepository struct {
 	Visibility string `json:"visibility,omitempty"`
 }
 
+// GitTree The hierarchy between files in a Git repository.
+type GitTree struct {
+	// Tree Objects specifying a tree structure
+	Tree []struct {
+		Mode string `json:"mode"`
+		Path string `json:"path"`
+		Sha  string `json:"sha"`
+		Size int    `json:"size,omitempty"`
+		Type string `json:"type"`
+		URL  string `json:"url,omitempty"`
+	} `json:"tree"`
+	Truncated bool `json:"truncated"`
+}
+
 // Installation Installation
 type Installation struct {
 	Account Installation_Account `json:"account"`
@@ -1604,6 +1665,21 @@ type InstallationToken struct {
 type Integration struct {
 	// Slug The slug name of the GitHub app
 	Slug string `json:"slug,omitempty"`
+}
+
+// Issue Issues are a great way to keep track of tasks, enhancements, and bugs for your projects.
+type Issue struct {
+	HTMLURL     string `json:"html_url"`
+	PullRequest struct {
+		DiffURL  string `json:"diff_url"`
+		HTMLURL  string `json:"html_url"`
+		MergedAt string `json:"merged_at,omitempty"`
+		PatchURL string `json:"patch_url"`
+		URL      string `json:"url"`
+	} `json:"pull_request,omitempty"`
+
+	// Title Title of the issue
+	Title string `json:"title"`
 }
 
 // IssueComment Comments provide a way for people to collaborate on an issue.
@@ -1691,6 +1767,17 @@ type PullRequestMergeResult struct {
 
 // PullRequestSimple Pull Request Simple
 type PullRequestSimple struct {
+	Base struct {
+		Label string `json:"label"`
+		Ref   string `json:"ref"`
+
+		// Repo A repository on GitHub.
+		Repo Repository `json:"repo"`
+		Sha  string     `json:"sha"`
+
+		// User A GitHub user.
+		User NullableSimpleUser `json:"user"`
+	} `json:"base"`
 	CreatedAt string `json:"created_at"`
 
 	// Draft Indicates whether or not the pull request is a draft.
@@ -2385,6 +2472,12 @@ type ChecksListForRefParams struct {
 // ChecksListForRefParamsFilter defines parameters for ChecksListForRef.
 type ChecksListForRefParamsFilter string
 
+// ReposGetContentParams defines parameters for ReposGetContent.
+type ReposGetContentParams struct {
+	// Ref The name of the commit/branch/tag. Default: the repository’s default branch.
+	Ref *string `form:"ref,omitempty" json:"ref,omitempty"`
+}
+
 // DependabotListAlertsForRepoParams defines parameters for DependabotListAlertsForRepo.
 type DependabotListAlertsForRepoParams struct {
 	// State A comma-separated list of states. If specified, only alerts with these states will be returned.
@@ -2407,6 +2500,30 @@ type ReposListDeploymentStatusesParams struct {
 	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
 	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
+
+// GitGetTreeParams defines parameters for GitGetTree.
+type GitGetTreeParams struct {
+	// Recursive Setting this parameter to any value returns the objects or subtrees referenced by the tree specified in `:tree_sha`. For example, setting `recursive` to any of the following will enable returning objects or subtrees: `0`, `1`, `"true"`, and `"false"`. Omit this parameter to prevent recursively returning objects or subtrees.
+	Recursive *string `form:"recursive,omitempty" json:"recursive,omitempty"`
+}
+
+// IssuesListForRepoParams defines parameters for IssuesListForRepo.
+type IssuesListForRepoParams struct {
+	// State Indicates the state of the issues to return.
+	State *IssuesListForRepoParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// Sort What to sort results by.
+	Sort *IssuesListForRepoParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// IssuesListForRepoParamsState defines parameters for IssuesListForRepo.
+type IssuesListForRepoParamsState string
+
+// IssuesListForRepoParamsSort defines parameters for IssuesListForRepo.
+type IssuesListForRepoParamsSort string
 
 // IssuesListCommentsParams defines parameters for IssuesListComments.
 type IssuesListCommentsParams struct {
@@ -3019,6 +3136,9 @@ type ClientInterface interface {
 	// ChecksListForRef performs a GET /repos/{owner}/{repo}/commits/{ref}/check-runs (the `ChecksListForRef` operationId) request.
 	ChecksListForRef(ctx context.Context, owner string, repo string, ref string, params *ChecksListForRefParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ReposGetContent performs a GET /repos/{owner}/{repo}/contents/{path} (the `ReposGetContent` operationId) request.
+	ReposGetContent(ctx context.Context, owner string, repo string, path string, params *ReposGetContentParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// DependabotListAlertsForRepo performs a GET /repos/{owner}/{repo}/dependabot/alerts (the `DependabotListAlertsForRepo` operationId) request.
 	DependabotListAlertsForRepo(ctx context.Context, owner string, repo string, params *DependabotListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -3031,8 +3151,14 @@ type ClientInterface interface {
 	// ReposGetAllEnvironments performs a GET /repos/{owner}/{repo}/environments (the `ReposGetAllEnvironments` operationId) request.
 	ReposGetAllEnvironments(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GitGetTree performs a GET /repos/{owner}/{repo}/git/trees/{tree_sha} (the `GitGetTree` operationId) request.
+	GitGetTree(ctx context.Context, owner string, repo string, treeSha string, params *GitGetTreeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AppsGetRepoInstallation performs a GET /repos/{owner}/{repo}/installation (the `AppsGetRepoInstallation` operationId) request.
 	AppsGetRepoInstallation(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IssuesListForRepo performs a GET /repos/{owner}/{repo}/issues (the `IssuesListForRepo` operationId) request.
+	IssuesListForRepo(ctx context.Context, owner string, repo string, params *IssuesListForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// IssuesListComments performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
 	IssuesListComments(ctx context.Context, owner string, repo string, issueNumber string, params *IssuesListCommentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3431,6 +3557,19 @@ func (c *Client) ChecksListForRef(ctx context.Context, owner string, repo string
 	return c.Client.Do(req)
 }
 
+// ReposGetContent performs a GET /repos/{owner}/{repo}/contents/{path} (the `ReposGetContent` operationId) request.
+func (c *Client) ReposGetContent(ctx context.Context, owner string, repo string, path string, params *ReposGetContentParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposGetContentRequest(c.Server, owner, repo, path, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // DependabotListAlertsForRepo performs a GET /repos/{owner}/{repo}/dependabot/alerts (the `DependabotListAlertsForRepo` operationId) request.
 func (c *Client) DependabotListAlertsForRepo(ctx context.Context, owner string, repo string, params *DependabotListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDependabotListAlertsForRepoRequest(c.Server, owner, repo, params)
@@ -3483,9 +3622,35 @@ func (c *Client) ReposGetAllEnvironments(ctx context.Context, owner string, repo
 	return c.Client.Do(req)
 }
 
+// GitGetTree performs a GET /repos/{owner}/{repo}/git/trees/{tree_sha} (the `GitGetTree` operationId) request.
+func (c *Client) GitGetTree(ctx context.Context, owner string, repo string, treeSha string, params *GitGetTreeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGitGetTreeRequest(c.Server, owner, repo, treeSha, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // AppsGetRepoInstallation performs a GET /repos/{owner}/{repo}/installation (the `AppsGetRepoInstallation` operationId) request.
 func (c *Client) AppsGetRepoInstallation(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAppsGetRepoInstallationRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IssuesListForRepo performs a GET /repos/{owner}/{repo}/issues (the `IssuesListForRepo` operationId) request.
+func (c *Client) IssuesListForRepo(ctx context.Context, owner string, repo string, params *IssuesListForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIssuesListForRepoRequest(c.Server, owner, repo, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5054,6 +5219,81 @@ func NewChecksListForRefRequest(server string, owner string, repo string, ref st
 	return req, nil
 }
 
+// NewReposGetContentRequest constructs an http.Request for the ReposGetContent method
+func NewReposGetContentRequest(server string, owner string, repo string, path string, params *ReposGetContentParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "path", path, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/contents/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Ref != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "ref", *params.Ref, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewDependabotListAlertsForRepoRequest constructs an http.Request for the DependabotListAlertsForRepo method
 func NewDependabotListAlertsForRepoRequest(server string, owner string, repo string, params *DependabotListAlertsForRepoParams) (*http.Request, error) {
 	var err error
@@ -5318,6 +5558,81 @@ func NewReposGetAllEnvironmentsRequest(server string, owner string, repo string)
 	return req, nil
 }
 
+// NewGitGetTreeRequest constructs an http.Request for the GitGetTree method
+func NewGitGetTreeRequest(server string, owner string, repo string, treeSha string, params *GitGetTreeParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "tree_sha", treeSha, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/git/trees/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Recursive != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "recursive", *params.Recursive, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewAppsGetRepoInstallationRequest constructs an http.Request for the AppsGetRepoInstallation method
 func NewAppsGetRepoInstallationRequest(server string, owner string, repo string) (*http.Request, error) {
 	var err error
@@ -5349,6 +5664,98 @@ func NewAppsGetRepoInstallationRequest(server string, owner string, repo string)
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIssuesListForRepoRequest constructs an http.Request for the IssuesListForRepo method
+func NewIssuesListForRepoRequest(server string, owner string, repo string, params *IssuesListForRepoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/issues"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -6430,6 +6837,11 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	ChecksListForRefWithResponse(ctx context.Context, owner string, repo string, ref string, params *ChecksListForRefParams, reqEditors ...RequestEditorFn) (*ChecksListForRefReply, error)
 
+	// ReposGetContentWithResponse performs a GET /repos/{owner}/{repo}/contents/{path} (the `ReposGetContent` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposGetContentWithResponse(ctx context.Context, owner string, repo string, path string, params *ReposGetContentParams, reqEditors ...RequestEditorFn) (*ReposGetContentReply, error)
+
 	// DependabotListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/dependabot/alerts (the `DependabotListAlertsForRepo` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -6450,10 +6862,20 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	ReposGetAllEnvironmentsWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposGetAllEnvironmentsReply, error)
 
+	// GitGetTreeWithResponse performs a GET /repos/{owner}/{repo}/git/trees/{tree_sha} (the `GitGetTree` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	GitGetTreeWithResponse(ctx context.Context, owner string, repo string, treeSha string, params *GitGetTreeParams, reqEditors ...RequestEditorFn) (*GitGetTreeReply, error)
+
 	// AppsGetRepoInstallationWithResponse performs a GET /repos/{owner}/{repo}/installation (the `AppsGetRepoInstallation` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	AppsGetRepoInstallationWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*AppsGetRepoInstallationReply, error)
+
+	// IssuesListForRepoWithResponse performs a GET /repos/{owner}/{repo}/issues (the `IssuesListForRepo` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	IssuesListForRepoWithResponse(ctx context.Context, owner string, repo string, params *IssuesListForRepoParams, reqEditors ...RequestEditorFn) (*IssuesListForRepoReply, error)
 
 	// IssuesListCommentsWithResponse performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
 	//
@@ -7545,6 +7967,47 @@ func (r ChecksListForRefReply) ContentType() string {
 	return ""
 }
 
+type ReposGetContentReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ContentFile
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposGetContentReply) GetJSON200() *ContentFile {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposGetContentReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposGetContentReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposGetContentReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposGetContentReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type DependabotListAlertsForRepoReply struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7719,6 +8182,47 @@ func (r ReposGetAllEnvironmentsReply) ContentType() string {
 	return ""
 }
 
+type GitGetTreeReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *GitTree
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GitGetTreeReply) GetJSON200() *GitTree {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GitGetTreeReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GitGetTreeReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GitGetTreeReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GitGetTreeReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type AppsGetRepoInstallationReply struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7754,6 +8258,47 @@ func (r AppsGetRepoInstallationReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AppsGetRepoInstallationReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type IssuesListForRepoReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]Issue
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IssuesListForRepoReply) GetJSON200() *[]Issue {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r IssuesListForRepoReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IssuesListForRepoReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IssuesListForRepoReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IssuesListForRepoReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -8613,6 +9158,17 @@ func (c *ClientWithResponses) ChecksListForRefWithResponse(ctx context.Context, 
 	return ParseChecksListForRefReply(rsp)
 }
 
+// ReposGetContentWithResponse performs a GET /repos/{owner}/{repo}/contents/{path} (the `ReposGetContent` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposGetContentWithResponse(ctx context.Context, owner string, repo string, path string, params *ReposGetContentParams, reqEditors ...RequestEditorFn) (*ReposGetContentReply, error) {
+	rsp, err := c.ReposGetContent(ctx, owner, repo, path, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposGetContentReply(rsp)
+}
+
 // DependabotListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/dependabot/alerts (the `DependabotListAlertsForRepo` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -8657,6 +9213,17 @@ func (c *ClientWithResponses) ReposGetAllEnvironmentsWithResponse(ctx context.Co
 	return ParseReposGetAllEnvironmentsReply(rsp)
 }
 
+// GitGetTreeWithResponse performs a GET /repos/{owner}/{repo}/git/trees/{tree_sha} (the `GitGetTree` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) GitGetTreeWithResponse(ctx context.Context, owner string, repo string, treeSha string, params *GitGetTreeParams, reqEditors ...RequestEditorFn) (*GitGetTreeReply, error) {
+	rsp, err := c.GitGetTree(ctx, owner, repo, treeSha, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGitGetTreeReply(rsp)
+}
+
 // AppsGetRepoInstallationWithResponse performs a GET /repos/{owner}/{repo}/installation (the `AppsGetRepoInstallation` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -8666,6 +9233,17 @@ func (c *ClientWithResponses) AppsGetRepoInstallationWithResponse(ctx context.Co
 		return nil, err
 	}
 	return ParseAppsGetRepoInstallationReply(rsp)
+}
+
+// IssuesListForRepoWithResponse performs a GET /repos/{owner}/{repo}/issues (the `IssuesListForRepo` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) IssuesListForRepoWithResponse(ctx context.Context, owner string, repo string, params *IssuesListForRepoParams, reqEditors ...RequestEditorFn) (*IssuesListForRepoReply, error) {
+	rsp, err := c.IssuesListForRepo(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIssuesListForRepoReply(rsp)
 }
 
 // IssuesListCommentsWithResponse performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
@@ -9475,6 +10053,32 @@ func ParseChecksListForRefReply(rsp *http.Response) (*ChecksListForRefReply, err
 	return response, nil
 }
 
+// ParseReposGetContentReply parses an HTTP response from a ReposGetContentWithResponse call
+func ParseReposGetContentReply(rsp *http.Response) (*ReposGetContentReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposGetContentReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ContentFile
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseDependabotListAlertsForRepoReply parses an HTTP response from a DependabotListAlertsForRepoWithResponse call
 func ParseDependabotListAlertsForRepoReply(rsp *http.Response) (*DependabotListAlertsForRepoReply, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -9584,6 +10188,32 @@ func ParseReposGetAllEnvironmentsReply(rsp *http.Response) (*ReposGetAllEnvironm
 	return response, nil
 }
 
+// ParseGitGetTreeReply parses an HTTP response from a GitGetTreeWithResponse call
+func ParseGitGetTreeReply(rsp *http.Response) (*GitGetTreeReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GitGetTreeReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GitTree
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAppsGetRepoInstallationReply parses an HTTP response from a AppsGetRepoInstallationWithResponse call
 func ParseAppsGetRepoInstallationReply(rsp *http.Response) (*AppsGetRepoInstallationReply, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -9600,6 +10230,32 @@ func ParseAppsGetRepoInstallationReply(rsp *http.Response) (*AppsGetRepoInstalla
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Installation
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseIssuesListForRepoReply parses an HTTP response from a IssuesListForRepoWithResponse call
+func ParseIssuesListForRepoReply(rsp *http.Response) (*IssuesListForRepoReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IssuesListForRepoReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []Issue
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

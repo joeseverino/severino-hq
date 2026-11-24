@@ -389,6 +389,7 @@
           "created_at": "example",
           "updated_at": "example",
           "head": "example",
+          "base": "example",
           "branch": "example",
           "labels": [
             "example"
@@ -409,8 +410,20 @@
               "path": "example",
               "status": "example",
               "additions": 1,
-              "deletions": 1,
-              "patch": "example"
+              "deletions": 1
+            }
+          ],
+          "apps": [
+            {
+              "app": "example",
+              "read": true,
+              "images": [
+                {
+                  "service": "example",
+                  "before": "example",
+                  "after": "example"
+                }
+              ]
             }
           ]
         }
@@ -578,6 +591,10 @@
       "called_workflows": [
         "example"
       ],
+      "compose": [
+        "example"
+      ],
+      "dashboard": "example",
       "fingerprint": "example",
       "read_at": "example",
       "carried": true

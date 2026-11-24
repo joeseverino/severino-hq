@@ -794,9 +794,15 @@ this one answer.
 The controller reads `github.repository` through HQ's GitHub App: one
 installation token per repository, read-only permissions only, minted for each
 read. A record is a repository's head and its checks, open pull requests
-(for each Renovate opened, its head's checks and the files it changes, with
-the diff of each Compose file), workflows waiting on an approval, and deployments with the steps each ran
-before deploying whose names begin "Verify". It also holds branch rules,
+(for each Renovate opened, its head's checks and the files it changes),
+workflows waiting on an approval, and deployments with the steps each ran
+before deploying whose names begin "Verify". A repository a project opts in
+to updates also holds each app's Compose files under `compose/<app>/` on its
+default branch, its open Dependency Dashboard, and for each update every
+service whose image differs between the pull request's base and head, read
+by compose-go, the loader Docker Compose uses, from those files alone. An
+image that needs a variable only the host sets leaves its app unread, never
+blank. It also holds branch rules,
 environments, runners,
 alert counts by severity, admission artifacts, who has access (collaborators,
 deploy keys, the default workflow token, Actions settings), and the names of

@@ -12,6 +12,7 @@ tool (
 
 require (
 	filippo.io/age v1.3.2
+	github.com/compose-spec/compose-go/v2 v2.17.0
 	github.com/oapi-codegen/runtime v1.9.1
 	golang.org/x/crypto v0.59.0
 	golang.org/x/sync v0.25.0
@@ -23,15 +24,22 @@ require (
 require (
 	filippo.io/hpke v0.4.0 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
+	github.com/distribution/reference v0.5.0 // indirect
+	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/getkin/kin-openapi v0.153.0 // indirect
 	github.com/go-openapi/jsonpointer v1.0.2 // indirect
+	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/mattn/go-shellwords v1.0.12 // indirect
 	github.com/oapi-codegen/oapi-codegen/v2 v2.9.0 // indirect
 	github.com/oasdiff/yaml v0.1.3 // indirect
 	github.com/oasdiff/yaml3 v0.0.16 // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
+	github.com/sirupsen/logrus v1.10.1 // indirect
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f // indirect
 	github.com/theory/jsonpath v0.12.3 // indirect
+	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0 // indirect
 	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/oauth2 v0.38.0 // indirect
