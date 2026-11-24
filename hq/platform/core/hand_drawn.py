@@ -85,21 +85,14 @@ def _counted_folds(source: Source) -> Iterator[int]:
                 yield source.at(token.lineno + token.contents.count("\n", 0, match.start()))
 
 
-_ALONE_AFTER_HEADING = re.compile(
-    r"</h[1-6]>\s*(?:\{%[^%]*%\}\s*)?<span class=\"count\"[^>]*>\s*\{\{([^}]*)\}\}\s*</span>"
-)
 _COUNT_IN_PARENTHESES = re.compile(r"\(\{\{[^}]*\|length\s*\}\}\)")
 
 
 def _cut_counts(source: Source) -> Iterator[int]:
-    """Each bare count standing apart from the words it counts."""
+    """Each bare count in parentheses, apart from the words it counts."""
 
     text = re.sub(r"<option\b.*?</option>", lambda match: blank(match.group()), source.text, flags=re.DOTALL)
-    for match in _ALONE_AFTER_HEADING.finditer(text):
-        name, *filters = (part.strip().partition(":")[0] for part in match.group(1).split("|"))
-        if "counted" not in filters and ("length" in filters or re.search(r"(?:^|[._])count$", name)):
-            yield match.start()
-    yield from (match.start() for match in _COUNT_IN_PARENTHESES.finditer(text))
+    return (match.start() for match in _COUNT_IN_PARENTHESES.finditer(text))
 
 
 def _nested_forms(source: Source) -> Iterator[int]:
@@ -350,7 +343,7 @@ SHAPES = (
         instead='{% status word chip=True %}, a count by {{ n|counted:"thing" }}, an age by {{ at|ago }}',
         find=tagged(r"[\w-]+", _CHIP_CLASS),
         refuses=('<span class="scope-chip">A</span>', '<span class="sweep-age">2h</span>'),
-        keeps=('<span class="count">2</span>', '{% status "Online" chip=True %}'),
+        keeps=('<span class="counter">2</span>', '{% status "Online" chip=True %}'),
         drawn_by={
             "partials/_list.html": "the list part, whose chips kind draws a link as a chip",
             "partials/_reading_age.html": "the reading age part itself",
@@ -358,6 +351,20 @@ SHAPES = (
             "partials/_record_list.html": "the record list lays out the chips the status part draws",
             "partials/_switch.html": "the switch part, each choice a chip of its row",
             "partials/_site_header.html": _THE_BAR["partials/_site_header.html"],
+        },
+    ),
+    Shape(
+        name="count",
+        said="A count or a line beside a heading drawn by hand, where the section part draws its voice.",
+        instead='{% section "Words" count=n %}, or the words alone in its {% aside %}',
+        find=tagged(r"[\w-]+", r"[\s}]class=[\"'](?:[^\"']*[\s}])?count(?:[\s\"'{]|$)"),
+        refuses=('{% aside %}<span class="count">{{ rows|length|counted:"row" }}</span>', '<b class="x count">2</b>'),
+        keeps=('{% section "A" count=n %}{% aside %}{{ rows|length|counted:"row" }}{% endsection %}',),
+        drawn_by={
+            "partials/_section_head.html": "the section part itself, its heading's count",
+            "partials/_row_group.html": "a declared group's count, after its name",
+            "partials/_switch.html": "the switch part, each choice's count beside its chip",
+            "partials/_activity_calendar.html": "the calendar part's tally of days kept, beside its legend",
         },
     ),
     Shape(
@@ -587,16 +594,10 @@ SHAPES = (
     Shape(
         name="cut-count",
         said="A count cut off from the words it counts.",
-        instead='<h2>Words <span class="count">N</span></h2>, or {{ n|counted:"thing" }}',
+        instead='{% section "Words" count=n %}, or {{ n|counted:"thing" }}',
         find=_cut_counts,
-        refuses=(
-            '<h2>A</h2><span class="count">{{ rows|length }}</span>',
-            "<summary>Other settings ({{ rows|length }})</summary>",
-        ),
-        keeps=(
-            '<h2>A</h2><span class="count">{{ rows|length|counted:"event" }}</span>',
-            "<option>Machines ({{ rows|length }})</option>",
-        ),
+        refuses=("<summary>Other settings ({{ rows|length }})</summary>",),
+        keeps=("<option>Machines ({{ rows|length }})</option>",),
     ),
     Shape(
         name="since",

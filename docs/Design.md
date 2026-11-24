@@ -396,12 +396,13 @@ in Python. A measured zero is 0; the missing mark is for no value. The value tag
 refused as any template of the host or an extension loads.
 
 A bare figure counting what a heading heads (`.count`) stands in that
-heading after its words: `<h2>Readings <span class="count">7</span></h2>`,
-and the same in a summary, a group row and a tab. Never in parentheses, and
-never alone at the far end of a `.section-head`, cut off from the words it
-counts; what stands there is a line about the section, a count with its
-unit ("3 events", "2 left") among them.
-*Gate:* `test_every_bare_count_stands_in_its_heading`.
+heading after its words (`{% section "Readings" count=n %}`), and the same
+in a summary, a group row and a tab. Never in parentheses, and never alone
+at the far end of a `.section-head`, cut off from the words it counts; what
+stands there is the section's aside, a line about it in the same quiet voice,
+a count with its unit ("3 events", "2 left") among them. The parts draw the
+class, so a page writes the words alone.
+*Gate:* the `count` and `cut-count` shapes (`hand_drawn.SHAPES`).
 
 **Color comes from tokens.** No color literal outside `@layer tokens`, so a
 theme is a set of token values and dark mode is not a second stylesheet.

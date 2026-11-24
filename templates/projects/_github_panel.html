@@ -67,7 +67,7 @@ reading; nothing here calls GitHub.
     {% endfor %}
   {% endfacts %}
   {% endwith %}
-{% aside %}<span class="count prose">{% entity repo.url|outside label=repo.name %}{% if repo.private %}{% dot %}private{% endif %}{% dot %}{% include "partials/_reading_age.html" with reading=repo.reading only %}</span>
+{% aside %}{% entity repo.url|outside label=repo.name %}{% if repo.private %}{% dot %}private{% endif %}{% dot %}{% include "partials/_reading_age.html" with reading=repo.reading only %}
 {% endsection %}
 
   {% comment %}

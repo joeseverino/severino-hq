@@ -24,7 +24,7 @@ would be a page about anybody.
 
   {% section "Newest starred" count=profile.watched|length %}
   {% data_table starred %}
-  {% aside %}<span class="count">{% include "partials/_reading_age.html" with at=profile.observed_at only %}</span>
+  {% aside %}{% include "partials/_reading_age.html" with at=profile.observed_at only %}
   {% endsection %}
 
   {% section "Your GitHub account" %}

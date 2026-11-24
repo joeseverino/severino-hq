@@ -246,6 +246,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | `{% filter_bar search="..." %}``{% choices %}``{% select ... %}``{% endfilter_bar %}` |
 | `button` | A button drawn by hand, where the button tag draws every control that looks like one. | `{% button %}`, which takes a popover, a dialog command and each data_* hook |
 | `chip` | A chip, a badge, a count or an age drawn by hand, where the status part or a value filter draws it. | `{% status word chip=True %}`, a count by {{ n\|counted:"thing" }}, an age by {{ at\|ago }} |
+| `count` | A count or a line beside a heading drawn by hand, where the section part draws its voice. | `{% section "Words" count=n %}`, or the words alone in its `{% aside %}` |
 | `filter-choice` | A choice of several drawn as boxes by hand, where the toggle set part draws it. | `{% include "partials/_toggle_set.html" %}`, or `{% select %}` for one choice |
 | `form-control` | A form, a field or a label drawn by hand, where the form, field and filter bar parts draw it. | `{% include "partials/_form.html" %}` of a Django form, or `{% filter_bar %}` for what a list keeps |
 | `list` | A list or a band of facts drawn by hand, where the list or the facts part draws it. | `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}`, or `{% facts %}` |
@@ -262,7 +263,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `typed-mark` | A dot or an arrow typed as text, which a reader hears and a line may strand. | `{% dot %}` between two parts, a .dot-list for a run of parts, `{% arrow %}` after a link |
 | `figure-in-chip` | A figure inside a chip, which is a word. | the figure in a band of facts, a numeric column or a sentence |
 | `counted-fold` | A list folded at a count, which hides parts its line has room for. | a Cell(fit=True) of the parts, which shows as many as the line holds |
-| `cut-count` | A count cut off from the words it counts. | `<h2>`Words `<span class="count">`N`</span>``</h2>`, or {{ n\|counted:"thing" }} |
+| `cut-count` | A count cut off from the words it counts. | `{% section "Words" count=n %}`, or {{ n\|counted:"thing" }} |
 | `since` | A "since" written before a moment, which reads "since 3 days ago" beside an age. | {{ at\|when:"since" }}, which says its own "since" |
 | `plural` | A word chosen by a count of one, which the count's own filter agrees. | {{ n\|counted:"one,many" }}, or {{ n\|agreed:"one,many" }} for the words alone |
 | `code-block` | A code block a keyboard cannot reach, though it scrolls in its own box. | `<pre tabindex="0">` |
@@ -1557,7 +1558,8 @@ the body comes its foot, drawn only with one: the line that says how to read it 
 means, where the numbers come from), quieter than the body. The heading's line is one control
 tall, so a control beside it adds no height and heads in one row are one height. The aside is one
 box at the row's end, so its parts (a count, a dot, a link) wrap as one line of text, and it keeps
-to one line while the row has room for it. What draws its own edges, cells or fill fills the frame
+to one line while the row has room for it. The box draws that line in the count's quiet voice,
+a link in it set at the size of its link to the rest, so a page writes the words alone. What draws its own edges, cells or fill fills the frame
 with no inset and no second border, as a card's flush list group does in Bootstrap. That is a
 table's region, a band of facts, a row of metrics, a month's grid, or a list whose rows carry
 their own padding. Prose, facts and the empty line sit in the frame's padding. With no body it

@@ -19,6 +19,6 @@ band of page spent on the absence of news.
         </li>
       {% endfor %}
     </ol>
-{% aside %}<span class="count">{{ timeline.items|length|counted:"event" }}</span>
+{% aside %}{{ timeline.items|length|counted:"event" }}
 {% endsection %}
 {% endif %}

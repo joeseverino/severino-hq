@@ -94,7 +94,7 @@ row in the flow.
   {% elif work.renderers %}
     {% data_table work.renderers_table %}
   {% endif %}
-{% aside %}{% if work.jobs and work.read_at and not work.unread %}<span class="count">{% include "partials/_reading_age.html" with at=work.read_at only %}</span>{% endif %}
+{% aside %}{% if work.jobs and work.read_at and not work.unread %}{% include "partials/_reading_age.html" with at=work.read_at only %}{% endif %}
 {% endsection %}
 
 {% if sight.groups %}

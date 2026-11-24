@@ -616,8 +616,8 @@ SWEEP_FRESHNESS_STATES = {
         lambda: {"inventory": _INVENTORY},
     ),
     "inline": Example(
-        '{% section "Example records 3" %}<p>An example line.</p>{% aside %}<span class="count">12 example records'
-        '{% include "partials/_sweep_freshness.html" with only_kind="example.records" inline=True %}</span>'
+        '{% section "Example records 3" %}<p>An example line.</p>{% aside %}12 example records'
+        '{% include "partials/_sweep_freshness.html" with only_kind="example.records" inline=True %}'
         "{% endsection %}",
         lambda: {"inventory": _INVENTORY},
     ),

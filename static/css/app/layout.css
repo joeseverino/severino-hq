@@ -97,10 +97,15 @@
    width. */
 .section-head > hgroup { flex: 9 1 auto; min-width: 0; margin: 0; }
 .section-lede { contain: inline-size; margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
-/* A line about the section at the head's end: a count with its unit, a
-   window, a source. Wrapped, its lines are as even as its words allow, so
-   none is left with one. */
-.section-head .count { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; text-wrap: balance; }
+/* The heading's count, and the line about the section at the head's end (a
+   count with its unit, a window, a source), are one quiet voice. Wrapped, the
+   line's lines are as even as its words allow, so none is left with one. */
+.section-head :is(.count, .section-aside) { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; font-variant-numeric: tabular-nums; text-wrap: balance; }
+/* A link in that line is set at the size of its link to the rest
+   (`.subtle-link`), which tells it from the words beside it (WCAG 1.4.1)
+   with no underline, so it reads the same alone or among them. A link with
+   a class of its own is a control and sizes itself. */
+:where(.section-aside) a:where(:not([class]), .external-link) { font-size: var(--text-xs); }
 /* What sits beside the heading is one box, so its parts (a count, a dot, a
    link) wrap as one line of text. It sits at the row's end, and under the
    heading at the end too, as a page head's actions do. It takes the row's

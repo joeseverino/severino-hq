@@ -92,7 +92,8 @@ class DashboardHighlightTests(SimpleTestCase):
         stale = {"label": "Example", "cards": [], "overview": overview(reading=Freshness("stale", ended, cadence))}
         html = render_to_string("core/_dashboard_highlights.html", {"dashboard_highlights": [stale]})
 
-        self.assertEqual(with_class(html, "count")[0].words, f"{' '.join(last_read(ended).split())} · out of date")
+        said = f"{' '.join(last_read(ended).split())} · out of date"
+        self.assertTrue(with_class(html, "section-aside")[0].words.startswith(said))
         self.assertEqual(overview(reading=Freshness("current", timezone.now(), cadence)).window, "Latest 4 weeks")
         self.assertNotIn("Latest", overview(reading=Freshness("never", None, cadence)).window)
 

@@ -138,14 +138,14 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     {% endcheck_ladder %}
     {% endpartialdef %}
     {% endwith %}
-  {% aside %}<span class="count">{{ request_path.proof }}</span>
+  {% aside %}{{ request_path.proof }}
   {% endsection %}
   {% endlayout %}
 
   {% section "Addresses" fold=True open=True lede="Yours and HQ's" %}
       {% section "Your addresses" %}
         {% data_table tables.yours %}
-      {% aside %}{% if connection.tailnet_observed_at %}<span class="count">Tailnet{% dot %}{% include "partials/_reading_age.html" with at=connection.tailnet_observed_at only %}</span>{% endif %}
+      {% aside %}{% if connection.tailnet_observed_at %}Tailnet{% dot %}{% include "partials/_reading_age.html" with at=connection.tailnet_observed_at only %}{% endif %}
       {% endsection %}
 
       {% if request_path.hq_addresses %}
@@ -153,7 +153,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
           {% data_table tables.hq %}
         {% endsection %}
       {% endif %}
-  {% aside %}<span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %}{% dot %}HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
+  {% aside %}Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %}{% dot %}HQ {{ request_path.hq_addresses|length }}{% endif %}
   {% endsection %}
 
   {% comment %}Folded: the response is read back only once somebody opens it.{% endcomment %}
@@ -176,7 +176,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% data_table tables.sent %}
         {% muted element="p" data_response_failure=True hidden=True %}The response could not be read back.{% endmuted %}
       {% endsection %}
-  {% aside %}<span class="count">Yours {{ request_path.headers|length }}</span>
+  {% aside %}Yours {{ request_path.headers|length }}
   {% endsection %}
 
 </div>

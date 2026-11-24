@@ -47,5 +47,5 @@ heading links to. An unread check says what would read it.
         <strong>{{ result.check.label }}</strong> {% muted %}{% if result.reading.evidence %}{% if result.reading.fix %}{{ result.reading.evidence }}: {% if result.reading.fix_url %}<a href="{{ result.reading.fix_url }}">{{ result.reading.fix }}.</a>{% else %}{{ result.reading.fix }}.{% endif %}{% else %}{{ result.reading.evidence }}.{% endif %} {% endif %}Stops {{ result.check.why }}.{% endmuted %}{% endstep %}
     {% endfor %}
   {% endsteps %}
-{% aside %}<span class="count prose">{{ posture.count_line }}{% if guide %}{% dot %}{% entity guide|outside label="Checks guide" %}{% endif %}</span>
+{% aside %}{{ posture.count_line }}{% if guide %}{% dot %}{% entity guide|outside label="Checks guide" %}{% endif %}
 {% endsection %}{% endpartialdef %}

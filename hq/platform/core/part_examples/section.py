@@ -96,7 +96,7 @@ SECTION_STATES = {
     "foot": Example(
         '{% section "Example trends" more_label="All example trends" more_url="/example/" %}'
         "{% data_table trends %}"
-        '{% aside %}<span class="count">2 example weeks</span>'
+        "{% aside %}2 example weeks"
         "{% foot %}R² is how much of the example movement the fitted line explains. It does not show cause."
         "{% endsection %}",
         lambda: {
@@ -116,7 +116,7 @@ SECTION_STATES = {
     "figure": Example(
         '{% section "Example allocation" figure=True lede="Each example account as its share of the whole." %}'
         '{% include "partials/_allocation.html" %}'
-        '{% aside %}<span class="count">2 example accounts</span>{% endsection %}',
+        "{% aside %}2 example accounts{% endsection %}",
         lambda: {"allocation": AllocationBar("Example allocation", (Share("Cash", 3, 1), Share("Owed", 1, 2)))},
     ),
     # Sections down a run of columns, as the map's lanes run, each body's

@@ -8,10 +8,11 @@ drawn as `{{ moment|when:when }}` draws it: after the heading's words, quieter
 than them, or with none, the heading itself. `toggle` draws it as a folded
 section's summary, whose head is its toggle, and `caption` as a figure's
 caption. The aside is one box of its own, so its parts (a count, a dot, a
-link) wrap as one line of text rather than as items of the head's row; in a
-summary it is a span, as a summary holds only phrasing content. `lead`, the
-start of the section's body, ends the head on a row of its own, kept whole
-with it.
+link) wrap as one line of text rather than as items of the head's row; the
+box draws that line's voice (layout.css), so a page writes only its words.
+In a summary it is a span, as a summary holds only phrasing content. `lead`,
+the start of the section's body, ends the head on a row of its own, kept
+whole with it.
 {% endcomment %}
 {% with level=level|default:2 %}
 {% if toggle %}<summary class="section-head">{% elif caption %}<figcaption class="section-head">{% else %}<header class="section-head">{% endif %}

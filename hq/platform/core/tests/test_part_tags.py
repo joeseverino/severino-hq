@@ -246,7 +246,7 @@ class SectionTagTests(SimpleTestCase):
 
         after = render(
             '{% section "Renewals" more_label="View renewals" more_url="/example/" %}<p>Body</p>'
-            '{% aside %}<span class="count">3 due</span>{% endsection %}'
+            "{% aside %}3 due{% endsection %}"
         )
         (aside,) = with_class(after, "section-aside")
         self.assertTrue(aside.words.startswith("3 due"))
