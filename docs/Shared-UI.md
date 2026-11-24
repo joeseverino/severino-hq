@@ -786,18 +786,18 @@ together rather than at the far ends of the head. *Gate:* `readings apart` in th
 
 A list, the default, is the facts about one thing, each label beside its value. It lays as many
 pairs to a row as keep each a short label and a short value wide, so a few short facts fill a
-wide frame rather than stacking down its start. The pairs of a row share what it leaves, so a
-row's last pair spans to its end and no pair stands alone beside empty columns; every label is
-one width, so the values of a column line up. A value that is a run of several (a `labeled` or
-`codes` list, addresses) asks for its widest line, sharing a row while it fits and taking the
-row when it does not. Narrower than two pairs it is one pair to a row. A
+wide frame rather than stacking down its start. The pairs stand in columns every row shares, so
+each label stands under the label above it, and a list of fewer pairs than its columns spreads
+them over the row; every label is one width, so the values of a column line up. A value that is
+a run of several (a `labeled` or `codes` list, addresses) takes the row. Narrower than two pairs
+it is one pair to a row. A
 label with several values holds them as a list inside one fact. An identifier in a value (code,
 a `|breakable` name) runs inline, code a chip on each line it wraps to, so a value's first line
 stands on its label's line in every engine. A list opened to read more (in a disclosure, a
 popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and
 ends with what holds it. A table row's small print keeps one pair to a row too. Where it stands
 decides this, never an option, so the same summary drawn on a page and in a dialog takes each
-one's spacing. *Gate:* `rows of facts short` in the survey.
+one's spacing.
 
 A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
 each fact one phrase, its bold value then its words ("3 rules"), agreeing with it, then a dot

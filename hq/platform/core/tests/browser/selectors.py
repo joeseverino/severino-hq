@@ -377,8 +377,6 @@ _DECLARED = {
     "band_code": _S(".facts-band > .fact > .fact-value code", optional=True),
     # A band of readings beside a page's title.
     "head_band": _S(".page-head .facts-band", optional=True),
-    # A list of facts, each label beside its value.
-    "facts_list": _S(".facts-list", optional=True),
     # One fact of a band, and the label that names its value.
     "band_fact": _S(".facts-band > .fact", "fact"),
     "band_label": _S(".fact-label", "fact"),

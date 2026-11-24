@@ -364,8 +364,8 @@ FACTS_STATES = {
     ),
     # Short facts in a section across the page, one with its detail under
     # its value, as a proposal's commit is drawn: the pairs go across the
-    # frame rather than down its start, the last row's pairs spanning what it
-    # leaves. Then seven, which wrap onto rows whose last pair spans its row.
+    # frame rather than down its start, in columns every row shares. Then
+    # seven, which wrap onto rows whose labels stand under the row's above.
     "list-across": Example(
         '{% section "Example change" %}{% facts %}'
         '{% fact "Commit" %}<code>0123456789ab</code>{% detail %}<small>on main</small>{% endfact %}'

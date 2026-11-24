@@ -371,39 +371,6 @@ _SHORT_MONTH = (
     + "</div></section></div>"
 )
 
-# A list of facts fills each row it lays its pairs on (layout.css): a row
-# whose pairs end short of the list leaves a lone pair beside empty columns.
-ROWS_SHORT = (
-    "(lists) => {"
-    + DESCRIBE
-    + """
-  const room = 6 * parseFloat(getComputedStyle(document.documentElement).fontSize);
-  const read = [...document.querySelectorAll(lists)].filter((list) => list.checkVisibility());
-  const found = [];
-  for (const list of read) {
-    const style = getComputedStyle(list);
-    const end = list.getBoundingClientRect().right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
-    // Pairs of a row align on their first baselines, so their tops differ by
-    // what their first lines hold: a row starts where a pair goes back left.
-    const rows = [];
-    for (const fact of list.children) {
-      if (!fact.checkVisibility()) continue;
-      const r = fact.getBoundingClientRect();
-      const row = rows.at(-1);
-      if (row && r.left > row.left) Object.assign(row, {left: r.left, right: r.right});
-      else rows.push({left: r.left, right: r.right});
-    }
-    for (const {right} of rows) {
-      if (end - right > room) {
-        const where = list.closest('section[id], section')?.querySelector('h2, h3')?.textContent.trim() ?? describe(list);
-        found.push(`a row of facts in ${where} ends ${Math.round(end - right)}px short of its list`);
-      }
-    }
-  }
-  return found;
-}"""
-)
-
 # An identifier in a band (a version, a tag) short enough for a cell of the
 # band's identifier floor stands whole on its line (figures.css): one that
 # wraps where a cell that wide would hold it was given too narrow a cell.
@@ -448,16 +415,6 @@ _READINGS_SPREAD = (
         for n in range(2)
     )
     + "</dl></div></div>"
-)
-
-# Four pairs on a grid of three, the last alone on its row.
-_LONE_PAIR = (
-    '<dl class="facts-list" style="display: grid; grid-template-columns: repeat(3, 1fr)">'
-    + "".join(
-        f'<div class="fact" style="grid-column: auto"><dt>Example {n}</dt><dd class="fact-value">example</dd></div>'
-        for n in range(4)
-    )
-    + "</dl>"
 )
 
 # Whether a box scrolls wider than it shows, which a plant's premise asks.
@@ -538,11 +495,6 @@ CHECKS = {
         (READINGS_APART, SELECTORS["head_band"]),
         reader_sees="two readings beside a page's title at the far ends of the head, nothing between",
         plants=(Plant(_READINGS_SPREAD, finds=("apart",)),),
-    ),
-    "rows of facts short": Check(
-        (ROWS_SHORT, SELECTORS["facts_list"]),
-        reader_sees="a lone fact on its row beside empty columns",
-        plants=(Plant(_LONE_PAIR, finds=("ends",)),),
     ),
     "months short of their frame": Check(
         (MONTHS_SHORT, SELECTORS["month"]),
