@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager, suppress
+from email.message import Message
 from functools import cache
 from html import escape, unescape
 from pathlib import Path
@@ -27,8 +28,13 @@ lazy from django.contrib.staticfiles.storage import staticfiles_storage
 
 from demo import first_glance
 from demo.examples import own
+from hq.platform.application.action_links import command_url
+from hq.platform.application.capabilities import capability_registry
+from hq.platform.application.command_center import command_center
 from hq.platform.application.decisions import item_anchor
+from hq.platform.application.effects import Effect
 from hq.platform.application.fragments import regions
+from hq.platform.application.security import web_principal
 from hq.platform.core import seeds
 from hq.platform.core.example_estate import REQUEST, SSO
 from hq.platform.core.example_estate.names import HQ, HQ_SOURCE
@@ -80,12 +86,13 @@ _SELECTED = re.compile(r'<option value="([^"]*)" selected>')
 # The pages of a list saved, from its first; demo.js says the rest are not.
 _MOST_PAGES_OF_A_LIST = 6
 # The most query answers kept, so a page of many links cannot fill the demo.
-_MOST_VARIANTS = 1500
+_MOST_VARIANTS = 2000
 # How many saved copies from a page an address with a query is still saved:
 # the copies a page links, and those they link in turn (the months either
 # side of today, a command a search found). demo.js says what lies further.
 _COPY_DEPTH = 2
-# Searches answered: each word of a page's name, up to this many.
+# Searches answered, past each word the command center offers or suggests:
+# each word of a page's name, up to this many.
 _MOST_SEARCHES = 200
 _TITLE = re.compile(r"<title>(.*?)(?: · [^<]*)?</title>", re.DOTALL)
 _WORD = re.compile(r"[a-z0-9][a-z0-9.-]{2,}")
@@ -160,6 +167,16 @@ def _drawn_sort(page: str) -> str:
     return unescape(selected.group(1)) if selected else ""
 
 
+def _offered_words(owner) -> set[str]:
+    """Each word of the name of everything the command center offers the
+    owner (each command, record kind, connection, view and check), read from
+    the declarations it searches, so typing one finds what it names; none
+    is left out as filler, since a name may start with one."""
+
+    offered = command_center("", principal=web_principal(owner), include_live_connections=True)
+    return {word for items in offered.values() for item in items for word in _WORD.findall(item.label.lower())}
+
+
 def _suggested(page: str) -> set[str]:
     """The words the command center on ``page`` suggests trying."""
 
@@ -203,21 +220,56 @@ class _Browser(Client):
         return super().get(path, *args, **kwargs)
 
 
-def _save_download(path: str, response) -> None:
-    """A CSV, JSON or receipt file, under a name a static host serves as that type.
+def _save_download(address: str, response, downloads: dict[str, dict[str, str]]) -> bool:
+    """A CSV, JSON or receipt file, under a name a static host serves as that
+    type; False for one with a query HQ does not send as an attachment.
 
     An address ending in ``/`` would be served as a page, so the file is saved
-    beside it with its extension and the address redirects to it.
+    beside it with its extension and the address redirects to it. A static
+    host answers an address with a query as the address without it, so an
+    export with one (a year's) is saved under a name of its own. Each file HQ
+    sends as an attachment goes in ``downloads`` with the name it is sent
+    under, which its links are given (``_mark_downloads``).
     """
 
+    disposition = Message()
+    disposition["Content-Disposition"] = response.get("Content-Disposition", "")
+    attached = disposition.get_content_disposition() == "attachment"
     content = b"".join(response.streaming_content) if response.streaming else response.content
-    if not path.endswith("/"):
-        _write(path, content, page=False)
-        return
-    kind = response.get("Content-Type", "").split(";")[0]
-    target = path.rstrip("/") + (mimetypes.guess_extension(kind) or "")
+    path, query = urlsplit(address)[2:4]
+    name = disposition.get_filename() or Path(path.rstrip("/")).name
+    if query and not attached:
+        return False
+    if query:
+        target = f"/__downloads/{len(downloads)}/{name}"
+    elif path.endswith("/"):
+        target = path.rstrip("/") + (mimetypes.guess_extension(response.get("Content-Type", "").split(";")[0]) or "")
+        _write(path, _MOVED.format(target=target).encode())
+    else:
+        target = path
     _write(target, content, page=False)
-    _write(path, _MOVED.format(target=target).encode())
+    if attached:
+        downloads[query_key(path, query)] = {"file": target, "name": name}
+    return True
+
+
+_HREF_ANY = re.compile(r'href="(/[^"#]*)"')
+
+
+def _mark_downloads(downloads: dict[str, dict[str, str]]) -> None:
+    """Each link to a file HQ sends as an attachment, on every saved page and
+    answer, leads to the saved file and saves it under HQ's name for it, as
+    HQ's own header has the browser do."""
+
+    def marked(found: re.Match) -> str:
+        parts = urlsplit(unescape(found.group(1)))
+        saved = downloads.get(query_key(parts.path, parts.query))
+        return f'href="{escape(saved["file"])}" download="{escape(saved["name"])}"' if saved else found.group(0)
+
+    for page in OUT.rglob("*.html"):
+        text = page.read_text(encoding="utf-8")
+        if (changed := _HREF_ANY.sub(marked, text)) != text:
+            page.write_text(changed, encoding="utf-8")
 
 
 @cache
@@ -292,21 +344,47 @@ def _inject(page: str, response, *, address: str = "") -> bytes:
     return page.replace(_CHARSET, _CHARSET + _meta_policy(response) + shown + _INJECT, 1).encode()
 
 
+def _hold_copies(routes: dict) -> None:
+    """Each saved page holds the copies of its own address with a query, the
+    order its list is drawn in and, for the search page, the words searched.
+    A static host serves every query that page, and ``demo-theme.js`` reads
+    them before the page is drawn, so it opens the copy with nothing shown."""
+
+    held: dict[str, dict] = {}
+    for key, target in routes["variants"].items():
+        held.setdefault(urlsplit(key).path, {})[key] = target
+    for path in held.keys() | routes["sorts"].keys():
+        page = OUT / path.strip("/") / "index.html"
+        own = {
+            "variants": held.get(path, {}),
+            "sorts": {path: routes["sorts"][path]} if path in routes["sorts"] else {},
+        }
+        if path == "/search/":
+            own |= {"searches": routes["searches"], "nothing": routes["nothing"]}
+        if (own["variants"] or own["sorts"]) and page.is_file():
+            meta = f'<meta name="hq-demo-copies" content="{escape(json.dumps(own))}">'
+            page.write_text(page.read_text(encoding="utf-8").replace(_INJECT, meta + _INJECT, 1), encoding="utf-8")
+
+
 class _Offered:
     """What the crawled pages offer that has a query: links (Show all, a day,
     an event), a filter's on-or-off choices, the addresses scripts read, the
     words of each page's name and those the command center suggests, to
     search for, and the order each list is drawn in."""
 
-    def __init__(self) -> None:
+    def __init__(self, searched: set[str]) -> None:
         # Each address, and the fewest saved copies between it and a page.
         self.variants: dict[str, int] = {}
         self.reads: set[str] = set()
         self.words: set[str] = set()
         self.suggested: set[str] = set()
+        # Each word the command center's own offers are named with.
+        self.searched = searched
         self.sorts: dict[str, str] = {}
         # Addresses HQ answered with something other than a page, with its status.
         self.refused: dict[str, int] = {}
+        # The files HQ sends as attachments, by address: where each is saved and its name.
+        self.downloads: dict[str, dict[str, str]] = {}
 
     def read(self, path: str, page: str, *, depth: int = 1) -> None:
         """What ``page`` at ``path`` offers; ``depth`` is how many copies from
@@ -370,17 +448,19 @@ class DemoBuild(TestCase):
             session = client.session
             session[DEMO_SESSION_KEY] = True
             session.save()
-            self._crawl(client, collected)
+            self._crawl(client, collected, _offered_words(owner))
 
-    def _crawl(self, client: Client, collected: Path) -> None:
+    def _crawl(self, client: Client, collected: Path, searched: set[str]) -> None:
         fragments: dict[str, str] = {}
-        offered = _Offered()
+        offered = _Offered(searched)
         seen: set[str] = set()
         self._walk(client, ["/"], seen, fragments, offered)
         variants = self._save_variants(client, offered, fragments, seen)
         (OUT / "__fragments__").mkdir(exist_ok=True)
         (OUT / "__fragments__" / "index.json").write_text(json.dumps(fragments, indent=1), encoding="utf-8")
         (OUT / "__fragments__" / "variants.json").write_text(json.dumps(variants, indent=1), encoding="utf-8")
+        _hold_copies(variants)
+        _mark_downloads(offered.downloads)
         self._copy_static(collected)
         self._copy_root(client)
         self.assertGreater(len(seen), 20)
@@ -407,7 +487,7 @@ class DemoBuild(TestCase):
         if response.status_code != 200:
             return []
         if not _is_page(response):
-            _save_download(path, response)
+            _save_download(path, response, offered.downloads)
             return []
         return self._save_page(client, path, response, fragments, offered)
 
@@ -484,7 +564,13 @@ class DemoBuild(TestCase):
         answer; and a search for each word of the pages' names, in the
         command center too. The list ``demo-theme.js`` reads."""
 
-        searches = sorted({*offered.suggested, *sorted(offered.words - offered.suggested)[:_MOST_SEARCHES]})
+        searches = sorted(
+            {
+                *offered.suggested,
+                *offered.searched,
+                *sorted(offered.words - offered.suggested - offered.searched)[:_MOST_SEARCHES],
+            }
+        )
         for word in [*searches, _NOTHING]:
             offered.variants.setdefault(f"/search/?{urlencode({'q': word})}", 1)
         variants: dict[str, str] = {}
@@ -511,6 +597,10 @@ class DemoBuild(TestCase):
             "sorts": offered.sorts,
             "refused": offered.refused,
             "most_pages": _MOST_PAGES_OF_A_LIST,
+            # The forms of the commands that only read, which have nothing to save.
+            "reads": sorted(
+                url for spec in capability_registry() if spec.effect is Effect.READ if (url := command_url(spec.name))
+            ),
         }
 
     def _save_reads(self, client: Client, offered: _Offered, read: set[str], fragments: dict[str, str]) -> list[str]:
@@ -548,6 +638,9 @@ class DemoBuild(TestCase):
             if len(variants) >= _MOST_VARIANTS:
                 continue
             response = client.get(address)
+            a_file = response.status_code == 200 and not _is_page(response)
+            if a_file and _save_download(address, response, offered.downloads):
+                continue
             if response.status_code != 200 or not _is_page(response):
                 offered.refused[key] = response.status_code
                 continue

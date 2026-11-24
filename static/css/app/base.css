@@ -162,15 +162,14 @@ pre ::selection { color: var(--code-ink); }
   .demo-flag { display: none; }
 }
 
-/* A saved copy's way to what it is: a chip held in the bottom left corner, clear
-   of a phone's rounded corners and home bar. Its footer is the room the page
-   ends with, taller than the chip and its inset, so the last of the content
-   scrolls up past it rather than staying under it. */
-.demo-foot { block-size: calc(var(--space-24) + env(safe-area-inset-bottom, 0px)); }
+/* A saved copy's way to what it is: a chip that ends the page, in line with the
+   content above it and clear of a phone's home bar. In the flow, it never sits
+   over what the page shows. */
+.demo-foot {
+  max-inline-size: var(--content-max); margin-inline: auto;
+  padding: 0 var(--content-pad) max(var(--content-pad), env(safe-area-inset-bottom, 0px));
+}
 .demo-about {
-  position: fixed; z-index: 9;
-  inset-inline-start: max(var(--space-6), env(safe-area-inset-left, 0px));
-  inset-block-end: max(var(--space-6), env(safe-area-inset-bottom, 0px));
   display: inline-flex; align-items: center; gap: var(--space-4);
   min-block-size: var(--target-min);
   padding: var(--space-3) var(--space-7) var(--space-3) var(--space-6);

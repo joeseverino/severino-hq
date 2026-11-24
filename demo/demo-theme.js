@@ -2,8 +2,9 @@
 // - applies the theme chosen in the demo (demo.js keeps the choice);
 // - opens the saved copy of an address with a query (a filter, a day, Show
 //   all, a search), since the static host serves every query the page without
-//   it. demo/build.py saved each copy under __q/ and listed it in
-//   __fragments__/variants.json. demo.js says so when there is no copy.
+//   it. demo/build.py saved each copy under __q/, listed it in
+//   __fragments__/variants.json for demo.js and in the page it is a copy of.
+//   demo.js says so when there is no copy.
 (() => {
   try {
     const theme = (JSON.parse(localStorage.getItem("hq-demo")) || {}).theme;
@@ -23,7 +24,7 @@
   let route;
   const routes = () => (route ??= fetch("/__fragments__/variants.json")
     .then((response) => response.json())
-    .catch(() => ({ variants: {}, searches: [], nothing: "", sorts: {} })));
+    .catch(() => ({ variants: {}, searches: [], nothing: "", sorts: {}, reads: [] })));
   // A search the demo has no answer for is answered as the nearest word it
   // has: the shortest that starts with it, else the longest it starts with.
   const nearest = (asked, words, nothing) => {
@@ -69,21 +70,21 @@
     return;
   }
   if (!location.search) return;
+  // The page holds its own address's copies (demo/build.py), so the copy is
+  // opened here, before anything of this page is drawn.
   const here = new URL(location.href);
-  document.documentElement.style.visibility = "hidden";
-  const reveal = () => { document.documentElement.style.visibility = ""; };
-  routes().then((found) => {
-    const asked = here.pathname === "/search/" ? here.searchParams.get("q") : "";
-    const target = found.variants[key(here, found)] || (asked ? found.variants[searchKey(asked, found)] : "");
-    if (target) {
-      // Read by demo.js, which then asks for nothing on a page being left.
-      window.hqDemo.leaving = true;
-      try { sessionStorage.setItem("hq-demo-asked", here.pathname + here.search); } catch { /* private window */ }
-      location.replace(target + here.hash);
-      return;
-    }
+  const held = document.querySelector('meta[name="hq-demo-copies"]')?.content;
+  const found = { variants: {}, searches: [], nothing: "", sorts: {}, ...(held ? JSON.parse(held) : {}) };
+  const asked = here.pathname === "/search/" ? here.searchParams.get("q") : "";
+  const target = found.variants[key(here, found)] || (asked ? found.variants[searchKey(asked, found)] : "");
+  if (!target) {
     window.hqDemo.unanswered = kindOf(here, found);
-    reveal();
-    document.dispatchEvent(new Event("hq-demo:unanswered"));
-  }, reveal);
+    return;
+  }
+  // Nothing of this page shows while the copy loads, and demo.js asks for
+  // nothing on a page being left.
+  document.documentElement.style.visibility = "hidden";
+  window.hqDemo.leaving = true;
+  try { sessionStorage.setItem("hq-demo-asked", here.pathname + here.search); } catch { /* private window */ }
+  location.replace(target + here.hash);
 })();

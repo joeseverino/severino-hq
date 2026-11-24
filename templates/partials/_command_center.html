@@ -61,7 +61,7 @@ the fragment `group`. Scripts and tests find each piece by its
       {% muted element="p" css="command-center-more" %}Showing {{ palette_count }} of {{ palette_total|counted:"match" }}. Press Enter to search all of HQ.{% endmuted %}
     {% endif %}
   {% elif q %}
-    <div class="command-center-empty">
+    <div class="command-center-empty" data-command-center-empty>
       <strong>No page or command called “{{ q }}”.</strong>
       {% muted %}Press Enter to search everything.{% endmuted %}
     </div>

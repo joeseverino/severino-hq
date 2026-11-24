@@ -121,34 +121,6 @@ def _most_pages() -> int:
 
 # The widths HQ's browser gate reads, and a small phone's.
 _WIDTHS = (390, *WIDTHS)
-# About the demo floats in the bottom left corner, over some of the page at
-# almost every scroll stop; what it promises is to leave none of it there.
-# Read at the page's end: the room below the content, against the room the
-# chip and its inset take (from its top down), and each control still under
-# it. The content is every part of the body in the page's flow but the
-# chip's own footer.
-_ABOUT_AT_THE_END = """() => {
-  scrollTo(0, document.documentElement.scrollHeight);
-  const chip = document.querySelector('.demo-about');
-  const c = chip.getBoundingClientRect();
-  const parts = [...document.body.children].filter((el) =>
-    !el.matches('.demo-foot, dialog, script') && el.checkVisibility()
-    && !['fixed', 'absolute'].includes(getComputedStyle(el).position));
-  const contentEnd = Math.max(...parts.map((el) => el.getBoundingClientRect().bottom));
-  const covered = [...document.querySelectorAll(
-    "a[href], button, summary, select, textarea, input:not([type=hidden]), [tabindex]:not([tabindex='-1'])"
-  )].filter((el) => !chip.contains(el) && !el.closest('dialog') && el.checkVisibility()).filter((el) => {
-    const r = el.getBoundingClientRect();
-    return Math.min(c.right, r.right) - Math.max(c.left, r.left) >= 1
-      && Math.min(c.bottom, r.bottom) - Math.max(c.top, r.top) >= 1;
-  }).map((el) => {
-    const said = (el.textContent || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
-    return `${el.tagName.toLowerCase()} ${said.slice(0, 40)}`;
-  });
-  const room = innerHeight - contentEnd, needed = innerHeight - c.top;
-  scrollTo(0, 0);
-  return {room, needed, covered: covered.slice(0, 10)};
-}"""
 
 
 def _sample() -> list[str]:
@@ -588,7 +560,8 @@ class DemoSiteTests(unittest.TestCase):
         # The day it was saved, written the way HQ writes a day.
         self.assertRegex(about.group(0), r'saved <time datetime="[^"]+" title="[^"]+">[^<]+</time>')
 
-    def test_about_this_demo_stays_in_the_corner_and_opens_by_keyboard(self):
+    def test_about_this_demo_ends_the_page_and_opens_by_keyboard(self):
+        # In the flow after the content, so it never sits over any of it.
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
@@ -598,36 +571,11 @@ class DemoSiteTests(unittest.TestCase):
                 page.goto(self.origin + "/", wait_until="load")
                 with self.subTest(width=width):
                     control = page.get_by_role("link", name="About the demo")
-                    for stop in (
-                        "0",
-                        "document.documentElement.scrollHeight / 2",
-                        "document.documentElement.scrollHeight",
-                    ):
-                        page.evaluate(f"window.scrollTo(0, {stop})")
-                        self.assertTrue(control.is_visible())
-                        box = control.bounding_box()
-                        self.assertLess(box["x"] + box["width"], width / 2, f"it sits on the left at {stop}")
-                        self.assertGreater(box["y"], 700 / 2, f"it sits at the bottom at {stop}")
-                        self.assertLessEqual(box["y"] + box["height"], 700, f"it is on screen at {stop}")
+                    control.scroll_into_view_if_needed()
+                    box = control.bounding_box()
+                    content = page.locator("#content").bounding_box()
+                    self.assertGreaterEqual(box["y"], content["y"] + content["height"], "it comes after the content")
                     self._assert_opens_and_closes(page, control)
-                page.close()
-            browser.close()
-
-    def test_about_this_demo_leaves_no_control_under_it(self):
-        # Pages with controls along their left edge and at their foot: a
-        # list's tick boxes and pages, the dashboard's calendar.
-        from playwright.sync_api import sync_playwright
-
-        with sync_playwright() as playwright:
-            browser = _engine(playwright).launch()
-            for width in _WIDTHS:
-                page = browser.new_page(viewport={"width": width, "height": 700})
-                for path in ("/", "/infrastructure/containers/", "/action-items/"):
-                    page.goto(self.origin + path, wait_until="load")
-                    with self.subTest(path=path, width=width):
-                        end = page.evaluate(_ABOUT_AT_THE_END)
-                        self.assertGreaterEqual(end["room"], end["needed"], "the page ends with room for it")
-                        self.assertEqual(end["covered"], [], "no control is under it at the page's end")
                 page.close()
             browser.close()
 
@@ -660,15 +608,18 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_the_command_center_answers_what_is_typed(self):
         # About the demo's Find anything and ⌘K open it; it lists what it
-        # offers, answers a word as it is typed, and a word the demo has no
-        # search for is answered as HQ answers one nothing matches, in the
-        # palette and after Enter, about the word typed.
+        # offers, and finds each thing it offers by the first word of its
+        # name, and each word its box suggests, as it is typed. A word the
+        # demo has no search for is answered, in the palette, after Enter and
+        # in the search page's own box, by saying so about the word typed,
+        # never by HQ's answer that nothing matches.
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
             browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 800})
             page.goto(self.origin + "/", wait_until="networkidle")
+            names: list[str] = []
             for opening in ("about", "keys"):
                 with self.subTest(opening=opening):
                     if opening == "about":
@@ -682,21 +633,104 @@ class DemoSiteTests(unittest.TestCase):
                     palette = page.locator("#modal-command-center")
                     self.assertTrue(palette.evaluate("dialog => dialog.open"))
                     self.assertTrue(offered, "it lists what it offers")
+                    names = palette.locator("[data-command-center-option]").all_inner_texts()
                     page.keyboard.press("Escape")
                     page.keyboard.press("Escape")
             page.keyboard.press("Meta+k")
             box = page.locator("#command-center-query")
-            for word in _suggested(box.get_attribute("placeholder")):
+            first_words = {words[0] for name in names if (words := re.findall(r"[a-z0-9]{3,}", name.lower()))}
+            for word in sorted(first_words | set(_suggested(box.get_attribute("placeholder")))):
                 with self.subTest(word=word):
                     found = self._answer_to(page, lambda typed=word[:4]: box.fill(typed))
                     self.assertTrue(found, f"typing {word[:4]} finds something")
             self._answer_to(page, lambda: box.fill("xyzzy"))
-            self.assertIn("“xyzzy”", page.locator(".command-center-empty").inner_text())
+            self._assert_no_search_for("xyzzy", page.locator("[data-command-center-empty]"))
             with page.expect_navigation(wait_until="networkidle"):
                 box.press("Enter")
             self.assertEqual(page.locator('main input[name="q"]').input_value(), "xyzzy")
+            self._assert_no_search_for("xyzzy", page.locator("[data-empty-state]"))
             self.assertNotIn(self._nothing(), page.locator("body").inner_text())
+            # The search page's own box asks as it is typed into, as the palette does.
+            search = page.locator('main input[name="q"]')
+            search.fill("")
+            search.press_sequentially("certificate", delay=40)
+            page.wait_for_url(re.compile(r"[?&]q=certificate"))
+            page.wait_for_function("() => !document.querySelector('main[aria-busy]')")
+            self.assertEqual(page.locator("#content > .messages").count(), 0, "the search page says nothing of a list")
+            self.assertEqual(page.locator("[data-empty-state]").count(), 0, "certificate finds something")
             browser.close()
+
+    def test_a_query_address_opens_its_copy_before_its_page_asks_for_anything(self):
+        # The page a static host serves at an address with a query opens the
+        # copy for it before it draws or asks for anything, so no request of
+        # its own is cut off as it is left.
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = _engine(playwright).launch()
+            page = browser.new_page(viewport={"width": 1360, "height": 800})
+            for start in ("/reports/", "/action-items/"):
+                with self.subTest(start=start):
+                    page.goto(self.origin + start, wait_until="networkidle")
+                    asked: list[str] = []
+                    opened = []
+
+                    def note(request, asked=asked, opened=opened):
+                        if request.is_navigation_request():
+                            opened.append(request.url)
+                        elif "/static/" not in request.url and len(opened) < 2:
+                            asked.append(request.url)
+
+                    page.on("request", note)
+                    page.locator('main a[href*="/?"]').first.click()
+                    page.wait_for_function("() => document.querySelector('meta[name=hq-demo-address]')")
+                    page.remove_listener("request", note)
+                    self.assertEqual(len(opened), 2, "the address, then its copy")
+                    self.assertEqual(asked, [], "the page at the address asks for nothing")
+            browser.close()
+
+    def test_a_form_that_posts_settles_with_what_the_demo_did(self):
+        # A read's form (a lookup) says the demo can't run it, a write's that
+        # nothing was saved, and neither is left sending.
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = _engine(playwright).launch()
+            page = browser.new_page(viewport={"width": 1360, "height": 800})
+            for path, said in (("/commands/lookup.name.read/", "can't run"), ("/commands/project.create/", "nothing")):
+                with self.subTest(path=path):
+                    page.goto(self.origin + path, wait_until="networkidle")
+                    form = page.locator("main form[method=post]").first
+                    form.evaluate("form => { form.noValidate = true; form.requestSubmit(); }")
+                    page.locator("#content > .messages").wait_for()
+                    self.assertIn(said, page.locator("#content > .messages").inner_text())
+                    self.assertIsNone(form.get_attribute("aria-busy"), "the form is not left sending")
+                    self.assertFalse(form.locator("[data-submit-status]").is_visible())
+            browser.close()
+
+    def test_an_export_is_saved_as_a_file(self):
+        # Each export HQ sends as an attachment downloads under HQ's name for
+        # it, a year's included, rather than opening in the tab.
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = _engine(playwright).launch()
+            page = browser.new_page(viewport={"width": 1360, "height": 800})
+            page.goto(self.origin + "/reports/", wait_until="networkidle")
+            exports = page.locator("main a[download]")
+            self.assertTrue(exports.count(), "Reports offers exports")
+            for at in range(exports.count()):
+                link = exports.nth(at)
+                with self.subTest(export=link.get_attribute("download")), page.expect_download() as download:
+                    link.click()
+                self.assertEqual(download.value.suggested_filename, link.get_attribute("download"))
+                self.assertEqual(page.url, self.origin + "/reports/")
+            browser.close()
+
+    def _assert_no_search_for(self, word: str, empty) -> None:
+        said = empty.inner_text()
+        self.assertIn(f"“{word}”", said)
+        self.assertIn("demo", said)
 
     @staticmethod
     def _answer_to(page, act) -> int:
