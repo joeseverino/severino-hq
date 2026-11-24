@@ -218,20 +218,18 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .relation-list > .eyebrow { display: block; margin: var(--space-2) 0 0; }
 .relation-list > ul { display: grid; gap: var(--space-1); }
 /* One edge: the link to the other end on its own line, then each value it
-   carries on a line of its own with its kind and age. */
-.relation-list > ul > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
-.relation-values {
-  display: grid; gap: var(--space-2); flex: 1 1 100%; min-width: 0;
-  margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-7); font-size: var(--text-xs);
-  overflow-wrap: anywhere;
-}
+   carries on a line of its own with its kind and age. The row's box holds
+   its arrow, its two lines and its status, at the end, so every row of a
+   list is one width and its status is inside it; what follows the box stands
+   on the box's columns (subgrid), under the other end's name. */
+.relation-list > ul > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: var(--space-2) var(--space-3); min-width: 0; }
+.relation-list > ul > li > :not(.relation-link) { grid-column: 2 / -1; }
+.relation-values { display: grid; gap: var(--space-2); min-width: 0; margin: 0 0 var(--space-2); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .relation-values li { display: grid; gap: 1px; min-width: 0; }
-.relation-reading { flex: 1 1 100%; margin: 0; font-size: var(--text-2xs); overflow-wrap: anywhere; }
-/* The row's box holds its arrow, its two lines and its status, at the end,
-   so every row of a list is one width and its status is inside it. */
+.relation-reading { margin: 0; font-size: var(--text-2xs); overflow-wrap: anywhere; }
 .relation-link {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 0 var(--space-3);
-  align-items: center; flex: 1 1 auto; min-width: 0; padding: var(--space-2) var(--space-3);
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; gap: 0 var(--space-3);
+  align-items: center; min-width: 0; padding: var(--space-2) var(--space-3);
   border-color: var(--line-2);
   background: var(--surface-2); color: var(--ink-2); text-decoration: none;
   font-size: var(--text-xs); transition: border-color 100ms ease, background 100ms ease;

@@ -468,8 +468,5 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   /* The last row showing ends the table, as the last row does. */
   .data-table > tbody:last-of-type > tr:has(~ tr[data-folded]):not(:has(~ tr:not([data-folded]:not([data-open])))) > * { border-bottom: 0; }
 }
-/* Rows folded under a row rather than a group's heading are set in under it, their open lines with them. */
-.data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded],
-.data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] + .row-detail { --row-inset: calc(var(--row-edge) + var(--space-10)); }
 
 }
