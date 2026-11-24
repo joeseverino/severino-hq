@@ -42,6 +42,8 @@ func (h *harness) docker(scenario string) func(context.Context, ...string) *exec
 			switch {
 			case scenario == "healthy", scenario == "unhealthy":
 				health = scenario
+			case scenario == "stubborn":
+				health = "healthy"
 			case scenario == "sickens":
 				health = "healthy"
 				if later {
@@ -55,8 +57,12 @@ func (h *harness) docker(scenario string) func(context.Context, ...string) *exec
 			return exec.CommandContext(ctx, "/bin/sh", "-c", "echo "+health)
 		case "run":
 			script := `trap 'kill $!; exit 0' TERM; sleep 10 & wait`
-			if scenario == "crash" {
+			switch scenario {
+			case "crash":
 				script = "exit 3"
+			case "stubborn":
+				// Deaf to the stop, as a container docker cannot end is.
+				script = `trap '' TERM; exec sleep 30`
 			}
 			h.run = exec.CommandContext(ctx, "/bin/sh", "-c", script)
 			return h.run
@@ -94,7 +100,7 @@ func newHarness(t *testing.T, scenario string) *harness {
 			h.notes = append(h.notes, state)
 			return nil
 		},
-		Poll: 20 * time.Millisecond, Await: 200 * time.Millisecond,
+		Poll: 20 * time.Millisecond, Await: 200 * time.Millisecond, Stop: 5 * time.Second,
 		Stdout: io.Discard, Stderr: io.Discard,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
@@ -163,11 +169,43 @@ func TestHQIsReadyOnlyWhenHealthyAndStopsCleanly(t *testing.T) {
 		t.Fatalf("a requested stop is not a failure: %v", err)
 	}
 	calls := h.calls()
-	if !strings.HasPrefix(calls, "stop --time 30 "+hostcore.Container+"\nrm --force "+hostcore.Container+"\n") {
+	if !strings.HasPrefix(calls, strings.Join(stopping, " ")+"\nrm --force "+hostcore.Container+"\n") {
 		t.Errorf("a stale container is not stopped and removed first:\n%s", calls)
 	}
-	if !strings.Contains(calls, "stop --time 30 "+hostcore.Container) {
+	if strings.Count(calls, strings.Join(stopping, " ")) != 2 {
 		t.Errorf("HQ was not asked to stop:\n%s", calls)
+	}
+}
+
+// A container that outlives its stop fails the run within the runner's bound,
+// so the unit's stop ends there rather than at systemd's kill.
+func TestAContainerThatOutlivesItsStopFailsTheRunWithinTheBound(t *testing.T) {
+	h := newHarness(t, "stubborn")
+	h.runner.Stop = 100 * time.Millisecond
+	t.Cleanup(func() {
+		if h.run != nil && h.run.Process != nil {
+			_ = h.run.Process.Kill()
+		}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- h.runner.Run(ctx) }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for !h.ready() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !h.ready() {
+		t.Fatal("never ready on a healthy container")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "still running") {
+			t.Fatalf("a container that outlived its stop was a clean stop: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the stop waited on a container that would not exit")
 	}
 }
 
@@ -273,7 +311,7 @@ func TestAnUnhealthyContainerFailsTheStart(t *testing.T) {
 	if h.ready() {
 		t.Error("an unhealthy container was reported ready")
 	}
-	if !strings.Contains(h.calls(), "stop --time 30 "+hostcore.Container) {
+	if !strings.Contains(h.calls(), strings.Join(stopping, " ")) {
 		t.Errorf("the unhealthy container was not stopped:\n%s", h.calls())
 	}
 }
@@ -321,7 +359,7 @@ func TestHQTurningUnhealthyStopsItAndFailsTheUnit(t *testing.T) {
 		t.Fatal("HQ was never ready, so this is the start path, not a later failure")
 	}
 	calls := strings.Split(strings.TrimSpace(h.calls()), "\n")
-	if last := calls[len(calls)-1]; last != "stop --time 30 "+hostcore.Container {
+	if last := calls[len(calls)-1]; last != strings.Join(stopping, " ") {
 		t.Errorf("the unhealthy container was not stopped before the unit failed:\n%s", h.calls())
 	}
 }

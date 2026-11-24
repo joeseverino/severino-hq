@@ -141,7 +141,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             glance_refresh.DASHBOARD_REFRESH,
             "Ask for a fresh reading of every dashboard panel a controller can read.",
-            Effect.INFRASTRUCTURE_CHANGE,
+            Effect.READ_REQUEST,
             Capability.MANAGE_INFRASTRUCTURE,
             glance_refresh.DashboardRefreshCommand,
             glance_refresh.request_dashboard_refresh,
@@ -152,7 +152,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             glance_refresh.DASHBOARD_REFRESH_STALE,
             "Ask again for the dashboard panels whose reading is due.",
-            Effect.INFRASTRUCTURE_CHANGE,
+            Effect.READ_REQUEST,
             Capability.MANAGE_INFRASTRUCTURE,
             glance_refresh.DashboardRefreshCommand,
             glance_refresh.request_stale_panel_refresh,

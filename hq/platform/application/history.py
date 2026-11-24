@@ -34,7 +34,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
-lazy from hq.domains.control_plane.models import DashboardConfiguration, ReadRequest
+lazy from hq.domains.control_plane.models import ReadRequest
 lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
 lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
@@ -328,12 +328,14 @@ class HistoryLine:
             noun, happened = self.burst[0].like
             return f"{counted(self.total, noun)} {happened}", ""
         head = self.head
-        if head is not None:
-            return head.object_repr or head.type_label, ""
-        newest = self.events[0]
+        if head is not None and head.object_repr:
+            return head.object_repr, ""
+        newest = head or self.events[0]
         named = words_of(newest).title
         if named:
             return named, ""
+        if head is not None:
+            return head.type_label, ""
         # Nothing declared its words, so the event is named by what it changed.
         return newest.object_repr or newest.type_label, f" and {counted(self.total - 1, 'more', 'more')}"
 
@@ -598,15 +600,9 @@ def _newest_of_each_kind(within: QuerySet, operations: Iterable[str]) -> QuerySe
 
 
 def read_requests() -> Q:
-    """The rows that are an ask for a fresh reading, as a filter.
+    """The rows that are an ask for a fresh reading, as a filter."""
 
-    Asks the dashboard made before it filed them as read requests carry the
-    panels they named.
-    """
-
-    return Q(object_type=read_request_type()) | Q(
-        object_type=audited_labels()[DashboardConfiguration], metadata__has_key="panels"
-    )
+    return Q(object_type=read_request_type())
 
 
 def routine() -> Q:

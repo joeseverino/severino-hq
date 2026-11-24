@@ -199,6 +199,7 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 		// out and a failed one retried when the unit restarts.
 		Await:          host.RenderBound,
 		StartPeriod:    period,
+		Stop:           host.StopBound,
 		SealPublic:     host.SealPublicKey,
 		TailscaledUnit: host.TailscaledEnabledUnit,
 		TailscaleRun:   host.TailscaleRunDir,

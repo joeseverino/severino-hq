@@ -15,7 +15,9 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import NOBODY
 from hq.platform.mcp.capability_answer import agent_capabilities
 
+from .. import history
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
+from ..contracts import Effect
 from ..documentation import sync_documentation
 from ..integration_testing import commands_registered
 from ..security import AuthorizationError, Capability, Principal, agent_principal, cli_principal
@@ -463,12 +465,20 @@ class WriteActTests(TestCase):
 
     principal = Principal("test", "test", frozenset({"example.write"}))
 
-    def run_write(self, handler, payload):
-        spec = CapabilitySpec(
-            "example.thing.set", "Write an example.", "remote_write", "example.write", ExampleWrite, handler
+    def spec(self, handler, effect="remote_write"):
+        return CapabilitySpec(
+            "example.thing.set",
+            "Write an example.",
+            effect,
+            "example.write",
+            ExampleWrite,
+            handler,
+            label="Set an example",
         )
-        with commands_registered(spec):
-            return execute_capability(spec.name, payload, principal=self.principal)
+
+    def run_write(self, handler, payload):
+        with commands_registered(self.spec(handler)):
+            return execute_capability("example.thing.set", payload, principal=self.principal)
 
     def written_since(self, before):
         return AuditLog.objects.filter(pk__gt=before)
@@ -477,17 +487,30 @@ class WriteActTests(TestCase):
         return AuditLog.objects.order_by("-pk").values_list("pk", flat=True).first() or 0
 
     def test_a_write_that_recorded_nothing_leaves_its_act_once_however_often_it_is_retried(self):
-        before = self.last_pk()
-        payload = {"idempotency_key": "example-act"}
+        # Each effect a write can declare but a destructive one, which waits for a person.
+        for effect in (effect for effect in Effect if effect.changes and effect is not Effect.DESTRUCTIVE):
+            spec = self.spec(lambda command, **kwargs: {"ok": True, "message": "Set."}, effect)
+            with self.subTest(effect=effect), commands_registered(spec):
+                before = self.last_pk()
+                payload = {"idempotency_key": f"example-act-{effect}"}
 
-        first = self.run_write(lambda command, **kwargs: {"ok": True, "message": "Set."}, payload)
-        again = self.run_write(lambda command, **kwargs: {"ok": True, "message": "Set."}, payload)
+                first = execute_capability(spec.name, payload, principal=self.principal)
+                again = execute_capability(spec.name, payload, principal=self.principal)
 
-        self.assertEqual(first, again)
-        (act,) = self.written_since(before)
-        self.assertEqual(
-            (act.action, act.metadata["operation"], act.message), (AuditLog.Action.DONE, "example.thing.set", "Set.")
-        )
+                self.assertEqual(first, again)
+                (act,) = self.written_since(before)
+                self.assertEqual(
+                    (act.action, act.metadata["operation"], act.message),
+                    (AuditLog.Action.DONE, "example.thing.set", "Set."),
+                )
+                # Titled by what ran, and an ask for a reading kept off the log until read requests are shown.
+                asks = effect == "read_request"
+                default, reads = (
+                    {line.title for line in history.recent(limit=5, reads=shown) if act in line.events}
+                    for shown in (False, True)
+                )
+                self.assertEqual(default, set() if asks else {"Set an example"})
+                self.assertEqual(reads, {"Set an example"})
 
     def test_a_write_that_recorded_its_change_leaves_no_act_beside_it(self):
         before = self.last_pk()
