@@ -197,7 +197,7 @@ FACT = FactTakes(
     """,
     classes=(
         *("band-icon", "fact", "fact-cut", "fact-detail", "fact-figure", "fact-label", "fact-open", "fact-panel"),
-        *("fact-panel-foot", "fact-panel-head", "fact-value", "is-zero", "tone-*"),
+        *("fact-panel-foot", "fact-panel-head", "fact-shown", "fact-value", "is-zero", "tone-*"),
     ),
     partial=FACT_PARTIAL,
     about=(

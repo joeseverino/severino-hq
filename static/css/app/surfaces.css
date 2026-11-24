@@ -117,7 +117,7 @@
   .figure-dots:has(> :nth-child(9)) { grid-template-rows: repeat(3, auto); }
   /* Dots may wrap into rows taller than the value: it keeps to the top of its
      line, level with the values beside it, rather than at their middle. */
-  .fact-figure:has(> .figure-dots) > span { align-self: flex-start; }
+  .fact-figure:has(> .figure-dots) > .fact-shown { align-self: flex-start; }
   /* The dots keep to the top as well, at least the value's line tall, so a
      single row of them stands at the middle of the value's line. */
   .fact-figure > .figure-dots { align-self: flex-start; min-block-size: 1lh; align-content: center; align-items: center; }

@@ -314,6 +314,18 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
   gap: var(--space-2);
   min-width: 0;
 }
+/* The cells of a row share its lines: each cell's label, value, detail and
+   drawing stand on rows of the band's own (subgrid), so a label that wraps
+   moves the values of its whole row with it and every value in a row stands
+   level. A shorter label stands at the foot of its line, on its value. */
+.facts-band:not(.is-small) > .fact {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  align-content: start;
+  & > dt { align-self: end; }
+}
+.facts-band:not(.is-small):has(> .fact > :nth-child(4)) > .fact { grid-row: span 4; }
 /* A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside the title while its facts fit there, on a line of its own under it, from the page's edge, where not. */
 :is(.page-head, .page-head-copy) > :has(> .facts-band) { flex: 1 1 32rem; min-width: 0; }
 .page-head .facts-band { margin-block: 0; }
@@ -327,7 +339,7 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
   &:not(:has(> :nth-child(3))) { --band-readings: 2; }
   &:not(:has(> :nth-child(2))) { --band-readings: 1; }
 }
-@container page-head (width < 30rem) { .page-head .facts-band { --band-floor: 10rem; --band-row-gap: var(--space-5); --band-column-gap: var(--space-6); & > .fact { flex-flow: row wrap; align-content: start; align-items: baseline; gap: 0 var(--space-3); } & > .fact > .fact-detail { flex-basis: 100%; } & .fact-value { font-size: var(--text-md); } } }
+@container page-head (width < 30rem) { .page-head .facts-band { --band-floor: 10rem; --band-row-gap: var(--space-5); --band-column-gap: var(--space-6); & > .fact { display: flex; grid-row: auto; flex-flow: row wrap; align-content: start; align-items: baseline; gap: 0 var(--space-3); } & > .fact > dt { align-self: auto; } & > .fact > .fact-detail { flex-basis: 100%; } & .fact-value { font-size: var(--text-md); } } }
 /* What names a value is sentence case in the muted voice; capitals are for a kicker over a group (`.eyebrow`), never a value's name. Its mark is quieter than its words, and a label too long for its cell wraps beside its mark, never under it. */
 .facts-band dt { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; color: var(--muted); font-size: var(--text-xs); }
 .facts-band .fact-label { min-width: 0; }
@@ -343,10 +355,10 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 /* What a figure counts, said after it (`<small>`), in the label's voice. */
 .facts-band .fact-value small { color: var(--muted); font-size: var(--text-xs); font-weight: 500; letter-spacing: 0; }
 /* A value that is a run of several (the connections that read a machine) is one box in its value's line: set at the value's end where the value is (a band read as a list), as wide as its parts until its value's width, then wrapping inside it, never under the label. */
-.facts-band .fact-value > .dot-list { display: inline-flex; max-inline-size: 100%; vertical-align: top; }
+.facts-band .fact-shown > .dot-list { display: inline-flex; max-inline-size: 100%; vertical-align: top; }
 /* A value drawn as well as said: the drawing beside it where there is room, under it where not (surfaces.css, the drawing's). */
 .facts-band .fact-figure { display: flex; flex-wrap: wrap; align-content: start; align-items: center; gap: var(--space-4) var(--space-6); }
-.facts-band .fact-figure > span { min-width: 0; }
+.facts-band .fact-figure > .fact-shown { min-width: 0; }
 /* A drawing beside a value never sets its cell's width: it has none of its own (`contain`), and takes what the cell's words leave, its dots wrapping there. */
 .facts-band .fact-figure > .figure-dots { flex: 1 1 0; contain: inline-size; }
 /* Dots set in rows (past four, surfaces.css) cannot wrap, so they keep their own width, which fits the narrowest cell, and take the line under the value where that is all the room left. */
@@ -364,11 +376,13 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .facts-band .fact.is-zero .fact-value { color: var(--muted-2); font-weight: 500; }
 /* Headline figures (`is-large`, `is-lead`) stand closer than other facts, so a phone's band holds three in a row. Each sets its value to its cell, between the band's value size and a headline's, so a long amount in a narrow cell is smaller rather than past its edge. */
 .facts-band:is(.is-large, .is-lead) { --band-floor: 6rem; --band-column-gap: var(--space-6); }
-.facts-band:is(.is-large, .is-lead) > .fact { container: figure / inline-size; }
-.facts-band:is(.is-large, .is-lead) .fact-value { font-size: clamp(var(--text-lg), 15cqi, var(--text-4xl)); }
+/* The value is the container its words are sized by, never the fact, which
+   stands on its band's rows (above) and so may not contain its own layout. */
+.facts-band:is(.is-large, .is-lead) .fact-value { container: figure / inline-size; }
+.facts-band:is(.is-large, .is-lead) .fact-shown { font-size: clamp(var(--text-lg), 15cqi, var(--text-4xl)); line-height: max(var(--target-min), 1.3em); }
 /* Headline figures led by the first: of four, the lead takes a row of its own over the other three (`data-band`, above), larger and in the accent, a rule under it. */
 .facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child { grid-column: 1 / -1; padding-block-end: var(--space-8); border-block-end: 1px solid var(--line-2); }
-.facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child .fact-value { color: var(--accent); font-size: var(--text-display); letter-spacing: -.04em; line-height: 1.1; }
+.facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child :is(.fact-value, .fact-shown) { color: var(--accent); font-size: var(--text-display); letter-spacing: -.04em; line-height: 1.1; }
 .facts-band.is-lead:has(> .fact:nth-child(4):last-child) > .fact:first-child .figure-trend { height: 40px; }
 /* Small figures read across, as a forecast's hours are: as many to a line as the band holds, each centered over its few characters, and a note under one marked, since one is said only where something stands out. */
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- small figures read across, each a column of one strip */
@@ -380,7 +394,7 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 /* A value that opens a panel in place is the panel's button, drawn as the value it is, as a linked value is: its ink, the cell tinted while it is pointed at or its panel open. */
 .facts-band .fact-open { padding: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: start; cursor: pointer; }
 .facts-band .fact-open:is(:hover, :focus-visible) { text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: .18em; }
-.facts-band > .fact:has(> .fact-value > .fact-open:is(:hover, :focus-visible), :popover-open) { background: var(--bg-tint); }
+.facts-band > .fact:has(> .fact-value > .fact-shown > .fact-open:is(:hover, :focus-visible), :popover-open) { background: var(--bg-tint); }
 /* The panel: what the figure stands for, read in place, its head over it and its foot under it. */
 .fact-panel { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); font-size: var(--text-sm); font-weight: 400; letter-spacing: normal; line-height: 1.4; text-align: start; }
 .fact-panel > p { margin: 0; color: var(--muted); font-size: var(--text-xs); }
@@ -401,7 +415,7 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .fact:is(.tone-good, .tone-attention, .tone-serious) .fact-value { color: var(--tone-ink); }
 /* A fact whose one target is its value's link is that link whole, its label and detail pressed as its value is; one holding another target (a link in its detail, a drawing's dots, a panel's button) keeps each its own, so none covers another. */
-.fact:has(> .fact-value > a:only-child, > .fact-figure > :first-child > a:only-child):not(:has(> dd:not(.fact-value) :is(a, button, [tabindex], [data-tip]), > .fact-figure > :not(:first-child) :is(a, button, [tabindex], [data-tip]))) { position: relative; & > .fact-value a::after { content: ""; position: absolute; inset: 0; } }
+.fact:has(> .fact-value > .fact-shown > a:only-child):not(:has(> dd:not(.fact-value) :is(a, button, [tabindex], [data-tip]), > .fact-value > :not(.fact-shown) :is(a, button, [tabindex], [data-tip]))) { position: relative; & > .fact-value a::after { content: ""; position: absolute; inset: 0; } }
 
 /* A line of facts (`{% facts layout="inline" %}`): a card's summary, each fact one phrase, its value bold then its words ("3 rules"), then a dot and its detail, a fixed gap apart, wrapping fact by fact. Under the card's head it takes a rule above. A fact with an address is a link whole, every line of which is a target tall. */
 .facts-inline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-10); margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--target-min); }

@@ -457,7 +457,7 @@
 /* A value that is a list of several (names, addresses, links) asks for its
    widest line and keeps it, so on the page a short list shares a row as
    any pair does and a long one takes the row, wrapping there. */
-.facts-list > .fact:has(> .fact-value > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) {
+.facts-list > .fact:has(> .fact-value > .fact-shown > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) {
   flex: 1 0 max-content; min-width: min(100%, calc((var(--facts-across, 0px) - var(--space-16)) / 2)); max-width: 100%;
 }
 /* In a table's row, facts are the row's small print. */
