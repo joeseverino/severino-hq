@@ -170,6 +170,30 @@ func (e GitHubDeliveryProduction) Valid() bool {
 	}
 }
 
+// Defines values for GitHubMergeRefusal.
+const (
+	GitHubMergeRefusalChecksFailing GitHubMergeRefusal = "checks_failing"
+	GitHubMergeRefusalHeadMoved     GitHubMergeRefusal = "head_moved"
+	GitHubMergeRefusalNotInstalled  GitHubMergeRefusal = "not_installed"
+	GitHubMergeRefusalNotMergeable  GitHubMergeRefusal = "not_mergeable"
+)
+
+// Valid indicates whether the value is a known member of the GitHubMergeRefusal enum.
+func (e GitHubMergeRefusal) Valid() bool {
+	switch e {
+	case GitHubMergeRefusalChecksFailing:
+		return true
+	case GitHubMergeRefusalHeadMoved:
+		return true
+	case GitHubMergeRefusalNotInstalled:
+		return true
+	case GitHubMergeRefusalNotMergeable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GitHubRepositoryRepositoryAccessToken.
 const (
 	GitHubRepositoryRepositoryAccessTokenRead  GitHubRepositoryRepositoryAccessToken = "read"
@@ -653,6 +677,7 @@ const (
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
+	ResourceKindGitHubPullRequest            ResourceKind = "github.pull_request"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
 	ResourceKindHostEdgeReboot               ResourceKind = "host.edge_reboot"
@@ -741,6 +766,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindGitHubDependencyRun:
 		return true
 	case ResourceKindGitHubProfile:
+		return true
+	case ResourceKindGitHubPullRequest:
 		return true
 	case ResourceKindGitHubRepository:
 		return true
@@ -1623,6 +1650,17 @@ type GitHubDependencyRunRecord struct {
 	StartedAt    string   `json:"started_at,omitempty"`
 }
 
+// GitHubMergeRefusal Why GitHub refused a merge, as a refused merge's status says it.
+type GitHubMergeRefusal string
+
+// GitHubMergeStatus What a github.pull_request merge reports: the commit it made, or why GitHub refused it.
+type GitHubMergeStatus struct {
+	MergeSha string `json:"merge_sha,omitempty"`
+
+	// Refused Why GitHub refused a merge, as a refused merge's status says it.
+	Refused GitHubMergeRefusal `json:"refused,omitempty"`
+}
+
 // GitHubProfilePlan Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
 type GitHubProfilePlan struct {
 	// Accounts GitHub logins.
@@ -1649,6 +1687,18 @@ type GitHubProfileRecord struct {
 	URL         string                   `json:"url,omitempty"`
 	Watched     []map[string]interface{} `json:"watched,omitempty"`
 	Website     string                   `json:"website,omitempty"`
+}
+
+// GitHubPullRequestSpec A github.pull_request declaration: what a merge merges.
+type GitHubPullRequestSpec struct {
+	// HeadSha The head commit approved; GitHub refuses the merge once it moves.
+	HeadSha string `json:"head_sha"`
+
+	// Number The pull request's number.
+	Number int `json:"number"`
+
+	// Repository The repository, as owner/name.
+	Repository string `json:"repository"`
 }
 
 // GitHubRepositoriesPlan Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.

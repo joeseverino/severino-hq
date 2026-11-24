@@ -918,6 +918,27 @@ func (e ChecksUpdateJSONBodyStatus) Valid() bool {
 	}
 }
 
+// Defines values for PullsMergeJSONBodyMergeMethod.
+const (
+	PullsMergeJSONBodyMergeMethodMerge  PullsMergeJSONBodyMergeMethod = "merge"
+	PullsMergeJSONBodyMergeMethodRebase PullsMergeJSONBodyMergeMethod = "rebase"
+	PullsMergeJSONBodyMergeMethodSquash PullsMergeJSONBodyMergeMethod = "squash"
+)
+
+// Valid indicates whether the value is a known member of the PullsMergeJSONBodyMergeMethod enum.
+func (e PullsMergeJSONBodyMergeMethod) Valid() bool {
+	switch e {
+	case PullsMergeJSONBodyMergeMethodMerge:
+		return true
+	case PullsMergeJSONBodyMergeMethodRebase:
+		return true
+	case PullsMergeJSONBodyMergeMethodSquash:
+		return true
+	default:
+		return false
+	}
+}
+
 // ActionsCanApprovePullRequestReviews Whether GitHub Actions can approve pull requests. Enabling this can be a security risk.
 type ActionsCanApprovePullRequestReviews = bool
 
@@ -1606,6 +1627,13 @@ type PublicUser struct {
 	TwitterUsername string `json:"twitter_username,omitempty"`
 }
 
+// PullRequestMergeResult Pull Request Merge Result
+type PullRequestMergeResult struct {
+	Merged  bool   `json:"merged"`
+	Message string `json:"message"`
+	Sha     string `json:"sha"`
+}
+
 // PullRequestSimple Pull Request Simple
 type PullRequestSimple struct {
 	// CreatedAt Example: 2011-01-26T19:01:12Z
@@ -2272,6 +2300,24 @@ type IssuesCreateCommentJSONBody struct {
 	Body string `json:"body"`
 }
 
+// PullsMergeJSONBody defines parameters for PullsMerge.
+type PullsMergeJSONBody struct {
+	// CommitMessage Extra detail to append to automatic commit message.
+	CommitMessage string `json:"commit_message,omitempty"`
+
+	// CommitTitle Title for the automatic commit message.
+	CommitTitle string `json:"commit_title,omitempty"`
+
+	// MergeMethod The merge method to use.
+	MergeMethod PullsMergeJSONBodyMergeMethod `json:"merge_method,omitempty"`
+
+	// Sha SHA that pull request head must match to allow merge.
+	Sha string `json:"sha,omitempty"`
+}
+
+// PullsMergeJSONBodyMergeMethod defines parameters for PullsMerge.
+type PullsMergeJSONBodyMergeMethod string
+
 // AppsCreateInstallationAccessTokenJSONRequestBody defines body for AppsCreateInstallationAccessToken for application/json ContentType.
 type AppsCreateInstallationAccessTokenJSONRequestBody AppsCreateInstallationAccessTokenJSONBody
 
@@ -2283,6 +2329,9 @@ type ChecksUpdateJSONRequestBody ChecksUpdateJSONBody
 
 // IssuesCreateCommentJSONRequestBody defines body for IssuesCreateComment for application/json ContentType.
 type IssuesCreateCommentJSONRequestBody IssuesCreateCommentJSONBody
+
+// PullsMergeJSONRequestBody defines body for PullsMerge for application/json ContentType.
+type PullsMergeJSONRequestBody PullsMergeJSONBody
 
 // AsSimpleUser returns the union data inside the Commit_Author as a SimpleUser
 func (t Commit_Author) AsSimpleUser() (SimpleUser, error) {

@@ -148,7 +148,7 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_, _ = io.WriteString(w, f.changeQuery(body))
 		return
 	case req.Method != http.MethodGet:
-		_, _ = io.WriteString(w, `{"id":1}`)
+		_, _ = io.WriteString(w, orDefault(f.routes[host+" "+req.Method+" "+key], `{"id":1}`))
 		return
 	case key == "/rate_limit" && f.routes[host+" "+key] == "" && f.hour != nil:
 		core := fmt.Sprintf(`{"limit":%d,"remaining":%d,"reset":%d,"used":%d}`, f.hour.limit, f.hour.limit-f.hour.used, githubFakeReset, f.hour.used)
@@ -441,7 +441,7 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	wanted := map[string]string{}
-	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
+	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubMergeWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
 		encoded, _ := json.Marshal(grant)
 		var names map[string]string
 		_ = json.Unmarshal(encoded, &names)

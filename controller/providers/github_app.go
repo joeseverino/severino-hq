@@ -57,6 +57,7 @@ func (r *Registry) admitGitHub() {
 	r.reader(runtime.ResourceKindGitHubDelivery, r.githubDeliveryInventory)
 	r.tally(runtime.ResourceKindGitHubAllowance, r.githubAllowances)
 	act(r, runtime.ResourceKindGitHubDelivery, "reconcile", r.githubDeliveryReconcile)
+	act(r, runtime.ResourceKindGitHubPullRequest, "merge", r.githubMerge)
 }
 
 func (r *Registry) githubConnection(ref string) (githubConnection, error) {

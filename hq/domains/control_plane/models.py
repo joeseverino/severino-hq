@@ -507,6 +507,9 @@ class OperationRequest(TimestampedModel):
         # declares, claimed by the automation worker. Asked for by a person's
         # Refresh, never on a timer.
         SCAN = "scan", "Refresh"
+        # A pull request merged once, at the head a person approved, by the
+        # controller through HQ's GitHub App (``provider_adapters.github``).
+        MERGE = "merge", "Merge"
 
     # Declared above the model so a rule in ``Meta`` can name its values.
     State = OperationState

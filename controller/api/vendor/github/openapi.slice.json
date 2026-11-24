@@ -1449,6 +1449,76 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/pulls/{pull_number}/merge": {
+   "put": {
+    "operationId": "pulls/merge",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "pull_number",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "if merge was successful"
+     }
+    },
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+         "commit_title": {
+          "type": "string",
+          "description": "Title for the automatic commit message."
+         },
+         "commit_message": {
+          "type": "string",
+          "description": "Extra detail to append to automatic commit message."
+         },
+         "sha": {
+          "type": "string",
+          "description": "SHA that pull request head must match to allow merge."
+         },
+         "merge_method": {
+          "type": "string",
+          "description": "The merge method to use.",
+          "enum": [
+           "merge",
+           "squash",
+           "rebase"
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/releases": {
    "get": {
     "operationId": "repos/list-releases",
@@ -2965,6 +3035,27 @@
      "created_at"
     ],
     "additionalProperties": false
+   },
+   "pull-request-merge-result": {
+    "title": "Pull Request Merge Result",
+    "description": "Pull Request Merge Result",
+    "type": "object",
+    "properties": {
+     "sha": {
+      "type": "string"
+     },
+     "merged": {
+      "type": "boolean"
+     },
+     "message": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "merged",
+     "message",
+     "sha"
+    ]
    },
    "pull-request-simple": {
     "title": "Pull Request Simple",

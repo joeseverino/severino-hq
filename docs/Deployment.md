@@ -177,7 +177,7 @@ use mints an hour-long token for only what it does:
 
 | Who | Holds the key as | Asks for |
 | :--- | :--- | :--- |
-| the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs |
+| the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs; Contents and Pull requests write on one repository to merge a pull request you approved |
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
 | Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
 

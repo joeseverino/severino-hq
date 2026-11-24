@@ -3722,6 +3722,36 @@
         ],
         "type": "object"
       },
+      "GitHubMergeRefusal": {
+        "type": "string",
+        "description": "Why GitHub refused a merge, as a refused merge's status says it.",
+        "enum": [
+          "head_moved",
+          "not_mergeable",
+          "checks_failing",
+          "not_installed"
+        ],
+        "x-enum-varnames": [
+          "GitHubMergeRefusalHeadMoved",
+          "GitHubMergeRefusalNotMergeable",
+          "GitHubMergeRefusalChecksFailing",
+          "GitHubMergeRefusalNotInstalled"
+        ]
+      },
+      "GitHubMergeStatus": {
+        "additionalProperties": false,
+        "description": "What a github.pull_request merge reports: the commit it made, or why GitHub refused it.",
+        "properties": {
+          "merge_sha": {
+            "default": "",
+            "type": "string"
+          },
+          "refused": {
+            "$ref": "#/components/schemas/GitHubMergeRefusal"
+          }
+        },
+        "type": "object"
+      },
       "GitHubProfileRecord": {
         "properties": {
           "login": {
@@ -3805,6 +3835,34 @@
         ],
         "type": "object",
         "description": "One github.profile record: GitHub profile."
+      },
+      "GitHubPullRequestSpec": {
+        "additionalProperties": false,
+        "description": "A github.pull_request declaration: what a merge merges.",
+        "properties": {
+          "repository": {
+            "description": "The repository, as owner/name.",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "number": {
+            "description": "The pull request's number.",
+            "maximum": 9223372036854775807,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "head_sha": {
+            "description": "The head commit approved; GitHub refuses the merge once it moves.",
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "number",
+          "head_sha"
+        ],
+        "type": "object"
       },
       "GitHubRepositoryCollaborator": {
         "properties": {
@@ -5993,6 +6051,7 @@
           "github.delivery",
           "github.dependency_run",
           "github.profile",
+          "github.pull_request",
           "github.repository",
           "host.edge_reboot",
           "host.filesystem",
@@ -6057,6 +6116,7 @@
           "ResourceKindGitHubDelivery",
           "ResourceKindGitHubDependencyRun",
           "ResourceKindGitHubProfile",
+          "ResourceKindGitHubPullRequest",
           "ResourceKindGitHubRepository",
           "ResourceKindHostEdgeReboot",
           "ResourceKindHostFilesystem",

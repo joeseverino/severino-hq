@@ -791,6 +791,13 @@ deploy keys, the default workflow token, Actions settings), and the names of
 its Actions variables. Each part is refused on its own where the repository's
 plan offers none, and says so.
 
+A `github.pull_request` record is one pull request at the head commit a person
+approved. Its `merge` reads that head's checks, then squash-merges it naming
+the head, under a token for that one repository with Contents and Pull
+requests write. GitHub refuses once the head moves. The record's status is the
+merge commit (`merge_sha`), or a refused merge's reason (`refused`):
+`head_moved`, `not_mergeable`, `checks_failing` or `not_installed`.
+
 `hq.platform.application.github_estate` joins a project to its repository by
 URL and queues what waits on a person: a deploy held for approval, a failing
 default branch, a deploy that failed its own verification, serious alerts, an

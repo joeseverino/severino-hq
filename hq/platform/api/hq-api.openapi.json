@@ -11430,6 +11430,19 @@
         },
         "type": "object"
       },
+      "DeclaredGitHubPullRequestSpec": {
+        "properties": {
+          "kind": {
+            "const": "github.pull_request",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/GitHubPullRequestSpec"
+          }
+        },
+        "type": "object"
+      },
       "DeclaredMachineSpec": {
         "properties": {
           "kind": {
@@ -14977,6 +14990,37 @@
         ],
         "type": "object"
       },
+      "GitHubPullRequestSpec": {
+        "additionalProperties": false,
+        "description": "One pull request, at the head commit a person approved merging.",
+        "properties": {
+          "head_sha": {
+            "description": "The head commit approved; GitHub refuses the merge once it moves.",
+            "pattern": "^[0-9a-f]{40}$",
+            "title": "Head commit",
+            "type": "string"
+          },
+          "number": {
+            "description": "The pull request's number.",
+            "maximum": 9223372036854775807,
+            "minimum": 1,
+            "title": "Number",
+            "type": "integer"
+          },
+          "repository": {
+            "description": "The repository, as owner/name.",
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "title": "Repository",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "number",
+          "head_sha"
+        ],
+        "type": "object"
+      },
       "GithubPath": {
         "description": "Its path in a repository. Empty for none.",
         "type": "string"
@@ -16656,6 +16700,10 @@
                 "title": "Declared git hub delivery spec"
               },
               {
+                "$ref": "#/components/schemas/DeclaredGitHubPullRequestSpec",
+                "title": "Declared git hub pull request spec"
+              },
+              {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
                 "title": "Declared portainer container spec"
               },
@@ -16853,6 +16901,10 @@
               {
                 "$ref": "#/components/schemas/DeclaredGitHubDeliverySpec",
                 "title": "Declared git hub delivery spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredGitHubPullRequestSpec",
+                "title": "Declared git hub pull request spec"
               },
               {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
@@ -18423,6 +18475,7 @@
           "tls.uploaded_certificate",
           "npm.proxy_host",
           "github.delivery",
+          "github.pull_request",
           "portainer.container",
           "tailscale.device",
           "tailscale.policy",
@@ -18446,6 +18499,7 @@
           "cloudflare.dns_record": "Public DNS record",
           "cloudflare.zone": "Domain",
           "github.delivery": "HQ deploys",
+          "github.pull_request": "Pull request",
           "machine": "Machine",
           "network": "Network",
           "npm.proxy_host": "Proxy host",
@@ -20490,7 +20544,7 @@
         "type": "object"
       },
       "OperationAction": {
-        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run` or `scan`.",
+        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run`, `scan` or `merge`.",
         "type": "string"
       },
       "OperationAsked": {
@@ -28391,6 +28445,7 @@
           "github.delivery",
           "github.dependency_run",
           "github.profile",
+          "github.pull_request",
           "github.repository",
           "host.edge_reboot",
           "host.filesystem",
@@ -28457,6 +28512,7 @@
           "github.delivery": "HQ deploys",
           "github.dependency_run": "Dependency update run",
           "github.profile": "GitHub profile",
+          "github.pull_request": "Pull request",
           "github.repository": "GitHub repository",
           "host.edge_reboot": "Pending restart on an edge",
           "host.filesystem": "Disk space",
@@ -39833,7 +39889,7 @@
             "required": false,
             "schema": {
               "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
               "type": "string"
             },
             "style": "form"
@@ -39850,6 +39906,7 @@
                 "tls.uploaded_certificate",
                 "npm.proxy_host",
                 "github.delivery",
+                "github.pull_request",
                 "portainer.container",
                 "tailscale.device",
                 "tailscale.policy",
