@@ -37,7 +37,8 @@ func (d vendorDoer) Do(req *http.Request) (*http.Response, error) {
 		}
 		payload = body
 	}
-	headers := maps.Clone(d.headers)
+	headers := map[string]string{}
+	maps.Copy(headers, d.headers)
 	for name := range req.Header {
 		headers[name] = req.Header.Get(name)
 	}
@@ -71,4 +72,13 @@ func json200[T any](reply interface{ GetJSON200() *T }, err error) (T, error) {
 		return zero, err
 	}
 	return deref(reply.GetJSON200()), nil
+}
+
+// json201 is a generated reply's 201 body, the zero value for an empty one.
+func json201[T any](reply interface{ GetJSON201() *T }, err error) (T, error) {
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return deref(reply.GetJSON201()), nil
 }

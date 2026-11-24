@@ -150,7 +150,7 @@ func TestMultipartIsTheDocumentedFraming(t *testing.T) {
 		{Field: "certificate", Filename: "certificate.pem", Content: []byte("leaf\n")},
 		{Field: "certificate_key", Filename: "certificate_key.pem", Content: []byte("key\n")},
 	}
-	body, contentType, err := parts.encode()
+	body, contentType, err := parts.Encode()
 	if err != nil {
 		t.Fatal(err)
 	}

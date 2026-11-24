@@ -2,8 +2,6 @@ package providers
 
 import (
 	"encoding/json"
-
-	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 )
 
 // What HQ declares for a proxy host, what it last observed, and what an action reports.
@@ -41,37 +39,6 @@ type NPMProxyHostStatus struct {
 type NPMProxyHostDeleteStatus struct {
 	DomainNames []string `json:"domain_names"`
 	Removed     bool     `json:"removed"`
-}
-
-// npmProxyHostRequest is the body NPM takes to create or update a proxy host.
-// Locations and Meta are NPM's own, carried forward on update; HQ never
-// decides them.
-type npmProxyHostRequest struct {
-	DomainNames           []string        `json:"domain_names"`
-	CertificateID         int             `json:"certificate_id"`
-	Locations             json.RawMessage `json:"locations"`
-	Meta                  json.RawMessage `json:"meta"`
-	ForwardScheme         string          `json:"forward_scheme"`
-	ForwardHost           string          `json:"forward_host"`
-	ForwardPort           int             `json:"forward_port"`
-	CachingEnabled        bool            `json:"caching_enabled"`
-	BlockExploits         bool            `json:"block_exploits"`
-	AccessListID          int             `json:"access_list_id"`
-	HSTSEnabled           bool            `json:"hsts_enabled"`
-	HSTSSubdomains        bool            `json:"hsts_subdomains"`
-	TrustForwardedProto   bool            `json:"trust_forwarded_proto"`
-	AdvancedConfig        string          `json:"advanced_config"`
-	AllowWebsocketUpgrade bool            `json:"allow_websocket_upgrade"`
-	SSLForced             bool            `json:"ssl_forced"`
-	HTTP2Support          bool            `json:"http2_support"`
-	Enabled               bool            `json:"enabled"`
-}
-
-// npmAccessList is an access list read with expand=items,clients.
-type npmAccessList struct {
-	npmapi.AccessListObject
-	Items   npmapi.AccessItems   `json:"items"`
-	Clients npmapi.AccessClients `json:"clients"`
 }
 
 // Records the NPM readers report.

@@ -114,11 +114,7 @@ func countedDays(days int) string {
 
 // npmCoveredHosts is the serving proxy hosts with a name the certificate covers.
 func (r *Registry) npmCoveredHosts(ctx context.Context, certificateDomains []string) ([]npmapi.ProxyHostObject, error) {
-	base, headers, err := r.npmSession(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	hosts, err := r.npmProxyHostList(ctx, base, headers)
+	hosts, err := npmProxyHostList(ctx, r.npm(ctx, "", false))
 	if err != nil {
 		return nil, err
 	}

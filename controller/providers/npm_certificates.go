@@ -1,8 +1,9 @@
 package providers
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -60,24 +61,14 @@ type npmCertificateSummary struct {
 // npmCustomProvider is NPM's provider for a certificate uploaded rather than issued.
 const npmCustomProvider = "other"
 
-type npmCertificateCreate struct {
-	Provider string `json:"provider"`
-	NiceName string `json:"nice_name"`
-}
-
-type npmHostCertificate struct {
-	CertificateID int `json:"certificate_id"`
-}
-
-// npmCertificateList reads NPM's certificates fresh, for the actions that write.
-func (r *Registry) npmCertificateList(ctx context.Context, base string, headers map[string]string) ([]npmCertificateSummary, error) {
-	raw, err := r.HTTP.Request(ctx, base+npmCertificatesSource.path, "GET", headers, nil)
+// npmCertificateList reads NPM's certificates through a write's fresh client.
+func npmCertificateList(ctx context.Context, client *npmapi.ClientWithResponses) ([]npmCertificateSummary, error) {
+	certificates, err := npmCertificatesSource.list(ctx, client)
+	if session, ok := errors.AsType[npmSessionFailed](err); ok {
+		return nil, session.error
+	}
 	if err != nil {
 		return nil, fmt.Errorf("npm %s: %w", npmCertificatesSource.what, err)
-	}
-	certificates, err := npmDecode[npmapi.CertificateObject](raw, "npm "+npmCertificatesSource.what)
-	if err != nil {
-		return nil, err
 	}
 	return recordsOf(certificates, func(certificate npmapi.CertificateObject) (npmCertificateSummary, error) {
 		id, err := npmID(certificate.Id, "certificate")
@@ -88,12 +79,9 @@ func (r *Registry) npmCertificateList(ctx context.Context, base string, headers 
 // npmManagedCertificate uploads into the certificate HQ installed for this
 // consumer, found by its recorded id, else by its display name, else created.
 func (r *Registry) npmManagedCertificate(ctx context.Context, consumer TLSConsumer, certificateDomains []string, fullchain, privateKey []byte, knownID *int) (int, NPMCertificateIdentity, error) {
-	base, headers, err := r.npmSession(ctx, "")
-	if err != nil {
-		return 0, NPMCertificateIdentity{}, err
-	}
+	client := r.npm(ctx, "", false)
 	niceName := npmCertificateName(consumer)
-	certificates, err := r.npmCertificateList(ctx, base, headers)
+	certificates, err := npmCertificateList(ctx, client)
 	if err != nil {
 		return 0, NPMCertificateIdentity{}, err
 	}
@@ -122,13 +110,9 @@ func (r *Registry) npmManagedCertificate(ctx context.Context, consumer TLSConsum
 		}
 		certificateID = matches[0].ID
 	} else {
-		created, err := r.HTTP.Request(ctx, base+npmCertificatesSource.path, "POST", headers, npmCertificateCreate{Provider: npmCustomProvider, NiceName: niceName})
+		answer, err := json201(client.CreateCertificateWithResponse(ctx, npmapi.CreateCertificateJSONRequestBody{Provider: npmCustomProvider, NiceName: &niceName}))
 		if err != nil {
 			return 0, NPMCertificateIdentity{}, fmt.Errorf("npm create certificate: %w", err)
-		}
-		var answer npmapi.CertificateObject
-		if err := json.Unmarshal(created, &answer); err != nil {
-			return 0, NPMCertificateIdentity{}, &ProviderError{Message: "npm create certificate answer did not decode", Err: err}
 		}
 		if certificateID, err = npmID(answer.Id, "created certificate"); err != nil {
 			return 0, NPMCertificateIdentity{}, err
@@ -138,18 +122,21 @@ func (r *Registry) npmManagedCertificate(ctx context.Context, consumer TLSConsum
 	if err != nil {
 		return 0, NPMCertificateIdentity{}, err
 	}
-	files := runtime.Multipart{
+	files, contentType, err := runtime.Multipart{
 		{Field: "certificate", Filename: "certificate.pem", Content: leaf},
 		{Field: "certificate_key", Filename: "certificate_key.pem", Content: privateKey},
 		{Field: "intermediate_certificate", Filename: "intermediate_certificate.pem", Content: chain},
+	}.Encode()
+	if err != nil {
+		return 0, NPMCertificateIdentity{}, &ProviderError{Message: "the request could not be encoded"}
 	}
-	if _, err := r.HTTP.Request(ctx, base+npmCertificatesSource.path+"/validate", "POST", headers, files); err != nil {
+	if _, err := client.ValidateCertificatesWithBodyWithResponse(ctx, contentType, bytes.NewReader(files)); err != nil {
 		return 0, NPMCertificateIdentity{}, fmt.Errorf("npm validate certificate: %w", err)
 	}
-	if _, err := r.HTTP.Request(ctx, fmt.Sprintf("%s%s/%d/upload", base, npmCertificatesSource.path, certificateID), "POST", headers, files); err != nil {
+	if _, err := client.UploadCertificateWithBodyWithResponse(ctx, certificateID, contentType, bytes.NewReader(files)); err != nil {
 		return 0, NPMCertificateIdentity{}, fmt.Errorf("npm upload certificate: %w", err)
 	}
-	hosts, err := r.npmProxyHostList(ctx, base, headers)
+	hosts, err := npmProxyHostList(ctx, client)
 	if err != nil {
 		return 0, NPMCertificateIdentity{}, err
 	}
@@ -193,7 +180,7 @@ func (r *Registry) npmManagedCertificate(ctx context.Context, consumer TLSConsum
 			return 0, NPMCertificateIdentity{}, err
 		}
 		// Uploading replaces NPM's files but does not reload nginx; re-applying each host does.
-		if _, err := r.HTTP.Request(ctx, fmt.Sprintf("%s%s/%d", base, npmProxyHosts.path, id), "PUT", headers, npmHostCertificate{CertificateID: certificateID}); err != nil {
+		if _, err := client.UpdateProxyHostWithResponse(ctx, id, npmapi.UpdateProxyHostJSONRequestBody{CertificateId: new(npmapi.CertificateId(certificateID))}); err != nil {
 			return 0, NPMCertificateIdentity{}, fmt.Errorf("npm attach certificate to proxy host %d: %w", id, err)
 		}
 	}

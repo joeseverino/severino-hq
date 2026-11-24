@@ -403,11 +403,8 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 	if len(elsewhere) > 0 {
 		return Result{}, &ProviderError{Message: "HQ can only remove this from Nginx Proxy Manager; take it off " + strings.Join(elsewhere, ", ") + " by hand first, then remove those targets from this certificate"}
 	}
-	base, headers, err := r.npmSession(ctx, "")
-	if err != nil {
-		return Result{}, err
-	}
-	certificates, err := r.npmCertificateList(ctx, base, headers)
+	client := r.npm(ctx, "", false)
+	certificates, err := npmCertificateList(ctx, client)
 	if err != nil {
 		return Result{}, err
 	}
@@ -438,7 +435,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 		}
 		return Result{Changed: false, Status: CertificateRemoval{Removed: true}, Conditions: []Condition{condition(runtime.ConditionReady, "Absent", "No such certificate in NPM.")}, Message: "Certificate was already absent from NPM."}, nil
 	}
-	hosts, err := r.npmProxyHostList(ctx, base, headers)
+	hosts, err := npmProxyHostList(ctx, client)
 	if err != nil {
 		return Result{}, err
 	}
@@ -458,7 +455,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 	}
 	if apply {
 		for _, id := range matches {
-			if _, err := r.HTTP.Request(ctx, base+"/nginx/certificates/"+itoa(int64(id)), "DELETE", headers, nil); err != nil {
+			if _, err := client.DeleteCertificateWithResponse(ctx, id); err != nil {
 				return Result{}, err
 			}
 		}

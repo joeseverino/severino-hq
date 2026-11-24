@@ -23,7 +23,7 @@ actions:
   - target: $..properties.meta
     update:
       x-go-type: json.RawMessage
-  - target: $.components.schemas['proxy-host-object'].properties.locations
+  - target: $..properties.locations
     update:
       x-go-type: json.RawMessage
   # One string whichever pattern it matches.
@@ -36,6 +36,32 @@ actions:
   - target: $.components.schemas['stream-object'].properties.forwarding_host
     update:
       x-go-type: string
+  # The access list endpoint answers a list, each entry carrying the items and
+  # clients its expand names, and takes several expansions joined by commas.
+  - target: $.components.schemas['access-list-object'].properties
+    update:
+      items:
+        $ref: '#/components/schemas/access_items'
+      clients:
+        $ref: '#/components/schemas/access_clients'
+  - target: $.paths['/nginx/access-lists'].get.responses['200'].content['application/json'].schema
+    remove: true
+  - target: $.paths['/nginx/access-lists'].get.responses['200'].content['application/json']
+    update:
+      schema:
+        type: array
+        items:
+          $ref: '#/components/schemas/access-list-object'
+  - target: $.paths['/nginx/access-lists'].get.parameters[0].schema
+    remove: true
+  - target: $.paths['/nginx/access-lists'].get.parameters[0]
+    update:
+      explode: false
+      schema:
+        type: array
+        items:
+          type: string
+          enum: [owner, items, clients, proxy_hosts]
   # oapi-codegen writes a schema's examples into the generated doc comments,
   # and the vendors' examples are addresses and hostnames HQ never sends.
   - target: $..example

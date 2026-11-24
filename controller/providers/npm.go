@@ -28,7 +28,7 @@ func (r *Registry) admitNPM() {
 	r.reader(runtime.ResourceKindNPMStream, npmEachConnection(r, r.npmStreams, func(rec *NPMStreamRecord, ref *string) { rec.ConnectionRef = ref }))
 	r.reader(runtime.ResourceKindNPMAccessList, npmEachConnection(r, r.npmAccessLists, func(rec *NPMAccessListRecord, ref *string) { rec.ConnectionRef = ref }))
 	r.probe(runtime.ConnectionProviderNPM, func(ctx context.Context, ref string) (ProbeResult, error) {
-		if _, _, err := r.npmSession(ctx, ref); err != nil {
+		if _, _, _, err := r.npmSession(ctx, ref); err != nil {
 			return ProbeResult{}, err
 		}
 		return ProbeResult{Detail: "Authenticated.", Reaches: []string{}}, nil
@@ -55,63 +55,95 @@ func npmEachConnection[T any](r *Registry, read func(context.Context, string) ([
 	}
 }
 
-func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[string]string, error) {
+// npmSession signs in to one NPM connection, once per sweep: the ref the
+// connection is held under, NPM's API address, and the token's header.
+func (r *Registry) npmSession(ctx context.Context, ref string) (string, string, map[string]string, error) {
 	connection, err := r.Supplied.For(runtime.ConnectionProviderNPM, ref)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	login, err := runtime.Need(connection.Login)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
-	base, err := url.Parse(strings.TrimRight(login.URL, "/"))
+	base, err := npmBase(login.URL)
 	if err != nil {
-		return "", nil, &ProviderError{Message: "npm API address is not a URL", Failure: runtime.FailureClassAddress}
+		return "", "", nil, err
+	}
+	token, err := cached(ctx, r, "npm-token:"+base+":"+connection.Ref, func() (string, error) {
+		signIn := &npmapi.ClientWithResponses{ClientInterface: &npmapi.API{Server: base, Client: vendorDoer{r: r}}}
+		answer, err := json200(signIn.RequestTokenWithResponse(ctx, npmapi.RequestTokenJSONRequestBody{Identity: login.Username, Secret: login.Password}))
+		if err != nil {
+			return "", fmt.Errorf("npm sign-in: %w", err)
+		}
+		token, err := answer.AsTokenObject()
+		if err != nil || token.Token == "" {
+			return "", &ProviderError{Message: "npm sign-in returned no token", Err: err}
+		}
+		return token.Token, nil
+	})
+	if err != nil {
+		return "", "", nil, err
+	}
+	mask.Learn(token)
+	return connection.Ref, base, map[string]string{"Authorization": "Bearer " + token}, nil
+}
+
+// npm is the generated client for one NPM connection, signed in. A sweep's
+// client reads each list once whichever kinds need it; a write's reads fresh.
+// A sign-in that fails fails every call, as npmSessionFailed.
+func (r *Registry) npm(ctx context.Context, ref string, sweep bool) *npmapi.ClientWithResponses {
+	held, base, headers, err := r.npmSession(ctx, ref)
+	doer := vendorDoer{r: r, headers: headers}
+	if err != nil {
+		doer.err = npmSessionFailed{err}
+	}
+	if sweep {
+		doer.cache = "npm:" + held
+	}
+	return &npmapi.ClientWithResponses{ClientInterface: &npmapi.API{Server: base, Client: doer}}
+}
+
+// npmBase is NPM's API address, under /api whether or not the connection names it.
+func npmBase(address string) (string, error) {
+	base, err := url.Parse(strings.TrimRight(address, "/"))
+	if err != nil {
+		return "", &ProviderError{Message: "npm API address is not a URL", Failure: runtime.FailureClassAddress}
 	}
 	base.Path = strings.TrimRight(base.Path, "/")
 	if !strings.HasSuffix(base.Path, "/api") {
 		base.Path += "/api"
 	}
-	raw, err := cached(ctx, r, "npm-token:"+base.String()+":"+connection.Ref, func() (json.RawMessage, error) {
-		answer, err := r.HTTP.Request(ctx, base.String()+"/tokens", "POST", nil, npmapi.RequestTokenJSONBody{Identity: login.Username, Secret: login.Password})
-		if err != nil {
-			return nil, fmt.Errorf("npm sign-in: %w", err)
-		}
-		var token npmapi.TokenObject
-		if err := json.Unmarshal(answer, &token); err != nil {
-			return nil, &ProviderError{Message: "npm sign-in answer did not decode", Err: err}
-		}
-		if token.Token == "" {
-			return nil, &ProviderError{Message: "npm sign-in returned no token"}
-		}
-		return json.Marshal(token.Token)
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	var token string
-	if err := json.Unmarshal(raw, &token); err != nil {
-		return "", nil, err
-	}
-	mask.Learn(token)
-	return base.String(), map[string]string{"Authorization": "Bearer " + token}, nil
+	return base.String() + "/", nil
 }
 
-// npmSource is one NPM list endpoint, the model its records decode into, and
-// what NPM's permission for it is called.
+// npmSource is one NPM list, the call that reads it, and what NPM's
+// permission for it is called.
 type npmSource[T any] struct {
-	path  string
+	list  func(context.Context, *npmapi.ClientWithResponses) ([]T, error)
 	needs string
 	what  string
 }
 
 var (
-	npmProxyHosts         = npmSource[npmapi.ProxyHostObject]{path: "/nginx/proxy-hosts", needs: "proxy_hosts: view", what: "proxy host list"}
-	npmRedirectionHosts   = npmSource[npmapi.RedirectionHostObject]{path: "/nginx/redirection-hosts", needs: "redirection_hosts: view", what: "redirection host list"}
-	npmDeadHostsSource    = npmSource[npmapi.DeadHostObject]{path: "/nginx/dead-hosts", needs: "dead_hosts: view", what: "404 host list"}
-	npmStreamsSource      = npmSource[npmapi.StreamObject]{path: "/nginx/streams", needs: "streams: view", what: "stream list"}
-	npmCertificatesSource = npmSource[npmapi.CertificateObject]{path: "/nginx/certificates", needs: "certificates: view", what: "certificate list"}
-	npmAccessListsSource  = npmSource[npmAccessList]{path: "/nginx/access-lists?expand=items,clients", needs: "access_lists: view", what: "access list list"}
+	npmProxyHosts = npmSource[npmapi.ProxyHostObject]{func(ctx context.Context, c *npmapi.ClientWithResponses) ([]npmapi.ProxyHostObject, error) {
+		return json200(c.GetProxyHostsWithResponse(ctx, nil))
+	}, "proxy_hosts: view", "proxy host list"}
+	npmRedirectionHosts = npmSource[npmapi.RedirectionHostObject]{func(ctx context.Context, c *npmapi.ClientWithResponses) ([]npmapi.RedirectionHostObject, error) {
+		return json200(c.GetRedirectionHostsWithResponse(ctx, nil))
+	}, "redirection_hosts: view", "redirection host list"}
+	npmDeadHostsSource = npmSource[npmapi.DeadHostObject]{func(ctx context.Context, c *npmapi.ClientWithResponses) ([]npmapi.DeadHostObject, error) {
+		return json200(c.GetDeadHostsWithResponse(ctx, nil))
+	}, "dead_hosts: view", "404 host list"}
+	npmStreamsSource = npmSource[npmapi.StreamObject]{func(ctx context.Context, c *npmapi.ClientWithResponses) ([]npmapi.StreamObject, error) {
+		return json200(c.GetStreamsWithResponse(ctx, nil))
+	}, "streams: view", "stream list"}
+	npmCertificatesSource = npmSource[npmapi.CertificateObject]{func(ctx context.Context, c *npmapi.ClientWithResponses) ([]npmapi.CertificateObject, error) {
+		return json200(c.GetCertificatesWithResponse(ctx, nil))
+	}, "certificates: view", "certificate list"}
+	npmAccessListsSource = npmSource[npmapi.AccessListObject]{func(ctx context.Context, c *npmapi.ClientWithResponses) ([]npmapi.AccessListObject, error) {
+		return json200(c.GetAccessListsWithResponse(ctx, &npmapi.GetAccessListsParams{Expand: &[]npmapi.GetAccessListsParamsExpand{npmapi.GetAccessListsParamsExpandItems, npmapi.GetAccessListsParamsExpandClients}}))
+	}, "access_lists: view", "access list list"}
 )
 
 // npmRefused says which list NPM refused and, for a missing permission, which
@@ -130,42 +162,11 @@ func npmRefused(err error, what, needs string) error {
 	return &ProviderError{Message: what, Err: err}
 }
 
-// npmDecode decodes one NPM list answer; an empty answer is an empty list.
-func npmDecode[T any](raw json.RawMessage, what string) ([]T, error) {
-	items := []T{}
-	if len(raw) == 0 {
-		return items, nil
-	}
-	if err := json.Unmarshal(raw, &items); err != nil {
-		return nil, &ProviderError{Message: what + " did not decode", Err: err}
-	}
-	if items == nil {
-		items = []T{}
-	}
-	return items, nil
-}
-
 // npmSessionFailed marks an error from signing in, as opposed to one from the
 // list endpoint, which npmRead words with the list's name.
 type npmSessionFailed struct{ error }
 
 func (e npmSessionFailed) Unwrap() error { return e.error }
-
-// npmFetched is one NPM list endpoint's answer, read once per sweep whichever
-// kinds need it. A sign-in failure comes back as npmSessionFailed.
-func (r *Registry) npmFetched(ctx context.Context, ref, path string) (json.RawMessage, error) {
-	connection, err := r.Supplied.For(runtime.ConnectionProviderNPM, ref)
-	if err != nil {
-		return nil, npmSessionFailed{err}
-	}
-	return cached(ctx, r, "npm-list:"+connection.Ref+":"+path, func() (json.RawMessage, error) {
-		base, headers, err := r.npmSession(ctx, ref)
-		if err != nil {
-			return nil, npmSessionFailed{err}
-		}
-		return r.HTTP.Request(ctx, base+path, "GET", headers, nil)
-	})
-}
 
 // npmFetchFailure is a list read's failure as the reader reports it.
 func npmFetchFailure(err error, what, needs string) error {
@@ -177,21 +178,24 @@ func npmFetchFailure(err error, what, needs string) error {
 
 // npmRead is one list endpoint's records, read through the sweep's snapshot.
 func npmRead[T any](ctx context.Context, r *Registry, ref string, src npmSource[T]) ([]T, error) {
-	raw, err := r.npmFetched(ctx, ref, src.path)
+	items, err := src.list(ctx, r.npm(ctx, ref, true))
 	if err != nil {
 		return nil, npmFetchFailure(err, src.what, src.needs)
 	}
-	return npmDecode[T](raw, "npm "+src.what)
+	return items, nil
 }
 
-// npmProxyHostList reads the proxy hosts fresh: the actions that write decide
-// from the live list, never from the sweep's snapshot.
-func (r *Registry) npmProxyHostList(ctx context.Context, base string, headers map[string]string) ([]npmapi.ProxyHostObject, error) {
-	raw, err := r.HTTP.Request(ctx, base+npmProxyHosts.path, "GET", headers, nil)
+// npmProxyHostList reads the proxy hosts through client: the actions that
+// write pass a fresh one, deciding from the live list, never the sweep's.
+func npmProxyHostList(ctx context.Context, client *npmapi.ClientWithResponses) ([]npmapi.ProxyHostObject, error) {
+	hosts, err := npmProxyHosts.list(ctx, client)
+	if session, ok := errors.AsType[npmSessionFailed](err); ok {
+		return nil, session.error
+	}
 	if err != nil {
 		return nil, fmt.Errorf("npm %s: %w", npmProxyHosts.what, err)
 	}
-	return npmDecode[npmapi.ProxyHostObject](raw, "npm "+npmProxyHosts.what)
+	return hosts, nil
 }
 
 // npmID is a record's id; NPM always gives one, so a record without it is malformed.
@@ -212,26 +216,31 @@ func matchingHosts(hosts []npmapi.ProxyHostObject, domains []string) []npmapi.Pr
 	return out
 }
 
+// npmProxyHostRequest is the body NPM takes to create a proxy host, and
+// whole, to update one. Locations and Meta are NPM's own, carried forward on
+// update; HQ never decides them.
+type npmProxyHostRequest = npmapi.CreateProxyHostJSONRequestBody
+
 func npmDesired(spec NPMProxyHostSpec, domains []string) npmProxyHostRequest {
 	return npmProxyHostRequest{
 		DomainNames:           domains,
-		CertificateID:         spec.CertificateID,
-		Locations:             json.RawMessage("[]"),
-		Meta:                  json.RawMessage("{}"),
-		ForwardScheme:         spec.ForwardScheme,
+		CertificateId:         new(npmapi.CertificateId(spec.CertificateID)),
+		Locations:             new(json.RawMessage("[]")),
+		Meta:                  new(json.RawMessage("{}")),
+		ForwardScheme:         npmapi.ForwardScheme(spec.ForwardScheme),
 		ForwardHost:           spec.ForwardHost,
 		ForwardPort:           spec.ForwardPort,
-		CachingEnabled:        spec.CachingEnabled,
-		BlockExploits:         spec.BlockExploits,
-		AccessListID:          spec.AccessListID,
-		HSTSEnabled:           spec.HSTSEnabled,
-		HSTSSubdomains:        spec.HSTSSubdomains,
-		TrustForwardedProto:   spec.TrustForwardedProto,
-		AdvancedConfig:        spec.AdvancedConfig,
-		AllowWebsocketUpgrade: spec.Websocket,
-		SSLForced:             spec.ForceSSL,
-		HTTP2Support:          spec.HTTP2,
-		Enabled:               spec.Serving,
+		CachingEnabled:        new(npmapi.Flag(spec.CachingEnabled)),
+		BlockExploits:         new(npmapi.Flag(spec.BlockExploits)),
+		AccessListId:          new(npmapi.AccessListId(spec.AccessListID)),
+		HstsEnabled:           new(npmapi.Flag(spec.HSTSEnabled)),
+		HstsSubdomains:        new(npmapi.Flag(spec.HSTSSubdomains)),
+		TrustForwardedProto:   new(npmapi.Flag(spec.TrustForwardedProto)),
+		AdvancedConfig:        new(spec.AdvancedConfig),
+		AllowWebsocketUpgrade: new(npmapi.Flag(spec.Websocket)),
+		SslForced:             new(npmapi.Flag(spec.ForceSSL)),
+		Http2Support:          new(npmapi.Flag(spec.HTTP2)),
+		Enabled:               new(npmapi.Flag(spec.Serving)),
 	}
 }
 
@@ -239,23 +248,23 @@ func npmDesired(spec NPMProxyHostSpec, domains []string) npmProxyHostRequest {
 func npmHeld(host npmapi.ProxyHostObject) npmProxyHostRequest {
 	return npmProxyHostRequest{
 		DomainNames:           sortedCopy(host.DomainNames),
-		CertificateID:         int(host.CertificateId),
-		Locations:             host.Locations,
-		Meta:                  host.Meta,
-		ForwardScheme:         string(host.ForwardScheme),
+		CertificateId:         new(host.CertificateId),
+		Locations:             new(host.Locations),
+		Meta:                  new(host.Meta),
+		ForwardScheme:         npmapi.ForwardScheme(host.ForwardScheme),
 		ForwardHost:           host.ForwardHost,
 		ForwardPort:           host.ForwardPort,
-		CachingEnabled:        bool(host.CachingEnabled),
-		BlockExploits:         bool(host.BlockExploits),
-		AccessListID:          int(host.AccessListId),
-		HSTSEnabled:           bool(host.HstsEnabled),
-		HSTSSubdomains:        bool(host.HstsSubdomains),
-		TrustForwardedProto:   bool(host.TrustForwardedProto),
-		AdvancedConfig:        host.AdvancedConfig,
-		AllowWebsocketUpgrade: bool(host.AllowWebsocketUpgrade),
-		SSLForced:             bool(host.SslForced),
-		HTTP2Support:          bool(host.Http2Support),
-		Enabled:               bool(host.Enabled),
+		CachingEnabled:        new(host.CachingEnabled),
+		BlockExploits:         new(host.BlockExploits),
+		AccessListId:          new(host.AccessListId),
+		HstsEnabled:           new(host.HstsEnabled),
+		HstsSubdomains:        new(host.HstsSubdomains),
+		TrustForwardedProto:   new(host.TrustForwardedProto),
+		AdvancedConfig:        new(host.AdvancedConfig),
+		AllowWebsocketUpgrade: new(host.AllowWebsocketUpgrade),
+		SslForced:             new(host.SslForced),
+		Http2Support:          new(host.Http2Support),
+		Enabled:               new(host.Enabled),
 	}
 }
 
@@ -267,14 +276,22 @@ func npmDiffers(held, desired npmProxyHostRequest) bool {
 	return !reflect.DeepEqual(held, desired)
 }
 
+// npmUpdate is a create's body as the update that writes every field of it:
+// NPM takes the same fields for both.
+func npmUpdate(body npmProxyHostRequest) (npmapi.UpdateProxyHostJSONRequestBody, error) {
+	var update npmapi.UpdateProxyHostJSONRequestBody
+	data, err := json.Marshal(body)
+	if err == nil {
+		err = json.Unmarshal(data, &update)
+	}
+	return update, err
+}
+
 const npmDuplicateHosts = "npm holds more than one proxy host for the domain set"
 
 func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, observed NPMProxyHostObserved, apply bool) (Result, error) {
-	base, headers, err := r.npmSession(ctx, spec.ConnectionRef)
-	if err != nil {
-		return Result{}, err
-	}
-	hosts, err := r.npmProxyHostList(ctx, base, headers)
+	client := r.npm(ctx, spec.ConnectionRef, false)
+	hosts, err := npmProxyHostList(ctx, client)
 	if err != nil {
 		return Result{}, err
 	}
@@ -291,32 +308,37 @@ func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, obse
 	}
 	desired := npmDesired(spec, domains)
 	changed := true
-	path, method := npmProxyHosts.path, "POST"
+	id := 0
 	if len(matches) == 1 {
 		current := matches[0]
-		id, err := npmID(current.Id, "proxy host")
-		if err != nil {
+		if id, err = npmID(current.Id, "proxy host"); err != nil {
 			return Result{}, err
 		}
 		if spec.ForceSSL && current.CertificateId == 0 {
 			return Result{}, &ProviderError{Message: "proxy host forces HTTPS but has no certificate; attach one, then apply again"}
 		}
 		if spec.CertificateID == 0 {
-			desired.CertificateID = int(current.CertificateId)
+			desired.CertificateId = new(current.CertificateId)
 		}
 		if len(current.Locations) > 0 {
-			desired.Locations = current.Locations
+			desired.Locations = new(current.Locations)
 		}
 		if len(current.Meta) > 0 {
-			desired.Meta = current.Meta
+			desired.Meta = new(current.Meta)
 		}
 		changed = npmDiffers(npmHeld(current), desired)
-		path, method = fmt.Sprintf("%s/%d", path, id), "PUT"
 	} else if spec.ForceSSL && spec.CertificateID == 0 {
 		return Result{}, &ProviderError{Message: "an HTTPS proxy host needs an issued certificate and none is set yet"}
 	}
 	if changed && apply {
-		if _, err := r.HTTP.Request(ctx, base+path, method, headers, desired); err != nil {
+		if id == 0 {
+			_, err = client.CreateProxyHostWithResponse(ctx, desired)
+		} else if update, encoded := npmUpdate(desired); encoded != nil {
+			err = encoded
+		} else {
+			_, err = client.UpdateProxyHostWithResponse(ctx, id, update)
+		}
+		if err != nil {
 			return Result{}, fmt.Errorf("npm write proxy host: %w", err)
 		}
 	}
@@ -331,11 +353,8 @@ func (r *Registry) npmReconcile(ctx context.Context, spec NPMProxyHostSpec, obse
 }
 
 func (r *Registry) npmDelete(ctx context.Context, spec NPMProxyHostSpec, _ struct{}, apply bool) (Result, error) {
-	base, headers, err := r.npmSession(ctx, spec.ConnectionRef)
-	if err != nil {
-		return Result{}, err
-	}
-	hosts, err := r.npmProxyHostList(ctx, base, headers)
+	client := r.npm(ctx, spec.ConnectionRef, false)
+	hosts, err := npmProxyHostList(ctx, client)
 	if err != nil {
 		return Result{}, err
 	}
@@ -353,16 +372,16 @@ func (r *Registry) npmDelete(ctx context.Context, spec NPMProxyHostSpec, _ struc
 		return Result{}, err
 	}
 	if apply {
-		if _, err := r.HTTP.Request(ctx, fmt.Sprintf("%s%s/%d", base, npmProxyHosts.path, id), "DELETE", headers, nil); err != nil {
+		if _, err := client.DeleteProxyHostWithResponse(ctx, id); err != nil {
 			return Result{}, fmt.Errorf("npm delete proxy host: %w", err)
 		}
 	}
 	return result(true, status, "Removed", "NPM proxy host was removed.", "NPM proxy host removed."), nil
 }
 
-func npmClients(list npmAccessList) []NPMAccessRule {
+func npmClients(list npmapi.AccessListObject) []NPMAccessRule {
 	clients := []NPMAccessRule{}
-	for _, rule := range list.Clients {
+	for _, rule := range deref(list.Clients) {
 		directive, address := string(deref(rule.Directive)), deref(rule.Address)
 		if directive != "" && address != "" {
 			clients = append(clients, NPMAccessRule{Directive: directive, Address: address})
@@ -372,24 +391,21 @@ func npmClients(list npmAccessList) []NPMAccessRule {
 }
 
 // npmEnrichment is an optional list the proxy host inventory joins: a refused
-// or unreachable read leaves it out, a malformed one fails the inventory.
+// or unreachable read, which the transport answers as a ProviderError, leaves
+// it out; a malformed one fails the inventory.
 func npmEnrichment[T any](ctx context.Context, r *Registry, src npmSource[T]) ([]T, error) {
-	raw, err := r.npmFetched(ctx, "", src.path)
-	if err != nil {
+	items, err := src.list(ctx, r.npm(ctx, "", true))
+	if _, refused := errors.AsType[*ProviderError](err); refused {
 		return []T{}, nil
 	}
-	return npmDecode[T](raw, "npm "+src.what)
+	if err != nil {
+		return nil, &ProviderError{Message: "npm " + src.what + " did not decode", Err: err}
+	}
+	return items, nil
 }
 
 func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
-	raw, err := r.npmFetched(ctx, "", npmProxyHosts.path)
-	if err != nil {
-		if session, ok := errors.AsType[npmSessionFailed](err); ok {
-			return nil, session.error
-		}
-		return nil, fmt.Errorf("npm %s: %w", npmProxyHosts.what, err)
-	}
-	hosts, err := npmDecode[npmapi.ProxyHostObject](raw, "npm "+npmProxyHosts.what)
+	hosts, err := npmProxyHostList(ctx, r.npm(ctx, "", true))
 	if err != nil {
 		return nil, err
 	}
@@ -408,7 +424,7 @@ func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
 			Name:               list.Name,
 			SatisfyAny:         bool(list.SatisfyAny),
 			PassAuth:           bool(list.PassAuth),
-			AuthorizationCount: len(list.Items),
+			AuthorizationCount: len(deref(list.Items)),
 			Clients:            clients,
 			ImplicitDeny:       len(clients) > 0,
 		}
@@ -617,10 +633,10 @@ func (r *Registry) npmAccessLists(ctx context.Context, ref string) ([]NPMAccessL
 			}
 		}
 	}
-	return recordsOf(lists, func(list npmAccessList) (NPMAccessListRecord, error) {
+	return recordsOf(lists, func(list npmapi.AccessListObject) (NPMAccessListRecord, error) {
 		id, err := npmID(list.Id, "access list")
 		logins := []string{}
-		for _, login := range list.Items {
+		for _, login := range deref(list.Items) {
 			if name := deref(login.Username); name != "" {
 				logins = append(logins, name)
 			}

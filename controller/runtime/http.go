@@ -61,9 +61,10 @@ type Multipart []MultipartFile
 // partContentType is what each part declares: every upload here is PEM.
 const partContentType = "application/x-pem-file"
 
-// encode writes the parts with mime/multipart, which quotes a field name or
-// filename that could otherwise end its header.
-func (m Multipart) encode() ([]byte, string, error) {
+// Encode writes the parts with mime/multipart, which quotes a field name or
+// filename that could otherwise end its header, and returns the body and its
+// content type.
+func (m Multipart) Encode() ([]byte, string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	for _, file := range m {
@@ -146,21 +147,13 @@ func (h *HTTPClient) Request(ctx context.Context, address, method string, header
 }
 
 func (h *HTTPClient) Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (Answer, error) {
-	timeout := time.Duration(0)
-	if _, ok := payload.(Multipart); ok {
-		timeout = MultipartTimeout
-	}
-	return h.send(ctx, address, method, headers, payload, timeout)
-}
-
-func (h *HTTPClient) send(ctx context.Context, address, method string, headers map[string]string, payload any, timeoutOverride time.Duration) (Answer, error) {
 	var body []byte
 	contentType := "application/json"
 	if payload != nil {
 		switch p := payload.(type) {
 		case Multipart:
 			var err error
-			body, contentType, err = p.encode()
+			body, contentType, err = p.Encode()
 			if err != nil {
 				return Answer{}, &ProviderError{Message: "the request could not be encoded"}
 			}
@@ -195,8 +188,8 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	if timeout == 0 {
 		timeout = DefaultRequestTimeout
 	}
-	if timeoutOverride != 0 {
-		timeout = timeoutOverride
+	if strings.HasPrefix(request.Header.Get("Content-Type"), "multipart/form-data") {
+		timeout = MultipartTimeout
 	}
 	client := &http.Client{Transport: h.Transport, Timeout: timeout, CheckRedirect: func(next *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {

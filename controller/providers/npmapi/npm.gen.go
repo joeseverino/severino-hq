@@ -4,7 +4,13 @@
 package npmapi
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/oapi-codegen/runtime"
 )
@@ -39,27 +45,6 @@ func (e ForwardScheme) Valid() bool {
 	case ForwardSchemeHttp:
 		return true
 	case ForwardSchemeHttps:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ForwardScheme2.
-const (
-	ForwardScheme2Auto  ForwardScheme2 = "auto"
-	ForwardScheme2Http  ForwardScheme2 = "http"
-	ForwardScheme2Https ForwardScheme2 = "https"
-)
-
-// Valid indicates whether the value is a known member of the ForwardScheme2 enum.
-func (e ForwardScheme2) Valid() bool {
-	switch e {
-	case ForwardScheme2Auto:
-		return true
-	case ForwardScheme2Http:
-		return true
-	case ForwardScheme2Https:
 		return true
 	default:
 		return false
@@ -254,12 +239,15 @@ func (e RequestTokenJSONBodyScope) Valid() bool {
 
 // AccessListObject Access List object
 type AccessListObject struct {
+	Clients *AccessClients `json:"clients,omitempty"`
+
 	// CreatedOn Date and time of creation
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// Id Unique identifier
-	Id   *Id             `json:"id,omitempty"`
-	Meta json.RawMessage `json:"meta"`
+	Id    *Id             `json:"id,omitempty"`
+	Items *AccessItems    `json:"items,omitempty"`
+	Meta  json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
@@ -389,18 +377,6 @@ type DeadHostObject struct {
 // Directive defines model for directive.
 type Directive string
 
-// DnsProvidersList DNS Providers list
-type DnsProvidersList = []struct {
-	// Credentials Instructions on how to format the credentials for this DNS provider
-	Credentials string `json:"credentials"`
-
-	// Id Unique identifier for the DNS provider, matching the python package
-	Id string `json:"id"`
-
-	// Name Human-readable name of the DNS provider
-	Name string `json:"name"`
-}
-
 // DomainNames Domain Names separated by a comma
 type DomainNames = []string
 
@@ -422,29 +398,14 @@ type ErrorObject struct {
 	Message string `json:"message"`
 }
 
-// ForwardDomainName Domain Name
-type ForwardDomainName = string
-
 // ForwardHost defines model for forward_host.
 type ForwardHost = string
-
-// ForwardHttpCode Redirect HTTP Status Code
-type ForwardHttpCode = int
 
 // ForwardPort defines model for forward_port.
 type ForwardPort = int
 
 // ForwardScheme defines model for forward_scheme.
 type ForwardScheme string
-
-// ForwardScheme2 defines model for forward_scheme-2.
-type ForwardScheme2 string
-
-// ForwardingHost defines model for forwarding_host.
-type ForwardingHost = string
-
-// ForwardingPort defines model for forwarding_port.
-type ForwardingPort = int
 
 // HstsEnabled Is HSTS Enabled
 type HstsEnabled = Flag
@@ -457,9 +418,6 @@ type Http2Support = Flag
 
 // Id Unique identifier
 type Id = ID
-
-// IncomingPort defines model for incoming_port.
-type IncomingPort = int
 
 // Locations defines model for locations.
 type Locations = []struct {
@@ -492,23 +450,11 @@ type MetaKeyType string
 // Meta2 defines model for meta-2.
 type Meta2 = map[string]any
 
-// Meta3 defines model for meta-3.
-type Meta3 = map[string]any
-
 // ModifiedOn Date and time of last update
 type ModifiedOn = string
 
-// Name defines model for name.
-type Name = string
-
 // NiceName Nice Name for the custom certificate
 type NiceName = string
-
-// PassAuth defines model for pass_auth.
-type PassAuth = Flag
-
-// PreservePath Should the path be preserved
-type PreservePath = Flag
 
 // ProxyHostList Proxy Hosts list
 type ProxyHostList = []ProxyHostObject
@@ -641,9 +587,6 @@ type RedirectionHostObject struct {
 // RedirectionHostObjectForwardScheme defines model for RedirectionHostObject.ForwardScheme.
 type RedirectionHostObjectForwardScheme string
 
-// SatisfyAny defines model for satisfy_any.
-type SatisfyAny = Flag
-
 // SslForced Is SSL Forced
 type SslForced = Flag
 
@@ -685,9 +628,6 @@ type StreamObject struct {
 	UdpForwarding Flag   `json:"udp_forwarding"`
 }
 
-// TcpForwarding defines model for tcp_forwarding.
-type TcpForwarding = Flag
-
 // TokenChallenge Token object
 type TokenChallenge struct {
 	// ChallengeToken Challenge Token used in subsequent 2FA verification
@@ -708,9 +648,6 @@ type TokenObject struct {
 
 // TrustForwardedProto Trust the forwarded headers
 type TrustForwardedProto = Flag
-
-// UdpForwarding defines model for udp_forwarding.
-type UdpForwarding = Flag
 
 // UserObject User object
 type UserObject struct {
@@ -772,29 +709,11 @@ type UserId = int
 // GetAccessListsParams defines parameters for GetAccessLists.
 type GetAccessListsParams struct {
 	// Expand Expansions
-	Expand *GetAccessListsParamsExpand `form:"expand,omitempty" json:"expand,omitempty"`
+	Expand *[]GetAccessListsParamsExpand `form:"expand,omitempty" json:"expand,omitempty"`
 }
 
 // GetAccessListsParamsExpand defines parameters for GetAccessLists.
 type GetAccessListsParamsExpand string
-
-// CreateAccessListJSONBody defines body for CreateAccessList for application/json ContentType.
-type CreateAccessListJSONBody struct {
-	Clients    *AccessClients `json:"clients,omitempty"`
-	Items      *AccessItems   `json:"items,omitempty"`
-	Name       Name           `json:"name"`
-	PassAuth   *PassAuth      `json:"pass_auth,omitempty"`
-	SatisfyAny *SatisfyAny    `json:"satisfy_any,omitempty"`
-}
-
-// UpdateAccessListJSONBody defines body for UpdateAccessList for application/json ContentType.
-type UpdateAccessListJSONBody struct {
-	Clients    *AccessClients `json:"clients,omitempty"`
-	Items      *AccessItems   `json:"items,omitempty"`
-	Name       *Name          `json:"name,omitempty"`
-	PassAuth   *PassAuth      `json:"pass_auth,omitempty"`
-	SatisfyAny *SatisfyAny    `json:"satisfy_any,omitempty"`
-}
 
 // GetCertificatesParams defines parameters for GetCertificates.
 type GetCertificatesParams struct {
@@ -814,12 +733,6 @@ type CreateCertificateJSONBody struct {
 	// NiceName Nice Name for the custom certificate
 	NiceName *NiceName   `json:"nice_name,omitempty"`
 	Provider SslProvider `json:"provider"`
-}
-
-// TestHttpReachJSONBody defines body for TestHttpReach for application/json ContentType.
-type TestHttpReachJSONBody struct {
-	// Domains Domain Names separated by a comma
-	Domains DomainNames2 `json:"domains"`
 }
 
 // ValidateCertificatesMultipartBody defines body for ValidateCertificates for multipart/form-data ContentType.
@@ -844,54 +757,6 @@ type GetDeadHostsParams struct {
 
 // GetDeadHostsParamsExpand defines parameters for GetDeadHosts.
 type GetDeadHostsParamsExpand string
-
-// Create404HostJSONBody defines body for Create404Host for application/json ContentType.
-type Create404HostJSONBody struct {
-	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
-
-	// CertificateId Certificate ID
-	CertificateId *CertificateId `json:"certificate_id,omitempty"`
-
-	// DomainNames Domain Names separated by a comma
-	DomainNames DomainNames2 `json:"domain_names"`
-
-	// HstsEnabled Is HSTS Enabled
-	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
-
-	// HstsSubdomains Is HSTS applicable to all subdomains
-	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
-
-	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support    `json:"http2_support,omitempty"`
-	Meta         *json.RawMessage `json:"meta,omitempty"`
-
-	// SslForced Is SSL Forced
-	SslForced *SslForced `json:"ssl_forced,omitempty"`
-}
-
-// UpdateDeadHostJSONBody defines body for UpdateDeadHost for application/json ContentType.
-type UpdateDeadHostJSONBody struct {
-	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
-
-	// CertificateId Certificate ID
-	CertificateId *CertificateId `json:"certificate_id,omitempty"`
-
-	// DomainNames Domain Names separated by a comma
-	DomainNames *DomainNames2 `json:"domain_names,omitempty"`
-
-	// HstsEnabled Is HSTS Enabled
-	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
-
-	// HstsSubdomains Is HSTS applicable to all subdomains
-	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
-
-	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support    `json:"http2_support,omitempty"`
-	Meta         *json.RawMessage `json:"meta,omitempty"`
-
-	// SslForced Is SSL Forced
-	SslForced *SslForced `json:"ssl_forced,omitempty"`
-}
 
 // GetProxyHostsParams defines parameters for GetProxyHosts.
 type GetProxyHostsParams struct {
@@ -937,7 +802,7 @@ type CreateProxyHostJSONBody struct {
 
 	// Http2Support HTTP2 Protocol Support
 	Http2Support *Http2Support    `json:"http2_support,omitempty"`
-	Locations    *Locations       `json:"locations,omitempty"`
+	Locations    *json.RawMessage `json:"locations,omitempty"`
 	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
@@ -982,7 +847,7 @@ type UpdateProxyHostJSONBody struct {
 
 	// Http2Support HTTP2 Protocol Support
 	Http2Support *Http2Support    `json:"http2_support,omitempty"`
-	Locations    *Locations       `json:"locations,omitempty"`
+	Locations    *json.RawMessage `json:"locations,omitempty"`
 	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
@@ -1001,80 +866,6 @@ type GetRedirectionHostsParams struct {
 // GetRedirectionHostsParamsExpand defines parameters for GetRedirectionHosts.
 type GetRedirectionHostsParamsExpand string
 
-// CreateRedirectionHostJSONBody defines body for CreateRedirectionHost for application/json ContentType.
-type CreateRedirectionHostJSONBody struct {
-	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
-
-	// BlockExploits Should we block common exploits
-	BlockExploits *BlockExploits `json:"block_exploits,omitempty"`
-
-	// CertificateId Certificate ID
-	CertificateId *CertificateId `json:"certificate_id,omitempty"`
-
-	// DomainNames Domain Names separated by a comma
-	DomainNames DomainNames2 `json:"domain_names"`
-
-	// ForwardDomainName Domain Name
-	ForwardDomainName ForwardDomainName `json:"forward_domain_name"`
-
-	// ForwardHttpCode Redirect HTTP Status Code
-	ForwardHttpCode ForwardHttpCode `json:"forward_http_code"`
-	ForwardScheme   ForwardScheme2  `json:"forward_scheme"`
-
-	// HstsEnabled Is HSTS Enabled
-	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
-
-	// HstsSubdomains Is HSTS applicable to all subdomains
-	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
-
-	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support    `json:"http2_support,omitempty"`
-	Meta         *json.RawMessage `json:"meta,omitempty"`
-
-	// PreservePath Should the path be preserved
-	PreservePath *PreservePath `json:"preserve_path,omitempty"`
-
-	// SslForced Is SSL Forced
-	SslForced *SslForced `json:"ssl_forced,omitempty"`
-}
-
-// UpdateRedirectionHostJSONBody defines body for UpdateRedirectionHost for application/json ContentType.
-type UpdateRedirectionHostJSONBody struct {
-	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
-
-	// BlockExploits Should we block common exploits
-	BlockExploits *BlockExploits `json:"block_exploits,omitempty"`
-
-	// CertificateId Certificate ID
-	CertificateId *CertificateId `json:"certificate_id,omitempty"`
-
-	// DomainNames Domain Names separated by a comma
-	DomainNames *DomainNames2 `json:"domain_names,omitempty"`
-
-	// ForwardDomainName Domain Name
-	ForwardDomainName *ForwardDomainName `json:"forward_domain_name,omitempty"`
-
-	// ForwardHttpCode Redirect HTTP Status Code
-	ForwardHttpCode *ForwardHttpCode `json:"forward_http_code,omitempty"`
-	ForwardScheme   *ForwardScheme2  `json:"forward_scheme,omitempty"`
-
-	// HstsEnabled Is HSTS Enabled
-	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
-
-	// HstsSubdomains Is HSTS applicable to all subdomains
-	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
-
-	// Http2Support HTTP2 Protocol Support
-	Http2Support *Http2Support    `json:"http2_support,omitempty"`
-	Meta         *json.RawMessage `json:"meta,omitempty"`
-
-	// PreservePath Should the path be preserved
-	PreservePath *PreservePath `json:"preserve_path,omitempty"`
-
-	// SslForced Is SSL Forced
-	SslForced *SslForced `json:"ssl_forced,omitempty"`
-}
-
 // GetStreamsParams defines parameters for GetStreams.
 type GetStreamsParams struct {
 	// Expand Expansions
@@ -1083,33 +874,6 @@ type GetStreamsParams struct {
 
 // GetStreamsParamsExpand defines parameters for GetStreams.
 type GetStreamsParamsExpand string
-
-// CreateStreamJSONBody defines body for CreateStream for application/json ContentType.
-type CreateStreamJSONBody struct {
-	// CertificateId Certificate ID
-	CertificateId *CertificateId `json:"certificate_id,omitempty"`
-
-	// DomainNames Domain Names separated by a comma
-	DomainNames    *DomainNames2    `json:"domain_names,omitempty"`
-	ForwardingHost ForwardingHost   `json:"forwarding_host"`
-	ForwardingPort ForwardingPort   `json:"forwarding_port"`
-	IncomingPort   IncomingPort     `json:"incoming_port"`
-	Meta           *json.RawMessage `json:"meta,omitempty"`
-	TcpForwarding  *TcpForwarding   `json:"tcp_forwarding,omitempty"`
-	UdpForwarding  *UdpForwarding   `json:"udp_forwarding,omitempty"`
-}
-
-// UpdateStreamJSONBody defines body for UpdateStream for application/json ContentType.
-type UpdateStreamJSONBody struct {
-	// CertificateId Certificate ID
-	CertificateId  *CertificateId   `json:"certificate_id,omitempty"`
-	ForwardingHost *ForwardingHost  `json:"forwarding_host,omitempty"`
-	ForwardingPort *ForwardingPort  `json:"forwarding_port,omitempty"`
-	IncomingPort   *IncomingPort    `json:"incoming_port,omitempty"`
-	Meta           *json.RawMessage `json:"meta,omitempty"`
-	TcpForwarding  *TcpForwarding   `json:"tcp_forwarding,omitempty"`
-	UdpForwarding  *UdpForwarding   `json:"udp_forwarding,omitempty"`
-}
 
 // RequestTokenJSONBody defines body for RequestToken for application/json ContentType.
 type RequestTokenJSONBody struct {
@@ -1126,23 +890,8 @@ type RequestToken200JSONResponseBody struct {
 	union json.RawMessage
 }
 
-// LoginWith2FAJSONBody defines body for LoginWith2FA for application/json ContentType.
-type LoginWith2FAJSONBody struct {
-	ChallengeToken string `json:"challenge_token"`
-	Code           string `json:"code"`
-}
-
-// CreateAccessListJSONRequestBody defines body for CreateAccessList for application/json ContentType.
-type CreateAccessListJSONRequestBody CreateAccessListJSONBody
-
-// UpdateAccessListJSONRequestBody defines body for UpdateAccessList for application/json ContentType.
-type UpdateAccessListJSONRequestBody UpdateAccessListJSONBody
-
 // CreateCertificateJSONRequestBody defines body for CreateCertificate for application/json ContentType.
 type CreateCertificateJSONRequestBody CreateCertificateJSONBody
-
-// TestHttpReachJSONRequestBody defines body for TestHttpReach for application/json ContentType.
-type TestHttpReachJSONRequestBody TestHttpReachJSONBody
 
 // ValidateCertificatesMultipartRequestBody defines body for ValidateCertificates for multipart/form-data ContentType.
 type ValidateCertificatesMultipartRequestBody ValidateCertificatesMultipartBody
@@ -1150,35 +899,14 @@ type ValidateCertificatesMultipartRequestBody ValidateCertificatesMultipartBody
 // UploadCertificateMultipartRequestBody defines body for UploadCertificate for multipart/form-data ContentType.
 type UploadCertificateMultipartRequestBody UploadCertificateMultipartBody
 
-// Create404HostJSONRequestBody defines body for Create404Host for application/json ContentType.
-type Create404HostJSONRequestBody Create404HostJSONBody
-
-// UpdateDeadHostJSONRequestBody defines body for UpdateDeadHost for application/json ContentType.
-type UpdateDeadHostJSONRequestBody UpdateDeadHostJSONBody
-
 // CreateProxyHostJSONRequestBody defines body for CreateProxyHost for application/json ContentType.
 type CreateProxyHostJSONRequestBody CreateProxyHostJSONBody
 
 // UpdateProxyHostJSONRequestBody defines body for UpdateProxyHost for application/json ContentType.
 type UpdateProxyHostJSONRequestBody UpdateProxyHostJSONBody
 
-// CreateRedirectionHostJSONRequestBody defines body for CreateRedirectionHost for application/json ContentType.
-type CreateRedirectionHostJSONRequestBody CreateRedirectionHostJSONBody
-
-// UpdateRedirectionHostJSONRequestBody defines body for UpdateRedirectionHost for application/json ContentType.
-type UpdateRedirectionHostJSONRequestBody UpdateRedirectionHostJSONBody
-
-// CreateStreamJSONRequestBody defines body for CreateStream for application/json ContentType.
-type CreateStreamJSONRequestBody CreateStreamJSONBody
-
-// UpdateStreamJSONRequestBody defines body for UpdateStream for application/json ContentType.
-type UpdateStreamJSONRequestBody UpdateStreamJSONBody
-
 // RequestTokenJSONRequestBody defines body for RequestToken for application/json ContentType.
 type RequestTokenJSONRequestBody RequestTokenJSONBody
-
-// LoginWith2FAJSONRequestBody defines body for LoginWith2FA for application/json ContentType.
-type LoginWith2FAJSONRequestBody LoginWith2FAJSONBody
 
 // AsTokenObject returns the union data inside the RequestToken200JSONResponseBody as a TokenObject
 func (t RequestToken200JSONResponseBody) AsTokenObject() (TokenObject, error) {
@@ -1240,4 +968,2516 @@ func (t RequestToken200JSONResponseBody) MarshalJSON() ([]byte, error) {
 func (t *RequestToken200JSONResponseBody) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
+}
+
+// RequestEditorFn is the function signature for the RequestEditor callback function
+type RequestEditorFn func(ctx context.Context, req *http.Request) error
+
+// Doer performs HTTP requests.
+//
+// The standard http.Client implements this interface.
+type HttpRequestDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// API which conforms to the OpenAPI3 specification for this service.
+type API struct {
+	// The endpoint of the server conforming to this interface, with scheme,
+	// https://api.deepmap.com for example. This can contain a path relative
+	// to the server, such as https://api.deepmap.com/dev-test, and all the
+	// paths in the swagger spec will be appended to the server.
+	Server string
+
+	// Doer for performing requests, typically a *http.Client with any
+	// customized settings, such as certificate chains.
+	Client HttpRequestDoer
+
+	// A list of callbacks for modifying requests which are generated before sending over
+	// the network.
+	RequestEditors []RequestEditorFn
+}
+
+// ClientOption allows setting custom parameters during construction
+type ClientOption func(*API) error
+
+// Creates a new API, with reasonable defaults
+func NewClient(server string, opts ...ClientOption) (*API, error) {
+	// create a client with sane default values
+	client := API{
+		Server: server,
+	}
+	// mutate client and add all optional params
+	for _, o := range opts {
+		if err := o(&client); err != nil {
+			return nil, err
+		}
+	}
+	// ensure the server URL always has a trailing slash
+	if !strings.HasSuffix(client.Server, "/") {
+		client.Server += "/"
+	}
+	// create httpClient, if not already present
+	if client.Client == nil {
+		client.Client = &http.Client{}
+	}
+	return &client, nil
+}
+
+// WithHTTPClient allows overriding the default Doer, which is
+// automatically created using http.Client. This is useful for tests.
+func WithHTTPClient(doer HttpRequestDoer) ClientOption {
+	return func(c *API) error {
+		c.Client = doer
+		return nil
+	}
+}
+
+// WithRequestEditorFn allows setting up a callback function, which will be
+// called right before sending the request. This can be used to mutate the request.
+func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
+	return func(c *API) error {
+		c.RequestEditors = append(c.RequestEditors, fn)
+		return nil
+	}
+}
+
+// The interface specification for the client above.
+type ClientInterface interface {
+
+	// GetAccessLists Get all access lists
+	//
+	// Corresponds with GET /nginx/access-lists (the `GetAccessLists` operationId).
+	GetAccessLists(ctx context.Context, params *GetAccessListsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCertificates Get all certificates
+	//
+	// Corresponds with GET /nginx/certificates (the `GetCertificates` operationId).
+	GetCertificates(ctx context.Context, params *GetCertificatesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateCertificateWithBody Create a Certificate
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /nginx/certificates (the `CreateCertificate` operationId).
+	CreateCertificateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateCertificate Create a Certificate
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /nginx/certificates (the `CreateCertificate` operationId).
+	CreateCertificate(ctx context.Context, body CreateCertificateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ValidateCertificatesWithBody Validates given Custom Certificates
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /nginx/certificates/validate (the `ValidateCertificates` operationId).
+	ValidateCertificatesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteCertificate Delete a Certificate
+	//
+	// Corresponds with DELETE /nginx/certificates/{certID} (the `DeleteCertificate` operationId).
+	DeleteCertificate(ctx context.Context, certID int, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UploadCertificateWithBody Uploads a custom Certificate
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /nginx/certificates/{certID}/upload (the `UploadCertificate` operationId).
+	UploadCertificateWithBody(ctx context.Context, certID int, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDeadHosts Get all 404 hosts
+	//
+	// Corresponds with GET /nginx/dead-hosts (the `GetDeadHosts` operationId).
+	GetDeadHosts(ctx context.Context, params *GetDeadHostsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetProxyHosts Get all proxy hosts
+	//
+	// Corresponds with GET /nginx/proxy-hosts (the `GetProxyHosts` operationId).
+	GetProxyHosts(ctx context.Context, params *GetProxyHostsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateProxyHostWithBody Create a Proxy Host
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /nginx/proxy-hosts (the `CreateProxyHost` operationId).
+	CreateProxyHostWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateProxyHost Create a Proxy Host
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /nginx/proxy-hosts (the `CreateProxyHost` operationId).
+	CreateProxyHost(ctx context.Context, body CreateProxyHostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteProxyHost Delete a Proxy Host
+	//
+	// Corresponds with DELETE /nginx/proxy-hosts/{hostID} (the `DeleteProxyHost` operationId).
+	DeleteProxyHost(ctx context.Context, hostID int, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateProxyHostWithBody Update a Proxy Host
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /nginx/proxy-hosts/{hostID} (the `UpdateProxyHost` operationId).
+	UpdateProxyHostWithBody(ctx context.Context, hostID int, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateProxyHost Update a Proxy Host
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /nginx/proxy-hosts/{hostID} (the `UpdateProxyHost` operationId).
+	UpdateProxyHost(ctx context.Context, hostID int, body UpdateProxyHostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetRedirectionHosts Get all Redirection hosts
+	//
+	// Corresponds with GET /nginx/redirection-hosts (the `GetRedirectionHosts` operationId).
+	GetRedirectionHosts(ctx context.Context, params *GetRedirectionHostsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetStreams Get all streams
+	//
+	// Corresponds with GET /nginx/streams (the `GetStreams` operationId).
+	GetStreams(ctx context.Context, params *GetStreamsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RequestTokenWithBody Request a new access token from credentials
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /tokens (the `RequestToken` operationId).
+	RequestTokenWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RequestToken Request a new access token from credentials
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /tokens (the `RequestToken` operationId).
+	RequestToken(ctx context.Context, body RequestTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// GetAccessLists Get all access lists
+//
+// Corresponds with GET /nginx/access-lists (the `GetAccessLists` operationId).
+func (c *API) GetAccessLists(ctx context.Context, params *GetAccessListsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAccessListsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetCertificates Get all certificates
+//
+// Corresponds with GET /nginx/certificates (the `GetCertificates` operationId).
+func (c *API) GetCertificates(ctx context.Context, params *GetCertificatesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCertificatesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateCertificateWithBody Create a Certificate
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /nginx/certificates (the `CreateCertificate` operationId).
+func (c *API) CreateCertificateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCertificateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateCertificate Create a Certificate
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /nginx/certificates (the `CreateCertificate` operationId).
+func (c *API) CreateCertificate(ctx context.Context, body CreateCertificateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCertificateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ValidateCertificatesWithBody Validates given Custom Certificates
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /nginx/certificates/validate (the `ValidateCertificates` operationId).
+func (c *API) ValidateCertificatesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewValidateCertificatesRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteCertificate Delete a Certificate
+//
+// Corresponds with DELETE /nginx/certificates/{certID} (the `DeleteCertificate` operationId).
+func (c *API) DeleteCertificate(ctx context.Context, certID int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteCertificateRequest(c.Server, certID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UploadCertificateWithBody Uploads a custom Certificate
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /nginx/certificates/{certID}/upload (the `UploadCertificate` operationId).
+func (c *API) UploadCertificateWithBody(ctx context.Context, certID int, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUploadCertificateRequestWithBody(c.Server, certID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetDeadHosts Get all 404 hosts
+//
+// Corresponds with GET /nginx/dead-hosts (the `GetDeadHosts` operationId).
+func (c *API) GetDeadHosts(ctx context.Context, params *GetDeadHostsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeadHostsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetProxyHosts Get all proxy hosts
+//
+// Corresponds with GET /nginx/proxy-hosts (the `GetProxyHosts` operationId).
+func (c *API) GetProxyHosts(ctx context.Context, params *GetProxyHostsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetProxyHostsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateProxyHostWithBody Create a Proxy Host
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /nginx/proxy-hosts (the `CreateProxyHost` operationId).
+func (c *API) CreateProxyHostWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateProxyHostRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateProxyHost Create a Proxy Host
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /nginx/proxy-hosts (the `CreateProxyHost` operationId).
+func (c *API) CreateProxyHost(ctx context.Context, body CreateProxyHostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateProxyHostRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteProxyHost Delete a Proxy Host
+//
+// Corresponds with DELETE /nginx/proxy-hosts/{hostID} (the `DeleteProxyHost` operationId).
+func (c *API) DeleteProxyHost(ctx context.Context, hostID int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteProxyHostRequest(c.Server, hostID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateProxyHostWithBody Update a Proxy Host
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /nginx/proxy-hosts/{hostID} (the `UpdateProxyHost` operationId).
+func (c *API) UpdateProxyHostWithBody(ctx context.Context, hostID int, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateProxyHostRequestWithBody(c.Server, hostID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateProxyHost Update a Proxy Host
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /nginx/proxy-hosts/{hostID} (the `UpdateProxyHost` operationId).
+func (c *API) UpdateProxyHost(ctx context.Context, hostID int, body UpdateProxyHostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateProxyHostRequest(c.Server, hostID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetRedirectionHosts Get all Redirection hosts
+//
+// Corresponds with GET /nginx/redirection-hosts (the `GetRedirectionHosts` operationId).
+func (c *API) GetRedirectionHosts(ctx context.Context, params *GetRedirectionHostsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetRedirectionHostsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetStreams Get all streams
+//
+// Corresponds with GET /nginx/streams (the `GetStreams` operationId).
+func (c *API) GetStreams(ctx context.Context, params *GetStreamsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetStreamsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RequestTokenWithBody Request a new access token from credentials
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /tokens (the `RequestToken` operationId).
+func (c *API) RequestTokenWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRequestTokenRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RequestToken Request a new access token from credentials
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /tokens (the `RequestToken` operationId).
+func (c *API) RequestToken(ctx context.Context, body RequestTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRequestTokenRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewGetAccessListsRequest constructs an http.Request for the GetAccessLists method
+func NewGetAccessListsRequest(server string, params *GetAccessListsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/access-lists"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Expand != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "expand", *params.Expand, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "array", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCertificatesRequest constructs an http.Request for the GetCertificates method
+func NewGetCertificatesRequest(server string, params *GetCertificatesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/certificates"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Expand != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "expand", *params.Expand, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateCertificateRequest calls the generic CreateCertificate builder with application/json body
+func NewCreateCertificateRequest(server string, body CreateCertificateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateCertificateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateCertificateRequestWithBody constructs an http.Request for the CreateCertificate method, with any body, and a specified content type
+func NewCreateCertificateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/certificates"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewValidateCertificatesRequestWithBody constructs an http.Request for the ValidateCertificates method, with any body, and a specified content type
+func NewValidateCertificatesRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/certificates/validate"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteCertificateRequest constructs an http.Request for the DeleteCertificate method
+func NewDeleteCertificateRequest(server string, certID int) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "certID", certID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/certificates/" + pathParam0
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUploadCertificateRequestWithBody constructs an http.Request for the UploadCertificate method, with any body, and a specified content type
+func NewUploadCertificateRequestWithBody(server string, certID int, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "certID", certID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/certificates/" + pathParam0 + "/upload"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetDeadHostsRequest constructs an http.Request for the GetDeadHosts method
+func NewGetDeadHostsRequest(server string, params *GetDeadHostsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/dead-hosts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Expand != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "expand", *params.Expand, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetProxyHostsRequest constructs an http.Request for the GetProxyHosts method
+func NewGetProxyHostsRequest(server string, params *GetProxyHostsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/proxy-hosts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Expand != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "expand", *params.Expand, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateProxyHostRequest calls the generic CreateProxyHost builder with application/json body
+func NewCreateProxyHostRequest(server string, body CreateProxyHostJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateProxyHostRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateProxyHostRequestWithBody constructs an http.Request for the CreateProxyHost method, with any body, and a specified content type
+func NewCreateProxyHostRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/proxy-hosts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteProxyHostRequest constructs an http.Request for the DeleteProxyHost method
+func NewDeleteProxyHostRequest(server string, hostID int) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "hostID", hostID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/proxy-hosts/" + pathParam0
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateProxyHostRequest calls the generic UpdateProxyHost builder with application/json body
+func NewUpdateProxyHostRequest(server string, hostID int, body UpdateProxyHostJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateProxyHostRequestWithBody(server, hostID, "application/json", bodyReader)
+}
+
+// NewUpdateProxyHostRequestWithBody constructs an http.Request for the UpdateProxyHost method, with any body, and a specified content type
+func NewUpdateProxyHostRequestWithBody(server string, hostID int, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "hostID", hostID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/proxy-hosts/" + pathParam0
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetRedirectionHostsRequest constructs an http.Request for the GetRedirectionHosts method
+func NewGetRedirectionHostsRequest(server string, params *GetRedirectionHostsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/redirection-hosts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Expand != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "expand", *params.Expand, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetStreamsRequest constructs an http.Request for the GetStreams method
+func NewGetStreamsRequest(server string, params *GetStreamsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/nginx/streams"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Expand != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "expand", *params.Expand, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRequestTokenRequest calls the generic RequestToken builder with application/json body
+func NewRequestTokenRequest(server string, body RequestTokenJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRequestTokenRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewRequestTokenRequestWithBody constructs an http.Request for the RequestToken method, with any body, and a specified content type
+func NewRequestTokenRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/tokens"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+func (c *API) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
+	for _, r := range c.RequestEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	for _, r := range additionalEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ClientWithResponses builds on ClientInterface to offer response payloads
+type ClientWithResponses struct {
+	ClientInterface
+}
+
+// NewClientWithResponses creates a new ClientWithResponses, which wraps
+// Client with return type handling
+func NewClientWithResponses(server string, opts ...ClientOption) (*ClientWithResponses, error) {
+	client, err := NewClient(server, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &ClientWithResponses{client}, nil
+}
+
+// WithBaseURL overrides the baseURL.
+func WithBaseURL(baseURL string) ClientOption {
+	return func(c *API) error {
+		newBaseURL, err := url.Parse(baseURL)
+		if err != nil {
+			return err
+		}
+		c.Server = newBaseURL.String()
+		return nil
+	}
+}
+
+// ClientWithResponsesInterface is the interface specification for the client with responses above.
+type ClientWithResponsesInterface interface {
+
+	// GetAccessListsWithResponse Get all access lists
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /nginx/access-lists (the `GetAccessLists` operationId).
+	GetAccessListsWithResponse(ctx context.Context, params *GetAccessListsParams, reqEditors ...RequestEditorFn) (*GetAccessListsReply, error)
+
+	// GetCertificatesWithResponse Get all certificates
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /nginx/certificates (the `GetCertificates` operationId).
+	GetCertificatesWithResponse(ctx context.Context, params *GetCertificatesParams, reqEditors ...RequestEditorFn) (*GetCertificatesReply, error)
+
+	// CreateCertificateWithBodyWithResponse Create a Certificate
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /nginx/certificates (the `CreateCertificate` operationId).
+	CreateCertificateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCertificateReply, error)
+
+	// CreateCertificateWithResponse Create a Certificate
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /nginx/certificates (the `CreateCertificate` operationId).
+	CreateCertificateWithResponse(ctx context.Context, body CreateCertificateJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCertificateReply, error)
+
+	// ValidateCertificatesWithBodyWithResponse Validates given Custom Certificates
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /nginx/certificates/validate (the `ValidateCertificates` operationId).
+	ValidateCertificatesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ValidateCertificatesReply, error)
+
+	// DeleteCertificateWithResponse Delete a Certificate
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /nginx/certificates/{certID} (the `DeleteCertificate` operationId).
+	DeleteCertificateWithResponse(ctx context.Context, certID int, reqEditors ...RequestEditorFn) (*DeleteCertificateReply, error)
+
+	// UploadCertificateWithBodyWithResponse Uploads a custom Certificate
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /nginx/certificates/{certID}/upload (the `UploadCertificate` operationId).
+	UploadCertificateWithBodyWithResponse(ctx context.Context, certID int, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadCertificateReply, error)
+
+	// GetDeadHostsWithResponse Get all 404 hosts
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /nginx/dead-hosts (the `GetDeadHosts` operationId).
+	GetDeadHostsWithResponse(ctx context.Context, params *GetDeadHostsParams, reqEditors ...RequestEditorFn) (*GetDeadHostsReply, error)
+
+	// GetProxyHostsWithResponse Get all proxy hosts
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /nginx/proxy-hosts (the `GetProxyHosts` operationId).
+	GetProxyHostsWithResponse(ctx context.Context, params *GetProxyHostsParams, reqEditors ...RequestEditorFn) (*GetProxyHostsReply, error)
+
+	// CreateProxyHostWithBodyWithResponse Create a Proxy Host
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /nginx/proxy-hosts (the `CreateProxyHost` operationId).
+	CreateProxyHostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProxyHostReply, error)
+
+	// CreateProxyHostWithResponse Create a Proxy Host
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /nginx/proxy-hosts (the `CreateProxyHost` operationId).
+	CreateProxyHostWithResponse(ctx context.Context, body CreateProxyHostJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProxyHostReply, error)
+
+	// DeleteProxyHostWithResponse Delete a Proxy Host
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /nginx/proxy-hosts/{hostID} (the `DeleteProxyHost` operationId).
+	DeleteProxyHostWithResponse(ctx context.Context, hostID int, reqEditors ...RequestEditorFn) (*DeleteProxyHostReply, error)
+
+	// UpdateProxyHostWithBodyWithResponse Update a Proxy Host
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /nginx/proxy-hosts/{hostID} (the `UpdateProxyHost` operationId).
+	UpdateProxyHostWithBodyWithResponse(ctx context.Context, hostID int, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateProxyHostReply, error)
+
+	// UpdateProxyHostWithResponse Update a Proxy Host
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /nginx/proxy-hosts/{hostID} (the `UpdateProxyHost` operationId).
+	UpdateProxyHostWithResponse(ctx context.Context, hostID int, body UpdateProxyHostJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateProxyHostReply, error)
+
+	// GetRedirectionHostsWithResponse Get all Redirection hosts
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /nginx/redirection-hosts (the `GetRedirectionHosts` operationId).
+	GetRedirectionHostsWithResponse(ctx context.Context, params *GetRedirectionHostsParams, reqEditors ...RequestEditorFn) (*GetRedirectionHostsReply, error)
+
+	// GetStreamsWithResponse Get all streams
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /nginx/streams (the `GetStreams` operationId).
+	GetStreamsWithResponse(ctx context.Context, params *GetStreamsParams, reqEditors ...RequestEditorFn) (*GetStreamsReply, error)
+
+	// RequestTokenWithBodyWithResponse Request a new access token from credentials
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tokens (the `RequestToken` operationId).
+	RequestTokenWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RequestTokenReply, error)
+
+	// RequestTokenWithResponse Request a new access token from credentials
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /tokens (the `RequestToken` operationId).
+	RequestTokenWithResponse(ctx context.Context, body RequestTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestTokenReply, error)
+}
+
+type GetAccessListsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]AccessListObject
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAccessListsReply) GetJSON200() *[]AccessListObject {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAccessListsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAccessListsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAccessListsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAccessListsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetCertificatesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CertificateList
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetCertificatesReply) GetJSON200() *CertificateList {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetCertificatesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCertificatesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCertificatesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetCertificatesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateCertificateReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *CertificateObject
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateCertificateReply) GetJSON201() *CertificateObject {
+	return r.JSON201
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r CreateCertificateReply) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateCertificateReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateCertificateReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateCertificateReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateCertificateReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ValidateCertificatesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Certificate struct {
+			Cn    string `json:"cn"`
+			Dates struct {
+				From int `json:"from"`
+				To   int `json:"to"`
+			} `json:"dates"`
+			Issuer string `json:"issuer"`
+		} `json:"certificate"`
+		CertificateKey Flag `json:"certificate_key"`
+	}
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ValidateCertificatesReply) GetJSON200() *struct {
+	Certificate struct {
+		Cn    string `json:"cn"`
+		Dates struct {
+			From int `json:"from"`
+			To   int `json:"to"`
+		} `json:"dates"`
+		Issuer string `json:"issuer"`
+	} `json:"certificate"`
+	CertificateKey Flag `json:"certificate_key"`
+} {
+	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r ValidateCertificatesReply) GetJSON400() *Error {
+	return r.JSON400
+}
+
+// GetBody returns the raw response body bytes
+func (r ValidateCertificatesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ValidateCertificatesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ValidateCertificatesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ValidateCertificatesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteCertificateReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Flag
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteCertificateReply) GetJSON200() *Flag {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteCertificateReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteCertificateReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteCertificateReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteCertificateReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UploadCertificateReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Certificate             string  `json:"certificate"`
+		CertificateKey          string  `json:"certificate_key"`
+		IntermediateCertificate *string `json:"intermediate_certificate,omitempty"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UploadCertificateReply) GetJSON200() *struct {
+	Certificate             string  `json:"certificate"`
+	CertificateKey          string  `json:"certificate_key"`
+	IntermediateCertificate *string `json:"intermediate_certificate,omitempty"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UploadCertificateReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UploadCertificateReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UploadCertificateReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UploadCertificateReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetDeadHostsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *DeadHostList
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetDeadHostsReply) GetJSON200() *DeadHostList {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetDeadHostsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeadHostsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeadHostsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetDeadHostsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetProxyHostsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProxyHostList
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetProxyHostsReply) GetJSON200() *ProxyHostList {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetProxyHostsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetProxyHostsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetProxyHostsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetProxyHostsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateProxyHostReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ProxyHostObject
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateProxyHostReply) GetJSON201() *ProxyHostObject {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateProxyHostReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateProxyHostReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateProxyHostReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateProxyHostReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteProxyHostReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Flag
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DeleteProxyHostReply) GetJSON200() *Flag {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteProxyHostReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteProxyHostReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteProxyHostReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteProxyHostReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateProxyHostReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ProxyHostObject
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateProxyHostReply) GetJSON200() *ProxyHostObject {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateProxyHostReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateProxyHostReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateProxyHostReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateProxyHostReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetRedirectionHostsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RedirectionHostList
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetRedirectionHostsReply) GetJSON200() *RedirectionHostList {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetRedirectionHostsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetRedirectionHostsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetRedirectionHostsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetRedirectionHostsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetStreamsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *StreamList
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetStreamsReply) GetJSON200() *StreamList {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r GetStreamsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetStreamsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetStreamsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetStreamsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RequestTokenReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RequestToken200JSONResponseBody
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RequestTokenReply) GetJSON200() *RequestToken200JSONResponseBody {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r RequestTokenReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RequestTokenReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RequestTokenReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RequestTokenReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetAccessListsWithResponse Get all access lists
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /nginx/access-lists (the `GetAccessLists` operationId).
+func (c *ClientWithResponses) GetAccessListsWithResponse(ctx context.Context, params *GetAccessListsParams, reqEditors ...RequestEditorFn) (*GetAccessListsReply, error) {
+	rsp, err := c.GetAccessLists(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAccessListsReply(rsp)
+}
+
+// GetCertificatesWithResponse Get all certificates
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /nginx/certificates (the `GetCertificates` operationId).
+func (c *ClientWithResponses) GetCertificatesWithResponse(ctx context.Context, params *GetCertificatesParams, reqEditors ...RequestEditorFn) (*GetCertificatesReply, error) {
+	rsp, err := c.GetCertificates(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCertificatesReply(rsp)
+}
+
+// CreateCertificateWithBodyWithResponse Create a Certificate
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /nginx/certificates (the `CreateCertificate` operationId).
+func (c *ClientWithResponses) CreateCertificateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCertificateReply, error) {
+	rsp, err := c.CreateCertificateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCertificateReply(rsp)
+}
+
+// CreateCertificateWithResponse Create a Certificate
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /nginx/certificates (the `CreateCertificate` operationId).
+func (c *ClientWithResponses) CreateCertificateWithResponse(ctx context.Context, body CreateCertificateJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCertificateReply, error) {
+	rsp, err := c.CreateCertificate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCertificateReply(rsp)
+}
+
+// ValidateCertificatesWithBodyWithResponse Validates given Custom Certificates
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /nginx/certificates/validate (the `ValidateCertificates` operationId).
+func (c *ClientWithResponses) ValidateCertificatesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ValidateCertificatesReply, error) {
+	rsp, err := c.ValidateCertificatesWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseValidateCertificatesReply(rsp)
+}
+
+// DeleteCertificateWithResponse Delete a Certificate
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /nginx/certificates/{certID} (the `DeleteCertificate` operationId).
+func (c *ClientWithResponses) DeleteCertificateWithResponse(ctx context.Context, certID int, reqEditors ...RequestEditorFn) (*DeleteCertificateReply, error) {
+	rsp, err := c.DeleteCertificate(ctx, certID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteCertificateReply(rsp)
+}
+
+// UploadCertificateWithBodyWithResponse Uploads a custom Certificate
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /nginx/certificates/{certID}/upload (the `UploadCertificate` operationId).
+func (c *ClientWithResponses) UploadCertificateWithBodyWithResponse(ctx context.Context, certID int, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadCertificateReply, error) {
+	rsp, err := c.UploadCertificateWithBody(ctx, certID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUploadCertificateReply(rsp)
+}
+
+// GetDeadHostsWithResponse Get all 404 hosts
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /nginx/dead-hosts (the `GetDeadHosts` operationId).
+func (c *ClientWithResponses) GetDeadHostsWithResponse(ctx context.Context, params *GetDeadHostsParams, reqEditors ...RequestEditorFn) (*GetDeadHostsReply, error) {
+	rsp, err := c.GetDeadHosts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeadHostsReply(rsp)
+}
+
+// GetProxyHostsWithResponse Get all proxy hosts
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /nginx/proxy-hosts (the `GetProxyHosts` operationId).
+func (c *ClientWithResponses) GetProxyHostsWithResponse(ctx context.Context, params *GetProxyHostsParams, reqEditors ...RequestEditorFn) (*GetProxyHostsReply, error) {
+	rsp, err := c.GetProxyHosts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetProxyHostsReply(rsp)
+}
+
+// CreateProxyHostWithBodyWithResponse Create a Proxy Host
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /nginx/proxy-hosts (the `CreateProxyHost` operationId).
+func (c *ClientWithResponses) CreateProxyHostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateProxyHostReply, error) {
+	rsp, err := c.CreateProxyHostWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateProxyHostReply(rsp)
+}
+
+// CreateProxyHostWithResponse Create a Proxy Host
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /nginx/proxy-hosts (the `CreateProxyHost` operationId).
+func (c *ClientWithResponses) CreateProxyHostWithResponse(ctx context.Context, body CreateProxyHostJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateProxyHostReply, error) {
+	rsp, err := c.CreateProxyHost(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateProxyHostReply(rsp)
+}
+
+// DeleteProxyHostWithResponse Delete a Proxy Host
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /nginx/proxy-hosts/{hostID} (the `DeleteProxyHost` operationId).
+func (c *ClientWithResponses) DeleteProxyHostWithResponse(ctx context.Context, hostID int, reqEditors ...RequestEditorFn) (*DeleteProxyHostReply, error) {
+	rsp, err := c.DeleteProxyHost(ctx, hostID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteProxyHostReply(rsp)
+}
+
+// UpdateProxyHostWithBodyWithResponse Update a Proxy Host
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /nginx/proxy-hosts/{hostID} (the `UpdateProxyHost` operationId).
+func (c *ClientWithResponses) UpdateProxyHostWithBodyWithResponse(ctx context.Context, hostID int, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateProxyHostReply, error) {
+	rsp, err := c.UpdateProxyHostWithBody(ctx, hostID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateProxyHostReply(rsp)
+}
+
+// UpdateProxyHostWithResponse Update a Proxy Host
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /nginx/proxy-hosts/{hostID} (the `UpdateProxyHost` operationId).
+func (c *ClientWithResponses) UpdateProxyHostWithResponse(ctx context.Context, hostID int, body UpdateProxyHostJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateProxyHostReply, error) {
+	rsp, err := c.UpdateProxyHost(ctx, hostID, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateProxyHostReply(rsp)
+}
+
+// GetRedirectionHostsWithResponse Get all Redirection hosts
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /nginx/redirection-hosts (the `GetRedirectionHosts` operationId).
+func (c *ClientWithResponses) GetRedirectionHostsWithResponse(ctx context.Context, params *GetRedirectionHostsParams, reqEditors ...RequestEditorFn) (*GetRedirectionHostsReply, error) {
+	rsp, err := c.GetRedirectionHosts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetRedirectionHostsReply(rsp)
+}
+
+// GetStreamsWithResponse Get all streams
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /nginx/streams (the `GetStreams` operationId).
+func (c *ClientWithResponses) GetStreamsWithResponse(ctx context.Context, params *GetStreamsParams, reqEditors ...RequestEditorFn) (*GetStreamsReply, error) {
+	rsp, err := c.GetStreams(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetStreamsReply(rsp)
+}
+
+// RequestTokenWithBodyWithResponse Request a new access token from credentials
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tokens (the `RequestToken` operationId).
+func (c *ClientWithResponses) RequestTokenWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RequestTokenReply, error) {
+	rsp, err := c.RequestTokenWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRequestTokenReply(rsp)
+}
+
+// RequestTokenWithResponse Request a new access token from credentials
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /tokens (the `RequestToken` operationId).
+func (c *ClientWithResponses) RequestTokenWithResponse(ctx context.Context, body RequestTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestTokenReply, error) {
+	rsp, err := c.RequestToken(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRequestTokenReply(rsp)
+}
+
+// ParseGetAccessListsReply parses an HTTP response from a GetAccessListsWithResponse call
+func ParseGetAccessListsReply(rsp *http.Response) (*GetAccessListsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAccessListsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []AccessListObject
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCertificatesReply parses an HTTP response from a GetCertificatesWithResponse call
+func ParseGetCertificatesReply(rsp *http.Response) (*GetCertificatesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCertificatesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CertificateList
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateCertificateReply parses an HTTP response from a CreateCertificateWithResponse call
+func ParseCreateCertificateReply(rsp *http.Response) (*CreateCertificateReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateCertificateReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CertificateObject
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseValidateCertificatesReply parses an HTTP response from a ValidateCertificatesWithResponse call
+func ParseValidateCertificatesReply(rsp *http.Response) (*ValidateCertificatesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ValidateCertificatesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Certificate struct {
+				Cn    string `json:"cn"`
+				Dates struct {
+					From int `json:"from"`
+					To   int `json:"to"`
+				} `json:"dates"`
+				Issuer string `json:"issuer"`
+			} `json:"certificate"`
+			CertificateKey Flag `json:"certificate_key"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteCertificateReply parses an HTTP response from a DeleteCertificateWithResponse call
+func ParseDeleteCertificateReply(rsp *http.Response) (*DeleteCertificateReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteCertificateReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Flag
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUploadCertificateReply parses an HTTP response from a UploadCertificateWithResponse call
+func ParseUploadCertificateReply(rsp *http.Response) (*UploadCertificateReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UploadCertificateReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Certificate             string  `json:"certificate"`
+			CertificateKey          string  `json:"certificate_key"`
+			IntermediateCertificate *string `json:"intermediate_certificate,omitempty"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDeadHostsReply parses an HTTP response from a GetDeadHostsWithResponse call
+func ParseGetDeadHostsReply(rsp *http.Response) (*GetDeadHostsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeadHostsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeadHostList
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetProxyHostsReply parses an HTTP response from a GetProxyHostsWithResponse call
+func ParseGetProxyHostsReply(rsp *http.Response) (*GetProxyHostsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetProxyHostsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProxyHostList
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateProxyHostReply parses an HTTP response from a CreateProxyHostWithResponse call
+func ParseCreateProxyHostReply(rsp *http.Response) (*CreateProxyHostReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateProxyHostReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ProxyHostObject
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteProxyHostReply parses an HTTP response from a DeleteProxyHostWithResponse call
+func ParseDeleteProxyHostReply(rsp *http.Response) (*DeleteProxyHostReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteProxyHostReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Flag
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateProxyHostReply parses an HTTP response from a UpdateProxyHostWithResponse call
+func ParseUpdateProxyHostReply(rsp *http.Response) (*UpdateProxyHostReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateProxyHostReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ProxyHostObject
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetRedirectionHostsReply parses an HTTP response from a GetRedirectionHostsWithResponse call
+func ParseGetRedirectionHostsReply(rsp *http.Response) (*GetRedirectionHostsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetRedirectionHostsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RedirectionHostList
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetStreamsReply parses an HTTP response from a GetStreamsWithResponse call
+func ParseGetStreamsReply(rsp *http.Response) (*GetStreamsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetStreamsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest StreamList
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRequestTokenReply parses an HTTP response from a RequestTokenWithResponse call
+func ParseRequestTokenReply(rsp *http.Response) (*RequestTokenReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RequestTokenReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RequestToken200JSONResponseBody
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
 }
