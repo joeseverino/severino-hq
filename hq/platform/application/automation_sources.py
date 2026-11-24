@@ -501,7 +501,8 @@ def _row(
     """One playbook's row by its title: ``procedure`` as adopted
     (``adopted``) or as the scan brings it, None for one HQ can't adopt,
     which is its ``title`` alone. Its adopted title links its command's
-    page; one the scan brings has no page yet."""
+    page; one the scan brings has no page yet. A change HQ can't adopt says
+    why beneath its title."""
 
     actions: list[PageAction | None] = []
     if change is not None and review is not None:
@@ -514,13 +515,17 @@ def _row(
     state = Cell(status=change_mark(kind)) if change_mark(kind) else Cell()
     shown = tuple(filter(None, actions))
     data = {"change": kind} if kind else {}
+    # Each reason HQ can't adopt it, under its name, where every width shows them.
+    refused = tuple(Cell(problem) for problem in change.problems) if change is not None else ()
     if procedure is None:
-        return title, Row((Cell(title), Cell(), Cell(), Cell(), state), actions=shown, data=data)
+        # HQ kept nothing of it but its title and its problems, so they stand in for its facts.
+        empty = Cell(blank=True)
+        return title, Row((Cell(title, lines=refused), empty, empty, empty, state), actions=shown, data=data)
     url = command_url(capability_name(procedure.id)) if adopted else ""
     hosts = tuple(Cell.of(entity_link("machine", host)) for host in procedure.hosts)
     return procedure.title, Row(
         (
-            Cell(procedure.title, url),
+            Cell(procedure.title, url, lines=refused),
             Cell(procedure.effect.label),
             Cell(lines=hosts) if hosts else Cell(anywhere(procedure.target_kinds)),
             Cell(access_words(procedure.privilege)),

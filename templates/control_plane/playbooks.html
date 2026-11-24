@@ -8,9 +8,11 @@ said under the title (`_playbooks_read.html`), and what to do about the
 whole commit is the page's actions, so the body holds the table and, above
 it while no playbook worker reports to take a scan or a run, the problem that
 says so with how to set one up (`problems`,
-`automation_findings.worker_problems`). Every name on it is the catalog's or
+`automation_findings.worker_problems`), and why HQ can't adopt the waiting
+commit at all (`_unadoptable.html`). Every name on it is the catalog's or
 the scan's.
 {% endcomment %}
 {% include "partials/_problems.html" with problems=problems %}
+{% include "control_plane/_unadoptable.html" with scan=sources.pending only %}
 {% data_table rows %}
 {% endblock %}

@@ -1,0 +1,10 @@
+{% comment %}
+Why HQ will adopt nothing of a scanned commit, whatever its playbooks are
+(`scan`, an `automation_sources.Reviewed`, its `unplaced`), above the rows
+that say each playbook's own reasons. The Playbooks page and the audit entry
+of the scan's read both draw it.
+{% endcomment %}{% if scan.unplaced %}
+  {% notice tone="error" %}
+    {% list kind="prose" %}{% for reason in scan.unplaced %}<li>{{ reason }}</li>{% endfor %}{% endlist %}
+  {% title %}HQ can't adopt this commit{% endnotice %}
+{% endif %}
