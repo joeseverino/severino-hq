@@ -89,10 +89,10 @@
 [aria-sort="ascending"] .sort-indicator { background: var(--accent); clip-path: polygon(50% 6.25%, 85% 34.4%, 57% 34.4%, 57% 93.75%, 43% 93.75%, 43% 34.4%, 15% 34.4%); }
 [aria-sort="descending"] .sort-indicator { background: var(--accent); clip-path: polygon(50% 93.75%, 85% 65.6%, 57% 65.6%, 57% 6.25%, 43% 6.25%, 43% 65.6%, 15% 65.6%); }
 /* The table's last row ends it with no rule, and a row joined by its open line has none where that line is drawn (as below, and at each width a column leaves); a section's last row is ruled off from the next section's first. */
-.data-table > tbody:last-of-type > tr:is(:last-child, :has(+ .row-detail:last-child)) > *,
+.data-table > tbody:last-of-type > tr:nth-last-child(1 of :not(.row-detail)) > *,
 .data-table > tbody > tr.is-expanded:has(+ .row-detail > td > :not(.row-columns), + .row-detail > td > .row-columns > :not([data-drop]:not([data-holds]))) > * { border-bottom: 0; }
 /* A heading row that opens a group of rows (a tbody per group), so grouped rows share one set of column widths. */
-.data-table .row-group > th { padding-top: var(--space-6); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); font-weight: 650; text-align: left; }
+.data-table .row-group > th { background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); font-weight: 650; text-align: left; }
 /* A row or group a reader should weigh first (a row's `data-attention`, row_group attention=) is washed in the caution tone, and a group's words beside its name, which say why, are its ink. */
 .data-table tr[data-attention] > * { background: var(--tone-wash); }
 .data-table .row-group[data-attention] .count { color: var(--tone-ink); }
@@ -191,9 +191,10 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .switch a { display: inline-flex; align-items: center; gap: var(--space-2); border-radius: var(--radius-pill); color: inherit; text-decoration: none; }
 .switch .scope-chip > [aria-hidden] { color: var(--accent); }
 .switch p { margin: var(--space-3) 0 0; }
-/* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand side by side on one line, so their column is as wide as they are and the words beside them wrap first. They end at the row's end, in every row whatever its set, on the row's first line where the table has headings (below where it has none). A control stands taller than a line of words by twice `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words. */
+/* A row's controls (`{% row_actions %}`, or a cell of a column of kind `control`) stand side by side on one line, so their column is as wide as they are and the words beside them wrap first. They end at the row's end, in every row whatever its set, centered on the row's first line. A control stands taller than a line of words by twice the row's `--control-rise`, which its cell takes out of its padding, so a row holding one is as tall as a row of words. */
+.data-table > tbody > tr { --control-rise: max(0px, (var(--control-compact) - 1lh) / 2); }
 .data-table > tbody > tr > [data-kind="control"]:not(.select-column) {
-  --control-rise: max(0px, (var(--control-compact) - 1lh) / 2); white-space: nowrap; text-align: end;
+  white-space: nowrap; text-align: end;
   & > :is(.btn, form) { vertical-align: top; }
   & > * + * { margin-inline-start: var(--space-4); }
   /* What a control cell says beside its controls wraps as words do, on a line of its own: a note, or the sentence linked to the setup a change needs (`_write_gap.html`), which is a link and no control's label. */
@@ -204,11 +205,15 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   /* An ask's cell keeps the line its note stands on under its controls (below). */
   &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }
 }
-/* A control never stands on its frame's edge: the first row of a table with no headings keeps its whole pad above it, its words coming down by the control's rise so they stay level, and a table's last row keeps its whole pad below, or an ask's the line its note stands on. */
-.data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child > [data-kind="control"]:has(> :is(.btn, form)) { padding-block-start: var(--row-pad); }
-.data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child:has(> [data-kind="control"] > :is(.btn, form)) > :not([data-kind="control"]) { --row-content-start: calc(var(--row-pad) + max(0px, (var(--control-compact) - 1lh) / 2)); padding-block-start: var(--row-content-start); }
-.data-table > tbody:last-of-type > tr:last-child > [data-kind="control"]:has(> :is(.btn, form)):not(:has(> [data-ask])) { padding-block-end: var(--row-pad); }
-.data-table:not(:has(> thead)) > tbody > tr > [data-kind="control"] { align-content: center; } /* A table with no headings is a list of rows that each say one thing (the queue's items): no column's first line to keep level with, so a row's controls stand at the middle of the words they act on. */
+/* A control never stands on its frame's edge: the first row of a table with no headings keeps its whole pad above it, and a table's last row shown keeps its whole pad below, or an ask's the line its note stands on. The row's words move off that edge by the control's rise too, so they stay level with it and the frame's edges hold the same space. */
+.data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child:has(> [data-kind="control"] > :is(.btn, form)) {
+  & > [data-kind="control"]:has(> :is(.btn, form)) { padding-block-start: var(--row-pad); }
+  & > :not([data-kind="control"]) { --row-content-start: calc(var(--row-pad) + var(--control-rise)); padding-block-start: var(--row-content-start); }
+}
+.data-table > tbody:last-of-type > tr:nth-last-child(1 of :not(.row-detail)):has(> [data-kind="control"] > :is(.btn, form)) {
+  & > [data-kind="control"]:has(> :is(.btn, form)):not(:has(> [data-ask])) { padding-block-end: var(--row-pad); }
+  & > :not([data-kind="control"]) { padding-block-end: calc(var(--row-pad) + var(--control-rise)); }
+}
 /* The tick-boxes' column is their box and the room beside it, no row control, so each box stands centered under the heading's; its width the table's `--row-lead`, in every engine, whose own margins around a checkbox differ. */
 .data-table:has(> * > tr > .select-column) { --row-lead: calc(var(--tick-box) + 2 * var(--space-4)); }
 .data-table > * > tr > .select-column { inline-size: var(--row-lead); text-align: center; padding-inline: 0; }
@@ -387,10 +392,10 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
     grid-template-columns: var(--lead,) [name] minmax(auto, 1fr) repeat(var(--columns), auto);
     & > thead > tr > [data-kind="control"] { padding-inline: 0; }
     & > tbody > tr:has(> [data-kind="control"] :is(a, button, [role="button"]):not([hidden])) {
-      grid-template-rows: repeat(4, auto);
+      --control-rise: 0px; grid-template-rows: repeat(4, auto);
       & > * { grid-row: 1 / -2; border-bottom-width: 0; }
       & > .select-column { grid-row: 1 / -1; border-bottom-width: 1px; }
-      & > [data-kind="control"]:not(.select-column, [data-field]) { --control-rise: 0px; grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; display: flex; flex-wrap: wrap; align-content: start; gap: var(--space-3) var(--space-4); & > * + * { margin-inline-start: 0; } }
+      & > [data-kind="control"]:not(.select-column, [data-field]) { grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; display: flex; flex-wrap: wrap; align-content: start; gap: var(--space-3) var(--space-4); & > * + * { margin-inline-start: 0; } }
       /* Where a row's fields stand apart (above), they stand between its words and its controls. */
       @container table-region (width < 36rem) {
         &:has(> [data-field]) {
@@ -412,11 +417,13 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* What a row shows only on its open line is never drawn on the row. */
 .data-table [data-kind] :is(.row-more, .line-rest) { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
-.data-table > tbody > tr > .row-gutter { position: relative; }
+.data-table > tbody > tr > .row-gutter { position: relative; --row-line: 1lh; }
 /* A table says a row of it can open (`data-rows-can-open`, table_layout), since a row's open line is drawn only as it opens unless it holds a block the server moved there. */
 .data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp, .row-gist)) { --row-inset: var(--row-gutter); }
 .data-table > * > tr > .row-gutter { padding-inline-start: var(--row-inset, var(--cell-pad)); }
-.data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--row-edge); inset-block-start: calc(var(--row-content-start, var(--row-pad)) - var(--space-1)); }
+/* The toggle is centered on its cell's first line: the line's height is taken where the cell sets its words (`--row-line`, registered so it computes there), and the toggle's own half height is taken back off. */
+@property --row-line { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--row-edge); inset-block-start: calc(var(--row-content-start, var(--row-pad)) + var(--row-line) / 2); translate: 0 -50%; }
 /* A column of a row's controls (`actions-col`, a public class) holds them on one line. */
 .actions-col { white-space: nowrap; }
 /* The line the server draws under a row (`table_tags._detail_row`), shown while the row is open: what the row moves there, then an entry for each cell that holds something back, under its column's name. Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or on the open line (`open`). */
