@@ -6,6 +6,7 @@ the host, never taken from a request or a dependency, since it is the only text
 an adapter answers with (``RefusalTextTests``).
 """
 
+from collections.abc import Callable, Iterable
 from typing import ClassVar
 
 from .refusal_codes import Code
@@ -33,6 +34,15 @@ class RecordNotFound(HostRefusal, LookupError):
     """The record the request names does not exist, or the caller cannot see it."""
 
     code = Code.NOT_FOUND
+
+
+def one_of[T](items: Iterable[T], matches: Callable[[T], bool], missing: Sentence) -> T:
+    """The first of a read's ``items`` that ``matches``, or the refusal that none does."""
+
+    for item in items:
+        if matches(item):
+            return item
+    raise RecordNotFound(missing)
 
 
 class RecordConflict(HostRefusal):

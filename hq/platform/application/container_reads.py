@@ -12,7 +12,7 @@ from typing import Any
 
 from .integration_specs import ListRead, ResourceSpec, typed_keys
 from .projection import iso, page_of, projection_scope
-from .record_errors import RecordNotFound
+from .record_errors import one_of
 from .resources import BoundedQuery
 from .security import Capability
 lazy from .app_updates import app_updates
@@ -179,10 +179,12 @@ def _one(found: Callable[[], list[Any]], address: str, serialize: Callable[[Any]
     """The item addressed ``machine:container``: a container, or its plan."""
 
     with projection_scope():
-        item = next((each for each in found() if getattr(each, "container", each).address == address), None)
-        if item is None:
-            raise RecordNotFound("No container answers to that address.")
-        return serialize(item)
+        addressed = one_of(
+            found(),
+            lambda each: getattr(each, "container", each).address == address,
+            "No container answers to that address.",
+        )
+        return serialize(addressed)
 
 
 def list_containers(*, limit: int = 50) -> dict[str, Any]:
@@ -272,10 +274,9 @@ def list_app_updates(*, limit: int = 50) -> dict[str, Any]:
 
 def get_app_update(key: str) -> dict[str, Any]:
     with projection_scope():
-        found = next((update for update in app_updates() if _key(update) == key), None)
-        if found is None:
-            raise RecordNotFound("No open app update answers to that key.")
-        return serialize_app_update(found)
+        return serialize_app_update(
+            one_of(app_updates(), lambda update: _key(update) == key, "No open app update answers to that key.")
+        )
 
 
 def resources() -> tuple[ResourceSpec, ...]:
