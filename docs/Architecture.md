@@ -1077,13 +1077,15 @@ action. It claims only declared actions it has a handler for, and refuses a
 locked action with the registry's reason.
 
 Vendor responses decode into types generated from each vendor's OpenAPI
-description (`controller/api/vendor/`). AdGuard, NPM and Cloudflare are
-called through clients generated from it too, so a path or query the
+description (`controller/api/vendor/`). AdGuard, NPM, Cloudflare and GitHub
+are called through clients generated from it too, so a path or query the
 description does not hold cannot be written. Each client sends through
 `vendorDoer`, which hands every request to the registry's transport with the
-vendor's own rules around it (Cloudflare's refusals and breaker), and reads a
-sweep's GETs once. A generated call goes through the vendor's
-`ClientWithResponses`, which reads and closes the answer's body. Bridge messages decode into types generated from
+vendor's own rules around it (Cloudflare's refusals and breaker, GitHub's
+allowance fuse), and reads a sweep's GETs once. A generated call goes through
+the vendor's `ClientWithResponses`, which reads and closes the answer's body.
+GitHub's GraphQL queries are outside its REST description and pass the same
+fuse by hand. Bridge messages decode into types generated from
 `controller/api/hq-controller.openapi.json`.
 
 **The bridge contract is emitted, and each fact in it has one owner.**

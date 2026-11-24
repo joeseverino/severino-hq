@@ -3,11 +3,9 @@ package providers
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -232,7 +230,7 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 		if failures[i] = ctx.Err(); failures[i] != nil {
 			return
 		}
-		record, err := (&githubRepository{r: r, c: c, name: names[i]}).read(ctx)
+		record, err := r.githubRepository(ctx, c, names[i]).read(ctx)
 		record.Fingerprint, record.ReadAt = fingerprints[names[i]], r.Now().UTC().Format(time.RFC3339)
 		records[i], failures[i] = record, err
 	}
@@ -292,19 +290,25 @@ type githubCarried struct {
 	Carried       bool   `json:"carried"`
 }
 
-// githubRepository is one repository being read.
+// githubRepository is one repository being read, through a client under a
+// token for it alone that holds githubRead.
 type githubRepository struct {
-	r    *Registry
-	c    githubConnection
-	name string
+	r           *Registry
+	c           githubConnection
+	name        string
+	owner, repo string
+	api         *githubapi.ClientWithResponses
 }
 
-func (g *githubRepository) raw(ctx context.Context, path string) (json.RawMessage, error) {
-	return g.r.githubCall(ctx, g.c, "GET", "/repos/"+g.name+path, []string{g.name}, githubRead, nil)
-}
-
-func repoGet[T any](ctx context.Context, g *githubRepository, path string) (T, error) {
-	return githubGet[T](ctx, g.r, g.c, "/repos/"+g.name+path, []string{g.name}, githubRead)
+func (r *Registry) githubRepository(ctx context.Context, c githubConnection, name string) *githubRepository {
+	g := &githubRepository{r: r, c: c, name: name}
+	var err error
+	if g.owner, g.repo, err = githubRepositoryName(name); err != nil {
+		g.api = r.githubClient("", false, err)
+	} else {
+		g.api = r.githubAs(ctx, c, []string{name}, githubRead)
+	}
+	return g
 }
 
 // part reads one refusable part: what it read, or ok false with the refusal reported.
@@ -333,22 +337,17 @@ func asRepositoryRefusal(err error) error {
 }
 
 func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, error) {
-	raw, err := g.raw(ctx, "")
+	reply, err := g.api.ReposGetWithResponse(ctx, g.owner, g.repo)
 	if err != nil {
 		return GitHubRepositoryRecord{}, err
 	}
-	repo, err := decodeAnswer[githubapi.FullRepository](raw, "GitHub repository")
-	if err != nil {
-		return GitHubRepositoryRecord{}, err
-	}
+	repo := deref(reply.JSON200)
 	branch := orDefault(repo.DefaultBranch, "main")
-	commit, err := repoGet[githubapi.Commit](ctx, g, "/commits/"+url.PathEscape(branch))
+	commit, err := json200(g.api.ReposGetCommitWithResponse(ctx, g.owner, g.repo, branch))
 	if err != nil {
 		return GitHubRepositoryRecord{}, err
 	}
-	runs, err := repoGet[struct {
-		WorkflowRuns []githubapi.WorkflowRun `json:"workflow_runs"`
-	}](ctx, g, "/actions/runs?per_page="+strconv.Itoa(githubRunsPage))
+	runs, err := json200(g.api.ActionsListWorkflowRunsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListWorkflowRunsForRepoParams{PerPage: new(githubRunsPage)}))
 	if err != nil {
 		return GitHubRepositoryRecord{}, err
 	}
@@ -363,7 +362,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if record.Checks, err = g.checks(ctx, commit.Sha, githubs); err != nil {
 		return record, err
 	}
-	pulls, err := repoGet[[]githubapi.PullRequestSimple](ctx, g, "/pulls?state=open&per_page="+strconv.Itoa(githubPullsPage))
+	pulls, err := json200(g.api.PullsListWithResponse(ctx, g.owner, g.repo, &githubapi.PullsListParams{State: new(githubapi.PullsListParamsStateOpen), PerPage: new(githubPullsPage)}))
 	if err != nil {
 		return record, err
 	}
@@ -371,9 +370,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests, githubs); err != nil {
 		return record, err
 	}
-	workflows, err := repoGet[struct {
-		Workflows []githubapi.Workflow `json:"workflows"`
-	}](ctx, g, "/actions/workflows?per_page="+strconv.Itoa(githubListPage))
+	workflows, err := json200(g.api.ActionsListRepoWorkflowsWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListRepoWorkflowsParams{PerPage: new(githubListPage)}))
 	if err != nil {
 		return record, err
 	}
@@ -381,7 +378,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if record.Waiting, err = g.waiting(ctx, runs.WorkflowRuns); err != nil {
 		return record, err
 	}
-	releases, err := repoGet[[]githubapi.Release](ctx, g, "/releases?per_page=1")
+	releases, err := json200(g.api.ReposListReleasesWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListReleasesParams{PerPage: new(1)}))
 	if err != nil {
 		return record, err
 	}
@@ -392,15 +389,13 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		return record, err
 	}
 	record.Alerts, record.DependabotAlerts = g.alerts(ctx)
-	artifacts, err := repoGet[struct {
-		Artifacts []githubapi.Artifact `json:"artifacts"`
-	}](ctx, g, "/actions/artifacts?per_page="+strconv.Itoa(githubRunsPage))
+	artifacts, err := json200(g.api.ActionsListArtifactsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListArtifactsForRepoParams{PerPage: new(githubRunsPage)}))
 	if err != nil {
 		return record, err
 	}
 	record.Artifacts = liveArtifacts(artifacts.Artifacts)
 	if rules, ok := part(ctx, g, runtime.PartBranchRules, func() (GitHubRules, error) {
-		found, err := repoGet[[]githubapi.RepositoryRuleDetailed](ctx, g, "/rules/branches/"+url.PathEscape(branch))
+		found, err := json200(g.api.ReposGetBranchRulesWithResponse(ctx, g.owner, g.repo, branch))
 		if err != nil {
 			return GitHubRules{}, err
 		}
@@ -409,9 +404,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		record.Rules = &rules
 	}
 	record.Environments, _ = part(ctx, g, runtime.PartEnvironments, func() ([]GitHubEnvironment, error) {
-		found, err := repoGet[struct {
-			Environments []githubapi.Environment `json:"environments"`
-		}](ctx, g, "/environments")
+		found, err := json200(g.api.ReposGetAllEnvironmentsWithResponse(ctx, g.owner, g.repo))
 		if err != nil {
 			return nil, err
 		}
@@ -421,9 +414,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		record.Environments = []GitHubEnvironment{}
 	}
 	record.Runners, _ = part(ctx, g, runtime.PartRunners, func() ([]GitHubRunner, error) {
-		found, err := repoGet[struct {
-			Runners []githubapi.Runner `json:"runners"`
-		}](ctx, g, "/actions/runners")
+		found, err := json200(g.api.ActionsListSelfHostedRunnersForRepoWithResponse(ctx, g.owner, g.repo))
 		return githubRunners(found.Runners), err
 	})
 	if record.Runners == nil {
@@ -432,13 +423,11 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if record.Images, err = g.images(ctx); err != nil {
 		return record, err
 	}
-	if access, ok := part(ctx, g, runtime.PartAccess, func() (GitHubAccess, error) { return g.access(ctx, repo, raw) }); ok {
+	if access, ok := part(ctx, g, runtime.PartAccess, func() (GitHubAccess, error) { return g.access(ctx, repo, reply.Body) }); ok {
 		record.Access = &access
 	}
 	record.Variables, _ = part(ctx, g, runtime.PartVariables, func() ([]string, error) {
-		found, err := repoGet[struct {
-			Variables []githubapi.ActionsVariable `json:"variables"`
-		}](ctx, g, "/actions/variables?per_page="+strconv.Itoa(githubListPage))
+		found, err := json200(g.api.ActionsListRepoVariablesWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListRepoVariablesParams{PerPage: new(githubListPage)}))
 		names := []string{}
 		for _, variable := range found.Variables {
 			names = append(names, variable.Name)
@@ -484,9 +473,7 @@ func (g *githubRepository) checks(ctx context.Context, sha string, githubs map[i
 	if sha == "" {
 		return summarizeChecks(nil, githubs), nil
 	}
-	found, err := repoGet[struct {
-		CheckRuns []githubapi.CheckRun `json:"check_runs"`
-	}](ctx, g, "/commits/"+sha+"/check-runs?per_page="+strconv.Itoa(githubListPage))
+	found, err := json200(g.api.ChecksListForRefWithResponse(ctx, g.owner, g.repo, sha, &githubapi.ChecksListForRefParams{PerPage: new(githubListPage)}))
 	return summarizeChecks(found.CheckRuns, githubs), err
 }
 
@@ -560,7 +547,7 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, g
 			return nil, err
 		}
 		pulls[i].Checks = &checks
-		files, err := repoGet[[]githubapi.DiffEntry](ctx, g, "/pulls/"+strconv.Itoa(pulls[i].Number)+"/files?per_page="+strconv.Itoa(githubPullFilesPage))
+		files, err := json200(g.api.PullsListFilesWithResponse(ctx, g.owner, g.repo, strconv.Itoa(pulls[i].Number), &githubapi.PullsListFilesParams{PerPage: new(githubPullFilesPage)}))
 		if err != nil {
 			return nil, err
 		}
@@ -636,7 +623,7 @@ func (g *githubRepository) waiting(ctx context.Context, runs []githubapi.Workflo
 		if run.Status != "waiting" {
 			continue
 		}
-		pending, err := repoGet[[]githubapi.PendingDeployment](ctx, g, "/actions/runs/"+strconv.Itoa(run.ID)+"/pending_deployments")
+		pending, err := json200(g.api.ActionsGetPendingDeploymentsForRunWithResponse(ctx, g.owner, g.repo, strconv.Itoa(run.ID)))
 		if err != nil {
 			return nil, err
 		}
@@ -653,7 +640,7 @@ func (g *githubRepository) waiting(ctx context.Context, runs []githubapi.Workflo
 
 // deployments is the newest deployment to each environment, with its latest status.
 func (g *githubRepository) deployments(ctx context.Context) ([]GitHubDeployment, error) {
-	listed, err := repoGet[[]githubapi.Deployment](ctx, g, "/deployments?per_page="+strconv.Itoa(githubDeploymentsPage))
+	listed, err := json200(g.api.ReposListDeploymentsWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListDeploymentsParams{PerPage: new(githubDeploymentsPage)}))
 	if err != nil {
 		return nil, err
 	}
@@ -664,7 +651,7 @@ func (g *githubRepository) deployments(ctx context.Context) ([]GitHubDeployment,
 			continue
 		}
 		seen[deployment.Environment] = true
-		statuses, err := repoGet[[]githubapi.DeploymentStatus](ctx, g, "/deployments/"+strconv.Itoa(deployment.ID)+"/statuses?per_page=1")
+		statuses, err := json200(g.api.ReposListDeploymentStatusesWithResponse(ctx, g.owner, g.repo, strconv.Itoa(deployment.ID), &githubapi.ReposListDeploymentStatusesParams{PerPage: new(1)}))
 		if err != nil {
 			return nil, err
 		}
@@ -694,7 +681,7 @@ func (g *githubRepository) verifications(ctx context.Context, link string) ([]Gi
 	if !found {
 		return verified, nil
 	}
-	answer, err := repoGet[githubapi.Job](ctx, g, "/actions/jobs/"+job)
+	answer, err := json200(g.api.ActionsGetJobForWorkflowRunWithResponse(ctx, g.owner, g.repo, job))
 	if err != nil {
 		return nil, err
 	}

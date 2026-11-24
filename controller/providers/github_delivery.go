@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -172,36 +171,25 @@ func (e extensionDelivery) says() string {
 
 func (e extensionDelivery) pending() bool { return e.behind() || e.unreported != nil }
 
-func githubRepoPath(name string) (string, error) {
-	owner, repo, err := githubRepositoryName(name)
-	if err != nil {
-		return "", err
-	}
-	return "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo), nil
-}
-
 // workflowRuns is a workflow's runs on a branch, by its file name.
-func (r *Registry) workflowRuns(ctx context.Context, c githubConnection, repository, workflow string, query url.Values, scope []string) ([]githubapi.WorkflowRun, error) {
-	base, err := githubRepoPath(repository)
+func (r *Registry) workflowRuns(ctx context.Context, c githubConnection, repository, workflow string, query githubapi.ActionsListWorkflowRunsParams, scope []string) ([]githubapi.WorkflowRun, error) {
+	owner, repo, err := githubRepositoryName(repository)
 	if err != nil {
 		return nil, err
 	}
-	answer, err := githubGet[struct {
-		WorkflowRuns []githubapi.WorkflowRun `json:"workflow_runs"`
-	}](ctx, r, c, base+"/actions/workflows/"+url.PathEscape(path.Base(workflow))+"/runs?"+query.Encode(), scope, githubActionsRead)
+	answer, err := json200(r.githubAs(ctx, c, scope, githubActionsRead).ActionsListWorkflowRunsWithResponse(ctx, owner, repo, path.Base(workflow), &query))
 	return answer.WorkflowRuns, err
 }
 
 // checkRun is HQ's latest check run on a commit, or nil.
 func (r *Registry) checkRun(ctx context.Context, c githubConnection, repository, sha string) (*githubapi.CheckRun, error) {
-	base, err := githubRepoPath(repository)
+	owner, repo, err := githubRepositoryName(repository)
 	if err != nil {
 		return nil, err
 	}
-	query := url.Values{"check_name": {githubCheckName}, "app_id": {c.appID}, "filter": {"latest"}}
-	answer, err := githubGet[struct {
-		CheckRuns []githubapi.CheckRun `json:"check_runs"`
-	}](ctx, r, c, base+"/commits/"+url.PathEscape(sha)+"/check-runs?"+query.Encode(), []string{repository}, githubChecksRead)
+	app, _ := strconv.Atoi(c.appID)
+	query := githubapi.ChecksListForRefParams{CheckName: new(githubCheckName), AppID: new(app), Filter: new(githubapi.ChecksListForRefParamsFilterLatest)}
+	answer, err := json200(r.githubAs(ctx, c, []string{repository}, githubChecksRead).ChecksListForRefWithResponse(ctx, owner, repo, sha, &query))
 	if err != nil || len(answer.CheckRuns) == 0 {
 		return nil, err
 	}
@@ -264,7 +252,7 @@ func (r *Registry) delivery(ctx context.Context, c githubConnection, spec GitHub
 	for _, extension := range composed.Extensions {
 		found := extensionDelivery{plugin: extension.Plugin, repository: extension.SourceRepository, workflow: extension.SourceWorkflow, running: extension.SourceCommit}
 		admissions, err := r.workflowRuns(ctx, c, found.repository, found.workflow,
-			url.Values{"branch": {githubMainBranch}, "status": {"success"}, "per_page": {strconv.Itoa(githubAdmissionPage)}}, every)
+			githubapi.ActionsListWorkflowRunsParams{Branch: new(githubMainBranch), Status: new(githubapi.ActionsListWorkflowRunsParamsStatusSuccess), PerPage: new(githubAdmissionPage)}, every)
 		if err != nil {
 			return nil, err
 		}
@@ -300,7 +288,7 @@ func (r *Registry) pipelineRuns(ctx context.Context, c githubConnection, spec Gi
 	found := []githubapi.WorkflowRun{}
 	for _, workflow := range []string{spec.Workflow, githubDeploy} {
 		runs, err := r.workflowRuns(ctx, c, spec.Repository, workflow,
-			url.Values{"branch": {spec.Branch}, "per_page": {strconv.Itoa(githubPipelinePage)}}, []string{spec.Repository})
+			githubapi.ActionsListWorkflowRunsParams{Branch: new(spec.Branch), PerPage: new(githubPipelinePage)}, []string{spec.Repository})
 		if err != nil {
 			return nil, err
 		}
@@ -405,7 +393,7 @@ func (e extensionDelivery) sha() string {
 
 // upsertCheck updates HQ's check run on the commit, or creates it.
 func (r *Registry) upsertCheck(ctx context.Context, c githubConnection, extension extensionDelivery, report githubCheckReport) error {
-	base, err := githubRepoPath(extension.repository)
+	owner, repo, err := githubRepositoryName(extension.repository)
 	if err != nil {
 		return err
 	}
@@ -413,30 +401,31 @@ func (r *Registry) upsertCheck(ctx context.Context, c githubConnection, extensio
 	if err != nil {
 		return err
 	}
-	scope := []string{extension.repository}
+	client := r.githubAs(ctx, c, []string{extension.repository}, githubChecksWrite)
 	if existing != nil && existing.ID != 0 {
-		body := githubapi.ChecksUpdateJSONBody{Status: githubapi.ChecksUpdateJSONBodyStatus(report.Status), Conclusion: githubapi.ChecksUpdateJSONBodyConclusion(report.Conclusion),
+		body := githubapi.ChecksUpdateJSONRequestBody{Status: githubapi.ChecksUpdateJSONBodyStatus(report.Status), Conclusion: githubapi.ChecksUpdateJSONBodyConclusion(report.Conclusion),
 			DetailsURL: report.DetailsURL, ExternalID: report.ExternalID}
 		body.Output.Title, body.Output.Summary = report.Title, report.Summary
-		_, err = r.githubCall(ctx, c, "PATCH", base+"/check-runs/"+strconv.Itoa(existing.ID), scope, githubChecksWrite, body)
+		_, err = client.ChecksUpdateWithResponse(ctx, owner, repo, strconv.Itoa(existing.ID), body)
 		return err
 	}
-	body := githubapi.ChecksCreateJSONBody{Name: githubCheckName, HeadSha: extension.sha(), Status: githubapi.ChecksCreateJSONBodyStatus(report.Status),
+	body := githubapi.ChecksCreateJSONRequestBody{Name: githubCheckName, HeadSha: extension.sha(), Status: githubapi.ChecksCreateJSONBodyStatus(report.Status),
 		Conclusion: githubapi.ChecksCreateJSONBodyConclusion(report.Conclusion), DetailsURL: report.DetailsURL, ExternalID: report.ExternalID}
 	body.Output.Title, body.Output.Summary = report.Title, report.Summary
-	_, err = r.githubCall(ctx, c, "POST", base+"/check-runs", scope, githubChecksWrite, body)
+	_, err = client.ChecksCreateWithResponse(ctx, owner, repo, body)
 	return err
 }
 
 // announce comments once on the merged pull request the first time its
 // commit is live; the marker says a comment was already made.
 func (r *Registry) announce(ctx context.Context, c githubConnection, extension extensionDelivery, image string) error {
-	base, err := githubRepoPath(extension.repository)
+	owner, repo, err := githubRepositoryName(extension.repository)
 	if err != nil {
 		return err
 	}
 	scope := []string{extension.repository}
-	pulls, err := githubGet[[]githubapi.PullRequestSimple](ctx, r, c, base+"/commits/"+url.PathEscape(extension.running)+"/pulls", scope, githubPullsRead)
+	read := r.githubAs(ctx, c, scope, githubPullsRead)
+	pulls, err := json200(read.ReposListPullRequestsAssociatedWithCommitWithResponse(ctx, owner, repo, extension.running))
 	if err != nil {
 		return err
 	}
@@ -450,9 +439,9 @@ func (r *Registry) announce(ctx context.Context, c githubConnection, extension e
 	if merged == nil {
 		return nil
 	}
-	comments := base + "/issues/" + strconv.Itoa(merged.Number) + "/comments"
+	number := strconv.Itoa(merged.Number)
 	marker := fmt.Sprintf(githubDeliveryMark, extension.running)
-	existing, err := githubGet[[]githubapi.IssueComment](ctx, r, c, comments+"?per_page="+strconv.Itoa(githubListPage), scope, githubPullsRead)
+	existing, err := json200(read.IssuesListCommentsWithResponse(ctx, owner, repo, number, &githubapi.IssuesListCommentsParams{PerPage: new(githubListPage)}))
 	if err != nil {
 		return err
 	}
@@ -461,8 +450,8 @@ func (r *Registry) announce(ctx context.Context, c githubConnection, extension e
 			return nil
 		}
 	}
-	body := githubapi.IssuesCreateCommentJSONBody{Body: marker + "\nLive in production: `" + short(extension.running, 12) + "` in `" + orDefault(image, githubComposedImage) + "`."}
-	_, err = r.githubCall(ctx, c, "POST", comments, scope, githubPullsWrite, body)
+	body := githubapi.IssuesCreateCommentJSONRequestBody{Body: marker + "\nLive in production: `" + short(extension.running, 12) + "` in `" + orDefault(image, githubComposedImage) + "`."}
+	_, err = r.githubAs(ctx, c, scope, githubPullsWrite).IssuesCreateCommentWithResponse(ctx, owner, repo, number, body)
 	return err
 }
 

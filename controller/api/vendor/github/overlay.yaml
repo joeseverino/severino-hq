@@ -33,6 +33,10 @@ actions:
     remove: true
   - target: $.components.schemas['dependabot-alert'].properties.dependency.properties.relationship
     remove: true
+  # The advisories query's direction would generate the bare names Asc and Desc.
+  - target: $.paths['/repos/{owner}/{repo}/security-advisories'].get.parameters[?(@.name == 'direction')].schema
+    update:
+      x-enum-varnames: [AdvisoriesAscending, AdvisoriesDescending]
   # Keep enum symbols stable when trimming removes unrelated collisions.
   - target: $.components.schemas.workflow.properties.state
     update:

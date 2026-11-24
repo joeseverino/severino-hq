@@ -4,7 +4,13 @@
 package githubapi
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/oapi-codegen/runtime"
 )
@@ -32,19 +38,19 @@ func (e ActionsDefaultWorkflowPermissions) Valid() bool {
 
 // Defines values for AllowedActions.
 const (
-	All       AllowedActions = "all"
-	LocalOnly AllowedActions = "local_only"
-	Selected  AllowedActions = "selected"
+	AllowedActionsAll       AllowedActions = "all"
+	AllowedActionsLocalOnly AllowedActions = "local_only"
+	AllowedActionsSelected  AllowedActions = "selected"
 )
 
 // Valid indicates whether the value is a known member of the AllowedActions enum.
 func (e AllowedActions) Valid() bool {
 	switch e {
-	case All:
+	case AllowedActionsAll:
 		return true
-	case LocalOnly:
+	case AllowedActionsLocalOnly:
 		return true
-	case Selected:
+	case AllowedActionsSelected:
 		return true
 	default:
 		return false
@@ -744,6 +750,60 @@ func (e WorkflowState) Valid() bool {
 	}
 }
 
+// Defines values for ActionsListWorkflowRunsParamsStatus.
+const (
+	ActionsListWorkflowRunsParamsStatusActionRequired ActionsListWorkflowRunsParamsStatus = "action_required"
+	ActionsListWorkflowRunsParamsStatusCancelled      ActionsListWorkflowRunsParamsStatus = "cancelled"
+	ActionsListWorkflowRunsParamsStatusCompleted      ActionsListWorkflowRunsParamsStatus = "completed"
+	ActionsListWorkflowRunsParamsStatusFailure        ActionsListWorkflowRunsParamsStatus = "failure"
+	ActionsListWorkflowRunsParamsStatusInProgress     ActionsListWorkflowRunsParamsStatus = "in_progress"
+	ActionsListWorkflowRunsParamsStatusNeutral        ActionsListWorkflowRunsParamsStatus = "neutral"
+	ActionsListWorkflowRunsParamsStatusPending        ActionsListWorkflowRunsParamsStatus = "pending"
+	ActionsListWorkflowRunsParamsStatusQueued         ActionsListWorkflowRunsParamsStatus = "queued"
+	ActionsListWorkflowRunsParamsStatusRequested      ActionsListWorkflowRunsParamsStatus = "requested"
+	ActionsListWorkflowRunsParamsStatusSkipped        ActionsListWorkflowRunsParamsStatus = "skipped"
+	ActionsListWorkflowRunsParamsStatusStale          ActionsListWorkflowRunsParamsStatus = "stale"
+	ActionsListWorkflowRunsParamsStatusSuccess        ActionsListWorkflowRunsParamsStatus = "success"
+	ActionsListWorkflowRunsParamsStatusTimedOut       ActionsListWorkflowRunsParamsStatus = "timed_out"
+	ActionsListWorkflowRunsParamsStatusWaiting        ActionsListWorkflowRunsParamsStatus = "waiting"
+)
+
+// Valid indicates whether the value is a known member of the ActionsListWorkflowRunsParamsStatus enum.
+func (e ActionsListWorkflowRunsParamsStatus) Valid() bool {
+	switch e {
+	case ActionsListWorkflowRunsParamsStatusActionRequired:
+		return true
+	case ActionsListWorkflowRunsParamsStatusCancelled:
+		return true
+	case ActionsListWorkflowRunsParamsStatusCompleted:
+		return true
+	case ActionsListWorkflowRunsParamsStatusFailure:
+		return true
+	case ActionsListWorkflowRunsParamsStatusInProgress:
+		return true
+	case ActionsListWorkflowRunsParamsStatusNeutral:
+		return true
+	case ActionsListWorkflowRunsParamsStatusPending:
+		return true
+	case ActionsListWorkflowRunsParamsStatusQueued:
+		return true
+	case ActionsListWorkflowRunsParamsStatusRequested:
+		return true
+	case ActionsListWorkflowRunsParamsStatusSkipped:
+		return true
+	case ActionsListWorkflowRunsParamsStatusStale:
+		return true
+	case ActionsListWorkflowRunsParamsStatusSuccess:
+		return true
+	case ActionsListWorkflowRunsParamsStatusTimedOut:
+		return true
+	case ActionsListWorkflowRunsParamsStatusWaiting:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ChecksCreateJSONBodyConclusion.
 const (
 	ChecksCreateJSONBodyConclusionActionRequired ChecksCreateJSONBodyConclusion = "action_required"
@@ -918,6 +978,69 @@ func (e ChecksUpdateJSONBodyStatus) Valid() bool {
 	}
 }
 
+// Defines values for CodeScanningListAlertsForRepoParamsState.
+const (
+	CodeScanningListAlertsForRepoParamsStateClosed    CodeScanningListAlertsForRepoParamsState = "closed"
+	CodeScanningListAlertsForRepoParamsStateDismissed CodeScanningListAlertsForRepoParamsState = "dismissed"
+	CodeScanningListAlertsForRepoParamsStateFixed     CodeScanningListAlertsForRepoParamsState = "fixed"
+	CodeScanningListAlertsForRepoParamsStateOpen      CodeScanningListAlertsForRepoParamsState = "open"
+)
+
+// Valid indicates whether the value is a known member of the CodeScanningListAlertsForRepoParamsState enum.
+func (e CodeScanningListAlertsForRepoParamsState) Valid() bool {
+	switch e {
+	case CodeScanningListAlertsForRepoParamsStateClosed:
+		return true
+	case CodeScanningListAlertsForRepoParamsStateDismissed:
+		return true
+	case CodeScanningListAlertsForRepoParamsStateFixed:
+		return true
+	case CodeScanningListAlertsForRepoParamsStateOpen:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ChecksListForRefParamsFilter.
+const (
+	ChecksListForRefParamsFilterAll    ChecksListForRefParamsFilter = "all"
+	ChecksListForRefParamsFilterLatest ChecksListForRefParamsFilter = "latest"
+)
+
+// Valid indicates whether the value is a known member of the ChecksListForRefParamsFilter enum.
+func (e ChecksListForRefParamsFilter) Valid() bool {
+	switch e {
+	case ChecksListForRefParamsFilterAll:
+		return true
+	case ChecksListForRefParamsFilterLatest:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PullsListParamsState.
+const (
+	PullsListParamsStateAll    PullsListParamsState = "all"
+	PullsListParamsStateClosed PullsListParamsState = "closed"
+	PullsListParamsStateOpen   PullsListParamsState = "open"
+)
+
+// Valid indicates whether the value is a known member of the PullsListParamsState enum.
+func (e PullsListParamsState) Valid() bool {
+	switch e {
+	case PullsListParamsStateAll:
+		return true
+	case PullsListParamsStateClosed:
+		return true
+	case PullsListParamsStateOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PullsMergeJSONBodyMergeMethod.
 const (
 	PullsMergeJSONBodyMergeMethodMerge  PullsMergeJSONBodyMergeMethod = "merge"
@@ -933,6 +1056,87 @@ func (e PullsMergeJSONBodyMergeMethod) Valid() bool {
 	case PullsMergeJSONBodyMergeMethodRebase:
 		return true
 	case PullsMergeJSONBodyMergeMethodSquash:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretScanningListAlertsForRepoParamsState.
+const (
+	SecretScanningListAlertsForRepoParamsStateOpen     SecretScanningListAlertsForRepoParamsState = "open"
+	SecretScanningListAlertsForRepoParamsStateResolved SecretScanningListAlertsForRepoParamsState = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the SecretScanningListAlertsForRepoParamsState enum.
+func (e SecretScanningListAlertsForRepoParamsState) Valid() bool {
+	switch e {
+	case SecretScanningListAlertsForRepoParamsStateOpen:
+		return true
+	case SecretScanningListAlertsForRepoParamsStateResolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecurityAdvisoriesListRepositoryAdvisoriesParamsState.
+const (
+	SecurityAdvisoriesListRepositoryAdvisoriesParamsStateClosed    SecurityAdvisoriesListRepositoryAdvisoriesParamsState = "closed"
+	SecurityAdvisoriesListRepositoryAdvisoriesParamsStateDraft     SecurityAdvisoriesListRepositoryAdvisoriesParamsState = "draft"
+	SecurityAdvisoriesListRepositoryAdvisoriesParamsStatePublished SecurityAdvisoriesListRepositoryAdvisoriesParamsState = "published"
+	SecurityAdvisoriesListRepositoryAdvisoriesParamsStateTriage    SecurityAdvisoriesListRepositoryAdvisoriesParamsState = "triage"
+)
+
+// Valid indicates whether the value is a known member of the SecurityAdvisoriesListRepositoryAdvisoriesParamsState enum.
+func (e SecurityAdvisoriesListRepositoryAdvisoriesParamsState) Valid() bool {
+	switch e {
+	case SecurityAdvisoriesListRepositoryAdvisoriesParamsStateClosed:
+		return true
+	case SecurityAdvisoriesListRepositoryAdvisoriesParamsStateDraft:
+		return true
+	case SecurityAdvisoriesListRepositoryAdvisoriesParamsStatePublished:
+		return true
+	case SecurityAdvisoriesListRepositoryAdvisoriesParamsStateTriage:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecurityAdvisoriesListRepositoryAdvisoriesParamsSort.
+const (
+	SecurityAdvisoriesListRepositoryAdvisoriesParamsSortCreated   SecurityAdvisoriesListRepositoryAdvisoriesParamsSort = "created"
+	SecurityAdvisoriesListRepositoryAdvisoriesParamsSortPublished SecurityAdvisoriesListRepositoryAdvisoriesParamsSort = "published"
+	SecurityAdvisoriesListRepositoryAdvisoriesParamsSortUpdated   SecurityAdvisoriesListRepositoryAdvisoriesParamsSort = "updated"
+)
+
+// Valid indicates whether the value is a known member of the SecurityAdvisoriesListRepositoryAdvisoriesParamsSort enum.
+func (e SecurityAdvisoriesListRepositoryAdvisoriesParamsSort) Valid() bool {
+	switch e {
+	case SecurityAdvisoriesListRepositoryAdvisoriesParamsSortCreated:
+		return true
+	case SecurityAdvisoriesListRepositoryAdvisoriesParamsSortPublished:
+		return true
+	case SecurityAdvisoriesListRepositoryAdvisoriesParamsSortUpdated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecurityAdvisoriesListRepositoryAdvisoriesParamsDirection.
+const (
+	AdvisoriesAscending  SecurityAdvisoriesListRepositoryAdvisoriesParamsDirection = "asc"
+	AdvisoriesDescending SecurityAdvisoriesListRepositoryAdvisoriesParamsDirection = "desc"
+)
+
+// Valid indicates whether the value is a known member of the SecurityAdvisoriesListRepositoryAdvisoriesParamsDirection enum.
+func (e SecurityAdvisoriesListRepositoryAdvisoriesParamsDirection) Valid() bool {
+	switch e {
+	case AdvisoriesAscending:
+		return true
+	case AdvisoriesDescending:
 		return true
 	default:
 		return false
@@ -1872,6 +2076,15 @@ type WorkflowRun struct {
 	WorkflowID int `json:"workflow_id"`
 }
 
+// AppsListInstallationsParams defines parameters for AppsListInstallations.
+type AppsListInstallationsParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+
+	// Page The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+}
+
 // AppsCreateInstallationAccessTokenJSONBody defines body for AppsCreateInstallationAccessToken for application/json ContentType.
 type AppsCreateInstallationAccessTokenJSONBody struct {
 	// Permissions The permissions granted to the fine-grained access token.
@@ -1883,6 +2096,57 @@ type AppsCreateInstallationAccessTokenJSONBody struct {
 	// RepositoryIds List of repository IDs that the token should have access to
 	RepositoryIds []int `json:"repository_ids,omitempty"`
 }
+
+// AppsListReposAccessibleToInstallationParams defines parameters for AppsListReposAccessibleToInstallation.
+type AppsListReposAccessibleToInstallationParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+
+	// Page The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+}
+
+// ActionsListArtifactsForRepoParams defines parameters for ActionsListArtifactsForRepo.
+type ActionsListArtifactsForRepoParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ActionsListWorkflowRunsForRepoParams defines parameters for ActionsListWorkflowRunsForRepo.
+type ActionsListWorkflowRunsForRepoParams struct {
+	// HeadSha Only returns workflow runs that are associated with the specified `head_sha`.
+	HeadSha *string `form:"head_sha,omitempty" json:"head_sha,omitempty"`
+
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ActionsListRepoVariablesParams defines parameters for ActionsListRepoVariables.
+type ActionsListRepoVariablesParams struct {
+	// PerPage The number of results per page (max 30). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ActionsListRepoWorkflowsParams defines parameters for ActionsListRepoWorkflows.
+type ActionsListRepoWorkflowsParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ActionsListWorkflowRunsParams defines parameters for ActionsListWorkflowRuns.
+type ActionsListWorkflowRunsParams struct {
+	// Branch Returns workflow runs associated with a branch. Use the name of the branch of the `push`.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty"`
+
+	// Status Returns workflow runs with the check run `status` or `conclusion` that you specify. For example, a conclusion can be `success` or a status can be `in_progress`. Only GitHub Actions can set a status of `waiting`, `pending`, or `requested`.
+	Status *ActionsListWorkflowRunsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ActionsListWorkflowRunsParamsStatus defines parameters for ActionsListWorkflowRuns.
+type ActionsListWorkflowRunsParamsStatus string
 
 // ChecksCreateJSONBody defines body for ChecksCreate for application/json ContentType.
 type ChecksCreateJSONBody struct {
@@ -2087,10 +2351,97 @@ type ChecksUpdateJSONBodyOutputAnnotationsAnnotationLevel string
 // ChecksUpdateJSONBodyStatus defines model for ChecksUpdateJSONBody.Status.
 type ChecksUpdateJSONBodyStatus string
 
+// CodeScanningListAlertsForRepoParams defines parameters for CodeScanningListAlertsForRepo.
+type CodeScanningListAlertsForRepoParams struct {
+	// State If specified, only code scanning alerts with this state will be returned.
+	State *CodeScanningListAlertsForRepoParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// CodeScanningListAlertsForRepoParamsState defines parameters for CodeScanningListAlertsForRepo.
+type CodeScanningListAlertsForRepoParamsState string
+
+// ReposListCollaboratorsParams defines parameters for ReposListCollaborators.
+type ReposListCollaboratorsParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ChecksListForRefParams defines parameters for ChecksListForRef.
+type ChecksListForRefParams struct {
+	// CheckName Returns check runs with the specified `name`.
+	CheckName *string `form:"check_name,omitempty" json:"check_name,omitempty"`
+	AppID     *int    `form:"app_id,omitempty" json:"app_id,omitempty"`
+
+	// Filter Filters check runs by their `completed_at` timestamp. `latest` returns the most recent check runs.
+	Filter *ChecksListForRefParamsFilter `form:"filter,omitempty" json:"filter,omitempty"`
+
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ChecksListForRefParamsFilter defines parameters for ChecksListForRef.
+type ChecksListForRefParamsFilter string
+
+// DependabotListAlertsForRepoParams defines parameters for DependabotListAlertsForRepo.
+type DependabotListAlertsForRepoParams struct {
+	// State A comma-separated list of states. If specified, only alerts with these states will be returned.
+	//
+	// Can be: `auto_dismissed`, `dismissed`, `fixed`, `open`
+	State *string `form:"state,omitempty" json:"state,omitempty"`
+
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ReposListDeploymentsParams defines parameters for ReposListDeployments.
+type ReposListDeploymentsParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ReposListDeploymentStatusesParams defines parameters for ReposListDeploymentStatuses.
+type ReposListDeploymentStatusesParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// IssuesListCommentsParams defines parameters for IssuesListComments.
+type IssuesListCommentsParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
 // IssuesCreateCommentJSONBody defines body for IssuesCreateComment for application/json ContentType.
 type IssuesCreateCommentJSONBody struct {
 	// Body The contents of the comment.
 	Body string `json:"body"`
+}
+
+// ReposListDeployKeysParams defines parameters for ReposListDeployKeys.
+type ReposListDeployKeysParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// PullsListParams defines parameters for PullsList.
+type PullsListParams struct {
+	// State Either `open`, `closed`, or `all` to filter by state.
+	State *PullsListParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// PullsListParamsState defines parameters for PullsList.
+type PullsListParamsState string
+
+// PullsListFilesParams defines parameters for PullsListFiles.
+type PullsListFilesParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
 
 // PullsMergeJSONBody defines body for PullsMerge for application/json ContentType.
@@ -2110,6 +2461,54 @@ type PullsMergeJSONBody struct {
 
 // PullsMergeJSONBodyMergeMethod defines model for PullsMergeJSONBody.MergeMethod.
 type PullsMergeJSONBodyMergeMethod string
+
+// ReposListReleasesParams defines parameters for ReposListReleases.
+type ReposListReleasesParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// SecretScanningListAlertsForRepoParams defines parameters for SecretScanningListAlertsForRepo.
+type SecretScanningListAlertsForRepoParams struct {
+	// State Set to `open` or `resolved` to only list secret scanning alerts in a specific state.
+	State *SecretScanningListAlertsForRepoParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// SecretScanningListAlertsForRepoParamsState defines parameters for SecretScanningListAlertsForRepo.
+type SecretScanningListAlertsForRepoParamsState string
+
+// SecurityAdvisoriesListRepositoryAdvisoriesParams defines parameters for SecurityAdvisoriesListRepositoryAdvisories.
+type SecurityAdvisoriesListRepositoryAdvisoriesParams struct {
+	// State Filter by state of the repository advisories. Only advisories of this state will be returned.
+	State *SecurityAdvisoriesListRepositoryAdvisoriesParamsState `form:"state,omitempty" json:"state,omitempty"`
+
+	// Sort The property to sort the results by.
+	Sort *SecurityAdvisoriesListRepositoryAdvisoriesParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Direction The direction to sort the results by.
+	Direction *SecurityAdvisoriesListRepositoryAdvisoriesParamsDirection `form:"direction,omitempty" json:"direction,omitempty"`
+
+	// PerPage The number of advisories to return per page. For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// SecurityAdvisoriesListRepositoryAdvisoriesParamsState defines parameters for SecurityAdvisoriesListRepositoryAdvisories.
+type SecurityAdvisoriesListRepositoryAdvisoriesParamsState string
+
+// SecurityAdvisoriesListRepositoryAdvisoriesParamsSort defines parameters for SecurityAdvisoriesListRepositoryAdvisories.
+type SecurityAdvisoriesListRepositoryAdvisoriesParamsSort string
+
+// SecurityAdvisoriesListRepositoryAdvisoriesParamsDirection defines parameters for SecurityAdvisoriesListRepositoryAdvisories.
+type SecurityAdvisoriesListRepositoryAdvisoriesParamsDirection string
+
+// ActivityListReposStarredByUserParams defines parameters for ActivityListReposStarredByUser.
+type ActivityListReposStarredByUserParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
 
 // AppsCreateInstallationAccessTokenJSONRequestBody defines body for AppsCreateInstallationAccessToken for application/json ContentType.
 type AppsCreateInstallationAccessTokenJSONRequestBody AppsCreateInstallationAccessTokenJSONBody
@@ -2460,4 +2859,7107 @@ func (t RepositoryRuleDetailed) MarshalJSON() ([]byte, error) {
 func (t *RepositoryRuleDetailed) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
+}
+
+// RequestEditorFn is the function signature for the RequestEditor callback function
+type RequestEditorFn func(ctx context.Context, req *http.Request) error
+
+// Doer performs HTTP requests.
+//
+// The standard http.Client implements this interface.
+type HttpRequestDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// Client which conforms to the OpenAPI3 specification for this service.
+type Client struct {
+	// The endpoint of the server conforming to this interface, with scheme,
+	// https://api.deepmap.com for example. This can contain a path relative
+	// to the server, such as https://api.deepmap.com/dev-test, and all the
+	// paths in the swagger spec will be appended to the server.
+	Server string
+
+	// Doer for performing requests, typically a *http.Client with any
+	// customized settings, such as certificate chains.
+	Client HttpRequestDoer
+
+	// A list of callbacks for modifying requests which are generated before sending over
+	// the network.
+	RequestEditors []RequestEditorFn
+}
+
+// ClientOption allows setting custom parameters during construction
+type ClientOption func(*Client) error
+
+// Creates a new Client, with reasonable defaults
+func NewClient(server string, opts ...ClientOption) (*Client, error) {
+	// create a client with sane default values
+	client := Client{
+		Server: server,
+	}
+	// mutate client and add all optional params
+	for _, o := range opts {
+		if err := o(&client); err != nil {
+			return nil, err
+		}
+	}
+	// ensure the server URL always has a trailing slash
+	if !strings.HasSuffix(client.Server, "/") {
+		client.Server += "/"
+	}
+	// create httpClient, if not already present
+	if client.Client == nil {
+		client.Client = &http.Client{}
+	}
+	return &client, nil
+}
+
+// WithHTTPClient allows overriding the default Doer, which is
+// automatically created using http.Client. This is useful for tests.
+func WithHTTPClient(doer HttpRequestDoer) ClientOption {
+	return func(c *Client) error {
+		c.Client = doer
+		return nil
+	}
+}
+
+// WithRequestEditorFn allows setting up a callback function, which will be
+// called right before sending the request. This can be used to mutate the request.
+func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
+	return func(c *Client) error {
+		c.RequestEditors = append(c.RequestEditors, fn)
+		return nil
+	}
+}
+
+// The interface specification for the client above.
+type ClientInterface interface {
+
+	// AppsGetAuthenticated performs a GET /app (the `AppsGetAuthenticated` operationId) request.
+	AppsGetAuthenticated(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AppsListInstallations performs a GET /app/installations (the `AppsListInstallations` operationId) request.
+	AppsListInstallations(ctx context.Context, params *AppsListInstallationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AppsCreateInstallationAccessTokenWithBody performs a POST /app/installations/{installation_id}/access_tokens (the `AppsCreateInstallationAccessToken` operationId) request,
+	// with any type of body and a specified content type.
+	AppsCreateInstallationAccessTokenWithBody(ctx context.Context, installationID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AppsCreateInstallationAccessToken performs a POST /app/installations/{installation_id}/access_tokens (the `AppsCreateInstallationAccessToken` operationId) request.
+	// Takes a body of the `application/json` content type.
+	AppsCreateInstallationAccessToken(ctx context.Context, installationID string, body AppsCreateInstallationAccessTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AppsListReposAccessibleToInstallation performs a GET /installation/repositories (the `AppsListReposAccessibleToInstallation` operationId) request.
+	AppsListReposAccessibleToInstallation(ctx context.Context, params *AppsListReposAccessibleToInstallationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RateLimitGet performs a GET /rate_limit (the `RateLimitGet` operationId) request.
+	RateLimitGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposGet performs a GET /repos/{owner}/{repo} (the `ReposGet` operationId) request.
+	ReposGet(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsListArtifactsForRepo performs a GET /repos/{owner}/{repo}/actions/artifacts (the `ActionsListArtifactsForRepo` operationId) request.
+	ActionsListArtifactsForRepo(ctx context.Context, owner string, repo string, params *ActionsListArtifactsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsGetJobForWorkflowRun performs a GET /repos/{owner}/{repo}/actions/jobs/{job_id} (the `ActionsGetJobForWorkflowRun` operationId) request.
+	ActionsGetJobForWorkflowRun(ctx context.Context, owner string, repo string, jobID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsGetGithubActionsPermissionsRepository performs a GET /repos/{owner}/{repo}/actions/permissions (the `ActionsGetGithubActionsPermissionsRepository` operationId) request.
+	ActionsGetGithubActionsPermissionsRepository(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsGetGithubActionsDefaultWorkflowPermissionsRepository performs a GET /repos/{owner}/{repo}/actions/permissions/workflow (the `ActionsGetGithubActionsDefaultWorkflowPermissionsRepository` operationId) request.
+	ActionsGetGithubActionsDefaultWorkflowPermissionsRepository(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsListSelfHostedRunnersForRepo performs a GET /repos/{owner}/{repo}/actions/runners (the `ActionsListSelfHostedRunnersForRepo` operationId) request.
+	ActionsListSelfHostedRunnersForRepo(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsListWorkflowRunsForRepo performs a GET /repos/{owner}/{repo}/actions/runs (the `ActionsListWorkflowRunsForRepo` operationId) request.
+	ActionsListWorkflowRunsForRepo(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsGetPendingDeploymentsForRun performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
+	ActionsGetPendingDeploymentsForRun(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsListRepoVariables performs a GET /repos/{owner}/{repo}/actions/variables (the `ActionsListRepoVariables` operationId) request.
+	ActionsListRepoVariables(ctx context.Context, owner string, repo string, params *ActionsListRepoVariablesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsListRepoWorkflows performs a GET /repos/{owner}/{repo}/actions/workflows (the `ActionsListRepoWorkflows` operationId) request.
+	ActionsListRepoWorkflows(ctx context.Context, owner string, repo string, params *ActionsListRepoWorkflowsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsListWorkflowRuns performs a GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs (the `ActionsListWorkflowRuns` operationId) request.
+	ActionsListWorkflowRuns(ctx context.Context, owner string, repo string, workflowID string, params *ActionsListWorkflowRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ChecksCreateWithBody performs a POST /repos/{owner}/{repo}/check-runs (the `ChecksCreate` operationId) request,
+	// with any type of body and a specified content type.
+	ChecksCreateWithBody(ctx context.Context, owner string, repo string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ChecksCreate performs a POST /repos/{owner}/{repo}/check-runs (the `ChecksCreate` operationId) request.
+	// Takes a body of the `application/json` content type.
+	ChecksCreate(ctx context.Context, owner string, repo string, body ChecksCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ChecksUpdateWithBody performs a PATCH /repos/{owner}/{repo}/check-runs/{check_run_id} (the `ChecksUpdate` operationId) request,
+	// with any type of body and a specified content type.
+	ChecksUpdateWithBody(ctx context.Context, owner string, repo string, checkRunID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ChecksUpdate performs a PATCH /repos/{owner}/{repo}/check-runs/{check_run_id} (the `ChecksUpdate` operationId) request.
+	// Takes a body of the `application/json` content type.
+	ChecksUpdate(ctx context.Context, owner string, repo string, checkRunID string, body ChecksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CodeScanningListAlertsForRepo performs a GET /repos/{owner}/{repo}/code-scanning/alerts (the `CodeScanningListAlertsForRepo` operationId) request.
+	CodeScanningListAlertsForRepo(ctx context.Context, owner string, repo string, params *CodeScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposListCollaborators performs a GET /repos/{owner}/{repo}/collaborators (the `ReposListCollaborators` operationId) request.
+	ReposListCollaborators(ctx context.Context, owner string, repo string, params *ReposListCollaboratorsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposListPullRequestsAssociatedWithCommit performs a GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls (the `ReposListPullRequestsAssociatedWithCommit` operationId) request.
+	ReposListPullRequestsAssociatedWithCommit(ctx context.Context, owner string, repo string, commitSha string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposGetCommit performs a GET /repos/{owner}/{repo}/commits/{ref} (the `ReposGetCommit` operationId) request.
+	ReposGetCommit(ctx context.Context, owner string, repo string, ref string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ChecksListForRef performs a GET /repos/{owner}/{repo}/commits/{ref}/check-runs (the `ChecksListForRef` operationId) request.
+	ChecksListForRef(ctx context.Context, owner string, repo string, ref string, params *ChecksListForRefParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DependabotListAlertsForRepo performs a GET /repos/{owner}/{repo}/dependabot/alerts (the `DependabotListAlertsForRepo` operationId) request.
+	DependabotListAlertsForRepo(ctx context.Context, owner string, repo string, params *DependabotListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposListDeployments performs a GET /repos/{owner}/{repo}/deployments (the `ReposListDeployments` operationId) request.
+	ReposListDeployments(ctx context.Context, owner string, repo string, params *ReposListDeploymentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposListDeploymentStatuses performs a GET /repos/{owner}/{repo}/deployments/{deployment_id}/statuses (the `ReposListDeploymentStatuses` operationId) request.
+	ReposListDeploymentStatuses(ctx context.Context, owner string, repo string, deploymentID string, params *ReposListDeploymentStatusesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposGetAllEnvironments performs a GET /repos/{owner}/{repo}/environments (the `ReposGetAllEnvironments` operationId) request.
+	ReposGetAllEnvironments(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AppsGetRepoInstallation performs a GET /repos/{owner}/{repo}/installation (the `AppsGetRepoInstallation` operationId) request.
+	AppsGetRepoInstallation(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IssuesListComments performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
+	IssuesListComments(ctx context.Context, owner string, repo string, issueNumber string, params *IssuesListCommentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IssuesCreateCommentWithBody performs a POST /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesCreateComment` operationId) request,
+	// with any type of body and a specified content type.
+	IssuesCreateCommentWithBody(ctx context.Context, owner string, repo string, issueNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IssuesCreateComment performs a POST /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesCreateComment` operationId) request.
+	// Takes a body of the `application/json` content type.
+	IssuesCreateComment(ctx context.Context, owner string, repo string, issueNumber string, body IssuesCreateCommentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposListDeployKeys performs a GET /repos/{owner}/{repo}/keys (the `ReposListDeployKeys` operationId) request.
+	ReposListDeployKeys(ctx context.Context, owner string, repo string, params *ReposListDeployKeysParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PullsList performs a GET /repos/{owner}/{repo}/pulls (the `PullsList` operationId) request.
+	PullsList(ctx context.Context, owner string, repo string, params *PullsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PullsListFiles performs a GET /repos/{owner}/{repo}/pulls/{pull_number}/files (the `PullsListFiles` operationId) request.
+	PullsListFiles(ctx context.Context, owner string, repo string, pullNumber string, params *PullsListFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PullsMergeWithBody performs a PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge (the `PullsMerge` operationId) request,
+	// with any type of body and a specified content type.
+	PullsMergeWithBody(ctx context.Context, owner string, repo string, pullNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PullsMerge performs a PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge (the `PullsMerge` operationId) request.
+	// Takes a body of the `application/json` content type.
+	PullsMerge(ctx context.Context, owner string, repo string, pullNumber string, body PullsMergeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposListReleases performs a GET /repos/{owner}/{repo}/releases (the `ReposListReleases` operationId) request.
+	ReposListReleases(ctx context.Context, owner string, repo string, params *ReposListReleasesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposGetLatestRelease performs a GET /repos/{owner}/{repo}/releases/latest (the `ReposGetLatestRelease` operationId) request.
+	ReposGetLatestRelease(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposGetBranchRules performs a GET /repos/{owner}/{repo}/rules/branches/{branch} (the `ReposGetBranchRules` operationId) request.
+	ReposGetBranchRules(ctx context.Context, owner string, repo string, branch string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecretScanningListAlertsForRepo performs a GET /repos/{owner}/{repo}/secret-scanning/alerts (the `SecretScanningListAlertsForRepo` operationId) request.
+	SecretScanningListAlertsForRepo(ctx context.Context, owner string, repo string, params *SecretScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SecurityAdvisoriesListRepositoryAdvisories performs a GET /repos/{owner}/{repo}/security-advisories (the `SecurityAdvisoriesListRepositoryAdvisories` operationId) request.
+	SecurityAdvisoriesListRepositoryAdvisories(ctx context.Context, owner string, repo string, params *SecurityAdvisoriesListRepositoryAdvisoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReposCheckVulnerabilityAlerts performs a GET /repos/{owner}/{repo}/vulnerability-alerts (the `ReposCheckVulnerabilityAlerts` operationId) request.
+	ReposCheckVulnerabilityAlerts(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UsersGetByUsername performs a GET /users/{username} (the `UsersGetByUsername` operationId) request.
+	UsersGetByUsername(ctx context.Context, username string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActivityListReposStarredByUser performs a GET /users/{username}/starred (the `ActivityListReposStarredByUser` operationId) request.
+	ActivityListReposStarredByUser(ctx context.Context, username string, params *ActivityListReposStarredByUserParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// AppsGetAuthenticated performs a GET /app (the `AppsGetAuthenticated` operationId) request.
+func (c *Client) AppsGetAuthenticated(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAppsGetAuthenticatedRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AppsListInstallations performs a GET /app/installations (the `AppsListInstallations` operationId) request.
+func (c *Client) AppsListInstallations(ctx context.Context, params *AppsListInstallationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAppsListInstallationsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AppsCreateInstallationAccessTokenWithBody performs a POST /app/installations/{installation_id}/access_tokens (the `AppsCreateInstallationAccessToken` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) AppsCreateInstallationAccessTokenWithBody(ctx context.Context, installationID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAppsCreateInstallationAccessTokenRequestWithBody(c.Server, installationID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AppsCreateInstallationAccessToken performs a POST /app/installations/{installation_id}/access_tokens (the `AppsCreateInstallationAccessToken` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) AppsCreateInstallationAccessToken(ctx context.Context, installationID string, body AppsCreateInstallationAccessTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAppsCreateInstallationAccessTokenRequest(c.Server, installationID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AppsListReposAccessibleToInstallation performs a GET /installation/repositories (the `AppsListReposAccessibleToInstallation` operationId) request.
+func (c *Client) AppsListReposAccessibleToInstallation(ctx context.Context, params *AppsListReposAccessibleToInstallationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAppsListReposAccessibleToInstallationRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RateLimitGet performs a GET /rate_limit (the `RateLimitGet` operationId) request.
+func (c *Client) RateLimitGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRateLimitGetRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposGet performs a GET /repos/{owner}/{repo} (the `ReposGet` operationId) request.
+func (c *Client) ReposGet(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposGetRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsListArtifactsForRepo performs a GET /repos/{owner}/{repo}/actions/artifacts (the `ActionsListArtifactsForRepo` operationId) request.
+func (c *Client) ActionsListArtifactsForRepo(ctx context.Context, owner string, repo string, params *ActionsListArtifactsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsListArtifactsForRepoRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsGetJobForWorkflowRun performs a GET /repos/{owner}/{repo}/actions/jobs/{job_id} (the `ActionsGetJobForWorkflowRun` operationId) request.
+func (c *Client) ActionsGetJobForWorkflowRun(ctx context.Context, owner string, repo string, jobID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsGetJobForWorkflowRunRequest(c.Server, owner, repo, jobID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsGetGithubActionsPermissionsRepository performs a GET /repos/{owner}/{repo}/actions/permissions (the `ActionsGetGithubActionsPermissionsRepository` operationId) request.
+func (c *Client) ActionsGetGithubActionsPermissionsRepository(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsGetGithubActionsPermissionsRepositoryRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsGetGithubActionsDefaultWorkflowPermissionsRepository performs a GET /repos/{owner}/{repo}/actions/permissions/workflow (the `ActionsGetGithubActionsDefaultWorkflowPermissionsRepository` operationId) request.
+func (c *Client) ActionsGetGithubActionsDefaultWorkflowPermissionsRepository(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsListSelfHostedRunnersForRepo performs a GET /repos/{owner}/{repo}/actions/runners (the `ActionsListSelfHostedRunnersForRepo` operationId) request.
+func (c *Client) ActionsListSelfHostedRunnersForRepo(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsListSelfHostedRunnersForRepoRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsListWorkflowRunsForRepo performs a GET /repos/{owner}/{repo}/actions/runs (the `ActionsListWorkflowRunsForRepo` operationId) request.
+func (c *Client) ActionsListWorkflowRunsForRepo(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsListWorkflowRunsForRepoRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsGetPendingDeploymentsForRun performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
+func (c *Client) ActionsGetPendingDeploymentsForRun(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsGetPendingDeploymentsForRunRequest(c.Server, owner, repo, runID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsListRepoVariables performs a GET /repos/{owner}/{repo}/actions/variables (the `ActionsListRepoVariables` operationId) request.
+func (c *Client) ActionsListRepoVariables(ctx context.Context, owner string, repo string, params *ActionsListRepoVariablesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsListRepoVariablesRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsListRepoWorkflows performs a GET /repos/{owner}/{repo}/actions/workflows (the `ActionsListRepoWorkflows` operationId) request.
+func (c *Client) ActionsListRepoWorkflows(ctx context.Context, owner string, repo string, params *ActionsListRepoWorkflowsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsListRepoWorkflowsRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsListWorkflowRuns performs a GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs (the `ActionsListWorkflowRuns` operationId) request.
+func (c *Client) ActionsListWorkflowRuns(ctx context.Context, owner string, repo string, workflowID string, params *ActionsListWorkflowRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsListWorkflowRunsRequest(c.Server, owner, repo, workflowID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ChecksCreateWithBody performs a POST /repos/{owner}/{repo}/check-runs (the `ChecksCreate` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) ChecksCreateWithBody(ctx context.Context, owner string, repo string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewChecksCreateRequestWithBody(c.Server, owner, repo, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ChecksCreate performs a POST /repos/{owner}/{repo}/check-runs (the `ChecksCreate` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) ChecksCreate(ctx context.Context, owner string, repo string, body ChecksCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewChecksCreateRequest(c.Server, owner, repo, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ChecksUpdateWithBody performs a PATCH /repos/{owner}/{repo}/check-runs/{check_run_id} (the `ChecksUpdate` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) ChecksUpdateWithBody(ctx context.Context, owner string, repo string, checkRunID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewChecksUpdateRequestWithBody(c.Server, owner, repo, checkRunID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ChecksUpdate performs a PATCH /repos/{owner}/{repo}/check-runs/{check_run_id} (the `ChecksUpdate` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) ChecksUpdate(ctx context.Context, owner string, repo string, checkRunID string, body ChecksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewChecksUpdateRequest(c.Server, owner, repo, checkRunID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CodeScanningListAlertsForRepo performs a GET /repos/{owner}/{repo}/code-scanning/alerts (the `CodeScanningListAlertsForRepo` operationId) request.
+func (c *Client) CodeScanningListAlertsForRepo(ctx context.Context, owner string, repo string, params *CodeScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCodeScanningListAlertsForRepoRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposListCollaborators performs a GET /repos/{owner}/{repo}/collaborators (the `ReposListCollaborators` operationId) request.
+func (c *Client) ReposListCollaborators(ctx context.Context, owner string, repo string, params *ReposListCollaboratorsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposListCollaboratorsRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposListPullRequestsAssociatedWithCommit performs a GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls (the `ReposListPullRequestsAssociatedWithCommit` operationId) request.
+func (c *Client) ReposListPullRequestsAssociatedWithCommit(ctx context.Context, owner string, repo string, commitSha string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposListPullRequestsAssociatedWithCommitRequest(c.Server, owner, repo, commitSha)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposGetCommit performs a GET /repos/{owner}/{repo}/commits/{ref} (the `ReposGetCommit` operationId) request.
+func (c *Client) ReposGetCommit(ctx context.Context, owner string, repo string, ref string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposGetCommitRequest(c.Server, owner, repo, ref)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ChecksListForRef performs a GET /repos/{owner}/{repo}/commits/{ref}/check-runs (the `ChecksListForRef` operationId) request.
+func (c *Client) ChecksListForRef(ctx context.Context, owner string, repo string, ref string, params *ChecksListForRefParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewChecksListForRefRequest(c.Server, owner, repo, ref, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DependabotListAlertsForRepo performs a GET /repos/{owner}/{repo}/dependabot/alerts (the `DependabotListAlertsForRepo` operationId) request.
+func (c *Client) DependabotListAlertsForRepo(ctx context.Context, owner string, repo string, params *DependabotListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDependabotListAlertsForRepoRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposListDeployments performs a GET /repos/{owner}/{repo}/deployments (the `ReposListDeployments` operationId) request.
+func (c *Client) ReposListDeployments(ctx context.Context, owner string, repo string, params *ReposListDeploymentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposListDeploymentsRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposListDeploymentStatuses performs a GET /repos/{owner}/{repo}/deployments/{deployment_id}/statuses (the `ReposListDeploymentStatuses` operationId) request.
+func (c *Client) ReposListDeploymentStatuses(ctx context.Context, owner string, repo string, deploymentID string, params *ReposListDeploymentStatusesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposListDeploymentStatusesRequest(c.Server, owner, repo, deploymentID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposGetAllEnvironments performs a GET /repos/{owner}/{repo}/environments (the `ReposGetAllEnvironments` operationId) request.
+func (c *Client) ReposGetAllEnvironments(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposGetAllEnvironmentsRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AppsGetRepoInstallation performs a GET /repos/{owner}/{repo}/installation (the `AppsGetRepoInstallation` operationId) request.
+func (c *Client) AppsGetRepoInstallation(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAppsGetRepoInstallationRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IssuesListComments performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
+func (c *Client) IssuesListComments(ctx context.Context, owner string, repo string, issueNumber string, params *IssuesListCommentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIssuesListCommentsRequest(c.Server, owner, repo, issueNumber, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IssuesCreateCommentWithBody performs a POST /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesCreateComment` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) IssuesCreateCommentWithBody(ctx context.Context, owner string, repo string, issueNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIssuesCreateCommentRequestWithBody(c.Server, owner, repo, issueNumber, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IssuesCreateComment performs a POST /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesCreateComment` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) IssuesCreateComment(ctx context.Context, owner string, repo string, issueNumber string, body IssuesCreateCommentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIssuesCreateCommentRequest(c.Server, owner, repo, issueNumber, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposListDeployKeys performs a GET /repos/{owner}/{repo}/keys (the `ReposListDeployKeys` operationId) request.
+func (c *Client) ReposListDeployKeys(ctx context.Context, owner string, repo string, params *ReposListDeployKeysParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposListDeployKeysRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PullsList performs a GET /repos/{owner}/{repo}/pulls (the `PullsList` operationId) request.
+func (c *Client) PullsList(ctx context.Context, owner string, repo string, params *PullsListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullsListRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PullsListFiles performs a GET /repos/{owner}/{repo}/pulls/{pull_number}/files (the `PullsListFiles` operationId) request.
+func (c *Client) PullsListFiles(ctx context.Context, owner string, repo string, pullNumber string, params *PullsListFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullsListFilesRequest(c.Server, owner, repo, pullNumber, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PullsMergeWithBody performs a PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge (the `PullsMerge` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) PullsMergeWithBody(ctx context.Context, owner string, repo string, pullNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullsMergeRequestWithBody(c.Server, owner, repo, pullNumber, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PullsMerge performs a PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge (the `PullsMerge` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) PullsMerge(ctx context.Context, owner string, repo string, pullNumber string, body PullsMergeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullsMergeRequest(c.Server, owner, repo, pullNumber, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposListReleases performs a GET /repos/{owner}/{repo}/releases (the `ReposListReleases` operationId) request.
+func (c *Client) ReposListReleases(ctx context.Context, owner string, repo string, params *ReposListReleasesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposListReleasesRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposGetLatestRelease performs a GET /repos/{owner}/{repo}/releases/latest (the `ReposGetLatestRelease` operationId) request.
+func (c *Client) ReposGetLatestRelease(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposGetLatestReleaseRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposGetBranchRules performs a GET /repos/{owner}/{repo}/rules/branches/{branch} (the `ReposGetBranchRules` operationId) request.
+func (c *Client) ReposGetBranchRules(ctx context.Context, owner string, repo string, branch string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposGetBranchRulesRequest(c.Server, owner, repo, branch)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecretScanningListAlertsForRepo performs a GET /repos/{owner}/{repo}/secret-scanning/alerts (the `SecretScanningListAlertsForRepo` operationId) request.
+func (c *Client) SecretScanningListAlertsForRepo(ctx context.Context, owner string, repo string, params *SecretScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecretScanningListAlertsForRepoRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SecurityAdvisoriesListRepositoryAdvisories performs a GET /repos/{owner}/{repo}/security-advisories (the `SecurityAdvisoriesListRepositoryAdvisories` operationId) request.
+func (c *Client) SecurityAdvisoriesListRepositoryAdvisories(ctx context.Context, owner string, repo string, params *SecurityAdvisoriesListRepositoryAdvisoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSecurityAdvisoriesListRepositoryAdvisoriesRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposCheckVulnerabilityAlerts performs a GET /repos/{owner}/{repo}/vulnerability-alerts (the `ReposCheckVulnerabilityAlerts` operationId) request.
+func (c *Client) ReposCheckVulnerabilityAlerts(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposCheckVulnerabilityAlertsRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UsersGetByUsername performs a GET /users/{username} (the `UsersGetByUsername` operationId) request.
+func (c *Client) UsersGetByUsername(ctx context.Context, username string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUsersGetByUsernameRequest(c.Server, username)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActivityListReposStarredByUser performs a GET /users/{username}/starred (the `ActivityListReposStarredByUser` operationId) request.
+func (c *Client) ActivityListReposStarredByUser(ctx context.Context, username string, params *ActivityListReposStarredByUserParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActivityListReposStarredByUserRequest(c.Server, username, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewAppsGetAuthenticatedRequest constructs an http.Request for the AppsGetAuthenticated method
+func NewAppsGetAuthenticatedRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/app"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAppsListInstallationsRequest constructs an http.Request for the AppsListInstallations method
+func NewAppsListInstallationsRequest(server string, params *AppsListInstallationsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/app/installations"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAppsCreateInstallationAccessTokenRequest calls the generic AppsCreateInstallationAccessToken builder with application/json body
+func NewAppsCreateInstallationAccessTokenRequest(server string, installationID string, body AppsCreateInstallationAccessTokenJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAppsCreateInstallationAccessTokenRequestWithBody(server, installationID, "application/json", bodyReader)
+}
+
+// NewAppsCreateInstallationAccessTokenRequestWithBody constructs an http.Request for the AppsCreateInstallationAccessToken method, with any body, and a specified content type
+func NewAppsCreateInstallationAccessTokenRequestWithBody(server string, installationID string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "installation_id", installationID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/app/installations/" + pathParam0 + "/access_tokens"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewAppsListReposAccessibleToInstallationRequest constructs an http.Request for the AppsListReposAccessibleToInstallation method
+func NewAppsListReposAccessibleToInstallationRequest(server string, params *AppsListReposAccessibleToInstallationParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/installation/repositories"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRateLimitGetRequest constructs an http.Request for the RateLimitGet method
+func NewRateLimitGetRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/rate_limit"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposGetRequest constructs an http.Request for the ReposGet method
+func NewReposGetRequest(server string, owner string, repo string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsListArtifactsForRepoRequest constructs an http.Request for the ActionsListArtifactsForRepo method
+func NewActionsListArtifactsForRepoRequest(server string, owner string, repo string, params *ActionsListArtifactsForRepoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/artifacts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsGetJobForWorkflowRunRequest constructs an http.Request for the ActionsGetJobForWorkflowRun method
+func NewActionsGetJobForWorkflowRunRequest(server string, owner string, repo string, jobID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "job_id", jobID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/jobs/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsGetGithubActionsPermissionsRepositoryRequest constructs an http.Request for the ActionsGetGithubActionsPermissionsRepository method
+func NewActionsGetGithubActionsPermissionsRepositoryRequest(server string, owner string, repo string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/permissions"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryRequest constructs an http.Request for the ActionsGetGithubActionsDefaultWorkflowPermissionsRepository method
+func NewActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryRequest(server string, owner string, repo string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/permissions/workflow"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsListSelfHostedRunnersForRepoRequest constructs an http.Request for the ActionsListSelfHostedRunnersForRepo method
+func NewActionsListSelfHostedRunnersForRepoRequest(server string, owner string, repo string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/runners"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsListWorkflowRunsForRepoRequest constructs an http.Request for the ActionsListWorkflowRunsForRepo method
+func NewActionsListWorkflowRunsForRepoRequest(server string, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/runs"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.HeadSha != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "head_sha", *params.HeadSha, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsGetPendingDeploymentsForRunRequest constructs an http.Request for the ActionsGetPendingDeploymentsForRun method
+func NewActionsGetPendingDeploymentsForRunRequest(server string, owner string, repo string, runID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "run_id", runID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/runs/" + pathParam2 + "/pending_deployments"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsListRepoVariablesRequest constructs an http.Request for the ActionsListRepoVariables method
+func NewActionsListRepoVariablesRequest(server string, owner string, repo string, params *ActionsListRepoVariablesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/variables"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsListRepoWorkflowsRequest constructs an http.Request for the ActionsListRepoWorkflows method
+func NewActionsListRepoWorkflowsRequest(server string, owner string, repo string, params *ActionsListRepoWorkflowsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/workflows"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsListWorkflowRunsRequest constructs an http.Request for the ActionsListWorkflowRuns method
+func NewActionsListWorkflowRunsRequest(server string, owner string, repo string, workflowID string, params *ActionsListWorkflowRunsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "workflow_id", workflowID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/workflows/" + pathParam2 + "/runs"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Branch != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "branch", *params.Branch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewChecksCreateRequest calls the generic ChecksCreate builder with application/json body
+func NewChecksCreateRequest(server string, owner string, repo string, body ChecksCreateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewChecksCreateRequestWithBody(server, owner, repo, "application/json", bodyReader)
+}
+
+// NewChecksCreateRequestWithBody constructs an http.Request for the ChecksCreate method, with any body, and a specified content type
+func NewChecksCreateRequestWithBody(server string, owner string, repo string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/check-runs"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewChecksUpdateRequest calls the generic ChecksUpdate builder with application/json body
+func NewChecksUpdateRequest(server string, owner string, repo string, checkRunID string, body ChecksUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewChecksUpdateRequestWithBody(server, owner, repo, checkRunID, "application/json", bodyReader)
+}
+
+// NewChecksUpdateRequestWithBody constructs an http.Request for the ChecksUpdate method, with any body, and a specified content type
+func NewChecksUpdateRequestWithBody(server string, owner string, repo string, checkRunID string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "check_run_id", checkRunID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/check-runs/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewCodeScanningListAlertsForRepoRequest constructs an http.Request for the CodeScanningListAlertsForRepo method
+func NewCodeScanningListAlertsForRepoRequest(server string, owner string, repo string, params *CodeScanningListAlertsForRepoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/code-scanning/alerts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposListCollaboratorsRequest constructs an http.Request for the ReposListCollaborators method
+func NewReposListCollaboratorsRequest(server string, owner string, repo string, params *ReposListCollaboratorsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/collaborators"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposListPullRequestsAssociatedWithCommitRequest constructs an http.Request for the ReposListPullRequestsAssociatedWithCommit method
+func NewReposListPullRequestsAssociatedWithCommitRequest(server string, owner string, repo string, commitSha string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "commit_sha", commitSha, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/commits/" + pathParam2 + "/pulls"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposGetCommitRequest constructs an http.Request for the ReposGetCommit method
+func NewReposGetCommitRequest(server string, owner string, repo string, ref string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "ref", ref, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/commits/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewChecksListForRefRequest constructs an http.Request for the ChecksListForRef method
+func NewChecksListForRefRequest(server string, owner string, repo string, ref string, params *ChecksListForRefParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "ref", ref, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/commits/" + pathParam2 + "/check-runs"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.CheckName != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "check_name", *params.CheckName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.AppID != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "app_id", *params.AppID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Filter != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "filter", *params.Filter, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDependabotListAlertsForRepoRequest constructs an http.Request for the DependabotListAlertsForRepo method
+func NewDependabotListAlertsForRepoRequest(server string, owner string, repo string, params *DependabotListAlertsForRepoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/dependabot/alerts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposListDeploymentsRequest constructs an http.Request for the ReposListDeployments method
+func NewReposListDeploymentsRequest(server string, owner string, repo string, params *ReposListDeploymentsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/deployments"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposListDeploymentStatusesRequest constructs an http.Request for the ReposListDeploymentStatuses method
+func NewReposListDeploymentStatusesRequest(server string, owner string, repo string, deploymentID string, params *ReposListDeploymentStatusesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "deployment_id", deploymentID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/deployments/" + pathParam2 + "/statuses"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposGetAllEnvironmentsRequest constructs an http.Request for the ReposGetAllEnvironments method
+func NewReposGetAllEnvironmentsRequest(server string, owner string, repo string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/environments"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAppsGetRepoInstallationRequest constructs an http.Request for the AppsGetRepoInstallation method
+func NewAppsGetRepoInstallationRequest(server string, owner string, repo string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/installation"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIssuesListCommentsRequest constructs an http.Request for the IssuesListComments method
+func NewIssuesListCommentsRequest(server string, owner string, repo string, issueNumber string, params *IssuesListCommentsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "issue_number", issueNumber, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/issues/" + pathParam2 + "/comments"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewIssuesCreateCommentRequest calls the generic IssuesCreateComment builder with application/json body
+func NewIssuesCreateCommentRequest(server string, owner string, repo string, issueNumber string, body IssuesCreateCommentJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewIssuesCreateCommentRequestWithBody(server, owner, repo, issueNumber, "application/json", bodyReader)
+}
+
+// NewIssuesCreateCommentRequestWithBody constructs an http.Request for the IssuesCreateComment method, with any body, and a specified content type
+func NewIssuesCreateCommentRequestWithBody(server string, owner string, repo string, issueNumber string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "issue_number", issueNumber, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/issues/" + pathParam2 + "/comments"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReposListDeployKeysRequest constructs an http.Request for the ReposListDeployKeys method
+func NewReposListDeployKeysRequest(server string, owner string, repo string, params *ReposListDeployKeysParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/keys"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPullsListRequest constructs an http.Request for the PullsList method
+func NewPullsListRequest(server string, owner string, repo string, params *PullsListParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/pulls"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPullsListFilesRequest constructs an http.Request for the PullsListFiles method
+func NewPullsListFilesRequest(server string, owner string, repo string, pullNumber string, params *PullsListFilesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "pull_number", pullNumber, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/pulls/" + pathParam2 + "/files"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPullsMergeRequest calls the generic PullsMerge builder with application/json body
+func NewPullsMergeRequest(server string, owner string, repo string, pullNumber string, body PullsMergeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPullsMergeRequestWithBody(server, owner, repo, pullNumber, "application/json", bodyReader)
+}
+
+// NewPullsMergeRequestWithBody constructs an http.Request for the PullsMerge method, with any body, and a specified content type
+func NewPullsMergeRequestWithBody(server string, owner string, repo string, pullNumber string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "pull_number", pullNumber, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/pulls/" + pathParam2 + "/merge"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReposListReleasesRequest constructs an http.Request for the ReposListReleases method
+func NewReposListReleasesRequest(server string, owner string, repo string, params *ReposListReleasesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/releases"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposGetLatestReleaseRequest constructs an http.Request for the ReposGetLatestRelease method
+func NewReposGetLatestReleaseRequest(server string, owner string, repo string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/releases/latest"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposGetBranchRulesRequest constructs an http.Request for the ReposGetBranchRules method
+func NewReposGetBranchRulesRequest(server string, owner string, repo string, branch string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "branch", branch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/rules/branches/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSecretScanningListAlertsForRepoRequest constructs an http.Request for the SecretScanningListAlertsForRepo method
+func NewSecretScanningListAlertsForRepoRequest(server string, owner string, repo string, params *SecretScanningListAlertsForRepoParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/secret-scanning/alerts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSecurityAdvisoriesListRepositoryAdvisoriesRequest constructs an http.Request for the SecurityAdvisoriesListRepositoryAdvisories method
+func NewSecurityAdvisoriesListRepositoryAdvisoriesRequest(server string, owner string, repo string, params *SecurityAdvisoriesListRepositoryAdvisoriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/security-advisories"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Direction != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "direction", *params.Direction, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewReposCheckVulnerabilityAlertsRequest constructs an http.Request for the ReposCheckVulnerabilityAlerts method
+func NewReposCheckVulnerabilityAlertsRequest(server string, owner string, repo string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/vulnerability-alerts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUsersGetByUsernameRequest constructs an http.Request for the UsersGetByUsername method
+func NewUsersGetByUsernameRequest(server string, username string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "username", username, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/users/" + pathParam0
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActivityListReposStarredByUserRequest constructs an http.Request for the ActivityListReposStarredByUser method
+func NewActivityListReposStarredByUserRequest(server string, username string, params *ActivityListReposStarredByUserParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "username", username, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/users/" + pathParam0 + "/starred"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
+	for _, r := range c.RequestEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	for _, r := range additionalEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ClientWithResponses builds on ClientInterface to offer response payloads
+type ClientWithResponses struct {
+	ClientInterface
+}
+
+// NewClientWithResponses creates a new ClientWithResponses, which wraps
+// Client with return type handling
+func NewClientWithResponses(server string, opts ...ClientOption) (*ClientWithResponses, error) {
+	client, err := NewClient(server, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &ClientWithResponses{client}, nil
+}
+
+// WithBaseURL overrides the baseURL.
+func WithBaseURL(baseURL string) ClientOption {
+	return func(c *Client) error {
+		newBaseURL, err := url.Parse(baseURL)
+		if err != nil {
+			return err
+		}
+		c.Server = newBaseURL.String()
+		return nil
+	}
+}
+
+// ClientWithResponsesInterface is the interface specification for the client with responses above.
+type ClientWithResponsesInterface interface {
+
+	// AppsGetAuthenticatedWithResponse performs a GET /app (the `AppsGetAuthenticated` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AppsGetAuthenticatedWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AppsGetAuthenticatedReply, error)
+
+	// AppsListInstallationsWithResponse performs a GET /app/installations (the `AppsListInstallations` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AppsListInstallationsWithResponse(ctx context.Context, params *AppsListInstallationsParams, reqEditors ...RequestEditorFn) (*AppsListInstallationsReply, error)
+
+	// AppsCreateInstallationAccessTokenWithBodyWithResponse performs a POST /app/installations/{installation_id}/access_tokens (the `AppsCreateInstallationAccessToken` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AppsCreateInstallationAccessTokenWithBodyWithResponse(ctx context.Context, installationID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AppsCreateInstallationAccessTokenReply, error)
+
+	// AppsCreateInstallationAccessTokenWithResponse performs a POST /app/installations/{installation_id}/access_tokens (the `AppsCreateInstallationAccessToken` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	AppsCreateInstallationAccessTokenWithResponse(ctx context.Context, installationID string, body AppsCreateInstallationAccessTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*AppsCreateInstallationAccessTokenReply, error)
+
+	// AppsListReposAccessibleToInstallationWithResponse performs a GET /installation/repositories (the `AppsListReposAccessibleToInstallation` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AppsListReposAccessibleToInstallationWithResponse(ctx context.Context, params *AppsListReposAccessibleToInstallationParams, reqEditors ...RequestEditorFn) (*AppsListReposAccessibleToInstallationReply, error)
+
+	// RateLimitGetWithResponse performs a GET /rate_limit (the `RateLimitGet` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	RateLimitGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*RateLimitGetReply, error)
+
+	// ReposGetWithResponse performs a GET /repos/{owner}/{repo} (the `ReposGet` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposGetWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposGetReply, error)
+
+	// ActionsListArtifactsForRepoWithResponse performs a GET /repos/{owner}/{repo}/actions/artifacts (the `ActionsListArtifactsForRepo` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsListArtifactsForRepoWithResponse(ctx context.Context, owner string, repo string, params *ActionsListArtifactsForRepoParams, reqEditors ...RequestEditorFn) (*ActionsListArtifactsForRepoReply, error)
+
+	// ActionsGetJobForWorkflowRunWithResponse performs a GET /repos/{owner}/{repo}/actions/jobs/{job_id} (the `ActionsGetJobForWorkflowRun` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsGetJobForWorkflowRunWithResponse(ctx context.Context, owner string, repo string, jobID string, reqEditors ...RequestEditorFn) (*ActionsGetJobForWorkflowRunReply, error)
+
+	// ActionsGetGithubActionsPermissionsRepositoryWithResponse performs a GET /repos/{owner}/{repo}/actions/permissions (the `ActionsGetGithubActionsPermissionsRepository` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsGetGithubActionsPermissionsRepositoryWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ActionsGetGithubActionsPermissionsRepositoryReply, error)
+
+	// ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryWithResponse performs a GET /repos/{owner}/{repo}/actions/permissions/workflow (the `ActionsGetGithubActionsDefaultWorkflowPermissionsRepository` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply, error)
+
+	// ActionsListSelfHostedRunnersForRepoWithResponse performs a GET /repos/{owner}/{repo}/actions/runners (the `ActionsListSelfHostedRunnersForRepo` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsListSelfHostedRunnersForRepoWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ActionsListSelfHostedRunnersForRepoReply, error)
+
+	// ActionsListWorkflowRunsForRepoWithResponse performs a GET /repos/{owner}/{repo}/actions/runs (the `ActionsListWorkflowRunsForRepo` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsListWorkflowRunsForRepoWithResponse(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*ActionsListWorkflowRunsForRepoReply, error)
+
+	// ActionsGetPendingDeploymentsForRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsGetPendingDeploymentsForRunWithResponse(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*ActionsGetPendingDeploymentsForRunReply, error)
+
+	// ActionsListRepoVariablesWithResponse performs a GET /repos/{owner}/{repo}/actions/variables (the `ActionsListRepoVariables` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsListRepoVariablesWithResponse(ctx context.Context, owner string, repo string, params *ActionsListRepoVariablesParams, reqEditors ...RequestEditorFn) (*ActionsListRepoVariablesReply, error)
+
+	// ActionsListRepoWorkflowsWithResponse performs a GET /repos/{owner}/{repo}/actions/workflows (the `ActionsListRepoWorkflows` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsListRepoWorkflowsWithResponse(ctx context.Context, owner string, repo string, params *ActionsListRepoWorkflowsParams, reqEditors ...RequestEditorFn) (*ActionsListRepoWorkflowsReply, error)
+
+	// ActionsListWorkflowRunsWithResponse performs a GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs (the `ActionsListWorkflowRuns` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsListWorkflowRunsWithResponse(ctx context.Context, owner string, repo string, workflowID string, params *ActionsListWorkflowRunsParams, reqEditors ...RequestEditorFn) (*ActionsListWorkflowRunsReply, error)
+
+	// ChecksCreateWithBodyWithResponse performs a POST /repos/{owner}/{repo}/check-runs (the `ChecksCreate` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ChecksCreateWithBodyWithResponse(ctx context.Context, owner string, repo string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChecksCreateReply, error)
+
+	// ChecksCreateWithResponse performs a POST /repos/{owner}/{repo}/check-runs (the `ChecksCreate` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	ChecksCreateWithResponse(ctx context.Context, owner string, repo string, body ChecksCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ChecksCreateReply, error)
+
+	// ChecksUpdateWithBodyWithResponse performs a PATCH /repos/{owner}/{repo}/check-runs/{check_run_id} (the `ChecksUpdate` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ChecksUpdateWithBodyWithResponse(ctx context.Context, owner string, repo string, checkRunID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChecksUpdateReply, error)
+
+	// ChecksUpdateWithResponse performs a PATCH /repos/{owner}/{repo}/check-runs/{check_run_id} (the `ChecksUpdate` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	ChecksUpdateWithResponse(ctx context.Context, owner string, repo string, checkRunID string, body ChecksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ChecksUpdateReply, error)
+
+	// CodeScanningListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/code-scanning/alerts (the `CodeScanningListAlertsForRepo` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	CodeScanningListAlertsForRepoWithResponse(ctx context.Context, owner string, repo string, params *CodeScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*CodeScanningListAlertsForRepoReply, error)
+
+	// ReposListCollaboratorsWithResponse performs a GET /repos/{owner}/{repo}/collaborators (the `ReposListCollaborators` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposListCollaboratorsWithResponse(ctx context.Context, owner string, repo string, params *ReposListCollaboratorsParams, reqEditors ...RequestEditorFn) (*ReposListCollaboratorsReply, error)
+
+	// ReposListPullRequestsAssociatedWithCommitWithResponse performs a GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls (the `ReposListPullRequestsAssociatedWithCommit` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposListPullRequestsAssociatedWithCommitWithResponse(ctx context.Context, owner string, repo string, commitSha string, reqEditors ...RequestEditorFn) (*ReposListPullRequestsAssociatedWithCommitReply, error)
+
+	// ReposGetCommitWithResponse performs a GET /repos/{owner}/{repo}/commits/{ref} (the `ReposGetCommit` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposGetCommitWithResponse(ctx context.Context, owner string, repo string, ref string, reqEditors ...RequestEditorFn) (*ReposGetCommitReply, error)
+
+	// ChecksListForRefWithResponse performs a GET /repos/{owner}/{repo}/commits/{ref}/check-runs (the `ChecksListForRef` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ChecksListForRefWithResponse(ctx context.Context, owner string, repo string, ref string, params *ChecksListForRefParams, reqEditors ...RequestEditorFn) (*ChecksListForRefReply, error)
+
+	// DependabotListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/dependabot/alerts (the `DependabotListAlertsForRepo` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	DependabotListAlertsForRepoWithResponse(ctx context.Context, owner string, repo string, params *DependabotListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*DependabotListAlertsForRepoReply, error)
+
+	// ReposListDeploymentsWithResponse performs a GET /repos/{owner}/{repo}/deployments (the `ReposListDeployments` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposListDeploymentsWithResponse(ctx context.Context, owner string, repo string, params *ReposListDeploymentsParams, reqEditors ...RequestEditorFn) (*ReposListDeploymentsReply, error)
+
+	// ReposListDeploymentStatusesWithResponse performs a GET /repos/{owner}/{repo}/deployments/{deployment_id}/statuses (the `ReposListDeploymentStatuses` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposListDeploymentStatusesWithResponse(ctx context.Context, owner string, repo string, deploymentID string, params *ReposListDeploymentStatusesParams, reqEditors ...RequestEditorFn) (*ReposListDeploymentStatusesReply, error)
+
+	// ReposGetAllEnvironmentsWithResponse performs a GET /repos/{owner}/{repo}/environments (the `ReposGetAllEnvironments` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposGetAllEnvironmentsWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposGetAllEnvironmentsReply, error)
+
+	// AppsGetRepoInstallationWithResponse performs a GET /repos/{owner}/{repo}/installation (the `AppsGetRepoInstallation` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AppsGetRepoInstallationWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*AppsGetRepoInstallationReply, error)
+
+	// IssuesListCommentsWithResponse performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	IssuesListCommentsWithResponse(ctx context.Context, owner string, repo string, issueNumber string, params *IssuesListCommentsParams, reqEditors ...RequestEditorFn) (*IssuesListCommentsReply, error)
+
+	// IssuesCreateCommentWithBodyWithResponse performs a POST /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesCreateComment` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	IssuesCreateCommentWithBodyWithResponse(ctx context.Context, owner string, repo string, issueNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IssuesCreateCommentReply, error)
+
+	// IssuesCreateCommentWithResponse performs a POST /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesCreateComment` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	IssuesCreateCommentWithResponse(ctx context.Context, owner string, repo string, issueNumber string, body IssuesCreateCommentJSONRequestBody, reqEditors ...RequestEditorFn) (*IssuesCreateCommentReply, error)
+
+	// ReposListDeployKeysWithResponse performs a GET /repos/{owner}/{repo}/keys (the `ReposListDeployKeys` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposListDeployKeysWithResponse(ctx context.Context, owner string, repo string, params *ReposListDeployKeysParams, reqEditors ...RequestEditorFn) (*ReposListDeployKeysReply, error)
+
+	// PullsListWithResponse performs a GET /repos/{owner}/{repo}/pulls (the `PullsList` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	PullsListWithResponse(ctx context.Context, owner string, repo string, params *PullsListParams, reqEditors ...RequestEditorFn) (*PullsListReply, error)
+
+	// PullsListFilesWithResponse performs a GET /repos/{owner}/{repo}/pulls/{pull_number}/files (the `PullsListFiles` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	PullsListFilesWithResponse(ctx context.Context, owner string, repo string, pullNumber string, params *PullsListFilesParams, reqEditors ...RequestEditorFn) (*PullsListFilesReply, error)
+
+	// PullsMergeWithBodyWithResponse performs a PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge (the `PullsMerge` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	PullsMergeWithBodyWithResponse(ctx context.Context, owner string, repo string, pullNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PullsMergeReply, error)
+
+	// PullsMergeWithResponse performs a PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge (the `PullsMerge` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	PullsMergeWithResponse(ctx context.Context, owner string, repo string, pullNumber string, body PullsMergeJSONRequestBody, reqEditors ...RequestEditorFn) (*PullsMergeReply, error)
+
+	// ReposListReleasesWithResponse performs a GET /repos/{owner}/{repo}/releases (the `ReposListReleases` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposListReleasesWithResponse(ctx context.Context, owner string, repo string, params *ReposListReleasesParams, reqEditors ...RequestEditorFn) (*ReposListReleasesReply, error)
+
+	// ReposGetLatestReleaseWithResponse performs a GET /repos/{owner}/{repo}/releases/latest (the `ReposGetLatestRelease` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposGetLatestReleaseWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposGetLatestReleaseReply, error)
+
+	// ReposGetBranchRulesWithResponse performs a GET /repos/{owner}/{repo}/rules/branches/{branch} (the `ReposGetBranchRules` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposGetBranchRulesWithResponse(ctx context.Context, owner string, repo string, branch string, reqEditors ...RequestEditorFn) (*ReposGetBranchRulesReply, error)
+
+	// SecretScanningListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/secret-scanning/alerts (the `SecretScanningListAlertsForRepo` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	SecretScanningListAlertsForRepoWithResponse(ctx context.Context, owner string, repo string, params *SecretScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*SecretScanningListAlertsForRepoReply, error)
+
+	// SecurityAdvisoriesListRepositoryAdvisoriesWithResponse performs a GET /repos/{owner}/{repo}/security-advisories (the `SecurityAdvisoriesListRepositoryAdvisories` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	SecurityAdvisoriesListRepositoryAdvisoriesWithResponse(ctx context.Context, owner string, repo string, params *SecurityAdvisoriesListRepositoryAdvisoriesParams, reqEditors ...RequestEditorFn) (*SecurityAdvisoriesListRepositoryAdvisoriesReply, error)
+
+	// ReposCheckVulnerabilityAlertsWithResponse performs a GET /repos/{owner}/{repo}/vulnerability-alerts (the `ReposCheckVulnerabilityAlerts` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposCheckVulnerabilityAlertsWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposCheckVulnerabilityAlertsReply, error)
+
+	// UsersGetByUsernameWithResponse performs a GET /users/{username} (the `UsersGetByUsername` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	UsersGetByUsernameWithResponse(ctx context.Context, username string, reqEditors ...RequestEditorFn) (*UsersGetByUsernameReply, error)
+
+	// ActivityListReposStarredByUserWithResponse performs a GET /users/{username}/starred (the `ActivityListReposStarredByUser` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActivityListReposStarredByUserWithResponse(ctx context.Context, username string, params *ActivityListReposStarredByUserParams, reqEditors ...RequestEditorFn) (*ActivityListReposStarredByUserReply, error)
+}
+
+type AppsGetAuthenticatedReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Integration
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AppsGetAuthenticatedReply) GetJSON200() *Integration {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r AppsGetAuthenticatedReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AppsGetAuthenticatedReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AppsGetAuthenticatedReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AppsGetAuthenticatedReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AppsListInstallationsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]Installation
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AppsListInstallationsReply) GetJSON200() *[]Installation {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r AppsListInstallationsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AppsListInstallationsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AppsListInstallationsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AppsListInstallationsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AppsCreateInstallationAccessTokenReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *InstallationToken
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r AppsCreateInstallationAccessTokenReply) GetJSON201() *InstallationToken {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r AppsCreateInstallationAccessTokenReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AppsCreateInstallationAccessTokenReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AppsCreateInstallationAccessTokenReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AppsCreateInstallationAccessTokenReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AppsListReposAccessibleToInstallationReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Repositories []struct {
+			// CustomProperties The custom properties that were defined for the repository. The keys are the custom property names, and the values are the corresponding custom property values. Present for org repos only.
+			CustomProperties map[string]any `json:"custom_properties,omitempty"`
+			Description      string         `json:"description"`
+			FullName         string         `json:"full_name"`
+			HTMLURL          string         `json:"html_url"`
+			Language         string         `json:"language"`
+			StargazersCount  int            `json:"stargazers_count"`
+		} `json:"repositories"`
+		RepositorySelection string `json:"repository_selection,omitempty"`
+		TotalCount          int    `json:"total_count"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AppsListReposAccessibleToInstallationReply) GetJSON200() *struct {
+	Repositories []struct {
+		// CustomProperties The custom properties that were defined for the repository. The keys are the custom property names, and the values are the corresponding custom property values. Present for org repos only.
+		CustomProperties map[string]any `json:"custom_properties,omitempty"`
+		Description      string         `json:"description"`
+		FullName         string         `json:"full_name"`
+		HTMLURL          string         `json:"html_url"`
+		Language         string         `json:"language"`
+		StargazersCount  int            `json:"stargazers_count"`
+	} `json:"repositories"`
+	RepositorySelection string `json:"repository_selection,omitempty"`
+	TotalCount          int    `json:"total_count"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r AppsListReposAccessibleToInstallationReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AppsListReposAccessibleToInstallationReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AppsListReposAccessibleToInstallationReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AppsListReposAccessibleToInstallationReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RateLimitGetReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *RateLimitOverview
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RateLimitGetReply) GetJSON200() *RateLimitOverview {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r RateLimitGetReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RateLimitGetReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RateLimitGetReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RateLimitGetReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposGetReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FullRepository
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposGetReply) GetJSON200() *FullRepository {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposGetReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposGetReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposGetReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposGetReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsListArtifactsForRepoReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Artifacts  []Artifact `json:"artifacts"`
+		TotalCount int        `json:"total_count"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsListArtifactsForRepoReply) GetJSON200() *struct {
+	Artifacts  []Artifact `json:"artifacts"`
+	TotalCount int        `json:"total_count"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsListArtifactsForRepoReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsListArtifactsForRepoReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsListArtifactsForRepoReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsListArtifactsForRepoReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsGetJobForWorkflowRunReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Job
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsGetJobForWorkflowRunReply) GetJSON200() *Job {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsGetJobForWorkflowRunReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsGetJobForWorkflowRunReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsGetJobForWorkflowRunReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsGetJobForWorkflowRunReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsGetGithubActionsPermissionsRepositoryReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ActionsRepositoryPermissions
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsGetGithubActionsPermissionsRepositoryReply) GetJSON200() *ActionsRepositoryPermissions {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsGetGithubActionsPermissionsRepositoryReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsGetGithubActionsPermissionsRepositoryReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsGetGithubActionsPermissionsRepositoryReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsGetGithubActionsPermissionsRepositoryReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ActionsGetDefaultWorkflowPermissions
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply) GetJSON200() *ActionsGetDefaultWorkflowPermissions {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsListSelfHostedRunnersForRepoReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Runners    []Runner `json:"runners"`
+		TotalCount int      `json:"total_count"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsListSelfHostedRunnersForRepoReply) GetJSON200() *struct {
+	Runners    []Runner `json:"runners"`
+	TotalCount int      `json:"total_count"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsListSelfHostedRunnersForRepoReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsListSelfHostedRunnersForRepoReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsListSelfHostedRunnersForRepoReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsListSelfHostedRunnersForRepoReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsListWorkflowRunsForRepoReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		TotalCount   int           `json:"total_count"`
+		WorkflowRuns []WorkflowRun `json:"workflow_runs"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsListWorkflowRunsForRepoReply) GetJSON200() *struct {
+	TotalCount   int           `json:"total_count"`
+	WorkflowRuns []WorkflowRun `json:"workflow_runs"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsListWorkflowRunsForRepoReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsListWorkflowRunsForRepoReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsListWorkflowRunsForRepoReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsListWorkflowRunsForRepoReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsGetPendingDeploymentsForRunReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]PendingDeployment
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsGetPendingDeploymentsForRunReply) GetJSON200() *[]PendingDeployment {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsGetPendingDeploymentsForRunReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsGetPendingDeploymentsForRunReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsGetPendingDeploymentsForRunReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsGetPendingDeploymentsForRunReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsListRepoVariablesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		TotalCount int               `json:"total_count"`
+		Variables  []ActionsVariable `json:"variables"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsListRepoVariablesReply) GetJSON200() *struct {
+	TotalCount int               `json:"total_count"`
+	Variables  []ActionsVariable `json:"variables"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsListRepoVariablesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsListRepoVariablesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsListRepoVariablesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsListRepoVariablesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsListRepoWorkflowsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		TotalCount int        `json:"total_count"`
+		Workflows  []Workflow `json:"workflows"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsListRepoWorkflowsReply) GetJSON200() *struct {
+	TotalCount int        `json:"total_count"`
+	Workflows  []Workflow `json:"workflows"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsListRepoWorkflowsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsListRepoWorkflowsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsListRepoWorkflowsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsListRepoWorkflowsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsListWorkflowRunsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		TotalCount   int           `json:"total_count"`
+		WorkflowRuns []WorkflowRun `json:"workflow_runs"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsListWorkflowRunsReply) GetJSON200() *struct {
+	TotalCount   int           `json:"total_count"`
+	WorkflowRuns []WorkflowRun `json:"workflow_runs"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsListWorkflowRunsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsListWorkflowRunsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsListWorkflowRunsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsListWorkflowRunsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ChecksCreateReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *CheckRun
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ChecksCreateReply) GetJSON201() *CheckRun {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r ChecksCreateReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ChecksCreateReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ChecksCreateReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ChecksCreateReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ChecksUpdateReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CheckRun
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ChecksUpdateReply) GetJSON200() *CheckRun {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ChecksUpdateReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ChecksUpdateReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ChecksUpdateReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ChecksUpdateReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CodeScanningListAlertsForRepoReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]CodeScanningAlertItems
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CodeScanningListAlertsForRepoReply) GetJSON200() *[]CodeScanningAlertItems {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r CodeScanningListAlertsForRepoReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CodeScanningListAlertsForRepoReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CodeScanningListAlertsForRepoReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CodeScanningListAlertsForRepoReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposListCollaboratorsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]Collaborator
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposListCollaboratorsReply) GetJSON200() *[]Collaborator {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposListCollaboratorsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposListCollaboratorsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposListCollaboratorsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposListCollaboratorsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposListPullRequestsAssociatedWithCommitReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]PullRequestSimple
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposListPullRequestsAssociatedWithCommitReply) GetJSON200() *[]PullRequestSimple {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposListPullRequestsAssociatedWithCommitReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposListPullRequestsAssociatedWithCommitReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposListPullRequestsAssociatedWithCommitReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposListPullRequestsAssociatedWithCommitReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposGetCommitReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Commit
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposGetCommitReply) GetJSON200() *Commit {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposGetCommitReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposGetCommitReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposGetCommitReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposGetCommitReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ChecksListForRefReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		CheckRuns  []CheckRun `json:"check_runs"`
+		TotalCount int        `json:"total_count"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ChecksListForRefReply) GetJSON200() *struct {
+	CheckRuns  []CheckRun `json:"check_runs"`
+	TotalCount int        `json:"total_count"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ChecksListForRefReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ChecksListForRefReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ChecksListForRefReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ChecksListForRefReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DependabotListAlertsForRepoReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]DependabotAlert
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DependabotListAlertsForRepoReply) GetJSON200() *[]DependabotAlert {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r DependabotListAlertsForRepoReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DependabotListAlertsForRepoReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DependabotListAlertsForRepoReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DependabotListAlertsForRepoReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposListDeploymentsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]Deployment
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposListDeploymentsReply) GetJSON200() *[]Deployment {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposListDeploymentsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposListDeploymentsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposListDeploymentsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposListDeploymentsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposListDeploymentStatusesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]DeploymentStatus
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposListDeploymentStatusesReply) GetJSON200() *[]DeploymentStatus {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposListDeploymentStatusesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposListDeploymentStatusesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposListDeploymentStatusesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposListDeploymentStatusesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposGetAllEnvironmentsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		Environments []Environment `json:"environments,omitempty"`
+
+		// TotalCount The number of environments in this repository
+		TotalCount int `json:"total_count,omitempty"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposGetAllEnvironmentsReply) GetJSON200() *struct {
+	Environments []Environment `json:"environments,omitempty"`
+
+	// TotalCount The number of environments in this repository
+	TotalCount int `json:"total_count,omitempty"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposGetAllEnvironmentsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposGetAllEnvironmentsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposGetAllEnvironmentsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposGetAllEnvironmentsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AppsGetRepoInstallationReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Installation
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AppsGetRepoInstallationReply) GetJSON200() *Installation {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r AppsGetRepoInstallationReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AppsGetRepoInstallationReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AppsGetRepoInstallationReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AppsGetRepoInstallationReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type IssuesListCommentsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]IssueComment
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IssuesListCommentsReply) GetJSON200() *[]IssueComment {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r IssuesListCommentsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IssuesListCommentsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IssuesListCommentsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IssuesListCommentsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type IssuesCreateCommentReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *IssueComment
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r IssuesCreateCommentReply) GetJSON201() *IssueComment {
+	return r.JSON201
+}
+
+// GetBody returns the raw response body bytes
+func (r IssuesCreateCommentReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IssuesCreateCommentReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IssuesCreateCommentReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IssuesCreateCommentReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposListDeployKeysReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]DeployKey
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposListDeployKeysReply) GetJSON200() *[]DeployKey {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposListDeployKeysReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposListDeployKeysReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposListDeployKeysReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposListDeployKeysReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PullsListReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]PullRequestSimple
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PullsListReply) GetJSON200() *[]PullRequestSimple {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r PullsListReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PullsListReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PullsListReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PullsListReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PullsListFilesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]DiffEntry
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PullsListFilesReply) GetJSON200() *[]DiffEntry {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r PullsListFilesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PullsListFilesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PullsListFilesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PullsListFilesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PullsMergeReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PullRequestMergeResult
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PullsMergeReply) GetJSON200() *PullRequestMergeResult {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r PullsMergeReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PullsMergeReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PullsMergeReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PullsMergeReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposListReleasesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]Release
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposListReleasesReply) GetJSON200() *[]Release {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposListReleasesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposListReleasesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposListReleasesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposListReleasesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposGetLatestReleaseReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Release
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposGetLatestReleaseReply) GetJSON200() *Release {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposGetLatestReleaseReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposGetLatestReleaseReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposGetLatestReleaseReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposGetLatestReleaseReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposGetBranchRulesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]RepositoryRuleDetailed
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposGetBranchRulesReply) GetJSON200() *[]RepositoryRuleDetailed {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposGetBranchRulesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposGetBranchRulesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposGetBranchRulesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposGetBranchRulesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SecretScanningListAlertsForRepoReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]SecretScanningAlert
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SecretScanningListAlertsForRepoReply) GetJSON200() *[]SecretScanningAlert {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r SecretScanningListAlertsForRepoReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SecretScanningListAlertsForRepoReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SecretScanningListAlertsForRepoReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SecretScanningListAlertsForRepoReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SecurityAdvisoriesListRepositoryAdvisoriesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]RepositoryAdvisory
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SecurityAdvisoriesListRepositoryAdvisoriesReply) GetJSON200() *[]RepositoryAdvisory {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r SecurityAdvisoriesListRepositoryAdvisoriesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SecurityAdvisoriesListRepositoryAdvisoriesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SecurityAdvisoriesListRepositoryAdvisoriesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SecurityAdvisoriesListRepositoryAdvisoriesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReposCheckVulnerabilityAlertsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposCheckVulnerabilityAlertsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposCheckVulnerabilityAlertsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposCheckVulnerabilityAlertsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposCheckVulnerabilityAlertsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UsersGetByUsernameReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PublicUser
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UsersGetByUsernameReply) GetJSON200() *PublicUser {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r UsersGetByUsernameReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UsersGetByUsernameReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UsersGetByUsernameReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UsersGetByUsernameReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActivityListReposStarredByUserReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]StarredRepository
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActivityListReposStarredByUserReply) GetJSON200() *[]StarredRepository {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActivityListReposStarredByUserReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActivityListReposStarredByUserReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActivityListReposStarredByUserReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActivityListReposStarredByUserReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AppsGetAuthenticatedWithResponse performs a GET /app (the `AppsGetAuthenticated` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AppsGetAuthenticatedWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AppsGetAuthenticatedReply, error) {
+	rsp, err := c.AppsGetAuthenticated(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAppsGetAuthenticatedReply(rsp)
+}
+
+// AppsListInstallationsWithResponse performs a GET /app/installations (the `AppsListInstallations` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AppsListInstallationsWithResponse(ctx context.Context, params *AppsListInstallationsParams, reqEditors ...RequestEditorFn) (*AppsListInstallationsReply, error) {
+	rsp, err := c.AppsListInstallations(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAppsListInstallationsReply(rsp)
+}
+
+// AppsCreateInstallationAccessTokenWithBodyWithResponse performs a POST /app/installations/{installation_id}/access_tokens (the `AppsCreateInstallationAccessToken` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AppsCreateInstallationAccessTokenWithBodyWithResponse(ctx context.Context, installationID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AppsCreateInstallationAccessTokenReply, error) {
+	rsp, err := c.AppsCreateInstallationAccessTokenWithBody(ctx, installationID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAppsCreateInstallationAccessTokenReply(rsp)
+}
+
+// AppsCreateInstallationAccessTokenWithResponse performs a POST /app/installations/{installation_id}/access_tokens (the `AppsCreateInstallationAccessToken` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AppsCreateInstallationAccessTokenWithResponse(ctx context.Context, installationID string, body AppsCreateInstallationAccessTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*AppsCreateInstallationAccessTokenReply, error) {
+	rsp, err := c.AppsCreateInstallationAccessToken(ctx, installationID, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAppsCreateInstallationAccessTokenReply(rsp)
+}
+
+// AppsListReposAccessibleToInstallationWithResponse performs a GET /installation/repositories (the `AppsListReposAccessibleToInstallation` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AppsListReposAccessibleToInstallationWithResponse(ctx context.Context, params *AppsListReposAccessibleToInstallationParams, reqEditors ...RequestEditorFn) (*AppsListReposAccessibleToInstallationReply, error) {
+	rsp, err := c.AppsListReposAccessibleToInstallation(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAppsListReposAccessibleToInstallationReply(rsp)
+}
+
+// RateLimitGetWithResponse performs a GET /rate_limit (the `RateLimitGet` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) RateLimitGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*RateLimitGetReply, error) {
+	rsp, err := c.RateLimitGet(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRateLimitGetReply(rsp)
+}
+
+// ReposGetWithResponse performs a GET /repos/{owner}/{repo} (the `ReposGet` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposGetWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposGetReply, error) {
+	rsp, err := c.ReposGet(ctx, owner, repo, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposGetReply(rsp)
+}
+
+// ActionsListArtifactsForRepoWithResponse performs a GET /repos/{owner}/{repo}/actions/artifacts (the `ActionsListArtifactsForRepo` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsListArtifactsForRepoWithResponse(ctx context.Context, owner string, repo string, params *ActionsListArtifactsForRepoParams, reqEditors ...RequestEditorFn) (*ActionsListArtifactsForRepoReply, error) {
+	rsp, err := c.ActionsListArtifactsForRepo(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsListArtifactsForRepoReply(rsp)
+}
+
+// ActionsGetJobForWorkflowRunWithResponse performs a GET /repos/{owner}/{repo}/actions/jobs/{job_id} (the `ActionsGetJobForWorkflowRun` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsGetJobForWorkflowRunWithResponse(ctx context.Context, owner string, repo string, jobID string, reqEditors ...RequestEditorFn) (*ActionsGetJobForWorkflowRunReply, error) {
+	rsp, err := c.ActionsGetJobForWorkflowRun(ctx, owner, repo, jobID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsGetJobForWorkflowRunReply(rsp)
+}
+
+// ActionsGetGithubActionsPermissionsRepositoryWithResponse performs a GET /repos/{owner}/{repo}/actions/permissions (the `ActionsGetGithubActionsPermissionsRepository` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsGetGithubActionsPermissionsRepositoryWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ActionsGetGithubActionsPermissionsRepositoryReply, error) {
+	rsp, err := c.ActionsGetGithubActionsPermissionsRepository(ctx, owner, repo, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsGetGithubActionsPermissionsRepositoryReply(rsp)
+}
+
+// ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryWithResponse performs a GET /repos/{owner}/{repo}/actions/permissions/workflow (the `ActionsGetGithubActionsDefaultWorkflowPermissionsRepository` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply, error) {
+	rsp, err := c.ActionsGetGithubActionsDefaultWorkflowPermissionsRepository(ctx, owner, repo, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply(rsp)
+}
+
+// ActionsListSelfHostedRunnersForRepoWithResponse performs a GET /repos/{owner}/{repo}/actions/runners (the `ActionsListSelfHostedRunnersForRepo` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsListSelfHostedRunnersForRepoWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ActionsListSelfHostedRunnersForRepoReply, error) {
+	rsp, err := c.ActionsListSelfHostedRunnersForRepo(ctx, owner, repo, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsListSelfHostedRunnersForRepoReply(rsp)
+}
+
+// ActionsListWorkflowRunsForRepoWithResponse performs a GET /repos/{owner}/{repo}/actions/runs (the `ActionsListWorkflowRunsForRepo` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsListWorkflowRunsForRepoWithResponse(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*ActionsListWorkflowRunsForRepoReply, error) {
+	rsp, err := c.ActionsListWorkflowRunsForRepo(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsListWorkflowRunsForRepoReply(rsp)
+}
+
+// ActionsGetPendingDeploymentsForRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsGetPendingDeploymentsForRunWithResponse(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*ActionsGetPendingDeploymentsForRunReply, error) {
+	rsp, err := c.ActionsGetPendingDeploymentsForRun(ctx, owner, repo, runID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsGetPendingDeploymentsForRunReply(rsp)
+}
+
+// ActionsListRepoVariablesWithResponse performs a GET /repos/{owner}/{repo}/actions/variables (the `ActionsListRepoVariables` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsListRepoVariablesWithResponse(ctx context.Context, owner string, repo string, params *ActionsListRepoVariablesParams, reqEditors ...RequestEditorFn) (*ActionsListRepoVariablesReply, error) {
+	rsp, err := c.ActionsListRepoVariables(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsListRepoVariablesReply(rsp)
+}
+
+// ActionsListRepoWorkflowsWithResponse performs a GET /repos/{owner}/{repo}/actions/workflows (the `ActionsListRepoWorkflows` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsListRepoWorkflowsWithResponse(ctx context.Context, owner string, repo string, params *ActionsListRepoWorkflowsParams, reqEditors ...RequestEditorFn) (*ActionsListRepoWorkflowsReply, error) {
+	rsp, err := c.ActionsListRepoWorkflows(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsListRepoWorkflowsReply(rsp)
+}
+
+// ActionsListWorkflowRunsWithResponse performs a GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs (the `ActionsListWorkflowRuns` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsListWorkflowRunsWithResponse(ctx context.Context, owner string, repo string, workflowID string, params *ActionsListWorkflowRunsParams, reqEditors ...RequestEditorFn) (*ActionsListWorkflowRunsReply, error) {
+	rsp, err := c.ActionsListWorkflowRuns(ctx, owner, repo, workflowID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsListWorkflowRunsReply(rsp)
+}
+
+// ChecksCreateWithBodyWithResponse performs a POST /repos/{owner}/{repo}/check-runs (the `ChecksCreate` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ChecksCreateWithBodyWithResponse(ctx context.Context, owner string, repo string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChecksCreateReply, error) {
+	rsp, err := c.ChecksCreateWithBody(ctx, owner, repo, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChecksCreateReply(rsp)
+}
+
+// ChecksCreateWithResponse performs a POST /repos/{owner}/{repo}/check-runs (the `ChecksCreate` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ChecksCreateWithResponse(ctx context.Context, owner string, repo string, body ChecksCreateJSONRequestBody, reqEditors ...RequestEditorFn) (*ChecksCreateReply, error) {
+	rsp, err := c.ChecksCreate(ctx, owner, repo, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChecksCreateReply(rsp)
+}
+
+// ChecksUpdateWithBodyWithResponse performs a PATCH /repos/{owner}/{repo}/check-runs/{check_run_id} (the `ChecksUpdate` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ChecksUpdateWithBodyWithResponse(ctx context.Context, owner string, repo string, checkRunID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChecksUpdateReply, error) {
+	rsp, err := c.ChecksUpdateWithBody(ctx, owner, repo, checkRunID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChecksUpdateReply(rsp)
+}
+
+// ChecksUpdateWithResponse performs a PATCH /repos/{owner}/{repo}/check-runs/{check_run_id} (the `ChecksUpdate` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ChecksUpdateWithResponse(ctx context.Context, owner string, repo string, checkRunID string, body ChecksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ChecksUpdateReply, error) {
+	rsp, err := c.ChecksUpdate(ctx, owner, repo, checkRunID, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChecksUpdateReply(rsp)
+}
+
+// CodeScanningListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/code-scanning/alerts (the `CodeScanningListAlertsForRepo` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) CodeScanningListAlertsForRepoWithResponse(ctx context.Context, owner string, repo string, params *CodeScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*CodeScanningListAlertsForRepoReply, error) {
+	rsp, err := c.CodeScanningListAlertsForRepo(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCodeScanningListAlertsForRepoReply(rsp)
+}
+
+// ReposListCollaboratorsWithResponse performs a GET /repos/{owner}/{repo}/collaborators (the `ReposListCollaborators` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposListCollaboratorsWithResponse(ctx context.Context, owner string, repo string, params *ReposListCollaboratorsParams, reqEditors ...RequestEditorFn) (*ReposListCollaboratorsReply, error) {
+	rsp, err := c.ReposListCollaborators(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposListCollaboratorsReply(rsp)
+}
+
+// ReposListPullRequestsAssociatedWithCommitWithResponse performs a GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls (the `ReposListPullRequestsAssociatedWithCommit` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposListPullRequestsAssociatedWithCommitWithResponse(ctx context.Context, owner string, repo string, commitSha string, reqEditors ...RequestEditorFn) (*ReposListPullRequestsAssociatedWithCommitReply, error) {
+	rsp, err := c.ReposListPullRequestsAssociatedWithCommit(ctx, owner, repo, commitSha, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposListPullRequestsAssociatedWithCommitReply(rsp)
+}
+
+// ReposGetCommitWithResponse performs a GET /repos/{owner}/{repo}/commits/{ref} (the `ReposGetCommit` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposGetCommitWithResponse(ctx context.Context, owner string, repo string, ref string, reqEditors ...RequestEditorFn) (*ReposGetCommitReply, error) {
+	rsp, err := c.ReposGetCommit(ctx, owner, repo, ref, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposGetCommitReply(rsp)
+}
+
+// ChecksListForRefWithResponse performs a GET /repos/{owner}/{repo}/commits/{ref}/check-runs (the `ChecksListForRef` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ChecksListForRefWithResponse(ctx context.Context, owner string, repo string, ref string, params *ChecksListForRefParams, reqEditors ...RequestEditorFn) (*ChecksListForRefReply, error) {
+	rsp, err := c.ChecksListForRef(ctx, owner, repo, ref, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChecksListForRefReply(rsp)
+}
+
+// DependabotListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/dependabot/alerts (the `DependabotListAlertsForRepo` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DependabotListAlertsForRepoWithResponse(ctx context.Context, owner string, repo string, params *DependabotListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*DependabotListAlertsForRepoReply, error) {
+	rsp, err := c.DependabotListAlertsForRepo(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDependabotListAlertsForRepoReply(rsp)
+}
+
+// ReposListDeploymentsWithResponse performs a GET /repos/{owner}/{repo}/deployments (the `ReposListDeployments` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposListDeploymentsWithResponse(ctx context.Context, owner string, repo string, params *ReposListDeploymentsParams, reqEditors ...RequestEditorFn) (*ReposListDeploymentsReply, error) {
+	rsp, err := c.ReposListDeployments(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposListDeploymentsReply(rsp)
+}
+
+// ReposListDeploymentStatusesWithResponse performs a GET /repos/{owner}/{repo}/deployments/{deployment_id}/statuses (the `ReposListDeploymentStatuses` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposListDeploymentStatusesWithResponse(ctx context.Context, owner string, repo string, deploymentID string, params *ReposListDeploymentStatusesParams, reqEditors ...RequestEditorFn) (*ReposListDeploymentStatusesReply, error) {
+	rsp, err := c.ReposListDeploymentStatuses(ctx, owner, repo, deploymentID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposListDeploymentStatusesReply(rsp)
+}
+
+// ReposGetAllEnvironmentsWithResponse performs a GET /repos/{owner}/{repo}/environments (the `ReposGetAllEnvironments` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposGetAllEnvironmentsWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposGetAllEnvironmentsReply, error) {
+	rsp, err := c.ReposGetAllEnvironments(ctx, owner, repo, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposGetAllEnvironmentsReply(rsp)
+}
+
+// AppsGetRepoInstallationWithResponse performs a GET /repos/{owner}/{repo}/installation (the `AppsGetRepoInstallation` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AppsGetRepoInstallationWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*AppsGetRepoInstallationReply, error) {
+	rsp, err := c.AppsGetRepoInstallation(ctx, owner, repo, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAppsGetRepoInstallationReply(rsp)
+}
+
+// IssuesListCommentsWithResponse performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) IssuesListCommentsWithResponse(ctx context.Context, owner string, repo string, issueNumber string, params *IssuesListCommentsParams, reqEditors ...RequestEditorFn) (*IssuesListCommentsReply, error) {
+	rsp, err := c.IssuesListComments(ctx, owner, repo, issueNumber, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIssuesListCommentsReply(rsp)
+}
+
+// IssuesCreateCommentWithBodyWithResponse performs a POST /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesCreateComment` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) IssuesCreateCommentWithBodyWithResponse(ctx context.Context, owner string, repo string, issueNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IssuesCreateCommentReply, error) {
+	rsp, err := c.IssuesCreateCommentWithBody(ctx, owner, repo, issueNumber, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIssuesCreateCommentReply(rsp)
+}
+
+// IssuesCreateCommentWithResponse performs a POST /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesCreateComment` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) IssuesCreateCommentWithResponse(ctx context.Context, owner string, repo string, issueNumber string, body IssuesCreateCommentJSONRequestBody, reqEditors ...RequestEditorFn) (*IssuesCreateCommentReply, error) {
+	rsp, err := c.IssuesCreateComment(ctx, owner, repo, issueNumber, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIssuesCreateCommentReply(rsp)
+}
+
+// ReposListDeployKeysWithResponse performs a GET /repos/{owner}/{repo}/keys (the `ReposListDeployKeys` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposListDeployKeysWithResponse(ctx context.Context, owner string, repo string, params *ReposListDeployKeysParams, reqEditors ...RequestEditorFn) (*ReposListDeployKeysReply, error) {
+	rsp, err := c.ReposListDeployKeys(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposListDeployKeysReply(rsp)
+}
+
+// PullsListWithResponse performs a GET /repos/{owner}/{repo}/pulls (the `PullsList` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PullsListWithResponse(ctx context.Context, owner string, repo string, params *PullsListParams, reqEditors ...RequestEditorFn) (*PullsListReply, error) {
+	rsp, err := c.PullsList(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePullsListReply(rsp)
+}
+
+// PullsListFilesWithResponse performs a GET /repos/{owner}/{repo}/pulls/{pull_number}/files (the `PullsListFiles` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PullsListFilesWithResponse(ctx context.Context, owner string, repo string, pullNumber string, params *PullsListFilesParams, reqEditors ...RequestEditorFn) (*PullsListFilesReply, error) {
+	rsp, err := c.PullsListFiles(ctx, owner, repo, pullNumber, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePullsListFilesReply(rsp)
+}
+
+// PullsMergeWithBodyWithResponse performs a PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge (the `PullsMerge` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PullsMergeWithBodyWithResponse(ctx context.Context, owner string, repo string, pullNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PullsMergeReply, error) {
+	rsp, err := c.PullsMergeWithBody(ctx, owner, repo, pullNumber, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePullsMergeReply(rsp)
+}
+
+// PullsMergeWithResponse performs a PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge (the `PullsMerge` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PullsMergeWithResponse(ctx context.Context, owner string, repo string, pullNumber string, body PullsMergeJSONRequestBody, reqEditors ...RequestEditorFn) (*PullsMergeReply, error) {
+	rsp, err := c.PullsMerge(ctx, owner, repo, pullNumber, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePullsMergeReply(rsp)
+}
+
+// ReposListReleasesWithResponse performs a GET /repos/{owner}/{repo}/releases (the `ReposListReleases` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposListReleasesWithResponse(ctx context.Context, owner string, repo string, params *ReposListReleasesParams, reqEditors ...RequestEditorFn) (*ReposListReleasesReply, error) {
+	rsp, err := c.ReposListReleases(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposListReleasesReply(rsp)
+}
+
+// ReposGetLatestReleaseWithResponse performs a GET /repos/{owner}/{repo}/releases/latest (the `ReposGetLatestRelease` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposGetLatestReleaseWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposGetLatestReleaseReply, error) {
+	rsp, err := c.ReposGetLatestRelease(ctx, owner, repo, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposGetLatestReleaseReply(rsp)
+}
+
+// ReposGetBranchRulesWithResponse performs a GET /repos/{owner}/{repo}/rules/branches/{branch} (the `ReposGetBranchRules` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposGetBranchRulesWithResponse(ctx context.Context, owner string, repo string, branch string, reqEditors ...RequestEditorFn) (*ReposGetBranchRulesReply, error) {
+	rsp, err := c.ReposGetBranchRules(ctx, owner, repo, branch, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposGetBranchRulesReply(rsp)
+}
+
+// SecretScanningListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/secret-scanning/alerts (the `SecretScanningListAlertsForRepo` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) SecretScanningListAlertsForRepoWithResponse(ctx context.Context, owner string, repo string, params *SecretScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*SecretScanningListAlertsForRepoReply, error) {
+	rsp, err := c.SecretScanningListAlertsForRepo(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecretScanningListAlertsForRepoReply(rsp)
+}
+
+// SecurityAdvisoriesListRepositoryAdvisoriesWithResponse performs a GET /repos/{owner}/{repo}/security-advisories (the `SecurityAdvisoriesListRepositoryAdvisories` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) SecurityAdvisoriesListRepositoryAdvisoriesWithResponse(ctx context.Context, owner string, repo string, params *SecurityAdvisoriesListRepositoryAdvisoriesParams, reqEditors ...RequestEditorFn) (*SecurityAdvisoriesListRepositoryAdvisoriesReply, error) {
+	rsp, err := c.SecurityAdvisoriesListRepositoryAdvisories(ctx, owner, repo, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSecurityAdvisoriesListRepositoryAdvisoriesReply(rsp)
+}
+
+// ReposCheckVulnerabilityAlertsWithResponse performs a GET /repos/{owner}/{repo}/vulnerability-alerts (the `ReposCheckVulnerabilityAlerts` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposCheckVulnerabilityAlertsWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposCheckVulnerabilityAlertsReply, error) {
+	rsp, err := c.ReposCheckVulnerabilityAlerts(ctx, owner, repo, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposCheckVulnerabilityAlertsReply(rsp)
+}
+
+// UsersGetByUsernameWithResponse performs a GET /users/{username} (the `UsersGetByUsername` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) UsersGetByUsernameWithResponse(ctx context.Context, username string, reqEditors ...RequestEditorFn) (*UsersGetByUsernameReply, error) {
+	rsp, err := c.UsersGetByUsername(ctx, username, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUsersGetByUsernameReply(rsp)
+}
+
+// ActivityListReposStarredByUserWithResponse performs a GET /users/{username}/starred (the `ActivityListReposStarredByUser` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActivityListReposStarredByUserWithResponse(ctx context.Context, username string, params *ActivityListReposStarredByUserParams, reqEditors ...RequestEditorFn) (*ActivityListReposStarredByUserReply, error) {
+	rsp, err := c.ActivityListReposStarredByUser(ctx, username, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActivityListReposStarredByUserReply(rsp)
+}
+
+// ParseAppsGetAuthenticatedReply parses an HTTP response from a AppsGetAuthenticatedWithResponse call
+func ParseAppsGetAuthenticatedReply(rsp *http.Response) (*AppsGetAuthenticatedReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AppsGetAuthenticatedReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Integration
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAppsListInstallationsReply parses an HTTP response from a AppsListInstallationsWithResponse call
+func ParseAppsListInstallationsReply(rsp *http.Response) (*AppsListInstallationsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AppsListInstallationsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []Installation
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAppsCreateInstallationAccessTokenReply parses an HTTP response from a AppsCreateInstallationAccessTokenWithResponse call
+func ParseAppsCreateInstallationAccessTokenReply(rsp *http.Response) (*AppsCreateInstallationAccessTokenReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AppsCreateInstallationAccessTokenReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest InstallationToken
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAppsListReposAccessibleToInstallationReply parses an HTTP response from a AppsListReposAccessibleToInstallationWithResponse call
+func ParseAppsListReposAccessibleToInstallationReply(rsp *http.Response) (*AppsListReposAccessibleToInstallationReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AppsListReposAccessibleToInstallationReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Repositories []struct {
+				// CustomProperties The custom properties that were defined for the repository. The keys are the custom property names, and the values are the corresponding custom property values. Present for org repos only.
+				CustomProperties map[string]any `json:"custom_properties,omitempty"`
+				Description      string         `json:"description"`
+				FullName         string         `json:"full_name"`
+				HTMLURL          string         `json:"html_url"`
+				Language         string         `json:"language"`
+				StargazersCount  int            `json:"stargazers_count"`
+			} `json:"repositories"`
+			RepositorySelection string `json:"repository_selection,omitempty"`
+			TotalCount          int    `json:"total_count"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRateLimitGetReply parses an HTTP response from a RateLimitGetWithResponse call
+func ParseRateLimitGetReply(rsp *http.Response) (*RateLimitGetReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RateLimitGetReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RateLimitOverview
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposGetReply parses an HTTP response from a ReposGetWithResponse call
+func ParseReposGetReply(rsp *http.Response) (*ReposGetReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposGetReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FullRepository
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsListArtifactsForRepoReply parses an HTTP response from a ActionsListArtifactsForRepoWithResponse call
+func ParseActionsListArtifactsForRepoReply(rsp *http.Response) (*ActionsListArtifactsForRepoReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsListArtifactsForRepoReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Artifacts  []Artifact `json:"artifacts"`
+			TotalCount int        `json:"total_count"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsGetJobForWorkflowRunReply parses an HTTP response from a ActionsGetJobForWorkflowRunWithResponse call
+func ParseActionsGetJobForWorkflowRunReply(rsp *http.Response) (*ActionsGetJobForWorkflowRunReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsGetJobForWorkflowRunReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Job
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsGetGithubActionsPermissionsRepositoryReply parses an HTTP response from a ActionsGetGithubActionsPermissionsRepositoryWithResponse call
+func ParseActionsGetGithubActionsPermissionsRepositoryReply(rsp *http.Response) (*ActionsGetGithubActionsPermissionsRepositoryReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsGetGithubActionsPermissionsRepositoryReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ActionsRepositoryPermissions
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply parses an HTTP response from a ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryWithResponse call
+func ParseActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply(rsp *http.Response) (*ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ActionsGetDefaultWorkflowPermissions
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsListSelfHostedRunnersForRepoReply parses an HTTP response from a ActionsListSelfHostedRunnersForRepoWithResponse call
+func ParseActionsListSelfHostedRunnersForRepoReply(rsp *http.Response) (*ActionsListSelfHostedRunnersForRepoReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsListSelfHostedRunnersForRepoReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Runners    []Runner `json:"runners"`
+			TotalCount int      `json:"total_count"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsListWorkflowRunsForRepoReply parses an HTTP response from a ActionsListWorkflowRunsForRepoWithResponse call
+func ParseActionsListWorkflowRunsForRepoReply(rsp *http.Response) (*ActionsListWorkflowRunsForRepoReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsListWorkflowRunsForRepoReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			TotalCount   int           `json:"total_count"`
+			WorkflowRuns []WorkflowRun `json:"workflow_runs"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsGetPendingDeploymentsForRunReply parses an HTTP response from a ActionsGetPendingDeploymentsForRunWithResponse call
+func ParseActionsGetPendingDeploymentsForRunReply(rsp *http.Response) (*ActionsGetPendingDeploymentsForRunReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsGetPendingDeploymentsForRunReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []PendingDeployment
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsListRepoVariablesReply parses an HTTP response from a ActionsListRepoVariablesWithResponse call
+func ParseActionsListRepoVariablesReply(rsp *http.Response) (*ActionsListRepoVariablesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsListRepoVariablesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			TotalCount int               `json:"total_count"`
+			Variables  []ActionsVariable `json:"variables"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsListRepoWorkflowsReply parses an HTTP response from a ActionsListRepoWorkflowsWithResponse call
+func ParseActionsListRepoWorkflowsReply(rsp *http.Response) (*ActionsListRepoWorkflowsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsListRepoWorkflowsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			TotalCount int        `json:"total_count"`
+			Workflows  []Workflow `json:"workflows"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsListWorkflowRunsReply parses an HTTP response from a ActionsListWorkflowRunsWithResponse call
+func ParseActionsListWorkflowRunsReply(rsp *http.Response) (*ActionsListWorkflowRunsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsListWorkflowRunsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			TotalCount   int           `json:"total_count"`
+			WorkflowRuns []WorkflowRun `json:"workflow_runs"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseChecksCreateReply parses an HTTP response from a ChecksCreateWithResponse call
+func ParseChecksCreateReply(rsp *http.Response) (*ChecksCreateReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ChecksCreateReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CheckRun
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseChecksUpdateReply parses an HTTP response from a ChecksUpdateWithResponse call
+func ParseChecksUpdateReply(rsp *http.Response) (*ChecksUpdateReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ChecksUpdateReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CheckRun
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCodeScanningListAlertsForRepoReply parses an HTTP response from a CodeScanningListAlertsForRepoWithResponse call
+func ParseCodeScanningListAlertsForRepoReply(rsp *http.Response) (*CodeScanningListAlertsForRepoReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CodeScanningListAlertsForRepoReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []CodeScanningAlertItems
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposListCollaboratorsReply parses an HTTP response from a ReposListCollaboratorsWithResponse call
+func ParseReposListCollaboratorsReply(rsp *http.Response) (*ReposListCollaboratorsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposListCollaboratorsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []Collaborator
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposListPullRequestsAssociatedWithCommitReply parses an HTTP response from a ReposListPullRequestsAssociatedWithCommitWithResponse call
+func ParseReposListPullRequestsAssociatedWithCommitReply(rsp *http.Response) (*ReposListPullRequestsAssociatedWithCommitReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposListPullRequestsAssociatedWithCommitReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []PullRequestSimple
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposGetCommitReply parses an HTTP response from a ReposGetCommitWithResponse call
+func ParseReposGetCommitReply(rsp *http.Response) (*ReposGetCommitReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposGetCommitReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Commit
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseChecksListForRefReply parses an HTTP response from a ChecksListForRefWithResponse call
+func ParseChecksListForRefReply(rsp *http.Response) (*ChecksListForRefReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ChecksListForRefReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			CheckRuns  []CheckRun `json:"check_runs"`
+			TotalCount int        `json:"total_count"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDependabotListAlertsForRepoReply parses an HTTP response from a DependabotListAlertsForRepoWithResponse call
+func ParseDependabotListAlertsForRepoReply(rsp *http.Response) (*DependabotListAlertsForRepoReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DependabotListAlertsForRepoReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []DependabotAlert
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposListDeploymentsReply parses an HTTP response from a ReposListDeploymentsWithResponse call
+func ParseReposListDeploymentsReply(rsp *http.Response) (*ReposListDeploymentsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposListDeploymentsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []Deployment
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposListDeploymentStatusesReply parses an HTTP response from a ReposListDeploymentStatusesWithResponse call
+func ParseReposListDeploymentStatusesReply(rsp *http.Response) (*ReposListDeploymentStatusesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposListDeploymentStatusesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []DeploymentStatus
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposGetAllEnvironmentsReply parses an HTTP response from a ReposGetAllEnvironmentsWithResponse call
+func ParseReposGetAllEnvironmentsReply(rsp *http.Response) (*ReposGetAllEnvironmentsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposGetAllEnvironmentsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Environments []Environment `json:"environments,omitempty"`
+
+			// TotalCount The number of environments in this repository
+			TotalCount int `json:"total_count,omitempty"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAppsGetRepoInstallationReply parses an HTTP response from a AppsGetRepoInstallationWithResponse call
+func ParseAppsGetRepoInstallationReply(rsp *http.Response) (*AppsGetRepoInstallationReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AppsGetRepoInstallationReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Installation
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseIssuesListCommentsReply parses an HTTP response from a IssuesListCommentsWithResponse call
+func ParseIssuesListCommentsReply(rsp *http.Response) (*IssuesListCommentsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IssuesListCommentsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []IssueComment
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseIssuesCreateCommentReply parses an HTTP response from a IssuesCreateCommentWithResponse call
+func ParseIssuesCreateCommentReply(rsp *http.Response) (*IssuesCreateCommentReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IssuesCreateCommentReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest IssueComment
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposListDeployKeysReply parses an HTTP response from a ReposListDeployKeysWithResponse call
+func ParseReposListDeployKeysReply(rsp *http.Response) (*ReposListDeployKeysReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposListDeployKeysReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []DeployKey
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePullsListReply parses an HTTP response from a PullsListWithResponse call
+func ParsePullsListReply(rsp *http.Response) (*PullsListReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PullsListReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []PullRequestSimple
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePullsListFilesReply parses an HTTP response from a PullsListFilesWithResponse call
+func ParsePullsListFilesReply(rsp *http.Response) (*PullsListFilesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PullsListFilesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []DiffEntry
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePullsMergeReply parses an HTTP response from a PullsMergeWithResponse call
+func ParsePullsMergeReply(rsp *http.Response) (*PullsMergeReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PullsMergeReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PullRequestMergeResult
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposListReleasesReply parses an HTTP response from a ReposListReleasesWithResponse call
+func ParseReposListReleasesReply(rsp *http.Response) (*ReposListReleasesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposListReleasesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []Release
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposGetLatestReleaseReply parses an HTTP response from a ReposGetLatestReleaseWithResponse call
+func ParseReposGetLatestReleaseReply(rsp *http.Response) (*ReposGetLatestReleaseReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposGetLatestReleaseReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Release
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposGetBranchRulesReply parses an HTTP response from a ReposGetBranchRulesWithResponse call
+func ParseReposGetBranchRulesReply(rsp *http.Response) (*ReposGetBranchRulesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposGetBranchRulesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []RepositoryRuleDetailed
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSecretScanningListAlertsForRepoReply parses an HTTP response from a SecretScanningListAlertsForRepoWithResponse call
+func ParseSecretScanningListAlertsForRepoReply(rsp *http.Response) (*SecretScanningListAlertsForRepoReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SecretScanningListAlertsForRepoReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []SecretScanningAlert
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSecurityAdvisoriesListRepositoryAdvisoriesReply parses an HTTP response from a SecurityAdvisoriesListRepositoryAdvisoriesWithResponse call
+func ParseSecurityAdvisoriesListRepositoryAdvisoriesReply(rsp *http.Response) (*SecurityAdvisoriesListRepositoryAdvisoriesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SecurityAdvisoriesListRepositoryAdvisoriesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []RepositoryAdvisory
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposCheckVulnerabilityAlertsReply parses an HTTP response from a ReposCheckVulnerabilityAlertsWithResponse call
+func ParseReposCheckVulnerabilityAlertsReply(rsp *http.Response) (*ReposCheckVulnerabilityAlertsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposCheckVulnerabilityAlertsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseUsersGetByUsernameReply parses an HTTP response from a UsersGetByUsernameWithResponse call
+func ParseUsersGetByUsernameReply(rsp *http.Response) (*UsersGetByUsernameReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UsersGetByUsernameReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PublicUser
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActivityListReposStarredByUserReply parses an HTTP response from a ActivityListReposStarredByUserWithResponse call
+func ParseActivityListReposStarredByUserReply(rsp *http.Response) (*ActivityListReposStarredByUserReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActivityListReposStarredByUserReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []StarredRepository
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
 }

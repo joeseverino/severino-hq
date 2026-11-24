@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -34,21 +33,18 @@ func (r *Registry) githubMerge(ctx context.Context, spec GitHubPullRequestSpec, 
 	if err != nil {
 		return Result{}, err
 	}
-	base, err := githubRepoPath(spec.Repository)
+	owner, repo, err := githubRepositoryName(spec.Repository)
 	if err != nil {
 		return Result{}, err
 	}
-	owner, repo, _ := githubRepositoryName(spec.Repository)
 	if _, err := r.githubInstallation(ctx, c, owner, repo); err != nil {
 		if httpStatus(err) == http.StatusNotFound {
 			return Result{}, mergeRefused(runtime.GitHubMergeRefusalNotInstalled, "The GitHub App is not installed on "+spec.Repository+".")
 		}
 		return Result{}, err
 	}
-	g := &githubRepository{r: r, c: c, name: spec.Repository}
-	runs, err := repoGet[struct {
-		WorkflowRuns []githubapi.WorkflowRun `json:"workflow_runs"`
-	}](ctx, g, "/actions/runs?head_sha="+url.QueryEscape(spec.HeadSha)+"&per_page="+strconv.Itoa(githubRunsPage))
+	g := r.githubRepository(ctx, c, spec.Repository)
+	runs, err := json200(g.api.ActionsListWorkflowRunsForRepoWithResponse(ctx, owner, repo, &githubapi.ActionsListWorkflowRunsForRepoParams{HeadSha: new(spec.HeadSha), PerPage: new(githubRunsPage)}))
 	if err != nil {
 		return Result{}, err
 	}
@@ -59,18 +55,14 @@ func (r *Registry) githubMerge(ctx context.Context, spec GitHubPullRequestSpec, 
 	if len(checks.Failing) > 0 {
 		return Result{}, mergeRefused(runtime.GitHubMergeRefusalChecksFailing, which+" fails its checks: "+strings.Join(checks.Failing, ", ")+".")
 	}
-	body := githubapi.PullsMergeJSONBody{MergeMethod: githubapi.PullsMergeJSONBodyMergeMethodSquash, Sha: spec.HeadSha}
-	raw, err := r.githubCall(ctx, c, http.MethodPut, base+"/pulls/"+strconv.Itoa(spec.Number)+"/merge", []string{spec.Repository}, githubMergeWrite, body)
+	body := githubapi.PullsMergeJSONRequestBody{MergeMethod: githubapi.PullsMergeJSONBodyMergeMethodSquash, Sha: spec.HeadSha}
+	merged, err := json200(r.githubAs(ctx, c, []string{spec.Repository}, githubMergeWrite).PullsMergeWithResponse(ctx, owner, repo, strconv.Itoa(spec.Number), body))
 	switch httpStatus(err) {
 	case http.StatusConflict:
 		return Result{}, mergeRefused(runtime.GitHubMergeRefusalHeadMoved, which+" moved past the approved head "+short(spec.HeadSha, 7)+".")
 	case http.StatusMethodNotAllowed:
 		return Result{}, mergeRefused(runtime.GitHubMergeRefusalNotMergeable, "GitHub cannot merge "+which+" as it stands.")
 	}
-	if err != nil {
-		return Result{}, err
-	}
-	merged, err := decodeAnswer[githubapi.PullRequestMergeResult](raw, "GitHub merge")
 	if err != nil {
 		return Result{}, err
 	}

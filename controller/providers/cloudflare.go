@@ -73,7 +73,7 @@ func (r *Registry) cloudflareZoneID(ctx context.Context, zone string) (string, e
 
 func (r *Registry) cloudflareRecords(ctx context.Context, zoneID string) ([]cfRecord, error) {
 	client := r.cloudflare(runtime.ConnectionProviderCloudflareDNS, "", false)
-	return cloudflarePages[cfRecord]("DNS record", cloudflarePerPage, func(page int) (any, error) {
+	return cloudflarePages[cfRecord]("DNS record", cloudflarePerPage, func(page int) (vendorReply, error) {
 		return client.DNSRecordsForAZoneListDNSRecordsWithResponse(ctx, zoneID, &cfapi.DNSRecordsForAZoneListDNSRecordsParams{Page: new(float32(page)), PerPage: new(float32(cloudflarePerPage))})
 	})
 }
@@ -334,7 +334,7 @@ func (r *Registry) cloudflareRegistrations(ctx context.Context) ([]cfapi.Registr
 		return nil, err
 	}
 	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, "", true)
-	return cloudflareCursorPages[cfapi.RegistrarAPIRegistration]("registration", func(cursor *string) (any, error) {
+	return cloudflareCursorPages[cfapi.RegistrarAPIRegistration]("registration", func(cursor *string) (vendorReply, error) {
 		return client.RegistrarDomainRegistrationListWithResponse(ctx, account, &cfapi.RegistrarDomainRegistrationListParams{Cursor: cursor, PerPage: new(cloudflareAccountPerPage)})
 	})
 }

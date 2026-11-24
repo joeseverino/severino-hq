@@ -148,7 +148,7 @@ func pageRuleRecord(rule cfPageRule, zone string) (CloudflareRedirectRecord, boo
 // cloudflareRedirectRules is the redirect rules in the zone's dynamic redirect rulesets.
 func (r *Registry) cloudflareRedirectRules(ctx context.Context, zoneID, zone, ref string) ([]CloudflareRedirectRecord, error) {
 	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
-	rulesets, err := cloudflareCursorPages[cfRuleset]("ruleset", func(cursor *string) (any, error) {
+	rulesets, err := cloudflareCursorPages[cfRuleset]("ruleset", func(cursor *string) (vendorReply, error) {
 		return client.ListZoneRulesetsWithResponse(ctx, zoneID, &cfapi.ListZoneRulesetsParams{Cursor: cursor, PerPage: new(cloudflareAccountPerPage)})
 	})
 	if err != nil {

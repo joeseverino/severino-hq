@@ -16,7 +16,14 @@
     "parameters": [],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/integration"
+        }
+       }
+      }
      }
     }
    }
@@ -24,10 +31,39 @@
   "/app/installations": {
    "get": {
     "operationId": "apps/list-installations",
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "page",
+      "description": "The page number of the results to fetch. For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
     "responses": {
      "200": {
-      "description": "The permissions the installation has are included under the `permissions` key."
+      "description": "The permissions the installation has are included under the `permissions` key.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/installation"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -47,7 +83,14 @@
     ],
     "responses": {
      "201": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/installation-token"
+        }
+       }
+      }
      }
     },
     "requestBody": {
@@ -88,10 +131,69 @@
   "/installation/repositories": {
    "get": {
     "operationId": "apps/list-repos-accessible-to-installation",
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "page",
+      "description": "The page number of the results to fetch. For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "repositories"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "repositories": {
+           "type": "array",
+           "items": {
+            "allOf": [
+             {
+              "$ref": "#/components/schemas/repository"
+             },
+             {
+              "type": "object",
+              "properties": {
+               "custom_properties": {
+                "type": "object",
+                "description": "The custom properties that were defined for the repository. The keys are the custom property names, and the values are the corresponding custom property values. Present for org repos only.",
+                "additionalProperties": true
+               }
+              }
+             }
+            ]
+           }
+          },
+          "repository_selection": {
+           "type": "string",
+           "example": "selected"
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -102,7 +204,14 @@
     "parameters": [],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/rate-limit-overview"
+        }
+       }
+      }
      }
     }
    }
@@ -130,7 +239,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/full-repository"
+        }
+       }
+      }
      }
     }
    }
@@ -154,11 +270,42 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "artifacts"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "artifacts": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/artifact"
+           }
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -194,7 +341,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/job"
+        }
+       }
+      }
      }
     }
    }
@@ -222,7 +376,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/actions-repository-permissions"
+        }
+       }
+      }
      }
     }
    }
@@ -250,7 +411,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/actions-get-default-workflow-permissions"
+        }
+       }
+      }
      }
     }
    }
@@ -278,7 +446,29 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "runners"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "runners": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/runner"
+           }
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -302,11 +492,52 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "head_sha",
+      "description": "Only returns workflow runs that are associated with the specified `head_sha`.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "workflow_runs"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "workflow_runs": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/workflow-run"
+           }
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -342,7 +573,17 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/pending-deployment"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -366,11 +607,42 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 30). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "variables"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "variables": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/actions-variable"
+           }
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -394,11 +666,42 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "workflows"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "workflows": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/workflow"
+           }
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -430,11 +733,78 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "branch",
+      "description": "Returns workflow runs associated with a branch. Use the name of the branch of the `push`.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "status",
+      "description": "Returns workflow runs with the check run `status` or `conclusion` that you specify. For example, a conclusion can be `success` or a status can be `in_progress`. Only GitHub Actions can set a status of `waiting`, `pending`, or `requested`.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "completed",
+        "action_required",
+        "cancelled",
+        "failure",
+        "neutral",
+        "skipped",
+        "stale",
+        "success",
+        "timed_out",
+        "in_progress",
+        "queued",
+        "requested",
+        "waiting",
+        "pending"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "workflow_runs"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "workflow_runs": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/workflow-run"
+           }
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -462,7 +832,14 @@
     ],
     "responses": {
      "201": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/check-run"
+        }
+       }
+      }
      }
     },
     "requestBody": {
@@ -731,7 +1108,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/check-run"
+        }
+       }
+      }
      }
     },
     "requestBody": {
@@ -975,11 +1359,47 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "state",
+      "description": "If specified, only code scanning alerts with this state will be returned.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "description": "State of a code scanning alert.",
+       "enum": [
+        "open",
+        "closed",
+        "dismissed",
+        "fixed"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/code-scanning-alert-items"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1003,11 +1423,30 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/collaborator"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1043,7 +1482,17 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/pull-request-simple"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1079,7 +1528,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/commit"
+        }
+       }
+      }
      }
     }
    }
@@ -1111,11 +1567,75 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "check_name",
+      "description": "Returns check runs with the specified `name`.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "app_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "filter",
+      "description": "Filters check runs by their `completed_at` timestamp. `latest` returns the most recent check runs.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "latest",
+        "all"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "check_runs"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "check_runs": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/check-run"
+           }
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1139,11 +1659,39 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "state",
+      "in": "query",
+      "description": "A comma-separated list of states. If specified, only alerts with these states will be returned.\n\nCan be: `auto_dismissed`, `dismissed`, `fixed`, `open`",
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/dependabot-alert"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1167,11 +1715,30 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/deployment"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1203,11 +1770,30 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/deployment-status"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1235,7 +1821,27 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "total_count": {
+           "description": "The number of environments in this repository",
+           "example": 5,
+           "type": "integer"
+          },
+          "environments": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/environment"
+           }
+          }
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1263,7 +1869,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/installation"
+        }
+       }
+      }
      }
     }
    }
@@ -1295,11 +1908,30 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/issue-comment"
+         }
+        }
+       }
+      }
      }
     }
    },
@@ -1333,7 +1965,14 @@
     ],
     "responses": {
      "201": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/issue-comment"
+        }
+       }
+      }
      }
     },
     "requestBody": {
@@ -1376,11 +2015,30 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/deploy-key"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1404,11 +2062,45 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "state",
+      "description": "Either `open`, `closed`, or `all` to filter by state.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "open",
+        "closed",
+        "all"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/pull-request-simple"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1440,11 +2132,30 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/diff-entry"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1480,7 +2191,14 @@
     ],
     "responses": {
      "200": {
-      "description": "if merge was successful"
+      "description": "if merge was successful",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/pull-request-merge-result"
+        }
+       }
+      }
      }
     },
     "requestBody": {
@@ -1538,11 +2256,30 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/release"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1570,7 +2307,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/release"
+        }
+       }
+      }
      }
     }
    }
@@ -1606,7 +2350,17 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/repository-rule-detailed"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1630,11 +2384,44 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "state",
+      "in": "query",
+      "description": "Set to `open` or `resolved` to only list secret scanning alerts in a specific state.",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "open",
+        "resolved"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/secret-scanning-alert"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1658,11 +2445,78 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "state",
+      "description": "Filter by state of the repository advisories. Only advisories of this state will be returned.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "triage",
+        "draft",
+        "published",
+        "closed"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "sort",
+      "description": "The property to sort the results by.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "created",
+        "updated",
+        "published"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "direction",
+      "description": "The direction to sort the results by.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "asc",
+        "desc"
+       ],
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of advisories to return per page. For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 100,
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/repository-advisory"
+         }
+        }
+       }
+      }
      }
     }
    }
@@ -1710,7 +2564,14 @@
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/public-user"
+        }
+       }
+      }
      }
     }
    }
@@ -1726,11 +2587,30 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "Response"
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/starred-repository"
+         }
+        }
+       }
+      }
      }
     }
    }

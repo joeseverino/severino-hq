@@ -127,7 +127,7 @@ func (r *Registry) mintFor(ctx context.Context, c githubConnection, app GitHubAp
 	for i, repository := range owner.Repositories {
 		_, names[i], _ = strings.Cut(repository, "/")
 	}
-	minted, err := MintGitHubToken(ctx, r.HTTP, r.Now(), app, installation, names, permissions)
+	minted, err := r.mintGitHubToken(ctx, app, installation, names, permissions)
 	if httpStatus(err) == http.StatusUnprocessableEntity {
 		err = r.notInstalledOn(ctx, c, owner, err)
 	}

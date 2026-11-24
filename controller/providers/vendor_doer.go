@@ -6,7 +6,6 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"reflect"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -73,14 +72,16 @@ func (d vendorDoer) Do(req *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: answer.Status, Status: http.StatusText(answer.Status), Header: header, Body: io.NopCloser(bytes.NewReader(answer.Body)), Request: req}, nil
 }
 
-// replyBody is a generated reply's body, which every reply type holds as its
-// Body field; the generated client has read and closed the answer. A reply
-// type has no method that returns it, and Go's generics cannot name a field.
-func replyBody(reply any, err error) ([]byte, error) {
+// vendorReply is any generated client's reply.
+type vendorReply interface{ GetBody() []byte }
+
+// replyBody is a generated reply's body, which the generated client has read
+// and closed.
+func replyBody(reply vendorReply, err error) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return reflect.ValueOf(reply).Elem().FieldByName("Body").Bytes(), nil
+	return reply.GetBody(), nil
 }
 
 // json200 is a generated reply's 200 body, the zero value for an empty one.

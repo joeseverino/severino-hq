@@ -113,7 +113,7 @@ func (r *Registry) cloudflare(provider runtime.ConnectionProvider, ref string, s
 }
 
 // cloudflareRead is one call's envelope, which the client's exchange checked.
-func cloudflareRead(reply any, err error) (cfEnvelope, error) {
+func cloudflareRead(reply vendorReply, err error) (cfEnvelope, error) {
 	body, err := replyBody(reply, err)
 	if err != nil {
 		return cfEnvelope{}, err
@@ -122,7 +122,7 @@ func cloudflareRead(reply any, err error) (cfEnvelope, error) {
 }
 
 // cloudflareResult is one call's envelope result.
-func cloudflareResult(reply any, err error) (json.RawMessage, error) {
+func cloudflareResult(reply vendorReply, err error) (json.RawMessage, error) {
 	envelope, err := cloudflareRead(reply, err)
 	return envelope.Result, err
 }
@@ -231,7 +231,7 @@ func (r *Registry) cloudflareAPIRefs() []string {
 // per_page below what was asked, so a short page is not proof of the last
 // one), else a short page ends the list. A null or missing result is an empty
 // page.
-func cloudflarePages[T any](what string, perPage int, read func(page int) (any, error)) ([]T, error) {
+func cloudflarePages[T any](what string, perPage int, read func(page int) (vendorReply, error)) ([]T, error) {
 	collected := []json.RawMessage{}
 	for page := 1; page <= cloudflareMaxPages; page++ {
 		envelope, err := cloudflareRead(read(page))
@@ -255,7 +255,7 @@ func cloudflarePages[T any](what string, perPage int, read func(page int) (any, 
 }
 
 // cloudflareCursorPages reads a cursor-paginated list; an empty cursor ends it.
-func cloudflareCursorPages[T any](what string, read func(cursor *string) (any, error)) ([]T, error) {
+func cloudflareCursorPages[T any](what string, read func(cursor *string) (vendorReply, error)) ([]T, error) {
 	collected := []json.RawMessage{}
 	var cursor *string
 	for range cloudflareMaxCursorPages {
@@ -293,7 +293,7 @@ func (r *Registry) cloudflareAPIZones(ctx context.Context, ref string) ([]cfapi.
 // once per snapshot for that credential.
 func (r *Registry) cloudflareZoneList(ctx context.Context, provider runtime.ConnectionProvider, ref string, perPage int) ([]cfapi.ZonesZone, error) {
 	client := r.cloudflare(provider, ref, true)
-	return cloudflarePages[cfapi.ZonesZone]("zone", perPage, func(page int) (any, error) {
+	return cloudflarePages[cfapi.ZonesZone]("zone", perPage, func(page int) (vendorReply, error) {
 		return client.ZonesGetWithResponse(ctx, &cfapi.ZonesGetParams{Page: new(float32(page)), PerPage: new(float32(perPage))})
 	})
 }

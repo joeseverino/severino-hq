@@ -147,21 +147,55 @@ def narrow(name, schema, kept):
         raise SystemExit(f"keep names what {name} does not have: {sorted(missing)}")
 
 
-def slice_operation(spec, item, operation, decodes, sends, encodes, queries, roots):
+def names(variant, decoded):
+    """Whether a union variant names one of the decoded schemas itself."""
+
+    found = set()
+    refs(variant, found)
+    return bool(found & {SCHEMAS + name for name in decoded})
+
+
+def answer(spec, op_id, upstream, decoded, body):
+    """A success answer: its JSON body when the generated client decodes it,
+    a union narrowed to the one variant naming a schema the provider decodes,
+    which stands in for the union; else its description alone."""
+
+    if body and "$ref" in upstream:
+        upstream = component(spec, upstream["$ref"])[2]
+    kept = {"description": upstream.get("description", "")}
+    media = upstream.get("content", {}).get("application/json")
+    if not body or media is None:
+        return kept
+    schema = copy.deepcopy(media["schema"])
+    for key in ("oneOf", "anyOf"):
+        if key in schema:
+            variants = [variant for variant in schema[key] if names(variant, decoded)]
+            if len(variants) != 1:
+                raise SystemExit(f"{op_id} answers {len(variants)} variants it decodes")
+            schema = variants[0]
+    kept["content"] = {"application/json": {"schema": schema}}
+    return kept
+
+
+def slice_operation(spec, item, operation, settings, roots):
     """Keep an operation's route contract and validate its decoded models."""
 
     op_id = operation["operationId"]
+    decodes, sends, encodes = settings["decodes"], settings["sends"], settings["encodes"]
     answers = success(operation)
+    decoded = decodes.get(op_id, ())
+    # An operation keeps its path, method, the query it sends and its success
+    # statuses. Its answer bodies go where the provider reads its own
+    # envelopes, and stay where the generated client decodes them.
     kept = {
         "operationId": op_id,
-        "parameters": parameters(spec, item, operation, queries),
-        "responses": {code: {"description": answer.get("description", "")} for code, answer in answers.items()},
+        "parameters": parameters(spec, item, operation, settings["queries"]),
+        "responses": {
+            code: answer(spec, op_id, upstream, decoded, settings["answers"]) for code, upstream in answers.items()
+        },
     }
-    # An operation keeps its path, method, the query it sends and its success
-    # statuses; its response bodies go, because the provider reads its own
-    # envelopes.
     upstream = reachable(spec, answers)
-    for name in decodes.get(op_id, ()):
+    for name in decoded:
         if SCHEMAS + name not in upstream:
             raise SystemExit(f"{op_id} answers no {name}")
         roots.add(SCHEMAS + name)
@@ -184,12 +218,17 @@ def slice_paths(spec, wanted, settings):
     # sends as the generated type. encodes: the operation ids whose request
     # body the provider encodes from a type of its own, kept as any JSON.
     # Every other request body goes. [queries]: operation id = the query
-    # parameters the provider sends; the rest go.
-    decodes = settings.get("decodes", {})
-    sends = set(settings.get("sends", ()))
-    encodes = set(settings.get("encodes", ()))
-    queries = settings.get("queries", {})
-    if stray := (decodes.keys() | sends | encodes | queries.keys()) - wanted:
+    # parameters the provider sends; the rest go. answers: true keeps each
+    # success answer's JSON body, so the generated client decodes it.
+    read = {
+        "decodes": settings.get("decodes", {}),
+        "sends": set(settings.get("sends", ())),
+        "encodes": set(settings.get("encodes", ())),
+        "queries": settings.get("queries", {}),
+        "answers": settings.get("answers", False),
+    }
+    named = read["decodes"].keys() | read["sends"] | read["encodes"] | read["queries"].keys()
+    if stray := named - wanted:
         raise SystemExit(f"slice.toml names operations oapi-codegen.yaml does not: {sorted(stray)}")
     roots = set()
     paths = {}
@@ -198,9 +237,7 @@ def slice_paths(spec, wanted, settings):
             if method not in METHODS or operation.get("operationId") not in wanted:
                 continue
             wanted.discard(operation["operationId"])
-            paths.setdefault(route, {})[method] = slice_operation(
-                spec, item, operation, decodes, sends, encodes, queries, roots
-            )
+            paths.setdefault(route, {})[method] = slice_operation(spec, item, operation, read, roots)
     if wanted:
         raise SystemExit(f"operations missing upstream: {sorted(wanted)}")
     # drop-examples: true drops media-type examples and the components only they use.

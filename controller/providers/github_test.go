@@ -17,6 +17,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -83,9 +84,6 @@ const (
 
 func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	host := req.Header.Get("X-Fake-Host")
-	if host == githubFakeAPI && req.URL.Path != "/graphql" {
-		recordVendorCall("github", req.Method, req.URL.Path)
-	}
 	key := req.URL.Path
 	if req.URL.RawQuery != "" {
 		key += "?" + req.URL.RawQuery
@@ -113,12 +111,14 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(f.remaining))
 		w.Header().Set("X-RateLimit-Reset", strconv.Itoa(githubFakeReset))
 	}
-	for name, value := range f.headers[host+" "+key] {
+	headers, _ := routed(f.headers, host+" "+key)
+	for name, value := range headers {
 		w.Header().Set(name, value)
 	}
-	if code := f.status[host+" "+key]; code != 0 {
+	if code, _ := routed(f.status, host+" "+key); code != 0 {
+		body, _ := routed(f.routes, host+" "+key)
 		w.WriteHeader(code)
-		_, _ = io.WriteString(w, orDefault(f.routes[host+" "+key], `{"message":"refused"}`))
+		_, _ = io.WriteString(w, orDefault(body, `{"message":"refused"}`))
 		return
 	}
 	switch {
@@ -127,6 +127,7 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_ = json.Unmarshal(data, &grant)
 		token := "minted-" + strconv.Itoa(len(f.grants)+1)
 		f.grants[token] = grant
+		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"token":"`+token+`","expires_at":"2030-01-01T00:00:00Z"}`)
 		return
 	case req.Method == http.MethodPost && key == "/graphql":
@@ -159,13 +160,27 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			f.remaining, githubFakeReset, 5000-f.remaining, f.remaining, githubFakeReset, 5000-f.remaining)
 		return
 	}
-	answer, ok := f.routes[host+" "+key]
+	answer, ok := routed(f.routes, host+" "+key)
 	if !ok {
 		f.t.Errorf("unexpected GET %s %s", host, key)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	_, _ = io.WriteString(w, answer)
+}
+
+// routed is a route's entry, its query named in any order.
+func routed[V any](routes map[string]V, key string) (V, bool) {
+	path, query, _ := strings.Cut(key, "?")
+	asked, _ := url.ParseQuery(query)
+	for name, found := range routes {
+		at, named, _ := strings.Cut(name, "?")
+		if listed, _ := url.ParseQuery(named); at == path && listed.Encode() == asked.Encode() {
+			return found, true
+		}
+	}
+	var zero V
+	return zero, false
 }
 
 // githubFakeReset is when the fake's hour starts over: 18:06 UTC on the
@@ -363,7 +378,7 @@ func TestGitHubTokensAreScopedAndMintedOncePerSweep(t *testing.T) {
 	ctx := t.Context()
 	call := func(perms githubapi.AppPermissions) {
 		t.Helper()
-		if _, err := h.r.githubCall(ctx, c, "GET", "/repos/example/app", []string{"example/app"}, perms, nil); err != nil {
+		if _, err := h.r.githubAs(ctx, c, []string{"example/app"}, perms).ReposGetWithResponse(ctx, "example", "app"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -618,7 +633,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		if strings.HasPrefix(call.path, "/repos/actions/checkout/commits/") {
 			resolved++
 		}
-		if !minted || call.method != "GET" || strings.HasPrefix(call.path, "/app") || strings.HasSuffix(call.path, "/installation") || strings.HasPrefix(call.path, githubRepositoriesPage) || call.path == githubRateLimitRoute {
+		if !minted || call.method != "GET" || strings.HasPrefix(call.path, "/app") || strings.HasSuffix(call.path, "/installation") || strings.HasPrefix(call.path, "/installation/repositories") || call.path == "/rate_limit" {
 			continue
 		}
 		encoded, _ := json.Marshal(grant.Permissions)
@@ -790,7 +805,7 @@ func TestAListThatNeverEndsIsRefused(t *testing.T) {
 		page[i] = "1"
 	}
 	read := 0
-	_, err := githubPaged(func(string) ([]string, error) { read++; return page, nil })
+	_, err := githubPaged(func(int) ([]string, error) { read++; return page, nil })
 	if err == nil || read != githubPageLimit {
 		t.Fatalf("read %d pages: %v", read, err)
 	}
@@ -801,7 +816,7 @@ func TestAListThatNeverEndsIsRefused(t *testing.T) {
 func TestMintGitHubTokenNamesItsScope(t *testing.T) {
 	h := newGitHubHarness(t, nil, runtime.Environment{})
 	app := GitHubApp{ID: "12345", Key: h.key}
-	minted, err := MintGitHubToken(t.Context(), h.r.HTTP, h.r.Now(), app, 7, []string{"app"}, githubChecksRead)
+	minted, err := h.r.mintGitHubToken(t.Context(), app, 7, []string{"app"}, githubChecksRead)
 	token := minted.Token
 	if err != nil || token == "" || minted.ExpiresAt != "2030-01-01T00:00:00Z" {
 		t.Fatalf("token %+v: %v", minted, err)
@@ -821,7 +836,7 @@ func TestMintGitHubTokenNamesItsScope(t *testing.T) {
 	if len(parts) != 3 || rsa.VerifyPKCS1v15(&h.key.PublicKey, crypto.SHA256, digest[:], signature) != nil {
 		t.Fatal("the mint is asked under a JWT the app's key signed")
 	}
-	if _, err := MintGitHubToken(t.Context(), h.r.HTTP, h.r.Now(), app, 7, []string{"app"}, githubapi.AppPermissions{}); err == nil || len(h.recorded()) != 1 {
+	if _, err := h.r.mintGitHubToken(t.Context(), app, 7, []string{"app"}, githubapi.AppPermissions{}); err == nil || len(h.recorded()) != 1 {
 		t.Fatal("a token naming no permission, which GitHub would grant every one of, was asked for")
 	}
 }

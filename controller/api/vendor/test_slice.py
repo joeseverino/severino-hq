@@ -104,6 +104,17 @@ class SliceTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "takes no query"):
             self.run_slice('[queries]\nread = ["absent"]\n')
 
+    def test_an_answer_the_client_decodes_keeps_its_json_body_and_one_variant(self):
+        result = self.run_slice('answers = true\n[decodes]\nread = ["answer"]\n')
+        content = result["paths"]["/example/{id}"]["get"]["responses"]["200"]["content"]
+        self.assertEqual(content, {"application/json": {"schema": {"$ref": slicer.SCHEMAS + "answer"}}})
+        listed = {"type": "array", "items": {"$ref": slicer.SCHEMAS + "read"}}
+        union = {"content": {"application/json": {"schema": {"anyOf": [listed, {"$ref": slicer.SCHEMAS + "other"}]}}}}
+        narrowed = slicer.answer({}, "read", union, ["read"], True)
+        self.assertEqual(narrowed["content"]["application/json"]["schema"], listed)
+        with self.assertRaisesRegex(SystemExit, "0 variants"):
+            slicer.answer({}, "read", union, ["unrelated"], True)
+
     def test_a_body_the_provider_encodes_is_any_json(self):
         result = self.run_slice('encodes = ["read"]\n')
         body = result["paths"]["/example/{id}"]["get"]["requestBody"]

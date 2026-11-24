@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -100,10 +99,7 @@ func (r *Registry) githubFingerprints(ctx context.Context, c githubConnection, n
 			return found, err
 		}
 		query, variables := githubProbeQuery(owner, repos)
-		raw, err := r.githubExchange(ctx, http.MethodPost, githubGraphQL, githubHeaders(token), struct {
-			Query     string         `json:"query"`
-			Variables map[string]any `json:"variables"`
-		}{query, variables}, token)
+		raw, err := r.githubQuery(ctx, token, query, variables)
 		if err != nil {
 			return found, err
 		}

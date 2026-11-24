@@ -135,7 +135,7 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 // discovered rather than configured.
 func (r *Registry) cloudflareAnalyticsAccount(ctx context.Context, ref string) (string, error) {
 	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
-	accounts, err := cloudflarePages[cfapi.IamAccount]("account", cloudflareAccountPerPage, func(page int) (any, error) {
+	accounts, err := cloudflarePages[cfapi.IamAccount]("account", cloudflareAccountPerPage, func(page int) (vendorReply, error) {
 		return client.AccountsListAccountsWithResponse(ctx, &cfapi.AccountsListAccountsParams{Page: new(float32(page)), PerPage: new(float32(cloudflareAccountPerPage))})
 	})
 	if err != nil {
@@ -151,7 +151,7 @@ func (r *Registry) cloudflareAnalyticsAccount(ctx context.Context, ref string) (
 // a site whose ruleset names no hostname measures nothing.
 func (r *Registry) cloudflareAccountSites(ctx context.Context, account, ref string) ([]CloudflareAnalyticsSite, error) {
 	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
-	listed, err := cloudflarePages[cfapi.RumSite]("analytics site", cloudflarePerPage, func(page int) (any, error) {
+	listed, err := cloudflarePages[cfapi.RumSite]("analytics site", cloudflarePerPage, func(page int) (vendorReply, error) {
 		return client.WebAnalyticsListSitesWithResponse(ctx, account, &cfapi.WebAnalyticsListSitesParams{Page: new(float32(page)), PerPage: new(float32(cloudflarePerPage))})
 	})
 	if err != nil {
