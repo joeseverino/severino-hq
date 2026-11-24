@@ -15,7 +15,7 @@ ARG HQ_IMAGE=scratch
 # host image's tools stage does, with the same mise). mise.toml reads Go's
 # release from go.mod, so mise cannot load it without that file.
 FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.11.11@sha256:14a30b9945ea5c2fbae70d8b6be8f2c8b2456698f2a258f3f6315f7784c84676 /usr/local/bin/mise /usr/local/bin/mise
+COPY --from=ghcr.io/jdx/mise:2026.11.13@sha256:06a4e5b507ac24d0279d6d2fc1f0849cb54fd0c1eb305a93db028398364b45f9 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./

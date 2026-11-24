@@ -67,7 +67,7 @@ jobs:
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
       # The cosign mise.lock records, which the host verifies with too.
       - name: Install the pinned cosign
-        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -119,7 +119,7 @@ jobs:
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
       # mise alone: --affected reads the task definitions and installs nothing.
       - name: Install the pinned mise
-        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -462,7 +462,7 @@ jobs:
         id: mise
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
       - name: Install the pinned Trivy and cosign
-        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:

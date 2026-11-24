@@ -31,7 +31,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.11.11"
+min_version = "2026.11.13"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -83,7 +83,7 @@ shellcheck = "0.11.0"
 "aqua:gotestyourself/gotestsum" = "1.13.0"
 jactionlint = "2.6.0"
 # The workflows' security audit (lint:workflows), offline.
-zizmor = "1.32.0"
+zizmor = "1.33.1"
 # The prose linter: HQ's wording rules, in tools/lint/vale/.vale.ini (lint:prose).
 vale = "3.28.1"
 # The spelling check, American English, in _typos.toml (lint:spelling).
@@ -93,7 +93,7 @@ typos = "1.52.2"
 ast-grep = "0.51.3"
 # Hands the linters that read a file at a time only the files a change touched
 # (hk.pkl, the hk task template).
-"aqua:jdx/hk" = "2.13.0"
+"aqua:jdx/hk" = "2.14.0"
 yq = "4.54.3"
 jq = "1.8.2"
 uv = "0.13.9"
@@ -124,7 +124,7 @@ cosign = { version = "3.1.4", lazy = true }
 osv-scanner = { version = "2.7.1", lazy = true }
 # Reads the names templates, strings and other languages' files hand to Python,
 # which vulture cannot see (audit:dead). Lazy, as age is.
-ripgrep = { version = "15.2.0", lazy = true }
+ripgrep = { version = "16.0.0", lazy = true }
 
 # Counts lines per language and per area (audit:loc). Not in mise's registry,
 # so named by its aqua package. Lazy, as age is.
