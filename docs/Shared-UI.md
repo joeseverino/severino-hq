@@ -533,6 +533,12 @@ the server moves there, then an entry for each cell that holds something back, u
 name. So every column keeps its edges and every other row its height. *Gate:*
 `test_opening_a_row_moves_no_column_and_no_other_row`.
 
+A fold that opens adds rows, whose controls a column shared down the table would widen for every
+row. So a table of one column with no headings, whose rows each say one thing (the queue), may
+size each row's controls apart (`DataTable(controls_per_row=True)`): in a box of 48rem or more
+each row is a grid of its words and its own controls at its end, and opening a fold moves no other
+row's words or controls. *Gate:* `test_opening_a_fold_moves_no_other_rows_controls`.
+
 The server writes each cell once. The browser's table layout cannot set a cell on a line beneath
 its row, so tables.js copies what the row holds back onto that line as the row first opens (or as
 it arrives drawn open), from the one frame the region draws (`template[data-open-line]`): each

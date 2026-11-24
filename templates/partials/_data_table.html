@@ -1,6 +1,6 @@
 {% comment %}A table drawn whole from its declaration (`tables.DataTable`), as `drawn_tables.drawn` lays it out: every mark the stylesheet reads is the layout's, written here on the element it belongs to, so nothing is read back. With no rows it draws its empty state in place of the box. Each cell, its value, what follows it and its lines beneath, is drawn by `drawn_tables`, as are the blocks its row keeps below; a row's editor, those blocks and its run evidence stand on its open line, and its totals in its foot. A group's `data-` attributes stand on its body.{% endcomment %}
 {% if rows %}<div class="table-scroll{% if table.region.css %} {{ table.region.css }}{% endif %}{% if table.region.pane %} is-pane{% endif %}"{{ box }}>
-  <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}{{ marks }}>
+  <table class="data-table"{% if table.selectable %} data-selectable-table{% endif %}{% if table.controls_per_row %} data-controls-per-row{% endif %}{{ marks }}>
     {% if headings %}<thead><tr>{% for heading in headings %}{% include "partials/_table_heading.html" with label=heading.label kind=heading.kind css=heading.css drop=heading.drop server_sort=heading.server_sort local_sort=heading.local_sort hidden=heading.hidden title=heading.title select_all=heading.select_all marks=heading.marks only %}{% endfor %}</tr></thead>{% endif %}
     {% for group in groups %}
     <tbody{% if group.group.id %} id="{{ group.group.id }}"{% endif %}{{ group.group.data|data_attributes }}>

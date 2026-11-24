@@ -200,7 +200,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table:has(.row-gist) > tbody > tr > [data-kind="control"] { inline-size: 1px; }
 /* A control never stands on its frame's edge: the first row of a table with no headings keeps its whole pad above it, its words coming down by the control's rise so they stay level, and a table's last row keeps its whole pad below, or an ask's the line its note stands on. */
 .data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child > [data-kind="control"]:has(> :is(.btn, form)) { padding-block-start: var(--row-pad); }
-.data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child:has(> [data-kind="control"] > :is(.btn, form)) > :not([data-kind="control"]) { padding-block-start: calc(var(--row-pad) + max(0px, (var(--control-compact) - 1lh) / 2)); }
+.data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child:has(> [data-kind="control"] > :is(.btn, form)) > :not([data-kind="control"]) { --row-content-start: calc(var(--row-pad) + max(0px, (var(--control-compact) - 1lh) / 2)); padding-block-start: var(--row-content-start); }
 .data-table > tbody:last-of-type > tr:last-child > [data-kind="control"]:has(> :is(.btn, form)):not(:has(> [data-ask])) { padding-block-end: var(--row-pad); }
 .data-table:not(:has(> thead)) > tbody > tr > [data-kind="control"] { vertical-align: middle; } /* A table with no headings is a list of rows that each say one thing (the queue's items): no column's first line to keep level with, so a row's controls stand at the middle of the words they act on. */
 /* The tick-boxes' column is their box and the room beside it, no row control, so each box stands centered under the heading's; its width the table's `--row-lead`, in every engine, whose own margins around a checkbox differ. */
@@ -399,14 +399,14 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* A table says a row of it can open (`data-rows-can-open`, table_layout), since a row's open line is drawn only as it opens unless it holds a block the server moved there. */
 .data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp, .row-gist)) { --row-inset: var(--row-gutter); }
 .data-table > * > tr > .row-gutter { padding-inline-start: var(--row-inset, var(--cell-pad)); }
-.data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--row-edge); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
+.data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--row-edge); inset-block-start: calc(var(--row-content-start, var(--row-pad)) - var(--space-1)); }
 /* A column of a row's controls (`actions-col`, a public class) holds them on one line. */
 .actions-col { white-space: nowrap; }
 /* The line the server draws under a row (`table_tags._detail_row`), shown while the row is open: what the row moves there, then an entry for each cell that holds something back, under its column's name. Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or on the open line (`open`). */
 .data-table td { --cell: line; }
 .data-table > tbody > tr.row-detail { display: none; }
 /* An open row's line is drawn only where it holds something at this width: a block moved there whole, an entry shown at every width, or a column that has left (above), so a row opened narrow and widened draws no empty line. */
-.data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > :not(.row-columns), > td > .row-columns > :not([data-drop]:not([data-holds]))) { display: table-row; }
+.data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > :not(.row-columns), > td > .row-columns > :not([data-drop]:not([data-holds]))) { display: var(--detail-display, table-row); }
 /* It starts where its row's words do, past the tick-boxes' column and the toggle, so nothing it holds sits left of them. */
 .data-table .row-detail > td { --cell: open; padding-block: 0 var(--row-pad); padding-inline-start: calc(var(--row-lead) + var(--row-inset, var(--cell-pad))); }
 /* What it holds asks its columns for no width, so opening a row moves no column. */
@@ -432,6 +432,19 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* Beside its label a value on a narrow line has too little room to hold a word, so there each label stands above its value. */
 @container row-columns (width < 18rem) {
   .row-columns dd, .row-columns dt { grid-column: 1 / -1; }
+}
+/* A table whose rows each size their own controls (`DataTable(controls_per_row=True)`) sets each row as a grid of its words and its controls in a wide box, so a fold that opens takes no width from another row. */
+@container table-region (width >= 48rem) {
+  .data-table[data-controls-per-row] {
+    --detail-display: grid;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    & > tbody { display: contents; }
+    :where(&) > tbody > tr:not(.row-detail) { display: grid; }
+    & > tbody > tr { grid-template-columns: minmax(0, 1fr) auto; }
+    & > tbody > tr > [colspan] { grid-column: 1 / -1; }
+    & > tbody > tr > [data-kind="control"] { inline-size: auto; align-content: center; }
+  }
 }
 /* A flat line (`data-line="flat"` on the table): what a row keeps beneath it, in one column on no panel. */
 .data-table[data-line="flat"] .row-detail .row-columns { padding: 0; background: none; }

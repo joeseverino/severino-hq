@@ -1,7 +1,7 @@
 """The catalog's tables: a data table in each option and state its parts give it."""
 
 from hq.platform.application.pages import PageAction
-from hq.platform.application.tables import Below, Cell, DataTable, Piece, Row, TableColumn
+from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, TableColumn
 from hq.platform.core import included_parts
 from hq.platform.core.part_examples import runs, table
 from hq.platform.core.template_parts import Example
@@ -83,6 +83,36 @@ def _many_actions() -> DataTable:
         for at in (1, 2)
     )
     return DataTable("Example findings", (TableColumn("Finding"),), rows, headed=False)
+
+
+def _controls_per_row() -> DataTable:
+    """Two folds whose rows' actions differ in length, as the queue's families do."""
+
+    groups = tuple(
+        Group(
+            label,
+            (
+                Row(
+                    (Cell(f"An example {fold.split('-')[0]} item", name=True),),
+                    actions=(PageAction(action, f"/example/{fold}/"),),
+                    folded=fold,
+                ),
+            ),
+            folds=fold,
+        )
+        for label, fold, action in (
+            ("Short actions", "short-actions", "Review"),
+            ("Long actions", "long-actions", "Check for active reboot inhibitors"),
+        )
+    )
+    return DataTable(
+        "Example queue 2",
+        (TableColumn("Item"),),
+        groups=groups,
+        headed=False,
+        data={"line": "flat"},
+        controls_per_row=True,
+    )
 
 
 def _identifiers() -> dict[str, DataTable]:
@@ -229,6 +259,9 @@ ENTRIES = {
     # actions keep their line while the table has room and wrap between
     # them where it has not.
     "table/many-actions": Example(_sectioned(findings="Example findings"), lambda: {"findings": _many_actions()}),
+    # A queue's folds, each row's controls their own width
+    # (``controls_per_row``): opening one fold moves no row of another.
+    "table/controls-per-row": Example(_sectioned(queue="Example queue 2"), lambda: {"queue": _controls_per_row()}),
     # A table whose rows are selected together: the heading that selects
     # every row, then each row's tick-box, and a row with no key whose cell
     # stays empty.

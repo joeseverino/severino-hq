@@ -152,7 +152,7 @@ class DashboardQueueTests(SignedInTestCase):
 
         self.assertContains(dashboard, "data-reading-age")
         self.assertContains(dashboard, "Read every")
-        self.assertNotContains(dashboard, "runs --failing")
+        self.assertContains(dashboard, "runs --failing")
         path, _, anchor = page.partition("#")
         self.assertEqual(path, "/action-items/")
         self.assertTrue(select(whole, "id", anchor))

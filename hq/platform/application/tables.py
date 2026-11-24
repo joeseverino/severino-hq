@@ -497,9 +497,15 @@ class DataTable:
     # Each ``data-`` attribute a script or a test finds the table by, by its
     # name after ``data-``, as a row's are.
     data: Mapping[str, str] = field(default_factory=dict)
+    # In a table of one column with no headings (the queue), each row's
+    # controls take their own width at its end rather than one shared down
+    # the table, so a fold that opens moves no other row.
+    controls_per_row: bool = False
 
     def __post_init__(self) -> None:
         held_data(self.data, "A table")
+        if self.controls_per_row and (self.headed or len(self.columns) != 1):
+            raise ValueError("Only a table of one column with no headings sizes each row's controls apart.")
         if self.rows and self.groups:
             raise ValueError("A table holds rows or groups of them, not both.")
         object.__setattr__(self, "columns", ranked(self.columns))
