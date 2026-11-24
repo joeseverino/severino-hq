@@ -389,9 +389,9 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .facts-band.is-small dt { font-size: var(--text-3xs); }
 .facts-band.is-small .fact-value { font-size: var(--text-xs); line-height: 1.3; }
 .facts-band.is-small .fact-detail { color: var(--accent); font-size: var(--text-3xs); font-weight: 600; }
-/* A value that opens a panel in place is the panel's button, drawn as the value it is, as a linked value is: its ink, the cell tinted while it is pointed at or its panel open. */
-.facts-band .fact-open { padding: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: start; cursor: pointer; }
-.facts-band .fact-open:is(:hover, :focus-visible) { text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: .18em; }
+/* A value that opens a panel in place is the panel's button, drawn as the value it is, as a linked value is: its ink, its words wrapping as a value's do, and in a band its cell tinted while it is pointed at or its panel open. */
+.fact .fact-open { padding: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: start; white-space: normal; cursor: pointer; }
+.fact .fact-open:is(:hover, :focus-visible) { text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: .18em; }
 .facts-band > .fact:has(> .fact-value > .fact-shown > .fact-open:is(:hover, :focus-visible), :popover-open) { background: var(--bg-tint); }
 /* The panel: what the figure stands for, read in place, its head over it and its foot under it. */
 .fact-panel { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); font-size: var(--text-sm); font-weight: 400; letter-spacing: normal; line-height: 1.4; text-align: start; }
@@ -403,8 +403,11 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .fact-panel-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); line-height: var(--target-min); }
 .fact-panel-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
 :is(.facts-band, .facts-list) .fact-value :is(code, kbd, samp, .token, .whole):is(:not(td *), [popover] *, dialog *) { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-/* A value holding a pill's link sets its lines a target tall (`--target-min`), so the area the pill is hit through (page.css) stays in its own line, clear of a link on the line above. */
-.facts-list .fact-value:has(.pill[href]) { line-height: var(--target-min); }
+/* A value holding a pill's link or a panel's button sets its lines a target tall (`--target-min`), so the area it is hit through (page.css) stays in its own line, clear of a link on the line above; the button is then as tall as its lines, never a control's height spilling onto the fact under it. */
+.facts-list .fact-value:has(.pill[href], .fact-open) { line-height: var(--target-min); }
+.facts-list .fact-open { min-height: 0; }
+/* A button's baseline is its last line, so a value whose button wraps is a flex box, whose baseline is its first line: the value starts on its label's line. */
+.facts-list .fact-shown:has(> .fact-open) { display: flex; }
 .band-icon {
   display: grid; place-items: center; flex: none;
   width: 36px; height: 36px; border-radius: var(--radius);

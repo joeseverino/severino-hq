@@ -425,6 +425,21 @@ FACTS_STATES = {
         {"image": "registry.example.com/example-team/example-image:2024.11.3"},
         premise=(_TIGHTER, ".facts-list"),
     ),
+    # A list's fact whose names are a panel its value opens, as a project's
+    # branch rules are drawn: the value and a toned line under it, the names
+    # read in place.
+    "list-panel": Example(
+        '{% section "Example repository" %}{% facts %}'
+        '{% fact "Example updates" value="Off" %}'
+        '{% fact "Example changes" id="example-rules" %}Pull request and 3 checks'
+        '{% detail %}<small>{% status "2 checks not required" tone="attention" pill=False %}</small>'
+        '{% panel %}{% facts %}{% fact "Required" %}{% list kind="dots" %}<li>lint</li><li>test</li><li>scan</li>'
+        '{% endlist %}{% endfact %}{% fact "Not required" %}{% list kind="dots" %}<li>example-one</li>'
+        '<li>example-two</li>{% endlist %}{% endfact %}{% fact "Force-push" value="Blocked" %}{% endfacts %}'
+        "{% endfact %}"
+        '{% fact "Example runner" %}Idle{% detail %}<small>example-host-01</small>{% endfact %}'
+        "{% endfacts %}{% endsection %}",
+    ),
     # A band of facts beside a page's title, as the dashboard's glance draws it.
     "band-glance": Example(
         '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',

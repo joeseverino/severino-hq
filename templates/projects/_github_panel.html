@@ -48,22 +48,45 @@ reading; nothing here calls GitHub.
       {% include "projects/_updates_run.html" with run=updates_run asked=run_asked %}
     </div>{% endfact %}
     {% if posture.measured %}
-      {% fact "Repository settings" %}<span class="prose"><a href="{% url 'posture' %}">{{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules)</span>{% if posture.unmet %}{% list kind="dots" %}{% for result in posture.unmet %}<li>{% status result.check.unmet tone="attention" pill=False %}</li>{% endfor %}{% endlist %}{% endif %}{% endfact %}
+      {% url "posture" as posture_url %}
+      {% fact "Repository settings" url=posture_url id="github-settings" tone=posture.unmet|yesno:"attention," %}
+        {{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}
+      {% detail %}
+        <small>{% if repo.private %}Private{% else %}Public{% endif %} repo rules</small>
+      {% panel %}
+        {% if posture.unmet %}{% list %}{% for result in posture.unmet %}<li>{% status result.check.unmet tone="attention" pill=False %}</li>{% endfor %}{% endlist %}{% endif %}
+      {% foot %}
+        {% if posture.unmet %}<a href="{{ posture_url }}">Repository settings{% arrow %}</a>{% endif %}
+      {% endfact %}
     {% endif %}
     {% if rules %}
-      {% fact "Changes to "|add:repo.default_branch %}
-        {% if rules.pull_request %}Need a pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}Need no pull request{% endif %}
-        and {{ rules.required_checks|length|counted:"passing check,passing checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", " }}).{% else %}.{% endif %}{% if rules.blocks_force_push %} Force-push is blocked.{% endif %}
-        {% if repo.unrequired_checks %}{% list %}<li>{% status "Run on pull requests but not required:" repo.unrequired_checks|join:", " tone="attention" pill=False %}</li>{% endlist %}{% endif %}
+      {% fact "Changes to "|add:repo.default_branch id="github-branch-rules" %}
+        {% if rules.pull_request %}Pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}No pull request{% endif %} and {% if rules.required_checks %}{{ rules.required_checks|length|counted:"check" }}{% else %}no checks{% endif %}
+      {% detail %}
+        {% if repo.unrequired_checks %}<small>{% status repo.unrequired_checks|length|counted:"check not required,checks not required" tone="attention" pill=False %}</small>{% endif %}
+      {% panel %}
+        {% facts %}
+          {% fact "Required" %}{% if rules.required_checks %}{% list kind="dots" %}{% for name in rules.required_checks %}<li>{{ name }}</li>{% endfor %}{% endlist %}{% else %}None{% endif %}{% endfact %}
+          {% if repo.unrequired_checks %}{% fact "Not required" %}{% list kind="dots" %}{% for name in repo.unrequired_checks %}<li>{{ name }}</li>{% endfor %}{% endlist %}{% endfact %}{% endif %}
+          {% fact "Force-push" %}{% if rules.blocks_force_push %}Blocked{% else %}Allowed{% endif %}{% endfact %}
+        {% endfacts %}
       {% endfact %}
     {% elif "branch_rules" in repo.refused %}
-      {% fact "Changes to "|add:repo.default_branch %}{% muted %}GitHub does not offer branch rules for this repository's plan.{% endmuted %}{% endfact %}
+      {% fact "Changes to "|add:repo.default_branch %}{% muted %}Not offered on this plan{% endmuted %}{% endfact %}
     {% endif %}
     {% if environment %}
-      {% fact "Deploy rules" %}{% if environment.reviewers %}Approval from {{ environment.reviewers|join:", " }}{% else %}No approval{% endif %}{% if environment.wait_minutes %}, then a {{ environment.wait_minutes|counted:"minute" }} wait{% endif %}{% if environment.branches == "protected" %}, protected branches only{% elif environment.branches != "any" %}, chosen branches only{% endif %}{% endfact %}
+      {% fact "Deploy rules" %}
+        {% if environment.reviewers %}Approval from {{ environment.reviewers|join:", " }}{% else %}No approval{% endif %}
+      {% detail %}
+        {% if environment.wait_minutes or environment.branches != "any" %}<small>{% if environment.wait_minutes %}{{ environment.wait_minutes|counted:"minute" }} wait{% if environment.branches != "any" %}{% dot %}{% endif %}{% endif %}{% if environment.branches == "protected" %}Protected branches only{% elif environment.branches != "any" %}Chosen branches only{% endif %}</small>{% endif %}
+      {% endfact %}
     {% endif %}
     {% for runner in repo.runners %}
-      {% fact "Runner" %}{% entity "machine"|entity_of:runner.name %}{% dot %}{{ runner.status }},{% if runner.busy %} running a job{% else %} idle{% endif %}{% endfact %}
+      {% fact "Runner" %}
+        {% if runner.status != "online" %}{% status runner.status tone="attention" pill=False %}{% elif runner.busy %}Running a job{% else %}Idle{% endif %}
+      {% detail %}
+        <small>On {% entity "machine"|entity_of:runner.name %}</small>
+      {% endfact %}
     {% endfor %}
   {% endfacts %}
   {% endwith %}

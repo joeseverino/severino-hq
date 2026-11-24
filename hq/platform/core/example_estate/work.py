@@ -149,6 +149,12 @@ def repositories():
                 {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]}
             ]
             record["images"] = [{"name": "example/hq", "signed": [HQ_DIGEST.removeprefix("sha256:")]}]
+            # Its default branch's rules, with checks its pull requests run
+            # that they do not require, and the runner its deploys run on.
+            required = ["lint", "test (3.13)", "test (3.14)"]
+            record["rules"] = {"pull_request": True, "required_checks": required, "blocks_force_push": True}
+            record["pull_request_checks"] = [*required, "CodeQL", "Analyze (python)", "browser (webkit)"]
+            record["runners"] = [{"name": "docker-host-01", "status": "online", "busy": False}]
         if name == UPDATED:
             record.update(_updates(name))
         if name == FAILING:
