@@ -36,7 +36,7 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
-from .display_words import Quoted
+from .quoted import Quoted
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .process_caches import kept
 from .record_errors import PolicyError, RecordNotFound

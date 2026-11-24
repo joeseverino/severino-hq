@@ -45,7 +45,7 @@ from .automation_manifest import AUTHORED, PLAYBOOK, REVISION, OperationManifest
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe, RequiredText
 from .contracts import Closed, Effect
-from .display_words import Quoted
+from .quoted import Quoted
 from .integration_specs import CapabilitySpec
 from .projection import read_once
 from .record_errors import PolicyError, RecordNotFound

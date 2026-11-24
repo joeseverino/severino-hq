@@ -16,6 +16,8 @@ from typing import Any, Literal, Union, dataclass_transform, get_args, get_origi
 
 from django.db import models
 
+from .quoted import Quoted
+
 # What only a machine writes, by what it is.
 MACHINE_TEXT = {
     "a date-time stamp": re.compile(r"\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}|\A\d{4}-\d{2}-\d{2}\Z"),
@@ -33,18 +35,6 @@ def quoted_when(flag: str) -> Mapping[str, bool | str]:
     """``QUOTED`` whenever its view's ``flag`` is set: a readout's words."""
 
     return MappingProxyType({"quoted": flag})
-
-
-class Quoted(str):
-    """Text a person wrote outside HQ, read where HQ reads it (a playbook's
-    title and statements, an input's description, a scan's problems): the
-    author's own words, shown as written however they read, and escaped on
-    the page like any text. Joined only with more of them it is wrapped
-    again; beside HQ's own words it is a field or item of its own, never
-    one str with them.
-    """
-
-    __slots__ = ()
 
 
 class QuotedCharField(models.CharField):

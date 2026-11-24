@@ -16,7 +16,7 @@ from typing import Any
 
 from hq.platform.core.digests import canonical
 
-from .display_words import Quoted
+from .quoted import Quoted
 from .labels import field_label, lower_first
 from .moments import moment
 from .printable import admitted

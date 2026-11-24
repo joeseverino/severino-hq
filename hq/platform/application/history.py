@@ -39,7 +39,7 @@ lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
 lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
 
-from .display_words import Quoted
+from .quoted import Quoted
 from .doors import Attribution
 from .entity_links import container_link, web_url
 from .facts import inventory_records

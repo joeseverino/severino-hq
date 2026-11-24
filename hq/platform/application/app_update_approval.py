@@ -234,7 +234,7 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
             raise PolicyError(reason)
     standing = merge_standing(updates[0])
     if standing is not None and standing.taken:
-        raise PolicyError(ended(standing.words))
+        raise PolicyError("This update is already approved, and its card says where it stands.")
     hosts = resolved_hosts(manifest, manifest.hosts)
     if not hosts:
         raise PolicyError("The playbook that applies an app update names no machine to apply it on.")

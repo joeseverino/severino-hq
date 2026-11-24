@@ -253,7 +253,7 @@ def _run_title() -> Collate:
 
 def _shown_title(kind: str, title: str) -> str:
     """The work ``kind`` names as a page draws it: its playbook's title as the
-    author wrote it (``display_words.Quoted``), which SQL's copy of it
+    author wrote it (``quoted.Quoted``), which SQL's copy of it
     (``_run_title``) is not; else ``title``."""
 
     return playbook_titles().get(operation_of(kind)) or title

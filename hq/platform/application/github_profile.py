@@ -20,7 +20,7 @@ from hq.platform.core.models import LinkedAccount
 from .asks import AskedAnswer, Standing, asked_read, read_standing
 from .command_fields import Describe
 from .contracts import Effect
-from .display_words import Quoted
+from .quoted import Quoted
 from .freshness import RETRY_AFTER, freshness
 from .integration_specs import CapabilitySpec
 from .linked_accounts import GITHUB

@@ -156,7 +156,7 @@ forbidden_modules = ["hq.**"]
 ignore_imports = ["hq.platform.application.answer_fields -> hq.platform.application.describe"]
 
 [[tool.importlinter.contracts]]
-name = "The operation manifest is a leaf: it imports nothing of HQ but four validators"
+name = "The operation manifest is a leaf: it imports nothing of HQ but four validators and the type of an author's words"
 type = "forbidden"
 source_modules = ["hq.platform.application.automation_manifest"]
 forbidden_modules = ["hq.**"]
@@ -164,12 +164,13 @@ forbidden_modules = ["hq.**"]
 # (names.is_hostname) and of a value that must hold something
 # (non_empty.NonEmpty), and the one way a rule refuses (reasons.Checked), which
 # the manifest holds its ids, kinds, hosts and statements to rather than
-# restating them.
+# restating them; and quoted.Quoted, the type its author's words are read as.
 ignore_imports = [
   "hq.platform.application.automation_manifest -> hq.platform.application.contracts",
   "hq.platform.application.automation_manifest -> hq.domains.control_plane.names",
   "hq.platform.application.automation_manifest -> hq.platform.application.non_empty",
   "hq.platform.application.automation_manifest -> hq.platform.application.reasons",
+  "hq.platform.application.automation_manifest -> hq.platform.application.quoted",
 ]
 
 [[tool.importlinter.contracts]]
