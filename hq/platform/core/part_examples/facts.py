@@ -57,6 +57,17 @@ _GLANCE = (
 
 
 # The same band with nothing read yet, a long line that wraps inside its fact.
+# Two readings beside a page's title, as a new install's dashboard draws them.
+_GLANCE_TWO = (
+    '<div data-example-region>{% facts layout="band" label="Example glance" %}'
+    '{% fact "Example connection" icon="network" url="/example/" %}{% status "Example" tone="good" dot=True ink="context" %}'
+    "{% detail %}<small>Example TLS 1.3</small>{% endfact %}"
+    '{% fact "Example controller" icon="activity" url="/example/controller/" %}'
+    '{% status "Online" tone="good" dot=True ink="context" %}{% detail %}<small>Last read just now</small>{% endfact %}'
+    "{% endfacts %}</div>"
+)
+
+
 _GLANCE_EMPTY = (
     '<div data-example-region>{% facts layout="band" label="Example glance" %}'
     '{% fact "Example controller" icon="activity" url="/example/controller/" %}'
@@ -416,6 +427,13 @@ FACTS_STATES = {
             "page_facts": "An example fact · another example fact",
             "page_aside": _Drawn(_GLANCE_EMPTY),
         },
+        heads_the_page=True,
+    ),
+    # Two readings by the title stand together, a column each as wide as
+    # four would take.
+    "band-glance-two": Example(
+        '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
+        lambda: {"page": Page(title="Example glance"), "page_aside": _Drawn(_GLANCE_TWO)},
         heads_the_page=True,
     ),
     # A strip of small figures, more than one line holds in a narrow box.

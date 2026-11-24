@@ -771,7 +771,8 @@ when space permits; empty contributors take no space.
 
 A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside
 the title while its facts fit there, and on a line of its own under it, from the page's edge,
-where not.
+where not. Fewer than four readings take a column each as wide as four would, so two stand
+together rather than at the far ends of the head. *Gate:* `readings apart` in the survey.
 
 A list, the default, is the facts about one thing, each label beside its value. It lays as many
 pairs to a row as keep each a short label and a short value wide, so a few short facts fill a

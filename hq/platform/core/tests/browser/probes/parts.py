@@ -405,6 +405,36 @@ ROWS_SHORT = (
 }"""
 )
 
+# Readings beside a page's title stand together (figures.css): two
+# neighbors on a row with more than a reading's width between them read as
+# unrelated things at the far ends of the head.
+READINGS_APART = """(bands) => {
+  const room = 12 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const read = [...document.querySelectorAll(bands)].filter((band) => band.checkVisibility());
+  const found = [];
+  for (const band of read) {
+    const facts = [...band.children].filter((fact) => fact.checkVisibility()).map((fact) => fact.getBoundingClientRect());
+    for (let i = 1; i < facts.length; i++) {
+      const [a, b] = [facts[i - 1], facts[i]];
+      if (Math.abs(a.top - b.top) < 2 && b.left - a.right > room) {
+        found.push(`two readings stand ${Math.round(b.left - a.right)}px apart`);
+      }
+    }
+  }
+  return {read: read.length, found};
+}"""
+
+# Two readings spread across a head's whole width.
+_READINGS_SPREAD = (
+    '<div class="page-head"><div style="flex: 1 1 32rem"><dl class="facts-band" data-band '
+    'style="max-inline-size: none; grid-template-columns: 1fr 1fr">'
+    + "".join(
+        f'<div class="fact" style="justify-self: center"><dt>Example {n}</dt><dd class="fact-value">example</dd></div>'
+        for n in range(2)
+    )
+    + "</dl></div></div>"
+)
+
 # Four pairs on a grid of three, the last alone on its row.
 _LONE_PAIR = (
     '<dl class="facts-list" style="display: grid; grid-template-columns: repeat(3, 1fr)">'
@@ -477,6 +507,12 @@ CHECKS = {
         (UNDRAWN, SELECTORS["drawing"]),
         reader_sees="a chart or a calendar given room and drawing nothing",
         part=CHART,
+    ),
+    "readings apart": Check(
+        (READINGS_APART, SELECTORS["head_band"]),
+        reader_sees="two readings beside a page's title at the far ends of the head, nothing between",
+        part=FACTS,
+        plants=(Plant(_READINGS_SPREAD, finds=("apart",)),),
     ),
     "rows of facts short": Check(
         (ROWS_SHORT, SELECTORS["facts_list"]),

@@ -315,6 +315,14 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .page-head .facts-band { margin-block: 0; }
 /* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; in a head under 30rem they stand from the page's edge, as many to a row as a label beside its value fits, each its label beside its value over its note, whose run wraps whole parts to the lines it needs. */
 @container band (width >= 24rem) { .page-head .facts-band > .fact { justify-self: center; } }
+/* Fewer than four readings take a column each as wide as four would, from
+   the band's start, so two never stand at the far ends of the room with
+   nothing between them. */
+.page-head .facts-band:not(:has(> :nth-child(4))) {
+  --band-readings: 3; max-inline-size: calc(var(--band-readings) * 16rem);
+  &:not(:has(> :nth-child(3))) { --band-readings: 2; }
+  &:not(:has(> :nth-child(2))) { --band-readings: 1; }
+}
 @container page-head (width < 30rem) { .page-head .facts-band { --band-floor: 10rem; --band-row-gap: var(--space-5); --band-column-gap: var(--space-6); & > .fact { flex-flow: row wrap; align-content: start; align-items: baseline; gap: 0 var(--space-3); } & > .fact > .fact-detail { flex-basis: 100%; } & .fact-value { font-size: var(--text-md); } } }
 /* What names a value is sentence case in the muted voice; capitals are for a kicker over a group (`.eyebrow`), never a value's name. Its mark is quieter than its words, and a label too long for its cell wraps beside its mark, never under it. */
 .facts-band dt { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; color: var(--muted); font-size: var(--text-xs); }
