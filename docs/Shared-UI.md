@@ -775,17 +775,18 @@ where not.
 
 A list, the default, is the facts about one thing, each label beside its value. It lays as many
 pairs to a row as keep each a short label and a short value wide, so a few short facts fill a
-wide frame rather than stacking down its start. The pairs of a row share their columns, and a
-value that is a list of several takes its row. Narrower than two pairs it is one pair to a row,
-its label column as wide as its longest label. A label with several values holds them as a list
-inside one fact. An identifier in a value (code, a `|breakable` name) runs inline, code a chip on
-each line it wraps to, so a value's first line stands on its label's line in every engine. A list
-opened to read more (in a disclosure, a popover, a dialog) or set above what a form changes keeps
-one pair to a row, sits closer and ends with what holds it. A table row's small print keeps one
-pair to a row too. Where it stands decides this, never an option, so the same summary drawn on a
-page and in a dialog takes each one's spacing. A pair whose value is a list of names (a `labeled`
-list, or a `codes` list of two or more) takes a row of its own, so it never wraps beside another
-pair and leaves that pair's row a gap.
+wide frame rather than stacking down its start. The pairs of a row share what it leaves, so a
+row's last pair spans to its end and no pair stands alone beside empty columns; every label is
+one width, so the values of a column line up. A value that is a run of several (a `labeled` or
+`codes` list, addresses) asks for its widest line, sharing a row while it fits and taking the
+row when it does not. Narrower than two pairs it is one pair to a row. A
+label with several values holds them as a list inside one fact. An identifier in a value (code,
+a `|breakable` name) runs inline, code a chip on each line it wraps to, so a value's first line
+stands on its label's line in every engine. A list opened to read more (in a disclosure, a
+popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and
+ends with what holds it. A table row's small print keeps one pair to a row too. Where it stands
+decides this, never an option, so the same summary drawn on a page and in a dialog takes each
+one's spacing. *Gate:* `rows of facts short` in the survey.
 
 A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
 each fact one phrase, its bold value then its words ("3 rules"), agreeing with it, then a dot
@@ -796,7 +797,6 @@ card holds them on one line. Under the card's head it takes a rule above.
 two shares a row with the sections beside it, so its values never end a third of the way across
 the page. A record page's facts are a `{% card %}` that opens its `{% layout %}`, beside its
 notes and related records. In a flow, a frame of facts grows into its row as every member does.
-*Gate:* `frames filled` in the layout survey.
 
 ### filter_bar
 

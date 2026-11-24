@@ -424,12 +424,14 @@
    and a short value wide, as a description list does at width (Ant Design's
    Descriptions, Tailwind's description lists), so a few short facts fill a
    wide frame rather than stacking down its start beside an empty end. The
-   pairs of a row share their columns, so every row's labels and values line
-   up, and stand apart by more than the gap that holds a label to its value.
-   Narrower than two pairs (`--facts-across`) it is one pair to a row, as
-   above. The switch is asked of the list's own width through its tracks, as
-   the band's `--fact-min` is, so no query or script measures it: under it a
-   value's least width is three fifths of the list, room for one pair only.
+   pairs wrap as a flex row and share what a row leaves, so a row's last
+   pairs, and one before a pair that takes its row, span what is left rather
+   than standing beside empty columns (Ant Design's Descriptions spans the
+   last item to the row's end). Every pair's label is one width, so the
+   values of a column line up, and pairs stand apart by more than the gap
+   that holds a label to its value. Narrower than two pairs
+   (`--facts-across`) it is one pair to a row, from each pair's basis, so no
+   query or script measures it.
    Opened to read more (a disclosure, a popover, a dialog), set above what a
    form changes, or a table row's small print, a list is a few short pairs
    under what it serves and keeps one pair to a row. A folded section on the
@@ -437,19 +439,17 @@
    frame (a resource's other settings) is opened to read more. */
 .facts-list:not(:where(tbody, details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) *) {
   --facts-across: 42rem;
-  --fact-label-least: clamp(0px, (100% - var(--facts-across)) * 999, 6rem);
-  --fact-value-least: clamp(min(12rem, 60% - var(--space-6)), (var(--facts-across) - 100%) * 999, 60% - var(--space-6));
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a list's pairs, each a label's track and a value's */
-  grid-template-columns: repeat(auto-fit, minmax(var(--fact-label-least), max-content) minmax(var(--fact-value-least), 1fr));
-  column-gap: clamp(var(--space-6), (100% - var(--facts-across)) * 999, var(--space-16));
-  & > .fact { grid-column: span 2; }
+  display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-16);
+  & > .fact { flex: 1 1 calc((var(--facts-across) - var(--space-16)) / 2); min-width: 0; grid-template-columns: var(--fact-label, min(9rem, 40%)) minmax(0, 1fr); }
 }
-/* A value that is a list of several (names, addresses, links) wraps onto
-   lines of its own, so its fact takes the row: beside other pairs it would
-   make their row as tall as itself. */
+/* A value that is a list of several (names, addresses, links) asks for its
+   widest line and keeps it, so on the page a short list shares a row as
+   any pair does and a long one takes the row, wrapping there. */
 .facts-list > .fact:has(> .fact-value > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) {
-  grid-column: 1 / -1;
-  & > dd { grid-column: 2 / -1; }
+  flex: 1 0 max-content; min-width: min(100%, calc((var(--facts-across, 0px) - var(--space-16)) / 2)); max-width: 100%;
+  /* A share of a size not yet known counts for nothing in a widest line, so
+     its label's track is a length. */
+  --fact-label: 9rem;
 }
 /* In a table's row, facts are the row's small print. */
 td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); }

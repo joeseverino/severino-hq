@@ -1,6 +1,7 @@
 """Probes of a page's parts: disclosures, labels, the dashboard's readings, drawings and a check's evidence."""
 
 from hq.platform.core.included_parts import CHART, MODAL, MONTH_GRID
+from hq.platform.core.templatetags.facts_tags import FACTS
 from hq.platform.core.templatetags.ladder_tags import CHECK_RUNG
 from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
@@ -371,6 +372,49 @@ _SHORT_MONTH = (
     + "</div></section></div>"
 )
 
+# A list of facts fills each row it lays its pairs on (layout.css): a row
+# whose pairs end short of the list leaves a lone pair beside empty columns.
+ROWS_SHORT = (
+    "(lists) => {"
+    + DESCRIBE
+    + """
+  const room = 6 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const read = [...document.querySelectorAll(lists)].filter((list) => list.checkVisibility());
+  const found = [];
+  for (const list of read) {
+    const style = getComputedStyle(list);
+    const end = list.getBoundingClientRect().right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
+    // Pairs of a row align on their first baselines, so their tops differ
+    // by what their first lines hold.
+    const rows = [];
+    for (const fact of list.children) {
+      if (!fact.checkVisibility()) continue;
+      const r = fact.getBoundingClientRect();
+      const row = rows.find((other) => Math.abs(other.top - r.top) < room / 12);
+      if (row) row.right = Math.max(row.right, r.right);
+      else rows.push({top: r.top, right: r.right});
+    }
+    for (const {right} of rows) {
+      if (end - right > room) {
+        const where = list.closest('section[id], section')?.querySelector('h2, h3')?.textContent.trim() ?? describe(list);
+        found.push(`a row of facts in ${where} ends ${Math.round(end - right)}px short of its list`);
+      }
+    }
+  }
+  return {read: read.length, found};
+}"""
+)
+
+# Four pairs on a grid of three, the last alone on its row.
+_LONE_PAIR = (
+    '<dl class="facts-list" style="display: grid; grid-template-columns: repeat(3, 1fr)">'
+    + "".join(
+        f'<div class="fact" style="grid-column: auto"><dt>Example {n}</dt><dd class="fact-value">example</dd></div>'
+        for n in range(4)
+    )
+    + "</dl>"
+)
+
 # Whether a box scrolls wider than it shows, which a plant's premise asks.
 _WIDENED = """(box) => document.querySelector(box).scrollWidth > document.querySelector(box).clientWidth
   ? [] : [`${box} scrolls no wider than it shows`]"""
@@ -433,6 +477,12 @@ CHECKS = {
         (UNDRAWN, SELECTORS["drawing"]),
         reader_sees="a chart or a calendar given room and drawing nothing",
         part=CHART,
+    ),
+    "rows of facts short": Check(
+        (ROWS_SHORT, SELECTORS["facts_list"]),
+        reader_sees="a lone fact on its row beside empty columns",
+        part=FACTS,
+        plants=(Plant(_LONE_PAIR, finds=("ends",)),),
     ),
     "months short of their frame": Check(
         (MONTHS_SHORT, SELECTORS["month"]),

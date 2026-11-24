@@ -371,6 +371,8 @@ _DECLARED = {
     "unseen": _S(".visually-hidden", optional=True),
     # The flow of sibling sections or cards, and of charts (layout.css).
     "flow": _S(".section-flow, .domain-charts", "layout", optional=True),
+    # A list of facts, each label beside its value.
+    "facts_list": _S(".facts-list", "facts", optional=True),
     # One fact of a band, and the label that names its value.
     "band_fact": _S(".facts-band > .fact", "fact"),
     "band_label": _S(".fact-label", "fact"),
