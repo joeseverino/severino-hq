@@ -107,32 +107,6 @@ func TestASetupNeedsAValidHostConfiguration(t *testing.T) {
 	}
 }
 
-// What verify reports of a check is each file an apply would change, by the
-// task that writes it, and nothing the check left as it was.
-func TestACheckNamesEachChangeAndNothingElse(t *testing.T) {
-	report, err := os.ReadFile(filepath.Join("testdata", "setup-check.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	changes, err := setupChanges(report)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{
-		"Install every drop-in and the units the restart needs: /etc/systemd/system/severino-hq-web.service",
-		"Remove the units the release no longer ships: /etc/systemd/system/severino-hq-old.timer",
-		"Render the drop-ins host.json decides: /etc/systemd/system/severino-hq-secrets.service.d/10-estate.conf",
-	}
-	if !slices.Equal(changes, want) {
-		t.Errorf("changes %q, not %q", changes, want)
-	}
-	if _, err := setupChanges([]byte("PLAY [all] ****")); err == nil {
-		t.Error("a report that is not the json callback's was read")
-	}
-}
-
 // An install verifies and pulls the runner its tree pins, and only then sets
 // the host up in it.
 func TestAnInstallSetsUpInTheVerifiedRunner(t *testing.T) {

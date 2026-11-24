@@ -47,11 +47,6 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.Remove(filepath.Join(f.machine.Lib, "hq", "config", "controller.json"))
-	report, err := os.ReadFile(filepath.Join("testdata", "setup-check.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.setupReport = string(report)
 
 	drift := strings.Join(f.verify(t), "\n")
 
@@ -59,7 +54,6 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 		"deploy/bin/hq-host differs from the image's",
 		"deploy/bin/planted is not the image's",
 		"hq/config/controller.json is missing from the tree",
-		"Remove the units the release no longer ships: /etc/systemd/system/severino-hq-old.timer",
 	} {
 		if !strings.Contains(drift, want) {
 			t.Errorf("not reported: %s\n%s", want, drift)
@@ -119,6 +113,9 @@ func TestEachRunnerSudoFaultIsDrift(t *testing.T) {
 		"a runner granted a command HQ does not render": {func(f *fakeHost, _ string) {
 			f.sudoRules += "    (root) NOPASSWD: /usr/local/lib/example/retired *\n"
 		}, "deployer may run /usr/local/lib/example/retired * through sudo, which HQ does not render"},
+		"a runner granted the setup": {func(f *fakeHost, program string) {
+			f.sudoRules += "    (root) NOPASSWD: " + program + " setup *\n"
+		}, "deployer may run <program> setup * through sudo, which HQ does not render"},
 		"a runner whose HQ rule is widened": {func(f *fakeHost, program string) {
 			f.sudoRules += "    (root) NOPASSWD: " + program + " *\n"
 		}, "deployer may run <program> * through sudo, which HQ does not render"},

@@ -10,6 +10,8 @@
 //	hq-host automation       run the automation worker until no run is queued
 //	hq-host install          set the host up for the release in the root-owned tree;
 //	                         --check to print what that would change, changing nothing
+//	hq-host setup RUNNER     apply the tree's setup in RUNNER, a digest this host holds,
+//	                         verified by nothing here: install's second half
 //	hq-host deploy IMAGE     verify and pull IMAGE, then hand over to its hq-host
 //	hq-host release IMAGE    switch HQ to IMAGE, install it, or roll back
 //	hq-host sync IMAGE       replace the root-owned tree with IMAGE's
@@ -48,7 +50,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance | --events] | events | renovate | automation | install [--check] | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | backup | unit --serve | check --release DIR | edge-receiver | dry-run | verified DIR"
+const usage = "usage: hq-host run-web | controller [--apply | --glance | --events] | events | renovate | automation | install [--check] | setup RUNNER | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | backup | unit --serve | check --release DIR | edge-receiver | dry-run | verified DIR"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
 var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance, "--events": host.Listen}
@@ -136,6 +138,15 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		default:
 			fmt.Fprintln(stderr, usage)
 			return 2
+		}
+	case "setup":
+		if len(args) != 2 {
+			fmt.Fprintln(stderr, usage)
+			return 2
+		}
+		var runner string
+		if runner, err = host.Pinned(args[1]); err == nil {
+			err = machine(stdout).Setup(ctx, runner, host.Lib)
 		}
 	case "deploy":
 		if len(args) != 2 {
