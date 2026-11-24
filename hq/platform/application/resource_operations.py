@@ -437,9 +437,11 @@ def acting_for(asked: OperationRequest) -> Principal:
 def queue_carried_merge(
     resource: ManagedResource, *, asked: OperationRequest, carries: dict[str, Any]
 ) -> OperationRequest:
-    """Queue the merge ``asked`` carries as its next step, once per head, as
-    its requester and its approver, whose consent is held as a capability's
-    is (``Consent.require``)."""
+    """Queue the merge ``asked`` carries as its next step, once for ``asked``,
+    as its requester and its approver, whose consent is held as a capability's
+    is (``Consent.require``). Keyed on the step that carries it, so a replay
+    of that step queues nothing and a merge GitHub refused is asked again by
+    the next approval at the same head."""
 
     acting = acting_for(asked)
     action = OperationRequest.Action.MERGE
@@ -447,7 +449,7 @@ def queue_carried_merge(
         operation, queued = enqueue(
             action,
             partial(_prepared, resource, Consent(acting), action, reason=asked.reason, carries=carries),
-            once=f"merge:{resource.pk}:{resource.spec.get('head_sha', '')}",
+            once=f"merge:{resource.pk}:{resource.spec.get('head_sha', '')}:{asked.pk}",
         )
     if queued:
         ask()

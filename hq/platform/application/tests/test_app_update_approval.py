@@ -382,6 +382,15 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(self.standing().words, "GitHub refused the merge: the head moved after the approval.")
         self.assertFalse(self.standing().taken)
 
+    def test_a_merge_github_refused_is_merged_by_the_next_approval_at_that_head(self):
+        self.merged(success=False, status={"refused": "not_mergeable"})
+
+        self.assertTrue(self.press(key="example-approve-2")["ok"])
+        self.worked()
+
+        self.assertEqual(self.merges().filter(state=OperationRequest.State.QUEUED).count(), 1)
+        self.assertEqual((self.standing().words, self.standing().taken), ("Merging", True))
+
     def test_a_merge_commit_that_is_no_sha_queues_no_run(self):
         merge = self.merged(status={"merge_sha": "not-a-sha"})
 

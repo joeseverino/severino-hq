@@ -1533,8 +1533,10 @@ adopted now).
 
 Each step carries the next in its `input` under `then`, and
 `succeeded` queues it once the step succeeds: the worker's report of a passing
-preview queues the merge once per head, as the preview's requester and
-approver (`resource_operations.queue_carried_merge`); the controller's settle
+preview queues the merge once for that preview, as its requester and
+approver (`resource_operations.queue_carried_merge`), so a replayed report
+queues nothing and a merge GitHub refused is asked again by the next approval
+at the same head; the controller's settle
 of the merge with its commit queues the apply, that commit as its `revision`
 (`automation_runs.queue_follow_up`). The merge's `then` is the playbook's id,
 its adopted revision, its machines and the correlation all three share. Each
