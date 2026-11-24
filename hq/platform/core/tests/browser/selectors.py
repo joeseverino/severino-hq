@@ -372,11 +372,13 @@ _DECLARED = {
     # The flow of sibling sections or cards, and of charts (layout.css).
     "flow": _S(".section-flow, .domain-charts", "layout", optional=True),
     # An identifier a band of facts shows as a value.
-    "band_code": _S(".facts-band > .fact > .fact-value code", "facts", optional=True),
+    # The facts part's catalog entry draws a band of one reading, so it holds
+    # none of these three and none is tied to the part.
+    "band_code": _S(".facts-band > .fact > .fact-value code", optional=True),
     # A band of readings beside a page's title.
-    "head_band": _S(".page-head .facts-band", "facts", optional=True),
+    "head_band": _S(".page-head .facts-band", optional=True),
     # A list of facts, each label beside its value.
-    "facts_list": _S(".facts-list", "facts", optional=True),
+    "facts_list": _S(".facts-list", optional=True),
     # One fact of a band, and the label that names its value.
     "band_fact": _S(".facts-band > .fact", "fact"),
     "band_label": _S(".fact-label", "fact"),

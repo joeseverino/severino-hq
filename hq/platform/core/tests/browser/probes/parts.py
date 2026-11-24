@@ -1,7 +1,6 @@
 """Probes of a page's parts: disclosures, labels, the dashboard's readings, drawings and a check's evidence."""
 
 from hq.platform.core.included_parts import CHART, MODAL, MONTH_GRID
-from hq.platform.core.templatetags.facts_tags import FACTS
 from hq.platform.core.templatetags.ladder_tags import CHECK_RUNG
 from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
@@ -384,15 +383,15 @@ ROWS_SHORT = (
   for (const list of read) {
     const style = getComputedStyle(list);
     const end = list.getBoundingClientRect().right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
-    // Pairs of a row align on their first baselines, so their tops differ
-    // by what their first lines hold.
+    // Pairs of a row align on their first baselines, so their tops differ by
+    // what their first lines hold: a row starts where a pair goes back left.
     const rows = [];
     for (const fact of list.children) {
       if (!fact.checkVisibility()) continue;
       const r = fact.getBoundingClientRect();
-      const row = rows.find((other) => Math.abs(other.top - r.top) < room / 12);
-      if (row) row.right = Math.max(row.right, r.right);
-      else rows.push({top: r.top, right: r.right});
+      const row = rows.at(-1);
+      if (row && r.left > row.left) Object.assign(row, {left: r.left, right: r.right});
+      else rows.push({left: r.left, right: r.right});
     }
     for (const {right} of rows) {
       if (end - right > room) {
@@ -401,7 +400,7 @@ ROWS_SHORT = (
       }
     }
   }
-  return {read: read.length, found};
+  return found;
 }"""
 )
 
@@ -418,7 +417,7 @@ SPLIT_IDENTIFIERS = """(codes) => {
     const whole = ink.measureText(code.textContent.trim()).width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
     return whole <= 11 * rem && code.getBoundingClientRect().height > 1.9 * parseFloat(style.fontSize);
   }).map((code) => `${code.textContent.trim()} breaks across lines`);
-  return {read: read.length, found};
+  return found;
 }"""
 
 # Readings beside a page's title stand together (figures.css): two
@@ -437,7 +436,7 @@ READINGS_APART = """(bands) => {
       }
     }
   }
-  return {read: read.length, found};
+  return found;
 }"""
 
 # Two readings spread across a head's whole width.
@@ -527,7 +526,6 @@ CHECKS = {
     "split identifiers": Check(
         (SPLIT_IDENTIFIERS, SELECTORS["band_code"]),
         reader_sees="a short version broken across two lines in a band of facts",
-        part=FACTS,
         plants=(
             Plant(
                 '<dl class="facts-band" data-band style="grid-template-columns: 6rem"><div class="fact">'
@@ -539,13 +537,11 @@ CHECKS = {
     "readings apart": Check(
         (READINGS_APART, SELECTORS["head_band"]),
         reader_sees="two readings beside a page's title at the far ends of the head, nothing between",
-        part=FACTS,
         plants=(Plant(_READINGS_SPREAD, finds=("apart",)),),
     ),
     "rows of facts short": Check(
         (ROWS_SHORT, SELECTORS["facts_list"]),
         reader_sees="a lone fact on its row beside empty columns",
-        part=FACTS,
         plants=(Plant(_LONE_PAIR, finds=("ends",)),),
     ),
     "months short of their frame": Check(
