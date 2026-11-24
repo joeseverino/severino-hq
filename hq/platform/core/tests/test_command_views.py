@@ -206,15 +206,6 @@ class CommandViewTests(SignedInTestCase):
             rows=lambda options: len(options or ()),
         )
 
-    def test_discovery_context_filters_and_explains_infrastructure_targets(self):
-        declare("example-device", "tailscale.device")
-        declare("example-zone", "cloudflare.zone")
-
-        response = self.client.get("/commands/infrastructure.resource.reconcile/", {"kind": "tailscale.device"})
-
-        self.assertIn("example-device", options(response))
-        self.assertNotIn("example-zone", options(response))
-
     def test_update_hydrates_the_selected_resource_and_concurrency_guard(self):
         resource = declare(
             "example-record",
@@ -225,7 +216,7 @@ class CommandViewTests(SignedInTestCase):
 
         response = self.client.get(
             "/commands/infrastructure.resource.update/",
-            {"kind": "cloudflare.dns_record", "target": resource.key},
+            {"target": resource.key},
         )
         form = response.context["form"]
 

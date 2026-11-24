@@ -40,17 +40,10 @@ class DiscoveryItem:
     search_terms: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class CommandRelation:
-    labels: tuple[str, ...] = ()
-    kinds: tuple[str, ...] = ()
-
-
 def _matches(item: DiscoveryItem, query: str) -> bool:
-    return _contains_all(
-        (item.name, item.label, item.summary, *item.badges, *item.search_terms),
-        query,
-    )
+    # An item is found by its own words. Its badges are its state and effect,
+    # which many items share, so a search for one would find them all.
+    return _contains_all((item.name, item.label, item.summary, *item.search_terms), query)
 
 
 def _contains_all(values: tuple[str, ...], query: str) -> bool:
@@ -85,7 +78,7 @@ def _match_score(item: DiscoveryItem, query: str) -> int:
     return sum(
         max(
             *(_term_score(value, term) * 4 for value in (item.label, primary_name)),
-            *(_term_score(value, term) * 2 for value in (item.summary, *item.badges)),
+            _term_score(item.summary, term) * 2,
             *(_term_score(value, term) for value in item.search_terms),
         )
         for term in terms
@@ -145,21 +138,11 @@ def _matching_ability_labels(spec: ConnectionSpec, query: str) -> tuple[str, ...
     return (*visible, f"+{hidden} more")
 
 
-def _command_matches_ability(command: CapabilitySpec, ability: ConnectionAbility) -> bool:
-    if ability.capability == command.name:
-        return True
-    if not ability.subject_resource or command.subject_resource != ability.subject_resource:
-        return False
-    governed = set(ability.governs_kinds)
-    constrained_kinds = {str(value) for key, value in command.target_query if key == "kind"}
-    return not constrained_kinds or bool(governed & constrained_kinds)
-
-
-def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryItem | None:
+def _command_item(spec: CapabilitySpec, executors: tuple[str, ...]) -> DiscoveryItem | None:
     """A command as search offers it: its form, or the page a person starts
     it from (``reached_from``); ``None`` for one only its own page sends."""
 
-    url, destination = command_url(spec.name, kinds=relation.kinds), ""
+    url, destination = command_url(spec.name), ""
     if spec.reached_from:
         start = starting_page(spec)
         if start is None:
@@ -172,69 +155,20 @@ def _command_item(spec: CapabilitySpec, relation: CommandRelation) -> DiscoveryI
         summary=spec.summary,
         url=url,
         destination_label=destination,
-        badges=(
-            spec.effect.label,
-            *(f"via {label}" for label in relation.labels),
-        ),
+        badges=(spec.effect.label, *(f"via {label}" for label in executors)),
     )
 
 
-def _commands_by_resource(
-    commands: tuple[CapabilitySpec, ...],
-) -> dict[str, tuple[CapabilitySpec, ...]]:
-    grouped: dict[str, list[CapabilitySpec]] = {}
-    for command in commands:
-        if command.subject_resource:
-            grouped.setdefault(command.subject_resource, []).append(command)
-    return {resource: tuple(items) for resource, items in grouped.items()}
+def _executors(connections: tuple[ConnectionSpec, ...]) -> dict[str, tuple[str, ...]]:
+    """Each command a connection's ability runs (``ConnectionAbility.capability``),
+    to the labels of those abilities: what the command runs through."""
 
-
-def _candidate_commands(
-    ability: ConnectionAbility,
-    *,
-    by_name: dict[str, CapabilitySpec],
-    by_resource: dict[str, tuple[CapabilitySpec, ...]],
-) -> tuple[CapabilitySpec, ...]:
-    candidates = {command.name: command for command in by_resource.get(ability.subject_resource, ())}
-    if explicit := by_name.get(ability.capability):
-        candidates.setdefault(explicit.name, explicit)
-    return tuple(candidates.values())
-
-
-def _record_command_relation(
-    related_labels: dict[str, dict[str, None]],
-    related_kinds: dict[str, dict[str, None]],
-    command: CapabilitySpec,
-    ability: ConnectionAbility,
-) -> None:
-    related_labels.setdefault(command.name, {}).setdefault(ability.label, None)
-    kinds = related_kinds.setdefault(command.name, {})
-    for kind in ability.governs_kinds:
-        kinds.setdefault(kind, None)
-
-
-def _related_command_labels(
-    connections: tuple[ConnectionSpec, ...],
-    commands: tuple[CapabilitySpec, ...],
-    query: str,
-) -> dict[str, CommandRelation]:
-    by_name = {command.name: command for command in commands}
-    by_resource = _commands_by_resource(commands)
-    related_labels: dict[str, dict[str, None]] = {}
-    related_kinds: dict[str, dict[str, None]] = {}
+    found: dict[str, dict[str, None]] = {}
     for connection in connections:
-        if not _connection_matches(connection, query):
-            continue
         for ability in connection.abilities:
-            if not _ability_contains_any(ability, query):
-                continue
-            for command in _candidate_commands(ability, by_name=by_name, by_resource=by_resource):
-                if _command_matches_ability(command, ability):
-                    _record_command_relation(related_labels, related_kinds, command, ability)
-    return {
-        name: CommandRelation(tuple(labels), tuple(related_kinds.get(name, ())))
-        for name, labels in related_labels.items()
-    }
+            if ability.capability:
+                found.setdefault(ability.capability, {}).setdefault(ability.label, None)
+    return {name: tuple(labels) for name, labels in found.items()}
 
 
 def _resource_url(spec: ResourceSpec) -> str:
@@ -415,10 +349,7 @@ def _command_center(query: str, *, principal: Principal, include_live_connection
     return {
         "estate": estate,
         "resources": _matching(_resource_items(tuple(graph.resources.values()), principal), query),
-        "commands": _ranked(
-            _command_items(capability_registry(), permitted_connections, principal, query),
-            query,
-        ),
+        "commands": _matching(_command_items(capability_registry(), permitted_connections, principal), query),
         "connections": _matching((*live_connections, *_connection_items(permitted_connections, query)), query),
         "views": _matching(views, query),
         "checks": _matching(checks, query),
@@ -453,27 +384,15 @@ def _command_items(
     registered: tuple[CapabilitySpec, ...],
     permitted_connections: tuple[ConnectionSpec, ...],
     principal: Principal,
-    query: str,
 ) -> tuple[DiscoveryItem, ...]:
-    """The permitted commands the query matches, and those a matching
-    connection relates to, each carrying that relation unless it was named."""
+    """The permitted commands search can open."""
 
-    related = _related_command_labels(permitted_connections, registered, query)
+    executors = _executors(permitted_connections)
     return tuple(
         item
         for spec in registered
         if spec.permitted_to(principal)
-        for item in (
-            _command_item(
-                spec,
-                (
-                    CommandRelation()
-                    if query.casefold() == spec.name.casefold()
-                    else related.get(spec.name, CommandRelation())
-                ),
-            ),
-        )
-        if item is not None and (_matches(item, query) or spec.name in related)
+        if (item := _command_item(spec, executors.get(spec.name, ()))) is not None
     )
 
 

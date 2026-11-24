@@ -160,11 +160,7 @@ class CommandView(View):
             self.spec.authorize(self.principal)
         except Exception as exc:
             raise PermissionDenied(refusal_of(exc, name=self.spec.name, principal=self.principal).message) from exc
-        self.target_options = capability_target_options(
-            self.spec,
-            principal=self.principal,
-            governed_kinds=tuple(dict.fromkeys(request.GET.getlist("kind"))),
-        )
+        self.target_options = capability_target_options(self.spec, principal=self.principal)
         if self.target_options is not None:
             self.target_options = with_requested_target(
                 self.spec,

@@ -57,7 +57,6 @@ def capability_target_options(
     spec: CapabilitySpec,
     *,
     principal: Principal,
-    governed_kinds: tuple[str, ...] = (),
 ) -> tuple[CommandTargetOption, ...] | None:
     """List local authorized targets, or ``None`` when the spec is not listable."""
 
@@ -67,7 +66,6 @@ def capability_target_options(
         spec.subject_resource,
         principal=principal,
         query=dict(spec.target_query),
-        governed_kinds=governed_kinds,
     )
 
 
@@ -136,7 +134,6 @@ def resource_options(
     principal: Principal,
     query: dict[str, Any] | None = None,
     key: str = "",
-    governed_kinds: tuple[str, ...] = (),
 ) -> tuple[CommandTargetOption, ...] | None:
     """Every record of one resource the caller may read, as choices by ``key``
     (the resource's identifier unless named), or ``None`` when it is not
@@ -152,15 +149,6 @@ def resource_options(
     # every resource past it unselectable.
     if "limit" in resource.listing.query.model_fields:
         query.setdefault("limit", MAX_PAGE_SIZE)
-    kinds_applied = False
-    if governed_kinds:
-        query_fields = resource.listing.query.model_fields
-        if "kinds" in query_fields and "kind" not in query:
-            query["kinds"] = ",".join(governed_kinds)
-            kinds_applied = True
-        elif len(governed_kinds) == 1 and "kind" in query_fields:
-            query["kind"] = governed_kinds[0]
-            kinds_applied = True
 
     try:
         # Whole items: an option is named by whichever of its fields names it.
@@ -171,8 +159,6 @@ def resource_options(
         return None
     options = []
     for item in collection["items"]:
-        if governed_kinds and not kinds_applied and item.get("kind") not in governed_kinds:
-            continue
         raw_value = item.get(key)
         if raw_value is None:
             continue

@@ -725,8 +725,7 @@ The Command Center is a projection of that graph:
 |---|---|
 | A resource link | `ResourceSpec.web_route` |
 | An operation to its domain | `CapabilitySpec.subject_resource` |
-| A searched ability to the commands that act on those kinds | `ConnectionAbility.subject_resource` with `governs_kinds` |
-| An ability to an exact command | `ConnectionAbility.capability` |
+| An ability to the command it runs, shown as the command's "via" | `ConnectionAbility.capability` |
 
 That ability is the only authored connection-to-capability edge. Capabilities
 keep no reciprocal list, and no command is invented from a credential scope.

@@ -37,9 +37,10 @@ class CommandOrderTests(SimpleTestCase):
         self.assertGreater(len(names), 1)
         self.assertEqual(names, [name for name in registered if name in names])
 
-    def test_a_query_puts_the_command_it_names_first(self):
+    def test_a_query_puts_the_commands_it_names_first(self):
         with host_only():
-            commands = command_center("certificate renew", principal=OPERATOR)["commands"]
+            commands = command_center("record", principal=OPERATOR)["commands"]
 
-        self.assertEqual(commands[0].name, "certificate.renew")
-        self.assertGreater(len(commands), 1)
+        named = ["record" in item.label.casefold() for item in commands]
+        self.assertIn(False, named)
+        self.assertEqual(named, sorted(named, reverse=True))
