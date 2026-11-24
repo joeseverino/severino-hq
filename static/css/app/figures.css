@@ -405,6 +405,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .fact-panel-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); line-height: var(--target-min); }
 .fact-panel-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
 :is(.facts-band, .facts-list) .fact-value :is(code, kbd, samp, .token, .whole):is(:not(td *), [popover] *, dialog *) { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+/* Chromium fits a line without the padding a cloned chip draws again at the line's end, so the value keeps that padding's width (code's own, base.css) free at its end, and a chip's wrapped line stays inside its column in any face. */
+:is(.facts-band, .facts-list) .fact-value:has(code):is(:not(td *), [popover] *, dialog *) { padding-inline-end: var(--space-2); }
 /* A value holding a pill's link or a panel's button sets its lines a target tall (`--target-min`), so the area it is hit through (page.css) stays in its own line, clear of a link on the line above; the button is then as tall as its lines, never a control's height spilling onto the fact under it. */
 .facts-list .fact-value:has(.pill[href], .fact-open) { line-height: var(--target-min); }
 .facts-list .fact-open { min-height: 0; }

@@ -92,7 +92,8 @@ FACTS = Part(
     it is one pair to a row. A
     label with several values holds them as a list inside one fact. An identifier in a value (code,
     a `|breakable` name) runs inline, code a chip on each line it wraps to, so a value's first line
-    stands on its label's line in every engine. A list opened to read more (in a disclosure, a
+    stands on its label's line in every engine; the value keeps a chip's end padding free at its end,
+    so a wrapped line's chip stays inside its column in any face. A list opened to read more (in a disclosure, a
     popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and
     ends with what holds it. A table row's small print keeps one pair to a row too. Where it stands
     decides this, never an option, so the same summary drawn on a page and in a dialog takes each
