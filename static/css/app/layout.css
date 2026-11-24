@@ -35,18 +35,15 @@
 .section-flow, .domain-charts { --flow-basis: 22rem; display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .domain-charts { --flow-basis: 30rem; }
 .section-flow > *, .domain-charts > * { flex: 1 1 var(--flow-basis); min-width: 0; margin: 0; }
-/* Cards in a row share its height: every layout stretches its members to
-   the row's tallest, so their bottom edges line up and the row reads as one
-   band. The added room goes to what draws taller truthfully, a chart
-   (figures.css) or a table's own frame; anything else leaves it under its
-   content, its foot at the bottom. No padding fills it. */
-:is(.two-col, .split, .section-flow, .domain-charts) > .section:not(details) {
-  display: flex; flex-direction: column;
-  & > .section-body { flex-grow: 1; }
-  & > .section-body:has(> .section-foot, > .table-scroll:only-child, > .chart-scroll) { display: flex; flex-direction: column; }
-  & > .section-body > :is(.table-scroll:only-child, .chart-scroll), & .chart-scroll > .chart-frame, & .chart-frame > :is(.bar-chart, .line-chart) { flex-grow: 1; }
-  & :is(.chart-scroll, .chart-frame) { display: flex; flex-direction: column; }
-  & > .section-body > .section-foot { margin-block-start: auto; padding-block-start: var(--space-6); }
+/* A card in a row is as tall as what it holds, from the row's top: a frame
+   taller than its content is empty space. A chart is the one content that
+   draws taller truthfully, so a card holding one stands as tall as its row
+   and its plot takes the room (figures.css). */
+:is(.two-col, .split, .section-flow, .domain-charts) { align-items: start; }
+:is(.two-col, .split, .section-flow, .domain-charts) > .section:not(details):has(> .section-body > .chart-scroll) {
+  align-self: stretch; display: flex; flex-direction: column;
+  & > .section-body, & .chart-scroll, & .chart-frame { display: flex; flex-direction: column; flex-grow: 1; }
+  & .chart-frame > :is(.bar-chart, .line-chart) { flex-grow: 1; }
 }
 
 /* What is not a section or a card (a fold, a paragraph) and a section holding

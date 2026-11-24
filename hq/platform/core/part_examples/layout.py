@@ -33,6 +33,10 @@ _LONG = (
 )
 
 
+# A short section beside a long one: the short one ends where its facts do.
+SHORT_BESIDE_LONG = _sections(("Example short", NARROW), ("Example long", _LONG))
+
+
 LAYOUT_STATES = {
     # Sibling sections in the flow: two, three and four narrow ones share a
     # row as far as the box holds them, and a wide one, written ahead of the
@@ -50,8 +54,9 @@ LAYOUT_STATES = {
     "flow-wide": Example(
         _flow(("Example hosts", _WIDE), ("Example identity 4", NARROW), ("Example link 4", NARROW)), _hosts
     ),
-    # A section that says how to read it beside a taller one: the row ends
-    # both together, and the foot stands at the bottom of its frame.
+    "flow-short": Example("{% layout %}" + SHORT_BESIDE_LONG + "{% endlayout %}"),
+    # A section that says how to read it beside a taller one: each ends
+    # where what it holds does, the foot under its content.
     "flow-foot": Example(
         _flow(("Example identity 5", NARROW + "{% foot %}Example of how to read it."), ("Example link 5", _LONG))
     ),
