@@ -765,12 +765,11 @@ something newer published, and changes nothing. A plan holds:
 - whether the move is recommended: it brings nothing of its own and, where
   the running version is vulnerable, fixes something. A finding's title, its
   action and its steps all read that one answer;
-- the writable mounts that would be snapshotted;
+- the writable mounts that hold its data;
 - what would verify it (its health check, a request to each name it serves);
-- the steps;
 - every reason it cannot go ahead yet, as an id and a reason (`not-declared`,
-  `runtime-unread`, `no-target-digest`, `no-apply-path`, `target-affected`,
-  `own-pipeline` for HQ's own image).
+  `runtime-unread`, `no-target-digest`, `target-affected`, `own-pipeline` for
+  HQ's own image).
 
 A separate list says what keeps it from applying without a person: what is not
 known about the target (`target-unread`, `no-provenance`, `no-package-list`,

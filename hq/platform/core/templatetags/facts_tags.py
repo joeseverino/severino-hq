@@ -157,7 +157,9 @@ FACT = FactTakes(
     A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
     or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure
     of what runs now) follows them in the detail, so a page's summary cards are a band of facts too,
-    never a grid of its own. A fact drawn by hand (a page's own band) writes the part's classes, which
+    never a grid of its own. A line naming something longer than its cell (an image's path) is held to
+    one line and cut at its end, `{% muted css="fact-cut" tip=value %}value{% endmuted %}` in its
+    `<small>`, so its cell is no taller than its neighbors and its tip reads it whole. A fact drawn by hand (a page's own band) writes the part's classes, which
     no page may, and a figure set bold apart from the words that count it is refused by the
     `split-count` shape of `hand_drawn.SHAPES`.
 
@@ -191,7 +193,7 @@ FACT = FactTakes(
     page of their own ("12 expenses"). It needs a `detail`, since a link is said by its words.
     """,
     classes=(
-        *("band-icon", "fact", "fact-detail", "fact-figure", "fact-label", "fact-open", "fact-panel"),
+        *("band-icon", "fact", "fact-cut", "fact-detail", "fact-figure", "fact-label", "fact-open", "fact-panel"),
         *("fact-panel-foot", "fact-panel-head", "fact-value", "is-zero", "tone-*"),
     ),
     partial=FACT_PARTIAL,

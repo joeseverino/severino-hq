@@ -198,7 +198,7 @@ const primitives = [
     ],
   },
   { name: "button", classes: "btn", sheets: ["page", "surfaces"] },
-  { name: "facts", classes: String.raw`facts-(?:list|band)|fact(?:-label|-value|-detail)?`, sheets: ["layout", "figures", "surfaces"] },
+  { name: "facts", classes: String.raw`facts-(?:list|band)|fact(?:-label|-value|-detail)?`, sheets: ["layout", "cuts", "figures", "surfaces"] },
   { name: "field", classes: "field", sheets: ["forms"] },
   { name: "section", classes: String.raw`section(?:-[\w-]+)?`, sheets: ["layout", "page", "surfaces"] },
   { name: "stat", classes: String.raw`kpi(?:-[\w-]+)?`, sheets: ["cards", "surfaces"] },

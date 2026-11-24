@@ -8,6 +8,7 @@ what it would take to change it. Nothing here derives a fact.
 """
 
 from collections.abc import Callable
+from dataclasses import asdict
 from typing import Any
 
 from .integration_specs import ListRead, ResourceSpec, typed_keys
@@ -15,6 +16,7 @@ from .projection import iso, page_of, projection_scope
 from .record_errors import one_of
 from .resources import BoundedQuery
 from .security import Capability
+lazy from .app_update_approval import approval_of
 lazy from .app_updates import app_updates
 lazy from .container_records import (
     AppUpdateRecord,
@@ -245,6 +247,7 @@ def _image(image: Any) -> str:
 
 
 def serialize_app_update(update: Any) -> AppUpdateRecord:
+    approval = approval_of(update)
     return row(
         update,
         AppUpdateRecord,
@@ -260,10 +263,16 @@ def serialize_app_update(update: Any) -> AppUpdateRecord:
             }
             for pin in update.pins
         ],
-        checks=dict(update.checks),
+        checks={key: update.checks.get(key, default) for key, default in _CHECKS.items()},
         fixes=_advisories(update.fixes),
         brings=_advisories(update.brings),
+        merge=asdict(approval.standing) if approval.standing else None,
+        held=approval.held,
     )
+
+
+# What a head's checks say before any ran.
+_CHECKS: dict[str, Any] = {"state": "", "total": 0, "failing": [], "running": 0}
 
 
 def list_app_updates(*, limit: int = 50) -> dict[str, Any]:

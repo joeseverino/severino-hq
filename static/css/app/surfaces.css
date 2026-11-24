@@ -164,6 +164,10 @@
   .section-fold > summary:hover :is(h2, h3) { color: var(--accent-2); }
   .section-fold > summary :is(h2, h3) { margin: 0; }
   .section-fold[open] > summary { margin-bottom: var(--space-5); }
+  /* Among a row's buttons ({% button_row %}) it is one of their items while
+     closed, and opens onto a line of its own the row's whole width. */
+  .form-actions > .section-fold { flex: 0 1 auto; margin: 0; }
+  .form-actions > .section-fold[open] { flex-basis: 100%; }
 
   /* A head's controls: the lead and the next beside the title (more where
      the page names them, data-many), the menu holding a copy of each of those

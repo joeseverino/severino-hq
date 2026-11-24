@@ -187,6 +187,16 @@
               "pins.digest",
               "pins.scanned",
               "checks",
+              "checks.state",
+              "checks.total",
+              "checks.failing",
+              "checks.running",
+              "merge",
+              "merge.words",
+              "merge.tone",
+              "merge.run_url",
+              "merge.taken",
+              "held",
               "fixes",
               "fixes.id",
               "fixes.severity",
@@ -2713,10 +2723,6 @@
               "not_automatic",
               "not_automatic.id",
               "not_automatic.reason",
-              "steps",
-              "steps.id",
-              "steps.label",
-              "steps.detail",
               "*"
             ],
             "type": "string"
@@ -5491,7 +5497,7 @@
       },
       "AppUpdateRecord": {
         "additionalProperties": false,
-        "description": "One open update of an app whole: its pins, checks, and what it fixes and brings.",
+        "description": "One open update of an app whole: its pins, checks, what it fixes and\nbrings, and where approving it stands (``app_update_approval.approval_of``).",
         "properties": {
           "app": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/app"
@@ -5504,8 +5510,8 @@
             "type": "array"
           },
           "checks": {
-            "description": "The head's checks: `state`, `total`, `failing`, `running`.",
-            "type": "object"
+            "$ref": "#/components/schemas/ChecksPart",
+            "description": "The head's checks."
           },
           "containers": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/containers"
@@ -5520,8 +5526,24 @@
           "head": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/head"
           },
+          "held": {
+            "description": "Why `app_update.approve` would be refused now, as the page says it; empty when it would run.",
+            "type": "string"
+          },
           "key": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/key"
+          },
+          "merge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MergePart",
+                "title": "Merge part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The merge an approval asked at the head; null before one is asked."
           },
           "number": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/number"
@@ -5562,6 +5584,8 @@
           "title",
           "pins",
           "checks",
+          "merge",
+          "held",
           "fixes",
           "brings"
         ],
@@ -5599,7 +5623,7 @@
       },
       "AppUpdateRecordPartial": {
         "additionalProperties": false,
-        "description": "One open update of an app whole: its pins, checks, and what it fixes and brings.",
+        "description": "One open update of an app whole: its pins, checks, what it fixes and\nbrings, and where approving it stands (``app_update_approval.approval_of``).",
         "properties": {
           "app": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/app"
@@ -5612,7 +5636,8 @@
             "type": "array"
           },
           "checks": {
-            "$ref": "#/components/schemas/AppUpdateRecord/properties/checks"
+            "$ref": "#/components/schemas/ChecksPartPartial",
+            "description": "The head's checks."
           },
           "containers": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/containers"
@@ -5627,8 +5652,23 @@
           "head": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/head"
           },
+          "held": {
+            "$ref": "#/components/schemas/AppUpdateRecord/properties/held"
+          },
           "key": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/key"
+          },
+          "merge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MergePartPartial",
+                "title": "Merge part"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The merge an approval asked at the head; null before one is asked."
           },
           "number": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/number"
@@ -8432,6 +8472,61 @@
           },
           "why": {
             "$ref": "#/components/schemas/CheckPart/properties/why"
+          }
+        },
+        "type": "object"
+      },
+      "ChecksPart": {
+        "additionalProperties": false,
+        "properties": {
+          "failing": {
+            "description": "The name of each check that failed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "running": {
+            "description": "How many checks are still running.",
+            "type": "integer"
+          },
+          "state": {
+            "description": "How the head's checks stand: any failing, any still running, all passed, or none ran.",
+            "enum": [
+              "success",
+              "pending",
+              "failure",
+              ""
+            ],
+            "type": "string"
+          },
+          "total": {
+            "description": "How many checks ran on the head.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "total",
+          "failing",
+          "running"
+        ],
+        "type": "object"
+      },
+      "ChecksPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "failing": {
+            "$ref": "#/components/schemas/ChecksPart/properties/failing"
+          },
+          "running": {
+            "$ref": "#/components/schemas/ChecksPart/properties/running"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ChecksPart/properties/state"
+          },
+          "total": {
+            "$ref": "#/components/schemas/ChecksPart/properties/total"
           }
         },
         "type": "object"
@@ -20264,6 +20359,52 @@
         },
         "type": "object"
       },
+      "MergePart": {
+        "additionalProperties": false,
+        "properties": {
+          "run_url": {
+            "description": "The page of the run that applies the merge; empty before one is queued.",
+            "type": "string"
+          },
+          "taken": {
+            "description": "Whether it waits, works or merged, so no second approval is offered.",
+            "type": "boolean"
+          },
+          "tone": {
+            "description": "Its status tone: `attention` while it merges, `good` merged and applying.",
+            "type": "string"
+          },
+          "words": {
+            "description": "How the merge asked at the head stands, in the words the page shows.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "words",
+          "tone",
+          "run_url",
+          "taken"
+        ],
+        "type": "object"
+      },
+      "MergePartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "run_url": {
+            "$ref": "#/components/schemas/MergePart/properties/run_url"
+          },
+          "taken": {
+            "$ref": "#/components/schemas/MergePart/properties/taken"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/MergePart/properties/tone"
+          },
+          "words": {
+            "$ref": "#/components/schemas/MergePart/properties/words"
+          }
+        },
+        "type": "object"
+      },
       "MethodNotAllowedRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -30686,7 +30827,7 @@
       },
       "UpgradeRecord": {
         "additionalProperties": false,
-        "description": "One upgrade whole: what it fixes and introduces, its data, and the steps it would take.",
+        "description": "One upgrade whole: what it fixes and introduces, and its data.",
         "properties": {
           "address": {
             "$ref": "#/components/schemas/UpgradeRow/properties/address"
@@ -30698,7 +30839,7 @@
             "$ref": "#/components/schemas/UpgradeRow/properties/change"
           },
           "data": {
-            "description": "The writable mounts holding its data, snapshotted before the upgrade and restored on rollback.",
+            "description": "The writable mounts holding its data.",
             "items": {
               "$ref": "#/components/schemas/MountPart"
             },
@@ -30750,13 +30891,6 @@
             "description": "Whether it keeps data in writable mounts, which `data` lists.",
             "type": "boolean"
           },
-          "steps": {
-            "description": "The steps an upgrade would take, in order.",
-            "items": {
-              "$ref": "#/components/schemas/UpgradeStep"
-            },
-            "type": "array"
-          },
           "to": {
             "$ref": "#/components/schemas/UpgradeRow/properties/to"
           },
@@ -30786,8 +30920,7 @@
           "stateful",
           "data",
           "verified_by",
-          "not_automatic",
-          "steps"
+          "not_automatic"
         ],
         "type": "object"
       },
@@ -30823,7 +30956,7 @@
       },
       "UpgradeRecordPartial": {
         "additionalProperties": false,
-        "description": "One upgrade whole: what it fixes and introduces, its data, and the steps it would take.",
+        "description": "One upgrade whole: what it fixes and introduces, and its data.",
         "properties": {
           "address": {
             "$ref": "#/components/schemas/UpgradeRowPartial/properties/address"
@@ -30835,7 +30968,7 @@
             "$ref": "#/components/schemas/UpgradeRowPartial/properties/change"
           },
           "data": {
-            "description": "The writable mounts holding its data, snapshotted before the upgrade and restored on rollback.",
+            "description": "The writable mounts holding its data.",
             "items": {
               "$ref": "#/components/schemas/MountPartPartial"
             },
@@ -30885,13 +31018,6 @@
           },
           "stateful": {
             "$ref": "#/components/schemas/UpgradeRecord/properties/stateful"
-          },
-          "steps": {
-            "description": "The steps an upgrade would take, in order.",
-            "items": {
-              "$ref": "#/components/schemas/UpgradeStepPartial"
-            },
-            "type": "array"
           },
           "to": {
             "$ref": "#/components/schemas/UpgradeRowPartial/properties/to"
@@ -31005,44 +31131,6 @@
           },
           "viable": {
             "$ref": "#/components/schemas/UpgradeRow/properties/viable"
-          }
-        },
-        "type": "object"
-      },
-      "UpgradeStep": {
-        "additionalProperties": false,
-        "properties": {
-          "detail": {
-            "description": "What the step does, in a sentence.",
-            "type": "string"
-          },
-          "id": {
-            "description": "The step's stable id.",
-            "type": "string"
-          },
-          "label": {
-            "description": "The step, in a few words.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "label",
-          "detail"
-        ],
-        "type": "object"
-      },
-      "UpgradeStepPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "detail": {
-            "$ref": "#/components/schemas/UpgradeStep/properties/detail"
-          },
-          "id": {
-            "$ref": "#/components/schemas/UpgradeStep/properties/id"
-          },
-          "label": {
-            "$ref": "#/components/schemas/UpgradeStep/properties/label"
           }
         },
         "type": "object"

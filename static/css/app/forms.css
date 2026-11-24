@@ -120,8 +120,7 @@ select.toned:not(.tone-neutral) { border-color: currentColor; }
 .input-suffix { display: flex; align-items: center; gap: var(--space-2); }
 .input-suffix > input { flex: 1 1 auto; min-width: 0; }
 .input-suffix > span { color: var(--muted); font-weight: 600; }
-.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
-/* A form whose rows stand in tables (`table_body`, partials/_form.html) adds
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }/* A form whose rows stand in tables (`table_body`, partials/_form.html) adds
    no box of its own, so where those tables stand in sections of the page,
    the sections and its closing row stack as the page's own parts do
    (`.content`, page.css). Its hidden fields take no place in the stack. */

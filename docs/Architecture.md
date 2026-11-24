@@ -1528,6 +1528,12 @@ measured against the head, every pin before and after, what the new pins fix
 and bring, and `then`, so a moved head, a changed pin or a new adoption stales
 it.
 
+The finding, the container page and the `app_updates` record read one answer,
+`approval_of`: the merge's standing once one is asked, the reason the press
+would be refused now (the record's `held`), or the sentence saying what the
+press does. Approve is offered only when nothing is held, so a page never
+shows a press the capability would refuse.
+
 Its security properties:
 
 - The follow-up was fixed at approval. Its playbook, revision, machines and
@@ -1548,6 +1554,14 @@ Its security properties:
   per playbook, one writer per machine (`_holding`), and a login for each
   machine (`reached`). A refused merge (`head_moved`, `checks_failing`) queues
   no run.
+
+The press is the update finding's one remedy and the container page's Upgrade
+band, beside the pull request it reviews. The merge's `input` holds the head,
+so the band reads how the approval at that head stands (merging, merged with
+its run, or refused and why), and the run's page names the pull request it
+applies. A playbook that `fixes` a finding but needs an input of its own (this
+one's `revision`) is never offered from the finding as a plain run
+(`findings._playbooks`): only the press that supplies the input asks for it.
 
 ### The automation worker
 

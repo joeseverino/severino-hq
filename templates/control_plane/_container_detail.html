@@ -13,12 +13,12 @@ limits. Each said once; the band above has its version and standing.
     {% fact "Pull request" icon="commit" tone=update.checks_said.1 %}
       {% entity update.url|outside label=update.label %}
     {% detail %}
-      {% list kind="dots" %}<li><small>{{ update.checks_said.0 }}</small></li>{% if update.checks_said.2 %}<li><small>{{ update.checks_said.2 }}</small></li>{% endif %}<li><small>{{ update.app }}</small></li>{% endlist %}
+      <small>{{ update.checks_said.0 }}{% if update.checks_said.2 %}{% dot %}{{ update.checks_said.2 }}{% endif %}{% dot %}{{ update.app }}</small>
     {% endfact %}
     {% fact "Pin" icon="deploy" %}
       {% for pin in update.pins %}{% if pin.before %}{% include "partials/_change.html" with from=pin.before.tag to=pin.after.tag code=True only %}{% else %}<code>{{ pin.after.tag }}</code>{% endif %}{% empty %}Diff too large to read{% endfor %}
     {% detail %}
-      {% for pin in update.pins %}<small>{% if pin.digest %}<span tabindex="0" data-tip="{{ pin.digest }}">{{ pin.digest|slice:":19" }}…</span>{% else %}Exact build not read yet{% endif %}</small>{% endfor %}
+      {% for pin in update.pins %}<small>{% if pin.digest %}{% muted tip=pin.digest %}{{ pin.digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}</small>{% endfor %}
     {% endfact %}
     {% fact "Fixes" icon="shield" tone=update.fixes_tone %}
       {{ update.fixes_said }}
@@ -30,11 +30,18 @@ limits. Each said once; the band above has its version and standing.
     {% detail %}
       {% if update.brings %}{% list kind="dots" %}{% for finding in update.brings|slice:":2" %}<li>{% entity finding.url|outside label=finding.id %}</li>{% endfor %}{% endlist %}{% endif %}
     {% endfact %}
+    {% with merge=approval.standing %}{% if merge %}
+    {% fact "Merge" icon="commit" tone=merge.tone %}
+      {{ merge.words }}
+    {% detail %}
+      {% if merge.run_url %}<small><a href="{{ merge.run_url }}">The run that applies it</a></small>{% endif %}
+    {% endfact %}
+    {% endif %}{% endwith %}
     {% elif plan %}
     {% fact "To" icon="deploy" %}
       {% entity plan.release.url|outside label=plan.target_tag code=True %}
     {% detail %}
-      {% list kind="dots" %}<li><small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19" }}…</span>{% else %}Exact build not read yet{% endif %}</small></li>{% if plan.release.published %}<li><small>released {{ plan.release.published|when_text:"ago" }}</small></li>{% endif %}{% endlist %}
+      <small>{% if plan.target_digest %}{% muted tip=plan.target_digest %}{{ plan.target_digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}{% if plan.release.published %}{% dot %}released {{ plan.release.published|when_text:"ago" }}{% endif %}</small>
     {% endfact %}
     {% fact "Fixes" icon="shield" tone=plan.fixes_tone %}
       {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.known_vulnerabilities %}None of {{ item.standing.known_vulnerabilities|length }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
@@ -44,7 +51,7 @@ limits. Each said once; the band above has its version and standing.
     {% endif %}
     {% if plan %}
     {% fact "Data" icon="layers" tone=plan.data_tone %}
-      {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}
+      {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }}{% else %}Keeps no data{% endif %}
     {% detail %}
       <small>{% for mount in plan.data %}<code>{{ mount.source }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
     {% endfact %}
@@ -60,9 +67,9 @@ limits. Each said once; the band above has its version and standing.
       <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not readiness.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
     {% endfact %}
     {% fact "Data" icon="layers" %}
-      {% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}
+      {% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }}{% else %}Keeps no data{% endif %}
     {% detail %}
-      <small>{% for mount in readiness.data %}<code>{{ mount.source }}</code>{% if not forloop.last %} {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
+      <small>{% for mount in readiness.data %}<code>{{ mount.source }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
     {% endfact %}
     {% fact "Automatic upgrades" icon="deploy" tone=readiness.automatic_tone %}
       {% if readiness.automatic %}Patch updates apply{% else %}Not yet{% endif %}
@@ -71,18 +78,10 @@ limits. Each said once; the band above has its version and standing.
     {% endfact %}
     {% endif %}
   {% endfacts %}
-  {% if plan %}
-  {% if plan.viable %}
-    {% notice tone="success" title="Ready" %}{% endnotice %}
-  {% else %}
-    {% notice tone="warning" title="Not yet, because:" %}{% list %}{% for blocker in plan.blockers %}<li>{{ blocker.reason }}</li>{% endfor %}{% endlist %}{% endnotice %}
+  {% if update %}
+    {% if held or approve or update.patch %}{% button_row %}{% if approve %}{% include "partials/_page_action.html" with action=approve only %}{% muted %}{{ approval.said }}{% endmuted %}{% elif held %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% if update.patch %}{% section "Compose change" id="compose-change" fold=True %}<pre tabindex="0"><code>{{ update.patch }}</code></pre>{% endsection %}{% endif %}{% endbutton_row %}{% endif %}
+  {% elif not plan and readiness.not_automatic %}{% list %}{% for blocker in readiness.not_automatic %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
   {% endif %}
-  {% steps numbered=True %}
-    {% for step in plan.steps %}{% step %}<strong>{{ step.label }}</strong> {% muted %}{{ step.detail }}{% endmuted %}{% endstep %}{% endfor %}
-  {% endsteps %}
-  {% elif readiness.not_automatic %}{% list %}{% for blocker in readiness.not_automatic %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
-  {% endif %}
-  {% if update.patch %}{% section "Compose change" id="compose-change" fold=True %}<pre tabindex="0"><code>{{ update.patch }}</code></pre>{% endsection %}{% endif %}
 {% aside %}{% muted %}{% if plan %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% elif readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}{% endmuted %}
 {% endsection %}
 {% endif %}

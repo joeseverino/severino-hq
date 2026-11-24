@@ -184,7 +184,7 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
     parameters as its manifest's input type, and the retry key of a change."""
 
     parameters = manifest.input_type
-    takes_none = not any(each.is_required() for each in parameters.model_fields.values())
+    takes_none = asks_nothing(manifest)
     # Offered as a person's choices, the machines a run can reach now
     # (``reachable``); ``reached`` refuses any other however it is asked.
     now = AmongNow(partial(reachable, manifest))
@@ -678,6 +678,12 @@ def playbooks_on(machine: str, principal: Principal) -> tuple[PlaybookHere, ...]
         if manifest.admits(MACHINE_KIND, machine) and principal.permits(run_authority(manifest.effect))
     )
     return tuple(sorted(found, key=lambda each: each.title.casefold()))
+
+
+def asks_nothing(manifest: OperationManifest) -> bool:
+    """Whether a run of ``manifest`` can be asked with no input of its own."""
+
+    return not any(each.is_required() for each in manifest.input_type.model_fields.values())
 
 
 def playbooks_for(rule: str, machine: str) -> Iterable[OperationManifest]:

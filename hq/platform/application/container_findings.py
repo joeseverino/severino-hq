@@ -39,10 +39,19 @@ from .standards import Check
 from .tone import Tone
 from .ui import agreed, ended
 from .workflow_contracts import ActionLink
+lazy from .app_update_approval import approval_of, approve_remedy
 lazy from .app_updates import update_of
+lazy from .labels import lower_first
 lazy from .topology_estate import machine_nodes
-lazy from .upgrades import HIGH, MAJOR, OVERRIDES, Plan, plan_for
+lazy from .upgrades import HIGH, MAJOR, Plan, plan_for
 
+# The files a stack's override is read from, beside its compose file.
+OVERRIDES = (
+    "compose.override.yaml",
+    "compose.override.yml",
+    "docker-compose.override.yaml",
+    "docker-compose.override.yml",
+)
 # Why an update is a person's to apply.
 BY_HAND = "HQ cannot apply an update itself yet."
 UPDATE_CAPABILITY = "infrastructure.resource.update"
@@ -84,14 +93,27 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
         if needs_you(standing, running):
             yield _advisory(running, subject, plan)
     elif plan is not None and plan.recommended:
+        update = update_of(_lead(running))
+        upgrade = _upgrade(running, plan)
+        if update is not None:
+            pin = update.pin_of(_lead(running))
+            title = f"{_names(running)} has an update" + (f", {pin.said}" if pin else "")
+            fixes = f", and fixes {lower_first(update.fixes_said)}" if update.fixes else ""
+            explanation = ended(f"Pull request {update.label} moves it{fixes}")
+            # What the title and its line say is not said again among its facts.
+            said = {("Pin", pin.said) if pin else (), ("Fixes", update.fixes_said) if fixes else ()}
+            upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if fact not in said)
+        else:
+            title = f"{standing.label} has an update"
+            explanation = ended(f"{standing.label} to {standing.latest}") + _running_as(running) + _risk(plan)
         yield _found(
             running,
             subject,
             rule=UPDATE,
             severity=Tone.ATTENTION,
-            title=f"{standing.label} has an update",
-            explanation=ended(f"{standing.label} to {standing.latest}") + _running_as(running) + _risk(plan),
-            **_upgrade(running, plan),
+            title=title,
+            explanation=explanation,
+            **upgrade,
         )
     if by_tag := [item for item in running if _unpinned(item.standing)]:
         yield _unpinned_finding(by_tag, subject)
@@ -167,16 +189,22 @@ def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
     page = opens("Upgrade plan", f"{lead.url}#upgrade") if plan is not None and lead.running.watcher else _containers()
     if plan is None or not plan.recommended:
         return {"primary": page, "steps": ()}
-    steps = _by_hand(running, plan)
     update = update_of(lead)
     if update is not None:
-        # The open pull request is the move: its pin and its judge's numbers.
+        # The open pull request is the move: one approval merges and applies
+        # it, beside the page that reviews it.
         url = f"{lead.url}#upgrade" if lead.running.watcher else update.url
-        label = f"Review {update.label}" + (f" ({update.fixes_counted})" if update.fixes else "")
-        return {"primary": opens(label, url), "steps": steps, "evidence": update.evidence}
+        held = approval_of(update).held
+        return {
+            "primary": opens(f"Review {update.label}", url),
+            "steps": (),
+            "evidence": update.evidence,
+            "remedies": () if held else (approve_remedy(update),),
+            "no_help_reason": held,
+        }
     said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
     label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
-    return {"primary": opens(label, page.url), "steps": steps}
+    return {"primary": opens(label, page.url), "steps": _by_hand(running, plan)}
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:

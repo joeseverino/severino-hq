@@ -16,7 +16,7 @@ from . import (
     views,
     visit_views,
 )
-from .container_views import ContainerListView
+from .container_views import AppUpdateApproveView, ContainerListView
 from .models import OperationRequest
 
 app_name = "control_plane"
@@ -69,6 +69,11 @@ urlpatterns = [
     path("new/", resource_form_views.ResourceFormView.as_view(runs=(CREATE_CAPABILITY,)), name="create"),
     path("services/<str:hostname>/", service_views.ServiceDetailView.as_view(), name="service"),
     path("adopt/<str:hostname>/", resource_form_views.AdoptView.as_view(), name="adopt"),
+    path(
+        "app-updates/<str:owner>/<str:name>/<int:number>/<str:head_sha>/approve/",
+        AppUpdateApproveView.as_view(),
+        name="app_update_approve",
+    ),
     # One specific record rather than everything a hostname answers with. A
     # container has no hostname at all, so it is unreachable from the route
     # above and would otherwise be adoptable only through the API.

@@ -324,9 +324,11 @@ def _playbooks(
     for manifest in automation_runs.playbooks_for(finding.rule, machine):
         name = automation_runs.capability_name(manifest.id)
         if finding.rule not in manifest.investigates:
-            remedies.append(
-                FindingRemedy(capability=name, target="", url=automation_runs.run_here_url(manifest.id, (machine,)))
-            )
+            # A fix is run as it stands, so one whose run needs an input of
+            # its own is the press of whatever supplies that input.
+            if automation_runs.asks_nothing(manifest):
+                url = automation_runs.run_here_url(manifest.id, (machine,))
+                remedies.append(FindingRemedy(capability=name, target="", url=url))
             continue
         allowed, _ = _permitted(name, principal)
         if not allowed:

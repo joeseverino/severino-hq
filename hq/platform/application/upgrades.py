@@ -7,7 +7,7 @@ HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Annotated, Any
 
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
@@ -35,13 +35,6 @@ class Blocker:
 
 
 @dataclass(frozen=True, slots=True)
-class UpgradeStep:
-    id: Annotated[str, Describe("The step's stable id.")]
-    label: Annotated[str, Describe("The step, in a few words.")]
-    detail: Annotated[str, Describe("What the step does, in a sentence.")]
-
-
-@dataclass(frozen=True, slots=True)
 class Plan:
     container: Container
     target_tag: str
@@ -52,13 +45,12 @@ class Plan:
     # of, and what known vulnerability the target would bring of its own.
     fixes: tuple[Mapping[str, Any], ...]
     introduces: tuple[Mapping[str, Any], ...]
-    # Writable mounts holding its data: snapshotted before, restored on rollback.
+    # Writable mounts holding the data it keeps.
     data: tuple[Mapping[str, Any], ...]
     verified_by: tuple[str, ...]
     blockers: tuple[Blocker, ...]
     # Why it would not apply on its own, though it may by a person's approval.
     not_automatic: tuple[Blocker, ...]
-    steps: tuple[UpgradeStep, ...] = field(default_factory=tuple)
 
     @property
     def viable(self) -> bool:
@@ -184,7 +176,6 @@ def plan_for(item: Container) -> Plan | None:
         verified_by=verified_by,
         blockers=blockers,
         not_automatic=_not_automatic(change, verified_by, blockers, _unvetted(standing)),
-        steps=_steps(item, target, standing.target_digest, data, verified_by),
     )
 
 
@@ -282,14 +273,9 @@ def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]
     if not item.running.watcher:
         found.append(Blocker("not-declared", "HQ does not track this container. Adopt it first."))
     if item.mounts is None:
-        found.append(
-            Blocker("mounts-unread", "Its mounts have not been read, so its data cannot be found to snapshot.")
-        )
+        found.append(Blocker("mounts-unread", "Its mounts have not been read, so the data it keeps is unknown."))
     if introduces:
         found.append(Blocker("target-affected", f"{standing.latest} brings a known vulnerability of its own."))
-    # The queue sends no upgrade to the one machine it concerns. Said as that
-    # missing step, since the page draws the reason under "Not yet, because".
-    found.append(Blocker("no-apply-path", ended(f"HQ does not send upgrades to {item.machine.name}")))
     return tuple(found)
 
 
@@ -308,69 +294,10 @@ def _not_automatic(change: str, verified_by, blockers, unvetted=()) -> tuple[Blo
     return tuple(found)
 
 
-OVERRIDES = (
-    "compose.override.yaml",
-    "compose.override.yml",
-    "docker-compose.override.yaml",
-    "docker-compose.override.yml",
-)
-
-
-def _pinned_in(item: Container) -> str:
-    """The override the pin is written to: the stack's own when it has one,
-    else a new one beside its compose file. The compose file is never edited."""
-
-    files = tuple(item.compose_files)
-    for path in files:
-        if path.rsplit("/", 1)[-1] in OVERRIDES:
-            return path
-    if files and "/" in files[0]:
-        return f"{files[0].rsplit('/', 1)[0]}/{OVERRIDES[-1]}"
-    return f"The compose override of {item.running.stack or item.running.name} on {item.machine.name}"
-
-
-def _steps(item: Container, target: str, digest: str, data, verified_by) -> tuple[UpgradeStep, ...]:
-    where = _pinned_in(item)
-    pinned = f"{item.standing.image.short}:{target}, " + ("by its digest" if digest else "once its digest is read")
-    steps = [UpgradeStep("pull", "Pull the target by digest", pinned)]
-    if data:
-        steps.append(
-            UpgradeStep(
-                "snapshot",
-                "Stop it and snapshot its data",
-                ", ".join(str(mount.get("source")) for mount in data),
-            )
-        )
-    steps += [
-        UpgradeStep(
-            "trial",
-            "Run the target as the service is defined",
-            "With no network and no published ports"
-            + (", against a copy of its data" if data else "")
-            + ", until it proves itself. The service stays stopped, and is started unchanged if it fails.",
-        ),
-        UpgradeStep(
-            "pin", "Pin the digest in its compose override", f"{ended(where)} The compose file itself is not edited."
-        ),
-        UpgradeStep("apply", "Recreate the service", f"compose up for {item.running.name} only"),
-        UpgradeStep("verify", "Verify", ", ".join(verified_by) if verified_by else "That it keeps running."),
-        UpgradeStep(
-            "keep-or-roll-back",
-            "Keep it, or roll back",
-            (
-                "The override as it was and the snapshot are restored if verification fails."
-                if data
-                else "The override as it was is restored if verification fails."
-            ),
-        ),
-    ]
-    return tuple(steps)
-
-
 @dataclass(frozen=True, slots=True)
 class Readiness:
     """What an upgrade of this container would take, before any is published:
-    what would verify it, what would be snapshotted, and what keeps it from
+    what would verify it, the data it keeps, and what keeps it from
     applying on its own. The same answer a plan gives, without a target."""
 
     container: Container

@@ -37,10 +37,10 @@ def checked(digest, findings=()):
     return {"digest": f"ghcr.io/example/app@{digest}", "checked": 1, "findings": list(findings), "read_at": "x"}
 
 
-def arranged(*pulls, scanned=(TARGET,), target_findings=()):
+def arranged(*pulls, scanned=(TARGET,), target_findings=(), advisories=(HIGH,)):
     """A container of example-box's app, its image's reading, and the open ``pulls``."""
 
-    estate(advisories=[HIGH])
+    estate(advisories=list(advisories))
     published()
     inventory("portainer.runtime", [runtime("app", service="app")])
     inventory(
@@ -121,7 +121,21 @@ class AppUpdateTests(TestCase):
         self.assertIn(("Pull request", "example/alpha#7"), card.evidence)
         self.assertIn(("Pin", "v1.2.0 to v1.2.1"), card.evidence)
         self.assertIn(("Fixes", "1 known vulnerability"), card.evidence)
-        self.assertEqual(card.primary.label, "Review #7 (fixes 1)")
+
+    def test_an_update_card_names_the_container_and_the_move(self):
+        arranged(pull(diff=patch()), advisories=())
+
+        (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
+
+        self.assertEqual(card.title, "app has an update, v1.2.0 to v1.2.1")
+        self.assertEqual(card.explanation, "Pull request #7 moves it.")
+        self.assertNotIn("Pin", dict(card.evidence))
+        self.assertEqual(card.primary.label, "Review #7")
+        # No playbook applies it, so no approval is offered, and the card says the step.
+        self.assertNotIn(
+            "app_update.approve", [getattr(step, "link", None) and step.link.capability for step in card.steps]
+        )
+        self.assertIn("Playbooks", card.no_help_reason)
 
     def test_the_repositorys_row_of_the_update_names_its_app_and_fix_count(self):
         from ..github_estate import repositories

@@ -65,6 +65,12 @@ class ImageRef:
         return self.name
 
     @property
+    def exact(self) -> str:
+        """``short``, pinned to its digest when the reference names one."""
+
+        return f"{self.short}@{self.digest}" if self.digest else self.short
+
+    @property
     def github(self) -> str:
         """``owner/repository`` when the registry is GitHub's own, else ""."""
 

@@ -13,9 +13,8 @@ of its repository instead: the production deploy, and the repository's alerts.
   {% fact "Version" icon="layers" %}
     {% if standing.tag %}<code>{{ standing.tag }}</code>{% else %}No version tag{% endif %}
   {% detail %}
-    <small>{{ standing.image.short }}</small>
-    <small>{% if standing.pinned %}<span tabindex="0" data-tip="{{ standing.image.digest }}">Pinned by digest</span>{% else %}Tag only{% endif %}</small>
-    {% if standing.built %}<small>Built {{ standing.built|when_text:"ago" }}</small>{% endif %}
+    <small>{% muted css="fact-cut" tip=standing.image.exact %}{{ standing.image.short }}{% endmuted %}</small>
+    <small>{% if standing.pinned %}Pinned by digest{% else %}Tag only{% endif %}{% if standing.built %}{% dot %}built {{ standing.built|when_text:"ago" }}{% endif %}</small>
     {% if standing.moved_to %}<small>{% status "Its tag now names a newer build." tone="attention" pill=False %}</small>{% endif %}
   {% endfact %}
   {% if standing.repository %}{% with deploy=standing.repository.production %}

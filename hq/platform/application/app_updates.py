@@ -138,6 +138,11 @@ class AppUpdate:
     def moves(self, item: Container) -> bool:
         return any(each.address == item.address for each in self.containers)
 
+    def pin_of(self, item: Container) -> Pin | None:
+        """The pin that moves ``item``, where the diff says which."""
+
+        return _pin_of(item, self.pins)
+
 
 def app_updates() -> tuple[AppUpdate, ...]:
     """Every open update of an app, by repository and then newest first."""

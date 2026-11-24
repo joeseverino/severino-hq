@@ -24,6 +24,8 @@ from .integration_specs import CapabilitySpec
 from .record_errors import PolicyError, RecordNotFound
 from .record_fields import RecordId
 from .security import Capability, PolicyDenied
+from .tone import Tone
+from .ui import ended
 lazy from .app_updates import AppUpdate, app_updates
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
@@ -39,9 +41,12 @@ lazy from .automation_runs import (
 lazy from .capabilities import Consented, command_spec, consent
 lazy from .capability_policy import Rule, decide
 lazy from .container_findings import UPDATE
+lazy from .finding_model import FindingRemedy
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
+lazy from .pages import command_reach
 lazy from .payload_words import ChangeRow
 lazy from .resource_operations import ACTION_CAPABILITY, OperationAsked, queue_merge
+lazy from .work_runs import run_url
 
 # The input of the playbook that applies a merge: the commit it applies.
 REVISION = "revision"
@@ -65,6 +70,10 @@ class ApproveUpdateCommand:
     ]
 
 
+# The page a playbook is adopted on, as its refusal names it.
+PLAYBOOKS = "Playbooks"
+
+
 def applier() -> OperationManifest:
     """The one adopted playbook that applies a merged app update: it fixes an
     image update and takes the commit to apply. Refused for none, and for
@@ -77,7 +86,7 @@ def applier() -> OperationManifest:
     ]
     if not found:
         raise PolicyError(
-            "No adopted playbook applies an app update. On Playbooks, Refresh and adopt the one that does."
+            f"No adopted playbook applies an app update. On {PLAYBOOKS}, Refresh and adopt the one that does."
         )
     if len(found) > 1:
         names = get_text_list(sorted(manifest.id for manifest in found), "and")
@@ -197,10 +206,8 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
         raise RecordNotFound("No open app update is that pull request.")
     if updates[0].head != command.head_sha:
         raise PolicyError("The update has a new head commit since you reviewed it. Review it again.")
-    if not all(update.readable for update in updates):
-        raise PolicyError("GitHub gave no diff of this update, so HQ cannot show what it moves. Review it on GitHub.")
-    if (updates[0].checks or {}).get("state") != "success":
-        raise PolicyError("Its checks are not passing. Approve it once they pass.")
+    if unapprovable := next(filter(None, map(_unapprovable, updates)), ""):
+        raise PolicyError(unapprovable)
     hosts = resolved_hosts(manifest, manifest.hosts)
     if not hosts:
         raise PolicyError(f"{manifest.id} names no machine to apply an update on.")
@@ -212,6 +219,7 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
         _declared(command, consented=consented),
         consented=consented,
         carries={
+            "head_sha": command.head_sha,
             "correlation": correlation,
             THEN: {
                 "operation": manifest.id,
@@ -288,3 +296,107 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             wants="merge and apply an app update",
         ),
     )
+
+
+def _unapprovable(update: AppUpdate) -> str:
+    """Why ``update`` cannot be approved as it stands, or ""."""
+
+    if not update.readable:
+        return "GitHub gave no diff of this update, so HQ cannot show what it moves. Review it on GitHub."
+    if (update.checks or {}).get("state") != "success":
+        return "Its checks are not passing. Approve it once they pass."
+    return ""
+
+
+# Why GitHub refused a merge (``github.MergeRefusal``), as the update says it.
+REFUSED = {
+    "head_moved": "GitHub refused the merge: the head moved after the approval.",
+    "not_mergeable": "GitHub refused the merge: it cannot merge it as it stands.",
+    "checks_failing": "GitHub refused the merge: its checks fail.",
+    "not_installed": "GitHub refused the merge: HQ's GitHub App is not installed on its repository.",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class MergeStanding:
+    """How an approved update stands: its merge, and the run that applies it."""
+
+    words: str
+    tone: str
+    run_url: str = ""
+    # Whether it waits, works or merged, so no second approval is offered.
+    taken: bool = False
+
+
+def merge_standing(update: AppUpdate) -> MergeStanding | None:
+    """The merge asked of ``update`` at its head, as the update says it; None before one is."""
+
+    merge = (
+        OperationRequest.objects.filter(
+            action=OperationRequest.Action.MERGE,
+            resource__kind=PULL_REQUEST_KIND,
+            resource__spec__repository=update.repository,
+            resource__spec__number=update.number,
+            input__head_sha=update.head,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if merge is None:
+        return None
+    result = merge.result or {}
+    if merge.state in (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED):
+        return MergeStanding("Merging", Tone.ATTENTION, taken=True)
+    if merge.state == OperationRequest.State.SUCCEEDED:
+        then = result.get(THEN) or {}
+        if then.get("run"):
+            return MergeStanding("Merged", Tone.GOOD, run_url(str(then["run"])), taken=True)
+        return MergeStanding(ended(f"Merged. {then.get('refused') or ''}".strip()), Tone.SERIOUS, taken=True)
+    refused = str((result.get("status") or {}).get("refused") or "")
+    return MergeStanding(REFUSED.get(refused) or str(result.get("message") or "The merge failed."), Tone.SERIOUS)
+
+
+def approve_target(update: AppUpdate) -> dict[str, str]:
+    """The route arguments a press approving ``update`` at its head posts to."""
+
+    owner, _, name = update.repository.partition("/")
+    return {"owner": owner, "name": name, "number": str(update.number), "head_sha": update.head}
+
+
+@dataclass(frozen=True, slots=True)
+class Approval:
+    """Where approving an update stands, as its page, its finding and its
+    record each show it: the merge asked at its head, why no approval is
+    offered (``held``, "" when one is), and what the press does when it is."""
+
+    standing: MergeStanding | None
+    held: str = ""
+    said: str = ""
+    # Held because no one adopted playbook applies it: the Playbooks page's step.
+    adopt: bool = False
+
+
+def approval_of(update: AppUpdate) -> Approval:
+    """How approving ``update`` stands now. The applier is resolved as the
+    approval resolves it (``applier``), so no surface offers a press it refuses."""
+
+    standing = merge_standing(update)
+    if standing is not None and standing.taken:
+        return Approval(standing, standing.words)
+    try:
+        manifest = applier()
+    except PolicyError as refusal:
+        return Approval(standing, str(refusal), adopt=True)
+    if reason := _unapprovable(update):
+        return Approval(standing, reason)
+    hosts = resolved_hosts(manifest, manifest.hosts)
+    where = f" on {get_text_list(list(hosts), 'and')}" if hosts else ""
+    return Approval(standing, said=f"Merges {update.label}, then applies it{where}.")
+
+
+def approve_remedy(update: AppUpdate) -> FindingRemedy:
+    """The press that approves ``update``, as a finding offers it while ``approval_of`` holds nothing back."""
+
+    name = ACTION_CAPABILITY[OperationRequest.Action.MERGE]
+    url, _ = command_reach(name, approve_target(update))
+    return FindingRemedy(capability=name, target="", url=url, method="POST")

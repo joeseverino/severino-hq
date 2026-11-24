@@ -64,6 +64,13 @@ class ApproveUpdateTests(TestCase):
         )
         return self.merge()
 
+    def standing(self):
+        from ..app_update_approval import merge_standing
+        from ..app_updates import app_updates
+
+        (update,) = app_updates()
+        return merge_standing(update)
+
     def runs(self):
         return OperationRequest.objects.filter(action=OperationRequest.Action.RUN)
 
@@ -76,6 +83,42 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(merge.input["then"]["operation"], APPLY)
         self.assertEqual(merge.input["then"]["hosts"], [APP])
         self.assertFalse(self.runs().exists())
+        self.assertEqual((self.standing().words, self.standing().taken), ("Merging", True))
+        # An API or MCP reader sees what the page shows.
+        from ..container_reads import get_app_update
+
+        record = get_app_update("example:alpha:7:app")
+        self.assertEqual((record["merge"]["words"], record["held"]), ("Merging", "Merging"))
+        self.assertEqual(record["checks"]["state"], "success")
+
+    def test_the_container_page_draws_the_press_that_queues_the_merge(self):
+        from django.urls import reverse
+
+        from hq.platform.core.testing import declare, operator
+
+        operator(self.client)
+        spec = {"host": "example-box", "name": "app", "connection_ref": "example-portainer"}
+        declare("example-box-app", "portainer.container", spec)
+
+        page = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
+        approve = page.context["container"]["approve"]
+
+        self.assertFalse(approve.disabled, approve.title)
+        # Beside it, what the press does.
+        self.assertEqual(page.context["container"]["approval"].said, f"Merges #7, then applies it on {APP}.")
+        self.assertContains(page, "/approve/?next=")
+        self.assertEqual(self.client.post(approve.url, {"__retry_key": "example-press"}).status_code, 302)
+        self.assertEqual(self.merge().resource.spec["head_sha"], HEAD)
+
+    def test_the_update_card_offers_one_press_approve(self):
+        from .test_containers import queued
+
+        arranged(pull(diff=patch()), advisories=())
+
+        (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
+
+        self.assertEqual([step.link.capability for step in card.steps], [APPROVE])
+        self.assertEqual(card.no_help_reason, "")
 
     def test_an_agents_call_waits_for_a_person(self):
         answer = self.press(principal=AGENT)
@@ -109,6 +152,11 @@ class ApproveUpdateTests(TestCase):
 
         self.assertFalse(answer["ok"], answer)
         self.assertIn("Playbooks", answer["error"]["message"])
+        from ..app_update_approval import approval_of
+        from ..app_updates import app_updates
+
+        # The page and the finding hold the press back for the same reason.
+        self.assertEqual(approval_of(app_updates()[0]).held, answer["error"]["message"])
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_a_caller_kept_off_the_playbooks_run_may_not_approve_it(self):
@@ -138,6 +186,15 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(serialize_operation(run)["requested_actor"], PERSON.actor)
         self.assertEqual(run.input["correlation"], merge.input["correlation"])
         self.assertEqual(merge.result["then"], {"run": str(run.pk)})
+        # The update links the run, and the run names the pull request it applies.
+        from ..run_pages import run_context
+        from ..work_runs import run_url
+
+        self.assertEqual(self.standing().run_url, run_url(str(run.pk)))
+        context = run_context(
+            {"operation_id": run.pk, "approved_by": "", "capability": "", "playbook": "", "state_label": ""}, user=None
+        )
+        self.assertEqual(context["merged_from"]["label"], "example/alpha#7")
 
     def test_a_replayed_settle_queues_no_second_run(self):
         from ..app_update_approval import merged
@@ -155,6 +212,9 @@ class ApproveUpdateTests(TestCase):
         self.settle(success=False, status={"refused": "head_moved"})
 
         self.assertFalse(self.runs().exists())
+        # Said on the update, and pressed again once its head is reviewed.
+        self.assertEqual(self.standing().words, "GitHub refused the merge: the head moved after the approval.")
+        self.assertFalse(self.standing().taken)
 
     def test_a_merge_commit_that_is_no_sha_queues_no_run(self):
         self.press()
@@ -163,6 +223,7 @@ class ApproveUpdateTests(TestCase):
 
         self.assertFalse(self.runs().exists())
         self.assertIn("refused", merge.result["then"])
+        self.assertEqual(self.standing().tone, "serious")
 
     def test_a_new_adoption_since_the_approval_runs_nothing(self):
         from .procedures import NEXT_REVISION

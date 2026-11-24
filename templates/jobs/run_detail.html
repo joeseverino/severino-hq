@@ -2,7 +2,8 @@
 {% comment %}
 One run of a playbook, or one scan of its source, from its record
 (`run_reads.RunRecord`, with `run_pages.run_context`): what it ran, who
-asked and who approved it (linking the approval it ran under), when, and
+asked and who approved it (linking the approval it ran under), when, the
+pull request an approved merge asked it to apply (`merged_from`), and
 how it ended, then what it shows for itself (its machines, lease, tasks'
 outcomes) drawn as every row of work draws it, as facts here
 ({% run_evidence %}). Its state is the badge beside its title.
@@ -20,6 +21,7 @@ so, with how to set one up, stands above it (`problems`).
     {% if playbook_url %}{% fact ran_label value=run.title url=playbook_url %}{% else %}{% fact ran_label value=run.title %}{% endif %}
     {% if approval_url %}{% fact "Asked by" value=run.by url=approval_url %}{% else %}{% fact "Asked by" value=run.by|or_empty %}{% endif %}
     {% fact "Asked" %}{{ run.created_at|when:"exact" }}{% endfact %}
+    {% if merged_from %}{% fact "Applies" value=merged_from.label url=merged_from.url %}{% endif %}
     {% if run.reason %}{% fact "Reason" value=run.reason %}{% endif %}
     {% if run.started_at %}{% fact "Started" %}{{ run.started_at|when:"exact" }}{% endfact %}{% endif %}
     {% if run.finished_at %}{% fact "Finished" %}{{ run.finished_at|when:"exact" }}{% endfact %}{% endif %}

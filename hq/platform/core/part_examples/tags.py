@@ -269,6 +269,15 @@ def _signed_in_request():
     return request
 
 
+BUTTON_ROW_STATES = {
+    # A press, what it does, and a fold beside them, open onto the row's whole width.
+    "with-a-fold-open": Example(
+        '{% section "Example decision" %}{% button_row %}{% button "Approve" look="primary" %}{% muted %}Merges'
+        ' example #7.{% endmuted %}{% section "Example change" fold=True open=True %}<pre tabindex="0"><code>'
+        "+ image: example/app:1.2.1</code></pre>{% endsection %}{% endbutton_row %}{% endsection %}"
+    ),
+}
+
 MUTED_STATES = {
     # Muted words as a line beside a value and as a paragraph under it.
     "beside-a-value": Example(

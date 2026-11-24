@@ -11,6 +11,16 @@
 }
 
 @layer components {
+/* A fact's detail line that names something longer than its cell
+   (`fact-cut`): one line, cut at its end, read whole from its tip. Its
+   identifier's pieces are text of that line, so the cut lands inside them.
+   It claims no width of its own, so the cell sizes from its other lines and
+   the cut takes whatever width that leaves. Its line is a target tall, as
+   every detail word that opens a tip is (figures.css). */
+.facts-band .fact-detail > small > .fact-cut {
+  display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  & :is(.token, .whole, .part) { display: inline; }
+}
 /* Page furniture: a label, a name or a note held to its line. */
 /* A head is one short line, and stays so: what one of its controls says is
    said over the head's reading line (ask.js, partials/_ask.html), in the room the words the
