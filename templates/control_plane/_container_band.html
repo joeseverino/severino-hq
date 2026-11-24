@@ -10,19 +10,17 @@ of its repository instead: the production deploy, and the repository's alerts.
   {% detail %}
     <small>{% if running.check %}{{ running.check.said|capfirst|breakable:"·" }}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
   {% endfact %}
-  {% fact "Version" icon="layers" %}
+  {% fact "Version" icon="layers" cut=standing.image.short cut_whole=standing.image.exact %}
     {% if standing.tag %}<code>{{ standing.tag }}</code>{% else %}No version tag{% endif %}
   {% detail %}
-    <small>{{ standing.image.short }}</small>
-    <small>{% if standing.pinned %}<span tabindex="0" data-tip="{{ standing.image.digest }}">Pinned by digest</span>{% else %}Tag only{% endif %}</small>
-    {% if standing.built %}<small>Built {{ standing.built|when_text:"ago" }}</small>{% endif %}
+    <small>{% if standing.pinned %}Pinned by digest{% else %}Tag only{% endif %}{% if standing.built %}{% dot %}built {{ standing.built|when_text }}{% endif %}</small>
     {% if standing.moved_to %}<small>{% status "Its tag now names a newer build." tone="attention" pill=False %}</small>{% endif %}
   {% endfact %}
   {% if standing.repository %}{% with deploy=standing.repository.production %}
     {% fact "Production deploy" icon="deploy" tone=standing.repository.verified_tone %}
       {% if standing.repository.production_verified %}Verified{% elif standing.repository.production_verified is False %}Failed its checks{% elif deploy %}Deployed{% else %}No deploy found{% endif %}
     {% detail %}
-      {% if deploy %}{% list kind="dots" %}<li>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}</li>{% if deploy.created_at %}<li>{{ deploy.created_at|when_text:"ago" }}</li>{% endif %}{% endlist %}{% endif %}
+      {% if deploy %}{% list kind="dots" %}<li>{% entity standing.repository.url|add:"/commit/"|add:deploy.sha|outside code=True label=deploy.sha|slice:":7" %}</li>{% if deploy.created_at %}<li>{{ deploy.created_at|when_text }}</li>{% endif %}{% endlist %}{% endif %}
       <small>{% if standing.repository.production_verified %}Passed its checks before deploying.{% else %}From {{ standing.repository.name }}.{% endif %}</small>
     {% endfact %}
     {% fact "Security" icon="shield" tone=standing.alerts_tone %}
@@ -35,7 +33,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% if standing.newer %}{% entity standing.release.url|outside label=standing.latest code=True %}{% elif standing.update_state == "current" %}Up to date{% else %}Unknown{% endif %}
     {% detail %}
       {% if standing.newer %}
-        <small>{{ standing.newer|length|counted:"newer release,newer releases" }} available{% if standing.release.published %}, the newest {{ standing.release.published|when_text:"ago" }}{% endif %}</small>
+        <small>{{ standing.newer|length|counted:"newer release,newer releases" }} available{% if standing.release.published %}, the newest {{ standing.release.published|when_text }}{% endif %}</small>
       {% elif standing.update_state == "current" %}
         <small>No newer version.</small>
       {% else %}

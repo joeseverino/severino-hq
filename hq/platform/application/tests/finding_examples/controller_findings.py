@@ -116,7 +116,7 @@ EXAMPLES = (
         fires=(
             Example(
                 given=lambda: connection("example-ssh", "ssh", failing_steps=[{"step": "Deploy", "reason": "exit 1"}]),
-                raises=("example-ssh connects, but 1 thing it does keeps failing",),
+                raises=("Work through example-ssh keeps failing",),
             ),
         ),
         quiet=(Example(given=lambda: connection("example-ssh", "ssh")),),
@@ -129,9 +129,7 @@ EXAMPLES = (
                 lambda: connection("example-adguard", "adguard"),
                 held("old", seen=STALE),
                 zone("old-zone", seen=STALE),
-                raises=offering(
-                    "The controller on example-controller has not read 2 types of record for 3\xa0days", REFRESH
-                ),
+                raises=offering("The controller on example-controller stopped reading", REFRESH),
             ),
         ),
         quiet=(estate(held("old", seen=STALE)),),

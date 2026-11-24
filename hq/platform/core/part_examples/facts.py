@@ -57,6 +57,17 @@ _GLANCE = (
 
 
 # The same band with nothing read yet, a long line that wraps inside its fact.
+# Two readings beside a page's title, as a new install's dashboard draws them.
+_GLANCE_TWO = (
+    '<div data-example-region>{% facts layout="band" label="Example glance" %}'
+    '{% fact "Example connection" icon="network" url="/example/" %}{% status "Example" tone="good" dot=True ink="context" %}'
+    "{% detail %}<small>Example TLS 1.3</small>{% endfact %}"
+    '{% fact "Example controller" icon="activity" url="/example/controller/" %}'
+    '{% status "Online" tone="good" dot=True ink="context" %}{% detail %}<small>Last read just now</small>{% endfact %}'
+    "{% endfacts %}</div>"
+)
+
+
 _GLANCE_EMPTY = (
     '<div data-example-region>{% facts layout="band" label="Example glance" %}'
     '{% fact "Example controller" icon="activity" url="/example/controller/" %}'
@@ -105,6 +116,19 @@ _WHOLE = """(facts) => [...document.querySelectorAll(facts)].flatMap((fact) => {
 
 
 FACTS_STATES = {
+    # A detail line naming something longer than its cell, cut at its end on
+    # one line and read whole from its tip, over a line opening a tip of its
+    # own in a cell four share, so each must be a target clear of the other.
+    "detail-cut": Example(
+        '{% card element="div" %}{% facts layout="band" %}{% fact "Example version" icon="layers" '
+        'cut="registry.example.net/example-builds/example-app-server" %}<code>1.2.3</code>{% detail %}'
+        '<small>{% muted tip="sha256:0123abcd" %}Pinned by digest{% endmuted %}{% dot %}built an example week ago</small>'
+        '{% endfact %}{% fact "Example update" icon="deploy" %}Up to date{% detail %}<small>No newer version.</small>'
+        "<small>Last read an example hour ago</small>{% endfact %}"
+        '{% fact "Example state" icon="activity" %}Up{% detail %}<small>Passing</small>{% endfact %}'
+        '{% fact "Example risk" icon="shield" %}None known{% detail %}<small>Read an example hour ago</small>'
+        "{% endfact %}{% endfacts %}{% endcard %}"
+    ),
     # A domain's overview as the dashboard draws it, its lead figure with the
     # line of its recent readings beside it.
     "figure-trend": Example(
@@ -182,6 +206,21 @@ FACTS_STATES = {
         '{% fact "An example label long enough to wrap onto a second line in its cell" icon="shield" tone="serious" %}'
         '<a href="/example/">{{ "2\u00a0example findings" }}</a>{% detail %}<small>An example detail</small>{% endfact %}'
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
+        "{% endfacts %}{% endcard %}"
+    ),
+    # Six facts, one of them a pin's change from one version to the next, as
+    # a container's Upgrade card draws them: each version stands whole on its
+    # line, the band counting its rows on a floor as wide as one.
+    "band-pins": Example(
+        '{% card element="div" %}{% facts layout="band" %}'
+        '{% fact "Example request" icon="commit" value="#58" %}'
+        '{% fact "Example pin" icon="deploy" %}'
+        '{% include "partials/_change.html" with from="2024.11.3-example-ls45" to="2024.12.1-example-ls48" code=True only %}'
+        "{% endfact %}"
+        '{% fact "Example fixes" icon="shield" value="None known" %}'
+        '{% fact "Example brings" icon="info" value="Nothing serious" %}'
+        '{% fact "Example data" icon="layers" value="1 mount" %}'
+        '{% fact "Example check" icon="check-circle" value="Its health check" %}'
         "{% endfacts %}{% endcard %}"
     ),
     # An identifier longer than its fact's bound beside a plain value, then
@@ -268,7 +307,7 @@ FACTS_STATES = {
                         "id": "updates",
                         "label": Counted(2, "Example open update", "Example open updates"),
                         "url": "/example/updates/",
-                        "detail": "2 example alerts with no fix open",
+                        "detail": "2 example alerts with no update open",
                     },
                     {
                         "id": "drafts",
@@ -325,8 +364,8 @@ FACTS_STATES = {
     ),
     # Short facts in a section across the page, one with its detail under
     # its value, as a proposal's commit is drawn: the pairs go across the
-    # frame rather than down its start. Then seven, which wrap onto a second
-    # row whose pairs keep the first row's columns.
+    # frame rather than down its start, in columns every row shares. Then
+    # seven, which wrap onto rows whose labels stand under the row's above.
     "list-across": Example(
         '{% section "Example change" %}{% facts %}'
         '{% fact "Commit" %}<code>0123456789ab</code>{% detail %}<small>on main</small>{% endfact %}'
@@ -386,6 +425,21 @@ FACTS_STATES = {
         {"image": "registry.example.com/example-team/example-image:2024.11.3"},
         premise=(_TIGHTER, ".facts-list"),
     ),
+    # A list's fact whose names are a panel its value opens, as a project's
+    # branch rules are drawn: the value and a toned line under it, the names
+    # read in place.
+    "list-panel": Example(
+        '{% section "Example repository" %}{% facts %}'
+        '{% fact "Example updates" value="Off" %}'
+        '{% fact "Example changes" id="example-rules" %}Pull request and 3 checks'
+        '{% detail %}<small>{% status "2 checks not required" tone="attention" pill=False %}</small>'
+        '{% panel %}{% facts %}{% fact "Required" %}{% list kind="dots" %}<li>lint</li><li>test</li><li>scan</li>'
+        '{% endlist %}{% endfact %}{% fact "Not required" %}{% list kind="dots" %}<li>example-one</li>'
+        '<li>example-two</li>{% endlist %}{% endfact %}{% fact "Force-push" value="Blocked" %}{% endfacts %}'
+        "{% endfact %}"
+        '{% fact "Example runner" %}Idle{% detail %}<small>example-host-01</small>{% endfact %}'
+        "{% endfacts %}{% endsection %}",
+    ),
     # A band of facts beside a page's title, as the dashboard's glance draws it.
     "band-glance": Example(
         '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
@@ -403,6 +457,13 @@ FACTS_STATES = {
             "page_facts": "An example fact · another example fact",
             "page_aside": _Drawn(_GLANCE_EMPTY),
         },
+        heads_the_page=True,
+    ),
+    # Two readings by the title stand together, a column each as wide as
+    # four would take.
+    "band-glance-two": Example(
+        '{% include "partials/_page_head.html" %}{% section "Example section 3" %}<p>An example line.</p>{% endsection %}',
+        lambda: {"page": Page(title="Example glance"), "page_aside": _Drawn(_GLANCE_TWO)},
         heads_the_page=True,
     ),
     # A strip of small figures, more than one line holds in a narrow box.

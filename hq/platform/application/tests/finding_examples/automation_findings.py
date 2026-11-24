@@ -26,10 +26,10 @@ EXAMPLES = (
     Examples(
         "automation-worker-absent",
         fires=(
-            worker(raises=("HQ's playbook worker is not set up",)),
+            worker(raises=("Playbooks are not set up",)),
             worker(
                 timedelta(hours=3),
-                raises=(Raised(title="HQ's playbook worker has stopped reporting", severity=Tone.SERIOUS),),
+                raises=(Raised(title="Playbooks stopped reporting", severity=Tone.SERIOUS),),
             ),
         ),
         # Where nobody set automation up, and where it arrived within its interval.

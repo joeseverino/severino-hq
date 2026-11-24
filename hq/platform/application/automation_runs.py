@@ -6,18 +6,16 @@ here. What it binds to, and what its approval is measured against:
 docs/Architecture.md, "Running a playbook".
 """
 
-from collections.abc import Iterable, Mapping
-from contextlib import suppress
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
 from functools import partial
-from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
-from pydantic import Field, StrictStr, StringConstraints, ValidationError
+from pydantic import Field, StrictStr, StringConstraints
 
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.application.url_query import with_query
@@ -32,9 +30,10 @@ lazy from hq.domains.control_plane.models import (
 lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
+lazy from hq.platform.core.attribution import own_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
-from .automation_manifest import COMPOSE_INPUTS, ComposeImage, OperationManifest, OperationRegistry, sorted_unique
+from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
@@ -42,7 +41,7 @@ from .process_caches import kept
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
-lazy from . import approvals, automation_adoption, compose_batches, pages
+lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
@@ -54,14 +53,12 @@ lazy from .doors import NOBODY
 lazy from .entity_links import entity_link, kind_label
 lazy from .findings import rule_for
 lazy from .history import asked_by
-lazy from .images import ImageRef
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
 lazy from .labels import lower_first
 lazy from .machines import machine_catalog
-lazy from .moments import ago, moment, when
+lazy from .moments import moment, since_when, when
 lazy from .payload_words import ChangeRow, field_words, value_words
-lazy from .projection import read_once
 lazy from .resource_operations import (
     Prepared,
     RunAsked,
@@ -78,7 +75,6 @@ lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs, run_url
 
 if TYPE_CHECKING:
     from .pages import PageAction
-    from .upgrades import ComposeTarget
 
 
 # One catalog at a time: a process builds its commands from the catalog
@@ -188,7 +184,7 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
     parameters as its manifest's input type, and the retry key of a change."""
 
     parameters = manifest.input_type
-    takes_none = not any(each.is_required() for each in parameters.model_fields.values())
+    takes_none = asks_nothing(manifest)
     # Offered as a person's choices, the machines a run can reach now
     # (``reachable``); ``reached`` refuses any other however it is asked.
     now = AmongNow(partial(reachable, manifest))
@@ -229,7 +225,7 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
         {
             **manifest.model_dump(
                 mode="json",
-                exclude={"id", "input_type", "privilege", "fixes", "investigates", "compose_updates", "compose_images"},
+                exclude={"id", "input_type", "privilege", "fixes", "investigates"},
             ),
             "operation": manifest.id,
             "privilege": manifest.privilege or "",
@@ -352,7 +348,7 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
     )
 
 
-def _record(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
+def record_of(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
     """The procedure's record, written as its manifest now says.
 
     Written when a run is asked for, where a transaction, an actor and an audit
@@ -431,7 +427,7 @@ def held_words(details: object, principal: Principal | None = None) -> HeldWords
     title = run_title(playbook, automation_adoption.playbook_titles())
     state = OperationRequest.State(holding["state"])
     asked_at = moment(holding.get("created_at"))
-    since = f"{lower_first(state.as_job.label)} since {when(asked_at)}" if asked_at else lower_first(state.as_job.label)
+    since = f"{lower_first(state.as_job.label)} {since_when(asked_at)}" if asked_at else lower_first(state.as_job.label)
     machines = [str(host) for host in details.get("machines") or ()]
     shared = [str(host) for host in details.get("shared") or ()]
     if shared:
@@ -468,13 +464,54 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, consented: 
 def queue_run(manifest: OperationManifest, bound: dict[str, Any], *, reason: str, consented: Consented) -> RunAsked:
     """Queue a bound request through the same machine locks and audit trail."""
 
+    operation, queued = _enqueue_run(
+        partial(record_of, manifest, consented=consented), bound, consent(consented).principal, reason=reason
+    )
+    return operation_asked(operation, queued=queued)
+
+
+@transaction.atomic
+def queue_follow_up(
+    manifest: OperationManifest, bound: dict[str, Any], *, asked: OperationRequest, once: str
+) -> OperationRequest:
+    """Queue the run another operation carries as its own next step, as that
+    operation's requester and its approver, once for ``once``.
+
+    It writes no record: the run's record is the one written when the step
+    was approved (``record_of``), and one that no longer pins ``manifest``
+    refuses it, as an adoption since then does.
+    """
+
+    def record() -> ManagedResource:
+        resource = ManagedResource.objects.select_for_update().filter(key=resource_key(manifest.id)).first()
+        if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(manifest):
+            raise PolicyError("The playbook adopted now is not the one approved, so nothing ran.")
+        return resource
+
+    acting = Principal(
+        asked.requested_actor,
+        asked.requested_interface,
+        frozenset(),
+        approved_by=str((asked.input or {}).get("approved_by") or ""),
+        person_key=asked.requested_person_key,
+        device=asked.requested_device,
+    )
+    # Its rows are its requester's, under the operation that carried it.
+    with own_operation(asked, operation=capability_name(manifest.id), principal=acting):
+        operation, _ = _enqueue_run(record, bound, acting, reason=asked.reason, once=once)
+    return operation
+
+
+def _enqueue_run(
+    record: Callable[[], ManagedResource], bound: dict[str, Any], principal: Principal, *, reason: str, once: str = ""
+) -> tuple[OperationRequest, bool]:
     def prepare() -> Prepared:
         # A run no worker will take would wait for nothing: the finding that
         # says so (``automation_findings``) carries how to set one up.
         untaken = automation_standing().cannot("run", now=timezone.now())
         if untaken:
             raise PolicyError(untaken)
-        resource = _record(manifest, consented=consented)
+        resource = record()
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
         # A claim whose lease ran out is ended or put back first, by the rule
@@ -487,18 +524,15 @@ def queue_run(manifest: OperationManifest, bound: dict[str, Any], *, reason: str
                 "Ask again once it ends.",
                 details=_held_by(holder, resource, bound["hosts"]),
             )
-        return resource, asked_fields(
-            consent(consented).principal, reason=reason, generation=resource.generation, **bound
-        )
+        return resource, asked_fields(principal, reason=reason, generation=resource.generation, **bound)
 
-    operation, queued = enqueue(OperationRequest.Action.RUN, prepare)
-    if not queued:
-        return operation_asked(operation, queued=False)
-    OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
-    # The worker pulls the run over the bridge; the ring only says one waits,
-    # and only once it is stored for the claim to find.
-    ask(doorbell="automation")
-    return operation_asked(operation, queued=True)
+    operation, queued = enqueue(OperationRequest.Action.RUN, prepare, once=once)
+    if queued:
+        OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
+        # The worker pulls the run over the bridge; the ring only says one
+        # waits, and only once it is stored for the claim to find.
+        ask(doorbell="automation")
+    return operation, queued
 
 
 CANCEL = "automation.run.cancel"
@@ -616,10 +650,10 @@ def cancel_action(operation_id: str, playbook: str, state: str, effect: str, pri
     return _cancel_button(operation_id)
 
 
-def run_here_url(operation_id: str, hosts: tuple[str, ...], *, finding: str = "", review: str = "") -> str:
+def run_here_url(operation_id: str, hosts: tuple[str, ...], *, finding: str = "") -> str:
     """The Run page of the playbook ``operation_id`` with ``hosts`` chosen."""
 
-    return command_url(capability_name(operation_id), hosts=hosts, finding=finding, review=review)
+    return command_url(capability_name(operation_id), hosts=hosts, finding=finding)
 
 
 class PlaybookHere(NamedTuple):
@@ -646,6 +680,12 @@ def playbooks_on(machine: str, principal: Principal) -> tuple[PlaybookHere, ...]
     return tuple(sorted(found, key=lambda each: each.title.casefold()))
 
 
+def asks_nothing(manifest: OperationManifest) -> bool:
+    """Whether a run of ``manifest`` can be asked with no input of its own."""
+
+    return not any(each.is_required() for each in manifest.input_type.model_fields.values())
+
+
 def playbooks_for(rule: str, machine: str) -> Iterable[OperationManifest]:
     """Adopted playbooks written for the machine and the finding's rule."""
 
@@ -654,69 +694,6 @@ def playbooks_for(rule: str, machine: str) -> Iterable[OperationManifest]:
         for manifest in operation_registry().values()
         if (rule in manifest.fixes or rule in manifest.investigates) and manifest.admits(MACHINE_KIND, machine)
     )
-
-
-REVIEW_IMAGE_UPDATE = "Review image update"
-
-
-class ComposeDeployment(NamedTuple):
-    """The reviewed procedure and exact values it can deploy from a finding."""
-
-    operation: str
-    finding: str
-    machine: str
-    pin: ComposeImage
-    revision: str
-
-    @property
-    def capability(self) -> str:
-        return capability_name(self.operation)
-
-    @property
-    def review(self) -> str:
-        return digest((self.revision, self.initial))
-
-    @property
-    def url(self) -> str:
-        return run_here_url(self.operation, (self.machine,), finding=self.finding, review=self.review)
-
-    @property
-    def parameters(self) -> dict[str, str]:
-        return dict(zip(COMPOSE_INPUTS, (self.pin.project, self.pin.service, self.pin.image), strict=True))
-
-    @property
-    def initial(self) -> dict[str, Any]:
-        return {"hosts": [self.machine], **{f"parameters.{name}": value for name, value in self.parameters.items()}}
-
-
-def compose_deployment(
-    rule: str, key: str, machine: str, target: ComposeTarget, principal: Principal
-) -> ComposeDeployment | None:
-    """Offer a run only when the adopted source and the observed service agree."""
-
-    for manifest in playbooks_for(rule, normalized_hostname(machine)):
-        updates = manifest.compose_updates
-        if updates is None or not principal.permits(run_authority(manifest.effect)):
-            continue
-        if (target.needs_data_restore and not updates.restores_data) or (
-            target.needs_owning_unit and not updates.uses_owning_unit
-        ):
-            continue
-        for pin in manifest.compose_images:
-            if (pin.project, pin.service) != (target.project, target.service):
-                continue
-            if target.file != PurePosixPath(updates.destination, pin.project, pin.file):
-                continue
-            image = ImageRef.parse(pin.image)
-            if image is None or (image.name, image.tag, image.digest) != (target.image, target.tag, target.digest):
-                continue
-            deployment = ComposeDeployment(manifest.id, key, machine, pin, manifest.revision)
-            with suppress(ValidationError):
-                manifest.input_type.model_validate(deployment.parameters, strict=True)
-                hosts = read_once(f"automation.reachable:{manifest.id}", partial(reachable, manifest))
-                if machine in hosts:
-                    return deployment
-    return None
 
 
 def _rule_fact(label: str, rules: tuple[str, ...]) -> tuple[CommandFact, ...]:
@@ -794,7 +771,7 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
                 reverse("core:approval_entry", kwargs={"approval_id": held.id}),
                 tone=Tone.ATTENTION,
             ),
-            Cell(ago(held.created_at), muted=True),
+            Cell(when(held.created_at), muted=True),
             Cell(who.get(str(held.pk), NOBODY).words),
         )
         for held in waiting
@@ -962,6 +939,5 @@ def capability_specs(generation: str | None = None) -> tuple[CapabilitySpec, ...
     titles = automation_adoption.playbook_titles(digest)
     return (
         _cancel_spec(),
-        compose_batches.capability(),
         *(_capability(manifest, titles) for manifest in operation_registry(digest).values()),
     )

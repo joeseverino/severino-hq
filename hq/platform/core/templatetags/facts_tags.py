@@ -51,7 +51,9 @@ FACTS = Part(
     a page or a part, each a cell with its label and mark over its value over its detail. Its cells
     are sized by what they hold: a wrapping row where each cell starts at its own widest line, a
     row's cells share the room left over, and a cell takes the next row only when the band has no
-    room for it. So a label wraps only in a band too narrow for it on one line. Each cell is its own
+    room for it. So a label wraps only in a band too narrow for it on one line. A band holding an
+    identifier (a version, a tag) counts its rows on a floor as wide as one, so a short version
+    stands whole on its line (*Gate:* `split identifiers`). Each cell is its own
     stack, top-aligned, its value right under its label, no taller than what it holds; a ragged line
     across cells is better than a gap inside one.
 
@@ -77,21 +79,23 @@ FACTS = Part(
 
     A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside
     the title while its facts fit there, and on a line of its own under it, from the page's edge,
-    where not.
+    where not. Fewer than four readings take a column each as wide as four would, so two stand
+    together rather than at the far ends of the head. *Gate:* `readings apart` in the survey.
 
     A list, the default, is the facts about one thing, each label beside its value. It lays as many
     pairs to a row as keep each a short label and a short value wide, so a few short facts fill a
-    wide frame rather than stacking down its start. The pairs of a row share their columns, and a
-    value that is a list of several takes its row. Narrower than two pairs it is one pair to a row,
-    its label column as wide as its longest label. A label with several values holds them as a list
-    inside one fact. An identifier in a value (code, a `|breakable` name) runs inline, code a chip on
-    each line it wraps to, so a value's first line stands on its label's line in every engine. A list
-    opened to read more (in a disclosure, a popover, a dialog) or set above what a form changes keeps
-    one pair to a row, sits closer and ends with what holds it. A table row's small print keeps one
-    pair to a row too. Where it stands decides this, never an option, so the same summary drawn on a
-    page and in a dialog takes each one's spacing. A pair whose value is a list of names (a `labeled`
-    list, or a `codes` list of two or more) takes a row of its own, so it never wraps beside another
-    pair and leaves that pair's row a gap.
+    wide frame rather than stacking down its start. The pairs stand in columns every row shares, so
+    each label stands under the label above it, and a list of fewer pairs than its columns spreads
+    them over the row; every label is one width, so the values of a column line up. A value that is
+    a run of several (a `labeled` or `codes` list, addresses) takes the row. Narrower than two pairs
+    it is one pair to a row. A
+    label with several values holds them as a list inside one fact. An identifier in a value (code,
+    a `|breakable` name) runs inline, code a chip on each line it wraps to, so a value's first line
+    stands on its label's line in every engine. A list opened to read more (in a disclosure, a
+    popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and
+    ends with what holds it. A table row's small print keeps one pair to a row too. Where it stands
+    decides this, never an option, so the same summary drawn on a page and in a dialog takes each
+    one's spacing.
 
     A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
     each fact one phrase, its bold value then its words ("3 rules"), agreeing with it, then a dot
@@ -102,7 +106,6 @@ FACTS = Part(
     two shares a row with the sections beside it, so its values never end a third of the way across
     the page. A record page's facts are a `{% card %}` that opens its `{% layout %}`, beside its
     notes and related records. In a flow, a frame of facts grows into its row as every member does.
-    *Gate:* `frames filled` in the layout survey.
     """,
     classes=("facts-band", "facts-inline", "facts-list", "is-large", "is-lead", "is-small"),
     partial=FACTS_PARTIAL,
@@ -157,7 +160,9 @@ FACT = FactTakes(
     A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
     or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure
     of what runs now) follows them in the detail, so a page's summary cards are a band of facts too,
-    never a grid of its own. A fact drawn by hand (a page's own band) writes the part's classes, which
+    never a grid of its own. A line naming something longer than its cell (an image's path) is its
+    `cut`, the detail's first line, held to one line and cut at its end, so its cell is no taller than
+    its neighbors, and its tip reads it whole (`cut_whole`, where that is more than the line). A fact drawn by hand (a page's own band) writes the part's classes, which
     no page may, and a figure set bold apart from the words that count it is refused by the
     `split-count` shape of `hand_drawn.SHAPES`.
 
@@ -191,8 +196,8 @@ FACT = FactTakes(
     page of their own ("12 expenses"). It needs a `detail`, since a link is said by its words.
     """,
     classes=(
-        *("band-icon", "fact", "fact-detail", "fact-figure", "fact-label", "fact-open", "fact-panel"),
-        *("fact-panel-foot", "fact-panel-head", "fact-value", "is-zero", "tone-*"),
+        *("band-icon", "fact", "fact-cut", "fact-detail", "fact-figure", "fact-label", "fact-open", "fact-panel"),
+        *("fact-panel-foot", "fact-panel-head", "fact-shown", "fact-value", "is-zero", "tone-*"),
     ),
     partial=FACT_PARTIAL,
     about=(
@@ -211,6 +216,12 @@ FACT = FactTakes(
         "detail": Option(about="The words under the value, or a list of them, a line each."),
         "detail_url": Option(about="The page the words under the value lead to."),
         "detail_tone": Option(about="A status tone the words under the value are colored by."),
+        "cut": Option(
+            about="A line longer than its cell, the detail's first, cut at its end and read whole from its tip."
+        ),
+        "cut_whole": Option(
+            about="What the cut line's tip reads, where that is more than the line; the line by default."
+        ),
         "tone": Option(about="A status tone the fact is colored by, for what it means."),
         "zero": Option(about="Its value is nothing counted, drawn quiet."),
         "icon": Option(about="The icon beside it."),

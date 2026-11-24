@@ -725,8 +725,7 @@ The Command Center is a projection of that graph:
 |---|---|
 | A resource link | `ResourceSpec.web_route` |
 | An operation to its domain | `CapabilitySpec.subject_resource` |
-| A searched ability to the commands that act on those kinds | `ConnectionAbility.subject_resource` with `governs_kinds` |
-| An ability to an exact command | `ConnectionAbility.capability` |
+| An ability to the command it runs, shown as the command's "via" | `ConnectionAbility.capability` |
 
 That ability is the only authored connection-to-capability edge. Capabilities
 keep no reciprocal list, and no command is invented from a credential scope.
@@ -1056,11 +1055,12 @@ time to stop and report) or the operation was cancelled. A run whose lease
 lapses may have changed machines. So the next claim, or the next ask for a
 run (`controller.release_lapsed`, the one rule for a lapsed lease), ends it
 `cancelled` with `reason: OutcomeUnknown` instead of queuing it again, unless
-its manifest's `retry` is `safe`. `observe_first` ends the same way and says
-so, and the observation is the worker's to make. A worker that reports
+its manifest's `retry` is `safe`. `observe_first` ends the same way, and the
+observation is the worker's to make. A worker that reports
 `OutcomeUnknown` itself ends its run the same way, so a run that stopped
-reporting reads "Stopped early" before HQ ends it and after. A run's report writes nothing to its
-playbook's record: a `status` is refused. Its `events` land on the run's
+reporting reads "Stopped early", its result "Stopped reporting"
+(`work_runs.STOPPED_REPORTING`), before HQ ends it and after. A run's report
+writes nothing to its playbook's record: a `status` is refused. Its `events` land on the run's
 result: each task's outcome on one machine, bounded by the contract's
 `RunEvent` and struck of secrets at the bridge's door. Each changed or failed
 one is an audit row under the run's own id that leads back to the ask, and
@@ -1077,8 +1077,16 @@ action. It claims only declared actions it has a handler for, and refuses a
 locked action with the registry's reason.
 
 Vendor responses decode into types generated from each vendor's OpenAPI
-description (`controller/api/vendor/`). Bridge messages decode into types
-generated from `controller/api/hq-controller.openapi.json`.
+description (`controller/api/vendor/`). AdGuard, NPM, Cloudflare and GitHub
+are called through clients generated from it too, so a path or query the
+description does not hold cannot be written. Each client sends through
+`vendorDoer`, which hands every request to the registry's transport with the
+vendor's own rules around it (Cloudflare's refusals and breaker, GitHub's
+allowance fuse), and reads a sweep's GETs once. A generated call goes through
+the vendor's `ClientWithResponses`, which reads and closes the answer's body.
+GitHub's GraphQL queries are outside its REST description and pass the same
+fuse by hand. Bridge messages decode into types generated from
+`controller/api/hq-controller.openapi.json`.
 
 **The bridge contract is emitted, and each fact in it has one owner.**
 
@@ -1417,34 +1425,6 @@ fills a declared `service_unit` input that accepts its exact name. Multiple
 services leave that field for the reader to fill. The form still validates
 every input and a run still goes through the canonical capability.
 
-A Compose deploy procedure can declare `compose_updates` with its repository
-`source` directory and its absolute `destination` on the machines it serves.
-It names the image rules it fixes in `fixes` and accepts the existing Compose
-project, service and exact image inputs. The scan reads literal tag and digest
-pins directly from the files in that commit. Needs you offers **Review image
-update** when an adopted pin matches the recommended image, the observed
-service uses that file, and the runner and reader can run the procedure. This
-path requires a running service with one primary Compose file. A procedure must
-declare `restores_data` to offer a stateful service, and the service must have
-a known health check or endpoint. A Compose project started by systemd also
-requires the procedure to declare `uses_owning_unit`, including when the
-running project uses Compose's standard override beside its primary file. These declarations
-describe what the adopted playbook verifies. The target host still enforces
-its own permission and recovery policy. The review binds the service, host, image and commit through the
-normal run command. If the adopted revision or the match changes, the reader
-opens the finding again. The playbook checks the actual running service and
-effective Compose image before changing the machine.
-
-When the same adopted procedure can apply several updates, Needs you can
-offer them together. One review shows each machine and exact image in
-execution order. The shared approval binds the full set to the adopted
-revision and becomes stale if that set changes. The operation holds every
-target machine for its lease. The runner calls the existing playbook once
-per update, with only that update's machine and inputs. The plan stops on
-the first failure and records which updates completed. Earlier successful
-updates remain deployed. An interrupted batch needs fresh observations
-before a new review.
-
 The sidecar's format is published as a JSON Schema,
 `hq/platform/application/hq-procedure.schema.json`, written from
 `ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the
@@ -1532,6 +1512,64 @@ a file named `automation-doorbell` beside the controller's, which starts the
 worker on the host. It says only that a run waits; the worker claims it over
 the bridge, so a forged or replayed ring starts a worker that finds nothing.
 A refused run, or a retry answered with the run already queued, rings nothing.
+
+### Approving an app update
+
+One press of `app_update.approve` (`hq/platform/application/app_update_approval.py`)
+merges an app update's pull request at the head commit the person reviewed,
+then applies the merge where the app runs. The command names the repository,
+the number and that head. The handler resolves the one adopted playbook whose
+manifest `fixes` the image-update finding and takes a `revision` input. It
+refuses none, and more than one, naming them, since HQ never picks. It also
+refuses a caller that the playbook's own run command would refuse (its
+authority, and an agent rule that denies it), a head that moved, an update
+whose diff GitHub did not give, and checks that are not passing. Otherwise it
+writes the playbook's record as adopted now and the `github.pull_request`
+record at that head, then queues the merge once per head. The merge's `input`
+carries `then`: the playbook's id, its adopted revision, its machines as
+resolved, and the correlation the merge and the run share. When the
+controller settles the merge with its commit, `controller._settle_report`
+queues that one run with the commit as its `revision`
+(`automation_runs.queue_follow_up`). The merge's result says which run, or why
+none ran. An agent's call waits for a person every time. Its approval is
+measured against the head, every pin before and after, what the new pins fix
+and bring, and `then`, so a moved head, a changed pin or a new adoption stales
+it.
+
+The finding, the container page and the `app_updates` record read one answer,
+`approval_of`: the merge's standing once one is asked, the reason the press
+would be refused now (the record's `held`), or the sentence saying what the
+press does. Approve is offered only when nothing is held, so a page never
+shows a press the capability would refuse.
+
+Its security properties:
+
+- The follow-up was fixed at approval. Its playbook, revision, machines and
+  correlation are the merge's `input`. The only value it takes later is
+  GitHub's merge commit, which must be 40 hex and must pass the playbook's
+  own input type.
+- It runs as the approver and never exceeds them. The run is asked as the
+  merge's requester, with its `approved_by` (`attribution.own_operation`
+  rebinds an operation only to its own requester). Their authority to run the
+  playbook was checked at the press. The pause and an agent's block still
+  stop it at the claim.
+- It runs once per merge commit. It is keyed `<playbook>:<commit>`, so a
+  replayed settle queues nothing.
+- Nothing the person did not approve runs. A playbook adopted since the
+  approval, or a record that no longer pins it, runs nothing, and the merge
+  says why.
+- Every check a run passes still applies: a worker must take runs, one run
+  per playbook, one writer per machine (`_holding`), and a login for each
+  machine (`reached`). A refused merge (`head_moved`, `checks_failing`) queues
+  no run.
+
+The press is the update finding's one remedy and the container page's Upgrade
+band, beside the pull request it reviews. The merge's `input` holds the head,
+so the band reads how the approval at that head stands (merging, merged with
+its run, or refused and why), and the run's page names the pull request it
+applies. A playbook that `fixes` a finding but needs an input of its own (this
+one's `revision`) is never offered from the finding as a plain run
+(`findings._playbooks`): only the press that supplies the input asks for it.
 
 ### The automation worker
 

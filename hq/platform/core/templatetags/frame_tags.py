@@ -148,7 +148,9 @@ slotted(
         name="button_row",
         rules="""
         A row of buttons that stands on its own (a confirmation's, a card's decisions, a page's way on) is
-        `{% button_row %}`, which a form's closing row draws through too.
+        `{% button_row %}`, which a form's closing row draws through too. A sentence beside its buttons
+        is `{% muted %}`, and a folded section in it (`{% section ... fold=True %}`) is one of its
+        items while closed, opening onto a line of its own the row's whole width.
         """,
         classes=("form-actions",),
         public_classes=("save-bar",),
@@ -157,6 +159,7 @@ slotted(
         options={"bar": Option(about="Pinned to the bottom of the screen once its form has changed.")},
         public=True,
         example='{% button_row %}{% button "Save" submit=True look="primary" %}{% endbutton_row %}',
+        states=tags.BUTTON_ROW_STATES,
     ),
 )
 slotted(

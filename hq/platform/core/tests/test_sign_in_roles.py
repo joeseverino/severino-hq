@@ -9,9 +9,12 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
+from hq.domains.control_plane.models import DashboardConfiguration
 from hq.platform.api.tests.tokens import ISSUER, _serving
 from hq.platform.application import roles
+from hq.platform.application.appearance import theme_for
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import Capability, web_principal
 from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AuditLog, PersonRole
@@ -134,14 +137,16 @@ class WebPrincipalTests(TestCase):
         self.assertFalse(principal.permits(Capability.MANAGE_INFRASTRUCTURE))
         self.assertFalse(principal.permits("write_projects"))
 
-    def test_a_viewers_write_in_the_browser_is_refused(self):
+    def test_a_viewer_chooses_their_own_theme_and_not_the_dashboard_everyone_shares(self):
         user = User.objects.create_user("example-person")
         roles.assign(user, roles.Role.VIEWER)
         self.client.force_login(user, backend=BACKEND)
 
-        self.client.post(reverse("theme"), {"theme": "dark"})
+        self.client.post(reverse("theme"), form_keyed({"theme": "dark"}))
+        self.client.post(reverse("dashboard_glance_settings"), form_keyed({"weather_label": "Outside"}))
 
-        self.assertFalse(hasattr(User.objects.get(pk=user.pk), "appearance"))
+        self.assertEqual(theme_for(User.objects.get(pk=user.pk)), "dark")
+        self.assertFalse(DashboardConfiguration.objects.filter(weather_label="Outside").exists())
 
     def test_a_new_superuser_operates_hq(self):
         with no_default_role():

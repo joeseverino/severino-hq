@@ -254,7 +254,7 @@ class UnmatchedAlertItemTests(TestCase):
 
         (item,) = raised_items()
 
-        self.assertIn("1 has no update pull request", item.explanation)
+        self.assertIn("1 has no update open", item.explanation)
         self.assertEqual(item.primary.url, "/projects/alpha/#updates")
         self.assertEqual([link.url for link in item.pages], [f"{ALPHA}/security/dependabot"])
 

@@ -62,8 +62,8 @@ func (c tailnetClient) call(ctx context.Context, method, path string, extra map[
 
 // callHeader is a GET that also returns one response header.
 func (c tailnetClient) callHeader(ctx context.Context, path string, extra map[string]string, name string) (json.RawMessage, string, error) {
-	data, header, err := c.r.HTTP.Exchange(ctx, c.base+path, "GET", c.headers(extra), nil)
-	return data, header.Get(name), err
+	answer, err := c.r.HTTP.Exchange(ctx, c.base+path, "GET", c.headers(extra), nil)
+	return answer.Body, answer.Header.Get(name), err
 }
 
 func (c tailnetClient) headers(extra map[string]string) map[string]string {
@@ -270,7 +270,7 @@ func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (stri
 	if err != nil {
 		return "", err
 	}
-	raw, err := r.cached(ctx, "tailscale-token:"+connection.Ref, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, "tailscale-token:"+connection.Ref, func() (json.RawMessage, error) {
 		data := url.Values{"client_id": {client.ClientID}, "client_secret": {client.ClientSecret}}
 		answer, err := r.HTTP.Request(ctx, r.tailnetBase()+"/oauth/token", "POST", map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",

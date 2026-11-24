@@ -82,7 +82,7 @@ EXAMPLES = (
                 {"domain": "one.example.com"},
                 {"domain": "two.example.com"},
                 {"domain": "three.example.com"},
-                title="Could not check a-certificate on 3 of the places it is installed",
+                title="Could not check a-certificate in 3 places",
             ),
             # The tailnet refusing the path is offered the amendment to it.
             certificate(

@@ -4,7 +4,7 @@ by ``table_layout.lay_out``, and every mark it gives written where the
 template draws the element it belongs to. No markup is read back."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from django.utils.html import escape
@@ -204,7 +204,10 @@ def _headings(table: DataTable) -> list[tuple[dict[str, Any], CellFacts]]:
                     "title": column.title,
                 },
                 CellFacts(
-                    classes=tuple(column.css.split()), kind=column_kind(column.kind, column.css), drop=column.drop
+                    classes=tuple(column.css.split()),
+                    kind=column_kind(column.kind, column.css),
+                    drop=column.drop,
+                    label=label,
                 ),
             )
         )
@@ -231,8 +234,8 @@ def _heading(sorting: dict[str, Any], column: dict[str, Any], facts: CellFacts, 
 
 
 def _row(table: DataTable, row: Row, context: Any, width: int) -> DrawnRow:
-    cells = [_cell(cell, context) for cell in row.cells]
     footer = row is table.footer
+    cells = [_cell(_name(cell) if at == 0 and not footer else cell, context) for at, cell in enumerate(row.cells)]
     for drawn_cell, column in zip(cells, table.columns, strict=False):
         drawn_cell.facts.classes = tuple(name for name in column.css.split() if name in _CELL_CLASSES)
         drawn_cell.quiet |= footer or column_kind(column.kind, column.css) == "control"
@@ -264,6 +267,17 @@ def _row(table: DataTable, row: Row, context: Any, width: int) -> DrawnRow:
         drawn_row.facts.cells[-1].moved.append(Moved("below", "evidence", row.evidence))
     drawn_row.editor = next((cell.editor for cell in cells if cell.editor and cell.editor["open"]), None)
     return drawn_row
+
+
+def _name(cell: Cell) -> Cell:
+    """The cell of the column that names each row (the grid's `name` track)
+    as the row's name, where its value is words or a link to its record's
+    page: so every table names its rows alike, and no table declares it. A
+    row's label, an identifier drawn as code, a sentence, a muted note, a
+    moment, an amount or a state names nothing."""
+
+    plain = not (cell.header or cell.readout or cell.muted or cell.tone or cell.quoted or cell.role == "prose")
+    return replace(cell, name=True) if plain and (cell.text or cell.link) else cell
 
 
 def _actions(row: Row) -> CellFacts:
@@ -457,12 +471,15 @@ def _whole(cell: DrawnCell, drawing: _Drawing) -> SafeString:
         inside = drawing.included("partials/_row_editor.html#way_in", **said)
     else:
         inside = _content(cell, drawing)
-    if value.fold:
-        inside = _safe(drawing.included("partials/_row_fold.html", label=value.text), inside)
     if cell.box == "cell-state":
         inside = _safe("<div>", inside, "</div>")
     if cell.box:
         inside = _safe('<div class="', cell.box, '">', inside, "</div>")
+    # A fold's toggle is the cell's own child, outside the value's box, so it
+    # stands in the gutter where the row's toggle does (tables.css) and the
+    # value's words start where every row's do.
+    if value.fold:
+        inside = _safe(drawing.included("partials/_row_fold.html", label=value.text), inside)
     toggle = drawing.toggle(cell.toggle) if cell.toggle is not None else ""
     tag = "th" if value.header else "td"
     return _safe("<", tag, cell.attributes, ">", inside, toggle, "</", tag, ">")
@@ -571,7 +588,8 @@ def _named(value: Cell, cell: DrawnCell | None, drawing: _Drawing, *, own: bool)
 
     names = ' data-cell="name"' if own and cell is not None and cell.named else ""
     if value.name and value.url and not (value.link or value.external or value.tone or value.cut):
-        return _safe(format_html('<a href="{}">', value.url), "<strong", names, ">", _text(value), "</strong></a>")
+        opened = _safe(format_html('<a href="{}"', value.url), data_attributes(value.data), ">")
+        return _safe(opened, "<strong", names, ">", _text(value), "</strong></a>")
     if value.name:
         return _safe("<strong", names, ">", _words(value, cell, drawing), "</strong>")
     if value.role and _linked(value):

@@ -3,13 +3,10 @@ package providers
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
-	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -109,7 +106,7 @@ func (n queryNames) covers(name string) bool {
 	})
 }
 
-func summarizeQueries(get func(string) (json.RawMessage, error), domains []string, ref string, now time.Time, anonymized bool) ([]any, error) {
+func summarizeQueries(read func(olderThan string) (adguardapi.QueryLog, error), domains []string, ref string, now time.Time, anonymized bool) ([]any, error) {
 	names := queryNames{exact: map[string]bool{}}
 	tallies := map[string]*queryTally{}
 	for _, domain := range domains {
@@ -129,17 +126,9 @@ func summarizeQueries(get func(string) (json.RawMessage, error), domains []strin
 	full := false
 	cursor := ""
 	for page := 0; page < 10 && !full; page++ {
-		path := "/control/querylog?limit=" + strconv.Itoa(adguardQueryPage)
-		if cursor != "" {
-			path += "&older_than=" + url.QueryEscape(cursor)
-		}
-		raw, err := get(path)
+		answer, err := read(cursor)
 		if err != nil {
 			return nil, fmt.Errorf("adguard query log: %w", err)
-		}
-		answer, err := adguardDecode[adguardapi.QueryLog](raw, "query log")
-		if err != nil {
-			return nil, err
 		}
 		for _, entry := range deref(answer.Data) {
 			when, err := time.Parse(time.RFC3339Nano, deref(entry.Time))
@@ -186,15 +175,22 @@ func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 	found := []any{}
 	now := r.Now().UTC()
 	for _, ref := range r.refs(runtime.ConnectionProviderAdGuard) {
-		get := func(path string) (json.RawMessage, error) { return r.adguardRequest(ctx, ref, path, "GET", nil) }
-		config, err := adguardGet[adguardapi.GetQueryLogConfigResponse](ctx, r, ref, "/control/querylog/config", "query log settings")
+		client := r.adguard(ref, true)
+		page := func(olderThan string) (adguardapi.QueryLog, error) {
+			params := adguardapi.QueryLogParams{Limit: new(adguardQueryPage)}
+			if olderThan != "" {
+				params.OlderThan = &olderThan
+			}
+			return json200(client.QueryLogWithResponse(ctx, &params))
+		}
+		config, err := json200(client.GetQueryLogConfigWithResponse(ctx))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("adguard query log settings: %w", err)
 		}
 		if config.Enabled != nil && !*config.Enabled {
 			return nil, &ProviderError{Message: "adguard query log is off, so which names are used is unknown"}
 		}
-		rewrites, err := r.adguardRewrites(ctx, ref, true)
+		rewrites, err := adguardRewrites(ctx, client)
 		if err != nil {
 			return nil, err
 		}
@@ -208,7 +204,7 @@ func (r *Registry) adguardQueries(ctx context.Context) ([]any, error) {
 		if anonymized {
 			refuse(ctx, runtime.PartClients, ref, "", &ProviderError{Message: "adguard anonymizes client addresses"})
 		}
-		records, err := summarizeQueries(get, domains, ref, now, anonymized)
+		records, err := summarizeQueries(page, domains, ref, now, anonymized)
 		if err != nil {
 			return nil, err
 		}

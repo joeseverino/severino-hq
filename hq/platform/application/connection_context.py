@@ -40,7 +40,7 @@ from .derived_reads import serialize_check, serialize_measurement, serialize_pat
 from .entity_links import entity_link
 from .freshness import freshness
 from .json_schemas import as_written
-from .moments import ago
+from .moments import when
 from .path_model import ServicePath
 from .paths import hq_path
 from .posture import estate_inputs, guide, posture
@@ -180,7 +180,7 @@ class ConnectionRow:
 
         if self.lifecycle == Lifecycle.UNREPORTED:
             observed = self.instance.observed_at
-            return f"Last reported {ago(observed)}" if observed else ""
+            return f"Last reported {when(observed)}" if observed else ""
         if self.lifecycle != self.connection.lifecycle:
             return ""
         missing = self._permissions_missing

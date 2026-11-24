@@ -3,6 +3,7 @@
 import re
 import subprocess
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
@@ -461,3 +462,17 @@ class HandRolledClassTests(SimpleTestCase):
 
     def test_a_part_declares_only_the_classes_its_partial_writes(self):
         self.assertEqual(sorted(needless_classes()), [], "remove it from the Part's classes")
+
+    def test_a_class_only_its_marking_module_writes_is_written_and_one_nothing_writes_is_not(self):
+        from hq.platform.core import table_layout
+        from hq.platform.core.template_parts import Part
+
+        part = Part(
+            name="",
+            about="A table whose open row its layout marks.",
+            partial="partials/_data_table.html",
+            marked_in=table_layout,
+            classes=("is-expanded", "example-unwritten"),
+        )
+        with mock.patch(f"{needless_classes.__module__}.parts", return_value=[part]):
+            self.assertEqual(needless_classes(), {("partials/_data_table.html", "example-unwritten")})

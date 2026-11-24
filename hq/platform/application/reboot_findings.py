@@ -12,7 +12,7 @@ from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, REBOOT_
 
 from .finding_model import Finding, FindingEstate, FindingRule, cannot_run_commands, machine_step
 from .finding_steps import Run
-from .moments import moment, when
+from .moments import moment, since_when, when_at
 from .reading_facts import OnEachMachine, ReadingRow
 from .tone import Tone
 from .topology_model import TopologyNode
@@ -48,7 +48,7 @@ class RebootState(ReadingRow):
         """When logind will act, as HQ writes a moment; "" when nothing is scheduled."""
 
         at = moment(self.scheduled_at) if self.scheduled_action else None
-        return when(at) if at else ""
+        return when_at(at) if at else ""
 
     @property
     def action(self) -> str:
@@ -108,20 +108,13 @@ def _title(node: TopologyNode, rows: tuple[RebootState, ...]) -> str:
 
 def _explanation(rows: tuple[RebootState, ...]) -> str:
     (row, *_) = rows
-    waiting = (
-        "An installed update takes effect only once the machine restarts. Until then it runs the code the "
-        "update replaced."
-    )
-    if not row.scheduled:
-        return waiting
-    scheduled = f"systemd will {row.action} it at that time, and everything on it stops until it is back."
-    return f"{waiting} {scheduled}" if row.waiting else scheduled
+    return "Everything on it stops until it is back." if row.scheduled else ""
 
 
 def _evidence(row: RebootState) -> tuple[tuple[str, str], ...]:
     since = moment(row.since)
     return (
-        *((("Waiting since", when(since)),) if row.waiting and since else ()),
+        *((("Waiting", since_when(since)),) if row.waiting and since else ()),
         *((("Packages", ", ".join(row.packages.split())),) if row.packages else ()),
         *((("Scheduled", f"To {row.action} at {row.scheduled}"),) if row.scheduled else ()),
     )
@@ -190,7 +183,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _restarts,
         gathered=True,
-        operator_action="On the machine, read what waits on the restart, then schedule it for a time that suits.",
+        operator_action="Schedule the restart for a quiet hour.",
         no_help_reason=cannot_run_commands(),
         bars={Tone.ATTENTION: "an update waits on a restart to take effect"},
     ),

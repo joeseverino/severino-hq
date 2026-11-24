@@ -23,7 +23,7 @@ from ..default_hold import needs_approval
 from ..doors import interface_label
 from ..entity_links import kind_label
 from ..integration_specs import capability_schema
-from ..labels import dotted, human_label, lower_first
+from ..labels import human_label, lower_first
 from ..security import Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 from .writers import keyed
@@ -369,7 +369,8 @@ class SettingTests(PolicyTestCase):
         _columns, groups = matrix()
         row = next(row for group in groups for row in group.rows if row.name == "pin.toggle")
         offered = {cell.column: bool(cell.options) for cell in row.cells}
-        self.assertEqual((offered["example-assistant"], offered["example-machine"]), (True, False))
+        assistant = f"example-assistant for {self.user.get_username()}"
+        self.assertEqual((offered[assistant], offered["example-machine"]), (True, False))
 
     def test_a_rule_needs_an_agent_that_has_been_seen(self):
         with self.assertRaisesMessage(ValueError, "No agent named nobody has connected yet."):
@@ -501,7 +502,7 @@ class PageTests(PolicyTestCase):
         AgentIdentity.objects.create(client_id="example-agent", person=self.user, person_key="op", interfaces=["mcp"])
         details = {column.label: column.detail for column in matrix()[0] if column.identity.person}
 
-        self.assertEqual(details["example-agent"], dotted(interface_label("mcp"), "for op"))
+        self.assertEqual(details, {f"example-agent for {self.user.get_username()}": interface_label("mcp")})
 
     def test_only_acronyms_are_capitalized(self):
         self.assertEqual(human_label("example.pace.set"), "Example Pace Set")

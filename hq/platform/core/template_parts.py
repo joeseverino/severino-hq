@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import wraps
 from itertools import chain
-from types import UnionType
+from types import ModuleType, UnionType
 from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_type_hints
 
 from django import template
@@ -162,6 +162,9 @@ class Part:
     example: Example | str = ""
     states: Mapping[str, Example] = field(default_factory=dict)
     shape: Shape | None = None
+    # The module that writes classes on what its function draws, beside its
+    # templates (a table's rows, marked by ``table_layout``).
+    marked_in: ModuleType | None = None
     # The classes the partial writes that are this part's alone, and those of
     # its own any template, an extension's too, may write beside it.
     classes: tuple[str, ...] = ()

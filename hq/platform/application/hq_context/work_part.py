@@ -118,7 +118,7 @@ def _unit(job: WorkUnit) -> Cell:
 _JOB_COLUMNS = (
     TableColumn("Unit", kind="identifier", cell=_unit),
     TableColumn("Runs", kind="identifier", drop=3, cell=lambda job: Cell(job.runs, readout=job.runs_unit)),
-    TableColumn("Last run", kind="status", drop=2, cell=lambda job: Cell(moment=job.last_run, form="ago")),
+    TableColumn("Last run", kind="status", drop=2, cell=lambda job: Cell(moment=job.last_run)),
     TableColumn("Result", kind="status", css="key-col", cell=lambda job: Cell(job.result, tone=str(job.tone))),
     TableColumn("Next run", kind="status", css="optional-col", drop=1, cell=lambda job: Cell(moment=job.next_run)),
 )
@@ -148,10 +148,8 @@ _SCHEDULED_COLUMNS = (
 _RENDERER_COLUMNS = (
     TableColumn("Credentials refresh", kind="identifier", cell=lambda item: Cell(item.name, readout=True)),
     TableColumn("Result", kind="status", css="key-col", cell=lambda item: Cell(item.result, tone=str(item.tone))),
-    TableColumn("Tried", kind="status", drop=2, cell=lambda item: Cell(moment=item.attempted, form="ago")),
-    TableColumn(
-        "Last confirmed current", kind="status", drop=1, cell=lambda item: Cell(moment=item.succeeded, form="ago")
-    ),
+    TableColumn("Tried", kind="status", drop=2, cell=lambda item: Cell(moment=item.attempted)),
+    TableColumn("Last confirmed current", kind="status", drop=1, cell=lambda item: Cell(moment=item.succeeded)),
 )
 
 

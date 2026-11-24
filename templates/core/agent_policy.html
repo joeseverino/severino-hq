@@ -10,7 +10,7 @@ the heading, then what the rules below allow and what they held or refused.
   {% facts layout="band" %}
     {% fact "Rules" value=rule_count %}
     {% if awaiting_count %}{% fact "Held for approval" value=awaiting_count url=held_url %}{% endif %}
-    {% fact "Refused in the last day" value=refused_count url=refused_url %}
+    {% with days=recent_days|counted:"day" %}{% fact "Refused in the last "|add:days value=refused_count url=refused_url %}{% endwith %}
   {% endfacts %}
 {% aside %}
   {% if agents_paused %}{% status "Paused" tone="attention" dot=True %}{% else %}{% status "Allowed" tone="good" dot=True %}{% endif %}

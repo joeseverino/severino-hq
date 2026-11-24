@@ -3,11 +3,15 @@
 // <gate> reads each file it is handed that its glob matches, and <gate>-whole
 // reads the whole tree, run when a file it names changed (the tool's own
 // config, its pins) or when the gate is run alone, on every file.
-amends "package://github.com/jdx/hk/releases/download/v2.13.0/hk@2.13.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.14.0/hk@2.14.0#/Config.pkl"
 
 // What every gate reads besides its files: the tools' pins and the tasks.
 local toolchain = List("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env")
 local astGrep = "ast-grep scan -c tools/lint/ast-grep/sgconfig.yml"
+
+// Ruff and ast-grep both rewrite *.py in parallel fix steps, so a check that
+// passed before the other's fix runs again on what that fix wrote.
+recheck_after_fix = true
 
 hooks {
   ["check"] {

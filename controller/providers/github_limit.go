@@ -239,37 +239,44 @@ func githubRateLimited(header http.Header, err error, now time.Time) error {
 	return githubLimited(why, githubResets(header, now), now)
 }
 
-// githubExchange is one request to GitHub's API. Under a token, a read passes
-// the fuse of the installation it spends, and every answer is counted there;
-// a refusal for a limit is named as one either way.
-func (r *Registry) githubExchange(ctx context.Context, method, path string, headers map[string]string, payload any, token string) (json.RawMessage, error) {
-	var budget *githubBudget
-	if token != "" && path != githubRateLimitRoute {
-		budget = r.githubSpend().of(token)
-	}
-	if budget != nil && (method == http.MethodGet || path == githubGraphQL) {
-		if err := budget.admit(); err != nil {
-			return nil, err
+// githubExchange is GitHub's rule around every request to its API. Under
+// token, a read passes the fuse of the installation it spends, and every
+// answer is counted there; a refusal for a limit is named as one either way.
+func (r *Registry) githubExchange(token string) func(context.Context, string, string, map[string]string, any) (runtime.Answer, error) {
+	return func(ctx context.Context, address, method string, headers map[string]string, payload any) (runtime.Answer, error) {
+		var budget *githubBudget
+		if token != "" {
+			budget = r.githubSpend().of(token)
+			if method == http.MethodGet || address == githubAPI+githubGraphQL {
+				if err := budget.admit(); err != nil {
+					return runtime.Answer{}, err
+				}
+			}
 		}
+		answer, err := r.HTTP.Exchange(ctx, address, method, headers, payload)
+		if budget != nil {
+			budget.note(answer.Header, err, r.Now())
+		}
+		return answer, githubRateLimited(answer.Header, err, r.Now())
 	}
-	raw, header, err := r.HTTP.Exchange(ctx, githubAPI+path, method, headers, payload)
-	if budget != nil {
-		budget.note(header, err, r.Now())
-	}
-	return raw, githubRateLimited(header, err, r.Now())
 }
 
-// githubRateLimitRoute answers what the allowance has left without spending any of it.
-const githubRateLimitRoute = "/rate_limit"
+// githubQuery is one GraphQL query under token, which passes the fuse as a
+// read does. GraphQL is outside GitHub's REST description, so it has no
+// generated client.
+func (r *Registry) githubQuery(ctx context.Context, token, query string, variables map[string]any) (json.RawMessage, error) {
+	answer, err := r.githubExchange(token)(ctx, githubAPI+githubGraphQL, http.MethodPost, githubHeaders(token), struct {
+		Query     string         `json:"query"`
+		Variables map[string]any `json:"variables"`
+	}{query, variables})
+	return answer.Body, err
+}
 
 // githubAllowance asks what a token's installation has left of its REST
-// allowance, and holds that installation's fuse to it before the sweep spends any.
+// allowance, which spends none of it, and holds that installation's fuse to
+// it before the sweep spends any.
 func (r *Registry) githubAllowance(ctx context.Context, token string) error {
-	raw, err := r.githubExchange(ctx, http.MethodGet, githubRateLimitRoute, githubHeaders(token), nil, token)
-	if err != nil {
-		return err
-	}
-	limit, err := decodeAnswer[githubapi.RateLimitOverview](raw, "GitHub rate limit")
+	limit, err := json200(r.githubClient(token, false, nil).RateLimitGetWithResponse(ctx))
 	if err != nil {
 		return err
 	}

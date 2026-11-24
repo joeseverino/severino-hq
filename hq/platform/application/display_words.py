@@ -24,7 +24,15 @@ MACHINE_TEXT = {
 }
 # A field's metadata when it quotes a record's own text (a search match): a
 # person or a provider wrote it, and a page shows it as they did.
-QUOTED: Mapping[str, bool] = MappingProxyType({"quoted": True})
+QUOTED: Mapping[str, bool | str] = MappingProxyType({"quoted": True})
+
+
+def quoted_when(flag: str) -> Mapping[str, bool | str]:
+    """``QUOTED`` whenever its view's ``flag`` is set: a readout's words."""
+
+    return MappingProxyType({"quoted": flag})
+
+
 # A field's name as code writes it, where its label belongs.
 _KEY = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
 
@@ -93,19 +101,21 @@ def said_in_words(view: Any) -> None:
 
     A field typed ``str`` holds a str, a flag is only a field typed ``bool``,
     and each str a field holds, in a tuple too, is words. A field named
-    ``label`` or ``…_label`` is a label. A field marked ``QUOTED`` holds a
-    record's own text, shown as it was written, so it is not held to words.
-    A field typed by an enum holds its member (``as_members``).
+    ``label`` or ``…_label`` is a label. A field marked ``QUOTED``, or
+    ``quoted_when`` its flag is set, holds a record's own text, shown as it
+    was written, so it is not held to words. A field typed by an enum holds
+    its member (``as_members``).
     """
 
     as_members(view)
     for field in fields(view):
-        if field.metadata.get("quoted"):
-            continue
         value = getattr(view, field.name)
         where = f"{type(view).__name__}.{field.name}"
         if (field.type is str and not isinstance(value, str)) or (isinstance(value, bool) and field.type is not bool):
             raise ValueError(f"{where} is words; got {value!r}.")
+        quoted = field.metadata.get("quoted", False)
+        if quoted is True or (quoted and getattr(view, quoted)):
+            continue
         for text, holder in _texts(value, value):
             if found := _machine_text(text, label=field.name.endswith("label")):
                 raise ValueError(f"{where} carries {found}: say it in words. Got {holder!r}.")

@@ -37,7 +37,7 @@ or anything acting for them may do. The roles are declared once, in
 | Role | Holds |
 | --- | --- |
 | `operator` | every capability, the host's and every extension's (`operator_capabilities`) |
-| `viewer` | the reads: `read` and every extension's read capabilities, `read_sensitive_documentation`, and `show_demo`, which switches stand-in values on in their own browser |
+| `viewer` | the reads: `read` and every extension's read capabilities, `read_sensitive_documentation`, and what changes only their own view: `show_demo`, which switches stand-in values on in their own browser, and `set_preferences`, their theme and calendar choices |
 
 What each subject holds, with `HELD_ONLY_AT` and `NEEDS_A_PERSON` applied on top:
 
@@ -474,10 +474,10 @@ is refused the audit log (`read_audit_log`) and the calendar
   `test_person_bound_agent.py`).
 - A machine's own token has no person, so it is refused those three whatever
   Pocket ID granted it, and the catalog lists no command needing one to it.
-  `set_preferences` also covers the dashboard's shared settings (its weather
-  point, panel names and machine tiles): an operator's, since a viewer holds
-  only reads, so an agent its operator signed in may change them as that
-  operator may.
+  `arrange_dashboard`, the dashboard's shared settings (its weather point,
+  panel names and machine tiles), is held only with a person behind it too:
+  an operator's, so an agent its operator signed in may change them as that
+  operator may, and a viewer's agent may not.
 - A held request keeps the person its token named (`requested_person_key`),
   so an approved personal write replays as that person's.
 - So the provider administrator's grant alone never makes a device. From its

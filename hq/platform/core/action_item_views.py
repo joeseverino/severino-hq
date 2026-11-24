@@ -15,7 +15,6 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.tone import Tone
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
-lazy from hq.platform.application import compose_batches
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
 # The urgencies the filter narrows to, in the words every pill says.
@@ -52,16 +51,6 @@ class ActionItemsView(PageMixin, TemplateView):
         return PageAction.command(queue_state.SET_ASIDE, variant=queue_state.ALL, query={**shown, "part": part})
 
     @override
-    def get_page_actions(self):
-        with projection_scope():
-            batches = compose_batches.available(web_principal(self.request.user))
-            return tuple(
-                action
-                for batch in batches
-                if (action := PageAction.command(compose_batches.NAME, query=batch.query, primary=True))
-            )
-
-    @override
     @projection_scope()
     def get_context_data(self, **kwargs):
         all_items, items = _action_items(self.request)
@@ -85,7 +74,8 @@ class ActionItemsView(PageMixin, TemplateView):
             show_action_count=True,
             action_sources=sources,
             action_urgencies=_URGENCIES,
-            action_shown=len(items),
+            # What is open on the page: a dismissed item waits in its closed fold.
+            action_shown=len(doing) + len(told),
             action_total=len(all_items),
             action_query=query,
             action_status=status,

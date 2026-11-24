@@ -31,7 +31,7 @@ lazy from hq.platform.core.hand_drawn import hand_drawn
 
 # HQ's own phrase functions: their words end on a literal HQ wrote.
 _OWN_PHRASES = frozenset(
-    {"counted", "ago", "duration", "span", "when", "when_day", "when_exact", "expiry_phrase", "human_bytes"}
+    {"counted", "duration", "span", "when", "when_day", "when_exact", "expiry_phrase", "human_bytes"}
 )
 # Builders whose template is markup, where ``ended`` cannot reach the text.
 _MARKUP = frozenset({"format_html"})

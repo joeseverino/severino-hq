@@ -1,7 +1,11 @@
 """The catalog's tables: a data table in each option and state its parts give it."""
 
+from datetime import date
+
+from django import forms
+
 from hq.platform.application.pages import PageAction
-from hq.platform.application.tables import Below, Cell, DataTable, Piece, Row, TableColumn
+from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, TableColumn
 from hq.platform.core import included_parts
 from hq.platform.core.part_examples import runs, table
 from hq.platform.core.template_parts import Example
@@ -60,7 +64,7 @@ def _row_actions() -> DataTable:
     return DataTable(
         "Example messages",
         (TableColumn("From", kind="identifier"), TableColumn("Note")),
-        tuple(Row((Cell(name, name=True), Cell(note)), actions=actions) for name, note, actions in rows),
+        tuple(Row((Cell(name), Cell(note)), actions=actions) for name, note, actions in rows),
     )
 
 
@@ -70,7 +74,6 @@ def _many_actions() -> DataTable:
             (
                 Cell(
                     f"example-{at:02} was started outside its compose project",
-                    name=True,
                     lines=(Cell("An example note long enough to wrap over several lines beside the row's actions."),),
                 ),
             ),
@@ -83,6 +86,36 @@ def _many_actions() -> DataTable:
         for at in (1, 2)
     )
     return DataTable("Example findings", (TableColumn("Finding"),), rows, headed=False)
+
+
+def _controls_per_row() -> DataTable:
+    """Two folds whose rows' actions differ in length, as the queue's families do."""
+
+    groups = tuple(
+        Group(
+            label,
+            (
+                Row(
+                    (Cell(f"An example {fold.split('-')[0]} item"),),
+                    actions=(PageAction(action, f"/example/{fold}/"),),
+                    folded=fold,
+                ),
+            ),
+            folds=fold,
+        )
+        for label, fold, action in (
+            ("Short actions", "short-actions", "Review"),
+            ("Long actions", "long-actions", "Check for active reboot inhibitors"),
+        )
+    )
+    return DataTable(
+        "Example queue 2",
+        (TableColumn("Item"),),
+        groups=groups,
+        headed=False,
+        data={"line": "flat"},
+        controls_per_row=True,
+    )
 
 
 def _identifiers() -> dict[str, DataTable]:
@@ -127,6 +160,83 @@ def _identifiers() -> dict[str, DataTable]:
         ("office only", "Address rules", "allow 198.51.100.0/24; allow 2001:db8:a1e0::/48", "none"),
     )
     return {"steps": steps, "access": access}
+
+
+def _crowded() -> DataTable:
+    """Nine columns, as Services draws: short identifiers beside long ones and a sentence."""
+
+    def chip(value: str) -> Cell:
+        return Cell(value, readout=True)
+
+    return table(
+        "Example services",
+        (
+            TableColumn("Service", kind="identifier"),
+            "Open to",
+            "Address",
+            "Proxy",
+            "Certificate",
+            "Runs on",
+            "Note",
+            TableColumn("State", kind="status"),
+            TableColumn("Since", kind="status"),
+        ),
+        *(
+            (
+                Cell(name),
+                "Tailnet only",
+                chip(address),
+                chip(f"{address}:{port}"),
+                chip("wildcard-example-com"),
+                "example-host-01 · example-app",
+                "Served through the proxy with a certificate from the example authority.",
+                Cell("Health check passing", tone="good"),
+                "1 day",
+            )
+            for name, address, port in (
+                ("home-automation-dashboard.example.com", "198.51.100.214", "8000"),
+                ("status.example.com", "198.51.100.215", "8443"),
+            )
+        ),
+    )
+
+
+def _choices() -> DataTable:
+    """A column of choices per agent, as the agent rules draw: a select in
+    each row of one, the words that stand where an agent holds no grant in
+    the other, beside a day each row keeps, a note it can spare and a row's
+    own control."""
+
+    form = forms.Form()
+    rows = []
+    for at, (name, day) in enumerate((("Edit an example record", 3), ("Stop an example container", 12)), 1):
+        form.fields[f"rule-{at}"] = forms.ChoiceField(
+            label=f"{name}, for example-agent",
+            choices=[("", "Default"), ("approve", "Ask me first"), ("deny", "Off")],
+            required=False,
+        )
+        rows.append(
+            Row(
+                (
+                    Cell(name),
+                    Cell("Ask me first", muted=True),
+                    Cell(moment=date(2026, 3, day)),
+                    Cell("A note a narrow box lets go to the row's open line."),
+                    Cell(field=form[f"rule-{at}"]),
+                    Cell("Not granted", muted=True),
+                ),
+                actions=(PageAction("Open", f"/example/{at}/"),) if at == 1 else (),
+            )
+        )
+    columns = (
+        TableColumn("Action"),
+        TableColumn("Default", css="key-col"),
+        TableColumn("Changed"),
+        TableColumn("Note"),
+        TableColumn("example-agent", kind="control"),
+        TableColumn("example-reader", kind="control"),
+    )
+    return DataTable("Example rules", columns, tuple(rows))
 
 
 def _blank_column() -> DataTable:
@@ -200,10 +310,10 @@ ENTRIES = {
                 "Example records 5",
                 (TableColumn("Name", kind="identifier"), "Note"),
                 (
-                    Cell("example-01", name=True),
+                    Cell("example-01"),
                     Cell("An example note", below=(Below("", (Cell("An example line the row holds back."),)),)),
                 ),
-                (Cell("example-02", name=True), "Another example note"),
+                (Cell("example-02"), "Another example note"),
             )
         },
     ),
@@ -215,8 +325,8 @@ ENTRIES = {
             "runs": table(
                 "Example runs 2",
                 (TableColumn("Run", kind="identifier"), "Asked by"),
-                (Cell("example-01", name=True), Cell("example-owner, on the web", cut=True)),
-                (Cell("example-02", name=True), Cell("example-agent, over MCP", cut=True)),
+                (Cell("example-01"), Cell("example-owner, on the web", cut=True)),
+                (Cell("example-02"), Cell("example-agent, over MCP", cut=True)),
             )
         },
     ),
@@ -229,6 +339,9 @@ ENTRIES = {
     # actions keep their line while the table has room and wrap between
     # them where it has not.
     "table/many-actions": Example(_sectioned(findings="Example findings"), lambda: {"findings": _many_actions()}),
+    # A queue's folds, each row's controls their own width
+    # (``controls_per_row``): opening one fold moves no row of another.
+    "table/controls-per-row": Example(_sectioned(queue="Example queue 2"), lambda: {"queue": _controls_per_row()}),
     # A table whose rows are selected together: the heading that selects
     # every row, then each row's tick-box, and a row with no key whose cell
     # stays empty.
@@ -251,6 +364,14 @@ ENTRIES = {
     # ranked columns to let go, so a narrow box lets a column leave before it
     # breaks a name at its seams.
     "table/identifiers": Example(_sectioned(steps="Example steps", access="Example access"), _identifiers),
+    # A table of nine columns, short identifiers (an address and its port, a
+    # certificate's name) beside a long host name and a sentence: each short
+    # one is whole while a long one or the sentence still has room to give.
+    "table/crowded": Example(_sectioned(services="Example services"), lambda: {"services": _crowded()}),
+    # A column of choices per agent: in a narrow box each row's choices stand
+    # each on a line of its own beneath its name, named by its column, and
+    # its day stands while its note leaves.
+    "table/choices": Example(_sectioned(rules="Example rules"), lambda: {"rules": _choices()}),
     # A column of dashes beside a column of marks with no words and a column
     # of short words: the server marks the dashes' column blank and it is not
     # drawn, the marks are, and no short word is split however its column's

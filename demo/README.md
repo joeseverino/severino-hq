@@ -71,27 +71,39 @@ cannot do four things HQ relies on, and each is handled here, never in HQ:
   a page of a list, a Map node's details) are answered by HQ's server. The
   build saves each one a page links, each choice a filter offers (a checkbox,
   a select's options), the first six pages of a list, each address a script
-  reads, and a search for each word of the pages' names and each word the
-  command center's box suggests, under `__q/` and `__fragments__/`, and
+  reads, and a search for each word of the name of everything the command
+  center offers (read from the declarations it searches), each word its box
+  suggests and each word of the pages' names, under `__q/` and
+  `__fragments__/`, and
   once more each address with a query those copies and the command
   center's answers link (the months either side of today, a command a
-  search found), each page they link being crawled too (`_COPY_DEPTH`);
-  `demo-theme.js` opens the saved copy before the page paints. Further
+  search found), each page they link being crawled too (`_COPY_DEPTH`).
+  A static host answers an address with a query with the page at the
+  address without it, so each page holds the copies of its own address
+  with a query, and `demo-theme.js` opens the copy before the page draws or
+  asks for anything. Further
   out, a day says only the days around today are saved. The command
   center asks for the same searches as it is typed into. A word with no
-  saved search is answered as the nearest saved word, or, with none near, as
-  HQ answers a word nothing matches, about the word typed. Sorts are not
+  saved search is answered as the nearest saved word, or, with none near, by
+  saying the demo has no search for the word typed, where HQ would say
+  nothing matches; the search page's own box is answered the same way as it
+  is typed into. Sorts are not
   saved. A list's filter sends the order the list is drawn in with it, which
   the build records for each list, so a filter keyed with that order opens
-  the same copy. A search within a list is not saved either: typing in it
+  the same copy. A search within any other list is not saved: typing in it
   says so and reloads nothing. On a page whose query has no copy, `demo.js`
   says which kind it was ("Sorting isn't saved in the demo"). Each page
   carries the policy HQ sends for its own route, so the API reference loads.
 - **Forms** have nowhere to post. Dismissals are kept in the browser's
-  localStorage; any other form shows "Demo only: nothing was saved" as an HQ
-  message, and a post a script sends (a page asking for its readings as it
-  opens) is answered with nothing changed. Reset demo, in the user menu,
-  clears localStorage. The Demo data switch is locked on.
+  localStorage; a read command's form (a lookup) says the demo can't run it,
+  any other form shows "Demo only: nothing was saved" as an HQ message, and
+  a post a script sends (a page asking for its readings as it opens) is
+  answered with nothing changed. Reset demo, in the user menu, clears
+  localStorage. The Demo data switch is locked on.
+- **Downloads** are sent by HQ as attachments, a header a static host can't
+  send. Each is saved as a file, one with a query (a year's export) under
+  `__downloads/`, and every link to it carries `download` with the name HQ
+  sends it under.
 - **An address with no file** is answered by GitHub Pages with `404.html`,
   which is HQ's own not-found page.
 - **Response headers** cannot be set on GitHub Pages. Each page carries HQ's CSP
@@ -105,8 +117,8 @@ laptop the demo was rendered for. `as_production()` sets HQ's
 `partials/_example_connection.html` then marks each of those places as an
 example connection. The wording lives in HQ; the demo only says it is a copy.
 
-The same setting puts About the demo in the bottom left corner of every
-page, a control that opens a dialog drawn by `partials/_demo_about.html`:
+The same setting ends every page with About the demo, in the flow after the
+content, a control that opens a dialog drawn by `partials/_demo_about.html`:
 what the demo is, links to the pages worth trying, links into this
 repository, who made it and the day the pages were saved. Without script the control is
 a link to this README. The API reference names the example HQ as its server,
@@ -152,17 +164,21 @@ so Scalar does not offer GitHub Pages as one.
   runs past it at 402 and 1360px.
 - A machine's addresses read as one list that fits.
 - A dismissal survives a reload until Reset demo clears it.
-- About the demo stays in the bottom left corner at 390, 402, 820 and
-  1360px, the dashboard, a list and the queue end with room for it so no
-  control is left under it, and it opens the dialog by keyboard, which
-  Escape closes. The dialog is read whole without scrolling on a 1360 by
+- About the demo comes after the content at 390, 402, 820 and 1360px, and
+  it opens the dialog by keyboard, which Escape closes. The dialog is read whole without scrolling on a 1360 by
   800 window and a 402px phone. Each thing to try in it is a page of the
   demo and each other link a file in this repository or its author, and it
   says the day the pages were saved, as HQ writes a day.
 - The command center opens from About the demo and from ⌘K with what it
-  offers, finds something as each word its box suggests is typed, and
-  answers a word the demo has no search for about that word, in the palette
-  and on the search page.
+  offers, finds each thing it offers by the first word of its name and
+  each word its box suggests as it is typed, and answers a word the demo
+  has no search for by saying so about that word, in the palette and on the
+  search page, whose own box answers as it is typed into.
+- The page at an address with a query opens its copy before it asks for
+  anything.
+- A read's form says the demo can't run it, a write's that nothing was
+  saved, and neither is left sending.
+- Each export on Reports downloads under HQ's name for it.
 - `404.html` is HQ's not-found page, and the API document names a server.
 
 HQ's own suite holds the other side: a running HQ with demo data on draws

@@ -29,7 +29,7 @@ from .container_state import ContainerCount
 from .contracts import Effect
 from .freshness import DASHBOARD_GLANCE, freshness
 from .labels import dotted, human_bytes
-from .moments import when_hour
+from .moments import clock
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
@@ -499,7 +499,7 @@ def weather_words(weather: Weather) -> dict[str, Any]:
         metrics.append(
             _metric(
                 "Rain",
-                dotted("Now" if index == 0 else when_hour(hour.start), measured(hour.chance, "%")),
+                dotted("Now" if index == 0 else clock(hour.start), measured(hour.chance, "%")),
                 hour.forecast,
             )
         )
@@ -516,7 +516,7 @@ def weather_words(weather: Weather) -> dict[str, Any]:
         # there is one.
         "hours": tuple(
             Kpi(
-                when_hour(hour.start),
+                clock(hour.start),
                 _degrees(hour),
                 measured(hour.chance, "%") if hour.chance else "",
                 tip=hour.forecast,

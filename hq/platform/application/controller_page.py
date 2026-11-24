@@ -67,13 +67,8 @@ class ControllerPage:
     # The oldest reading is more than two sweeps old: sweeps are not landing.
     overdue: bool
     readings: tuple[KindReading, ...]
-    failing: int
     queue: tuple[QueuedWork, ...]
     asked: tuple[ForcedRead, ...]
-
-    @property
-    def failing_tone(self) -> str:
-        return Tone.ATTENTION if self.failing else ""
 
     @property
     def overdue_tone(self) -> str:
@@ -143,7 +138,6 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         oldest=oldest,
         overdue=oldest is not None and interval > 0 and now - oldest.attempted_at > 2 * every,
         readings=readings,
-        failing=sum(1 for reading in readings if not reading.ok),
         queue=queue,
         asked=forced_reads(),
     )

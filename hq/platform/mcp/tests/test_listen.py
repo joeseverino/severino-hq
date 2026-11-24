@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
 from unittest import mock
@@ -196,6 +197,26 @@ async def listening(application, principal, body, *, protocol=MODERN, **claims):
             gone.set()
 
 
+class _Pool(ThreadPoolExecutor):
+    """The loop's default executor, as asyncio makes it, knowing which of its work is submitted and not yet returned."""
+
+    def __init__(self) -> None:
+        super().__init__(thread_name_prefix="asyncio")
+        self.holding: set[object] = set()
+
+    def submit(self, fn, /, *args, **kwargs):
+        work = object()
+        self.holding.add(work)
+
+        def run():
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                self.holding.discard(work)
+
+        return super().submit(run)
+
+
 def _run(steps):
     served, application = _door()
 
@@ -308,29 +329,35 @@ class ListenStreamTests(TransactionTestCase):
         self.assertEqual(closing["result"]["_meta"][SUBSCRIPTION_ID], 3)
 
     def test_an_open_stream_holds_no_thread(self):
+        pool = _Pool()
+
         async def threads_with(application, count):
             async with contextlib.AsyncExitStack() as streams:
                 for ident in range(count):
                     reply = await streams.enter_async_context(listening(application, AGENT, _listen(ident)))
                     await reply.message()
-                return set(threading.enumerate())
+                return set(threading.enumerate()) - set(pool._threads), len(pool.holding)
 
         async def steps(application):
-            # A first stream warms the pool its brakes are asked on, which every stream shares.
+            # A first stream warms the threads every stream shares.
             await threads_with(application, 1)
             return await threads_with(application, 1), await threads_with(application, 4)
 
         served, application = _door()
 
         async def run():
+            asyncio.get_running_loop().set_default_executor(pool)
             async with served.sessions.run():
                 return await steps(application)
 
         # Served as production serves it: an event loop with no synchronous caller above it.
-        one, four = asyncio.run(run())
+        (one, _), (four, held) = asyncio.run(run())
 
         # Which threads, never how many: a thread the process ends elsewhere under load is no stream's.
         self.assertEqual(four - one, set(), "three more open streams hold no thread more")
+        # The pool starts a worker whenever none has yet marked itself idle, so
+        # what it holds is its work still running, never its workers.
+        self.assertEqual(held, 0, "four open streams hold no pooled thread")
 
     def test_a_listen_at_an_earlier_protocol_opens_no_stream(self):
         async def steps(application):

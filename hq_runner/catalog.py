@@ -11,7 +11,6 @@ import os
 import re
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from functools import cache
-from itertools import islice
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -44,7 +43,6 @@ MOST_PROBLEMS = 20
 PATH_LIMIT = 4096
 # The most logins a scan reports.
 MOST_REACHES = 1000
-_LITERAL_IMAGE = re.compile(r"[a-zA-Z0-9./:_-]+:[a-zA-Z0-9_.-]+@sha256:[0-9a-f]{64}")
 
 # The directories Ansible adds to its plugin search when one sits beside a
 # playbook or inside a role, by ansible-core 2.22's plugin loaders' subdir
@@ -551,59 +549,7 @@ def procedure(
     found.read_roles(roles, project_dir, role_spec)
     if found.plays is not None:
         found.read_pulled_in(project_dir, roles, files, known)
-    declaration = found.found["declaration"]
-    updates = declaration.get("compose_updates") if isinstance(declaration, Mapping) else None
-    if isinstance(updates, Mapping) and isinstance(source := updates.get("source"), str):
-        images = list(
-            islice(
-                _compose_images(project_dir, source, files, owning_unit=updates.get("uses_owning_unit") is True), 1001
-            )
-        )
-        if len(images) > 1000:
-            found.problem("The declared Compose source has more than 1000 pinned services.")
-        else:
-            found.found["compose_images"] = images
     return found.found
-
-
-def _compose_images(
-    project_dir: Path, source: str, files: frozenset[str], *, owning_unit: bool
-) -> Iterator[dict[str, str]]:
-    """Read literal pins from independent Compose files in the scanned checkout."""
-
-    if "/" in source or not procedures.safe_path(source):
-        return
-    configs: dict[str, list[str]] = {}
-    for path in sorted(files):
-        parts = path.split("/")
-        if len(parts) == 3 and parts[0] == source:
-            configs.setdefault(parts[1], []).append(parts[2])
-    for project, names in configs.items():
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", project):
-            continue
-        main = {"compose.yaml", "docker-compose.yml"}.intersection(names)
-        if len(main) != 1 or any(".override." in name or name == "Dockerfile" for name in names):
-            continue
-        filename = main.pop()
-        try:
-            document = _yaml(project_dir, f"{source}/{project}/{filename}", PLAYBOOK_BYTES)
-        except Refused, OSError, ValueError, yaml.YAMLError:
-            document = None
-        if not isinstance(document, Mapping) or "include" in document:
-            continue
-        if document.get("x-started-by") and not owning_unit:
-            continue
-        services = document.get("services")
-        if not isinstance(services, Mapping):
-            continue
-        for service, definition in services.items():
-            if not isinstance(service, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", service):
-                continue
-            if not isinstance(definition, Mapping) or {"extends", "build"} & definition.keys():
-                continue
-            image = definition.get("image")
-            if isinstance(image, str) and len(image) <= 320 and _LITERAL_IMAGE.fullmatch(image):
-                yield {"project": project, "file": filename, "service": service, "image": image}
 
 
 def scan(

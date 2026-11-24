@@ -95,7 +95,7 @@ class ContractTests(SimpleTestCase):
             datetime.combine(TODAY + timedelta(days=1), time(0), zone),
         )
         self.assertFalse(late.span)
-        self.assertEqual(late.time_label, "10p")
+        self.assertEqual(late.time_label, "10\xa0PM")
 
     def test_a_link_is_hqs_own_path_or_a_web_address(self):
         self.assertEqual(CalendarEvent("a", "x", TODAY, url="/calendar/").url, "/calendar/")
@@ -164,8 +164,9 @@ class MonthTests(TestCase):
         week = next(week for week in month.weeks if week[0].day == date(2026, 10, 11))
         monday, tuesday, wednesday = week[1], week[2], week[3]
         self.assertEqual(monday.lanes[0].placed.event.id, "trip")
-        self.assertTrue(monday.lanes[0].starts_here and monday.lanes[0].titled)
-        self.assertFalse(tuesday.lanes[0].titled)
+        # Titled where it starts, the bar runs its four days from there.
+        self.assertTrue(monday.lanes[0].starts_here and monday.lanes[0].ends_here)
+        self.assertEqual((monday.lanes[0].reach, tuesday.lanes[0].reach), (4, 0))
         self.assertEqual(wednesday.lanes[0].placed.event.id, "trip")
         self.assertEqual(wednesday.lanes[1].placed.event.id, "short")
         self.assertIsNone(tuesday.lanes[1])
@@ -173,8 +174,10 @@ class MonthTests(TestCase):
         later = CalendarEvent("long", "Long", date(2026, 10, 16), date(2026, 10, 20))
         with _with(_domain([_source("example.spans", [later])])):
             month = calendar_month(date(2026, 10, 1), today=TODAY)
-        sunday = next(cell for week in month.weeks for cell in week if cell.day == date(2026, 10, 18))
-        self.assertTrue(sunday.lanes[0].titled)
+        cells = {cell.day: cell for week in month.weeks for cell in week}
+        friday, sunday = cells[date(2026, 10, 16)].lanes[0], cells[date(2026, 10, 18)].lanes[0]
+        self.assertEqual((friday.reach, friday.ends_here), (2, False))
+        self.assertEqual((sunday.reach, sunday.starts_here, sunday.ends_here), (2, False, True))
 
     def test_a_busy_day_folds_and_marks_stay_dots(self):
         items = [CalendarEvent(f"i{n}", f"Item {n}", TODAY) for n in range(5)]

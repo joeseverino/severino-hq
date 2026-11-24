@@ -325,10 +325,13 @@ class TopologyView(PageMixin, TemplateView):
                     row["other"].label.casefold(),
                 ),
             )
+            link = node_link(node)
             items.append(
                 {
                     "node": node,
-                    "link": node_link(node),
+                    "link": link,
+                    # A subtitle that repeats the name says nothing under it.
+                    "subtitle": "" if node.subtitle.casefold() == str(link.label).casefold() else node.subtitle,
                     "neighbors": " ".join(sorted(neighbors[node.id])),
                     "degree": len(neighbors[node.id]),
                     "relations": rows,

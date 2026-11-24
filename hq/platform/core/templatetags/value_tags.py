@@ -289,14 +289,14 @@ def when(value, form=""):
 @register.filter
 def last_read(value):
     """``{{ moment|last_read }}``: when a reading was taken, said as every page
-    says it (``freshness.LAST_READ``), its age a ``when`` that shows the moment."""
+    says it (``freshness.LAST_READ``), its moment a ``when``."""
 
-    return format_html("{} {}", LAST_READ, when(value, "ago"))
+    return format_html("{} {}", LAST_READ, when(value))
 
 
 @register.filter
 def when_text(value, form=""):
-    """``{{ moment|when_text:"ago" }}``: the words ``when`` writes in a form,
+    """``{{ moment|when_text }}``: the words ``when`` writes in a form,
     as plain text, where a ``<time>`` cannot stand: an attribute, or a line
     in a table cell, which sorts on the first ``<time>`` it holds. Nothing for
     a missing moment or text that names none."""

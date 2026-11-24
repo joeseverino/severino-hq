@@ -1,10 +1,18 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.9.0/configuration-schema.json
 package: githubapi
 output: github.gen.go
 generate:
   models: true
+  client: true
   server-urls: true
 output-options:
+  response-type-suffix: Reply
+  # An optional field is left out when unset, nullable or not, so a value the
+  # other side reads as unknown is never sent as null or a zero value.
+  struct-tags:
+    tags:
+      - name: json
+        template: '{{.FieldName}}{{if or .OmitEmpty .IsOptional}},omitempty{{end}}{{if .OmitZero}},omitzero{{end}}'
   overlay:
     path: ../../api/vendor/github/overlay.yaml
   skip-prune: true
@@ -32,15 +40,20 @@ output-options:
     - checks/update
     - code-scanning/list-alerts-for-repo
     - dependabot/list-alerts-for-repo
+    - git/get-tree
     - issues/create-comment
     - issues/list-comments
+    - issues/list-for-repo
     - pulls/list
+    - pulls/list-files
+    - pulls/merge
     - rate-limit/get
     - repos/check-vulnerability-alerts
     - repos/get
     - repos/get-all-environments
     - repos/get-branch-rules
     - repos/get-commit
+    - repos/get-content
     - repos/get-latest-release
     - repos/list-collaborators
     - repos/list-deploy-keys

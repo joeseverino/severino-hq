@@ -49,7 +49,7 @@ the row is gone once every step is done.
       {% step icon=step.done|yesno:"check-circle,"|default:step.icon done=step.done %}{% if step.done %}<strong>{{ step.label }}</strong> {% muted %}Done.{% endmuted %}{% else %}<a href="{{ step.url }}">{{ step.label }}</a> {% muted %}{{ step.why }}{% endmuted %}{% endif %}{% endstep %}
     {% endfor %}
   {% endsteps %}
-{% aside %}<span class="count">{{ getting_started_left|measured:"left" }}{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>
+{% aside %}{{ getting_started_left|measured:"left" }}{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}
 {% endsection %}
 {% endif %}
 
@@ -86,7 +86,7 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   {% url 'projects:create' as add_project_url %}{% if project_rows %}{% url 'projects:list' as projects_url %}{% endif %}
   {% section "Projects" remedy_label="Add one" remedy_url=add_project_url more_label="All projects" more_url=projects_url %}
     {% if project_rows %}{% include "partials/_record_list.html" with rows=project_rows %}{% endif %}
-  {% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|measured:"active" }}{% if projects_needing_output %}{% dot %}{{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}
+  {% aside %}{% if active_project_count %}{{ active_project_count|measured:"active" }}{% if projects_needing_output %}{% dot %}{{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}{% endif %}
   {% empty %}No active projects.
   {% endsection %}
 

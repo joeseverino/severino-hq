@@ -19,7 +19,7 @@ from .json_schemas import as_written
 from .labels import human_label
 from .own_addresses import tailnet_sightings
 from .projection import complete, page_of, page_size, projection_scope
-from .record_errors import RecordNotFound
+from .record_errors import RecordNotFound, one_of
 from .references import Kind
 from .security import Principal
 from .standards import CheckResult, Measurement
@@ -417,10 +417,9 @@ def list_credentials() -> dict[str, Any]:
 
 
 def get_credential(provider: str) -> CredentialRecord:
-    found = next((item for item in credential_sight() if item.provider == provider), None)
-    if found is None:
-        raise RecordNotFound("No credential is seen for that service.")
-    return serialize_provider_sight(found)
+    return serialize_provider_sight(
+        one_of(credential_sight(), lambda item: item.provider == provider, "No credential is seen for that service.")
+    )
 
 
 # ----- Search -----------------------------------------------------------------

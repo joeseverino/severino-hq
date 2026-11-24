@@ -124,7 +124,7 @@ func refusal(err error) string {
 // rule for. sudo-rs resolves the aliases, groups and includes, and names no
 // rule's source, so a failure says how to find it.
 func onlyRendered(user, rules, program string) []string {
-	rendered := []string{program + " deploy *", program + " upgrade *"}
+	rendered := []string{program + " deploy *"}
 	commands, found := listedCommands(rules)
 	if !found {
 		return []string{"sudo's listing of " + user + "'s rules has no list of commands"}

@@ -35,6 +35,21 @@ class TableRowTests(SimpleTestCase):
         rows = [row for row in elements(html, "tr") if any(up.tag == "tbody" for up in row.ancestors)]
         self.assertEqual(["data-emphasized" in row.attrs for row in rows], [True, False])
 
+    def test_the_column_that_names_each_row_draws_its_name_whether_or_not_it_links(self):
+        """A row's name is the value of the column that names it, words or a
+        link to its record's page, though no cell declares it: a link elsewhere
+        in the row, and an identifier drawn as code, name nothing."""
+
+        rows = (
+            _row(Cell("example-run", "/example/run/"), Cell("example-host", "/example/host/"), key=1),
+            _row("example-job", "example-host", key=2),
+            _row(Cell("example-id", readout=True), "example-host", key=3),
+        )
+        html = _drawn(_things(("Work",), ("Host",), rows=rows, selectable=True))
+        names = [each for each in all_elements(html) if each.attrs.get("data-cell") == "name"]
+        self.assertEqual([each.words for each in names], ["example-run", "example-job"])
+        self.assertEqual(names[0].ancestors[-1].attrs.get("href"), "/example/run/")
+
     def test_the_gutter_column_holds_each_rows_toggle(self):
         """In a table whose rows can hold something back (here a ranked
         column), each row's cell in the column that names it stands in the

@@ -14,6 +14,7 @@ from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import web_principal
 from hq.platform.core import ahead
+from hq.platform.core.attribution import from_the_shell
 from hq.platform.core.bench import seed, unchanged_sweep
 
 
@@ -40,8 +41,9 @@ class SweepTests(TestCase):
     def setUpTestData(cls):
         cls.seeded = seed(0.05)
         # The first sweep of a seeded estate adopts what it finds; every one
-        # after it changes nothing but when it was read.
-        with tempfile.TemporaryDirectory() as kept, markers(Path(kept)):
+        # after it changes nothing but when it was read. Run from the shell's
+        # door, as a bench command runs it.
+        with tempfile.TemporaryDirectory() as kept, markers(Path(kept)), from_the_shell("manage.bench_pages"):
             unchanged_sweep()
 
     def setUp(self):

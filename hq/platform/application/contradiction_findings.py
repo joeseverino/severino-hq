@@ -32,7 +32,7 @@ from .finding_model import (
 from .finding_steps import Do, told
 from .references import Kind
 from .tone import Tone
-from .ui import agreed, counted, ended
+from .ui import agreed, counted
 lazy from . import exposure, zones
 lazy from .containers import containers
 lazy from .facts import inventory_records
@@ -114,15 +114,15 @@ def _answered_by_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
                 Finding(
                     rule="public-name-served-by-nothing",
                     **_about(estate, name, last.name),
-                    title=f"{name} points at {last.name}, which serves nothing for it",
+                    title=f"{name} leads nowhere",
                     severity=Tone.ATTENTION,
-                    explanation=(
-                        f"Public DNS sends {name} to {ended(last.name)} No proxy answers for "
-                        f"this name, and no container on {last.name} answers on a web port. "
-                        "Either the record is left over from something removed, or the proxy "
-                        "route that should serve it is missing."
+                    explanation=f"Nothing on {last.name} serves it.",
+                    evidence=(
+                        ("Name", name),
+                        ("Path", route.line),
+                        ("Proxy route", "none"),
+                        ("Container on a web port", "none"),
                     ),
-                    evidence=(("Name", name), ("Path", route.line), ("Machine", last.name)),
                     remedies=tuple(_update(key, intent="Change where it points") for key in keys),
                     steps=(
                         Do(
@@ -176,13 +176,13 @@ def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
                 proxies = _declared(name, (kind for kind, provider in PROVIDERS.items() if provider.facet == "proxy"))
                 if container:
                     title = f"{name} leads to {container} on {machine}, which is {_said(state)}"
-                    said = f"fail until {container} runs again or the proxy route points at what replaced it."
+                    said = f"Requests fail until {container} runs again."
                     shown = ("Container", _said(state))
                     start = on_machine(machine, f"docker start {shlex.quote(container)}")
                     steps = (told(f"Start {container} on {machine}", start),)
                 else:
-                    title = f"{name} forwards to {state} on {machine}, where no container publishes that port"
-                    said = "fail unless something outside Docker answers there, or the proxy route points elsewhere."
+                    title = f"{name} forwards to an unpublished port on {machine}"
+                    said = "Requests fail unless something outside Docker answers there."
                     shown, steps = ("Forwards to", state), ()
                 found.append(
                     Finding(
@@ -190,7 +190,7 @@ def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
                         **_about(estate, name, machine),
                         title=title,
                         severity=Tone.SERIOUS if container else Tone.ATTENTION,
-                        explanation=f"Requests for {name} {said}",
+                        explanation=said,
                         evidence=(("Name", name), ("Path", route.line), shown),
                         remedies=tuple(_update(key, intent="Change where it points") for key in proxies),
                         steps=steps,
@@ -221,12 +221,9 @@ def _gates_guarding_nothing(_estate: FindingEstate) -> tuple[Finding, ...]:
                     Finding(
                         rule="gate-guards-nothing",
                         subject=Kind.SERVICE.of(name),
-                        title=f"{spec.label} {title} protects {name}, which has no DNS record",
+                        title=f"{name} has an access rule but no DNS record",
                         severity=Tone.NEUTRAL,
-                        explanation=(
-                            f"Nothing answers at {ended(name)} If the name is published again "
-                            "later, this rule will apply to it without anyone reviewing it."
-                        ),
+                        explanation="Published again, it would get this rule unreviewed.",
                         evidence=(("Access rule", f"{spec.label} {title}"), ("Name", name)),
                         steps=(Do(f"Remove {name} from {title}", notes=((console,) if console else ())),),
                     )
@@ -278,9 +275,7 @@ def _split_horizon_finding(
             f"{name} goes to {', '.join(sorted(public))} from the internet and {', '.join(sorted(internal))} from home"
         ),
         severity=Tone.ATTENTION,
-        explanation=(
-            "That is right only if you meant it. Otherwise the public record or the internal record is out of date."
-        ),
+        explanation="Unless meant, one record is out of date.",
         evidence=tuple(("Path", route.line) for route in routes),
         remedies=(
             *(_update(key, intent="Change the internal record") for key in _declared(name, _dns_kinds(public=False))),
@@ -319,7 +314,7 @@ def _unfronted_ports(_estate: FindingEstate) -> tuple[Finding, ...]:
                 f"{agreed(len(open_ports), 'port')} "
                 f"{', '.join(str(port) for port in open_ports)}",
                 severity=Tone.SERIOUS,
-                explanation="It answered a test from outside your network, with no proxy in front.",
+                explanation="No proxy is in front of it.",
                 evidence=(
                     ("Container", item.running.name),
                     ("Published", item.running.published),
@@ -361,10 +356,7 @@ def _served_not_held(_estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=Kind.RESOURCE.of(resource.key),
                 title=f"{names} serves a certificate other than {resource.key}",
                 severity=Tone.SERIOUS,
-                explanation=(
-                    f"HQ renews {resource.key}, but {names} is serving a different "
-                    "one. Visitors will not get renewals until it serves HQ's."
-                ),
+                explanation="Visitors will not get HQ's renewals.",
                 evidence=tuple(
                     (
                         str(item.get("consumer") or item.get("domain") or ""),
@@ -384,12 +376,16 @@ def _served_not_held(_estate: FindingEstate) -> tuple[Finding, ...]:
     return distinct(found)
 
 
-def _fault_title(hostname: str, faults: tuple[str, ...]) -> str:
-    """What is wrong with ``hostname``, by its first fault's first sentence; the explanation says all of each."""
+def _fault_said(hostname: str, faults: tuple[str, ...]) -> tuple[str, str]:
+    """What is wrong with ``hostname``, by its first fault's first sentence,
+    and what that fault says after it; the evidence says each of the others."""
 
-    first = faults[0].split(". ", 1)[0].rstrip(".")
+    first, _stop, rest = faults[0].partition(". ")
     more = len(faults) - 1
-    return f"{hostname}: {first}" + (f", and {counted(more, 'more problem', 'more problems')}" if more else "")
+    title = f"{hostname}: {first.rstrip('.')}" + (
+        f", and {counted(more, 'more problem', 'more problems')}" if more else ""
+    )
+    return title, rest
 
 
 def _wiring_incomplete(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -409,12 +405,14 @@ def wiring_incomplete(hostname: str, faults: tuple[str, ...], *, url: str = "") 
     """What is not set up right for ``hostname``, as its finding says it
     wherever it is drawn: the queue, and the service's own page."""
 
+    title, explanation = _fault_said(hostname, faults)
     return Finding(
         rule="service-wiring-incomplete",
         subject=_subject(hostname),
         severity=Tone.ATTENTION,
-        title=_fault_title(hostname, faults),
-        explanation=" ".join(faults),
+        title=title,
+        explanation=explanation,
+        evidence=tuple(("Also", fault) for fault in faults[1:]),
         primary=opens("Open service", url) if url else None,
     )
 
@@ -422,40 +420,40 @@ def wiring_incomplete(hostname: str, faults: tuple[str, ...], *, url: str = "") 
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "served-certificate-not-held",
-        "A site is serving a different certificate",
+        "Another certificate served",
         Tone.SERIOUS,
         _served_not_held,
         gathered=True,
         operator_action="Install HQ's certificate again, or point the site at it.",
-        no_help_reason="HQ cannot tell why the site is serving another certificate.",
-        bars={Tone.SERIOUS: "a site serves a certificate other than the one HQ holds for it"},
+        no_help_reason="HQ cannot tell why the site serves another certificate.",
+        bars={Tone.SERIOUS: "a site serves a certificate HQ does not hold for it"},
     ),
     FindingRule(
         "public-name-served-by-nothing",
-        "A public name that leads nowhere",
+        "Public name leads nowhere",
         Tone.ATTENTION,
         _answered_by_nothing,
         gathered=True,
-        operator_action="Remove the public record, or add the proxy route that should serve the name.",
+        operator_action="Remove the public record, or add the proxy route that serves the name.",
         no_help_reason="HQ cannot tell whether the name should still exist.",
         bars={Tone.ATTENTION: "a public name has no proxy route behind it"},
     ),
     FindingRule(
         "route-to-stopped-container",
-        "A route to nothing running",
+        "Route to nothing running",
         Tone.SERIOUS,
         _routed_to_stopped,
         gathered=True,
         operator_action="Start what it leads to, or point the proxy route at what replaced it.",
         no_help_reason="HQ cannot start containers.",
         bars={
-            Tone.SERIOUS: "a proxy route leads to a container that is not running",
+            Tone.SERIOUS: "a proxy route leads to a stopped container",
             Tone.ATTENTION: "a proxy route forwards to a port no container publishes",
         },
     ),
     FindingRule(
         "gate-guards-nothing",
-        "Access rule for a name that no longer exists",
+        "Access rule for a removed name",
         Tone.NEUTRAL,
         _gates_guarding_nothing,
         gathered=True,
@@ -465,7 +463,7 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "split-horizon-disagrees",
-        "One name, two different machines",
+        "One name, two machines",
         Tone.ATTENTION,
         _split_horizon,
         gathered=True,
@@ -475,17 +473,17 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "published-port-unfronted",
-        "A container is open to the internet",
+        "Container open to the internet",
         Tone.SERIOUS,
         _unfronted_ports,
         gathered=True,
         operator_action="Bind the published ports to 127.0.0.1, or put a proxy route in front of them.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
-        bars={Tone.SERIOUS: "a container publishes a port to the internet with no proxy in front"},
+        bars={Tone.SERIOUS: "a container's port is open to the internet with no proxy in front"},
     ),
     FindingRule(
         "service-wiring-incomplete",
-        "A service not fully set up",
+        "Service not fully set up",
         Tone.ATTENTION,
         _wiring_incomplete,
         operator_action="Change the service's records on its page so they agree.",

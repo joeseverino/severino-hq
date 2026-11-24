@@ -21,6 +21,8 @@ CELLS = (
   // ellipsis, the cell itself cut by its kind) shows only as far as that box,
   // which is held on its own. A popover or a modal dialog shown is drawn in
   // the top layer, over the page, so the cell it sits in does not hold it.
+  // What reads across the cells after its own (a month's bar, `data-reach`
+  // of them) stays in those.
   const found = [];
   const cut = (el, cell) => {
     for (let b = el.parentElement; b && b !== cell.parentElement; b = b.parentElement) {
@@ -29,10 +31,13 @@ CELLS = (
     return false;
   };
   for (const cell of document.querySelectorAll('main td, main th')) {
-    const edge = box(cell).right;
+    const row = [...cell.parentElement.children];
     for (const el of cell.querySelectorAll('*')) {
       const r = box(el);
       if (r.width < 2 || r.height < 2 || !el.checkVisibility() || el.closest(':popover-open, :modal')) continue;
+      const across = el.closest('[data-reach]');
+      const reach = across && cell.contains(across) ? Number(across.dataset.reach) : 1;
+      const edge = box(row[Math.min(row.indexOf(cell) + reach, row.length) - 1]).right;
       if (r.right > edge + 1 && !cut(el, cell)) {
         found.push(`${describe(el)} runs ${Math.round(r.right - edge)}px past its cell: ${el.textContent.trim().slice(0, 40)}`);
       }
@@ -139,10 +144,9 @@ TABLE_PROMISES = (
     for (const cell of table.querySelectorAll(':scope > tbody > tr > [colspan]')) {
       if (cell.checkVisibility() && cell.getBoundingClientRect().width < width - 2) found.add(`${name}: a cell across its row spans less`);
     }
-    // The headings stick as cells of their row.
+    // The heading row sticks, a box of the table's grid.
     const head = table.querySelector(':scope > thead > tr');
-    const sticks = (el) => el && getComputedStyle(el).position === 'sticky';
-    if (head && !sticks(head.parentElement) && ![...head.children].every(sticks)) found.add(`${name}: its heading row does not stick`);
+    if (head && getComputedStyle(head).position !== 'sticky') found.add(`${name}: its heading row does not stick`);
   }
   return {read, found: [...found]};
 }"""
@@ -324,10 +328,12 @@ CUT_BESIDE_ROOM = (
       if (cell.colSpan === 1 && cell.checkVisibility()) asks.set(cell.cellIndex, cell.getBoundingClientRect().width);
     }
     ruler.remove();
+    // A cell that stands beneath its row (its controls on a line of their own) is beside no other column, so its room is none of theirs.
+    const beneath = (cell) => getComputedStyle(cell).gridColumnEnd === '-1';
     const slack = new Map();
     for (const cell of cells) {
       const place = cell.cellIndex;
-      const held = cuts.some((cut) => cut.cell.cellIndex === place) ? 0 : cell.getBoundingClientRect().width - (asks.get(place) ?? Infinity);
+      const held = cuts.some((cut) => cut.cell.cellIndex === place) || beneath(cell) ? 0 : cell.getBoundingClientRect().width - (asks.get(place) ?? Infinity);
       slack.set(place, Math.max(0, Math.min(slack.get(place) ?? Infinity, held)));
     }
     // A fixed layout's columns are set by its first row and never share.
@@ -373,9 +379,7 @@ CUT_BESIDE_ROOM = (
       const own = Math.max(0, inner(cell).right - end);
       const asksNothing = boxes.some((box) => /flex/.test(getComputedStyle(box.parentElement).display)
         && getComputedStyle(box).flexGrow !== '0' && parseFloat(getComputedStyle(box).flexBasis) === 0);
-      // A cell that stands beneath its row spans it, beside no other column.
-      const spans = getComputedStyle(cell).gridColumnEnd === '-1';
-      const others = asksNothing || spans ? 0 : [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
+      const others = asksNothing || beneath(cell) ? 0 : [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
       const room = own + others;
       if (room < 1) continue;
       // Each box that cuts it given the room, to see whether it then shows
@@ -408,7 +412,8 @@ CUT_BESIDE_ROOM = (
 # line are read from the table laid out again at its max-content, unseen,
 # beside it, and a column needs the most its cells do; a cell drawn across
 # the row or stacked beneath it asks no column for anything. A short value
-# holds its line up to its share, then wraps as the table contract allows.
+# (`cell-short`) and a heading need their line whole, past any share: a
+# column of longer values or words gives way first.
 # A band (`data-band`) is held to the same: its cells stacked one to a row
 # while as many of them as its count puts on a row, each as wide as its
 # words, fit side by side, a cell drawn across the band (a band read as a
@@ -438,7 +443,7 @@ ROOM_UNSHARED = (
     return width;
   };
   for (const table of document.querySelectorAll('main table.data-table')) {
-    if (!table.checkVisibility() || getComputedStyle(table).display !== 'table') continue;
+    if (!table.checkVisibility()) continue;
     const cells = placed(table);
     const region = table.closest('.table-scroll');
     const heads = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
@@ -447,9 +452,7 @@ ROOM_UNSHARED = (
     const ruler = table.cloneNode(true);
     ruler.setAttribute('aria-hidden', 'true');
     ruler.style.cssText += '; position: absolute; visibility: hidden; inset: 0 auto auto 0; inline-size: max-content; max-inline-size: none';
-    // A column held to its widest line by a width on its heading asks no more than its narrowest there.
-    ruler.querySelectorAll(':scope > thead th').forEach((head) => { head.style.inlineSize = 'auto'; });
-    // A short value whole is the value past its share.
+    // A short value whole is the value past any cap on its box.
     ruler.querySelectorAll('.cell-short, :scope > thead th > *').forEach((box) => { box.style.maxInlineSize = 'none'; });
     table.after(ruler);
     // A cell is as tall as its row, so its words' own box says how many lines they take.
@@ -467,8 +470,8 @@ ROOM_UNSHARED = (
       const at = whole.get(cell);
       if (!at) continue;
       const r = said(cell);
-      const line = lineOf(cell, share);
-      const asks = Math.min(at.width - padded(cell), line);
+      const held = cell.querySelector(':scope > .cell-short') || cell.closest('thead');
+      const asks = held ? at.width - padded(cell) : Math.min(at.width - padded(cell), lineOf(cell, share));
       // A value that keeps its line (a state, a row's controls) needs it whole.
       const keeps = getComputedStyle(cell).whiteSpace === 'nowrap';
       const column = columns.get(cell.cellIndex) ?? {width: r.width, needs: 0, name: heads[cell.cellIndex]?.textContent.trim()};
@@ -536,7 +539,7 @@ EMPTY_PANELS = (
   return [...document.querySelectorAll('main table.data-table *')]
     .filter((el) => {
       const r = el.getBoundingClientRect();
-      return r.width >= 40 && r.height >= 16 && el.checkVisibility() && filled(getComputedStyle(el))
+      return r.width >= 40 && r.height >= 16 && el.checkVisibility({visibilityProperty: true}) && filled(getComputedStyle(el))
         && !el.matches(held) && !el.matches(table) && !el.querySelector(held) && !el.innerText.trim();
     })
     .map((el) => `${describe(el)} draws a ${Math.round(el.getBoundingClientRect().width)}px panel with nothing in it`);
@@ -548,7 +551,7 @@ EMPTY_PANELS = (
 # table, as one reads where a row ends: a rule along the row's bottom edge,
 # drawn by the row or by whichever of its cells stand on that edge. A row's
 # own open line joins it with no rule, and a group's heading row is set apart
-# by its fill.
+# by its fill. A closed fold's rows are hidden, so no reader reads them.
 ROWS_UNRULED = (
     "() => {"
     + DESCRIBE
@@ -557,7 +560,7 @@ ROWS_UNRULED = (
   const ruled = (el) => parseFloat(getComputedStyle(el).borderBottomWidth) >= 1;
   for (const table of document.querySelectorAll('main table.data-table')) {
     if (!table.checkVisibility()) continue;
-    const rows = [...table.querySelectorAll(':scope > tbody > tr')].filter((row) => row.checkVisibility());
+    const rows = [...table.querySelectorAll(':scope > tbody > tr')].filter((row) => row.checkVisibility({visibilityProperty: true}));
     rows.forEach((row, at) => {
       const next = rows[at + 1];
       if (!next || next.matches('.row-group') || next.matches('[data-row-detail]') && next.previousElementSibling === row) return;
@@ -601,8 +604,11 @@ STATE_LEFT = (
     const pills = [...cell.querySelectorAll('.pill')];
     const stated = pills.length && cell.dataset.kind !== 'status' && pills.map((pill) => pill.textContent).join('').replace(/\\s+/g, '') === cell.textContent.replace(/\\s+/g, '');
     const spared = [...cell.parentElement.children].some((other) => other.matches('[data-drop]') && other.checkVisibility());
-    const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated && spared ? pills[0] : null);
-    if (held) found.push(`${describe(cell)} "${(cell.dataset.label || '').slice(0, 30)}" leaves with its column, holding ${describe(held)}`);
+    if (stated && spared) found.push(`${describe(cell)} leaves with its column, holding ${describe(pills[0])}`);
+  }
+  // A field a row fills in stands wherever its row does, at every width.
+  for (const field of document.querySelectorAll('main table.data-table > tbody > tr:not(.row-detail) > td :is(select, textarea, input:not([type="hidden"]))')) {
+    if (field.closest('tr').checkVisibility() && !field.checkVisibility()) found.push(`${describe(field.closest('td'))} "${(field.closest('td').dataset.label || '').slice(0, 30)}" hides ${describe(field)}, which its row fills in`);
   }
   for (const head of document.querySelectorAll('main table.data-table > thead > tr:last-child')) {
     if (!head.closest('table').checkVisibility()) continue;
@@ -801,8 +807,8 @@ WHOLE_PARTS_MOVED_BY_OPENING = (
 )
 
 # A row folded under its family (`data-folded`) is drawn only once its family
-# is opened (`data-open`), at every width: a rule that sets a row's display (a
-# row stacked in a narrow box) must leave a folded row folded. With no script
+# is opened (`data-open`), at every width: a rule that sets a row's look (a row
+# stacked in a narrow box) must leave a folded row hidden. With no script
 # every row shows, so it holds once script runs.
 FOLDED_ROWS_SHOWN = (
     "() => {"
@@ -810,7 +816,7 @@ FOLDED_ROWS_SHOWN = (
     + """
   if (!matchMedia('(scripting: enabled)').matches) return [];
   return [...document.querySelectorAll('.data-table tr[data-folded]:not([data-open])')]
-    .filter((row) => row.checkVisibility())
+    .filter((row) => row.checkVisibility({visibilityProperty: true}))
     .map((row) => `${describe(row)} is drawn while its family is folded: ${row.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
 }"""
 )

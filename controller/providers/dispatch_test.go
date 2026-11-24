@@ -184,7 +184,7 @@ func TestInventoryReadsProviderGroupsConcurrentlyWithoutRacing(t *testing.T) {
 				inFlight.Done()
 				inFlight.Wait()
 			}
-			raw, err := controller.cached(ctx, "shared", func() (json.RawMessage, error) {
+			raw, err := cached(ctx, controller.Registry, "shared", func() (json.RawMessage, error) {
 				loads.Add(1)
 				return json.RawMessage(`"value"`), nil
 			})

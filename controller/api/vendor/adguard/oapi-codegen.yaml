@@ -1,9 +1,14 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.0/configuration-schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.9.0/configuration-schema.json
 package: adguardapi
 output: adguard.gen.go
 generate:
   models: true
+  client: true
+  server-urls: true
 output-options:
+  # The spec's own schemas are named Client and GetQueryLogConfigResponse.
+  client-type-name: API
+  response-type-suffix: Reply
   overlay:
     path: ../../api/vendor/adguard/overlay.yaml
   include-operation-ids:

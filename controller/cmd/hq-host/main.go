@@ -13,7 +13,6 @@
 //	hq-host verify           report where the host differs from its release
 //	hq-host bootstrap        write the host's own configuration from host.json
 //	hq-host backup           back up HQ's volumes: database, uploads and exports
-//	hq-host upgrade ARGS     move one compose service to a pinned image (package upgrade)
 //	hq-host unit --serve     stop, start or restart the unit a container names (package unit)
 //	hq-host check            the deploy host's half of a preflight, as any account
 //	hq-host edge-receiver    the tree's edge receiver, for an edge, as any account
@@ -41,12 +40,11 @@ import (
 
 	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/host/unit"
-	"github.com/joeseverino/severino-hq/controller/host/upgrade"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | unit --serve | check --release DIR --main DIR | edge-receiver | dry-run"
+const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | unit --serve | check --release DIR --main DIR | edge-receiver | dry-run"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
 var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance}
@@ -70,11 +68,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	// An upgrade or a unit answers in JSON whatever happens, a refusal to run as
-	// anyone but root included.
-	if args[0] == "upgrade" {
-		return upgrade.Main(ctx, args[1:], getenv, euid, stdout, stderr)
-	}
+	// A unit answers in JSON whatever happens, a refusal to run as anyone but
+	// root included.
 	if args[0] == "unit" {
 		return unit.Main(ctx, args[1:], euid, stdin, stdout)
 	}

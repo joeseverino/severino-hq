@@ -30,7 +30,6 @@ from .tone import Tone, Toned
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, capability_specs
 lazy from .cadence import automation_standing
-lazy from .compose_batches import DEPLOY as DEPLOY_IMAGES
 lazy from .entity_links import entity_link
 lazy from .history import Acts, asked_by, asking, who_did_each
 lazy from .outbound_work import job_names
@@ -67,8 +66,10 @@ STANDS = {
 # ``Drifted`` condition) says, so it never reads as done.
 PROBLEM_FOUND = "Problem found"
 PROBLEM_TONE = Tone.ATTENTION
-# What a claimed run whose lease ran out says until the next claim ends it.
-LAPSED = "The run stopped reporting, so HQ can't tell whether it finished."
+# What a run says whose worker stopped reporting before it ended, so what it
+# changed is unknown: while its lease has run out, and once HQ ends it
+# (``controller.OUTCOME_UNKNOWN``).
+STOPPED_REPORTING = "Stopped reporting"
 # What a run or scan that waits says while no worker will take it, in the
 # tone of something to look at: it is neither under way nor waiting its turn.
 NOT_STARTED = "Not started"
@@ -240,7 +241,6 @@ def _run_title() -> Collate:
     )
     unadopted = Concat(Value(run_title("", {})), operation, output_field=CharField())
     run = Case(
-        When(input__steps__isnull=False, then=Value(DEPLOY_IMAGES)),
         *titled,
         default=unadopted,
         output_field=CharField(),
@@ -545,7 +545,7 @@ def _run_row(
         # it will not start.
         note=untaken
         if stuck
-        else LAPSED
+        else STOPPED_REPORTING
         if lapsed
         else ""
         if operation.state in UNENDED

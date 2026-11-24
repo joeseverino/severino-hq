@@ -162,8 +162,7 @@ def _arranged_rows() -> DataTable:
         ("shop.example.com", RowMark("/example/pin/", False, "shop.example.com", "favorites"), None),
     ]
     rows = tuple(
-        tables.Row((Cell(name, name=True), Cell("Example network")), mark=mark, order=order)
-        for name, mark, order in arranged
+        tables.Row((Cell(name), Cell("Example network")), mark=mark, order=order) for name, mark, order in arranged
     )
     return DataTable("Example services", (TableColumn("Service", kind="identifier"), TableColumn("Open to")), rows)
 
@@ -268,6 +267,15 @@ def _signed_in_request():
     request.user = get_user_model()(username="example-owner")
     return request
 
+
+BUTTON_ROW_STATES = {
+    # A press, what it does, and a fold beside them, open onto the row's whole width.
+    "with-a-fold-open": Example(
+        '{% section "Example decision" %}{% button_row %}{% button "Approve" look="primary" %}{% muted %}Merges'
+        ' example #7.{% endmuted %}{% section "Example change" fold=True open=True %}<pre tabindex="0"><code>'
+        "+ image: example/app:1.2.1</code></pre>{% endsection %}{% endbutton_row %}{% endsection %}"
+    ),
+}
 
 MUTED_STATES = {
     # Muted words as a line beside a value and as a paragraph under it.
@@ -494,7 +502,7 @@ RUN_EVIDENCE_IN_ROWS = Example(
             "Example runs",
             (TableColumn("Playbook"), TableColumn("State", kind="status"), TableColumn("Result")),
             tuple(
-                tables.Row((Cell(title, name=True), Cell(word, tone=tone), Cell(note)), evidence=evidence)
+                tables.Row((Cell(title), Cell(word, tone=tone), Cell(note)), evidence=evidence)
                 for title, word, tone, note, evidence in _example_runs()
             ),
         )
@@ -553,7 +561,7 @@ CHANGE_TABLE_STATES = {
     # none, one that moves, one that is new (said by its summary, its fields
     # folded), one that goes, one that stays and so is only named under the
     # table, and a document that would not parse, said as a line diff. Each
-    # kind of change has its own status.
+    # kind of change has its own status. The whole change is one link away.
     "many": Example(
         "{% change_table preview %}",
         lambda: {
@@ -586,6 +594,8 @@ CHANGE_TABLE_STATES = {
                         label="",
                     ).lines
                 ),
+                more_label="Example changes",
+                more_url="https://example.com/changes",
             )
         },
     ),
@@ -824,7 +834,7 @@ def _every_kind() -> DataTable:
             (
                 Cell(name, f"/example/{name}/", readout=True, name=True, fold=bool(options.get("folds"))),
                 Cell("example-operator, on the web", cut=True),
-                Cell(moment=DRAWN_AT - timedelta(hours=2), form="clock", muted=True),
+                Cell(moment=DRAWN_AT - timedelta(hours=2), muted=True),
                 Cell(amount=Decimal(12)),
                 Cell("Online", tone="good"),
                 Cell("an example note that wraps wherever it must", muted=True, role="data"),
@@ -852,7 +862,7 @@ def _every_kind() -> DataTable:
             *head.cells[5:],
         ),
     )
-    rest = tables.Row((Cell("1 more change", "/example/rest/", name=True),), folded="example-fold", across=True)
+    rest = tables.Row((Cell("1 more change", "/example/rest/"),), folded="example-fold", across=True)
     blank = row("example-host-03")
     run = tuple(Cell(status=tables.StatusMark(name, chip=True)) for name in ("Debian", "Caddy", "Tailscale", "SQLite"))
     blank = replace(blank, cells=(blank.cells[0], Cell(fit=True, parts=run), *blank.cells[2:-1], Cell(blank=True)))
@@ -862,7 +872,6 @@ def _every_kind() -> DataTable:
         (
             Cell(
                 "example-host-04",
-                name=True,
                 title="An example host",
                 parts=(Cell(status=tables.StatusMark("Edge", chip=True)),),
                 below=(
@@ -938,7 +947,7 @@ def _queue_kind() -> DataTable:
             piece(OPERATOR_STEPS, steps=item["steps"]),
             piece(ICON_LINKS, **LINKS.given()),
         )
-        title = Cell(item["label"], "/example/", name=True, parts=(mark, gist), below=(tables.Below("", pieces),))
+        title = Cell(item["label"], "/example/", parts=(mark, gist), below=(tables.Below("", pieces),))
         return tables.Row((title,))
 
     return DataTable("Example queue", (TableColumn("Item"),), tuple(row(decision(each)) for each in opened_problems()))

@@ -765,30 +765,56 @@ something newer published, and changes nothing. A plan holds:
 - whether the move is recommended: it brings nothing of its own and, where
   the running version is vulnerable, fixes something. A finding's title, its
   action and its steps all read that one answer;
-- the writable mounts that would be snapshotted;
+- the writable mounts that hold its data;
 - what would verify it (its health check, a request to each name it serves);
-- the steps;
 - every reason it cannot go ahead yet, as an id and a reason (`not-declared`,
-  `runtime-unread`, `no-target-digest`, `no-apply-path`, `target-affected`,
-  `own-pipeline` for HQ's own image).
+  `runtime-unread`, `no-target-digest`, `target-affected`, `own-pipeline` for
+  HQ's own image).
 
 A separate list says what keeps it from applying without a person: what is not
 known about the target (`target-unread`, `no-provenance`, `no-package-list`,
-`not-scanned`). Anything but a vetted patch waits. The program an upgrade runs
-is in [Deployment](Deployment.md#container-upgrades).
+`not-scanned`). Anything but a vetted patch waits.
+
+`hq.platform.application.app_updates` reads each open Renovate pull request
+that changes a file under `compose/<app>/`. The app is that directory, never
+the branch or the title. Each `image:` line the diff takes out and puts in is a
+pin, under the service whose key stands above it. A pin moves a container when
+one of the container's compose files ends in the app's directory and that file's
+name, and the container runs the pin's image, under the same service where both
+name one. What a pin fixes and brings comes from the judge plans use
+(`upgrades.weigh`), run against the new pin's own OSV reading. A pin whose
+digest is not scanned yet says so and is never shown clean, and the registry
+reading lists each pin's digest for scanning. A diff GitHub leaves out is still
+an update, marked unreadable, with no pins. The container page, the image
+card, the repository's update rows and the `app_updates` resource all read
+this one answer.
 
 ## GitHub
 
 The controller reads `github.repository` through HQ's GitHub App: one
 installation token per repository, read-only permissions only, minted for each
-read. A record is a repository's head and its checks, open pull requests,
+read. A record is a repository's head and its checks, open pull requests
+(for each Renovate opened, its head's checks and the files it changes),
 workflows waiting on an approval, and deployments with the steps each ran
-before deploying whose names begin "Verify". It also holds branch rules,
+before deploying whose names begin "Verify". A repository a project opts in
+to updates also holds each app's Compose files under `compose/<app>/` on its
+default branch, its open Dependency Dashboard, and for each update every
+service whose image differs between the pull request's base and head, read
+by compose-go, the loader Docker Compose uses, from those files alone. An
+image that needs a variable only the host sets leaves its app unread, never
+blank. It also holds branch rules,
 environments, runners,
 alert counts by severity, admission artifacts, who has access (collaborators,
 deploy keys, the default workflow token, Actions settings), and the names of
 its Actions variables. Each part is refused on its own where the repository's
 plan offers none, and says so.
+
+A `github.pull_request` record is one pull request at the head commit a person
+approved. Its `merge` reads that head's checks, then squash-merges it naming
+the head, under a token for that one repository with Contents and Pull
+requests write. GitHub refuses once the head moves. The record's status is the
+merge commit (`merge_sha`), or a refused merge's reason (`refused`):
+`head_moved`, `not_mergeable`, `checks_failing` or `not_installed`.
 
 `hq.platform.application.github_estate` joins a project to its repository by
 URL and queues what waits on a person: a deploy held for approval, a failing

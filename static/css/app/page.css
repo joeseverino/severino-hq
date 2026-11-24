@@ -38,28 +38,19 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* A link's muted words take the link's color when it is pressed, as a muted link would. */
 a:is(:hover, :focus-visible) > .muted { color: inherit; }
 
-/* One head at every width, on a grid: the trail, then the name, in the
-   first column, the controls beside both in the second, as tall as the two
-   lines together, so they set neither's height; everything after (what the
-   page says beside its title, the lede, the facts) spans the head's whole
-   width, never the room the controls leave. With no trail the controls
-   stand beside the name alone. The copy steps aside (`display: contents`)
-   so its parts are the grid's items. */
-/* A container, so its controls fold by the head's width (surfaces.css). */
-.page-head { container: page-head / inline-size; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
-.page-head:has(> .page-actions) { grid-template-columns: minmax(0, 1fr) auto; }
+/* One head at every width, as Primer's PageHeader lays one out: the trail on
+   a line of its own, then the name with the controls at its line's end, and
+   every line after it (what the page says under its title, the lede, the
+   facts) the head's whole width. The name asks for its whole width, so where
+   it and the controls don't fit side by side the controls wrap to a line of
+   their own from the head's start, never squeezing the name. The copy steps
+   aside (`display: contents`) so its parts are the head's items. A container,
+   so its controls fold by the head's width (surfaces.css). */
+.page-head { container: page-head / inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
 .page-head-copy { display: contents; }
-.page-head > *, .page-head-copy > * { grid-column: 1 / -1; min-width: 0; }
-.page-head-copy > :is(.page-trail-row, .page-name) { grid-column: 1; }
-.page-head > .page-actions { grid-column: 2; grid-row: 1 / span 2; }
-.page-head:not(:has(> .page-head-copy > .page-trail-row)) > .page-actions { grid-row: 1; }
-/* A phone's head leaves the trail too little room beside the controls for a
-   note's sentence, so there a trail holding a note takes the head's width and
-   the controls stand beside the name alone. */
-@container page-head (width < 30rem) {
-  .page-head-copy > .page-trail-row:has(> .visit-slot) { grid-column: 1 / -1; }
-  .page-head:has(> .page-head-copy > .page-trail-row > .visit-slot) > .page-actions { grid-row: 2; }
-}
+.page-head > *, .page-head-copy > * { flex: 1 1 100%; min-width: 0; }
+.page-head-copy > .page-name { flex: 1 1 auto; }
+.page-head-copy > :not(.page-trail-row, .page-name) { order: 1; }
 /* The head's first line: the trail, then at its end the note of a page about
    one thing (partials/_visit_refresh.html) in the room it keeps (cuts.css).
    A trail longer than the line wraps between its steps inside it, leaving the
@@ -84,7 +75,6 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    copy is a column of its own: its lines stacked a small gap apart, as wide
    as its words, and the aside takes the rest of the head's line beside all of
    them, wrapping under the column only when it cannot fit. */
-.page-head:has(> .is-column) { display: flex; flex-wrap: wrap; }
 .page-head-copy.is-column { display: grid; align-content: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0; }
 .page-head-copy.is-column > * { margin: 0; }
 .page-trail { margin: 0; color: var(--muted); font-size: var(--text-xs); }
@@ -101,7 +91,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    controls beside it different heights. Its controls wrap rather than spill
    past its start onto the title: a line one of them asks for (an ask's note)
    takes a row of its own under them. */
-.page-head .page-actions { position: relative; margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-4); flex: 0 1 auto; justify-content: flex-end; min-width: 0; }
+.page-head .page-actions { position: relative; display: flex; flex-wrap: wrap; gap: var(--space-4); flex: 0 1 auto; justify-content: flex-end; min-width: 0; }
 .page-head .page-actions > * { white-space: nowrap; }
 /* A run of short things on one line (links, values, figures): one separator
    for all of them, drawn here, so no list writes its own commas or gaps. A
@@ -473,6 +463,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   max-height: calc(100dvh - var(--site-header-height) - 12px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  anchor-name: --primary-nav;
 }
 .primary-nav:popover-open > a,
 .primary-nav:popover-open .nav-group-button {
@@ -481,24 +472,24 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   font-size: var(--text-md);
 }
 .primary-nav:popover-open .nav-group-button { display: flex; inline-size: 100%; }
-/* A section's own links fly out beside the list, level with its row: a
-   popover is drawn over the page, never in the list's flow. The list is
-   anchored to the right edge, so the room is to its left; a screen with
-   none there takes them below the row. They hang from the row down or up
-   from it, on the side with more height, and a section taller than that
-   side is held to it and scrolls, so every link of a long section low on a
-   short screen can be reached: the pattern of the spec's own example for
-   `position-try-order`. */
+/* A section opened in the list opens in place. A popover is drawn in the
+   top layer, never in the list's flow, so the list gives way to it: the
+   other rows go, the section's own row stays at the top to close it, and
+   its links run on beneath at the list's width, one box with it, scrolling
+   where the screen runs out. */
+.primary-nav:popover-open:has(.nav-group-panel:popover-open) > :not(:has(> .nav-group-panel:popover-open)) { display: none; }
+.primary-nav:popover-open:has(.nav-group-panel:popover-open) { border-end-start-radius: 0; border-end-end-radius: 0; }
 .primary-nav:popover-open .nav-group-panel {
-  position-area: inline-start span-block-end;
-  position-try-fallbacks: --nav-panel-down-scrolling, inline-start span-block-start, --nav-panel-up-scrolling, block-end span-inline-start;
-  position-try-order: most-block-size;
+  position-anchor: --primary-nav;
+  position-area: block-end;
+  inline-size: anchor-size(inline);
+  max-block-size: 100%;
+  margin: -1px 0 0;
+  border-block-start: 0;
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
   overflow-y: auto;
-  margin: 0 var(--space-3) 0 0;
-  min-width: 168px;
 }
-@position-try --nav-panel-down-scrolling { position-area: inline-start span-block-end; max-block-size: 100%; }
-@position-try --nav-panel-up-scrolling { position-area: inline-start span-block-start; max-block-size: 100%; }
 .primary-nav:popover-open .nav-group-panel a {
   min-height: 44px;
   display: flex;

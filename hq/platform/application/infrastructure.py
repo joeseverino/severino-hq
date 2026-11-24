@@ -32,7 +32,6 @@ from .adoption import Live, live_read, require_writable
 from .command_fields import Checked, Choices, Describe, stored_in
 from .conditions import DEGRADED, DRIFTED, READY, holding
 from .integration_specs import Kept, command_adapter, keeps
-from .labels import lower_first
 from .projection import read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, row, written
@@ -584,6 +583,11 @@ def _save(
     }
 
 
+# How work its record's switch-off called off ends, waiting or claimed
+# (``controller.release_lapsed``); its row names the record.
+CALLED_OFF = {"ok": False, "message": "Switched off", "reason": "SwitchedOff"}
+
+
 def _call_off_waiting(resource: ManagedResource) -> None:
     """Cancel the work queued for a record switched off, all but its removal.
 
@@ -594,16 +598,11 @@ def _call_off_waiting(resource: ManagedResource) -> None:
     """
 
     now = timezone.now()
-    said = f"The {lower_first(registry_label(resource.kind))} was switched off in HQ before this ran."
     waiting = resource.operations.select_for_update().filter(state=OperationRequest.State.QUEUED)
     for operation in waiting.exclude(action=OperationRequest.Action.DELETE):
         operation.state = OperationRequest.State.CANCELLED
         operation.completed_at = now
-        operation.result = {
-            "ok": False,
-            "message": said,
-            "reason": "SwitchedOff",
-        }
+        operation.result = dict(CALLED_OFF)
         operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
 
 

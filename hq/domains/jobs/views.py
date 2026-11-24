@@ -18,7 +18,6 @@ lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import AskMixin
 lazy from hq.platform.application.automation_runs import AGAIN, cancel_action
 lazy from hq.platform.application.capabilities import capability_spec
-lazy from hq.platform.application.compose_batches import NAME as COMPOSE_BATCH
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.moments import duration, moment
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
@@ -52,11 +51,11 @@ class JobListView(ListPageMixin, TemplateView):
     page_title = "Background jobs"
     table_search_placeholder = "Search jobs and results…"
     table_columns = (
-        TableColumn("Job", kind="prose", cell=lambda row: Cell(row["title"], row["url"], name=True, role="data")),
+        TableColumn("Job", kind="prose", cell=lambda row: Cell(row["title"], row["url"], role="data")),
         TableColumn(
             "State", css="key-col", kind="status", cell=lambda row: Cell(row["state_label"], tone=str(row["tone"]))
         ),
-        TableColumn("Started", css="date-col", cell=lambda row: Cell(moment=moment(row["created_at"]))),
+        TableColumn("Started", cell=lambda row: Cell(moment=moment(row["created_at"]))),
         TableColumn("Duration", kind="numeric", cell=lambda row: Cell(_ran_for(row["duration_seconds"]))),
         TableColumn("Result", kind="prose", cell=lambda row: Cell(row["headline"] or "")),
         TableColumn("Requested by", kind="prose", cell=lambda row: Cell(row["by"], cut=bool(row["by"]))),
@@ -131,10 +130,7 @@ class RunView(RecordPageMixin, TemplateView):
         # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
         again = (
             PageAction.command(run["capability"], variant=AGAIN, query={"hosts": tuple(run["hosts"])})
-            if not self.following_run
-            and playbook
-            and run["capability"] != COMPOSE_BATCH
-            and capability_spec(run["capability"])
+            if not self.following_run and playbook and capability_spec(run["capability"])
             else None
         )
         return tuple(action for action in (again, cancel) if action is not None)

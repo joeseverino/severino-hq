@@ -801,11 +801,10 @@ ready, unauthorized, stale, revoked), stale by the cadence of the instance's
 `kind` ([How old a reading may get](#how-old-a-reading-may-get)).
 
 An ability may set `subject_resource` to the resource it governs and list its
-provider kinds in `governs_kinds`. Command Center then offers the registered
-commands against that resource whose target filters include one of those
-kinds. For an operation that maps through no resource, set `capability` to the
-exact `CapabilitySpec` name. Composition refuses unknown resource and
-capability references.
+provider kinds in `governs_kinds`. An ability that runs one command sets
+`capability` to that `CapabilitySpec`'s name, and Command Center shows the
+command running through it. Search finds a command by its own words, never by
+an ability's. Composition refuses unknown resource and capability references.
 
 The ability is the only connection-to-capability edge. Scope coverage decides
 only whether the connection can perform it; no command is fabricated from
@@ -989,6 +988,9 @@ that counts takes a `hq_sdk.ui.Counted` as its label, as a dashboard card does.
 `{% data_table table %}` of a `DataTable`, which draws every heading, group,
 row and control, and `hq plugin check` refuses a `<td>` or `<th>` written by
 hand.
+`PLUGIN_API_VERSION` 25 retires `hq_sdk.plugin.Finding`'s `compose_target`,
+`compose_targets`, `deployment`, `deployments`, `update_targets` and
+`reviewed_updates`: a finding offers no Compose deployment of its own.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

@@ -2,17 +2,19 @@
 
 from django.http import HttpResponseForbidden, HttpResponseServerError
 from django.template import loader
+from django.template.context_processors import csp
 
 from .context_processors import site
 
 
 def server_error(request):
     """Django's 500 skips the context processors, rightly: any of them may be
-    what broke. HQ's name and asset version come from settings alone, so this
-    one is given to the page and the rest are not. The request id is the one
-    the log line for this failure carries."""
+    what broke. HQ's name and asset version come from settings alone, and the
+    script nonce from the policy middleware, so those two are given to the page
+    and the rest are not. The request id is the one the log line for this
+    failure carries."""
 
-    context = {**site(request), "request_id": getattr(request, "request_id", "")}
+    context = {**site(request), **csp(request), "request_id": getattr(request, "request_id", "")}
     return HttpResponseServerError(loader.get_template("500.html").render(context))
 
 

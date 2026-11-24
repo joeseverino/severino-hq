@@ -18,15 +18,38 @@ from hq.platform.application.conditions import READY
 from hq.platform.application.images import ImageRef
 from hq.platform.core.audit import stamped
 
-from .names import CONTAINERS, GITHUB, HQ_DIGEST, HQ_REVISION, NEWER, OWNER_NAME, SOURCES, hexed, iso, stamp
+from .names import (
+    CONTAINERS,
+    GITHUB,
+    HQ_DIGEST,
+    HQ_REVISION,
+    NEWER,
+    OWNER_NAME,
+    SOURCES,
+    back,
+    digest,
+    hexed,
+    iso,
+    share,
+    stamp,
+)
 from .sweep import store
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")
-# The repository HQ opens dependency updates for.
+# The repository whose dependency update and alerts are open.
 UPDATED = "photo-library"
 # The repository whose default branch fails a check, so the queue holds GitHub's item.
 FAILING = "homelab"
+# The repository each app's Compose files live in, under ``compose/<app>/``,
+# and the app its open update moves to the newer release.
+APPS = "homelab"
+UPDATED_APP = "home-automation"
+# The repositories HQ opens dependency updates for: each with an update open.
+OPTED_IN = (UPDATED, APPS)
+# The apps whose Compose files the apps repository holds: every container but
+# HQ, which its own pipeline releases.
+HELD_APPS = tuple(name for name, _port, _image in CONTAINERS if name != "hq")
 # How many runs of each piece of HQ's own work on a clock to show.
 RUNS = 3
 # The states the latest run of the first scheduled kinds is left in, one each.
@@ -78,7 +101,6 @@ def repositories():
     at = timezone.now()
     access = {
         "collaborators": [{"login": "example", "role": "admin"}],
-        "deploy_keys": [{"title": "deploy", "read_only": True, "last_used": at.isoformat()}],
         "token": "read",
         "token_approves_reviews": False,
         "pinning_required": True,
@@ -98,7 +120,17 @@ def repositories():
             "checks": {"state": "success", "total": 4, "failing": [], "running": 0},
             "alerts": {"dependabot": {}},
             "private": True,
-            "access": access,
+            # Each repository's deploy key last used when its machine last pulled it.
+            "access": {
+                **access,
+                "deploy_keys": [
+                    {
+                        "title": "deploy",
+                        "read_only": True,
+                        "last_used": back(share(timedelta(days=6), name), name).isoformat(),
+                    }
+                ],
+            },
             "variables": [],
             "pins": [],
         }
@@ -117,21 +149,32 @@ def repositories():
                 {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]}
             ]
             record["images"] = [{"name": "example/hq", "signed": [HQ_DIGEST.removeprefix("sha256:")]}]
+            # Its default branch's rules, with checks its pull requests run
+            # that they do not require, and the runner its deploys run on.
+            required = ["lint", "test (3.13)", "test (3.14)"]
+            record["rules"] = {"pull_request": True, "required_checks": required, "blocks_force_push": True}
+            record["pull_request_checks"] = [*required, "CodeQL", "Analyze (python)", "browser (webkit)"]
+            record["runners"] = [{"name": "docker-host-01", "status": "online", "busy": False}]
         if name == UPDATED:
             record.update(_updates(name))
         if name == FAILING:
             record["checks"] = {"state": "failure", "total": 4, "failing": ["Scan"], "running": 0}
+        if name == APPS:
+            record["pull_requests"] = [_app_update(name)]
+            # Renovate's Dashboard lists the updates it has not opened yet.
+            record["compose"] = [f"compose/{app}/compose.yaml" for app in sorted(HELD_APPS)]
+            record["dashboard"] = f"https://github.com/example/{name}/issues/12"
         return record
 
     store("github.repository", *(repository(name) for name in REPOSITORIES))
-    # This morning's update run of the opted-in repository, finished cleanly.
+    # This morning's update run of the opted-in repositories, finished cleanly.
     started = timedelta(hours=5)
     store(
         DEPENDENCY_RUN_KIND,
         {
             "connection_ref": GITHUB,
             "owner": "example",
-            "repositories": [f"example/{UPDATED}"],
+            "repositories": [f"example/{name}" for name in OPTED_IN],
             "outcome": "ok",
             "exit_code": 0,
             "started_at": iso(started),
@@ -181,15 +224,16 @@ def repositories():
 
 
 # The projects the estate runs, starred on GitHub to follow their releases:
-# image, what it is, its language, its stars, and how long ago it was starred.
+# image, what it is, its language, its stars, and how long ago it was
+# starred; newest first, as GitHub lists an account's stars.
 STARRED = (
+    ("home-automation", "Home automation server images, rebuilt weekly.", "Shell", 410, 260),
+    ("forgejo", "A self-hosted lightweight software forge.", "Go", 1_900, 290),
     ("immich", "Self-hosted photo and video management.", "TypeScript", 58_400, 300),
     ("jellyfin", "The free software media system.", "C#", 39_200, 330),
-    ("forgejo", "A self-hosted lightweight software forge.", "Go", 1_900, 290),
-    ("home-automation", "Home automation server images, rebuilt weekly.", "Shell", 410, 260),
     ("adguard", "Network-wide ads and trackers blocking DNS server.", "Go", 27_600, 380),
-    ("nginx-proxy-manager", "Expose your services easily and securely.", "TypeScript", 25_100, 380),
-    ("portainer", "Making Docker and Kubernetes management easy.", "TypeScript", 32_300, 380),
+    ("nginx-proxy-manager", "Expose your services easily and securely.", "TypeScript", 25_100, 395),
+    ("portainer", "Making Docker and Kubernetes management easy.", "TypeScript", 32_300, 410),
 )
 
 
@@ -219,6 +263,46 @@ def _watched():
             }
         )
     return watched
+
+
+def _app_update(name):
+    """Renovate's update of one app's pin to the newer release, checks
+    passing, as GitHub lists the pull request and the reading loads its
+    Compose file at base and head."""
+
+    image = next(image for container, _port, image in CONTAINERS if container == UPDATED_APP)
+    ref = ImageRef.parse(image)
+    after = f"{ref.name}:{NEWER[UPDATED_APP]}@{digest(ref.name, NEWER[UPDATED_APP])}"
+    url = f"https://github.com/example/{name}"
+    return {
+        "number": 58,
+        "title": f"Update {ref.repository} Docker tag to {NEWER[UPDATED_APP]}",
+        "url": f"{url}/pull/58",
+        "author": "renovate[bot]",
+        "draft": False,
+        "created_at": iso(timedelta(days=2)),
+        "updated_at": iso(timedelta(hours=4)),
+        "head": hexed("update", name, UPDATED_APP, length=40),
+        "base": hexed("head", name, length=40),
+        "branch": f"renovate/{UPDATED_APP}",
+        "labels": ["dependencies"],
+        "checks": {"state": "success", "total": 2, "failing": [], "running": 0, "names": ["validate", "scan"]},
+        "files": [
+            {
+                "path": f"compose/{UPDATED_APP}/compose.yaml",
+                "status": "modified",
+                "additions": 1,
+                "deletions": 1,
+            }
+        ],
+        "apps": [
+            {
+                "app": UPDATED_APP,
+                "read": True,
+                "images": [{"service": UPDATED_APP, "before": f"{image}@{digest(ref.name, ref.tag)}", "after": after}],
+            }
+        ],
+    }
 
 
 def _updates(name):
@@ -371,9 +455,10 @@ def _ran(declared, ago, work):
             actor=runner.SCHEDULER,
             request={outbound_work.SUBJECT_FIELD: ""},
         )
+    took = timedelta(seconds=2) + share(timedelta(seconds=40), declared.name, ago)
     Job.objects.filter(pk=job.pk).update(
-        created_at=finished - timedelta(seconds=5),
-        started_at=finished - timedelta(seconds=4),
+        created_at=finished - took - timedelta(seconds=1),
+        started_at=finished - took,
         finished_at=finished,
         heartbeat_at=finished,
     )

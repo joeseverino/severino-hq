@@ -9,7 +9,7 @@ from typing import Any
 from django.utils.text import capfirst, slugify
 
 from hq.platform.application.entity_links import declared_link, entity_link, web_url
-from hq.platform.application.moments import ago
+from hq.platform.application.moments import when
 from hq.platform.application.tables import Below, Cell, DataTable, Row, StatusMark, TableColumn
 from hq.platform.application.ui import counted, ended, measured, severity_tone
 
@@ -80,9 +80,9 @@ def machine_containers(
     def cells(container: Any) -> tuple[Cell, ...]:
         standing = standings.get(container.name)
         name = (
-            Cell.of(entity_link("resource", container.watcher, label=container.name), name=True)
+            Cell.of(entity_link("resource", container.watcher, label=container.name))
             if container.watcher
-            else Cell(container.name, name=True)
+            else Cell(container.name)
         )
         stack = container.stack if container.stack and container.stack != container.name else ""
         image = (
@@ -129,7 +129,6 @@ def every_container(found: Sequence[Any]) -> DataTable:
                     Cell(
                         item.running.name,
                         item.url,
-                        name=True,
                         lines=(Cell("on", muted=True, parts=(Cell.of(item.machine.link),)),),
                     ),
                     _image(item.standing),
@@ -152,7 +151,7 @@ def _image(standing: Any) -> Cell:
         if standing.pinned
         else Cell("tag only", tip="It runs whatever the tag pointed at when it was pulled.", dot=True)
     )
-    built = (Cell(f"built {ago(standing.built)}", dot=True),) if standing.built else ()
+    built = (Cell(f"built {when(standing.built)}", dot=True),) if standing.built else ()
     return Cell(
         standing.image.short,
         readout=True,
@@ -232,7 +231,7 @@ def _need_lines(standing: Any, plan: Any) -> tuple[Cell, ...]:
     else:
         said = f"{capfirst(standing.summary)}, and no newer release yet."
     if standing.release and standing.release.get("published"):
-        said += f" Released {ago(standing.release['published'])}."
+        said += f" Released {when(standing.release['published'])}."
     moved = (
         (
             Cell(

@@ -858,7 +858,7 @@ class DependsOnceTests(TestCase):
                 ("example.net", reverse("zones:detail", kwargs={"zone": "example.net"}), "example-net"),
             ],
         )
-        self.assertEqual([link.label for link in instance.dependencies], ["www-record"])
+        self.assertEqual([link.label for link in instance.dependencies], ["www.example.com at example.com"])
 
     def test_the_page_shows_the_zone_key_nowhere(self):
         operator(self.client)
@@ -866,4 +866,4 @@ class DependsOnceTests(TestCase):
         response = self.client.get(reverse("control_plane:connections"))
 
         self.assertNotContains(response, ">example-com<")
-        self.assertContains(response, ">www-record<")
+        self.assertIn("www.example.com at example.com", text(response))

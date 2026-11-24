@@ -17,6 +17,8 @@ from hq.platform.core.templatetags.action_tags import remedies, triage
 from hq.platform.core.templatetags.status_tags import origin_tip, urgency_tone
 
 _COLUMNS = (TableColumn("Item"),)
+# A queue's rows are the rest of what a part says, each sizing its own controls.
+_QUEUE: dict[str, Any] = {"headed": False, "data": {"line": "flat"}, "controls_per_row": True}
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,7 +41,7 @@ def table(context: Any, items: Iterable[Mapping[str, Any]], where: Where, *, fol
     """The queue drawn whole: its entries, a family folded under its name when ``fold``."""
 
     found = action_items.families(list(items), fold=fold)
-    return DataTable("Queue", _COLUMNS, tuple(_entries(context, found, where)), headed=False, data={"line": "flat"})
+    return DataTable("Queue", _COLUMNS, tuple(_entries(context, found, where)), **_QUEUE)
 
 
 def by_domain(context: Any, groups: Iterable[Any], where: Where, *, titled: bool = True) -> DataTable:
@@ -55,7 +57,7 @@ def by_domain(context: Any, groups: Iterable[Any], where: Where, *, titled: bool
         )
         for group in groups
     )
-    return DataTable("Queue", _COLUMNS, groups=bodies, headed=False, data={"line": "flat"})
+    return DataTable("Queue", _COLUMNS, groups=bodies, **_QUEUE)
 
 
 def _entries(context: Any, entries: Iterable[Mapping[str, Any]], where: Where) -> Iterable[Row]:
@@ -77,7 +79,7 @@ def _family(context: Any, entry: Mapping[str, Any], family: str, away: Any) -> R
     words = Tone(status).urgency
     mark = Cell(status=StatusMark(words, tone=status, css=css, tip=words))
     gist = Cell(entry["summary"], shows="gist", data={"attention-detail": ""})
-    name = Cell(entry["family"], name=True, lead=True, count=len(entry["items"]), fold=True, parts=(mark, gist))
+    name = Cell(entry["family"], lead=True, count=len(entry["items"]), fold=True, parts=(mark, gist))
     return Row(
         (name,),
         actions=tuple(remedies(context, entry["lead"])),
@@ -136,13 +138,12 @@ def _said(item: Mapping[str, Any], title: Cell, where: Where) -> Cell:
         line.insert(1, Cell(item["detail"], shows="gist", data={"attention-detail": ""}))
     said = [] if where.grouped else [Cell(item["source"])]
     if late := item.get("late"):
-        said += [Cell.reading(reading=late["reading"]), Cell(late["every"])]
+        said.append(Cell.reading(reading=late))
     lines = ()
     if said:
         first, *rest = said
         lines = (replace(first, muted=True, parts=tuple(replace(each, dot=True) for each in rest)),)
-    below = () if where.glance else _below(item)
-    return replace(title, parts=tuple(line), lines=lines, below=below)
+    return replace(title, parts=tuple(line), lines=lines, below=_below(item))
 
 
 def _below(item: Mapping[str, Any]) -> tuple[Below, ...]:

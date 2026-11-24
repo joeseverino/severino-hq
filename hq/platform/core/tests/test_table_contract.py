@@ -1,6 +1,7 @@
 """A data table is declared (``tables.DataTable``), so its shape is in the HTML on first paint."""
 
 import re
+from datetime import date
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -16,10 +17,11 @@ from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.markup_testing import all_elements, elements, links, select, with_class, within
 from hq.platform.application.pages import PageAction
 from hq.platform.application.routes import routed
-from hq.platform.application.tables import Below, Cell, DataTable, Group, Row, TableColumn, ranked, typed
+from hq.platform.application.tables import Below, Cell, DataTable, Group, Row, TableColumn, typed
 from hq.platform.core.part_examples import table
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
-from hq.platform.core.testing import SignedInTestCase
+from hq.platform.core.table_layout import TRACKS
+from hq.platform.core.testing import SignedInTestCase, leaving
 
 TEMPLATES = Path(__file__).resolve().parents[4] / "templates"
 
@@ -509,32 +511,49 @@ class TableColumnTests(SimpleTestCase):
 
     def test_the_column_that_names_each_row_never_drops(self):
         with self.assertRaises(ValueError):
-            ranked((TableColumn("Name", drop=1), TableColumn("Note")))
-        columns = (TableColumn("Name"), TableColumn("Note", drop=1))
-        self.assertEqual(ranked(columns), columns)
+            leaving(TableColumn("Name", drop=1), TableColumn("Note"))
+        self.assertEqual(leaving(TableColumn("Name"), TableColumn("Note", drop=1)), {"Name": 0, "Note": 1})
 
-    def _ranks(self, *columns):
-        return {column.label: column.drop for column in ranked(columns)}
+    def test_a_table_draws_no_more_columns_than_its_grid_has_tracks(self):
+        columns = tuple(TableColumn(f"Column {at}") for at in range(TRACKS))
+        acted = Row(tuple(Cell(column.label) for column in columns), actions=(PageAction("Open", "/"),))
+        DataTable("Things", columns)
+        for refused in (
+            lambda: DataTable("Things", (*columns, TableColumn("Over"))),
+            lambda: DataTable("Things", columns, (acted,)),
+        ):
+            with self.subTest(refused), self.assertRaises(ValueError):
+                refused()
 
-    def test_a_list_ranks_its_columns_optional_first_then_from_the_far_end(self):
-        ranks = self._ranks(
+    def test_a_table_lets_its_columns_go_at_the_narrowest_widths_optional_first_then_from_the_far_end(self):
+        levels = leaving(
             TableColumn("Name"),
             TableColumn("Who", css="optional-col"),
             TableColumn("Action"),
+            TableColumn("When", css="date-col"),
+            TableColumn("State", kind="status"),
             TableColumn("What", css="key-col"),
             TableColumn("Message"),
         )
-        self.assertEqual(ranks, {"Name": 0, "Who": 1, "Message": 2, "Action": 3, "What": 0})
+        self.assertEqual(levels, {"Name": 0, "Who": 1, "Message": 2, "State": 3, "Action": 4, "When": 5, "What": 0})
+        self.assertEqual(
+            leaving(TableColumn("Name"), TableColumn("Note"), TableColumn("Who")), {"Name": 0, "Note": 4, "Who": 3}
+        )
 
     def test_the_closing_figure_of_a_table_with_no_key_stays(self):
         figures = (TableColumn("Name"), TableColumn("Note"), TableColumn("Cost", kind="numeric"))
-        self.assertEqual(self._ranks(*figures), {"Name": 0, "Note": 1, "Cost": 0})
+        self.assertEqual(leaving(*figures), {"Name": 0, "Note": 4, "Cost": 0})
         keyed = (TableColumn("Name"), TableColumn("State", css="key-col"), TableColumn("Cost", kind="numeric"))
-        self.assertEqual(self._ranks(*keyed), {"Name": 0, "State": 0, "Cost": 1})
+        self.assertEqual(leaving(*keyed), {"Name": 0, "State": 0, "Cost": 4})
+
+    def test_a_column_of_moments_is_a_date(self):
+        rows = (Row((Cell("a"), Cell(moment=date(2026, 3, 1)))), Row((Cell("b"), Cell())))
+        _, day = DataTable("Things", (TableColumn("Name"), TableColumn("Day")), rows).columns
+        self.assertEqual(day.css, "date-col")
 
     def test_a_declared_rank_stands(self):
-        ranks = self._ranks(TableColumn("Name"), TableColumn("Note", drop=2), TableColumn("When", drop=1))
-        self.assertEqual(ranks, {"Name": 0, "Note": 2, "When": 1})
+        levels = leaving(TableColumn("Name"), TableColumn("Note", drop=2), TableColumn("When", drop=1))
+        self.assertEqual(levels, {"Name": 0, "Note": 2, "When": 1})
 
 
 class ListTableTests(SignedInTestCase):

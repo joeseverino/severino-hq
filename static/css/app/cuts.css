@@ -11,6 +11,16 @@
 }
 
 @layer components {
+/* A fact's detail line that names something longer than its cell
+   (`fact-cut`): one line, cut at its end, read whole from its tip. Its
+   identifier's pieces are text of that line, so the cut lands inside them.
+   It claims no width of its own, so the cell sizes from its other lines and
+   the cut takes whatever width that leaves. Its line is a target tall, as
+   every detail word that opens a tip is (figures.css). */
+.facts-band .fact-detail > small > .fact-cut {
+  display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  & :is(.token, .whole, .part) { display: inline; }
+}
 /* Page furniture: a label, a name or a note held to its line. */
 /* A head is one short line, and stays so: what one of its controls says is
    said over the head's reading line (ask.js, partials/_ask.html), in the room the words the
@@ -117,6 +127,10 @@
    hold its column, and the table, past the box. So its column asks for no
    more than a letter of it, and gives way as a column of words does. */
 .data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
+/* Past a narrow box the column that names each row holds its identifiers' pieces whole: it is the one track given the room the others leave, so asking it of every column alike would break a piece there while the others had room. */
+@container table-region (width >= 36rem) {
+  .data-table > tbody > tr > [data-kind="name"] :is(code:not(.cell-whole), .token) { overflow-wrap: break-word; }
+}
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
@@ -159,14 +173,19 @@
 .list-rows .row-snippet :is(.token, .whole) { display: inline; }
 
 /* The calendar: a day's events on one line each, inside the day. */
-/* A span is one bar across its days: rounded only where it starts and ends,
-   titled where it starts or where a week begins. A gap holds the lane open.
-   Its tint is strong enough that the palest source still shows on a
-   weekend's fill. */
+/* A span is one bar across its days in a week, drawn from the day it is
+   titled on (where it starts or a week begins) over the `data-reach` days it
+   runs on: it reaches past its own day by that many days' columns, each a
+   day's box and its rule (layout.css), and its title runs the bar's length.
+   Placed, it draws over the days after its own and their rules.
+   Rounded only where it starts and ends. A gap holds the lane open. Its tint
+   is strong enough that the palest source still shows on a weekend's fill. */
 .month-span {
+  --run: calc((var(--reach, 1) - 1) * (100% + 2 * var(--day-pad) + var(--day-rule)));
+  position: relative;
   display: block;
   height: 1.25rem;
-  margin: 0 calc(-1 * var(--space-2)) var(--space-1);
+  margin: 0 calc(-1 * (var(--run) + var(--day-pad))) var(--space-1) calc(-1 * var(--day-pad));
   padding: 0 var(--space-3);
   background: color-mix(in srgb, var(--slot) 22%, var(--surface));
   color: var(--ink);

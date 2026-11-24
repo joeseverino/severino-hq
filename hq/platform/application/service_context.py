@@ -23,7 +23,7 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
-from .moments import ago
+from .moments import when
 from .published_sites import projects_by_hostname
 from .tables import Cell, DataTable, Row, TableColumn
 from .tone import Tone
@@ -256,7 +256,7 @@ def _run_cells(run: WorkRun, *, shows: bool) -> tuple[Cell, ...]:
 
     return (
         Cell(run.word, tone=run.tone),
-        Cell(ago(run.created_at), muted=True),
+        Cell(when(run.created_at), muted=True),
         Cell(str(seconds(run.duration)) if run.duration is not None else ""),
         Cell(run.note),
         Cell(run.by.words if shows else ""),
@@ -271,7 +271,7 @@ def _run_record(run: WorkRun, *, by_machine: bool, opens: bool, shows: bool) -> 
         # Read without the run's page, the playbook leads to the command it is run through.
         return (Cell(run.title, run.url if opens else command_url(run.kind)), *_run_cells(run, shows=shows))
     state, _asked, *rest = _run_cells(run, shows=shows)
-    return (Cell(ago(run.created_at), run.url if opens else ""), machines_cell(run.evidence.hosts), state, *rest)
+    return (Cell(when(run.created_at), run.url if opens else ""), machines_cell(run.evidence.hosts), state, *rest)
 
 
 def machines_cell(hosts: Sequence[str]) -> Cell:
@@ -469,7 +469,7 @@ def _project(service) -> SummaryItem | None:
             _repository_detail(repo)
             or (_repository_label(project.repository_url) if project and project.repository_url else "",)
         ),
-        f"pushed {ago(pushed)}" if project and (pushed := last_push(project)) else "",
+        f"pushed {when(pushed)}" if project and (pushed := last_push(project)) else "",
     )
     return SummaryItem("Project", service.project["name"], link, lines(*parts), icon="commit")
 

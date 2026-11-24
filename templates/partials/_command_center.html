@@ -8,15 +8,11 @@ the fragment `group`. Scripts and tests find each piece by its
 {% endcomment %}
 <form class="command-center-palette" action="{% url 'search' %}" method="get" data-command-center-form>
   <label class="visually-hidden" for="command-center-query">Find anything</label>
-  <div class="command-center-query">
-    {% include "partials/_icon.html" with name="search" only %}
-    <input id="command-center-query" name="q" type="search"
-           placeholder="Try “deploy”, “certificate”, or “unreachable”"
-           autocomplete="off" spellcheck="false" role="combobox"
-           aria-autocomplete="list" aria-controls="command-center-options"
-           aria-expanded="false" data-command-center-input>
-    <kbd class="keyboard-only">⌘ K</kbd>
-  </div>
+  <input id="command-center-query" class="command-center-query" name="q" type="search"
+         placeholder="Try “deploy”, “certificate”, or “unreachable”"
+         autocomplete="off" spellcheck="false" role="combobox"
+         aria-autocomplete="list" aria-controls="command-center-options"
+         aria-expanded="false" data-command-center-input>
   {% with loading=True %}{% partial results %}{% endwith %}
   <footer class="command-center-footer keyboard-only">
     <span><kbd>↑</kbd><kbd>↓</kbd> choose</span>
@@ -57,11 +53,11 @@ the fragment `group`. Scripts and tests find each piece by its
       {% endfor %}
       {% for group in palette_groups %}{% partial group %}{% endfor %}
     </div>
-    {% if palette_total > palette_count %}
-      {% muted element="p" css="command-center-more" %}Showing {{ palette_count }} of {{ palette_total|counted:"match" }}. Press Enter to search all of HQ.{% endmuted %}
+    {% if match_total > palette_count %}
+      {% muted element="p" css="command-center-more" %}Showing {{ palette_count }} of {{ match_total|counted:"match" }}. Press Enter to search all of HQ.{% endmuted %}
     {% endif %}
   {% elif q %}
-    <div class="command-center-empty">
+    <div class="command-center-empty" data-command-center-empty>
       <strong>No page or command called “{{ q }}”.</strong>
       {% muted %}Press Enter to search everything.{% endmuted %}
     </div>

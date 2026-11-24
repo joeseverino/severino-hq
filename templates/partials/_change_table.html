@@ -12,9 +12,10 @@ sees it, a record as one. Status says each row's kind of change, as the
 preview's state words it: what a made change did, or what a held one would
 do, and is the row's state, which a phone keeps beside After, the key;
 Before leaves a narrow box for the row's open line. Where nothing stood before, every row would say the same, so the table
-is Field and Value alone.
+is Field and Value alone. The preview's more link names the whole change
+where its rows are only part of it.
 {% endcomment %}{% if not preview.empty %}
-{% section preview.label count=preview.moves|default:"" %}
+{% section preview.label count=preview.moves|default:"" more_label=preview.more_label more_url=preview.more_url %}
   {% if table %}{% data_table table %}{% endif %}
   {% if preview.lines %}
     <pre tabindex="0"><code>{% for line in preview.lines %}{{ line }}

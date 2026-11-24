@@ -1,6 +1,7 @@
 """The endpoint browsers report Content Security Policy violations to."""
 
 import json
+import re
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -75,6 +76,14 @@ _KEYWORDS = frozenset(
 )
 
 
+# A Trusted Types policy's name as the policy grammar spells one (CSP's
+# tt-policy-name), which a refused policy's report carries as its sample, cut
+# to its first 40 characters (Trusted Types, "Should Trusted Type policy
+# creation be blocked"). It says whose policy was refused: HQ's own, named
+# twice in one document, or a script's that is not HQ's.
+_POLICY_NAME = re.compile(r"[A-Za-z0-9\-#=_/@.%]{1,40}")
+
+
 def _governed() -> frozenset[str]:
     """The directive names a violation of HQ's policy can carry."""
 
@@ -101,6 +110,9 @@ def _blocked(violation: dict) -> str:
     """What was blocked, as an origin or a keyword, or "" for anything else."""
 
     value = str(violation.get("blocked-uri") or violation.get("blockedURL") or "")[:_CSP_FIELD_LIMIT].strip()
+    if value.lower() == "trusted-types-policy":
+        name = str(violation.get("script-sample") or violation.get("sample") or "")
+        return f"trusted-types-policy {name}" if _POLICY_NAME.fullmatch(name) else "trusted-types-policy"
     if value.lower() in _KEYWORDS:
         return value.lower()
     try:

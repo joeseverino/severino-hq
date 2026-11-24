@@ -143,7 +143,7 @@ class PanelTests(TestCase):
         relation = OBSERVATIONS[DNS].relation
         self.assertEqual(found.labels(relation), ("100.64.0.1, 192.0.2.53\xa0· MagicDNS on",))
         (item,) = found.group(relation).items
-        self.assertEqual(item.source.label, TAILNET_REF)
+        self.assertEqual(item.source.label, entity_link("connection", TAILNET_REF).label)
         self.assertIsNotNone(item.observed_at)
         self.assertEqual(len(found.readouts), 1)
 
@@ -155,7 +155,7 @@ class PanelTests(TestCase):
     def test_it_is_reached_through_the_tailnet_connection(self):
         found = self.relationships("example-host")
 
-        self.assertEqual(found.labels("Read through"), (TAILNET_REF,))
+        self.assertEqual(found.labels("Read through"), (entity_link("connection", TAILNET_REF).label,))
         (item,) = found.group("Read through").items
         self.assertIn("#connection-", item.entity.url)
 

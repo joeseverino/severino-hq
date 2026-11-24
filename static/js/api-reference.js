@@ -1,12 +1,9 @@
 // Mounts the vendored Scalar bundle (static/vendor/scalar) on /api/docs/.
-// Runs before the bundle: zod inside it probes for eval unless told not to,
-// and HQ's policy refuses eval.
-globalThis.__zod_globalConfig = { jitless: true };
 
 // Scalar marks the entry in view (the sidebar's current item, the bar's name
 // on a phone) as each entry's section crosses the middle of the window, an
-// IntersectionObserver with this margin (`dAn`, its `Section`'s, in
-// static/vendor/scalar/standalone.js line 3541). A reader's place is the top
+// IntersectionObserver with this margin (`jjn`, its `Section`'s, in
+// static/vendor/scalar/standalone.js line 3557). A reader's place is the top
 // of what is shown, so the end of one entry above the middle reads as that
 // entry while the next is named. Each such observer watches instead the one
 // line under the bars that stand over the page, the ones Scalar scrolls an
@@ -78,7 +75,7 @@ const STOCK_SENTENCES = [
 
 // Where a line may end inside a path: before each "/", "." or "-", the
 // places Scalar's own path text takes (`ScalarWrappingText`'s `path` preset,
-// static/vendor/scalar/standalone.js line 282), and before a query's "?" and
+// static/vendor/scalar/standalone.js line 298), and before a query's "?" and
 // "&"; never after a space, a ":" or another of them, so "https://" and
 // "../" stay whole.
 const PATH_BREAK = /(?<=[^\s/.?&:-])[/.?&-]/g;
@@ -173,29 +170,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // stylesheet's (static/css/api-reference.css).
   // eslint-disable-next-line no-restricted-syntax -- the frame's header, which no fragment holds
   document.querySelector(".site-header")?.setAttribute("data-scalar-scroll-header", "");
-  // Scalar holds the page on an entry it was sent to that is not drawn yet,
-  // scrolling back to it every frame until its next batch is drawn
-  // (`freeze` in its lazy-bus `scrollToLazy`), and nothing stops that hold
-  // when a reader follows another entry meanwhile: the page is pulled back to
-  // the earlier entry while the address names the newer one. Scalar writes
-  // the entry followed last to the address before it scrolls there, so a
-  // scroll to one of its entries goes ahead only for the entry the address
-  // names, or the one holding it (a deep link into an operation that falls
-  // back to the operation). Its entries are ids "<document>/<entry>" in the
-  // root, scrolled to the top of the view; every other scroll is left alone.
-  // Scalar's own fix (scalar/scalar#10805) ends the hold, so this goes once
-  // the vendored bundle carries it.
-  const scrollIntoView = Element.prototype.scrollIntoView;
-  const addressed = () => {
-    try { return decodeURIComponent(window.location.hash.slice(1)); } catch { return ""; }
-  };
-  Element.prototype.scrollIntoView = function (options) {
-    const entry = this.id.slice(this.id.indexOf("/") + 1);
-    const named = addressed();
-    const stale = options?.block === "start" && this.id.includes("/") && root.contains(this)
-      && named && named !== entry && !named.startsWith(`${entry}.`);
-    if (!stale) scrollIntoView.call(this, options);
-  };
   // The operator's theme is the one on <html>: light, dark, or none for the
   // system's. A chosen theme is forced on Scalar; with none Scalar follows the
   // system too, once a mode it stored itself is out of the way.

@@ -6,7 +6,7 @@ from typing import Any
 
 from hq.platform.application.entity_links import connection_anchor, declared_link
 from hq.platform.application.freshness import reading_age
-from hq.platform.application.moments import ago
+from hq.platform.application.moments import when
 from hq.platform.application.pages import PageAction, offered_now
 from hq.platform.application.routes import reverse
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, StatusMark, TableColumn
@@ -129,7 +129,7 @@ def _name(row: Any, *, starts: bool) -> Cell:
         lines.append(Cell(sight.summary, muted=True, parts=age))
     if row.fix:
         lines.append(Cell(status=_fix_mark(row.fix)))
-    return replace(Cell.of(connection.name_link, name=True), lines=tuple(lines))
+    return replace(Cell.of(connection.name_link), lines=tuple(lines))
 
 
 def _reached(row: Any) -> Cell | None:
@@ -224,7 +224,7 @@ def _state(row: Any) -> Cell:
     instance = row.connection.instance
     line = None
     if row.read_requested_at:
-        line = Cell(f"Read asked {ago(row.read_requested_at)}", muted=True, shows="narrow-more")
+        line = Cell(f"Read asked {when(row.read_requested_at)}", muted=True, shows="narrow-more")
     elif row.state_line:
         line = Cell(
             row.state_line if not row.state_line_tone else "",
@@ -233,7 +233,7 @@ def _state(row: Any) -> Cell:
             shows="more" if row.state_line_quiet else "narrow-more",
         )
     elif row.changes_only and instance.observed_at:
-        line = Cell(f"Checked {ago(instance.observed_at)}", muted=True, shows="narrow-more")
+        line = Cell(f"Checked {when(instance.observed_at)}", muted=True, shows="narrow-more")
     elif not (row.sight and row.sight.sights) and instance.observed_at:
         line = Cell(piece=reading_age(at=instance.observed_at), muted=True, shows="narrow-more")
     problems = (

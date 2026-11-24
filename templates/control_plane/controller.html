@@ -12,12 +12,12 @@ for it. Nothing here asks it anything.
   {% detail %}
     {% if not standing.known %}<small>No controller has connected to this HQ yet.</small>
     {% elif standing.silent %}<small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>
-    {% else %}<small>Last connected {{ standing.seen_at|when:"ago" }}.</small>{% endif %}
+    {% else %}<small>Last connected {{ standing.seen_at|when }}.</small>{% endif %}
   {% endfact %}
-  {% fact "Reading" icon="eye" tone=controller.failing_tone %}
+  {% fact "Reading" icon="eye" tone=sight.tone %}
     {% include "partials/_reading_age.html" with at=controller.swept_at only %}
   {% detail %}
-    {% if controller.swept_at %}<small>{% if controller.failing %}{{ controller.failing }} of {{ controller.readings|length|counted:"reading" }} failed.{% else %}All {{ controller.readings|length|counted:"reading" }} are current.{% endif %}</small>{% endif %}
+    {% if controller.swept_at %}<small>{{ sight.read|counted:"reading" }}{% dot %}{{ sight.said }}</small>{% endif %}
   {% endfact %}
   {% fact "Next read" icon="clock" tone=controller.overdue_tone %}
     {% if not standing.known %}After the first run{% elif controller.overdue %}Overdue{% elif controller.sweep_due %}Shortly{% elif controller.next_sweep_at %}In {{ controller.next_sweep_at|when:"length" }}{% else %}After the first run{% endif %}
@@ -29,7 +29,7 @@ for it. Nothing here asks it anything.
   {% fact "Pending changes" icon="layers" tone=controller.queue_tone %}
     {% if controller.queue %}{{ controller.queue|length|counted:"change" }}{% else %}Nothing{% endif %}
   {% detail %}
-    {% if controller.asked %}<small>{% words "infrastructure.controller.refresh" %} asked for {% for read in controller.asked %}{% with mark=forloop.last|then:".|," %}{{ read.subject|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% elif controller.queue %}<small>{% waiting %}</small>{% endif %}
+    {% if controller.asked %}<small>{% words "infrastructure.controller.refresh" %} asked for {% for read in controller.asked %}{% with mark=forloop.last|then:".|," %}{{ read.subject|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% endif %}
   {% endfact %}
 {% endfacts %}{% endcard %}
 {% comment %}

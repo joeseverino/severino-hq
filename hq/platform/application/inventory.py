@@ -520,7 +520,7 @@ def _difference_phrase(field: str, asked: str, live: str) -> str:
 
     Short values are quoted. Two JSON documents are compared by their top-level
     keys: what the live one has that the declaration does not, what it lacks,
-    and what differs. Anything else long is sized, not pasted.
+    and what differs. Anything else long is named, not pasted.
     """
 
     if len(asked) <= _QUOTABLE and len(live) <= _QUOTABLE:
@@ -538,8 +538,8 @@ def _difference_phrase(field: str, asked: str, live: str) -> str:
             *(f"- {key}" for key in missing),
             *(f"{key} changed" for key in changed),
         ]
-        return ended(f"{field} differs from HQ's copy: {', '.join(parts) or 'layout only'}")
-    return f"{field} differs from HQ's copy ({len(live)} characters live, {len(asked)} in HQ)."
+        return ended(f"{field} changed outside HQ: {', '.join(parts) or 'layout only'}")
+    return f"{field} changed outside HQ."
 
 
 @transaction.atomic

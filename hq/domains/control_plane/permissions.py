@@ -100,6 +100,7 @@ class GitHub(Permission):
     CONTENTS_WRITE = "Contents", "write"
     DEPENDABOT_ALERTS_READ = "Dependabot alerts", "read", "vulnerability_alerts"
     DEPLOYMENTS_READ = "Deployments", "read"
+    ISSUES_READ = "Issues", "read"
     ISSUES_WRITE = "Issues", "write"
     METADATA_READ = "Metadata", "read"
     PACKAGES_READ = "Packages", "read"

@@ -12,6 +12,7 @@ from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.tables import Cell, DataTable, Row, TableColumn, check_drop, column_kind
+from hq.platform.core import table_layout
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Part, answers, slotted
 lazy from hq.platform.core.drawn_tables import drawn
@@ -157,10 +158,11 @@ def data_table(
 TABLE_HEADING = Part(
     name="",
     rules="""
-    Each column that may leave has a rank, 1 first (`TableColumn(drop=N)`). A list's ranks are derived by
-    `ranked`: `optional-col` first, then from the far end. It never ranks the column that names the
-    row, one marked `key-col`, or the closing figure of a table that marks none; the region turns
-    the ranks into the widths each leaves at.
+    Each column that may leave has a rank, 1 first (`TableColumn(drop=N)`). A table that declares none
+    has its order derived by the region (`table_layout.leaving_order`): `optional-col` first, then
+    from the far end. It never lets go the column that names the row, one marked `key-col`, the
+    closing figure of a table that marks none, a row's state or its controls; the region turns the
+    ranks into the widths each leaves at.
 
     **Every table sorts.** A list its server sorts has links in its headings (`TableColumn(sort=)`). Every other
     heading has the same control, looking the same, drawn as a button, which the region keeps only
@@ -245,25 +247,26 @@ DATA_TABLE = Part(
     about="A table drawn whole from its declaration: its columns' headings and a row of cells for each record.",
     rules="""
     **A table fits its box, at every width.** No screen width is asked anywhere in the table
-    primitive, and nothing is measured: a table is laid out by the browser's automatic table layout,
-    the same with script and without, so every cell stands under its column's heading and a column is
-    one width down the table. No width is computed in Python. A column whose values keep their line
-    (a status, a figure, a row's controls, a date) is as wide as its widest (`inline-size: 1px` on its
-    heading), and the columns that wrap share the rest as the browser shares it. Each column's share
-    is its region's width over one more than the count of columns it shows (`--share`, tables.css,
-    over the count the region writes, `data-columns`: its headings, or in a table with none its widest
-    row; a column with nothing in any row, one ranked to leave at the region's width, or a `wide-only`
-    one in a narrow box, is not counted), the one more kept for what a column asks past its share, and
-    no column asks more than its share to hold a value whole, so the columns together never ask more
-    than the region. A value longer than a line of words (`data-long` on its cell and heading,
-    `table_layout`), whatever its kind, wraps at its words in a line of `--row-words`, or its share
-    where that is less, so no column of words is set a word to a line while its neighbor sits empty. A
-    status, a figure or what a row's controls say that long shares the room as words do; a row's
-    controls stay as narrow as their line. A long value is held to its third line (below). A heading
-    is one of its column's values, held whole up to its share as a short value is, so its words wrap
-    only where its share is narrower than its line. *Gate:* the survey's `room unshared`, which fails
-    a cell or a heading squeezed below what it needs while another column holds the room it lacks,
-    counting each share itself.
+    primitive, and nothing is measured: a table is a grid of its columns' tracks, each row a subgrid
+    of them, the same with script and without, so every cell stands under its column's heading and a
+    column is one width down the table. No width is computed in Python. Its columns are sized as
+    Primer's DataTable sizes its own (`auto` beside `grow`): each column starts at the least its cells
+    can wrap to, every column grows alike toward its values whole, and the room left past every
+    column's values goes to the column that names the rows, which is `auto` where every other is
+    `fit-content(100%)` (tables.css). The grid has a track for each of `table_layout.TRACKS` columns
+    after a row's tick-box, a row's controls among them, and a table that declares more is refused,
+    so no column is drawn over another. A value that keeps its line (a status, a figure, a row's
+    controls, a date) starts whole. A short value (`cell-short`, `table_layout.SHORT`: an address and
+    its port, a host, a mailbox, a project's name) starts whole up to its column's share, its region's
+    width over one more than the count of columns it shows (`--share`, over the count the region
+    writes, `data-columns`: its headings, or in a table with none its widest row; a column with
+    nothing in any row, one ranked to leave at the region's width, or a `wide-only` one in a narrow
+    box, is not counted), so the columns together never start wider than the region. A longer value
+    starts at its longest word or piece, so it gives way first: a short value is whole wherever the
+    table has room for it, and wraps (an identifier at its seams, words at their spaces) only where
+    the table has none. A long value is held to its third line (below). A heading is one of its
+    column's values, held as a short value is. *Gate:* the survey's `room unshared`, which fails a
+    cell or a heading squeezed below what it needs while another column holds the room it lacks.
 
     The region turns a table's ranks (`TableColumn(drop=)`) into at most four levels from the widest
     (`data-drop`, `table_layout`): its first rank leaves while the region is narrower than 64rem, its
@@ -272,10 +275,10 @@ DATA_TABLE = Part(
     Nothing is measured, so a column may leave a box that could still hold it. What leaves shows on
     the row's open line. The gates fail a table that runs past its card.
 
-    A table whose headings rank no column has its ranks derived by the region (`table_layout`), by the
-    rule `ranked` follows, and lets them go only at the narrowest widths: its far column at the widest
-    of them and its nearest below 40rem, so it keeps every column until a narrow box and a
-    hand-written table needs no rank of its own to fit a phone. A column holding a button stands,
+    A column its headings rank none for leaves by the rule `leaving_order` follows, after every
+    declared rank and only at the narrowest widths: its far column at the widest of them and its
+    nearest below 40rem, so a table keeps every column until a narrow box and a hand-written table
+    needs no rank of its own to fit a phone. A column holding a button stands,
     since a cell held back holds none. This is the column-priority pattern of jQuery Mobile's and
     Tablesaw's column toggle (six priorities, each shown from a set width, the columns with none
     persisting) rather than their reflow mode, which stacks each cell under its label: at every width
@@ -324,27 +327,30 @@ DATA_TABLE = Part(
     **A narrow box keeps its rows under their headings.** Below 36rem of its region (the
     `table-region` container query in tables.css) every column a row can spare has left for the row's
     open line, and what stands is the naming column, each `key-col` (or the closing figure), a row's
-    state (its pills, or any column under a heading of kind `status` that declares no rank), a field
-    it fills in and its controls, each under its heading. A heading of kind `status` that declares a
+    state (its pills, a date, or any column under a heading of kind `status` that declares no rank
+    in a table that ranks its others) and its controls, each under its heading. A column whose rows
+    each say a moment is a date (`date-col`, which `DataTable` writes), never ranked to leave unless
+    declared. A column of a row's choices (a field it fills in in each row, or the words standing
+    where one cannot be, as the agent rules draw a column per agent) stands each choice on a line of
+    its own beneath the row's name, named by its column (`data-field`), so the row keeps every one
+    however many columns there are. A heading of kind `status` that declares a
     rank is one of a row's secondary checks: it leaves at that rank, whatever its cells hold, and no
     later than the table's last ranked column, so a row's own state is declared with no rank and its
-    checks with one. Below every rank's width (20rem) the state goes to the open line last; a key
-    never does, and a pill there is as wide as its words up to its column's share, wraps between them
-    past it, and is never narrower than its longest word. A name's least width is its longest word, so
-    another column gives way before a name breaks inside one; a hash or key with no break in it may
-    break anywhere (cuts.css).
+    checks with one. In a narrow box a pill is as wide as its words up to its column's share, wraps
+    between them past it, and is never narrower than its longest word, so a row's name is whole before
+    its state is. Below every rank's width (20rem) the state goes to the open line last; a key never
+    does. A hash or key with no break in it may break anywhere (cuts.css).
 
-    A table cell cannot take a line of its own, so a narrow table whose rows hold labeled controls
-    (below 48rem where a row holds four, which ask a line of their own sooner) is a grid of its
-    columns' tracks instead, each row a subgrid of them: the headings, the cells under them, the open
-    line and a group's heading keep their place and their roles (table, row, column header, cell, in
-    WebKit and Chromium), and the heading still pins. A row's labeled controls take its last line, on
+    A table's headings, cells, open lines and group headings keep their roles in its grid (table,
+    row, column header, cell), and its heading pins. A narrow table whose rows
+    hold labeled controls (below 48rem where a row holds four, which ask a line of their own sooner)
+    gives them a line of their own: a row's labeled controls take its last line, on
     a line of their own from where its name starts, in every row alike, the row's pad under them,
     wrapping only between whole controls. A row of icon controls (a star, the order arrows) keeps them
     at its end on its first line. *Gates:* the survey's `tables` (each cell a row shows stands under
     its column's heading, and no row draws a column's label), `rows unruled` (a row's bottom edge is
     ruled, whichever cell draws it), `overlaps` (what two boxes draw never crosses) and `row state
-    kept` (a key, a state or a field never leaves early).
+    kept` (a key or a state never leaves early, and a field its row fills in is never hidden).
 
     **Opening a row moves no column.** An open row keeps its cells as they were, but for a clamp,
     which it releases in place, and, in a narrow box, its `narrow-more` parts, which it shows in
@@ -354,10 +360,17 @@ DATA_TABLE = Part(
     name. So every column keeps its edges and every other row its height. *Gate:*
     `test_opening_a_row_moves_no_column_and_no_other_row`.
 
-    The server writes each cell once. The browser's table layout cannot set a cell on a line beneath
-    its row, so tables.js copies what the row holds back onto that line as the row first opens (or as
-    it arrives drawn open), from the one frame the region draws (`template[data-open-line]`): each
-    cell of a ranked column, shown where its column has left (`data-drop`), and each cell holding a
+    A closed fold's rows are hidden and no height, and still size their columns, so opening it moves
+    no column (*Gate:* the layout gate's `opens_every_fold`). So their controls would widen a column
+    shared down the table for every row, and a table of one column with no headings, whose rows each
+    say one thing (the queue), may size each row's controls apart (`DataTable(controls_per_row=True)`): in a box of 48rem or more
+    each row is a grid of its words and its own controls at its end, and opening a fold moves no other
+    row's words or controls. *Gate:* `test_opening_a_fold_moves_no_other_rows_controls`.
+
+    The server writes each cell once. A cell cannot also stand on a line beneath its row, so
+    tables.js copies what the row holds back onto that line as the row first opens (or as it arrives
+    drawn open), from the one frame the region draws (`template[data-open-line]`): each cell of a
+    ranked column, shown where its column has left (`data-drop`), and each cell holding a
     part only the open line shows (`row-more`, `line-rest`), shown always, what the row's line already
     shows of it only once its column has left (`data-row-shows`). A copy draws no id twice. A cell
     held back holds no control, which a copy would draw twice: the region refuses one, so a button
@@ -416,8 +429,9 @@ DATA_TABLE = Part(
 
     What each part of a cell is decides how it wraps, and the region marks it (`data-cell`,
     `table_layout`). The stylesheet keys its cuts, holds and wraps on that mark, never on a
-    page's class or a cell's tags. The bold a cell leads with, or its leading link's, is the row's
-    `name`; free text (a message, a record's words) is declared `Cell(role="data")` and marked `data`;
+    page's class or a cell's tags. The row's `name` is the value of the column that names it, words or
+    a link to its record's page, drawn bold whether or not it links, which no table declares; an
+    identifier drawn as code, a sentence (`role="prose"`), a muted note, a moment or a state there names nothing. Free text (a message, a record's words) is declared `Cell(role="data")` and marked `data`;
     what a row means in words is `Cell(role="prose")`. A context line is a muted cell. A table declared
     later sets as every other does by declaring those, and `lint:css` refuses a table primitive rule
     that tells a cell's part by anything else. Free text breaks a run with no seam in it (a link, a
@@ -467,11 +481,12 @@ DATA_TABLE = Part(
     """,
     partial="partials/_data_table.html",
     function=data_table,
+    marked_in=table_layout,
     public=True,
     example=tags.DATA_TABLE,
     states=tags.DATA_TABLE_STATES,
-    # Its box, and a row's open line.
-    classes=("data-table", "is-pane", "row-columns", "row-detail", "table-scroll"),
+    # Its box, a row that is open, and its open line.
+    classes=("data-table", "is-expanded", "is-pane", "row-columns", "row-detail", "table-scroll"),
 )
 slotted(DATA_TABLE, library=register)
 ROW_TOGGLE = Part(

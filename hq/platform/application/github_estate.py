@@ -29,12 +29,13 @@ from .derivations import whole
 from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
-from .moments import ago, moment
+from .moments import moment, when
 from .projection import read_once
 from .thresholds import Threshold
 from .tone import Tone
 from .ui import severity_tone
 from .workflow_contracts import ActionLink
+lazy from .app_updates import app_updates
 lazy from .facts import record_read_at, snapshots_of
 lazy from .images import GHCR, ImageRef
 lazy from .projects import repository_key
@@ -99,7 +100,7 @@ def _age(stamp: object) -> str:
     """How long ago a provider's stamp was, or nothing where it has none."""
 
     found = moment(str(stamp or ""))
-    return ago(found) if found else ""
+    return when(found) if found else ""
 
 
 def _pull_row(pull: Mapping[str, Any], *details: str, meta: str = "", badge: str = "", status: str = "") -> ListRow:
@@ -122,6 +123,15 @@ _PULL_CHECKS = {
     "pending": ("Checks running", Tone.ATTENTION),
     "success": ("Checks passing", Tone.GOOD),
 }
+
+
+def pull_checks(pull: Mapping[str, Any]) -> tuple[str, str, str]:
+    """A pull request's checks as every page says them: the badge, its tone,
+    and the failing ones named while they fail."""
+
+    checks = pull.get("checks") or {}
+    badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", Tone.NEUTRAL))
+    return badge, tone, ", ".join(checks.get("failing") or ()) if checks.get("state") == "failure" else ""
 
 
 def _severity_rank(level: str) -> int:
@@ -260,12 +270,15 @@ class Repository:
         failing ones named), an alert with its severity and what would fix it."""
 
         rows = []
+        apps: dict[Any, list[str]] = {}
+        for update in app_updates():
+            if update.repository == self.name:
+                apps.setdefault(update.number, []).extend((update.app, update.fixes_counted))
         for pull in self.update_pulls:
-            checks = pull.get("checks") or {}
-            badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", Tone.NEUTRAL))
-            failing = ", ".join(checks.get("failing") or ()) if checks.get("state") == "failure" else ""
-            opened = f"opened {ago(pull['opened'])}" if pull["opened"] else ""
-            rows.append(_pull_row(pull, failing, meta=opened, badge=badge, status=tone))
+            badge, tone, failing = pull_checks(pull)
+            opened = f"opened {when(pull['opened'])}" if pull["opened"] else ""
+            said = apps.get(pull.get("number"), ())
+            rows.append(_pull_row(pull, *said, failing, meta=opened, badge=badge, status=tone))
         for alert in self.unmatched_alerts:
             fixed = alert.get("first_patched_version")
             severity = str(alert.get("severity") or "")

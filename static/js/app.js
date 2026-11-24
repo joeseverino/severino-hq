@@ -183,10 +183,11 @@ document.addEventListener("click", (event) => {
 // Long-running forms stay ordinary HTML forms: uploads and commands still work
 // without JavaScript and keep Django's redirect/error semantics. Enhancement
 // only makes the committed state explicit, prevents accidental double-submit,
-// and gives assistive technology a live status while the server works.
+// and gives assistive technology a live status while the server works. A
+// submit another listener prevented sends nothing, so nothing is working.
 document.addEventListener("submit", (event) => {
   const form = event.target.closest("form[data-submit-busy]");
-  if (!form) return;
+  if (!form || event.defaultPrevented) return;
 
   form.setAttribute("aria-busy", "true");
   form.querySelectorAll("button[type=submit], input[type=submit]").forEach((control) => {

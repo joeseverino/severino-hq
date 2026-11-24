@@ -46,7 +46,7 @@ const (
 	githubAvatarSize = 96
 	// githubStarJSON lists stars with the moment each repository was starred.
 	githubStarJSON = "application/vnd.github.star+json"
-	// githubUserAgent is the contact every keyless read sends.
+	// githubUserAgent is the contact every request to GitHub sends.
 	githubUserAgent = nwsUserAgent
 )
 
@@ -131,29 +131,13 @@ func (r *Registry) githubPublicBearer(ctx context.Context) (string, error) {
 	return r.githubToken(ctx, c, covered[:1], githubapi.AppPermissions{Metadata: githubapi.AppPermissionsMetadataRead})
 }
 
-func githubPublicHeaders(accept, bearer string) map[string]string {
-	headers := map[string]string{"Accept": accept, "X-GitHub-Api-Version": githubAPIVersion, "User-Agent": githubUserAgent}
-	if bearer != "" {
-		headers["Authorization"] = "Bearer " + bearer
-	}
-	return headers
-}
-
-// githubPublic is one GET of public data from GitHub's API, decoded into T. A
-// missing resource is the zero value and ok false.
-func githubPublic[T any](ctx context.Context, r *Registry, bearer, path, accept, what string) (T, bool, error) {
-	// Under the app's token the read spends the installation's allowance;
-	// anonymous, this address's own.
-	raw, err := r.githubExchange(ctx, http.MethodGet, path, githubPublicHeaders(accept, bearer), nil, bearer)
+// githubPublic is one read of public data: a missing resource is the zero
+// value and ok false.
+func githubPublic[T any](found T, err error) (T, bool, error) {
 	if httpStatus(err) == http.StatusNotFound {
 		var zero T
 		return zero, false, nil
 	}
-	if err != nil {
-		var zero T
-		return zero, false, fmt.Errorf("%s: %w", what, err)
-	}
-	found, err := decodeAnswer[T](raw, what)
 	return found, err == nil, err
 }
 
@@ -173,7 +157,7 @@ func (r *Registry) githubProfiles(ctx context.Context) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	limit, _, err := githubPublic[githubapi.RateLimitOverview](ctx, r, bearer, "/rate_limit", "application/vnd.github+json", "GitHub rate limit")
+	limit, err := json200(r.githubClient(bearer, false, nil).RateLimitGetWithResponse(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -187,9 +171,12 @@ func (r *Registry) githubProfiles(ctx context.Context) ([]any, error) {
 			"GitHub allows "+whom+" until %s and the read needs %d; the last reading stands", left, resets, need)})
 		return nil, errCarried
 	}
+	// Under the app's token the reads spend the installation's allowance;
+	// anonymous, this address's own.
+	client := r.githubClient(bearer, true, nil)
 	records := make([]any, len(plan.Accounts))
 	for i, login := range plan.Accounts {
-		record, err := r.githubProfile(ctx, bearer, login)
+		record, err := r.githubProfile(ctx, client, login)
 		if err != nil {
 			return nil, err
 		}
@@ -198,17 +185,19 @@ func (r *Registry) githubProfiles(ctx context.Context) ([]any, error) {
 	return records, nil
 }
 
-func (r *Registry) githubProfile(ctx context.Context, bearer, login string) (GitHubProfileRecord, error) {
-	const accept = "application/vnd.github+json"
-	account := "/users/" + url.PathEscape(login)
-	user, ok, err := githubPublic[githubapi.PublicUser](ctx, r, bearer, account, accept, "GitHub profile")
+func (r *Registry) githubProfile(ctx context.Context, client *githubapi.ClientWithResponses, login string) (GitHubProfileRecord, error) {
+	user, ok, err := githubPublic(json200(client.UsersGetByUsernameWithResponse(ctx, login)))
 	if err != nil {
 		return GitHubProfileRecord{}, err
 	}
 	if !ok {
 		return GitHubProfileRecord{}, &ProviderError{Message: "GitHub has no account " + login}
 	}
-	stars, _, err := githubPublic[[]githubapi.StarredRepository](ctx, r, bearer, account+"/starred?per_page="+strconv.Itoa(githubStarsPage), githubStarJSON, "GitHub stars")
+	starred := func(_ context.Context, request *http.Request) error {
+		request.Header.Set("Accept", githubStarJSON)
+		return nil
+	}
+	stars, _, err := githubPublic(json200(client.ActivityListReposStarredByUserWithResponse(ctx, login, &githubapi.ActivityListReposStarredByUserParams{PerPage: new(githubStarsPage)}, starred)))
 	if err != nil {
 		return GitHubProfileRecord{}, err
 	}
@@ -220,7 +209,7 @@ func (r *Registry) githubProfile(ctx context.Context, bearer, login string) (Git
 	group.SetLimit(githubProfileConcurrency)
 	for i, star := range newest {
 		group.Go(func() error {
-			found, err := r.githubWatched(groupCtx, bearer, star)
+			found, err := r.githubWatched(groupCtx, client, star)
 			watched[i] = found
 			return err
 		})
@@ -241,26 +230,27 @@ func (r *Registry) githubProfile(ctx context.Context, bearer, login string) (Git
 	}, nil
 }
 
-func (r *Registry) githubWatched(ctx context.Context, bearer string, star githubapi.StarredRepository) (GitHubWatched, error) {
-	const accept = "application/vnd.github+json"
+func (r *Registry) githubWatched(ctx context.Context, client *githubapi.ClientWithResponses, star githubapi.StarredRepository) (GitHubWatched, error) {
 	name := star.Repo.FullName
 	watched := GitHubWatched{
 		Name: name, URL: star.Repo.HTMLURL, Description: star.Repo.Description, Language: star.Repo.Language,
 		Stars: star.Repo.StargazersCount, StarredAt: star.StarredAt, Advisories: []GitHubAdvisory{},
 	}
-	if _, _, err := githubRepositoryName(name); err != nil {
+	owner, repo, err := githubRepositoryName(name)
+	if err != nil {
 		return watched, err
 	}
-	release, ok, err := githubPublic[githubapi.Release](ctx, r, bearer, "/repos/"+name+"/releases/latest", accept, "latest release of "+name)
+	release, ok, err := githubPublic(json200(client.ReposGetLatestReleaseWithResponse(ctx, owner, repo)))
 	if err != nil {
 		return watched, err
 	}
 	if ok && release.TagName != "" {
 		watched.Release = &GitHubRelease{Tag: release.TagName, URL: release.HTMLURL, PublishedAt: release.PublishedAt}
 	}
-	advisories, _, err := githubPublic[[]githubapi.RepositoryAdvisory](ctx, r, bearer,
-		"/repos/"+name+"/security-advisories?state=published&sort=published&direction=desc&per_page="+strconv.Itoa(githubAdvisoriesPage),
-		accept, "advisories of "+name)
+	advisories, _, err := githubPublic(json200(client.SecurityAdvisoriesListRepositoryAdvisoriesWithResponse(ctx, owner, repo, &githubapi.SecurityAdvisoriesListRepositoryAdvisoriesParams{
+		State: new(githubapi.SecurityAdvisoriesListRepositoryAdvisoriesParamsStatePublished), Sort: new(githubapi.SecurityAdvisoriesListRepositoryAdvisoriesParamsSortPublished),
+		Direction: new(githubapi.AdvisoriesDescending), PerPage: new(githubAdvisoriesPage),
+	})))
 	if err != nil {
 		return watched, err
 	}

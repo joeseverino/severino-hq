@@ -10,7 +10,7 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import text
 from hq.platform.application.pages import runs_at
-from hq.platform.core.testing import NOBODY, READER, SignedInTestCase
+from hq.platform.core.testing import NOBODY, OPERATOR, READER, SignedInTestCase
 
 from ..command_center import command_center
 from ..connection_catalog import connection_catalog
@@ -325,40 +325,29 @@ class ConnectionRegistrationTests(TestCase):
                 self.assertEqual([item.name for item in discovered["connections"]], ["infrastructure.controllers"])
                 self.assertLessEqual(matched, set(discovered["connections"][0].badges))
 
-    def test_matching_ability_derives_its_authorized_commands(self):
-        with host_only():
-            discovered = command_center("tailscale", principal=INFRA_OPERATOR)
+    def test_a_command_is_found_by_its_own_words(self):
+        # "tailscale" is a connection ability's word, "deploy" another's label,
+        # and "changes" the effect many commands share.
+        for query in ("tailscale", "deploy", "changes"):
+            with self.subTest(query), host_only():
+                discovered = command_center(query, principal=INFRA_OPERATOR)
 
-        commands = {item.name: item for item in discovered["commands"]}
-        self.assertEqual(
-            set(commands),
-            {
-                "infrastructure.resource.create",
-                "infrastructure.resource.update",
-                "infrastructure.resource.accept_observed",
-                # Taking on what the credential found live.
-                "infrastructure.resource.adopt",
-                "infrastructure.service.adopt",
-                "infrastructure.zone.adopt",
-                "infrastructure.resource.reconcile",
-                "infrastructure.resource.remove",
-                # Scoped to the device kind, so it surfaces here for the same
-                # reason `certificate.renew` does not: the ability names what
-                # the credential reaches, and the command names what it acts on.
-                "tailnet.routes.approve",
-                # Scoped to the policy kind, which the same credential reads.
-                "tailnet.policy.remove_empty_groups",
-                # Found by its own words: its title names Tailscale.
-                "tailnet.reach.allow",
-            },
-        )
-        self.assertIn("via Tailnet device", commands["infrastructure.resource.reconcile"].badges)
-        self.assertIn("via Tailnet device", commands["tailnet.routes.approve"].badges)
-        self.assertEqual(
-            commands["infrastructure.resource.reconcile"].url,
-            "/commands/infrastructure.resource.reconcile/?kind=tailscale.device&kind=tailscale.policy",
-        )
-        self.assertNotIn("certificate.renew", commands)
+                for item in discovered["commands"]:
+                    words = f"{item.name} {item.label} {item.summary}".casefold()
+                    self.assertIn(query, words, item.name)
+
+    def test_a_command_runs_through_only_the_ability_that_names_it(self):
+        with host_only():
+            discovered = command_center("", principal=OPERATOR)
+
+        via = {
+            item.name: {badge for badge in item.badges if badge.startswith("via ")} for item in discovered["commands"]
+        }
+        self.assertEqual(via["lookup.name.read"], {"via Public DNS lookup"})
+        # A record command runs through no connection of its own, nor does
+        # one scoped to a kind that a connection governs.
+        self.assertEqual(via["infrastructure.resource.update"], set())
+        self.assertEqual(via["infrastructure.resource.restart"], set())
 
     def test_command_center_caps_broad_ability_match_explanations(self):
         with host_only():

@@ -72,11 +72,10 @@ func (r *Registry) cloudflareZoneID(ctx context.Context, zone string) (string, e
 }
 
 func (r *Registry) cloudflareRecords(ctx context.Context, zoneID string) ([]cfRecord, error) {
-	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareDNS, "/zones/"+zoneID+"/dns_records", "", cloudflarePerPage)
-	if err != nil {
-		return nil, err
-	}
-	return cloudflareItems[cfRecord](items, "DNS record")
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareDNS, "", false)
+	return cloudflarePages[cfRecord]("DNS record", cloudflarePerPage, func(page int) (vendorReply, error) {
+		return client.DNSRecordsForAZoneListDNSRecordsWithResponse(ctx, zoneID, &cfapi.DNSRecordsForAZoneListDNSRecordsParams{Page: new(float32(page)), PerPage: new(float32(cloudflarePerPage))})
+	})
 }
 
 // caaParts splits a CAA value by the rule the spec validates with.
@@ -253,9 +252,10 @@ func (r *Registry) cloudflareRecordReconcile(ctx context.Context, spec Cloudflar
 	if err != nil {
 		return Result{}, err
 	}
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareDNS, "", false)
 	if live == nil {
 		if apply {
-			if live, err = writtenRecord(r.cloudflareRequest(ctx, "/zones/"+zoneID+"/dns_records", "POST", desired)); err != nil {
+			if live, err = writtenRecord(cloudflareResult(client.DNSRecordsForAZoneCreateDNSRecordWithResponse(ctx, zoneID, desired))); err != nil {
 				return Result{}, err
 			}
 		}
@@ -265,7 +265,7 @@ func (r *Registry) cloudflareRecordReconcile(ctx context.Context, spec Cloudflar
 		return result(false, recordStatus(zone, live), "Reconciled", "DNS record is current.", "Public DNS record unchanged."), nil
 	}
 	if apply {
-		if live, err = writtenRecord(r.cloudflareRequest(ctx, "/zones/"+zoneID+"/dns_records/"+live.ID, "PUT", desired)); err != nil {
+		if live, err = writtenRecord(cloudflareResult(client.DNSRecordsForAZoneUpdateDNSRecordWithResponse(ctx, zoneID, live.ID, desired))); err != nil {
 			return Result{}, err
 		}
 	}
@@ -301,7 +301,7 @@ func (r *Registry) cloudflareRecordDelete(ctx context.Context, spec CloudflareDN
 		return result(false, status, "Absent", "No such record in Cloudflare.", "Public DNS record was already absent."), nil
 	}
 	if apply {
-		if _, err := r.cloudflareRequest(ctx, "/zones/"+zoneID+"/dns_records/"+live.ID, "DELETE", nil); err != nil {
+		if _, err := cloudflareRead(r.cloudflare(runtime.ConnectionProviderCloudflareDNS, "", false).DNSRecordsForAZoneDeleteDNSRecordWithResponse(ctx, zoneID, live.ID)); err != nil {
 			return Result{}, err
 		}
 	}
@@ -333,11 +333,10 @@ func (r *Registry) cloudflareRegistrations(ctx context.Context) ([]cfapi.Registr
 	if err != nil {
 		return nil, err
 	}
-	items, err := r.cloudflareAPICursorList(ctx, "/accounts/"+account+"/registrar/registrations", "", cloudflareAccountPerPage)
-	if err != nil {
-		return nil, err
-	}
-	return cloudflareItems[cfapi.RegistrarAPIRegistration](items, "registration")
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, "", true)
+	return cloudflareCursorPages[cfapi.RegistrarAPIRegistration]("registration", func(cursor *string) (vendorReply, error) {
+		return client.RegistrarDomainRegistrationListWithResponse(ctx, account, &cfapi.RegistrarDomainRegistrationListParams{Cursor: cursor, PerPage: new(cloudflareAccountPerPage)})
+	})
 }
 
 // cloudflareZonePosture reads how a zone answers over TLS through the account
@@ -348,8 +347,9 @@ func (r *Registry) cloudflareZonePosture(ctx context.Context, zoneID, zone strin
 	if zoneID == "" {
 		return found
 	}
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, "", true)
 	for _, setting := range zonePostureSettings {
-		raw, err := r.cloudflareAPIResult(ctx, "/zones/"+zoneID+"/settings/"+setting, "")
+		raw, err := cloudflareResult(client.ZoneSettingsGetSingleSettingWithResponse(ctx, zoneID, setting))
 		var item cfStringSetting
 		if err == nil && present(raw) {
 			item, err = cloudflareDecode[cfStringSetting](raw, setting+" setting")
@@ -368,9 +368,9 @@ func (r *Registry) cloudflareZonePosture(ctx context.Context, zoneID, zone strin
 // cloudflareZoneInventory reports every zone the credential can see, declared
 // or not: which of them HQ manages is an operator's decision.
 func (r *Registry) cloudflareZoneInventory(ctx context.Context) ([]any, error) {
-	connectionRef, _, err := r.cloudflareCredential(runtime.ConnectionProviderCloudflareDNS, "")
-	if err != nil {
-		return nil, err
+	connectionRef, _, doer := r.cloudflareDoer(runtime.ConnectionProviderCloudflareDNS, "")
+	if doer.err != nil {
+		return nil, doer.err
 	}
 	registrars := r.cloudflareRegistrarDomains(ctx)
 	zones, err := r.cloudflareZones(ctx)
@@ -422,15 +422,11 @@ func (r *Registry) cloudflareRecordInventory(ctx context.Context) ([]any, error)
 // A probe answers whether the credential still works and what it reaches.
 
 func (r *Registry) cloudflareDNSProbe(ctx context.Context, ref string) (ProbeResult, error) {
-	verification, err := r.cloudflareEnvelope(ctx, runtime.ConnectionProviderCloudflareDNS, ref, "/user/tokens/verify", "GET", nil)
+	expires, err := r.cloudflareTokenExpiry(ctx, runtime.ConnectionProviderCloudflareDNS, ref)
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareDNS, "/zones", ref, cloudflarePerPage)
-	if err != nil {
-		return ProbeResult{}, err
-	}
-	zones, err := cloudflareItems[cfapi.ZonesZone](items, "zone")
+	zones, err := r.cloudflareZoneList(ctx, runtime.ConnectionProviderCloudflareDNS, ref, cloudflarePerPage)
 	if err != nil {
 		return ProbeResult{}, err
 	}
@@ -439,17 +435,13 @@ func (r *Registry) cloudflareDNSProbe(ctx context.Context, ref string) (ProbeRes
 		names = append(names, zone.Name)
 	}
 	slices.Sort(names)
-	expires, err := tokenExpiry(verification)
-	if err != nil {
-		return ProbeResult{}, err
-	}
 	return ProbeResult{Detail: fmt.Sprintf("%d zones.", len(names)), Reaches: names, ExpiresAt: &expires}, nil
 }
 
 // cloudflareAPIProbe reports the analytics sites the account credential
 // observes: both credentials see the same zones, so the sites tell them apart.
 func (r *Registry) cloudflareAPIProbe(ctx context.Context, ref string) (ProbeResult, error) {
-	verification, err := r.cloudflareAPIRequest(ctx, "/user/tokens/verify", ref)
+	expires, err := r.cloudflareTokenExpiry(ctx, runtime.ConnectionProviderCloudflareAPI, ref)
 	if err != nil {
 		return ProbeResult{}, err
 	}
@@ -470,20 +462,16 @@ func (r *Registry) cloudflareAPIProbe(ctx context.Context, ref string) (ProbeRes
 	if len(hosts) == 1 {
 		measured = "site"
 	}
-	expires, err := tokenExpiry(verification)
-	if err != nil {
-		return ProbeResult{}, err
-	}
 	return ProbeResult{Detail: fmt.Sprintf("%d analytics %s.", len(hosts), measured), Reaches: hosts, ExpiresAt: &expires}, nil
 }
 
-// tokenExpiry is when a verified credential expires; empty when it does not.
-func tokenExpiry(verification cfEnvelope) (string, error) {
-	if !present(verification.Result) {
-		return "", nil
+// cloudflareTokenExpiry verifies a credential and says when it expires; empty
+// when it does not.
+func (r *Registry) cloudflareTokenExpiry(ctx context.Context, provider runtime.ConnectionProvider, ref string) (string, error) {
+	body, err := replyBody(r.cloudflare(provider, ref, false).UserAPITokensVerifyTokenWithResponse(ctx))
+	if err != nil {
+		return "", err
 	}
-	result, err := cloudflareDecode[struct {
-		ExpiresOn string `json:"expires_on"`
-	}](verification.Result, "token verification")
-	return result.ExpiresOn, err
+	verified, err := cloudflareDecode[cfapi.IamTokenVerifyResponseSingleSegment](body, "token verification")
+	return verified.Result.ExpiresOn, err
 }

@@ -93,7 +93,7 @@ class ReportsView(PageMixin, TemplateView):
                 Kpi(f"Deductible (est.) {year}", money(spent.deductible)),
                 Kpi(
                     Counted(bought.count, f"Asset purchased {year}", f"Assets purchased {year}"),
-                    detail=f"{money(bought.total)} total",
+                    detail=f"{money(bought.total)} total" if bought else "",
                 ),
             ),
             year=year,

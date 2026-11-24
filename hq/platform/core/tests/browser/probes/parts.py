@@ -1,6 +1,6 @@
 """Probes of a page's parts: disclosures, labels, the dashboard's readings, drawings and a check's evidence."""
 
-from hq.platform.core.included_parts import CHART, MODAL
+from hq.platform.core.included_parts import CHART, MODAL, MONTH_GRID
 from hq.platform.core.templatetags.ladder_tags import CHECK_RUNG
 from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
@@ -344,6 +344,79 @@ UNDRAWN = """(drawings) => {
   return {read: read.length, found};
 }"""
 
+# A month in a card fills the body its card is stretched to, its weeks
+# sharing the room (layout.css), so it never ends short of its frame.
+MONTHS_SHORT = """(months) => {
+  const room = 1.5 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const read = [...document.querySelectorAll(months)].filter((month) => month.checkVisibility());
+  const found = read.filter((month) => {
+    const body = month.parentElement;
+    const style = getComputedStyle(body);
+    const end = body.getBoundingClientRect().bottom - parseFloat(style.paddingBottom) - parseFloat(style.borderBottomWidth);
+    return end - month.getBoundingClientRect().bottom > room;
+  }).map((month) => `${month.closest('section')?.id || 'a month'} ends short of its frame`);
+  return {read: read.length, found};
+}"""
+
+# A month as a split's main beside a taller companion, its weeks held to
+# their own height.
+_SHORT_MONTH = (
+    '<div class="split"><section class="section"><div class="section-body">'
+    '<table class="month-grid" style="flex-grow: 0"><tbody>'
+    + '<tr class="month-week">'
+    + '<td class="month-day">1</td>' * 7
+    + "</tr>"
+    + '</tbody></table></div></section><section class="section"><div class="section-body">'
+    + "<p>Example line</p>" * 30
+    + "</div></section></div>"
+)
+
+# An identifier in a band (a version, a tag) short enough for a cell of the
+# band's identifier floor stands whole on its line (figures.css): one that
+# wraps where a cell that wide would hold it was given too narrow a cell.
+SPLIT_IDENTIFIERS = """(codes) => {
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const ink = document.createElement('canvas').getContext('2d');
+  const read = [...document.querySelectorAll(codes)].filter((code) => code.checkVisibility());
+  const found = read.filter((code) => {
+    const style = getComputedStyle(code);
+    ink.font = style.font;
+    const whole = ink.measureText(code.textContent.trim()).width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    return whole <= 11 * rem && code.getBoundingClientRect().height > 1.9 * parseFloat(style.fontSize);
+  }).map((code) => `${code.textContent.trim()} breaks across lines`);
+  return found;
+}"""
+
+# Readings beside a page's title stand together (figures.css): two
+# neighbors on a row with more than a reading's width between them read as
+# unrelated things at the far ends of the head.
+READINGS_APART = """(bands) => {
+  const room = 12 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const read = [...document.querySelectorAll(bands)].filter((band) => band.checkVisibility());
+  const found = [];
+  for (const band of read) {
+    const facts = [...band.children].filter((fact) => fact.checkVisibility()).map((fact) => fact.getBoundingClientRect());
+    for (let i = 1; i < facts.length; i++) {
+      const [a, b] = [facts[i - 1], facts[i]];
+      if (Math.abs(a.top - b.top) < 2 && b.left - a.right > room) {
+        found.push(`two readings stand ${Math.round(b.left - a.right)}px apart`);
+      }
+    }
+  }
+  return found;
+}"""
+
+# Two readings spread across a head's whole width.
+_READINGS_SPREAD = (
+    '<div class="page-head"><div style="flex: 1 1 32rem"><dl class="facts-band" data-band '
+    'style="max-inline-size: none; grid-template-columns: 1fr 1fr">'
+    + "".join(
+        f'<div class="fact" style="justify-self: center"><dt>Example {n}</dt><dd class="fact-value">example</dd></div>'
+        for n in range(2)
+    )
+    + "</dl></div></div>"
+)
+
 # Whether a box scrolls wider than it shows, which a plant's premise asks.
 _WIDENED = """(box) => document.querySelector(box).scrollWidth > document.querySelector(box).clientWidth
   ? [] : [`${box} scrolls no wider than it shows`]"""
@@ -406,6 +479,28 @@ CHECKS = {
         (UNDRAWN, SELECTORS["drawing"]),
         reader_sees="a chart or a calendar given room and drawing nothing",
         part=CHART,
+    ),
+    "split identifiers": Check(
+        (SPLIT_IDENTIFIERS, SELECTORS["band_code"]),
+        reader_sees="a short version broken across two lines in a band of facts",
+        plants=(
+            Plant(
+                '<dl class="facts-band" data-band style="grid-template-columns: 6rem"><div class="fact">'
+                '<dt>Example</dt><dd class="fact-value"><code>2024.11.3-example-ls45</code></dd></div></dl>',
+                finds=("breaks",),
+            ),
+        ),
+    ),
+    "readings apart": Check(
+        (READINGS_APART, SELECTORS["head_band"]),
+        reader_sees="two readings beside a page's title at the far ends of the head, nothing between",
+        plants=(Plant(_READINGS_SPREAD, finds=("apart",)),),
+    ),
+    "months short of their frame": Check(
+        (MONTHS_SHORT, SELECTORS["month"]),
+        reader_sees="a month ending short of its card, empty space under its last week",
+        part=MONTH_GRID,
+        plants=(Plant(_SHORT_MONTH, finds=("ends short",)),),
     ),
     "pills in pieces": Check(
         PILLS_IN_PIECES, table=True, reader_sees="one pill's words drawn as two pills, a line each"

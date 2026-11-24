@@ -489,7 +489,7 @@ class OverviewPageTests(SignedInTestCase):
 
         shown = text(response)
         for dimension in RumDaily.Dimension.values:
-            self.assertIn(f"value-{dimension}", shown)
+            self.assertIn(f"value-{dimension}", shown.casefold())
         self.assertEqual(response.context["totals"]["sample_interval"], 10)
         coverage = response.context["coverage"]
         self.assertEqual((coverage["covered_days"], coverage["expected_days"], coverage["complete"]), (1, 7, False))

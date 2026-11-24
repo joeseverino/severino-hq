@@ -1,22 +1,24 @@
-"""Continuous delivery: every extension's latest admission runs in production.
+"""GitHub as HQ declares it: continuous delivery, and the pull requests it merges.
 
-The declaration. The controller (controller/providers/github_delivery.go)
-compares the running image's lock with each extension's latest admission on
-GitHub and reports each stage there; HQ starts nothing.
+Delivery: the controller (controller/providers/github_delivery.go) compares
+the running image's lock with each extension's latest admission on GitHub and
+reports each stage there; HQ starts nothing. A pull request is merged at the
+head commit a person approved (controller/providers/github_merge.go).
 """
 
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field
 
 from hq.platform.application.describe import Describe
+from hq.platform.application.record_fields import RecordId
 from hq.platform.application.ui import ended
 
 from ..connection_shapes import GITHUB_APP
 from ..observations import github as readings
 from ..observations.github import PROVIDER
-from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, SharedValue, applies
+from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, SharedValue, applies, locked
 
 KIND = "github.delivery"
 # Shared values (``SHARED``): the controller reports a sweep's record with the
@@ -24,6 +26,9 @@ KIND = "github.delivery"
 CURRENT = "Every extension's latest admission, confirmed on GitHub"
 COMPOSE_WORKFLOW = ".github/workflows/compose.yml"
 MAIN_BRANCH = "main"
+# A repository as owner/name, and a commit by its whole sha, as GitHub names each.
+REPOSITORY = r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+COMMIT = r"^[0-9a-f]{40}$"
 
 
 def _from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -72,7 +77,7 @@ class GitHubDeliverySpec(ProviderModel):
     """The repository and workflow that deploy HQ, which HQ checks production against."""
 
     repository: str = Field(
-        pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        pattern=REPOSITORY,
         title="Repository",
         description="The repository whose deploy workflow deploys HQ.",
     )
@@ -120,7 +125,55 @@ DEFINITION = ProviderSpec(
         f"start the deploy in {ended(spec.get('repository', 'the repository'))}"
     ),
 )
-DEFINITIONS = (DEFINITION,)
+
+
+PULL_REQUEST_KIND = "github.pull_request"
+# The action that merges one, ``OperationRequest.Action.MERGE``.
+MERGE = "merge"
+# Why GitHub would not merge one: the head moved after the approval (409),
+# GitHub refused it as it stands (405), its head's checks fail, or the App is
+# not installed on its repository.
+MergeRefusal = Literal["head_moved", "not_mergeable", "checks_failing", "not_installed"]
+
+
+class GitHubPullRequestSpec(ProviderModel):
+    """One pull request, at the head commit a person approved merging."""
+
+    repository: Annotated[str, Describe("", api="The repository, as owner/name.")] = Field(
+        pattern=REPOSITORY, title="Repository"
+    )
+    number: Annotated[RecordId, Describe("", api="The pull request's number.")] = Field(title="Number")
+    head_sha: Annotated[str, Describe("", api="The head commit approved; GitHub refuses the merge once it moves.")] = (
+        Field(pattern=COMMIT, title="Head commit")
+    )
+
+
+class GitHubMergeStatus(ProviderModel):
+    """What a merge reports: the commit it made, or why GitHub refused it."""
+
+    merge_sha: str = ""
+    refused: MergeRefusal | None = None
+
+
+PULL_REQUEST = ProviderSpec(
+    PULL_REQUEST_KIND,
+    "A pull request HQ merges, at the head commit you approved.",
+    GitHubPullRequestSpec,
+    actions={
+        "reconcile": locked("Nothing to apply. Merge it from its update."),
+        MERGE: applies(),
+    },
+    label="Pull request",
+    name=lambda spec: f"{spec.get('repository', '')}#{spec.get('number', '')}",
+    connection_providers=(PROVIDER,),
+    identity=lambda spec: (str(spec["repository"]), str(spec["number"])),
+    key_hint=lambda spec: f"{spec.get('repository', '')}-{spec.get('number', '')}".replace("/", "-"),
+    console=lambda spec: f"https://github.com/{spec.get('repository', '')}/pull/{spec.get('number', '')}",
+    console_label="Open pull request on GitHub",
+    declaration_only=True,
+    unobserved_reason="Each merge reports the commit it made.",
+)
+DEFINITIONS = (DEFINITION, PULL_REQUEST)
 OBSERVATIONS = readings.OBSERVATIONS
 
 SHARED = (
@@ -137,6 +190,21 @@ SHARED = (
         "A github.delivery declaration. The defaults are the declaration a sweep reports and HQ adopts.",
         refs=(("production", "GitHubDeliveryProduction"),),
     ),
+    SharedValue(
+        "GitHubPullRequestSpec", GitHubPullRequestSpec, "A github.pull_request declaration: what a merge merges."
+    ),
+    SharedValue(
+        "GitHubMergeRefusal",
+        get_args(MergeRefusal),
+        "Why GitHub refused a merge, as a refused merge's status says it.",
+    ),
+    SharedValue(
+        "GitHubMergeStatus",
+        GitHubMergeStatus,
+        "What a github.pull_request merge reports: the commit it made, or why GitHub refused it.",
+        mode="validation",
+        refs=(("refused", "GitHubMergeRefusal"),),
+    ),
 )
 
 # The connection this provider's credential arrives through, beside its kinds:
@@ -150,6 +218,6 @@ CONNECTIONS = {
         GITHUB_APP,
         create="A GitHub App on your account; mise run wire-github-app records its ID and stores its key.",
         create_url="https://github.com/settings/apps/new",
-        gives="Repo checks on your repositories, and HQ's deploys waiting for your approval.",
+        gives="Repo rules on your repositories, and HQ's deploys waiting for your approval.",
     ),
 }

@@ -13,9 +13,9 @@ from .finding_model import (
     open_the_path,
     reconcile_remedy,
 )
-from .moments import elapsed
+from .moments import when
 from .tone import Tone
-from .ui import ended
+from .ui import agreed, ended
 lazy from .topology_facts import PATH_DENIED, UNREACHABLE
 
 
@@ -45,15 +45,11 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                     else f"{node.label} is not answering"
                 ),
                 severity=Tone.ATTENTION,
-                explanation=(
-                    (f"{ended(reason)} " if reason else "")
-                    + "HQ cannot read anything through it, so what it shows from "
-                    f"{node.label} may be out of date."
-                ),
+                explanation=ended(reason) if reason else "HQ cannot read through it.",
                 evidence=(
                     ("State", "Refused" if refused else node.status_label or "Unreachable"),
                     *((("Cause", credential_findings.FAILURE_LABELS[failure]),) if failure and not refused else ()),
-                    *((("Last checked", elapsed(node.observed_at)),) if node.observed_at else ()),
+                    *((("Last checked", when(node.observed_at)),) if node.observed_at else ()),
                 ),
                 steps=mint_steps(node) if refused else credential_findings.answer_steps(node),
             )
@@ -95,17 +91,16 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=(
                     f"Could not check {node.label} on {names[0]}"
                     if len(names) == 1
-                    else f"Could not check {node.label} on {len(names)} of the places it is installed"
+                    else f"Could not check {node.label} in {len(names)} places"
                 ),
                 severity=Tone.SERIOUS,
-                explanation=(
-                    "The other places answered. "
-                    + (
-                        f"{names[0]} did not, so HQ cannot say which certificate it is serving."
-                        if len(names) == 1
-                        else "These did not, so HQ cannot say which certificate they are serving."
-                    )
-                    + (ended(f" The tailnet policy does not allow {', '.join(refused)}") if refused else "")
+                explanation=agreed(
+                    len(names),
+                    *(
+                        ("The tailnet policy blocks it.", "The tailnet policy blocks them.")
+                        if refused
+                        else ("It did not answer.", "They did not answer.")
+                    ),
                 ),
                 evidence=(
                     *(("Did not answer", name) for name in names),
@@ -121,23 +116,23 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "connection-not-answering",
-        "A connection is not answering",
+        "Connection not answering",
         Tone.ATTENTION,
         _connection_not_answering,
-        operator_action=(f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}"),
-        no_help_reason=("HQ cannot change 1Password or your network."),
+        operator_action=f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}",
+        no_help_reason="HQ cannot change 1Password or your network.",
         bars={Tone.ATTENTION: "a connection fails its check"},
     ),
     FindingRule(
         "unreachable-consumer",
-        "Could not check a certificate where it is installed",
+        "Certificate not checked",
         Tone.SERIOUS,
         _unreachable_consumer,
-        operator_action=(f"Make it reachable from the controller's machine. {THEN_CHECK_AGAIN}"),
-        no_help_reason=("HQ cannot reach it any other way."),
+        operator_action=f"Make it reachable from the controller's machine. {THEN_CHECK_AGAIN}",
+        no_help_reason="HQ cannot reach it any other way.",
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.
         subsumes=("reporting-a-fault",),
-        bars={Tone.SERIOUS: "HQ cannot reach where a certificate is installed to check it"},
+        bars={Tone.SERIOUS: "a place a certificate is installed does not answer"},
     ),
 )

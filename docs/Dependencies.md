@@ -66,7 +66,7 @@ change `version:` in `static/vendor/scalar/UPSTREAM` and run
 
 ## Advisories
 
-`mise run lint:audit` runs `tools/pipeline/audit.sh`, which holds two tools
+`mise run lint:audit` runs `tools/pipeline/audit.sh`, which holds three tools
 to their jobs:
 
 - `uv audit` against `uv.lock`, every group included. It alone reports a
@@ -77,8 +77,11 @@ to their jobs:
   `package-lock.json` and `controller/go.mod`. It judges a Go advisory by
   whether the controller calls the vulnerable code, as govulncheck does, so
   an advisory in an uncalled function passes.
+- `mise audit` against the tools `mise.toml` pins. It has no ignore list, so
+  `tools/pipeline/tool_advisories.py` drops what the root `osv-scanner.toml`
+  ignores, until each entry's expiry.
 
-Both query their advisory service, so the gate fails offline.
+Each queries its advisory service, so the gate fails offline.
 `mise run lint:govulncheck` runs govulncheck over the controller, its tests
 included, and queries vuln.go.dev, so it too is left to `mise run check` and
 CI's lint job rather than `fast`. The image gates scan the built image with

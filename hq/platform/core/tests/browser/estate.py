@@ -12,7 +12,6 @@ Each page is rendered once, opened once per width, and every check runs on
 that one load; a finding names its check, page, width and theme.
 """
 
-import json
 import re
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -322,9 +321,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     found |= self.opened(path, width)
                     found["unanswered"], self.unanswered = self.unanswered, []
                     found["refused"] = self.refusals_so_far()
-                    failed = {check: said for check, said in found.items() if said}
-                    if failed:
-                        self.fail(json.dumps(failed, indent=1))
+                    self.assertEqual({check: said for check, said in found.items() if said}, {})
         if webkit:
             self.a_refused_page_is_heard_after_every_other()
 
@@ -673,10 +670,11 @@ class ExampleEstateControlTests(BrowserGate):
                 marks = rows.locator(".pill").evaluate_all("(pills) => pills.map((pill) => [...pill.classList])")
                 self.assertEqual([mark for mark in marks if f"tone-{chosen}" not in mark], [])
 
-    def test_a_category_opened_in_the_phone_drawer_keeps_the_drawer_open(self):
+    def test_a_category_opened_in_the_phone_drawer_opens_in_place(self):
         """A category's menu lives inside the drawer that holds it, so pressing
-        it opens the category beside the drawer and leaves the drawer open
-        around it; Escape closes the category alone, then the drawer."""
+        it opens the category in place, at the drawer's width under its own
+        row, and leaves the drawer open around it; Escape closes the category
+        alone, then the drawer."""
 
         self.visit(reverse("expenses:list"), PHONE_SCREEN[0])
         toggle = self.page.locator(self.css(SELECTORS["nav_toggle"]))
@@ -688,14 +686,15 @@ class ExampleEstateControlTests(BrowserGate):
         handle.click()
         self.assertTrue(links.first.is_visible())
         self.assertTrue(drawer.is_visible())
-        # Beside the drawer, inside the screen, so it covers no section of the list.
-        beside = self.page.evaluate(
-            "([drawer, panel]) => [document.querySelector(drawer), document.querySelector(panel)]"
-            ".map((box) => box.getBoundingClientRect().toJSON())",
+        # Under the drawer's last row shown, its own, and as wide as the drawer.
+        drawer_box, panel_box, row_box = self.page.evaluate(
+            "([drawer, panel]) => [document.querySelector(drawer), document.querySelector(panel),"
+            " document.querySelector(panel).previousElementSibling].map((box) => box.getBoundingClientRect().toJSON())",
             self.css([SELECTORS["nav_drawer"], SELECTORS["nav_menu_panel"] + ":popover-open"]),
         )
-        self.assertLessEqual(beside[1]["right"], beside[0]["left"])
-        self.assertGreaterEqual(beside[1]["left"], 0)
+        self.assertEqual((panel_box["left"], panel_box["right"]), (drawer_box["left"], drawer_box["right"]))
+        self.assertGreaterEqual(panel_box["top"], row_box["bottom"])
+        self.assertLessEqual(panel_box["top"], drawer_box["bottom"])
         self.page.keyboard.press("Escape")
         self.assertFalse(links.first.is_visible())
         self.assertTrue(drawer.is_visible())

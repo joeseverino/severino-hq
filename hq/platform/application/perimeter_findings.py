@@ -1,5 +1,7 @@
 """Findings about a machine's edge: ports open to the internet, a perimeter nobody checked, a firewall that is not running, and reach nobody measured."""
 
+from django.utils.text import capfirst
+
 from .finding_model import (
     THEN_CHECK_AGAIN,
     Finding,
@@ -46,7 +48,7 @@ def _reached_but_unmeasured(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=f"{node.label} has no visitor counts",
             severity=Tone.ATTENTION,
-            explanation=("Other names read through the same connection have them. Turn on analytics for this one."),
+            explanation="Other names on its connection have them.",
             evidence=(
                 (
                     "Read through",
@@ -84,7 +86,7 @@ def _open_ports(node: TopologyNode, ports: tuple[str, ...]) -> Said:
     one = len(ports) == 1
     return {
         "title": f"{node.label} is open to the internet on {'port' if one else 'ports'} {', '.join(ports)}",
-        "explanation": f"A test from outside your network got an answer on {'this port' if one else 'these ports'}.",
+        "explanation": "A test from outside got an answer.",
     }
 
 
@@ -97,14 +99,9 @@ def _perimeter_unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="perimeter-unchecked",
                 subject=node.id,
-                title=f"HQ could not test whether {node.label} is open to the internet",
+                title=f"{node.label} not tested for open ports",
                 severity=Tone.ATTENTION,
-                explanation=(
-                    ended(
-                        "The test did not run because "
-                        + " and ".join(_UNCHECKED.get(reason, reason) for reason in reasons)
-                    )
-                ),
+                explanation=ended(capfirst(" and ".join(_UNCHECKED.get(reason, reason) for reason in reasons))),
                 evidence=tuple(("Not tested", _UNCHECKED.get(reason, reason)) for reason in reasons),
             )
         )
@@ -157,35 +154,35 @@ RULES: tuple[FindingRule, ...] = (
         "Ports open to the internet",
         Tone.SERIOUS,
         _perimeter_open,
-        operator_action=(f"Close them in the machine's firewall. {THEN_CHECK_AGAIN}"),
-        no_help_reason=("HQ cannot change the firewall."),
+        operator_action=f"Close them in the machine's firewall. {THEN_CHECK_AGAIN}",
+        no_help_reason="HQ cannot change the firewall.",
         bars={Tone.SERIOUS: "a port answers from the internet"},
     ),
     FindingRule(
         "perimeter-unchecked",
-        "Could not test for ports open to the internet",
+        "Open ports not tested",
         Tone.ATTENTION,
         _perimeter_unchecked,
-        operator_action=(f"Make the machine report its public addresses and published ports. {THEN_CHECK_AGAIN}"),
-        no_help_reason=("HQ cannot change what the machine reports."),
+        operator_action=f"Have the machine report its public addresses and ports. {THEN_CHECK_AGAIN}",
+        no_help_reason="HQ cannot change what the machine reports.",
         bars={Tone.ATTENTION: "HQ cannot test a machine for ports open to the internet"},
     ),
     FindingRule(
         "firewall-stopped",
-        "A firewall is not running",
+        "Firewall not running",
         Tone.SERIOUS,
         _firewall_stopped,
-        operator_action=("Start the firewall on the machine and check it stays running."),
+        operator_action="Start the firewall, then check it stays running.",
         no_help_reason=cannot_run_commands(),
         bars={Tone.SERIOUS: "a machine's firewall is not running"},
     ),
     FindingRule(
         "reached-but-unmeasured",
-        "A name has no visitor counts",
+        "No visitor counts",
         Tone.ATTENTION,
         _reached_but_unmeasured,
-        operator_action=("Turn on analytics for the name where the other names on its domain are measured."),
-        no_help_reason=("HQ cannot turn analytics on."),
+        operator_action="Turn on analytics for the name.",
+        no_help_reason="HQ cannot turn analytics on.",
         bars={Tone.ATTENTION: "a name visitors reach has no visitor counts"},
     ),
 )

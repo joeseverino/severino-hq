@@ -317,7 +317,7 @@ STANDARD: tuple[Check, ...] = (
 
 
 def posture(inputs: Inputs) -> Measurement:
-    """HQ against its standard: under Advanced HQ Posture an unmet check is a
+    """HQ against its standard: under Advanced HQ posture an unmet check is a
     fault; otherwise an open item, shown quietly."""
 
     return measure(inputs, STANDARD, enforced=advanced())
@@ -341,7 +341,7 @@ def guide() -> str:
 
 
 def _hq(estate) -> tuple[Measured, ...]:
-    """HQ, under Advanced HQ Posture, measured from the connections its reader may read."""
+    """HQ, under Advanced HQ posture, measured from the connections its reader may read."""
 
     if estate.principal is None or not advanced():
         return ()
@@ -361,7 +361,7 @@ POSTURE_STANDARD = Standard(
     checks=STANDARD,
     subjects=_hq,
     raises=Per.CHECK,
-    operator_action="Meet the check, or turn Advanced HQ Posture off.",
+    operator_action="Meet the check, or turn Advanced HQ posture off.",
     no_help_reason="HQ does not change these settings.",
     bars={Tone.ATTENTION: "a check of the standard HQ holds itself to is not met"},
     primary=_connections,

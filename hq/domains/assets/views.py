@@ -40,7 +40,7 @@ class AssetListView(ListPageMixin, TemplateView):
         TableColumn(
             "Item",
             "item_name",
-            cell=lambda row: Cell.of(entity_link("asset", row["slug"], label=row["item_name"]), name=True),
+            cell=lambda row: Cell.of(entity_link("asset", row["slug"], label=row["item_name"])),
         ),
         TableColumn("Vendor", "vendor", cell=lambda row: Cell(row["vendor"])),
         TableColumn("Category", "category", cell=lambda row: Cell(_CATEGORIES[row["category"]])),

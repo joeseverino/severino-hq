@@ -1,10 +1,14 @@
 """The endpoint a browser reports a refused policy to: what it keeps, and how much a stranger can make it write."""
 
 import json
+import threading
+from unittest import mock
 
-from django.test import Client, TestCase, override_settings
+from django.db import connection
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 
 from hq.platform.core.models import AuditLog
+from hq.platform.core.write_bounds import RowCap
 
 
 def _reports():
@@ -102,6 +106,15 @@ class PolicyReportTests(TestCase):
                 self.violations({"effectiveDirective": "img-src", "blockedURL": sent})
                 self.assertEqual(_reports().latest("id").metadata["blocked"], kept)
 
+    def test_a_refused_policy_is_kept_with_its_name(self):
+        cases = {"example-policy": "trusted-types-policy example-policy", "<b>no</b>": "trusted-types-policy"}
+        for sample, kept in cases.items():
+            with self.subTest(sample=sample):
+                self.violations(
+                    {"effectiveDirective": "trusted-types", "blockedURL": "trusted-types-policy", "sample": sample}
+                )
+                self.assertEqual(_reports().latest("id").metadata["blocked"], kept)
+
     def test_distinct_blocked_values_write_no_more_rows_than_the_cap(self):
         def flood(start):
             for batch in range(start, start + 1_000, 10):
@@ -145,3 +158,40 @@ class PolicyReportTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+
+@override_settings(SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8"])
+class SimultaneousReportTests(TransactionTestCase):
+    """TransactionTestCase because the two reports arrive on threads of their own."""
+
+    def test_the_same_complaint_arriving_at_once_writes_one_row(self):
+        checked = {name: threading.Event() for name in ("first", "second")}
+        admits = RowCap.admits
+
+        def admitting(cap, **metadata):
+            checked[threading.current_thread().name].set()
+            if threading.current_thread().name == "first":
+                # Write only once the second has looked too, where it can.
+                checked["second"].wait(2)
+            return admits(cap, **metadata)
+
+        def report():
+            try:
+                Client(REMOTE_ADDR="127.0.0.1").post(
+                    "/csp-report/",
+                    data='{"csp-report": {"effective-directive": "trusted-types", "blocked-uri": "trusted-types-policy"}}',
+                    content_type="application/csp-report",
+                )
+            finally:
+                connection.close()
+
+        with mock.patch.object(RowCap, "admits", admitting):
+            first = threading.Thread(target=report, name="first")
+            first.start()
+            checked["first"].wait(30)
+            second = threading.Thread(target=report, name="second")
+            second.start()
+            first.join(30)
+            second.join(30)
+
+        self.assertEqual(_reports().count(), 1)

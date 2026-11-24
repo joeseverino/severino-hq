@@ -10,8 +10,7 @@ from django.utils import formats, timezone
 from hq.platform.application.markup_testing import elements, text, with_class
 
 from ..moments import (
-    ago,
-    ahead,
+    clock,
     length,
     month,
     numeral,
@@ -47,7 +46,7 @@ class PhrasingTests(SimpleTestCase):
     def test_a_moment_is_read_in_the_timezone_hq_is_read_in(self):
         late = datetime(timezone.localdate().year, 7, 4, 3, 0, tzinfo=UTC)
 
-        self.assertEqual(when(late), "Jul\xa03, 10:00\xa0PM")
+        self.assertEqual(when(late), "Jul\xa03, 10\xa0PM")
         self.assertEqual(when_day(late), "Jul\xa03")
 
     def test_a_bare_date_has_no_time_of_day(self):
@@ -61,24 +60,30 @@ class PhrasingTests(SimpleTestCase):
         naive = datetime(2019, 1, 3, 9, 29, 15)  # noqa: DTZ001 - a naive moment is shown without a zone
         self.assertEqual(when_exact(naive), "Jan\xa03,\xa02019, 9:29:15\xa0AM")
 
-    def test_an_age_is_one_unit_and_a_stamp_is_read_as_written(self):
+    def test_within_a_day_a_moment_is_how_far_it_lies_and_past_it_its_day_and_time(self):
         now = timezone.now()
         cases = {
             timedelta(seconds=59): "just now",
             timedelta(seconds=60): "1\xa0minute ago",
-            timedelta(minutes=59): "59\xa0minutes ago",
             timedelta(hours=5, minutes=40): "5\xa0hours ago",
-            timedelta(days=5, hours=15): "5\xa0days ago",
+            -timedelta(hours=3, minutes=10): "in 3\xa0hours",
+            -timedelta(seconds=20): "in under a minute",
         }
         for age, said in cases.items():
             with self.subTest(age=age):
-                self.assertEqual(ago(now - age, now), said)
-                self.assertEqual(ago((now - age).isoformat(), now), said)
+                self.assertEqual(when(now - age, now), said)
+                self.assertEqual(when((now - age).isoformat(), now), said)
+        for age in (timedelta(days=1, minutes=1), -timedelta(days=1, minutes=1)):
+            with self.subTest(age=age):
+                self.assertEqual(when(now - age, now), f"{when_day(now - age)}, {clock(now - age)}")
 
-    def test_no_moment_is_never_and_a_future_one_is_just_now(self):
-        for missing in ("", "not a time"):
-            self.assertEqual(ago(missing, timezone.now()), "never")
-        self.assertEqual(ago(timezone.now() + timedelta(minutes=5)), "just now")
+    def test_no_moment_is_never(self):
+        for missing in (None, "", "not a time"):
+            self.assertEqual(when(missing, timezone.now()), "never")
+
+    def test_a_whole_hour_drops_its_minutes(self):
+        self.assertEqual(clock(this_year(10, 3, 19)), "7\xa0PM")
+        self.assertEqual(clock(this_year(10, 3, 19, 30)), "7:30\xa0PM")
 
     def test_a_run_of_days_says_a_shared_year_once(self):
         year = timezone.localdate().year
@@ -116,14 +121,6 @@ class PhrasingTests(SimpleTestCase):
         self.assertEqual(length(now + timedelta(seconds=20), now), "under a minute")
         self.assertEqual(length(date(2019, 10, 3)), "Oct\xa03,\xa02019")
 
-    def test_what_is_ahead_says_how_soon_and_what_has_passed_says_how_long_ago(self):
-        now = timezone.now()
-
-        self.assertEqual(ahead(now + timedelta(days=3, hours=2), now), "in 3\xa0days")
-        self.assertEqual(ahead(now + timedelta(seconds=20), now), "in under a minute")
-        self.assertEqual(ahead(now - timedelta(days=5, hours=2), now), "5\xa0days ago")
-        self.assertEqual(ahead(date(2019, 10, 3)), "Oct\xa03,\xa02019")
-
     def test_a_date_printed_bare_reads_the_same_way(self):
         """Django's own formats are the owner's, so a template that forgot the filter agrees."""
 
@@ -150,29 +147,18 @@ class WhenFilterTests(SimpleTestCase):
         self.assertEqual(self.moment(moment), (moment.isoformat(), when_exact(moment), "Oct\xa03, 9:29\xa0AM"))
 
     def test_an_age_keeps_the_exact_moment_behind_it(self):
-        moment = timezone.now() - timedelta(days=5, hours=15)
+        moment = timezone.now() - timedelta(hours=5, minutes=15)
 
-        self.assertEqual(self.moment(moment, "ago"), (moment.isoformat(), when_exact(moment), "5\xa0days ago"))
+        self.assertEqual(self.moment(moment), (moment.isoformat(), when_exact(moment), "5\xa0hours ago"))
 
     def test_a_date_is_a_date(self):
         self.assertEqual(self.moment(date(2019, 10, 3)), ("2019-10-03", "Oct\xa03,\xa02019", "Oct\xa03,\xa02019"))
-        self.assertEqual(self.moment(date(2019, 10, 3), "ago")[2], "Oct\xa03,\xa02019")
 
     def test_the_day_and_exact_forms(self):
         moment = datetime(2019, 10, 3, 9, 29, 15, tzinfo=CHICAGO)
 
         self.assertEqual(self.moment(moment, "day")[2], "Oct\xa03,\xa02019")
         self.assertEqual(self.moment(moment, "exact")[2], "Oct\xa03,\xa02019, 9:29:15\xa0AM\xa0CDT")
-
-    def test_the_clock_form_tells_apart_moments_within_one_minute(self):
-        first, second = this_year(10, 3, 9, 29, 15), this_year(10, 3, 9, 29, 40)
-
-        self.assertEqual(self.moment(first, "clock"), (first.isoformat(), when_exact(first), "Oct\xa03, 9:29:15\xa0AM"))
-        self.assertNotEqual(self.moment(first, "clock")[2], self.moment(second, "clock")[2])
-        self.assertEqual(
-            self.moment(datetime(2019, 10, 3, 9, 29, 15, tzinfo=CHICAGO), "clock")[2],
-            "Oct\xa03,\xa02019, 9:29:15\xa0AM",
-        )
 
     def test_the_calendar_forms_keep_the_day_behind_their_words(self):
         day = date(2026, 10, 5)
@@ -182,11 +168,10 @@ class WhenFilterTests(SimpleTestCase):
         self.assertEqual(self.moment(day, "month")[2], "October\xa02026")
         self.assertEqual(self.moment(day, "numeral")[2], "5")
 
-    def test_the_length_and_ahead_forms_keep_the_exact_moment_behind_them(self):
+    def test_the_length_form_keeps_the_exact_moment_behind_it(self):
         moment = timezone.now() + timedelta(days=3, hours=2)
 
         self.assertEqual(self.moment(moment, "length"), (moment.isoformat(), when_exact(moment), "3\xa0days"))
-        self.assertEqual(self.moment(moment, "ahead")[2], "in 3\xa0days")
 
     def test_an_iso_stamp_reads_like_the_instant_it_names(self):
         moment = this_year(10, 3, 9, 29, 15)

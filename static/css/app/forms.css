@@ -120,8 +120,7 @@ select.toned:not(.tone-neutral) { border-color: currentColor; }
 .input-suffix { display: flex; align-items: center; gap: var(--space-2); }
 .input-suffix > input { flex: 1 1 auto; min-width: 0; }
 .input-suffix > span { color: var(--muted); font-weight: 600; }
-.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
-/* A form whose rows stand in tables (`table_body`, partials/_form.html) adds
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }/* A form whose rows stand in tables (`table_body`, partials/_form.html) adds
    no box of its own, so where those tables stand in sections of the page,
    the sections and its closing row stack as the page's own parts do
    (`.content`, page.css). Its hidden fields take no place in the stack. */
@@ -259,30 +258,8 @@ select.toned:not(.tone-neutral) { border-color: currentColor; }
 .command-center-modal .modal-head h2 { font-size: var(--text-2xl); letter-spacing: -.02em; }
 .command-center-modal .modal-lede { margin-bottom: var(--space-6); }
 .command-center-palette { display: grid; min-height: 0; }
-.command-center-query {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-5);
-  padding: 0 var(--space-6);
-  border-color: var(--field-line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-.command-center-query:focus-within {
-  border-color: var(--accent);
-  outline: 2px solid var(--accent); outline-offset: -2px;
-}
-.command-center-query svg { width: 18px; height: 18px; fill: none; stroke: var(--muted); stroke-width: 1.8; }
-.command-center-query input[type=search] {
-  width: 100%;
-  min-height: 46px;
-  padding: 0;
-  outline: 0;
-  background: transparent;
-  font-size: var(--text-lg);
-}
-.command-center-query kbd { white-space: nowrap; }
+/* The query is one field, drawn as every field is, at the dialog's width. */
+.command-center-query { inline-size: 100%; block-size: 46px; font-size: var(--text-lg); }
 .command-center-results {
   min-height: 120px;
   max-height: min(56vh, 520px);

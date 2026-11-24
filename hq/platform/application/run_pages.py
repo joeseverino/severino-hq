@@ -3,7 +3,7 @@ the command it is run through, and the approval it ran under."""
 
 from typing import Any
 
-from hq.domains.control_plane.models import ApprovalRequest
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
 from .action_links import command_url
 from .automation_findings import worker_problems
@@ -38,7 +38,22 @@ def run_context(record: dict[str, Any], *, user: Any) -> dict[str, Any]:
     approval = approval_of(record)
     approval_url = reverse("core:approval_entry", kwargs={"approval_id": approval.pk}) if approval else ""
     capability = record["capability"]
+    # A run an approved merge asked for (``app_update_approval.merged``) names
+    # that merge's pull request, the change it applies.
+    merge = (
+        OperationRequest.objects.filter(
+            action=OperationRequest.Action.MERGE, result__then__run=str(record["operation_id"])
+        )
+        .select_related("resource")
+        .first()
+    )
+    spec = merge.resource.spec if merge is not None else {}
     return {
+        "merged_from": (
+            {"label": f"{spec.get('repository')}#{spec.get('number')}", "url": merge.resource.get_absolute_url()}
+            if merge is not None
+            else None
+        ),
         # A scan runs no playbook: what it ran is the command that asked for it.
         "ran_label": "Playbook" if record["playbook"] else "Command",
         # A playbook no longer adopted has no command to link to.

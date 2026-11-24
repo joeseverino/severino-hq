@@ -363,9 +363,12 @@ def _queue_operation(
     consented: Consented,
     action: str,
     require_enabled: bool = True,
-    replaces: dict[str, Any] | None = None,
+    carries: dict[str, Any] | None = None,
     once: str = "",
 ) -> OperationAsked:
+    """Queue ``action`` on ``resource`` under the consent of the run asking,
+    with what its worker reads beside the generation in ``carries``."""
+
     def prepare() -> Prepared:
         if require_enabled and not resource.enabled:
             raise PolicyError("This record is switched off in HQ.")
@@ -379,10 +382,8 @@ def _queue_operation(
         allowed, explanation = controller_action_policy(resource.kind, action)
         if not allowed:
             raise PolicyError(explanation)
-        # The copy an apply by hand may only replace (``controller.over_live``).
-        replaced = {REPLACES: replaces} if replaces is not None else {}
         return resource, asked_fields(
-            consent(consented).principal, reason=command.reason, generation=resource.generation, **replaced
+            consent(consented).principal, reason=command.reason, generation=resource.generation, **(carries or {})
         )
 
     operation, queued = enqueue(action, prepare, once=once)
@@ -413,8 +414,23 @@ def queue_reconcile(
         OperationCommand(reason=reason),
         consented=consented,
         action=OperationRequest.Action.RECONCILE,
-        replaces=replaces,
+        # The copy an apply by hand may only replace (``controller.over_live``).
+        carries={REPLACES: replaces} if replaces is not None else None,
         once=f"reconcile:{resource.pk}:g{resource.generation}",
+    )
+
+
+def queue_merge(resource: ManagedResource, *, consented: Consented, carries: dict[str, Any]) -> OperationAsked:
+    """Queue the merge of a pull request just declared at the head approved,
+    once per head, with the step it carries once it merges."""
+
+    return _queue_operation(
+        resource,
+        OperationCommand(),
+        consented=consented,
+        action=OperationRequest.Action.MERGE,
+        carries=carries,
+        once=f"merge:{resource.pk}:{resource.spec.get('head_sha', '')}",
     )
 
 
@@ -595,6 +611,7 @@ ACTION_CAPABILITY = {
     OperationRequest.Action.START: "infrastructure.resource.start",
     OperationRequest.Action.STOP: "infrastructure.resource.stop",
     OperationRequest.Action.APPROVE_ROUTES: "tailnet.routes.approve",
+    OperationRequest.Action.MERGE: "app_update.approve",
 }
 
 

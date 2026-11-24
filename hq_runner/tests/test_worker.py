@@ -74,37 +74,6 @@ class SuccessTests(PassTestCase):
         self.assertNotIn("status", report)
         self.assertIsNone(self.journal.read())
 
-    def test_batch_stops_before_the_next_update_when_a_step_fails(self):
-        claim = fakes.pending()
-        claim["resource"]["spec"]["effect"] = "infrastructure_change"
-        claim["input"].pop("parameters")
-        claim["input"]["steps"] = [
-            {
-                "machine": fakes.APP,
-                "parameters": {
-                    "compose_project_name": name,
-                    "compose_project_upgrade_service": name,
-                    "compose_project_upgrade_image": "example/app:v1@sha256:" + "a" * 64,
-                },
-            }
-            for name in ("first", "second", "third")
-        ]
-        bridge = fakes.Bridge(claim)
-        runner = fakes.Runner()
-
-        def fail_second(run, **kwargs):
-            status = runner(run, **kwargs)
-            return "failed" if run.parameters["compose_project_name"] == "second" else status
-
-        self.work(bridge, fail_second)
-
-        report = self.only_report(bridge)
-        self.assertFalse(report["success"])
-        self.assertEqual([run.parameters["compose_project_name"] for run in runner.runs], ["first", "second"])
-        self.assertTrue(all(run.hosts == (fakes.APP,) for run in runner.runs))
-        self.assertEqual([event["outcome"] for event in report["events"]], ["ok", "failed"])
-        self.assertIn("completing 1 of 3 updates", report["message"])
-
     def test_ansibles_own_check_of_a_roles_arguments_is_reported_only_when_it_fails(self):
         bridge = fakes.Bridge(fakes.pending())
 

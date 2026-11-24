@@ -21,7 +21,6 @@ from hq.domains.control_plane.providers import (
     PROVIDERS,
     controller_capability_registry,
     enabled_controller_actions,
-    registry_label,
 )
 from hq.platform.core.attribution import own_operation
 from hq.platform.core.audit import Outcome, work_ended
@@ -33,12 +32,12 @@ lazy from hq.domains.control_plane.secret_shapes import struck
 from . import agent_access
 from .adoption import manages_through, observes_only
 from .conditions import DRIFTED, PROBLEMS, holding, stamped
-from .infrastructure import controller_contract, resolved_spec, serialize_resource
+from .infrastructure import CALLED_OFF, controller_contract, resolved_spec, serialize_resource
 from .inventory import read_as, read_since, strike_removed
-from .labels import lower_first
 from .plugin_admission import admitted_sources
 from .projection import iso
 from .resource_operations import REPLACES, Prepared, enqueue, serialize_operation
+lazy from .app_update_approval import merged
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -50,7 +49,7 @@ lazy from .github_profile import plan as github_profiles
 lazy from .github_repositories import plan as github_repositories
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .security import CONTROLLER_INTERFACE, cli_principal
-lazy from .work_runs import AUDITED_OUTCOMES
+lazy from .work_runs import AUDITED_OUTCOMES, STOPPED_REPORTING
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,18 +101,17 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
 
 
 # The reason a run ended without a known outcome carries: its lease lapsed,
-# or its worker stopped before it reported (``hq_runner``).
+# or its worker stopped before it reported (``hq_runner``). Either ends it
+# said as ``work_runs.STOPPED_REPORTING``, whatever the worker said.
 OUTCOME_UNKNOWN = "OutcomeUnknown"
-# Why a run whose lease lapsed is ended rather than queued again, by the
-# retry its manifest declares (``OperationManifest.retry``), pinned in its
-# record's spec when it was asked for. ``safe`` alone queues it again.
-_UNKNOWN_OUTCOME = {
-    "never": "It stopped reporting before finishing, so what it changed is unknown, and it is not run again.",
-    "observe_first": (
-        "It stopped reporting before finishing, so what it changed is unknown; "
-        "its playbook checks the machines before running again."
-    ),
-}
+
+
+def _stopped(operation: OperationRequest, result: dict[str, Any]) -> None:
+    _end(
+        operation,
+        OperationRequest.State.CANCELLED,
+        {**result, "ok": False, "message": STOPPED_REPORTING, "reason": OUTCOME_UNKNOWN},
+    )
 
 
 def _fail_lapsed_runs(now) -> None:
@@ -121,24 +119,19 @@ def _fail_lapsed_runs(now) -> None:
 
     A run may have changed machines before its worker stopped, so running it
     again could act twice. It ends cancelled, saved under its own id so each
-    ending is an audited row.
+    ending is an audited row. Its playbook's page says what its retry
+    (``OperationManifest.retry``) lets it do next (``RETRY_WORDS``).
     """
 
     lapsed = (
         OperationRequest.objects.select_for_update()
         .select_related("resource")
         .filter(OPERATION_LAPSE.q(now), action=OperationRequest.Action.RUN)
-        .exclude(resource__spec__retry="safe", input__steps__isnull=True)
+        .exclude(resource__spec__retry="safe")
     )
     for operation in lapsed:
-        retry = "observe_first" if "steps" in operation.input else str(operation.resource.spec.get("retry") or "never")
-        message = _UNKNOWN_OUTCOME.get(retry, _UNKNOWN_OUTCOME["never"])
         with own_operation(operation):
-            _end(
-                operation,
-                OperationRequest.State.CANCELLED,
-                {"ok": False, "message": message, "reason": OUTCOME_UNKNOWN, "retry": retry},
-            )
+            _stopped(operation, {})
 
 
 def release_lapsed(now) -> None:
@@ -152,42 +145,21 @@ def release_lapsed(now) -> None:
 
     _fail_lapsed_runs(now)
 
-    def off(**kind: str) -> Q:
-        return Q(resource__in=ManagedResource.objects.filter(enabled=False, **kind).values("pk")) & ~Q(
-            action=OperationRequest.Action.DELETE
-        )
-
-    lapsed = OperationRequest.objects.filter(OPERATION_LAPSE.q(now))
-    switched_off = off()
-    # The ending names its record's kind, so one statement words each kind it ends.
-    with transaction.atomic():
-        kinds = set(lapsed.filter(switched_off).values_list("resource__kind", flat=True))
-        lapsed.update(
-            state=Case(
-                When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
-                default=Value(OperationRequest.State.QUEUED),
-            ),
-            completed_at=Case(When(switched_off, then=Value(now)), default=None),
-            result=Case(
-                *(
-                    When(off(kind=kind), then=Value(_called_off(kind), output_field=JSONField()))
-                    for kind in sorted(kinds)
-                ),
-                default=F("result"),
-            ),
-            claimed_by="",
-            claimed_at=None,
-            lease_expires_at=None,
-            claim_attempt="",
-        )
-
-
-def _called_off(kind: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "message": f"The {lower_first(registry_label(kind))} was switched off in HQ before its controller finished.",
-        "reason": "SwitchedOff",
-    }
+    switched_off = Q(resource__in=ManagedResource.objects.filter(enabled=False).values("pk")) & ~Q(
+        action=OperationRequest.Action.DELETE
+    )
+    OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).update(
+        state=Case(
+            When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
+            default=Value(OperationRequest.State.QUEUED),
+        ),
+        completed_at=Case(When(switched_off, then=Value(now)), default=None),
+        result=Case(When(switched_off, then=Value(CALLED_OFF, output_field=JSONField())), default=F("result")),
+        claimed_by="",
+        claimed_at=None,
+        lease_expires_at=None,
+        claim_attempt="",
+    )
 
 
 def _compatible_operations(operations, capabilities: tuple[tuple[str, str], ...]):
@@ -504,7 +476,6 @@ def _next_resolvable(operations):
 
 # ``over_live``'s answer for a reconcile whose kind has not been read since it was queued.
 UNREAD = "unread"
-_ASK_AGAIN = f"{OperationRequest.Action.RECONCILE.label} to see and approve the whole difference."
 
 
 def over_live(operation: OperationRequest) -> str:
@@ -521,11 +492,11 @@ def over_live(operation: OperationRequest) -> str:
         return ""
     resource = operation.resource
     if operation.input.get("generation") != resource.generation:
-        return f"HQ's copy changed again before this ran. {_ASK_AGAIN}"
+        return "HQ's copy changed"
     if not read_since(resource.kind, operation.created_at):
         return UNREAD
     if not read_as(resource.kind, replaced, resource.spec):
-        return f"The live record changed after this change was approved. {_ASK_AGAIN}"
+        return "Changed outside HQ"
     return ""
 
 
@@ -630,12 +601,8 @@ def report_operation(
         return _settle_report(operation, report)
 
 
-def _finish(
-    operation: OperationRequest, report: ControllerReport, result: dict[str, Any], *, unknown: bool = False
-) -> None:
-    # Stopped early, as a run whose lease lapsed ends (``_fail_lapsed_runs``).
-    failed = OperationRequest.State.CANCELLED if unknown else OperationRequest.State.FAILED
-    _end(operation, OperationRequest.State.SUCCEEDED if report.success else failed, result)
+def _finish(operation: OperationRequest, report: ControllerReport, result: dict[str, Any]) -> None:
+    _end(operation, OperationRequest.State.SUCCEEDED if report.success else OperationRequest.State.FAILED, result)
 
 
 def _end(operation: OperationRequest, state: str, result: dict[str, Any]) -> None:
@@ -692,12 +659,11 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
     result: dict[str, Any] = {"message": report.message, "conditions": report.conditions, "events": events}
     if report.stated:
         result["stated"] = struck(report.stated, declared_names())[0]
-    _finish(
-        operation,
-        report,
-        result,
-        unknown=any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions),
-    )
+    # Ended as a run whose lease lapsed is (``_fail_lapsed_runs``).
+    if any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions):
+        _stopped(operation, result)
+    else:
+        _finish(operation, report, result)
     for event in events:
         if event["outcome"] in AUDITED_OUTCOMES:
             said = {name: event[name] for name in ("host", "task", "outcome")}
@@ -751,6 +717,8 @@ def _settle_report(operation: OperationRequest, report: ControllerReport) -> dic
     if report.success:
         _confirm_delivery_targets(resource, report.status)
     _read_back_lifecycle(operation)
+    if report.success and operation.action == OperationRequest.Action.MERGE:
+        merged(operation)
 
     if report.success and operation.action == OperationRequest.Action.DELETE:
         # The declaration outlived the thing it described. Keeping it would put

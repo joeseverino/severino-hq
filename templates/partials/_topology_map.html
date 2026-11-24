@@ -46,9 +46,9 @@ drawn from it, and a page of one map takes the topology page's own.
     data-topology-search-text="{{ item.node.label }} {{ item.node.name }} {{ item.node.subtitle }} {{ item.node.summary }} {{ item.node.detail }}"
     data-topology-body="{{ item.body_url }}"
   >
-    <span class="topology-node-title" title="{{ item.node.label }} · {{ item.node.subtitle }}{% if item.node.summary %} · {{ item.node.summary }}{% endif %}">
+    <span class="topology-node-title" title="{{ item.node.label }}{% if item.subtitle %} · {{ item.subtitle }}{% endif %}{% if item.node.summary %} · {{ item.node.summary }}{% endif %}">
       <strong>{% if item.link.url and item.link.external %}{% outside_link url=item.link.url css="topology-node-link" entity=item.link.kind_label %}{{ item.link.label }}{% endoutside_link %}{% elif item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}">{{ item.link.label }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label }}</span>{% endif %}</strong>
-      <small>{{ item.node.subtitle }}</small>
+      {% if item.subtitle %}<small>{{ item.subtitle }}</small>{% endif %}
       {% if item.node.summary %}<small data-topology-node-summary>{{ item.node.summary }}</small>{% endif %}
     </span>
     <a class="topology-node-select" href="{{ item.focus_url }}" data-topology-select aria-controls="{{ map_parts }}-detail" title="Details · {{ item.degree|counted:"link" }}" aria-label="Details for {{ item.node.label }}, {{ item.degree|counted:"link" }}"{% if item.node.id == focus_node %} aria-current="true"{% endif %}><span class="topology-node-degree" aria-hidden="true">{{ item.degree|counted:"link" }}</span></a>

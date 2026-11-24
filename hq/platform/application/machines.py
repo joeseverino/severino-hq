@@ -7,6 +7,7 @@ machine exists because something reported it, and a declaration is for the
 printer and the offline CA, which nothing will ever sweep.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Any
@@ -53,12 +54,13 @@ class MachineState(Toned):
     NOT_ANSWERING = "not answering", Tone.SERIOUS
     UNMONITORED = "not monitored", Tone.NEUTRAL
 
-    @property
-    def watched(self) -> bool:
-        """Whether "online" is out of it: a machine nothing reaches (an offline
-        CA, a printer) and a personal device that is away are not missing."""
 
-        return self not in (MachineState.AWAY, MachineState.UNMONITORED)
+def in_states(states: Iterable[str]) -> str:
+    """How many machines are in each state, in the order the states first
+    appear ("2 online, 1 away"): what the dashboard and the machines page say."""
+
+    states = list(states)
+    return ", ".join(f"{states.count(state)} {state}" for state in dict.fromkeys(states))
 
 
 @dataclass(frozen=True, slots=True)

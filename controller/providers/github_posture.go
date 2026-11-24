@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
@@ -123,7 +122,7 @@ func (g *githubRepository) alerts(ctx context.Context) (map[runtime.ReadingPartN
 		found[name] = counts
 	}
 	if alerts, ok := part(ctx, g, runtime.PartCodeScanning, func() ([]githubapi.CodeScanningAlertItems, error) {
-		return repoGet[[]githubapi.CodeScanningAlertItems](ctx, g, "/code-scanning/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
+		return json200(g.api.CodeScanningListAlertsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.CodeScanningListAlertsForRepoParams{State: new(githubapi.CodeScanningListAlertsForRepoParamsStateOpen), PerPage: new(githubListPage)}))
 	}); ok {
 		severities := []string{}
 		for _, alert := range alerts {
@@ -132,7 +131,7 @@ func (g *githubRepository) alerts(ctx context.Context) (map[runtime.ReadingPartN
 		count(runtime.PartCodeScanning, severities)
 	}
 	if alerts, ok := part(ctx, g, runtime.PartDependabot, func() ([]githubapi.DependabotAlert, error) {
-		return repoGet[[]githubapi.DependabotAlert](ctx, g, "/dependabot/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
+		return json200(g.api.DependabotListAlertsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.DependabotListAlertsForRepoParams{State: new("open"), PerPage: new(githubListPage)}))
 	}); ok {
 		severities := []string{}
 		dependabot = []GitHubDependabotAlert{}
@@ -143,7 +142,7 @@ func (g *githubRepository) alerts(ctx context.Context) (map[runtime.ReadingPartN
 		count(runtime.PartDependabot, severities)
 	}
 	if alerts, ok := part(ctx, g, runtime.PartLeakedCredentials, func() ([]githubapi.SecretScanningAlert, error) {
-		return repoGet[[]githubapi.SecretScanningAlert](ctx, g, "/secret-scanning/alerts?state=open&per_page="+strconv.Itoa(githubListPage))
+		return json200(g.api.SecretScanningListAlertsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.SecretScanningListAlertsForRepoParams{State: new(githubapi.SecretScanningListAlertsForRepoParamsStateOpen), PerPage: new(githubListPage)}))
 	}); ok {
 		severities := make([]string, len(alerts))
 		for i := range alerts {
@@ -269,11 +268,11 @@ func githubRunners(runners []githubapi.Runner) []GitHubRunner {
 
 // access is who can reach the repository and how its Actions may run.
 func (g *githubRepository) access(ctx context.Context, repo githubapi.FullRepository, raw json.RawMessage) (GitHubAccess, error) {
-	actions, err := repoGet[githubapi.ActionsRepositoryPermissions](ctx, g, "/actions/permissions")
+	actions, err := json200(g.api.ActionsGetGithubActionsPermissionsRepositoryWithResponse(ctx, g.owner, g.repo))
 	if err != nil {
 		return GitHubAccess{}, err
 	}
-	workflow, err := repoGet[githubapi.ActionsGetDefaultWorkflowPermissions](ctx, g, "/actions/permissions/workflow")
+	workflow, err := json200(g.api.ActionsGetGithubActionsDefaultWorkflowPermissionsRepositoryWithResponse(ctx, g.owner, g.repo))
 	if err != nil {
 		return GitHubAccess{}, err
 	}
@@ -281,11 +280,11 @@ func (g *githubRepository) access(ctx context.Context, repo githubapi.FullReposi
 	if err != nil {
 		return GitHubAccess{}, err
 	}
-	collaborators, err := repoGet[[]githubapi.Collaborator](ctx, g, "/collaborators?per_page="+strconv.Itoa(githubListPage))
+	collaborators, err := json200(g.api.ReposListCollaboratorsWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListCollaboratorsParams{PerPage: new(githubListPage)}))
 	if err != nil {
 		return GitHubAccess{}, err
 	}
-	keys, err := repoGet[[]githubapi.DeployKey](ctx, g, "/keys?per_page="+strconv.Itoa(githubListPage))
+	keys, err := json200(g.api.ReposListDeployKeysWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListDeployKeysParams{PerPage: new(githubListPage)}))
 	if err != nil {
 		return GitHubAccess{}, err
 	}
@@ -319,7 +318,7 @@ func (g *githubRepository) access(ctx context.Context, repo githubapi.FullReposi
 
 // vulnerabilityAlerts is GitHub's answer for the setting: 204 on, 404 off.
 func (g *githubRepository) vulnerabilityAlerts(ctx context.Context) (bool, error) {
-	_, err := g.raw(ctx, "/vulnerability-alerts")
+	_, err := g.api.ReposCheckVulnerabilityAlertsWithResponse(ctx, g.owner, g.repo)
 	if httpStatus(err) == 404 {
 		return false, nil
 	}

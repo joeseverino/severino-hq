@@ -17,6 +17,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -83,9 +84,6 @@ const (
 
 func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	host := req.Header.Get("X-Fake-Host")
-	if host == githubFakeAPI && req.URL.Path != "/graphql" {
-		recordVendorCall("github", req.Method, req.URL.Path)
-	}
 	key := req.URL.Path
 	if req.URL.RawQuery != "" {
 		key += "?" + req.URL.RawQuery
@@ -113,12 +111,14 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(f.remaining))
 		w.Header().Set("X-RateLimit-Reset", strconv.Itoa(githubFakeReset))
 	}
-	for name, value := range f.headers[host+" "+key] {
+	headers, _ := routed(f.headers, host+" "+key)
+	for name, value := range headers {
 		w.Header().Set(name, value)
 	}
-	if code := f.status[host+" "+key]; code != 0 {
+	if code, _ := routed(f.status, host+" "+key); code != 0 {
+		body, _ := routed(f.routes, host+" "+key)
 		w.WriteHeader(code)
-		_, _ = io.WriteString(w, orDefault(f.routes[host+" "+key], `{"message":"refused"}`))
+		_, _ = io.WriteString(w, orDefault(body, `{"message":"refused"}`))
 		return
 	}
 	switch {
@@ -127,6 +127,7 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_ = json.Unmarshal(data, &grant)
 		token := "minted-" + strconv.Itoa(len(f.grants)+1)
 		f.grants[token] = grant
+		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"token":"`+token+`","expires_at":"2030-01-01T00:00:00Z"}`)
 		return
 	case req.Method == http.MethodPost && key == "/graphql":
@@ -148,7 +149,7 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_, _ = io.WriteString(w, f.changeQuery(body))
 		return
 	case req.Method != http.MethodGet:
-		_, _ = io.WriteString(w, `{"id":1}`)
+		_, _ = io.WriteString(w, orDefault(f.routes[host+" "+req.Method+" "+key], `{"id":1}`))
 		return
 	case key == "/rate_limit" && f.routes[host+" "+key] == "" && f.hour != nil:
 		core := fmt.Sprintf(`{"limit":%d,"remaining":%d,"reset":%d,"used":%d}`, f.hour.limit, f.hour.limit-f.hour.used, githubFakeReset, f.hour.used)
@@ -159,13 +160,27 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			f.remaining, githubFakeReset, 5000-f.remaining, f.remaining, githubFakeReset, 5000-f.remaining)
 		return
 	}
-	answer, ok := f.routes[host+" "+key]
+	answer, ok := routed(f.routes, host+" "+key)
 	if !ok {
 		f.t.Errorf("unexpected GET %s %s", host, key)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	_, _ = io.WriteString(w, answer)
+}
+
+// routed is a route's entry, its query named in any order.
+func routed[V any](routes map[string]V, key string) (V, bool) {
+	path, query, _ := strings.Cut(key, "?")
+	asked, _ := url.ParseQuery(query)
+	for name, found := range routes {
+		at, named, _ := strings.Cut(name, "?")
+		if listed, _ := url.ParseQuery(named); at == path && listed.Encode() == asked.Encode() {
+			return found, true
+		}
+	}
+	var zero V
+	return zero, false
 }
 
 // githubFakeReset is when the fake's hour starts over: 18:06 UTC on the
@@ -363,7 +378,7 @@ func TestGitHubTokensAreScopedAndMintedOncePerSweep(t *testing.T) {
 	ctx := t.Context()
 	call := func(perms githubapi.AppPermissions) {
 		t.Helper()
-		if _, err := h.r.githubCall(ctx, c, "GET", "/repos/example/app", []string{"example/app"}, perms, nil); err != nil {
+		if _, err := h.r.githubAs(ctx, c, []string{"example/app"}, perms).ReposGetWithResponse(ctx, "example", "app"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -441,7 +456,7 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	wanted := map[string]string{}
-	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
+	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubMergeWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
 		encoded, _ := json.Marshal(grant)
 		var names map[string]string
 		_ = json.Unmarshal(encoded, &names)
@@ -483,12 +498,16 @@ func githubRepositoryRoutes() map[string]string {
 			{"id":2,"name":"test","status":"completed","conclusion":"success","started_at":"2030-01-01T01:00:00Z"},
 			{"id":3,"name":"lint","status":"in_progress","conclusion":null,"started_at":"2030-01-01T00:00:00Z"}]}`,
 		api("/pulls?state=open&per_page=30"): `[{"number":6,"title":"Update example-lib to v2","html_url":"https://github.com/example/app/pull/6","user":{"login":"renovate[bot]"},"draft":false,
-				"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":{"sha":"eeee","ref":"renovate/example-lib-2.x"},"labels":[{"name":"dependencies"},{"name":"security"}]},
+				"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":{"sha":"eeee","ref":"renovate/example-lib-2.x"},"base":{"sha":"dddd","ref":"main"},"labels":[{"name":"dependencies"},{"name":"security"}]},
 			{"number":5,"title":"Bump","html_url":"https://github.com/example/app/pull/5","user":{"login":"octo"},"draft":true,"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-02T00:00:00Z","head":{"sha":"bbbb","ref":"bump"},"labels":[]}]`,
 		api("/commits/eeee/check-runs?per_page=100"): `{"check_runs":[{"id":9,"name":"build","status":"completed","conclusion":"success"},{"id":10,"name":"test","status":"completed","conclusion":"failure"}]}`,
-		api("/actions/workflows?per_page=100"):       `{"workflows":[{"id":11,"name":"CI","state":"active"},{"id":12,"name":"graph","state":"active"}]}`,
-		api("/actions/runs/3/pending_deployments"):   `[{"environment":{"name":"production"}},{"environment":{}}]`,
-		api("/releases?per_page=1"):                  `[{"tag_name":"v1.2.0","html_url":"https://github.com/example/app/releases/v1.2.0","published_at":"2030-01-01T00:00:00Z"}]`,
+		api("/pulls/6/files?per_page=100"): `[{"sha":"c1","filename":"compose/example/compose.yml","status":"modified","additions":1,"deletions":1,"changes":2,"blob_url":"","raw_url":"","contents_url":"","patch":"@@ -1 +1 @@\\n-image: example/app:1\\n+image: example/app:2"},
+			{"sha":"c2","filename":"README.md","status":"modified","additions":3,"deletions":0,"changes":3,"blob_url":"","raw_url":"","contents_url":"","patch":"@@ -1 +1,4 @@"},
+			{"sha":"c3","filename":"compose/large/compose.yml","status":"added","additions":900,"deletions":0,"changes":900,"blob_url":"","raw_url":"","contents_url":"","patch":"@@ -0,0 +1 @@\\n+services: {}"},
+			{"sha":"c4","filename":"compose/moved.yml","status":"renamed","additions":0,"deletions":0,"changes":0,"blob_url":"","raw_url":"","contents_url":"","previous_filename":"compose/old.yml"}]`,
+		api("/actions/workflows?per_page=100"):     `{"workflows":[{"id":11,"name":"CI","state":"active"},{"id":12,"name":"graph","state":"active"}]}`,
+		api("/actions/runs/3/pending_deployments"): `[{"environment":{"name":"production"}},{"environment":{}}]`,
+		api("/releases?per_page=1"):                `[{"tag_name":"v1.2.0","html_url":"https://github.com/example/app/releases/v1.2.0","published_at":"2030-01-01T00:00:00Z"}]`,
 		api("/deployments?per_page=20"): `[{"id":21,"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z"},
 			{"id":20,"environment":"production","sha":"9999","created_at":"2030-01-01T00:00:00Z"}]`,
 		api("/deployments/21/statuses?per_page=1"):           `[{"state":"success","log_url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","target_url":""}]`,
@@ -572,8 +591,10 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"head", record.Head, `{"sha":"aaaa000000000000000000000000000000000000","message":"Ship it","author":"octo","date":"2030-01-02T00:00:00Z","url":"https://github.com/example/app/commit/aaaa"}`},
 		{"a check stands as its last run did", record.Checks, `{"state":"pending","total":2,"failing":[],"running":1,"names":["lint","test"]}`},
 		{"the checks the newest pull request runs", record.PullRequestChecks, `["build","test"]`},
-		{"each open pull request, with its checks read only for an update's", record.PullRequests, `[{"number":6,"title":"Update example-lib to v2","url":"https://github.com/example/app/pull/6","author":"renovate[bot]","draft":false,"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":"eeee","branch":"renovate/example-lib-2.x","labels":["dependencies","security"],"checks":{"state":"failure","total":2,"failing":["test"],"running":0,"names":["build","test"]}},` +
-			`{"number":5,"title":"Bump","url":"https://github.com/example/app/pull/5","author":"octo","draft":true,"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-02T00:00:00Z","head":"bbbb","branch":"bump","labels":[],"checks":null}]`},
+		{"each open pull request, with its checks and files read only for an update's", record.PullRequests, `[{"number":6,"title":"Update example-lib to v2","url":"https://github.com/example/app/pull/6","author":"renovate[bot]","draft":false,"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":"eeee","base":"dddd","branch":"renovate/example-lib-2.x","labels":["dependencies","security"],"checks":{"state":"failure","total":2,"failing":["test"],"running":0,"names":["build","test"]},` +
+			`"files":[{"path":"compose/example/compose.yml","status":"modified","additions":1,"deletions":1},{"path":"README.md","status":"modified","additions":3,"deletions":0},` +
+			`{"path":"compose/large/compose.yml","status":"added","additions":900,"deletions":0},{"path":"compose/moved.yml","status":"renamed","additions":0,"deletions":0}],"apps":null},` +
+			`{"number":5,"title":"Bump","url":"https://github.com/example/app/pull/5","author":"octo","draft":true,"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-02T00:00:00Z","head":"bbbb","base":"","branch":"bump","labels":[],"checks":null,"files":null,"apps":null}]`},
 		{"each open Dependabot alert, its package from the dependency or the vulnerability", record.DependabotAlerts, `[{"number":3,"package":"example-lib","ecosystem":"npm","manifest_path":"web/package.json","severity":"critical","first_patched_version":"2.0.1","url":"https://github.com/example/app/security/dependabot/3"},` +
 			`{"number":2,"package":"example.com/unfixed","ecosystem":"go","manifest_path":"go.mod","severity":"high","first_patched_version":null,"url":"https://github.com/example/app/security/dependabot/2"}]`},
 		{"each workflow that exists now once, under its name now", record.Runs, `[{"id":3,"name":"CI","status":"waiting","conclusion":"","event":"push","branch":"main","sha":"aaaa","url":"https://github.com/example/app/actions/runs/3","created_at":"2030-01-03T00:00:00Z"}]`},
@@ -612,7 +633,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		if strings.HasPrefix(call.path, "/repos/actions/checkout/commits/") {
 			resolved++
 		}
-		if !minted || call.method != "GET" || strings.HasPrefix(call.path, "/app") || strings.HasSuffix(call.path, "/installation") || strings.HasPrefix(call.path, githubRepositoriesPage) || call.path == githubRateLimitRoute {
+		if !minted || call.method != "GET" || strings.HasPrefix(call.path, "/app") || strings.HasSuffix(call.path, "/installation") || strings.HasPrefix(call.path, "/installation/repositories") || call.path == "/rate_limit" {
 			continue
 		}
 		encoded, _ := json.Marshal(grant.Permissions)
@@ -784,7 +805,7 @@ func TestAListThatNeverEndsIsRefused(t *testing.T) {
 		page[i] = "1"
 	}
 	read := 0
-	_, err := githubPaged(func(string) ([]string, error) { read++; return page, nil })
+	_, err := githubPaged(func(int) ([]string, error) { read++; return page, nil })
 	if err == nil || read != githubPageLimit {
 		t.Fatalf("read %d pages: %v", read, err)
 	}
@@ -795,7 +816,7 @@ func TestAListThatNeverEndsIsRefused(t *testing.T) {
 func TestMintGitHubTokenNamesItsScope(t *testing.T) {
 	h := newGitHubHarness(t, nil, runtime.Environment{})
 	app := GitHubApp{ID: "12345", Key: h.key}
-	minted, err := MintGitHubToken(t.Context(), h.r.HTTP, h.r.Now(), app, 7, []string{"app"}, githubChecksRead)
+	minted, err := h.r.mintGitHubToken(t.Context(), app, 7, []string{"app"}, githubChecksRead)
 	token := minted.Token
 	if err != nil || token == "" || minted.ExpiresAt != "2030-01-01T00:00:00Z" {
 		t.Fatalf("token %+v: %v", minted, err)
@@ -815,7 +836,7 @@ func TestMintGitHubTokenNamesItsScope(t *testing.T) {
 	if len(parts) != 3 || rsa.VerifyPKCS1v15(&h.key.PublicKey, crypto.SHA256, digest[:], signature) != nil {
 		t.Fatal("the mint is asked under a JWT the app's key signed")
 	}
-	if _, err := MintGitHubToken(t.Context(), h.r.HTTP, h.r.Now(), app, 7, []string{"app"}, githubapi.AppPermissions{}); err == nil || len(h.recorded()) != 1 {
+	if _, err := h.r.mintGitHubToken(t.Context(), app, 7, []string{"app"}, githubapi.AppPermissions{}); err == nil || len(h.recorded()) != 1 {
 		t.Fatal("a token naming no permission, which GitHub would grant every one of, was asked for")
 	}
 }

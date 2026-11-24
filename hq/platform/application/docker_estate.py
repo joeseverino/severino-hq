@@ -30,7 +30,7 @@ from .finding_model import (
     distinct,
     machine_step,
 )
-from .finding_steps import Run
+from .finding_steps import Do, Run
 from .images import ImageRef
 from .labels import human_bytes
 from .projection import read_once
@@ -169,10 +169,7 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
                     subject=node.id,
                     title=f"Unrecognized container {name} on {node.label}",
                     severity=Tone.SERIOUS,
-                    explanation=(
-                        "No compose project started it, so HQ is not tracking it. "
-                        "Adopt it if you started it. Otherwise find what did and remove it."
-                    ),
+                    explanation="No compose project started it.",
                     steps=machine_step(
                         f"If nothing needs it, remove it from {host or node.label}",
                         host or node.label,
@@ -258,11 +255,7 @@ def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=f"{container} on {node.label} runs an older {reference}",
             severity=Tone.ATTENTION,
-            explanation=(
-                f"{reference} on this machine is now image {tagged}, and the "
-                f"container still runs {ended(running)} Recreate it to run what "
-                "was pulled."
-            ),
+            explanation="Recreate it to run what was pulled.",
             part=container,
             evidence=(
                 ("Container", container),
@@ -285,18 +278,14 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=f"{container} on {node.label} runs an untagged image",
             severity=Tone.ATTENTION,
-            explanation=(
-                "No tag on this machine names the image it runs, so its "
-                "version cannot be told or reproduced. Pin a tag in its "
-                "compose file and recreate it."
-            ),
+            explanation="Its version cannot be told or reproduced.",
             part=container,
             evidence=(
                 ("Container", container),
                 ("Image", running),
                 *((("Started from", reference),) if reference else ()),
             ),
-            steps=_recreate(container, service, host or node.label),
+            steps=(Do("Pin a tag in its compose file."), *_recreate(container, service, host or node.label)),
         )
         for node, container, host, reference, running, _tagged, service in _stated(estate, IMAGE_UNTAGGED)
     )
@@ -321,8 +310,8 @@ RULES: tuple[FindingRule, ...] = (
         Tone.SERIOUS,
         unrecognized_containers,
         gathered=True,
-        operator_action=("Adopt it if you started it. Otherwise remove it on its machine."),
-        no_help_reason=("HQ cannot remove a container it did not start."),
+        operator_action="Adopt it, or remove it on its machine.",
+        no_help_reason="HQ cannot remove a container it did not start.",
         card=CONTAINERS_CARD,
         bars={Tone.SERIOUS: "a container runs that no compose project started"},
     ),
@@ -332,7 +321,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         images_behind,
         gathered=True,
-        operator_action=("Recreate the container from its compose project so it runs the image its tag names now."),
+        operator_action="Recreate it from its compose project.",
         no_help_reason=cannot_run_commands(),
         card=CONTAINERS_CARD,
         bars={Tone.ATTENTION: "a container runs an older image than its tag names now"},
@@ -343,7 +332,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         images_untagged,
         gathered=True,
-        operator_action=("Pin a tag for the image in the container's compose file and recreate it."),
+        operator_action="Pin a tag in its compose file, then recreate it.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
         bars={Tone.ATTENTION: "a container runs an image with no tag"},

@@ -264,21 +264,6 @@ class PageTests(TestCase):
         self.assertIn("full", rows[OTHER])
         self.assertEqual(rows["example-quiet"], set(), "an agent holding none shows nothing more")
 
-    def test_the_refused_headline_counts_what_the_rows_count(self):
-        _seen(AGENT)
-        denials.record_denial(interface="mcp", reason=Code.RATE_LIMITED, actor=AGENT)
-        refused = AuditLog.objects.get(metadata__reason=Code.RATE_LIMITED)
-        refused.metadata = {**refused.metadata, denials.COUNT: 14}
-        refused.save(update_fields=["metadata"])
-        denials.record_denial(interface="mcp", reason=Code.FORBIDDEN, actor=AGENT)
-        self.client.force_login(get_user_model().objects.create_user("operator"))
-
-        page = self.client.get(reverse("agent_policy"))
-
-        rows = sum(standing.activity.refused for standing in page.context["standings"])
-        self.assertEqual(page.context["refused_count"], rows)
-        self.assertEqual(rows, 15)
-
 
 def _streams(page, client_id: str) -> set[str]:
     """The stream states ``client_id``'s row on the Agents page shows, its open

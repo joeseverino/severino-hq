@@ -345,6 +345,20 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertFalse(any(shown()))
 
     @with_script
+    def test_opening_a_fold_moves_no_other_rows_controls(self):
+        from hq.platform.core.tests.browser.catalog import page
+
+        name = "table/controls-per-row"
+        self.pages = {**self.pages, name: page(name)}
+        self.open(name, WIDTHS[-1])
+        self.page.locator("#short-actions [data-fold-toggle]").click()
+        row = self.page.locator('tr[data-folded="short-actions"]')
+        widths = "(row) => Array.from(row.cells, (cell) => cell.getBoundingClientRect().width)"
+        before = row.evaluate(widths)
+        self.page.locator("#long-actions [data-fold-toggle]").click()
+        self.assertEqual(row.evaluate(widths), before)
+
+    @with_script
     def test_a_folds_rows_offer_their_toggles_as_they_appear(self):
         """A row a fold shows offers its toggle in the frame that draws it,
         since the stylesheet decides it from what the server wrote."""

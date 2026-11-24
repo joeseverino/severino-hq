@@ -1,19 +1,11 @@
 from dataclasses import replace
 
 from django.test import TestCase
-from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
-from hq.platform.core.testing import AGENT, operator
-
-from ..contracts import Closed
-from ..machines import Machine
 from ..upgrades import HIGH as HIGH_RISK, LOW, MAJOR, PATCH, change_between, plans
-from .procedures import NEXT_REVISION, Supply, manifest
 from .test_container_standard import runtime
-from .test_containers import HIGH, container, estate, inventory, running
-from .test_image_findings import project
+from .test_containers import HIGH, container, estate, inventory
 
 TARGET = "sha256:" + "9" * 64
 
@@ -34,209 +26,6 @@ def published(app_tags=("v1.2.0", "v1.2.1"), digests=None):
             {"image": "docker.io/example/kuma", "tags": ["1", "2"], "digests": {"2": TARGET}, "read_at": now},
         ],
     )
-
-
-class DeployInputs(Closed):
-    compose_project_name: str
-    compose_project_upgrade_service: str
-    compose_project_upgrade_image: str
-
-
-class ReviewedDeploymentTests(TestCase):
-    operation = "example.compose_deploy"
-    image = f"ghcr.io/example/app:v1.2.1@{TARGET}"
-    pin = {"project": "app", "file": "compose.yaml", "service": "web", "image": image}
-
-    def setUp(self):
-        estate()
-        published()
-        inventory("portainer.runtime", [runtime("app", stack="app", service="web", healthcheck=True)])
-        inventory("portainer.compose_project", [project("app", "/opt/example/app/compose.yaml")])
-        container("app")
-        self.user = operator(self.client)
-        self.procedure = manifest(
-            id=self.operation,
-            input_type=DeployInputs,
-            fixes=("container-image-update",),
-            compose_updates={"source": "compose", "destination": "/opt/example"},
-            compose_images=(self.pin,),
-        )
-        self.supply = Supply(self, self.procedure)
-        self.supply.know(Machine("example-box"))
-
-    def offer(self):
-        from ..markup_testing import links
-
-        response = self.client.get(reverse("action_items"))
-        return [url for label, url in links(response.content) if label == "Review image update"]
-
-    def test_reviewed_image_reuses_the_run_form_and_keeps_the_reviewed_values(self):
-        (url,) = self.offer()
-        response = self.client.get(url)
-        self.assertContains(response, self.image)
-        self.assertContains(response, "Deploy image")
-        self.assertFalse(OperationRequest.objects.exists())
-        response = self.client.post(
-            url,
-            {
-                "parameters.compose_project_upgrade_image": "wrong",
-                "reason": "Update the reviewed image",
-                "__confirm_effect": "on",
-                "__retry_key": "web:example-image-update",
-            },
-        )
-        self.assertEqual(response.status_code, 302, getattr(response, "context_data", {}).get("form"))
-        queued = OperationRequest.objects.get()
-        self.assertEqual(queued.input["hosts"], ["example-box"])
-        self.assertEqual(
-            queued.input["parameters"],
-            {
-                "compose_project_name": "app",
-                "compose_project_upgrade_service": "web",
-                "compose_project_upgrade_image": self.image,
-            },
-        )
-        job_url = reverse("jobs:run", kwargs={"pk": queued.pk})
-        self.assertRedirects(response, job_url)
-        waiting = self.client.get(job_url, headers={"X-Fragment": "run_status"})
-        self.assertContains(waiting, 'data-fragment-poll="2"')
-        self.assertContains(waiting, "Cancel run")
-        OperationRequest.objects.filter(pk=queued.pk).update(
-            state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now(), result={"ok": True}
-        )
-        finished = self.client.get(job_url, headers={"X-Fragment": "run_status"})
-        self.assertContains(finished, 'data-fragment-name="run_status"')
-        self.assertNotContains(finished, "data-fragment-poll")
-        self.assertNotContains(finished, "Cancel run")
-
-    def _batch(self):
-        from .. import compose_batches
-        from ..automation_manifest import ComposeImage
-        from ..security import web_principal
-
-        inventory(
-            "portainer.container",
-            [{**running(name, "ghcr.io/example/app:v1.2.0@sha256:aaa"), "stack": name} for name in ("app", "other")],
-        )
-        inventory(
-            "portainer.runtime",
-            [runtime(name, stack=name, service="web", healthcheck=True) for name in ("app", "other")],
-        )
-        inventory(
-            "portainer.compose_project",
-            [project(name, f"/opt/example/{name}/compose.yaml") for name in ("app", "other")],
-        )
-        container("other")
-        pins = (self.pin, {**self.pin, "project": "other"})
-        self.supply(
-            self.procedure.model_copy(
-                update={"compose_images": tuple(ComposeImage.model_validate(pin) for pin in pins)}
-            )
-        )
-        (batch,) = compose_batches.available(web_principal(self.user))
-        return batch
-
-    def test_batch_reviews_exact_pins_and_queues_one_guarded_job(self):
-        batch = self._batch()
-        response = self.client.get(reverse("action_items"))
-        self.assertContains(response, "Review image updates")
-        response = self.client.get(batch.url)
-        self.assertContains(response, "Deploy images")
-        self.assertContains(response, "9" * 64, count=2)
-        self.assertFalse(OperationRequest.objects.exists())
-        response = self.client.post(
-            batch.url,
-            {"review": "unreviewed", "__confirm_effect": "on", "__retry_key": "web:example-batch"},
-        )
-
-        self.assertEqual(response.status_code, 302, response.context_data if hasattr(response, "context_data") else "")
-        queued = OperationRequest.objects.get()
-        self.assertEqual(queued.input["hosts"], ["example-box"])
-        self.assertEqual(queued.input["steps"], batch.steps)
-        self.assertNotIn("parameters", queued.input)
-        self.assertRedirects(response, reverse("jobs:run", kwargs={"pk": queued.pk}))
-        self.supply(self.procedure.model_copy(update={"revision": NEXT_REVISION}))
-        self.assertContains(self.client.get(batch.url), "Open Needs you", status_code=409)
-
-    def test_agent_batch_approval_binds_all_updates_and_expires_when_the_review_changes(self):
-        from .. import compose_batches
-        from ..approvals import APPROVE
-        from ..capabilities import run_capability
-        from ..security import web_principal
-
-        batch = self._batch()
-        asked = run_capability(
-            compose_batches.NAME, batch.query, principal=AGENT, idempotency_key="example-update-batch"
-        ).answer
-        self.assertEqual(asked.get("status"), "awaiting_approval", asked)
-        approval = ApprovalRequest.objects.get()
-        self.assertEqual(approval.baseline["updates"], batch.steps)
-        self.assertFalse(OperationRequest.objects.exists())
-
-        self.supply(self.procedure.model_copy(update={"revision": NEXT_REVISION}))
-        refused = run_capability(
-            APPROVE,
-            {"approval_id": str(approval.id)},
-            principal=web_principal(self.user),
-            idempotency_key="example-approve-outdated-batch",
-        ).answer
-        self.assertFalse(refused["ok"], refused)
-        approval.refresh_from_db()
-        self.assertEqual(approval.state, ApprovalRequest.State.STALE)
-        self.assertFalse(OperationRequest.objects.exists())
-
-    def test_stale_review_cannot_submit_through_the_old_link(self):
-        (url,) = self.offer()
-        self.supply(self.procedure.model_copy(update={"revision": NEXT_REVISION}))
-        self.assertContains(self.client.post(url, {"__confirm_effect": "on"}), "Open Needs you", status_code=409)
-        self.assertFalse(OperationRequest.objects.exists())
-
-    def test_no_action_until_the_exact_pin_and_login_are_available(self):
-        self.supply(self.procedure.model_copy(update={"compose_images": ()}))
-        self.assertEqual(self.offer(), [])
-        self.supply(self.procedure)
-        self.supply.reach()
-        self.assertEqual(self.offer(), [])
-
-    def test_stateful_unit_with_an_override_requires_both_protections_in_the_reviewed_playbook(self):
-        from ..automation_runs import compose_deployment
-        from ..security import web_principal
-
-        reader = web_principal(self.user)
-        inventory(
-            "portainer.compose_project",
-            [project("app", "/opt/example/app/compose.yaml", "/opt/example/app/compose.override.yaml")],
-        )
-        inventory(
-            "portainer.container",
-            [{**running("app", "ghcr.io/example/app:v1.2.0@sha256:aaa"), "unit": "example.service", "stack": "app"}],
-        )
-        inventory(
-            "portainer.runtime",
-            [
-                runtime(
-                    "app",
-                    stack="app",
-                    service="web",
-                    healthcheck=True,
-                    mounts=[{"type": "bind", "source": "/srv/app", "destination": "/data", "read_only": False}],
-                )
-            ],
-        )
-        (plan,) = plans()
-        self.assertTrue(plan.stateful)
-        target = plan.compose_target
-        assert target is not None
-        self.assertTrue(target.needs_owning_unit)
-        assert self.procedure.compose_updates is not None
-        for restore, unit in ((False, False), (True, False), (False, True), (True, True)):
-            with self.subTest(restore=restore, unit=unit):
-                updates = self.procedure.compose_updates.model_copy(
-                    update={"restores_data": restore, "uses_owning_unit": unit}
-                )
-                self.supply(self.procedure.model_copy(update={"compose_updates": updates}))
-                deployment = compose_deployment("container-image-update", "example", target.machine, target, reader)
-                self.assertEqual(deployment is not None, restore and unit)
 
 
 class ChangeTests(TestCase):
@@ -280,15 +69,9 @@ class PlanTests(TestCase):
         self.assertEqual([advisory["id"] for advisory in plan.fixes], ["GHSA-high"])
         self.assertEqual(plan.verified_by, ("its health check",))
         self.assertEqual((plan.fixes_tone, plan.data_tone, plan.verified_tone), ("good", "", ""))
-        # Nothing was snapshotted, so only the override comes back.
-        self.assertEqual(plan.steps[-1].detail, "The override as it was is restored if verification fails.")
-        # Nothing sends it to the machine, and the reason says that step, not
-        # that the upgrade cannot happen.
-        (blocker,) = plan.blockers
-        self.assertEqual(blocker.id, "no-apply-path")
-        self.assertEqual(blocker.reason, f"HQ does not send upgrades to {plan.container.machine.name}.")
+        self.assertEqual(plan.blockers, ())
 
-    def test_data_is_snapshotted_and_restored(self):
+    def test_its_data_is_its_writable_mounts(self):
         estate()
         published()
         inventory(
@@ -314,8 +97,6 @@ class PlanTests(TestCase):
         plan = self.plan("app")
 
         self.assertEqual(([mount["source"] for mount in plan.data], plan.data_tone), (["app_data"], "attention"))
-        self.assertEqual([step.id for step in plan.steps][:2], ["pull", "snapshot"])
-        self.assertIn("the snapshot", plan.steps[-1].detail)
 
     def test_a_major_version_is_high_risk_and_waits_for_a_person(self):
         estate()
@@ -332,7 +113,7 @@ class PlanTests(TestCase):
 
         blockers = {blocker.id for blocker in self.plan("app").blockers}
 
-        self.assertEqual(blockers, {"no-target-digest", "not-declared", "mounts-unread", "no-apply-path"})
+        self.assertEqual(blockers, {"no-target-digest", "not-declared", "mounts-unread"})
         self.assertFalse(self.plan("app").viable)
 
     def test_nothing_is_automatic_before_its_target_is_read_and_opted_in(self):
@@ -367,8 +148,7 @@ class PlanTests(TestCase):
         found = get_resource("upgrades", "example-box:app", principal=cli_principal())
 
         self.assertEqual({item["address"] for item in listed["items"]}, {"example-box:app", "example-box:kuma"})
-        self.assertEqual((found["to"]["digest"], found["change"], found["viable"]), (TARGET, "patch", False))
-        self.assertEqual([step["id"] for step in found["steps"]][:2], ["pull", "trial"])
+        self.assertEqual((found["to"]["digest"], found["change"], found["viable"]), (TARGET, "patch", True))
 
 
 class ProvenanceJoinTests(TestCase):
@@ -436,49 +216,6 @@ class JoinedReadingTests(TestCase):
         self.assertNotIn("mounts-unread", {blocker.id for blocker in plan.blockers})
         self.assertEqual(posture.state_of("no-docker-socket"), "unmet")
 
-    def test_the_pin_step_names_the_override_it_would_write_never_the_compose_file(self):
-        estate()
-        published()
-        inventory(
-            "portainer.compose_project",
-            [
-                {
-                    "connection_ref": "example-portainer",
-                    "host": "example-box",
-                    "name": "app",
-                    "config_files": ["/opt/apps/app/docker-compose.yml"],
-                    "containers": ["app"],
-                },
-            ],
-        )
-
-        plan = next(plan for plan in plans() if plan.container.running.name == "app")
-
-        pin = next(step for step in plan.steps if step.id == "pin")
-        self.assertIn("compose override", pin.label)
-        self.assertTrue(pin.detail.startswith("/opt/apps/app/docker-compose.override.yml."))
-
-    def test_the_pin_step_names_the_stacks_own_override_when_it_has_one(self):
-        estate()
-        published()
-        inventory(
-            "portainer.compose_project",
-            [
-                {
-                    "connection_ref": "example-portainer",
-                    "host": "example-box",
-                    "name": "app",
-                    "config_files": ["/opt/apps/app/compose.yaml", "/opt/apps/app/compose.override.yaml"],
-                    "containers": ["app"],
-                },
-            ],
-        )
-
-        plan = next(plan for plan in plans() if plan.container.running.name == "app")
-
-        pin = next(step for step in plan.steps if step.id == "pin")
-        self.assertTrue(pin.detail.startswith("/opt/apps/app/compose.override.yaml."))
-
 
 class ReadinessTests(TestCase):
     def test_a_current_container_says_what_an_upgrade_would_take_before_one_exists(self):
@@ -506,7 +243,7 @@ class ReadinessTests(TestCase):
         self.assertEqual([mount["source"] for mount in found.data], ["/opt/apps/web/data"])
         self.assertEqual(found.verified_by, ())
         reasons = {blocker.id for blocker in found.not_automatic}
-        self.assertLessEqual({"no-apply-path", "unverifiable", "attestations-unread", "not-opted-in"}, reasons)
+        self.assertLessEqual({"unverifiable", "attestations-unread", "not-opted-in"}, reasons)
         # Nothing about a target it does not have.
         self.assertFalse(reasons & {"no-target-digest", "not-a-patch", "target-affected"})
         self.assertFalse(found.automatic)

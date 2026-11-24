@@ -20,7 +20,7 @@ from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule
 from .references import Kind
 from .tone import Tone
 from .topology_model import TopologyNode
-from .ui import counted, ended
+from .ui import counted
 lazy from .facts import snapshots_of
 lazy from .infrastructure import declared_resources
 
@@ -104,10 +104,7 @@ def _no_connection(node: TopologyNode, ref: str, reported: tuple[str, ...]) -> F
         subject=node.id,
         title=f"{name} uses a connection no controller has",
         severity=Tone.ATTENTION,
-        explanation=(
-            f"It names the connection {ended(ref)} No controller has one called that, so "
-            f"nothing reads {name} and nothing applies HQ's config to it."
-        ),
+        explanation="Nothing reads it or applies its settings.",
         evidence=(
             ("Connection it names", ref),
             ("Connections the controllers have", counted(len(reported), "connection")),
@@ -124,9 +121,7 @@ def _no_parent(node: TopologyNode, kind: str, missing: str) -> Finding:
         subject=node.id,
         title=f"{name} is in {missing}, which HQ does not have",
         severity=Tone.ATTENTION,
-        explanation=(
-            f"HQ expects no {what} called {missing} and no connection reads one, so {name} cannot be applied anywhere."
-        ),
+        explanation="It cannot be applied anywhere.",
         evidence=((f"{what.capitalize()} it names", missing),),
         remedies=_edit(node),
     )
@@ -157,11 +152,11 @@ def _names_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         RULE,
-        "A record names something that is not there",
+        "Missing reference",
         Tone.ATTENTION,
         _names_nothing,
         gathered=True,
-        operator_action=("Change the record to name a connection or a domain HQ has, or add the one it names."),
+        operator_action="Name a connection or domain HQ has, or add the one it names.",
         no_help_reason="HQ cannot tell which one was meant.",
         bars={Tone.ATTENTION: "a record names a connection or domain HQ does not have"},
     ),

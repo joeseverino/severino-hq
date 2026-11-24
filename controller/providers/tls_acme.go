@@ -341,7 +341,7 @@ func (r *Registry) placeChallenge(ctx context.Context, name, value string) (chal
 	if err != nil {
 		return challengeRecord{}, err
 	}
-	written, err := writtenRecord(r.cloudflareRequest(ctx, "/zones/"+zoneID+"/dns_records", "POST", payload))
+	written, err := writtenRecord(cloudflareResult(r.cloudflare(runtime.ConnectionProviderCloudflareDNS, "", false).DNSRecordsForAZoneCreateDNSRecordWithResponse(ctx, zoneID, payload)))
 	if err != nil {
 		return challengeRecord{}, err
 	}
@@ -360,8 +360,9 @@ func (r *Registry) removeChallenges(ctx context.Context, placed []challengeRecor
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), acmeChallengeCleanup)
 	defer cancel()
 	var failed []error
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareDNS, "", false)
 	for _, record := range placed {
-		if _, err := r.cloudflareRequest(ctx, "/zones/"+record.zoneID+"/dns_records/"+record.recordID, "DELETE", nil); err != nil {
+		if _, err := cloudflareRead(client.DNSRecordsForAZoneDeleteDNSRecordWithResponse(ctx, record.zoneID, record.recordID)); err != nil {
 			failed = append(failed, fmt.Errorf("the challenge record %s could not be removed: %w", record.name, err))
 		}
 	}

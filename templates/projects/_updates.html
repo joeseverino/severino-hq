@@ -10,7 +10,7 @@ queue's alert item and the projects list link here.
 {% if pulls or unmatched %}
   {% section "Open updates" id="updates" %}
     {% include "partials/_record_list.html" with rows=repo.update_rows label="Open updates" only %}
-  {% aside %}<span class="count">{% if pulls %}{{ pulls|length|counted:"pull request,pull requests" }}{% endif %}{% if pulls and unmatched %}{% dot %}{% endif %}{% if unmatched %}{{ unmatched|length|counted:"alert with no update,alerts with no update" }}{% endif %}</span>
+  {% aside %}{% if pulls %}{{ pulls|length|counted:"pull request,pull requests" }}{% endif %}{% if pulls and unmatched %}{% dot %}{% endif %}{% if unmatched %}{{ unmatched|length|counted:"alert with no update,alerts with no update" }}{% endif %}
   {% endsection %}
 {% endif %}
 {% endwith %}

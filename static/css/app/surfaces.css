@@ -73,9 +73,9 @@
   meter::-webkit-meter-bar { border: 0; }
   :where(
   .btn:not(.link, .menu), button:not([class]),
-  input:is([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], [type=file], :not([type])):not(.dropzone input, .command-center-query input),
+  input:is([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], [type=file], :not([type])):not(.dropzone input),
   select:not(.table-sort select), textarea,
-  .table-filter-menu > button, .table-toggle, .table-sort, .command-center-query,
+  .table-filter-menu > button, .table-toggle, .table-sort,
   .pill, .scope-chip, .link-chips a, .chart-tab, .role-mark, .switch-track, .demo-flag, .demo-about, kbd,
   .choice-card, .relation-link, .topology-node, .conn-peering,
   .ladder-rung:not(.ladder-body .ladder-rung, .check-ladder.is-route > .ladder-rung), .check-ladder.is-route > .ladder-rung > details > .ladder-body,
@@ -117,7 +117,7 @@
   .figure-dots:has(> :nth-child(9)) { grid-template-rows: repeat(3, auto); }
   /* Dots may wrap into rows taller than the value: it keeps to the top of its
      line, level with the values beside it, rather than at their middle. */
-  .fact-figure:has(> .figure-dots) > span { align-self: flex-start; }
+  .fact-figure:has(> .figure-dots) > .fact-shown { align-self: flex-start; }
   /* The dots keep to the top as well, at least the value's line tall, so a
      single row of them stands at the middle of the value's line. */
   .fact-figure > .figure-dots { align-self: flex-start; min-block-size: 1lh; align-content: center; align-items: center; }
@@ -164,6 +164,10 @@
   .section-fold > summary:hover :is(h2, h3) { color: var(--accent-2); }
   .section-fold > summary :is(h2, h3) { margin: 0; }
   .section-fold[open] > summary { margin-bottom: var(--space-5); }
+  /* Among a row's buttons ({% button_row %}) it is one of their items while
+     closed, and opens onto a line of its own the row's whole width. */
+  .form-actions > .section-fold { flex: 0 1 auto; margin: 0; }
+  .form-actions > .section-fold[open] { flex-basis: 100%; }
 
   /* A head's controls: the lead and the next beside the title (more where
      the page names them, data-many), the menu holding a copy of each of those
@@ -219,8 +223,10 @@
          that, and the value never narrows past its longest run that cannot
          break (`min-content`, a count bound to its noun), so a long label never
          squeezes its value to a letter a line or parts a number from its unit. */
-      & > .fact { grid-column: 1 / -1; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); }
-      & dt { font-size: var(--text-sm); }
+      & > .fact { grid-column: 1 / -1; grid-row: auto; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); grid-template-rows: none; align-items: baseline; gap: var(--space-2) var(--space-4); }
+      /* A row of its own, the label stands on its value's first line rather
+         than at the foot of a row the band's cells share. */
+      & > .fact > dt { align-self: auto; font-size: var(--text-sm); }
       & .fact-value { text-align: right; font-size: var(--text-md); }
       & .fact-detail { grid-column: 1 / -1; }
       /* A value's dots stand before it, so the value keeps the right edge. */
@@ -281,6 +287,9 @@
    a control beside it (a button, a month's arrows) adds no height, and heads
    that share a row are one height and start their frames together. */
 .section > .section-head > :is(h2, h3, h4, h5, h6) { min-block-size: var(--control-size); align-content: center; }
+/* A control after the words beside the heading stands as far from them as a
+   row's controls stand apart. */
+.section-aside > * + :is(.btn, .ask) { margin-inline-start: var(--space-4); }
 .section > .section-body {
   --section-start: var(--section-inset, var(--space-8));
   --section-end: var(--space-8);

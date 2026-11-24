@@ -106,7 +106,7 @@ def _sender(submission: dict) -> Cell:
 
     email = submission.get("email") or ""
     lines = (Cell(email, muted=True, cut=True),) if email else ()
-    return Cell(submission.get("name") or "", submission["url"], name=True, lines=lines)
+    return Cell(submission.get("name") or "", submission["url"], lines=lines)
 
 
 def _status(submission: dict) -> Cell:

@@ -140,7 +140,7 @@ class RequestFacts:
 
 def measure_request(facts: RequestFacts) -> Measurement:
     """``facts`` against the request standard. A check of HQ's standard among
-    them is an open item, shown quietly, unless Advanced HQ Posture is on."""
+    them is an open item, shown quietly, unless Advanced HQ posture is on."""
 
     return measure(facts, REQUEST_STANDARD, quiet=() if advanced() else STANDARD)
 

@@ -6,7 +6,7 @@
 {% layout %}
 {% section event_heading %}
   {% facts label="Event" %}
-    {% fact "When" %}{{ event.created_at|when:"exact" }}{% endfact %}
+    {% fact "When" %}{{ event.created_at|when }}{% endfact %}
     {% fact "Who" value=event.who.words %}
     {% if event.object_type %}{% fact "Object" %}{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} {% muted %}#{{ event.object_id }}{% endmuted %}{% endif %}{% endfact %}{% endif %}
     {% if about %}{% fact "About" %}<a href="{{ about.1 }}">{{ about.0 }}</a>{% endfact %}{% endif %}
@@ -19,7 +19,7 @@
       {% fact "Commit adopted" value=adopted_revision|or_empty %}
       {% if scan.proposal.rejected_at %}
         {% fact "Rejected by" value=rejected_by.words|or_empty %}
-        {% fact "Rejected" %}{{ scan.proposal.rejected_at|when:"exact" }}{% endfact %}
+        {% fact "Rejected" %}{{ scan.proposal.rejected_at|when }}{% endfact %}
       {% endif %}
     {% endif %}
   {% endfacts %}

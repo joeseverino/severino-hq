@@ -94,7 +94,9 @@ def projects() -> tuple[Card, ...]:
         id="hq.projects.updates",
         label=Counted(reading["open"], "Open update", "Open updates"),
         url=f"{reverse('projects:list')}?updates_on=1",
-        detail=counted(reading["unmatched"], "security alert with no fix open", "security alerts with no fix open")
+        detail=counted(
+            reading["unmatched"], "security alert with no update open", "security alerts with no update open"
+        )
         if reading["unmatched"]
         else "",
     )

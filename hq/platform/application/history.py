@@ -447,13 +447,13 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
 
     folding = {"folded": folded} if folded else {"folds": line.fold if line.grouped else "", "folded": line.under}
     if line.rest is not None:
-        return Row((Cell(line.rest.more_words, line.url, name=True),), across=True, **folding)
+        return Row((Cell(line.rest.more_words, line.url),), across=True, **folding)
     if line.burst or line.moment is not None:
         moment = line.burst[0] if line.burst else line.moment
         title = (
-            Cell(line.title, line.url, name=True, role="data", fold=True)
+            Cell(line.title, line.url, role="data", fold=True)
             if line.burst
-            else Cell(moment.title, line.url, external=moment.external, name=True, role="data")
+            else Cell(moment.title, line.url, external=moment.external, role="data")
         )
         person, outcome = Cell(moment.actor), Cell(moment.source, tone="neutral")
         said = Cell(moment.detail, muted=True, role="data")
@@ -474,7 +474,7 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
         state = line.state
         outcome = Cell.state(state) if isinstance(state, AuditLog.Action) else Cell(state, tone="neutral")
         said = Cell(line.message, muted=True, role="data")
-    when = Cell(moment=line.at, form="clock", muted=True)
+    when = Cell(moment=line.at, muted=True)
     return Row((title, when, *((person,) if who else ()), outcome, said), key=key, **folding)
 
 

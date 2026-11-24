@@ -10,6 +10,8 @@ from collections.abc import Callable, Iterator
 from functools import partial
 from typing import Any
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -34,16 +36,30 @@ from .finding_steps import Do, Run
 from .images import fixed_in
 from .projection import read_once
 from .references import Kind
-from .standard_findings import Help, Measured, Per, Standard
+from .standard_findings import Help, Measured, Per, Standard, why
 from .standards import Check
 from .tone import Tone
 from .ui import agreed, ended
 from .workflow_contracts import ActionLink
+lazy from .app_update_approval import approval_of, approve_remedy
+lazy from .app_updates import managed_by, update_of
+lazy from .entity_links import web_url
+lazy from .labels import lower_first
 lazy from .topology_estate import machine_nodes
-lazy from .upgrades import HIGH, MAJOR, OVERRIDES, Plan, plan_for
+lazy from .upgrades import HIGH, MAJOR, Plan, plan_for
 
-# Why an update is a person's to apply.
-BY_HAND = "HQ cannot apply an update itself yet."
+# The files a stack's override is read from, beside its compose file.
+OVERRIDES = (
+    "compose.override.yaml",
+    "compose.override.yml",
+    "docker-compose.override.yaml",
+    "docker-compose.override.yml",
+)
+# Why an update is a person's to apply: no repository holds the container's
+# Compose files, so no pull request will move it.
+BY_HAND = "No repository HQ reads holds its Compose files."
+# Why a repository's container waits: HQ approves the update Renovate opens.
+NOT_OPENED = "Renovate has not opened its update yet."
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 ADVISORY = "container-image-advisory"
 UPDATE = "container-image-update"
@@ -83,14 +99,28 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
         if needs_you(standing, running):
             yield _advisory(running, subject, plan)
     elif plan is not None and plan.recommended:
+        update = update_of(_lead(running))
+        upgrade = _upgrade(running, plan)
+        if update is not None:
+            pin = update.pin_of(_lead(running))
+            title = f"{_names(running)} has an update" + (f", {pin.said}" if pin else "")
+            fixes = f", and fixes {lower_first(update.fixes_said)}" if update.fixes else ""
+            explanation = ended(f"Pull request {update.label} moves it{fixes}")
+            # What the title and its line say is not said again among its facts.
+            said = {("Pin", pin.said) if pin else (), ("Fixes", update.fixes_said) if fixes else ()}
+            upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if fact not in said)
+        else:
+            title = f"{standing.label} has an update"
+            explanation = ended(f"{standing.label} to {standing.latest}")
+            upgrade["evidence"] = (*upgrade.get("evidence", ()), *_risk(plan))
         yield _found(
             running,
             subject,
             rule=UPDATE,
             severity=Tone.ATTENTION,
-            title=f"{standing.label} has an update",
-            explanation=ended(f"{standing.label} to {standing.latest}") + _running_as(running) + _risk(plan),
-            **_upgrade(running, plan),
+            title=title,
+            explanation=explanation,
+            **upgrade,
         )
     if by_tag := [item for item in running if _unpinned(item.standing)]:
         yield _unpinned_finding(by_tag, subject)
@@ -113,10 +143,6 @@ def _names(running: list[Container]) -> str:
     return ", ".join(item.running.name for item in running)
 
 
-def _running_as(running: list[Container]) -> str:
-    return " " + ended(f"Running as {_names(running)} on {running[0].machine.name}")
-
-
 def _lead(running: list[Container]) -> Container:
     """The container whose page plans the image's upgrade: the first HQ watches."""
 
@@ -133,7 +159,11 @@ def _found(running: list[Container], subject: str, **said: Any) -> Finding:
     return Finding(
         subject=subject,
         part=running[0].standing.label,
-        evidence=(*(("Container", item.running.name) for item in running), *said.pop("evidence", ())),
+        evidence=(
+            *(("Container", item.running.name) for item in running),
+            ("Machine", running[0].machine.name),
+            *said.pop("evidence", ()),
+        ),
         **_read(running),
         primary=primary,
         offers=() if primary.url == containers.url else (containers,),
@@ -143,12 +173,6 @@ def _found(running: list[Container], subject: str, **said: Any) -> Finding:
 
 def _containers() -> ActionLink:
     return opens("Open containers", reverse("control_plane:containers"))
-
-
-def upgrade_plan_link(link: ActionLink | None) -> ActionLink | None:
-    """The secondary page when HQ can send the update."""
-
-    return opens("Upgrade plan", link.url) if link else None
 
 
 def _read(running: list[Container], *, standing: bool = True) -> dict[str, Any]:
@@ -172,22 +196,31 @@ def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
     page = opens("Upgrade plan", f"{lead.url}#upgrade") if plan is not None and lead.running.watcher else _containers()
     if plan is None or not plan.recommended:
         return {"primary": page, "steps": ()}
+    update = update_of(lead)
+    if update is not None:
+        # The open pull request is the move: one approval merges and applies
+        # it, beside the page that reviews it.
+        url = f"{lead.url}#upgrade" if lead.running.watcher else update.url
+        held = approval_of(update).held
+        return {
+            "primary": opens(f"Review {update.label}", url),
+            "steps": (),
+            "evidence": update.evidence,
+            "remedies": () if held else (approve_remedy(update),),
+            "no_help_reason": held,
+        }
+    if (managed := managed_by(lead)) is not None:
+        # Its repository moves it: the Dashboard lists the update Renovate holds.
+        where = web_url(managed.dashboard)
+        found = (
+            opens("Dependency Dashboard", where)
+            if where
+            else opens(managed.repository, web_url(managed.url) or page.url)
+        )
+        return {"primary": found, "steps": (), "no_help_reason": NOT_OPENED}
     said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
     label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
-    return {
-        "primary": opens(label, page.url),
-        "steps": _by_hand(running, plan),
-        "compose_target": plan.compose_target if len(running) == 1 else None,
-        "compose_targets": ()
-        if len(running) == 1
-        else tuple(
-            candidate.compose_target
-            for item in running
-            if (candidate := plan_for(item))
-            and (candidate.target_tag, candidate.target_digest) == (plan.target_tag, plan.target_digest)
-            and candidate.compose_target is not None
-        ),
-    }
+    return {"primary": opens(label, page.url), "steps": _by_hand(running, plan)}
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:
@@ -203,10 +236,10 @@ def _held_back(standing: ImageStanding, plan: Plan | None) -> str:
     return ""
 
 
-def _risk(plan: Plan) -> str:
+def _risk(plan: Plan) -> tuple[tuple[str, str], ...]:
     """The upgrade's risk, where it is high enough to weigh before moving."""
 
-    return f" {plan.risk_said}" if plan.risk == HIGH else ""
+    return (("Upgrade", plan.risk_said),) if plan.risk == HIGH else ()
 
 
 def _advisory(running: list[Container], subject: str, plan: Plan | None) -> Finding:
@@ -218,17 +251,21 @@ def _advisory(running: list[Container], subject: str, plan: Plan | None) -> Find
     )
     held = _held_back(standing, plan)
     level, reached = _reach(running)
-    fixed_in_words = f" {ended(f'Fixed in {fixed}')}" if fixed else ""
+    upgrade = _upgrade(running, plan)
+    upgrade["evidence"] = (
+        *upgrade.get("evidence", ()),
+        ("Worst severity", capfirst(standing.worst)),
+        *((("Fixed in", fixed),) if fixed else ()),
+        *(_risk(plan) if plan is not None and plan.recommended else ()),
+    )
     return _found(
         running,
         subject,
         rule=ADVISORY,
         severity=status_at(Tone.SERIOUS if standing.serious and not held else Tone.ATTENTION, level),
         title=f"{standing.label} has {standing.summary}{held}",
-        explanation=f"Worst severity: {ended(standing.worst)}{_running_as(running)}{fixed_in_words}"
-        + (_risk(plan) if plan is not None and plan.recommended else "")
-        + f" {reached}",
-        **_upgrade(running, plan),
+        explanation=reached,
+        **upgrade,
     )
 
 
@@ -255,7 +292,7 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
         rule=UNPINNED,
         severity=Tone.ATTENTION,
         title=f"{running[0].running.image} runs by tag alone",
-        explanation=f"A tag can later name a different build. Pin it by digest.{_running_as(running)}",
+        explanation="A tag can later name a different build.",
         evidence=tuple(("Pin it as", pin) for pin in pins),
         steps=_compose_steps(running, _pin),
         primary=_containers(),
@@ -263,8 +300,8 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
 
 
 def _by_hand(running: list[Container], plan: Plan) -> tuple[Run | Do, ...]:
-    """How the image is moved to the plan's target today, on its machine: one
-    step for each compose project that runs it."""
+    """How the image is moved to the plan's target on its machine where no
+    repository holds its Compose files: one step for each compose project that runs it."""
 
     standing = running[0].standing
     if standing.repository is not None:
@@ -360,10 +397,7 @@ def _reach(running: list[Container]) -> tuple[str, str]:
 
 def _help(check_id: str) -> str:
     if check_id == "no-docker-socket":
-        return (
-            "HQ cannot tell which Docker calls it needs, so it cannot write a socket proxy. "
-            "Mark it if it is meant to control Docker, and HQ stops warning about it."
-        )
+        return "HQ cannot tell which calls it needs. Mark it if it should control Docker."
     return "The compose change is on its page."
 
 
@@ -388,7 +422,9 @@ def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
                     reason="The lines to add to its compose file, and what each can break.",
                 )
             )
-    return Help(steps=(Do(check.fix, notes=(_help(check.id),)),), remedies=tuple(remedies), offers=tuple(offers))
+    return Help(
+        steps=(Do(check.fix, notes=(*why(check), _help(check.id))),), remedies=tuple(remedies), offers=tuple(offers)
+    )
 
 
 SOCKET_HOLDER_INTENT = "Mark as intended"
@@ -434,7 +470,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _images(ADVISORY),
         gathered=True,
-        operator_action="Move the container to a release that fixes it, once one does.",
+        operator_action="Move it to a release that fixes it.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
         bars={
@@ -463,7 +499,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _images(UNPINNED),
         gathered=True,
-        operator_action="Pin the image by digest in the compose file that runs it and recreate its containers.",
+        operator_action="Pin it by digest in its compose file, then recreate it.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
         bars={Tone.ATTENTION: "an image a registry holds is run by its tag, with no digest"},

@@ -13,13 +13,13 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.db.models import Model
 
-from hq.platform.core.table_layout import SAYS_NOTHING, leaving_order
-lazy from hq.platform.core.included_parts import METER, READING_AGE
+from hq.platform.core.table_layout import SAYS_NOTHING, TRACKS
+lazy from hq.platform.core.included_parts import METER
 lazy from hq.platform.core.templatetags import status_tags
 
 from .describe import Describe
-from .display_words import QUOTED, display
-lazy from .freshness import last_read
+from .display_words import QUOTED, display, quoted_when
+lazy from .freshness import reading_age
 
 if TYPE_CHECKING:
     from hq.platform.core.template_parts import Part
@@ -88,25 +88,6 @@ def check_drop(drop: int, css: str, label: str) -> None:
         raise ValueError(f"Column {label!r}: a drop rank is 1 or more, or 0 to keep it.")
     if drop and "key-col" in css.split():
         raise ValueError(f"Column {label!r} is kept at every width, so it has no drop rank.")
-
-
-def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
-    """The columns, each with the order a narrow table lets it go in.
-
-    Ranks a list declares stand as declared. Otherwise they follow one rule:
-    ``optional-col`` columns first, then the rest, each from the far end; never
-    the column that names the row, a key column, a column of the row's
-    controls, which stand beneath its words in a narrow box instead, or the
-    closing figure of a table that marks no key.
-    """
-
-    if columns and columns[0].drop:
-        raise ValueError(f"Column {columns[0].label!r} names each row, so it has no drop rank.")
-    if any(column.drop for column in columns):
-        return columns
-    order = leaving_order([(column.kind, column.css.split()) for column in columns])
-    rank = {index: place for place, index in enumerate(order, 1)}
-    return tuple(replace(column, drop=rank.get(index, 0)) for index, column in enumerate(columns))
 
 
 # Where a value of a cell shows: on its row's line (""), only once the row
@@ -186,7 +167,8 @@ class Cell:
     a cell (its emptiness, its length, whether it names the row or holds a
     control) is known from this before it is drawn."""
 
-    text: str = ""
+    # A record's own text when the cell is a ``readout``, shown as it arrived.
+    text: str = field(default="", metadata=quoted_when("readout"))
     url: str = ""
     # Leaves HQ. Rendered so the operator knows before clicking, and so the
     # linked page cannot reach back through window.opener.
@@ -196,7 +178,8 @@ class Cell:
     link: EntityLink | None = None
     # A state: ``text`` is its word and this its tone, drawn as a status.
     tone: str = ""
-    # In bold, the name its row is read by.
+    # In bold: a word its row stresses. The column that names each row draws
+    # its value as the row's name without it (``drawn_tables``).
     name: bool = False
     # It shows nothing at all, not even the empty value's mark: the side of a
     # change its row's record already says.
@@ -297,10 +280,7 @@ class Cell:
         """A reading's age as every page words it (``partials/_reading_age.html``):
         of its ``Freshness``, of the moment ``at`` it was taken, else why there is none."""
 
-        taken = reading.observed_at if reading is not None else at
-        words = last_read(taken) if taken else (reading.label if reading is not None else unread or "No reading yet")
-        context = {"reading": reading, "at": at, "unread": unread}
-        return cls(piece=Piece(READING_AGE, context, words=words), muted=muted)
+        return cls(piece=reading_age(reading, at=at, unread=unread), muted=muted)
 
     @classmethod
     def meter(cls, marks: Iterable[Any], label: str) -> Cell:
@@ -473,8 +453,9 @@ REGION = inspect.signature(box)
 
 @dataclass(frozen=True, slots=True)
 class DataTable:
-    """A table drawn whole by ``{% data_table %}``: its columns ranked to leave
-    a narrow box as a list's do, then its rows, or its groups of rows. A list
+    """A table drawn whole by ``{% data_table %}``: its columns, each of which
+    the region lets leave a narrow box by its rank or its own rule
+    (``table_layout``), then its rows, or its groups of rows. A list
     its server sorts names the sort it stands in (``sorted_by``), and its
     headings sort there; any other table sorts on the page."""
 
@@ -497,12 +478,21 @@ class DataTable:
     # Each ``data-`` attribute a script or a test finds the table by, by its
     # name after ``data-``, as a row's are.
     data: Mapping[str, str] = field(default_factory=dict)
+    # In a table of one column with no headings (the queue), each row's
+    # controls take their own width at its end rather than one shared down
+    # the table, so a fold that opens moves no other row.
+    controls_per_row: bool = False
 
     def __post_init__(self) -> None:
         held_data(self.data, "A table")
+        if self.controls_per_row and (self.headed or len(self.columns) != 1):
+            raise ValueError("Only a table of one column with no headings sizes each row's controls apart.")
         if self.rows and self.groups:
             raise ValueError("A table holds rows or groups of them, not both.")
-        object.__setattr__(self, "columns", ranked(self.columns))
+        # A column past its grid's last track would be drawn over that one.
+        if (drawn := len(self.columns) + self.has_actions) > TRACKS:
+            raise ValueError(f"{self.label!r} draws {drawn} columns; a table holds {TRACKS}, its controls among them.")
+        object.__setattr__(self, "columns", self._dated())
         bound = REGION.bind(self.label, **self.region)
         bound.apply_defaults()
         object.__setattr__(self, "region", {name: value for name, value in bound.arguments.items() if name != "label"})
@@ -518,6 +508,23 @@ class DataTable:
         """Its groups, or its rows as one group with no heading."""
 
         return self.groups or (Group("", self.rows),)
+
+    def _dated(self) -> tuple[TableColumn, ...]:
+        """Its columns, each whose rows each say a moment or nothing marked a
+        date (``date-col``), which a row keeps as it keeps its state."""
+
+        rows = [row for group in self.bodies for row in group.rows if not row.across]
+
+        def dated(at: int) -> bool:
+            cells = [row.cells[at] for row in rows if at < len(row.cells)]
+            return any(cell.moment for cell in cells) and all(cell.moment or cell.says_nothing for cell in cells)
+
+        return tuple(
+            column
+            if "date-col" in column.css.split() or not dated(at)
+            else replace(column, css=f"{column.css} date-col".strip())
+            for at, column in enumerate(self.columns)
+        )
 
     @property
     def has_actions(self) -> bool:

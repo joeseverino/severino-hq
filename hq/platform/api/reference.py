@@ -28,7 +28,7 @@ from hq.platform.application.pages import Page
 #   which Scalar never sets and offers no option for, and a nonce in the
 #   directive would make browsers ignore 'unsafe-inline'. The page shows only
 #   HQ's own registry, so no style here is anyone else's.
-# It needs no inline script and, configured jitless, no eval.
+# It needs no inline script and no eval, since the bundle sets its zod jitless.
 _APPLICATION = cast("dict[str, list[str]]", settings.SECURE_CSP)
 POLICY = without_trusted_types(_APPLICATION) | {"style-src-elem": [*_APPLICATION["style-src-elem"], CSP.UNSAFE_INLINE]}
 

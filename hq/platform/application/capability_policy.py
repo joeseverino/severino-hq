@@ -275,10 +275,8 @@ def split_by_default(groups: tuple[Group, ...]) -> tuple[tuple[Group, ...], tupl
 def table(label: str, columns: tuple[Column, ...], groups: tuple[Group, ...], *, settable: bool) -> tables.DataTable:
     """The rules as one table, a group per resource, headed once since the
     columns are the same for every resource. A column per agent, so a rule is
-    read and changed where it sits, each a setting a row's open line cannot
-    copy, so a narrow box keeps only the action and its default
-    (``wide-only``). Each setting is a select where ``settable``, else its
-    words."""
+    read and changed where it sits. Each setting is a select where
+    ``settable``, else its words."""
 
     def action(row: Row) -> tables.Cell:
         does = tables.StatusMark(row.effect_label, tone=row.effect_tone, pill=False)
@@ -295,7 +293,7 @@ def table(label: str, columns: tuple[Column, ...], groups: tuple[Group, ...], *,
     heads = (
         tables.TableColumn("Action"),
         tables.TableColumn("Default", css="key-col"),
-        *(tables.TableColumn(each.label, kind="control", css="wide-only", title=each.detail) for each in columns),
+        *(tables.TableColumn(each.label, kind="control", title=each.detail) for each in columns),
     )
     rows = (
         tables.Group(
@@ -314,11 +312,10 @@ def columns() -> tuple[Column, ...]:
     return tuple(
         Column(
             subject_of(identity.client_id, identity.person_key),
-            identity.client_id,
-            dotted(
-                *(interface_label(interface) for interface in identity.interfaces),
-                *(() if identity.person is None else (f"for {identity.person.get_username()}",)),
-            ),
+            # As its row on the Agents page reads: one client two people signed
+            # in is two columns, each named for its person.
+            str(identity),
+            dotted(*(interface_label(interface) for interface in identity.interfaces)),
             identity,
         )
         for identity in AgentIdentity.objects.select_related("person")

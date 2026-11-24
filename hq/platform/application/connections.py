@@ -38,11 +38,11 @@ from .connection_lifecycle import Lifecycle, probed, standing
 from .connection_setup import guide_url
 from .contracts import Effect
 from .describe import Describe, listed
-from .entity_links import entity_link
+from .entity_links import entity_link, record_names
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
-from .moments import ago
+from .moments import when
 from .resources import BoundedQuery, EmptyQuery, one_of
 from .security import Capability, Principal
 from .tone import Tone
@@ -183,7 +183,9 @@ def _depends(reading: ConnectionReading) -> tuple[tuple[ConnectionLink, ...], tu
         folded.add(key)
         merged.append(ConnectionLink(link.label, link.url or home, resource_key=key))
     dependencies = tuple(
-        ConnectionLink(key, url, resource_key=key) for key, url in reading.resources if key not in folded
+        ConnectionLink(record_names().get(key, key), url, resource_key=key)
+        for key, url in reading.resources
+        if key not in folded
     )
     return tuple(merged), dependencies
 
@@ -388,7 +390,7 @@ def _controller_instances(
                         ConnectionFact("Controller", reading.controller_id)
                         if name_controller and reading.controller_id
                         else None,
-                        ConnectionFact("Tested", ago(reading.probed_at)) if reading.probed_at else None,
+                        ConnectionFact("Tested", when(reading.probed_at)) if reading.probed_at else None,
                         *(
                             ConnectionFact("Could not finish", f"{step} ({reason})")
                             for step, reason in reading.failing_steps

@@ -5,11 +5,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/providers/npmapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -50,6 +53,10 @@ func newNPMServer(t *testing.T) *npmServer {
 			_, _ = io.WriteString(w, raw)
 		default:
 			s.written = append(s.written, req.Method+" "+path+" "+string(body))
+			// NPM answers a create, a POST to a collection, with 201.
+			if req.Method == http.MethodPost && strings.Count(path, "/") == 3 {
+				w.WriteHeader(http.StatusCreated)
+			}
 			_, _ = io.WriteString(w, `{"id":99}`)
 		}
 	}))
@@ -139,17 +146,40 @@ func TestNPMUpdateCarriesNPMsOwnLocationsAndCertificate(t *testing.T) {
 	if len(writes) != 1 {
 		t.Fatal(writes)
 	}
-	var body npmProxyHostRequest
+	var body npmapi.UpdateProxyHostJSONRequestBody
 	if err := json.Unmarshal([]byte(strings.SplitN(writes[0], " ", 3)[2]), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.CertificateID != 12 || !strings.Contains(string(body.Locations), `"/app"`) || body.ForwardPort != 8000 {
+	if deref(body.CertificateId) != 12 || !strings.Contains(string(deref(body.Locations)), `"/app"`) || deref(body.ForwardPort) != 8000 {
 		t.Errorf("%+v", body)
 	}
 }
 
 // An NPM write goes through the connection the spec names, which is the one
 // the manages gate approved, never the default connection.
+// A certificate HQ installs is created, read back from NPM's 201, validated and
+// uploaded as its PEM parts, and every host serving its names re-applied.
+func TestNPMInstallsACertificate(t *testing.T) {
+	server := newNPMServer(t)
+	server.lists["/api/nginx/certificates"] = `[]`
+	server.lists["/api/nginx/proxy-hosts"] = heldHost("true", "false")
+	chain, key, _ := newTestPKI(t).leaf(2, time.Now().AddDate(0, 3, 0), "hq.example")
+	r := npmRegistry(t, npmAt(server.URL))
+	id, _, err := r.npmManagedCertificate(t.Context(), TLSConsumer{Name: "proxy", VerifyDomains: []string{"hq.example"}}, []string{"hq.example"}, chain, key, nil)
+	if err != nil || id != 99 {
+		t.Fatal(id, err)
+	}
+	writes := server.writes()
+	if len(writes) != 4 || !strings.HasPrefix(writes[0], "POST /api/nginx/certificates ") || !strings.HasPrefix(writes[3], `PUT /api/nginx/proxy-hosts/9 {"certificate_id":99}`) {
+		t.Fatal(writes)
+	}
+	for _, upload := range []string{"POST /api/nginx/certificates/validate ", "POST /api/nginx/certificates/99/upload "} {
+		if write := writes[slices.IndexFunc(writes, func(w string) bool { return strings.HasPrefix(w, upload) })]; !strings.Contains(write, `name="certificate_key"`) {
+			t.Error(write)
+		}
+	}
+}
+
 func TestNPMWriteUsesTheNamedConnection(t *testing.T) {
 	fallback, named := newNPMServer(t), newNPMServer(t)
 	fallback.lists["/api/nginx/proxy-hosts"] = `[]`

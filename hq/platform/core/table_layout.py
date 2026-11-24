@@ -11,6 +11,7 @@ content.
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from html import escape
 from typing import Any
 
 # A value that says nothing: dashes and space, and nothing drawn but the
@@ -48,6 +49,9 @@ STATES_LEAVE = RANKS + 1
 # How many columns at most a table's share is counted over (`data-columns`),
 # one rule each in tables.css.
 COUNTED = 10
+# How many columns at most a table draws, its row's controls among them: the
+# tracks of its grid (tables.css) after a row's tick-box, which leads.
+TRACKS = 16
 
 
 @dataclass(slots=True)
@@ -72,6 +76,8 @@ class CellFacts:
     kind: str = ""
     drop: int = 0
     row_header: bool = False
+    # A heading's words, which a cell under it standing apart in a narrow box is named by.
+    label: str = ""
     says_nothing: bool = True
     # The characters on its longest line, spaces collapsed.
     longest: int = 0
@@ -156,10 +162,12 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
     counted = heads[-1] if heads else max((row.cells for row in records), key=len, default=[])
     if (columns := min(COUNTED, sum(index not in empty for index in range(len(counted))))) > 1:
         table.marks.append(f' data-columns="{columns}"')
-    # Of those, the ones a narrow box does not draw (`wide-only`), which
-    # its share is not counted over.
+    # Of those, the ones a narrow box does not draw (`wide-only`), and the
+    # columns of a row's choices, which it stands each on a line of its own
+    # beneath the row's name (tables.css): its share is counted over neither.
     wide = {at for at, cell in enumerate(heads[-1] if heads else []) if "wide-only" in cell.classes}
-    if columns > 1 and (narrow := min(columns - 1, len(wide - empty))):
+    fielded = _fielded(heads[-1] if heads else [], kinds, named, records)
+    if columns > 1 and (narrow := min(columns - 1, len((wide | set(fielded)) - empty))):
         table.marks.append(f' data-wide-columns="{narrow}"')
     drops = _drops(heads[-1] if heads else [])
     # The columns no heading's rank takes away: what a row is (a cell said
@@ -168,19 +176,19 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
     # every row must show (`key-col`). Controls never leave, since the
     # open line copies what leaves, where a control would be drawn twice.
     # A key (`key-col`, or the closing figure of a table that marks none)
-    # never leaves. A state (a cell said by its pills, or any under a
-    # heading of kind `status` that declares no rank) stands while any other column can, and
-    # goes to the open line only below every rank's width
-    # (`STATES_LEAVE`), where the name, the keys and the controls take
-    # the row.
+    # never leaves. A state (a cell said by its pills, a date, or in a
+    # table that ranks its columns any under a heading of kind `status`
+    # that declares no rank) stands while any other column can, and goes
+    # to the open line only below every rank's width (`STATES_LEAVE`),
+    # where the name, the keys and the controls take the row.
     heading = heads[-1] if heads else []
-    # A heading of kind `status` decides: with no rank its column is a
-    # state, and with one it leaves by it, whatever its cells hold, though
-    # never before another ranked column (`declared`).
+    # A heading of kind `status` with a rank leaves by it, whatever its
+    # cells hold, though never before another ranked column (`declared`).
     statuses = {at for at, cell in enumerate(heading) if cell.kind == "status" and at != named}
     declared = statuses & set(drops)
-    states = {place for row in records for place, cell in _placed(row) if place != named and cell.states} - declared
-    states |= statuses - declared
+    dated = {at for at in statuses if "date-col" in heading[at].classes}
+    states = {place for row in records for place, cell in _placed(row) if place != named and cell.states}
+    states = (states | dated | (statuses if drops else set())) - declared
     keys = set(_keys([(kinds.get(at, ""), cell.classes) for at, cell in enumerate(heading)]))
     does = {place for row in records for place, cell in _placed(row) if cell.fields}
     does |= {place for row in records for place, _ in _row_controls(row, kinds, named)}
@@ -215,7 +223,7 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
         # A value is clamped only where its row's toggle opens it whole.
         toggle_cell = None if gutter is None else _at_place(row.cells, gutter)
         toggled = toggle_cell is not None and not toggle_cell.folds
-        _mark_cells(row, kinds, named, empty, levels, wide, toggled=toggled)
+        _mark_cells(row, kinds, named, empty, levels, wide, fielded, toggled=toggled)
         if row.section == "thead":
             _mark_long_heads(row, longs)
         _name(row, kinds, named)
@@ -252,12 +260,15 @@ def _mark_cells(
     empty: set[int],
     levels: dict[int, int],
     wide: set[int],
+    fielded: dict[int, str],
     *,
     toggled: bool,
 ) -> None:
     """What each cell says of itself: blank, its whole column blank, the
     width its column leaves at, that it stands only in a wide box as its
-    heading does (`wide-only`), and in the body its kind and its clamp."""
+    heading does (`wide-only`), that its column holds a field (`data-field`)
+    and in the body the heading's words, and in the body its kind and its
+    clamp."""
 
     body = row.section == "tbody"
     for at, cell in _placed(row):
@@ -266,6 +277,8 @@ def _mark_cells(
             marks += [" data-blank-column"] if at in empty else []
             marks += [f' data-drop="{levels[at]}"'] if at in levels else []
             marks += [" data-wide-only"] if body and at in wide else []
+            if at in fielded:
+                marks.append(f' data-field data-label="{escape(fielded[at])}"' if body else " data-field")
             if row.section != "thead":
                 marks += _body_marks(cell, _kind_at(at, kinds, named), body=body, toggled=toggled)
         cell.marks.extend(marks)
@@ -410,8 +423,8 @@ def leaving_order(columns: Sequence[tuple[str, Sequence[str]]]) -> list[int]:
     """The places of a table's columns, each by its kind and its classes, in
     the order a narrow table lets them go: ``optional-col`` columns first,
     then the rest, each from the far end. Never the first, which names the
-    row, a ``key-col``, a column of the row's controls, or the closing figure
-    of a table that marks no key."""
+    row, a ``key-col``, a column of the row's controls, the closing figure of
+    a table that marks no key."""
 
     keys = _keys(columns)
 
@@ -431,6 +444,23 @@ def _keys(columns: Sequence[tuple[str, Sequence[str]]]) -> list[int]:
         return keys
     closing = next((index for index in reversed(range(len(columns))) if columns[index][0] != "control"), None)
     return [closing] if closing and columns[closing][0] == "numeric" else []
+
+
+def _fielded(heading: list[CellFacts], kinds: dict[int, str], named: int, records: list[RowFacts]) -> dict[int, str]:
+    """The heading's words of each column of a row's choices: a column of
+    controls whose cells each hold a field a reader fills in, the words that
+    stand where one cannot be, or nothing, never a button or a link."""
+
+    found = {}
+    for place, head in enumerate(heading):
+        if place == named or kinds.get(place) != "control" or "select-column" in head.classes:
+            continue
+        cells = [cell for row in records if (cell := _at_place(row.cells, place))]
+        if any(cell.fields or not cell.says_nothing for cell in cells) and not any(
+            cell.controls and not cell.fields for cell in cells
+        ):
+            found[place] = head.label
+    return found
 
 
 def _narrow_levels(heading: list[CellFacts], kinds: dict[int, str], kept: set[int], *, after: int) -> dict[int, int]:

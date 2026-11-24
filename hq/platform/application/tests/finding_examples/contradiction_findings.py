@@ -17,7 +17,7 @@ DB_REWRITE = {"domain": "db.example.com", "answer": "100.64.0.10", "connection_r
 APP_REWRITE = {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"}
 SPLIT = {"cloudflare.dns_record": (OLD[0], DB), "adguard.rewrite": (APP_REWRITE, DB_REWRITE)}
 CHANGE = "infrastructure.resource.update"
-UNPUBLISHED = "app.example.com forwards to 100.64.0.10:8099 on lab-1, where no container publishes that port"
+UNPUBLISHED = "app.example.com forwards to an unpublished port on lab-1"
 UNPUBLISHED_ROUTE = {"domain_names": ["app.example.com"], "forward_host": "100.64.0.10", "forward_port": 8099}
 SPLIT_TITLE = "db.example.com goes to edge-1 from the internet and lab-1 from home"
 
@@ -85,7 +85,7 @@ EXAMPLES = (
         fires=(
             on_estate(
                 {"cloudflare.dns_record": OLD},
-                raises=("old.example.com points at edge-1, which serves nothing for it",),
+                raises=("old.example.com leads nowhere",),
             ),
         ),
         quiet=(
@@ -132,7 +132,7 @@ EXAMPLES = (
         fires=(
             on_estate(
                 {"cloudflare.access_app": (gate("Old admin", "gone.example.com"),)},
-                raises=("Access application Old admin protects gone.example.com, which has no DNS record",),
+                raises=("gone.example.com has an access rule but no DNS record",),
             ),
         ),
         # One on a domain HQ does not read names nothing it could see.

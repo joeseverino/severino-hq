@@ -77,9 +77,9 @@ class ReceiptListView(ListPageMixin, TemplateView):
         TableColumn(
             "Vendor",
             "vendor",
-            cell=lambda row: Cell.of(entity_link("receipt", row["id"], label=row["label"]), name=True),
+            cell=lambda row: Cell.of(entity_link("receipt", row["id"], label=row["label"])),
         ),
-        TableColumn("Date", "date", kind="status", cell=lambda row: Cell(moment=stamp_day(row["date"]))),
+        TableColumn("Date", "date", cell=lambda row: Cell(moment=stamp_day(row["date"]))),
         TableColumn("Amount", "amount", css="key-col", kind="numeric", cell=lambda row: Cell(amount=row["amount"])),
         TableColumn("For", cell=lambda row: Cell(lines=_paid_for(row))),
         TableColumn("File", "original_filename", cell=lambda row: Cell(row["original_filename"] or "", muted=True)),
@@ -87,7 +87,7 @@ class ReceiptListView(ListPageMixin, TemplateView):
             "Uploaded",
             "uploaded_at",
             kind="status",
-            cell=lambda row: Cell(moment=moment(row["uploaded_at"]), form="ago", muted=True),
+            cell=lambda row: Cell(moment=moment(row["uploaded_at"]), muted=True),
         ),
     )
     table_search_placeholder = "Search vendors, filenames, and notes…"

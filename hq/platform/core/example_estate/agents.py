@@ -83,11 +83,12 @@ RATE_LIMITED_TIMES = 14
 UNPLACED_AT = tailnet_v4(None)
 # A reader a viewer signed in, whose token carries more than a viewer holds:
 # the calendar writes are granted, and beyond its person's role. The viewer
-# signed the assistant in too, from their phone: the same client as another
-# person is a row of its own, with its own rules, block and devices.
+# signed an assistant of their own in too, from their phone, asking for every
+# permission as the owner's does.
 VIEWER_USERNAME = "riley"
 VIEWER_PERSON = "example-viewer-subject"
 READER = "example-reader"
+VIEWER_ASSISTANT = "example-phone-assistant"
 READER_CLAIMS = {"client_id": READER, "sub": VIEWER_PERSON, "scope": "read write_calendar"}
 # A build runner calling as itself, its subject the client.
 RUNNER = "example-runner"
@@ -187,15 +188,14 @@ def lately(owner=None):
         _viewer(joined)
         with _on(joined), _first_call(MCP_INTERFACE):
             _observe_from(token_principal(READER_CLAIMS, MCP_INTERFACE), PHONE_NAME)
-            _observe_from(token_principal(_assistant_claims(VIEWER_PERSON), MCP_INTERFACE), PHONE_NAME)
+            _observe_from(
+                token_principal(_assistant_claims(VIEWER_PERSON, VIEWER_ASSISTANT), MCP_INTERFACE), PHONE_NAME
+            )
         AgentIdentity.objects.filter(person__username=VIEWER_USERNAME).update(first_seen=joined)
-        AgentDevice.objects.filter(identity__client_id=READER).update(
+        AgentDevice.objects.filter(identity__client_id__in=(READER, VIEWER_ASSISTANT)).update(
             first_seen=joined, last_seen=now() - timedelta(hours=3)
         )
-        AgentDevice.objects.filter(identity__client_id=ASSISTANT, identity__person__username=VIEWER_USERNAME).update(
-            first_seen=joined, last_seen=now() - timedelta(hours=3)
-        )
-    AgentIdentity.objects.filter(client_id=READER).update(last_seen=now() - timedelta(hours=3))
+    AgentIdentity.objects.filter(client_id__in=(READER, VIEWER_ASSISTANT)).update(last_seen=now() - timedelta(hours=3))
     AgentIdentity.objects.filter(client_id=ASSISTANT).update(last_seen=now() - timedelta(minutes=12))
     AgentIdentity.objects.filter(client_id=RUNNER).update(last_seen=now() - timedelta(days=2))
     # Refused for its rate: a minute of refusals, written as the one row that counts them.
@@ -238,12 +238,12 @@ def lately(owner=None):
     OwnDevice.objects.filter(client_id=PHONE).update(registered_at=registered_at)
 
 
-def _assistant_claims(person=PERSON):
-    """The assistant's token as ``person`` signed it in: every permission HQ
+def _assistant_claims(person=PERSON, client=ASSISTANT):
+    """An assistant's token as ``person`` signed it in: every permission HQ
     offers an agent, as a sign-in asks for them all, but ``NOT_CARRIED``."""
 
     granted = sorted(agent_grantable() - {NOT_CARRIED})
-    return {"client_id": ASSISTANT, "sub": person, "scope": " ".join(granted)}
+    return {"client_id": client, "sub": person, "scope": " ".join(granted)}
 
 
 def _listen(principal, streams):

@@ -117,8 +117,9 @@ def worded(
     primary: ActionLink | None = None,
 ) -> Finding:
     """What is wrong as the title, after the subject's name for a finding
-    about one; why it matters as the explanation; where it fails and what was
-    read as the evidence; and each fix as a step unless its help names its own."""
+    about one; what reaches it, else why its one check matters, as the
+    explanation; where it fails and what was read as the evidence; and each
+    fix as a step, with why it matters, unless its help names its own."""
 
     helped = said or [Help()] * len(checks)
     clauses = [check.unmet for check in checks]
@@ -127,13 +128,14 @@ def worded(
     severity, reached = Tone.SERIOUS if any(check.serious for check in checks) else Tone.ATTENTION, ""
     if about and about.reach:
         severity, reached = about.reach(severity)
+    explanation = reached or (checks[0].why_said if len(checks) == 1 else "")
     return Finding(
         rule=rule,
         subject=about.node if about else "",
         part=about.part if about else checks[0].id,
         title=f"{about.name}: {', '.join(map(lower_first, clauses))}" if about and about.name else ", ".join(clauses),
         severity=severity,
-        explanation=" ".join((*dict.fromkeys(check.why_said for check in checks), *([reached] if reached else []))),
+        explanation=explanation,
         evidence=(
             *((("Not met in", ", ".join(named)),) if named and not about else ()),
             *dict.fromkeys(
@@ -144,7 +146,7 @@ def worded(
         steps=tuple(
             step
             for check, help in zip(checks, helped, strict=True)
-            for step in (help.steps or ((Do(check.fix),) if check.fix else ()))
+            for step in (help.steps or ((Do(check.fix, notes=why(check, explanation)),) if check.fix else ()))
         ),
         remedies=tuple(dict.fromkeys(remedy for help in helped for remedy in help.remedies)),
         offers=tuple(dict.fromkeys(offer for help in helped for offer in help.offers)),
@@ -156,3 +158,10 @@ def worded(
         observed_at=min((item.observed_at for item in subjects if item.observed_at), default=None),
         reads=next((item.reads for item in subjects if item.reads), ""),
     )
+
+
+def why(check: Check, said: str = "") -> tuple[str, ...]:
+    """Why a check matters, as the note under its fix, unless the finding
+    already ``said`` it."""
+
+    return (check.why_said,) if check.why_said and check.why_said != said else ()

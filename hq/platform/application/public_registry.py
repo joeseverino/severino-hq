@@ -43,6 +43,7 @@ from .moments import moment
 from .reach import is_public, public_label
 from .security import Capability, Principal
 lazy from . import osv, services, zones
+lazy from .app_updates import app_updates
 lazy from .attestations import reduce
 lazy from .containers import containers
 lazy from .entity_links import https_url
@@ -207,7 +208,8 @@ def wanted_upstreams() -> tuple[str, ...]:
 
 def wanted_digests() -> tuple[str, ...]:
     """``registry/repository@sha256:…`` for what runs, what its tag names now,
-    and what an upgrade would pin: every digest a page compares."""
+    what an upgrade would pin, and what each open update of an app pins: every
+    digest a page compares."""
 
     found = set()
     for item in containers():
@@ -215,6 +217,7 @@ def wanted_digests() -> tuple[str, ...]:
         for digest in (standing.digest, standing.moved_to, standing.target_digest):
             if digest and standing.image.name:
                 found.add(f"{standing.image.name}@{digest}")
+    found.update(f"{pin.after.name}@{pin.digest}" for update in app_updates() for pin in update.pins if pin.digest)
     return tuple(sorted(found))
 
 

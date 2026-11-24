@@ -17,7 +17,7 @@ from .projection import read_once
 from .tone import Tone
 from .ui import agreed, counted, ended
 lazy from . import hq_context
-lazy from .moments import ago
+lazy from .moments import when
 lazy from .security import INTERNAL_INTERFACE, Capability, Principal
 lazy from .whereabouts import reads_containers_on
 
@@ -142,7 +142,7 @@ def _as_last_read(found: Health, service: Any) -> Health:
     stale = route.stale_reading if route is not None else None
     if stale is None or found.state is None:
         return found
-    said = f"{found.label} when last read, {ago(stale.observed_at)}."
+    said = f"{found.label} when last read, {when(stale.observed_at)}."
     return Health(
         Tone.SERIOUS if found.state == Tone.SERIOUS else Tone.ATTENTION,
         "Out of date",

@@ -14,7 +14,29 @@
   "/accounts": {
    "get": {
     "operationId": "accounts-list-accounts",
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of paginated results.",
+       "type": "number",
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Maximum number of results per page.",
+       "type": "number",
+       "maximum": 50,
+       "minimum": 5,
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
     "responses": {
      "200": {
       "description": "List Accounts response"
@@ -32,6 +54,25 @@
       "required": true,
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "page",
+      "schema": {
+       "description": "Page number of results.",
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "in": "query",
+      "name": "per_page",
+      "schema": {
+       "description": "Number of results per page.",
+       "type": "integer",
+       "maximum": 1000,
+       "x-go-type-skip-optional-pointer": false
       }
      }
     ],
@@ -53,6 +94,25 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "in": "query",
+      "name": "page",
+      "schema": {
+       "description": "Page number of results.",
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "in": "query",
+      "name": "per_page",
+      "schema": {
+       "description": "Number of results per page.",
+       "type": "integer",
+       "maximum": 1000,
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
@@ -72,6 +132,37 @@
       "required": true,
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of paginated results.",
+       "type": "number",
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of results to display.",
+       "type": "number",
+       "maximum": 1000,
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "is_deleted",
+      "in": "query",
+      "schema": {
+       "description": "If `true`, only include deleted tunnels. If `false`, exclude deleted tunnels. If empty, all tunnels will be included.",
+       "type": "boolean",
+       "example": true,
+       "x-go-type-skip-optional-pointer": false
       }
      }
     ],
@@ -149,6 +240,27 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of paginated results.",
+       "type": "number",
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of items per page.",
+       "type": "number",
+       "maximum": 10000,
+       "minimum": 10,
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
@@ -211,6 +323,14 @@
      "200": {
       "description": "Query response"
      }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {}
+      }
+     }
     }
    }
   },
@@ -224,6 +344,26 @@
       "required": true,
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of results to return.",
+       "type": "integer",
+       "example": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of results to return per page.",
+       "type": "integer",
+       "example": 10,
+       "x-go-type-skip-optional-pointer": false
       }
      }
     ],
@@ -245,6 +385,27 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "description": "Opaque token from a previous response's `result_info.cursor`.\nPass this value to fetch the next page of results. Omit (or\npass an empty string) for the first page.\n",
+      "in": "query",
+      "name": "cursor",
+      "schema": {
+       "type": "string",
+       "maxLength": 256,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "description": "Number of items to return per page.",
+      "in": "query",
+      "name": "per_page",
+      "schema": {
+       "type": "integer",
+       "maximum": 50,
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
      }
     ],
     "responses": {
@@ -264,6 +425,26 @@
       "required": true,
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Current page within the paginated list of results.",
+       "type": "number",
+       "example": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of items to return per page of results.",
+       "type": "number",
+       "example": 10,
+       "x-go-type-skip-optional-pointer": false
       }
      }
     ],
@@ -288,7 +469,29 @@
   "/zones": {
    "get": {
     "operationId": "zones-get",
-    "parameters": [],
+    "parameters": [
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of paginated results.",
+       "type": "number",
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of zones per page.",
+       "type": "number",
+       "maximum": 50,
+       "minimum": 5,
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
     "responses": {
      "200": {
       "description": "List Zones response."
@@ -306,6 +509,28 @@
       "required": true,
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of paginated results.",
+       "type": "number",
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of DNS records per page.",
+       "type": "number",
+       "example": 5,
+       "maximum": 5000000,
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
       }
      }
     ],
@@ -330,6 +555,14 @@
     "responses": {
      "200": {
       "description": "Create DNS Record response"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {}
+      }
      }
     }
    }
@@ -385,6 +618,14 @@
      "200": {
       "description": "Update DNS Record response"
      }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {}
+      }
+     }
     }
    }
   },
@@ -418,6 +659,31 @@
       "required": true,
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "cursor",
+      "in": "query",
+      "schema": {
+       "description": "The cursor to use for the next page.",
+       "type": "string",
+       "example": "dGhpc2lzYW5leGFtcGxlCg",
+       "minLength": 1,
+       "title": "Cursor",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "The number of rulesets to return per page.",
+       "type": "integer",
+       "example": 3,
+       "maximum": 50,
+       "minimum": 1,
+       "title": "Per Page",
+       "x-go-type-skip-optional-pointer": false
       }
      }
     ],
@@ -494,6 +760,40 @@
       "required": true,
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of paginated results.",
+       "type": "number",
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of certificate packs per page.",
+       "type": "number",
+       "maximum": 50,
+       "minimum": 5,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "schema": {
+       "description": "Include Certificate Packs of all statuses, not just active ones.",
+       "type": "string",
+       "example": "all",
+       "enum": [
+        "all"
+       ],
+       "x-go-type-skip-optional-pointer": false
       }
      }
     ],

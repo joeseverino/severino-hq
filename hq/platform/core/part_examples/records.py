@@ -447,6 +447,15 @@ MONTH_GRID_STATES = {
         '{% section "Example link 6" %}' + NARROW + "{% endsection %}{% endlayout %}{% endlayout %}",
         lambda: {"calendar": _month_gone_by(date(2026, 9, 1))},
     ),
+    # A month beside a taller companion: its weeks share the room its card
+    # is stretched to, so the month ends with the row.
+    "beside-taller": Example(
+        '{% layout kind="split" %}{% section "Example month 4" %}{% include "partials/_month_grid.html" %}'
+        '{% endsection %}{% section "Example records" %}{% facts %}'
+        + "".join(f'{{% fact "Example fact {n}" value="example-{n:02}" %}}' for n in range(1, 25))
+        + "{% endfacts %}{% endsection %}{% endlayout %}",
+        lambda: {"calendar": _month_gone_by(date(2026, 10, 1))},
+    ),
 }
 
 
@@ -607,8 +616,8 @@ SWEEP_FRESHNESS_STATES = {
         lambda: {"inventory": _INVENTORY},
     ),
     "inline": Example(
-        '{% section "Example records 3" %}<p>An example line.</p>{% aside %}<span class="count">12 example records'
-        '{% include "partials/_sweep_freshness.html" with only_kind="example.records" inline=True %}</span>'
+        '{% section "Example records 3" %}<p>An example line.</p>{% aside %}12 example records'
+        '{% include "partials/_sweep_freshness.html" with only_kind="example.records" inline=True %}'
         "{% endsection %}",
         lambda: {"inventory": _INVENTORY},
     ),

@@ -4,12 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
-
-	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 )
 
 // Every uses: line a repository's workflows and composite actions run, and
@@ -64,13 +60,12 @@ type githubUsesFound struct {
 // usesFiles is every workflow file's path and text, then every local
 // composite action's.
 func (g *githubRepository) usesFiles(ctx context.Context, branch string) ([][2]string, error) {
-	owner, name, err := githubRepositoryName(g.name)
+	token, err := g.r.githubToken(ctx, g.c, []string{g.name}, githubRead)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := g.r.githubCall(ctx, g.c, http.MethodPost, githubGraphQL, []string{g.name}, githubRead, map[string]any{
-		"query":     githubPinsQuery,
-		"variables": map[string]string{"owner": owner, "name": name, "workflows": branch + ":.github/workflows", "actions": branch + ":.github/actions"},
+	raw, err := g.r.githubQuery(ctx, token, githubPinsQuery, map[string]any{
+		"owner": g.owner, "name": g.repo, "workflows": branch + ":.github/workflows", "actions": branch + ":.github/actions",
 	})
 	if err != nil {
 		return nil, err
@@ -162,8 +157,9 @@ func firstN(parts []string, n int) []string {
 // read-only token of the repository being read; only a commit that was read
 // is shared, since one repository's token failing says nothing of the next's.
 func (g *githubRepository) commitOf(ctx context.Context, source, at string) string {
-	raw, err := g.r.cached(ctx, "github.commit|"+source+"|"+at, func() (json.RawMessage, error) {
-		commit, err := githubGet[githubapi.Commit](ctx, g.r, g.c, "/repos/"+source+"/commits/"+url.PathEscape(at), []string{g.name}, githubRead)
+	raw, err := cached(ctx, g.r, "github.commit|"+source+"|"+at, func() (json.RawMessage, error) {
+		owner, repo, _ := strings.Cut(source, "/")
+		commit, err := json200(g.api.ReposGetCommitWithResponse(ctx, owner, repo, at))
 		if err != nil {
 			return nil, err
 		}

@@ -55,18 +55,6 @@ _PRIVILEGE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
 
 
 @dataclass(frozen=True, slots=True)
-class Step:
-    """One part of a batch, bound to just its own machine and input."""
-
-    machine: str
-    parameters: Mapping[str, str]
-
-    @property
-    def label(self) -> str:
-        return f"{self.machine} / {self.parameters['compose_project_upgrade_service']}"
-
-
-@dataclass(frozen=True, slots=True)
 class Run:
     """A claimed run of one installed procedure."""
 
@@ -83,7 +71,6 @@ class Run:
     profile: str = READ_PROFILE
     # What its record says shows it worked, each a sentence without its stop.
     verification: tuple[str, ...] = ()
-    steps: tuple[Step, ...] = ()
 
     @property
     def escalates(self) -> bool:
@@ -160,11 +147,8 @@ def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
     parameters = run_input.get("parameters")
     if not isinstance(hosts, list) or not hosts or not all(isinstance(host, str) and host for host in hosts):
         raise Refused("Unrunnable", "The run names no machine to run on.")
-    steps = _steps(run_input["steps"], hosts) if "steps" in run_input else ()
-    if not steps and not isinstance(parameters, Mapping):
+    if not isinstance(parameters, Mapping):
         raise Refused("Unrunnable", "The run's parameters are not an object.")
-    if steps and ("parameters" in run_input or spec.get("effect") != "infrastructure_change"):
-        raise Refused("Unrunnable", "The batch must name only steps of an infrastructure change.")
     timeout = spec.get("timeout_seconds")
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout < 1:
         raise Refused("Unrunnable", "The procedure's record declares no timeout.")
@@ -191,11 +175,10 @@ def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
         procedure=procedure,
         hosts=tuple(hosts),
         targets=targets,
-        parameters=dict(parameters) if isinstance(parameters, Mapping) else {},
+        parameters=dict(parameters),
         timeout_seconds=timeout,
         profile=login,
         verification=tuple(each for each in _list(spec.get("verification")) if isinstance(each, str) and each.strip()),
-        steps=steps,
     )
 
 
@@ -211,30 +194,3 @@ def _reached(host: str, login: str, reach: Reach) -> Target:
     if target is None:
         raise Refused("NoConnection", f"No runner connection reaches {host} as the {login} profile.")
     return target
-
-
-def _steps(raw: Any, hosts: list[str]) -> tuple[Step, ...]:
-    """All steps must bind to an admitted host and exactly the three Compose inputs."""
-
-    required = {"compose_project_name", "compose_project_upgrade_service", "compose_project_upgrade_image"}
-    refused = Refused("Unrunnable", "The batch does not carry distinct Compose updates for its named machines.")
-    if not isinstance(raw, list) or not 2 <= len(raw) <= 10:
-        raise refused
-    steps: list[Step] = []
-    addresses: set[tuple[str, str, str]] = set()
-    for item in raw:
-        if not isinstance(item, dict) or set(item) != {"machine", "parameters"}:
-            raise refused
-        machine, parameters = item["machine"], item["parameters"]
-        if machine not in hosts or not isinstance(parameters, dict) or parameters.keys() != required:
-            raise refused
-        if any(not isinstance(value, str) or not value for value in parameters.values()):
-            raise refused
-        address = (machine, parameters["compose_project_name"], parameters["compose_project_upgrade_service"])
-        if address in addresses:
-            raise refused
-        addresses.add(address)
-        steps.append(Step(machine, parameters))
-    if {step.machine for step in steps} != set(hosts):
-        raise refused
-    return tuple(steps)

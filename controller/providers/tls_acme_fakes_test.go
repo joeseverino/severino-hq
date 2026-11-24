@@ -342,7 +342,6 @@ func newDNSFake(t *testing.T) (*dnsFake, string, func(*http.Transport)) {
 }
 
 func (f *dnsFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	recordVendorCall("cloudflare", r.Method, r.URL.Path)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	ok := func(result any) {

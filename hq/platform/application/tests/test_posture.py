@@ -1,5 +1,5 @@
 """HQ's standard: each check read from what decides it, shown always, raised
-under Advanced HQ Posture (``standards.Standard``, held in test_standards)."""
+under Advanced HQ posture (``standards.Standard``, held in test_standards)."""
 
 import os
 import subprocess
@@ -253,7 +253,7 @@ class PageTests(SignedInTestCase):
     def test_the_connection_panel_says_advanced_posture_is_enabled(self):
         response = self.client.get(reverse("connection"))
 
-        self.assertIn("Advanced HQ Posture", [words for words, _target in links(response)])
+        self.assertIn("Advanced HQ posture", [words for words, _target in links(response)])
         self.assertNotContains(response, "SEVERINO_POSTURE=advanced")
 
     def test_the_api_carries_the_standard_and_what_would_read_a_check_not_read(self):

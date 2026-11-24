@@ -12,7 +12,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -57,6 +56,7 @@ func (r *Registry) admitGitHub() {
 	r.reader(runtime.ResourceKindGitHubDelivery, r.githubDeliveryInventory)
 	r.tally(runtime.ResourceKindGitHubAllowance, r.githubAllowances)
 	act(r, runtime.ResourceKindGitHubDelivery, "reconcile", r.githubDeliveryReconcile)
+	act(r, runtime.ResourceKindGitHubPullRequest, "merge", r.githubMerge)
 }
 
 func (r *Registry) githubConnection(ref string) (githubConnection, error) {
@@ -122,25 +122,18 @@ func (app GitHubApp) jwt(now time.Time) (string, error) {
 // githubNoGrant is a permission set naming nothing, as the token request encodes it.
 const githubNoGrant = "{}"
 
-// MintGitHubToken is an installation token for exactly these repositories
+// mintGitHubToken is an installation token for exactly these repositories
 // (names within the installation's account) and permissions, with the moment
 // GitHub says it expires. No repositories is every repository the installation
 // covers; no permissions is refused, since GitHub would grant all of the
 // installation's.
-func MintGitHubToken(ctx context.Context, transport Transport, now time.Time, app GitHubApp, installation int, repositories []string, permissions githubapi.AppPermissions) (githubapi.InstallationToken, error) {
+func (r *Registry) mintGitHubToken(ctx context.Context, app GitHubApp, installation int, repositories []string, permissions githubapi.AppPermissions) (githubapi.InstallationToken, error) {
 	if grant, _ := json.Marshal(permissions); string(grant) == githubNoGrant {
 		return githubapi.InstallationToken{}, &ProviderError{Message: "a GitHub token names its permissions"}
 	}
-	jwt, err := app.jwt(now)
-	if err != nil {
-		return githubapi.InstallationToken{}, err
-	}
-	body := githubapi.AppsCreateInstallationAccessTokenJSONBody{Repositories: repositories, Permissions: permissions}
-	raw, err := transport.Request(ctx, githubAPI+"/app/installations/"+strconv.Itoa(installation)+"/access_tokens", "POST", githubHeaders(jwt), body)
-	if err != nil {
-		return githubapi.InstallationToken{}, err
-	}
-	token, err := decodeAnswer[githubapi.InstallationToken](raw, "GitHub installation token")
+	jwt, err := app.jwt(r.Now())
+	body := githubapi.AppsCreateInstallationAccessTokenJSONRequestBody{Repositories: repositories, Permissions: permissions}
+	token, err := json201(r.githubClient(jwt, false, err).AppsCreateInstallationAccessTokenWithResponse(ctx, strconv.Itoa(installation), body))
 	if err != nil {
 		return githubapi.InstallationToken{}, err
 	}
@@ -196,28 +189,45 @@ func readSigningKey(path string) (*rsa.PrivateKey, error) {
 	return key, nil
 }
 
-func githubHeaders(token string) map[string]string {
-	return map[string]string{
+// githubHeaders is what every request to GitHub's API sends, under a bearer
+// when it has one.
+func githubHeaders(bearer string) map[string]string {
+	headers := map[string]string{
 		"Accept":               "application/vnd.github+json",
-		"Authorization":        "Bearer " + token,
 		"X-GitHub-Api-Version": githubAPIVersion,
+		"User-Agent":           githubUserAgent,
 	}
+	if bearer != "" {
+		headers["Authorization"] = "Bearer " + bearer
+	}
+	return headers
 }
 
-// githubRequest is one request to GitHub's API under an installation token,
-// spent from the installation's allowance through the fuse.
-func (r *Registry) githubRequest(ctx context.Context, method, path, token string, payload any) (json.RawMessage, error) {
-	return r.githubExchange(ctx, method, path, githubHeaders(token), payload, token)
+// githubClient is GitHub's generated client under one bearer: an
+// installation token, the app's JWT, or none for an anonymous read. Every
+// call fails with err when there is one. Under a token that spends, each call
+// passes the fuse of the installation it spends.
+func (r *Registry) githubClient(bearer string, spends bool, err error) *githubapi.ClientWithResponses {
+	fuse := ""
+	if spends {
+		fuse = bearer
+	}
+	doer := vendorDoer{r: r, err: err, headers: githubHeaders(bearer), exchange: r.githubExchange(fuse)}
+	return &githubapi.ClientWithResponses{ClientInterface: &githubapi.Client{Server: githubAPI + "/", Client: doer}}
 }
 
-// githubAsApp is one request authenticated as the app itself, on the app's
+// githubAsApp is the client authenticated as the app itself, on the app's
 // own allowance rather than an installation's.
-func (r *Registry) githubAsApp(ctx context.Context, c githubConnection, method, path string, payload any) (json.RawMessage, error) {
+func (r *Registry) githubAsApp(ctx context.Context, c githubConnection) *githubapi.ClientWithResponses {
 	jwt, err := r.githubJWT(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	return r.githubExchange(ctx, method, path, githubHeaders(jwt), payload, "")
+	return r.githubClient(jwt, false, err)
+}
+
+// githubAs is the client under a token scoped to exactly these repositories
+// and permissions.
+func (r *Registry) githubAs(ctx context.Context, c githubConnection, repositories []string, permissions githubapi.AppPermissions) *githubapi.ClientWithResponses {
+	token, err := r.githubToken(ctx, c, repositories, permissions)
+	return r.githubClient(token, true, err)
 }
 
 // githubRepositoryName is (owner, repository) from owner/repository.
@@ -236,12 +246,8 @@ func installationKey(c githubConnection, owner, repo string) string {
 // githubInstallation is the installation covering one repository, asked of
 // GitHub once per sweep.
 func (r *Registry) githubInstallation(ctx context.Context, c githubConnection, owner, repo string) (int, error) {
-	raw, err := r.cached(ctx, installationKey(c, owner, repo), func() (json.RawMessage, error) {
-		raw, err := r.githubAsApp(ctx, c, "GET", "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+"/installation", nil)
-		if err != nil {
-			return nil, err
-		}
-		installation, err := decodeAnswer[githubapi.Installation](raw, "GitHub installation")
+	raw, err := cached(ctx, r, installationKey(c, owner, repo), func() (json.RawMessage, error) {
+		installation, err := json200(r.githubAsApp(ctx, c).AppsGetRepoInstallationWithResponse(ctx, owner, repo))
 		if err != nil {
 			return nil, err
 		}
@@ -264,7 +270,7 @@ func (r *Registry) githubMint(ctx context.Context, c githubConnection, installat
 	if err != nil {
 		return "", err
 	}
-	token, err := MintGitHubToken(ctx, r.HTTP, r.Now(), app, installation, repositories, permissions)
+	token, err := r.mintGitHubToken(ctx, app, installation, repositories, permissions)
 	if err == nil {
 		r.githubSpend().minted(token.Token, c.ref, installation)
 	}
@@ -294,7 +300,7 @@ func (r *Registry) githubToken(ctx context.Context, c githubConnection, reposito
 	}
 	owner, _, _ := githubRepositoryName(names[0])
 	key := "github_app.token|" + c.ref + "|" + strings.Join(names, ",") + "|" + string(grant)
-	raw, err := r.cached(ctx, key, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, key, func() (json.RawMessage, error) {
 		installation, err := r.githubInstallation(ctx, c, owner, repos[0])
 		if err != nil {
 			return nil, err
@@ -313,33 +319,12 @@ func (r *Registry) githubToken(ctx context.Context, c githubConnection, reposito
 	return token, err
 }
 
-// githubCall is one API call under a token scoped to exactly its repositories
-// and permissions.
-func (r *Registry) githubCall(ctx context.Context, c githubConnection, method, path string, repositories []string, permissions githubapi.AppPermissions, payload any) (json.RawMessage, error) {
-	token, err := r.githubToken(ctx, c, repositories, permissions)
-	if err != nil {
-		return nil, err
-	}
-	return r.githubRequest(ctx, method, path, token, payload)
-}
-
-// githubGet decodes one scoped GET into its GitHub type.
-func githubGet[T any](ctx context.Context, r *Registry, c githubConnection, path string, repositories []string, permissions githubapi.AppPermissions) (T, error) {
-	raw, err := r.githubCall(ctx, c, "GET", path, repositories, permissions, nil)
-	if err != nil {
-		var zero T
-		return zero, err
-	}
-	route, _, _ := strings.Cut(path, "?")
-	return decodeAnswer[T](raw, "GitHub "+route)
-}
-
 // githubInstallationRepositories is every repository the app's installations
 // cover, as owner/name: choosing repositories on GitHub decides what HQ reads.
 // Each installation is listed under a token that can read metadata only, and
 // the installation found for each repository is kept for the sweep.
 func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubConnection) ([]string, error) {
-	raw, err := r.cached(ctx, "github_app.repositories|"+c.ref, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, "github_app.repositories|"+c.ref, func() (json.RawMessage, error) {
 		installations, err := r.githubInstallations(ctx, c)
 		if err != nil {
 			return nil, err
@@ -356,27 +341,26 @@ func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubC
 			if err != nil {
 				return nil, err
 			}
-			repositories, err := githubPaged(func(query string) ([]githubapi.Repository, error) {
-				listed, err := r.githubRequest(ctx, "GET", "/installation/repositories"+query, token, nil)
-				if err != nil {
-					return nil, err
+			client := r.githubClient(token, true, nil)
+			repositories, err := githubPaged(func(page int) ([]string, error) {
+				listed, err := json200(client.AppsListReposAccessibleToInstallationWithResponse(ctx, &githubapi.AppsListReposAccessibleToInstallationParams{PerPage: new(githubListPage), Page: new(page)}))
+				names := make([]string, len(listed.Repositories))
+				for i, repository := range listed.Repositories {
+					names[i] = repository.FullName
 				}
-				page, err := decodeAnswer[struct {
-					Repositories []githubapi.Repository `json:"repositories"`
-				}](listed, "GitHub installation repositories")
-				return page.Repositories, err
+				return names, err
 			})
 			if err != nil {
 				return nil, err
 			}
-			for _, repository := range repositories {
-				owner, repo, err := githubRepositoryName(repository.FullName)
+			for _, name := range repositories {
+				owner, repo, err := githubRepositoryName(name)
 				if err != nil {
 					continue
 				}
-				found = append(found, repository.FullName)
+				found = append(found, name)
 				id := installation.ID
-				_, _ = r.cached(ctx, installationKey(c, owner, repo), func() (json.RawMessage, error) { return json.Marshal(id) })
+				_, _ = cached(ctx, r, installationKey(c, owner, repo), func() (json.RawMessage, error) { return json.Marshal(id) })
 			}
 		}
 		return json.Marshal(slices.Compact(slices.Sorted(slices.Values(found))))
@@ -391,12 +375,9 @@ func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubC
 
 // githubInstallations is every installation of the connection's app.
 func (r *Registry) githubInstallations(ctx context.Context, c githubConnection) ([]githubapi.Installation, error) {
-	return githubPaged(func(query string) ([]githubapi.Installation, error) {
-		answer, err := r.githubAsApp(ctx, c, "GET", "/app/installations"+query, nil)
-		if err != nil {
-			return nil, err
-		}
-		return decodeAnswer[[]githubapi.Installation](answer, "GitHub installations")
+	client := r.githubAsApp(ctx, c)
+	return githubPaged(func(page int) ([]githubapi.Installation, error) {
+		return json200(client.AppsListInstallationsWithResponse(ctx, &githubapi.AppsListInstallationsParams{PerPage: new(githubListPage), Page: new(page)}))
 	})
 }
 
@@ -405,11 +386,12 @@ func (r *Registry) githubInstallations(ctx context.Context, c githubConnection) 
 const githubPageLimit = 100
 
 // githubPaged is every item of a paged GitHub list, read a full page at a time
-// until a page comes back short. read takes the page's query string.
-func githubPaged[T any](read func(query string) ([]T, error)) ([]T, error) {
+// until a page comes back short. read takes the page's number and asks for
+// githubListPage items.
+func githubPaged[T any](read func(page int) ([]T, error)) ([]T, error) {
 	found := []T{}
 	for page := 1; page <= githubPageLimit; page++ {
-		items, err := read("?per_page=" + strconv.Itoa(githubListPage) + "&page=" + strconv.Itoa(page))
+		items, err := read(page)
 		if err != nil {
 			return nil, err
 		}
@@ -447,11 +429,7 @@ func (r *Registry) githubProbe(ctx context.Context, ref string) (ProbeResult, er
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	raw, err := r.githubAsApp(ctx, c, "GET", "/app", nil)
-	if err != nil {
-		return ProbeResult{}, err
-	}
-	app, err := decodeAnswer[githubapi.Integration](raw, "GitHub App")
+	app, err := json200(r.githubAsApp(ctx, c).AppsGetAuthenticatedWithResponse(ctx))
 	if err != nil {
 		return ProbeResult{}, err
 	}

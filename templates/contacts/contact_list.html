@@ -3,7 +3,7 @@
 {% if not_read %}
 {% include "partials/_empty_state.html" with absent="no reading yet" remedy=page.remedy %}
 {% else %}
-{% if problem %}{% notice tone="warning" %}{{ problem }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}{% endnotice %}{% endif %}
+{% if problem %}{% notice tone="warning" %}{{ problem }}{% if observed_at %} Showing the read from {{ observed_at|when:"at" }}.{% endif %}{% endnotice %}{% endif %}
 {% if waiting_note %}{% notice tone="info" %}{{ waiting_note }}{% endnotice %}{% endif %}
 {% switch label="Message status" %}
   {% for tab in status_tabs %}

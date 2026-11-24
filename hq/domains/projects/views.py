@@ -21,7 +21,7 @@ from hq.platform.application.capabilities import capability_words
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import entity_link, page_url, record_link, web_url
 from hq.platform.application.list_pages import ListPageMixin
-from hq.platform.application.moments import ago, moment
+from hq.platform.application.moments import moment, when
 from hq.platform.application.pages import PageAction, PageBadge, PageMixin, RecordPageMixin
 from hq.platform.application.projects import (
     DEPENDENCY_UPDATES,
@@ -69,9 +69,7 @@ class ProjectListView(ListPageMixin, TemplateView):
             "Technologies", "technologies_used", css="optional-col", cell=lambda row: _chips(row["technologies"])
         ),
         TableColumn("Repository", kind="status", cell=lambda row: Cell(lines=_repository(row))),
-        TableColumn(
-            "Last active", kind="status", cell=lambda row: Cell(moment=row["last_active_at"], form="ago", muted=True)
-        ),
+        TableColumn("Last active", kind="status", cell=lambda row: Cell(moment=row["last_active_at"], muted=True)),
     )
     table_search_placeholder = "Search projects, technology, and notes…"
 
@@ -104,7 +102,7 @@ def _named(row) -> Cell:
 
     link = entity_link(Kind.PROJECT, row["slug"], label=row["name"])
     slug = (Cell(row["slug"], muted=True),) if row["slug"] != slugify(row["name"]) else ()
-    return replace(Cell.of(link, name=True), lines=slug)
+    return replace(Cell.of(link), lines=slug)
 
 
 def _updates(row) -> tuple[Cell, ...]:
@@ -137,7 +135,7 @@ def _repository(row) -> tuple[Cell, ...]:
     """When its repository was last pushed to, and whether its checks fail."""
 
     if row["pushed_at"]:
-        found = [Cell("Pushed", muted=True, parts=(Cell(moment=row["pushed_at"], form="ago", muted=True),))]
+        found = [Cell("Pushed", muted=True, parts=(Cell(moment=row["pushed_at"], muted=True),))]
     else:
         found = [Cell("Not read yet", muted=True)] if row["repository_url"] else []
     if row["repository"] and row["repository"].failing:
@@ -299,7 +297,7 @@ class ProjectDeleteView(ProjectPage, RecordDeleteMixin, DeleteView):
 def _published(at) -> Cell:
     """How long ago, quiet, as words that leave the cell's sort to its value."""
 
-    return Cell(moment=moment(at), form="ago", muted=True) if moment(at) else Cell()
+    return Cell(moment=moment(at), muted=True) if moment(at) else Cell()
 
 
 def _release(repo) -> Cell:
@@ -336,7 +334,6 @@ def _starred(repo) -> Cell:
         repo["name"],
         repo["url"],
         external=True,
-        name=True,
         lines=(Cell(description, muted=True),) if description else (),
     )
 
@@ -345,7 +342,7 @@ _STARRED_COLUMNS = (
     TableColumn("Repository", cell=_starred),
     TableColumn("Latest release", kind="identifier", drop=2, cell=_release),
     TableColumn("Advisories", drop=1, cell=_advisories),
-    TableColumn("Starred", kind="status", cell=lambda repo: Cell(moment=repo["starred"], form="ago")),
+    TableColumn("Starred", kind="status", cell=lambda repo: Cell(moment=repo["starred"])),
 )
 
 
@@ -390,7 +387,7 @@ class WatchingView(PageMixin, TemplateView):
             )
         context["profile"] = profile(self.login)
         if context["profile"]:
-            context["starred"] = DataTable.of("Starred", _STARRED_COLUMNS, context["profile"]["watched"])
+            context["starred"] = DataTable.of("Newest starred", _STARRED_COLUMNS, context["profile"]["watched"])
         context["app_repositories"] = self.app_repositories
         # Why the account is yours, on hover beside its name: the sign-in
         # names it, and the App installed on it says so from GitHub's side.
@@ -485,7 +482,7 @@ def _access(subject) -> Cell:
         if not key["read_only"]:
             parts.append(Cell(status=StatusMark("Can write", tone="serious", pill=False), dot=True))
         used = moment(key.get("last_used") or "")
-        parts.append(Cell(f"used {ago(used)}" if used else "never used", dot=True))
+        parts.append(Cell(f"used {when(used)}" if used else "never used", dot=True))
     if not access["deploy_keys"]:
         parts.append(Cell("no deploy keys", dot=True))
     if variables := subject.variables:
@@ -516,7 +513,7 @@ class PostureView(PageMixin, TemplateView):
     """
 
     template_name = "projects/posture.html"
-    page_title = "Repo checks"
+    page_title = "Repo rules"
     page_reads = ("github.repository",)
 
     @override

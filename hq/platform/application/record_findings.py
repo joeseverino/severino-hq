@@ -26,7 +26,7 @@ lazy from hq.domains.receipts.specs import UNLINKED
 from . import sections
 from .entity_links import EntityLink, entity_link
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .references import UNLINK, naming_nothing
+from .references import naming_nothing
 from .tone import Tone
 from .ui import counted, ended
 
@@ -58,7 +58,6 @@ class _Backlog:
     query: Mapping[str, str]
     count: Callable[[], int] | None = None
     named: Callable[[], tuple[EntityLink, ...]] | None = None
-    said: str = ""
     # Work in hand rather than a problem to fix.
     notice: bool = False
 
@@ -78,7 +77,7 @@ class _Backlog:
                 subject="",
                 title=counted(count, self.one, self.many),
                 severity=Tone.ATTENTION,
-                explanation=" ".join(part for part in (ended(names), self.said) if part),
+                explanation=ended(names) if names else "",
                 evidence=((self.counts, f"{count:,}"),),
                 primary=opens(self.opens_as, with_query(reverse(self.route), self.query)),
                 offers=tuple(opens(link.label, link.url) for link in first if link.url),
@@ -142,7 +141,7 @@ def _links_to_nothing(rule: str, model: type) -> FindingRule:
                 part=found.key,
                 title=found.title,
                 severity=Tone.ATTENTION,
-                explanation=UNLINK,
+                explanation="",
                 primary=opens("Open record", found.url),
             )
             for found in naming_nothing(model)
@@ -153,9 +152,9 @@ def _links_to_nothing(rule: str, model: type) -> FindingRule:
         "Links to nothing",
         Tone.ATTENTION,
         detect,
-        operator_action="Open the record, then choose something else for the link or clear it.",
+        operator_action="Choose something else for the link, or clear it.",
         no_help_reason="Only you know what the record was meant to name.",
-        bars={Tone.ATTENTION: "a record links to something HQ no longer has, so the record points nowhere"},
+        bars={Tone.ATTENTION: "a record links to something HQ no longer has"},
         domain={Expense: "hq.expenses", Asset: "hq.assets", Entry: "hq.calendar"}[model],
         gathered=True,
     )
@@ -179,7 +178,7 @@ RULES: tuple[FindingRule, ...] = (
         domain="hq.content",
         operator_action="Finish each draft and publish it, or delete it.",
         no_help_reason="Only you decide when a piece is ready.",
-        bar="a draft is not published, which is work in hand rather than a problem",
+        bar="a draft is not published",
     ),
     _backlog(
         CONTENT_UNDOCUMENTED,
@@ -201,9 +200,9 @@ RULES: tuple[FindingRule, ...] = (
             ),
         ),
         domain="hq.content",
-        operator_action="Link each published piece to the doc that records what it covers.",
+        operator_action="Link each published piece to its doc.",
         no_help_reason="Only you know which doc a piece belongs with.",
-        bar="a published piece has no doc linked, so nothing records what it covers",
+        bar="a published piece has no doc linked",
     ),
     _backlog(
         CONTACTS_UNREAD,
@@ -220,7 +219,7 @@ RULES: tuple[FindingRule, ...] = (
         domain="hq.contacts",
         operator_action="Read each message, and reply where one asks for it.",
         no_help_reason="A reply is yours to write.",
-        bar="a message from the contact form is unread, and each one waits on a reply",
+        bar="a message from the contact form is unread",
     ),
     _backlog(
         EXPENSES_WITHOUT_RECEIPTS,
@@ -235,7 +234,7 @@ RULES: tuple[FindingRule, ...] = (
             count=lambda: Expense.objects.filter(NO_RECEIPT.keeps).count(),
         ),
         domain="hq.expenses",
-        operator_action="Upload the receipt for each expense, or attach one already in HQ.",
+        operator_action="Upload or attach the receipt for each expense.",
         no_help_reason="A receipt is a file only you can hand HQ.",
         bar="an expense has no receipt, and a deduction needs its receipt",
     ),
@@ -255,7 +254,7 @@ RULES: tuple[FindingRule, ...] = (
         domain="hq.receipts",
         operator_action="Attach each receipt to the expense or asset it proves.",
         no_help_reason="Only you know what a receipt was for.",
-        bar="a receipt is attached to nothing, so no expense counts it as proof",
+        bar="a receipt is attached to nothing",
     ),
     _backlog(
         ASSETS_MISSING_PURCHASE,
@@ -268,12 +267,11 @@ RULES: tuple[FindingRule, ...] = (
             route="assets:list",
             query={UNPRICED.name: "1"},
             named=_unpriced,
-            said="Depreciation cannot be calculated without both.",
         ),
         domain="hq.assets",
         operator_action="Fill in each asset's purchase date and cost.",
-        no_help_reason="The purchase date and cost are on a receipt only you have.",
-        bar="an active asset has no purchase date or cost, so its depreciation cannot be worked out",
+        no_help_reason="Only you have the receipt that says them.",
+        bar="an active asset lacks the purchase date or cost depreciation needs",
     ),
     _links_to_nothing("asset-links-to-nothing", Asset),
     _links_to_nothing("event-links-to-nothing", Entry),

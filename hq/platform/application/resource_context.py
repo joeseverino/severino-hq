@@ -103,8 +103,12 @@ def record_summary(resource, shown_name: str) -> str:
     itself.
     """
 
-    rows = readout_rows(resource)
-    return value_summary(rows[0][1] or rows[0][2] if rows else "", shown_name)
+    if not (rows := readout_rows(resource)):
+        return ""
+    label, desired, observed = rows[0]
+    # Said with its label, as the record's search line says it: a bare "1" is a count of nothing.
+    said = value_summary(desired or observed, shown_name)
+    return f"{label}: {said}" if said else ""
 
 
 def value_summary(value: str, shown_name: str) -> str:

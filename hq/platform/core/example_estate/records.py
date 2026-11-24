@@ -20,7 +20,7 @@ lazy from hq.domains.expenses.models import Expense
 
 from .names import MACHINE
 from .network import RENEWS_IN
-from .work import UPDATED
+from .work import OPTED_IN
 
 # A one-page PDF that says what it is.
 _RECEIPT = (
@@ -146,7 +146,7 @@ def projects():
             description=about,
             technologies_used=STACKS.get(slug, ""),
             repository_url=f"https://github.com/example/{repository}",
-            dependency_updates=repository == UPDATED,
+            dependency_updates=repository in OPTED_IN,
         )
     _runbooks()
     _writeups()

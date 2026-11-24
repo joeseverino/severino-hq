@@ -18,6 +18,11 @@
   /* A pill is one short state; it never wraps. */
   white-space: nowrap;
 }
+/* A pill or a chip sets its own line, so it is one height wherever it stands:
+   inherited, it would take its container's, a run of links' line a target
+   tall. The line it sits on keeps its own height, and the links beside it
+   their targets. */
+:is(.pill, .tag) { line-height: 1.4; }
 
 
 /* A control that posts a form of its own (a posting `{% button %}` with `fields`) stands where a button would. */
@@ -117,7 +122,7 @@
 .origin-panel { --surface-border: 0 none; --surface-radius: 0; --surface-bg: transparent; --surface-shadow: none; --surface-inset: 0; }
 /* The urgency, one quiet word after the title only when urgent (the pill
    keeps its word for a screen reader and its tip). */
-.pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
+.pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 600; }
 /* A row dismissed in place (app.js): its title, quiet, and the way back, the button that posts its key (action_tags.triage). */
 [data-attention-item][data-dismissed] > .row-gutter > :not(.row-line),
 [data-attention-item][data-dismissed] > .row-actions > :not(button[name="key"]),

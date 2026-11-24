@@ -2,7 +2,6 @@
 
 import re
 from typing import Any, ClassVar, override
-lazy from datetime import timedelta
 
 from django import forms
 from django.conf import settings
@@ -10,7 +9,6 @@ from django.contrib.auth.views import LoginView
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.text import capfirst
 from django.views.generic import TemplateView, View
 
@@ -382,16 +380,15 @@ class AgentPolicyView(PageMixin, TemplateView):
         ]
         context["device_groups"] = agent_tables.devices(device_groups) if device_groups else None
         context["recent_days"] = agent_activity.RECENT.days
-        # Each agent's latest events, drawn as the audit log draws its rows.
+        # Each client's latest events, drawn as the audit log draws its rows,
+        # once however many people signed it in: an audit row names the client.
+        by_client = {standing.identity.client_id: standing.activity for standing in standings}
         context["agent_events"] = tuple(
-            history.HistoryGroup(
-                tuple(history.entries(list(standing.activity.latest))),
-                standing.identity.client_id,
-                len(standing.activity.latest),
-            )
-            for standing in standings
-            if standing.activity.latest
+            history.HistoryGroup(tuple(history.entries(list(activity.latest))), client, len(activity.latest))
+            for client, activity in by_client.items()
+            if activity.latest
         )
+        context["refused_count"] = sum(activity.refused for activity in by_client.values())
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
@@ -406,7 +403,6 @@ class AgentPolicyView(PageMixin, TemplateView):
             # no field: it carries what was wrong with a save, said over the tables.
             context.setdefault("form", forms.Form())
         context["awaiting_count"] = len(awaiting_ids())
-        context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context
 
     @staticmethod
@@ -480,12 +476,14 @@ class SearchView(PageMixin, TemplateView):
         "audit": 100,
     }
 
-    def _palette_groups(self, discovery):
+    def _palette_groups(self, discovery, q):
         remaining = self.palette_result_limit
+        # A group shares the list with the others only once something is asked.
+        group_limit = self.palette_group_limit if q else remaining
         groups = []
         for key in PALETTE_GROUPS:
             label = DISCOVERY_GROUPS[key]
-            items = tuple(item for item in discovery[key] if item.url)[: min(self.palette_group_limit, remaining)]
+            items = tuple(item for item in discovery[key] if item.url)[: min(group_limit, remaining)]
             if items:
                 groups.append({"key": key, "label": label, "items": items})
                 remaining -= len(items)
@@ -602,19 +600,19 @@ class SearchView(PageMixin, TemplateView):
                 if not palette_request:
                     contacts = inbox.search(q, limit=self.result_limit)
                     total += len(contacts)
-            # With nothing asked, the page is a search box. The palette still
-            # opens on a short list of where to go.
-            discovery = (
-                command_center(q, principal=principal, include_live_connections=True)
-                if q or palette_request
-                else dict.fromkeys(DISCOVERY_GROUPS, ())
-            )
+            # With nothing asked, the page is a search box, and the palette
+            # opens on where to go: every page, as declared.
+            if q:
+                discovery = command_center(q, principal=principal, include_live_connections=True)
+            else:
+                pages = command_center(q, principal=principal)["resources"] if palette_request else ()
+                discovery = {**dict.fromkeys(DISCOVERY_GROUPS, ()), "resources": pages}
         # A page to go to: a resource with no page of its own is the API's.
         discovery = {
             **discovery,
             "resources": tuple(item for item in discovery["resources"] if item.url),
         }
-        palette_groups = self._palette_groups(discovery)
+        palette_groups = self._palette_groups(discovery, q)
         palette_search_groups = self._palette_search_groups(groups)
         palette_search_count = sum(len(group["items"]) for group in palette_search_groups)
         discovery_total = sum(len(discovery[key]) for key in discovery)
@@ -623,7 +621,6 @@ class SearchView(PageMixin, TemplateView):
             q=q,
             search_query=q,
             groups=groups,
-            total=total,
             result_sections=sections,
             # A way to each group of results, over them, once there are two.
             result_navigation=(
@@ -635,13 +632,13 @@ class SearchView(PageMixin, TemplateView):
                 else None
             ),
             discovery_sections=[] if palette_request else self._discovery_sections(discovery),
-            discovery_total=discovery_total,
             # The estate leads, above records and the audit log.
             palette_estate=[group for group in palette_groups if group["key"] == "estate"],
             palette_groups=[group for group in palette_groups if group["key"] != "estate"],
             palette_search_groups=palette_search_groups,
             palette_count=(sum(len(group["items"]) for group in palette_groups) + palette_search_count),
-            palette_total=discovery_total + total,
+            # Every match the page or the palette shows a part of, counted once.
+            match_total=discovery_total + total,
             palette_result_limit=self.palette_result_limit,
         )
         return ctx

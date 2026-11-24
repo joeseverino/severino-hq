@@ -60,12 +60,12 @@ func (r *Registry) d1Query(ctx context.Context, ref, account, database, sql stri
 	if params == nil {
 		params = []any{}
 	}
-	path := "/accounts/" + account + "/d1/database/" + database + "/query"
-	envelope, err := r.cloudflareEnvelope(ctx, runtime.ConnectionProviderCloudflareAPI, ref, path, "POST", d1Statement{SQL: sql, Params: params})
+	statement := d1Statement{SQL: sql, Params: params}
+	raw, err := cloudflareResult(r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, false).D1QueryDatabaseWithResponse(ctx, account, database, statement))
 	if err != nil {
 		return d1QueryResult{}, err
 	}
-	results, err := cloudflareDecode[[]d1QueryResult](envelope.Result, "D1 query result")
+	results, err := cloudflareDecode[[]d1QueryResult](raw, "D1 query result")
 	if err != nil {
 		return d1QueryResult{}, err
 	}
@@ -87,7 +87,7 @@ func (r *Registry) cloudflareContactSubmissions(ctx context.Context) ([]any, err
 		if err != nil {
 			return nil, err
 		}
-		databases, err := cloudflareAccountItems[cfapi.D1DatabaseResponse](ctx, r, ref, "/d1/database", cloudflarePerPage)
+		databases, err := r.cloudflareD1List(ctx, ref)
 		if err != nil {
 			return nil, err
 		}

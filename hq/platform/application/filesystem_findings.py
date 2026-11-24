@@ -111,9 +111,7 @@ _nearly_full = OnEachMachine(
         if len(full) == 1
         else f"{counted(len(full), 'filesystem is', 'filesystems are')} nearly full on {node.label}"
     ),
-    explanation=lambda _full: (
-        "The next write that needs more room than is left fails, and says only that the write did."
-    ),
+    explanation=lambda _full: "Writes fail once it fills.",
     # The mount stands in the label, so no value reads as a link's path.
     evidence=lambda row: (
         (f"Free on {row.mount}", f"{human_bytes(row.free)} of {human_bytes(row.total)} ({_share(row)})"),
@@ -126,11 +124,11 @@ _nearly_full = OnEachMachine(
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "filesystem-nearly-full",
-        "A filesystem is nearly full",
+        "Filesystem nearly full",
         Tone.SERIOUS,
         _nearly_full,
         gathered=True,
-        operator_action="On the machine, free space on the mount, then check again.",
+        operator_action="Free space on the mount, then check again.",
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: f"free space is under {SERIOUS_FREE} and {SERIOUS_SHARE} of the disk",

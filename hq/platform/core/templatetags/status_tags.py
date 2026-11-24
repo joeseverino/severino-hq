@@ -274,7 +274,9 @@ slotted(
         `MachineState`, a model's stored status declared as `TonedChoices`, `ARCHIVED = "archived",
         Tone.NEUTRAL, "Archived"`). Any other word is refused where it is drawn. Several parts are one
         label (`{% status "HQ expects" desired tone="serious" %}`); `href`, `title`, `tip`, `css` and
-        `data_*` say the rest. No template or module writes a pill by hand. With `chip=True` it is one of
+        `data_*` say the rest. No template or module writes a pill by hand. A pill or a chip sets its own
+        line height (cards.css), so it is one height wherever it stands, in a cell or beside a run of links
+        whose line is a target tall; that line keeps its height around it. With `chip=True` it is one of
         a record's names (a technology, a domain, a role) as a neutral chip, said as written and taking no
         tone, so no template writes a `.tag` by hand. With `pill=False` it is the state's words in its
         tone, as a headline or a line of text says a state. The sentence that says what a state means

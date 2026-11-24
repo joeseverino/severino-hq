@@ -15,35 +15,30 @@ import (
 // What a Cloudflare account holds beyond its DNS, each list read once per sweep.
 
 func (r *Registry) cloudflareAccount(ctx context.Context, ref string) (string, error) {
-	raw, err := r.cached(ctx, "cloudflare-account:"+ref, func() (json.RawMessage, error) {
-		account, err := r.cloudflareAnalyticsAccount(ctx, ref)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(account)
-	})
-	if err != nil {
-		return "", err
-	}
-	var account string
-	err = json.Unmarshal(raw, &account)
-	return account, err
+	return cached(ctx, r, "cloudflare-account:"+ref, func() (string, error) { return r.cloudflareAnalyticsAccount(ctx, ref) })
 }
 
-// cloudflareAccountItems reads one account list once per sweep and decodes
-// each entry into T.
-func cloudflareAccountItems[T any](ctx context.Context, r *Registry, ref, path string, perPage int) ([]T, error) {
+// cloudflareAccountItems reads one account list, read once per sweep, page
+// by page, each entry decoded into T.
+func cloudflareAccountItems[T any](ctx context.Context, r *Registry, ref, what string, perPage int, read func(client *cfapi.ClientWithResponses, account string, page int) (vendorReply, error)) ([]T, error) {
 	account, err := r.cloudflareAccount(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	items, err := r.cloudflareCachedList(ctx, "cloudflare-account-list:"+ref+":"+path, func() ([]json.RawMessage, error) {
-		return r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/accounts/"+account+path, ref, perPage)
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
+	return cloudflarePages[T](what, perPage, func(page int) (vendorReply, error) { return read(client, account, page) })
+}
+
+func (r *Registry) cloudflareD1List(ctx context.Context, ref string) ([]cfapi.D1DatabaseResponse, error) {
+	return cloudflareAccountItems[cfapi.D1DatabaseResponse](ctx, r, ref, "D1 database", cloudflarePerPage, func(client *cfapi.ClientWithResponses, account string, page int) (vendorReply, error) {
+		return client.D1ListDatabasesWithResponse(ctx, account, &cfapi.D1ListDatabasesParams{Page: new(float32(page)), PerPage: new(float32(cloudflarePerPage))})
 	})
-	if err != nil {
-		return nil, err
-	}
-	return cloudflareItems[T](items, path+" entry")
+}
+
+func (r *Registry) cloudflareAccessAppList(ctx context.Context, ref string) ([]cfAccessApp, error) {
+	return cloudflareAccountItems[cfAccessApp](ctx, r, ref, "Access application", cloudflarePerPage, func(client *cfapi.ClientWithResponses, account string, page int) (vendorReply, error) {
+		return client.AccessApplicationsListAccessApplicationsWithResponse(ctx, account, &cfapi.AccessApplicationsListAccessApplicationsParams{Page: new(page), PerPage: new(cloudflarePerPage)})
+	})
 }
 
 func (r *Registry) cloudflarePagesProjects(ctx context.Context) ([]any, error) {
@@ -53,7 +48,9 @@ func (r *Registry) cloudflarePagesProjects(ctx context.Context) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		projects, err := cloudflareAccountItems[cfapi.PagesProject](ctx, r, ref, "/pages/projects", 10)
+		projects, err := cloudflareAccountItems[cfapi.PagesProject](ctx, r, ref, "Pages project", cloudflarePagesPerPage, func(client *cfapi.ClientWithResponses, account string, page int) (vendorReply, error) {
+			return client.PagesProjectGetProjectsWithResponse(ctx, account, &cfapi.PagesProjectGetProjectsParams{Page: new(page), PerPage: new(cloudflarePagesPerPage)})
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +82,7 @@ func (r *Registry) cloudflareD1Databases(ctx context.Context) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		databases, err := cloudflareAccountItems[cfapi.D1DatabaseResponse](ctx, r, ref, "/d1/database", cloudflarePerPage)
+		databases, err := r.cloudflareD1List(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +101,7 @@ func (r *Registry) cloudflareD1Databases(ctx context.Context) ([]any, error) {
 
 // cloudflareD1Size is a database's size in bytes; the list omits it.
 func (r *Registry) cloudflareD1Size(ctx context.Context, account, uuid, ref string) (*int64, error) {
-	raw, err := r.cloudflareAPIResult(ctx, "/accounts/"+account+"/d1/database/"+uuid, ref)
+	raw, err := cloudflareResult(r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true).D1GetDatabaseWithResponse(ctx, account, uuid))
 	if err != nil || !present(raw) {
 		return nil, err
 	}
@@ -149,7 +146,7 @@ func (r *Registry) cloudflareAccessApps(ctx context.Context) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		apps, err := cloudflareAccountItems[cfAccessApp](ctx, r, ref, "/access/apps", cloudflarePerPage)
+		apps, err := r.cloudflareAccessAppList(ctx, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -190,11 +187,13 @@ func appAdmits(app cfAccessApp, tokenID string) bool {
 func (r *Registry) cloudflareServiceTokens(ctx context.Context) ([]any, error) {
 	found := []any{}
 	for _, ref := range r.cloudflareAPIRefs() {
-		tokens, err := cloudflareAccountItems[cfapi.AccessServiceTokens](ctx, r, ref, "/access/service_tokens", cloudflarePerPage)
+		tokens, err := cloudflareAccountItems[cfapi.AccessServiceTokens](ctx, r, ref, "service token", cloudflarePerPage, func(client *cfapi.ClientWithResponses, account string, page int) (vendorReply, error) {
+			return client.AccessServiceTokensListServiceTokensWithResponse(ctx, account, &cfapi.AccessServiceTokensListServiceTokensParams{Page: new(page), PerPage: new(cloudflarePerPage)})
+		})
 		if err != nil {
 			return nil, err
 		}
-		apps, appsErr := cloudflareAccountItems[cfAccessApp](ctx, r, ref, "/access/apps", cloudflarePerPage)
+		apps, appsErr := r.cloudflareAccessAppList(ctx, ref)
 		if appsErr != nil {
 			refuse(ctx, runtime.PartApps, ref, "", appsErr)
 		}
@@ -219,14 +218,16 @@ func (r *Registry) cloudflareTunnels(ctx context.Context) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		tunnels, err := cloudflareAccountItems[cfapi.TunnelCfdTunnel](ctx, r, ref, "/cfd_tunnel?is_deleted=false", cloudflarePerPage)
+		tunnels, err := cloudflareAccountItems[cfapi.TunnelCfdTunnel](ctx, r, ref, "tunnel", cloudflarePerPage, func(client *cfapi.ClientWithResponses, account string, page int) (vendorReply, error) {
+			return client.CloudflareTunnelListCloudflareTunnelsWithResponse(ctx, account, &cfapi.CloudflareTunnelListCloudflareTunnelsParams{IsDeleted: new(false), Page: new(float32(page)), PerPage: new(float32(cloudflarePerPage))})
+		})
 		if err != nil {
 			return nil, err
 		}
+		client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
 		for _, tunnel := range tunnels {
-			base := "/accounts/" + account + "/cfd_tunnel/" + tunnel.ID
 			record := CloudflareTunnelRecord{ConnectionRef: ref, AccountID: account, ID: tunnel.ID, Name: tunnel.Name, Status: string(tunnel.Status), CreatedAt: tunnel.CreatedAt, ConnsActiveAt: tunnel.ConnsActiveAt}
-			if config, err := cloudflareOptional[cfapi.TunnelConfiguration](r.cloudflareAPIResult(ctx, base+"/configurations", ref)); err != nil {
+			if config, err := cloudflareOptional[cfapi.TunnelConfiguration](cloudflareResult(client.CloudflareTunnelConfigurationGetConfigurationWithResponse(ctx, account, tunnel.ID))); err != nil {
 				refuse(ctx, runtime.PartConfiguration, ref, record.Name, err)
 			} else {
 				source := string(config.Source)
@@ -238,7 +239,7 @@ func (r *Registry) cloudflareTunnels(ctx context.Context) ([]any, error) {
 				}
 				record.ConfigSource, record.Ingress = &source, &ingress
 			}
-			if clients, err := cloudflareOptional[[]cfapi.TunnelTunnelClient](r.cloudflareAPIResult(ctx, base+"/connections", ref)); err != nil {
+			if clients, err := cloudflareOptional[[]cfapi.TunnelTunnelClient](cloudflareResult(client.CloudflareTunnelListCloudflareTunnelConnectionsWithResponse(ctx, account, tunnel.ID))); err != nil {
 				refuse(ctx, runtime.PartConnections, ref, record.Name, err)
 			} else {
 				connections := []CloudflareTunnelConnection{}
@@ -270,10 +271,13 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 			return nil, err
 		}
 		named := namedZones(zones)
+		client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
 		var refused []error
 		for _, zone := range named {
 			name := hostname(zone.Name)
-			packs, err := r.cloudflareCertificatePacks(ctx, zone.ID, ref)
+			packs, err := cloudflarePages[cfapi.TLSCertificatesAndHostnamesCertificatePack]("certificate pack", cloudflareAccountPerPage, func(page int) (vendorReply, error) {
+				return client.CertificatePacksListCertificatePacksWithResponse(ctx, zone.ID, &cfapi.CertificatePacksListCertificatePacksParams{Page: new(float32(page)), PerPage: new(float32(cloudflareAccountPerPage)), Status: new(cfapi.CertificatePacksListCertificatePacksParamsStatusAll)})
+			})
 			if err != nil {
 				refused = append(refused, err)
 				refuse(ctx, runtime.PartWhole, ref, name, err)
@@ -295,14 +299,6 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 		}
 	}
 	return found, nil
-}
-
-func (r *Registry) cloudflareCertificatePacks(ctx context.Context, zoneID, ref string) ([]cfapi.TLSCertificatesAndHostnamesCertificatePack, error) {
-	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/zones/"+zoneID+"/ssl/certificate_packs?status=all", ref, cloudflareAccountPerPage)
-	if err != nil {
-		return nil, err
-	}
-	return cloudflareItems[cfapi.TLSCertificatesAndHostnamesCertificatePack](items, "certificate pack")
 }
 
 // cloudflareOptional decodes a result that may be absent or null, which reads

@@ -230,7 +230,7 @@ class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
 TEMPLATES = APPLICATION.parents[2] / "templates"
 PARTIAL = TEMPLATES / "partials/_reading_age.html"
 # "read" just before an age: a page wording a reading's age itself.
-OWN_WORDING = re.compile(r"\bread\b[^{<]{0,4}\{\{[^}]*\|(?:when|when_text):\"ago\"", re.IGNORECASE)
+OWN_WORDING = re.compile(r"\bread\b[^{<]{0,4}\{\{[^}]*\|(?:when|when_text)\b", re.IGNORECASE)
 
 
 @tag("source", "tree")
@@ -247,5 +247,5 @@ class OneWordingTests(SimpleTestCase):
             for match in OWN_WORDING.finditer(text)
         ]
 
-        self.assertRegex('Last read {{ at|when:"ago" }}', OWN_WORDING, "the rule no longer finds an age worded by hand")
+        self.assertRegex("Last read {{ at|when }}", OWN_WORDING, "the rule no longer finds an age worded by hand")
         self.assertEqual(found, [])

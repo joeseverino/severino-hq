@@ -50,7 +50,8 @@ def _section() -> Part:
         means, where the numbers come from), quieter than the body. The heading's line is one control
         tall, so a control beside it adds no height and heads in one row are one height. The aside is one
         box at the row's end, so its parts (a count, a dot, a link) wrap as one line of text, and it keeps
-        to one line while the row has room for it. What draws its own edges, cells or fill fills the frame
+        to one line while the row has room for it. The box draws that line in the count's quiet voice,
+        a link in it set at the size of its link to the rest, so a page writes the words alone. What draws its own edges, cells or fill fills the frame
         with no inset and no second border, as a card's flush list group does in Bootstrap. That is a
         table's region, a band of facts, a row of metrics, a month's grid, or a list whose rows carry
         their own padding. Prose, facts and the empty line sit in the frame's padding. With no body it

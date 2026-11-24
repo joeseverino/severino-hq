@@ -80,11 +80,11 @@ PAGE_HEAD = _part(
     *("is-column", "overflow-menu", "overflow-menu-copies", "overflow-menu-panel", "page-actions", "page-facts"),
     *("page-head", "page-head-copy", "page-name", "page-trail", "page-trail-row"),
     rules="""
-    **One head.** Trail, title, controls, lede, laid out the same at every width. The controls stand
-    at the head's top right, beside the trail and the title together, so the trail's line is as tall
-    as its words, or beside the title alone where there is no trail (the title wraps before the
-    controls move). Every line after the title has the head's whole width: what the page says about
-    its thing and the lede never share a line with the controls. Two controls stand there at every
+    **One head.** Trail, title, controls, lede, laid out the same at every width. The trail has a
+    line of its own; the controls end the title's line, and where the title and they don't fit side
+    by side they wrap to a line of their own under it, so neither squeezes the other. Every line
+    after the title has the head's whole width: what the page says about its thing and the lede
+    never share a line with the controls. Two controls stand there at every
     width, the lead and the next the page names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
     the head) folds the second in too. The lead is chosen by what each control is for, never by where
     it stands: not a destructive one while another is offered, then one that can be pressed, then the
@@ -733,6 +733,10 @@ PARTS = (
         its own content, and the bar's controls all take their size from `--control-size`. The
         person's control shows their name beside the mark at any width whose bar has room for it, cut
         past four controls, and only the mark where there is none.
+
+        **A section opens in place.** On the bar, a section's links hang beneath its button. In the
+        toggle's menu, the menu gives way to the section: its row stays at the top to close it, and its
+        links run on beneath at the menu's width, one box with it, never a panel beside the menu.
 
         **The user menu says whose session it is first.** It shows the person's picture, kept by HQ from
         sign-on and never loaded from the provider by a page. Then come their name, what the account may

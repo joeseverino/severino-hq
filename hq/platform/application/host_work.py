@@ -124,10 +124,10 @@ def outbound() -> tuple[OutboundWork, ...]:
     is due sooner than the timer would find it."""
 
     return (
-        _own("audit.prune", "Delete old routine log entries and scan results", prune_audit, every=DAILY),
-        _own("content.sync", "Fetch the site's content list", _content_index, every=DAILY),
-        _own("due", "Do the work that is due", _due),
-        _own("registry.refresh", "Read domain registration and image data", _public_registry, every=DAILY),
-        _own("sessions.clear", "Delete expired sessions", _clear_sessions, every=DAILY),
-        _own("units.read", "Check HQ's own services after a failure", _unit_state),
+        _own("audit.prune", "Log cleanup", prune_audit, every=DAILY),
+        _own("content.sync", "Content sync", _content_index, every=DAILY),
+        _own("due", "Scheduled work", _due),
+        _own("registry.refresh", "Registry refresh", _public_registry, every=DAILY),
+        _own("sessions.clear", "Session cleanup", _clear_sessions, every=DAILY),
+        _own("units.read", "Service check", _unit_state),
     )

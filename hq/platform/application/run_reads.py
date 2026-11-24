@@ -17,7 +17,6 @@ from django.utils import timezone
 from hq.domains.jobs.models import Job, JobState
 
 from .automation_runs import CORRELATION_CHARACTER, CORRELATION_LONGEST
-from .compose_batches import NAME as COMPOSE_BATCH
 from .describe import Describe, listed
 from .integration_specs import ListFilter, ListRead, ListSort, ResourceSpec
 from .managed_records import AskedAt
@@ -229,7 +228,7 @@ def get_run(run_id: str) -> dict[str, Any]:
         **_evidence(run),
         "operation_id": run.id,
         "playbook": operation_of(run.kind),
-        "capability": COMPOSE_BATCH if "steps" in operation.input else run.kind,
+        "capability": run.kind,
         "reason": operation.reason,
     }
 
@@ -304,7 +303,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 WorkQuery,
                 WorkItem,
                 sorts=(
-                    ListSort("failed", "Failed first", ("lead", "-created_at", "-id"), _failed_first),
+                    ListSort("failed", "Failing first", ("lead", "-created_at", "-id"), _failed_first),
                     ListSort("-created_at", "Newest first", ("-created_at", "-id")),
                     ListSort("created_at", "Oldest first", ("created_at", "id")),
                     ListSort("title", "Job A–Z", ("title", "-created_at", "-id"), _a_to_z),

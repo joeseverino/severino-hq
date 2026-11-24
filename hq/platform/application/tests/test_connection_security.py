@@ -21,7 +21,7 @@ from ..connections import (
     ConnectionSpec,
 )
 from ..facts import stored_snapshots
-from ..moments import ago
+from ..moments import when
 from ..posture import Inputs, posture
 from ..projection import projection_scope
 from ..request_connection import connection
@@ -287,7 +287,7 @@ class ConnectionSecurityPostureTests(TestCase):
 
         self.assertTrue(_result(found, "freshness").met)
         aged = _result(_posture((replace(group, connections=(view, read)),), self.request()), "freshness")
-        self.assertEqual(aged.reading.evidence, f"Oldest reading {ago(old)}")
+        self.assertEqual(aged.reading.evidence, f"Oldest reading {when(old)}")
 
     def test_a_keyless_service_is_counted_once_and_alike_by_every_check(self):
         (group,) = _groups()

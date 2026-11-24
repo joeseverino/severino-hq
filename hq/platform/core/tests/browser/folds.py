@@ -50,8 +50,8 @@ PRESS_FOLD = "(id) => document.getElementById(id).querySelector('[data-fold-togg
 # section inside another, as a hop's evidence lies inside its hop.
 NESTED = (
     '{% section "Example outer" fold=True %}<p>Example</p>{% section "Example inner" fold=True %}'
-    '<table class="data-table" style="table-layout: fixed; inline-size: 10rem"><tbody><tr><td>'
-    '<span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">'
+    '<table class="data-table"><tbody><tr><td>'
+    '<span style="display: block; inline-size: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">'
     "an-example-value-far-too-long-for-its-cell</span></td></tr></tbody></table>"
     "{% endsection %}{% endsection %}"
 )

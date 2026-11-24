@@ -84,9 +84,9 @@ EXAMPLES = (
         "perimeter-unchecked",
         fires=(
             # An empty probe set is not a pass.
-            perimeter(ports_checked=[], raises=("HQ could not test whether example-edge is open to the internet",)),
+            perimeter(ports_checked=[], raises=("example-edge not tested for open ports",)),
             # No public address checked nothing either.
-            perimeter(public_addresses=[], raises=("HQ could not test whether example-edge is open to the internet",)),
+            perimeter(public_addresses=[], raises=("example-edge not tested for open ports",)),
         ),
         quiet=(perimeter(), perimeter(answered_publicly=[443])),
     ),

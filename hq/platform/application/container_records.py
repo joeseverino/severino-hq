@@ -1,13 +1,13 @@
-"""The shapes the containers and upgrades resources answer in."""
+"""The shapes the containers, upgrades and app updates resources answer in."""
 
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from .answer_fields import AsRead, PageUrl
 from .describe import Describe, listed
 from .json_schemas import Written
 from .record_parts import ComposeProject, MeasurementPart
 from .ui import ended
-from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE, Blocker, UpgradeStep
+from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE, Blocker
 
 # What stands in the way of an upgrade, as ``Blocker`` says it.
 WrittenBlocker = Annotated[dict[str, Any], Written(Blocker)]
@@ -30,9 +30,13 @@ class ProjectPart(TypedDict):
     url: PageUrl
 
 
+# A pull request's title, as GitHub lists it.
+type PullTitle = Annotated[str, Describe("The pull request's title.")]
+
+
 class PullRequestPart(TypedDict):
     number: Annotated[int | None, Describe("The pull request's number; null when not read.")]
-    title: Annotated[str, Describe("The pull request's title.")]
+    title: PullTitle
     url: Annotated[str, Describe("The pull request's page.")]
     draft: Annotated[bool, Describe("Whether it is a draft.")]
 
@@ -167,7 +171,7 @@ class MountPart(TypedDict):
 
 
 class UpgradeRecord(UpgradeRow):
-    """One upgrade whole: what it fixes and introduces, its data, and the steps it would take."""
+    """One upgrade whole: what it fixes and introduces, and its data."""
 
     release: Annotated[ReleasePart | None, Describe("The release of the version it moves to; null for none.")]
     fixes: Annotated[
@@ -186,7 +190,7 @@ class UpgradeRecord(UpgradeRow):
     stateful: Annotated[bool, Describe("Whether it keeps data in writable mounts, which `data` lists.")]
     data: Annotated[
         list[MountPart],
-        Describe("The writable mounts holding its data, snapshotted before the upgrade and restored on rollback."),
+        Describe("The writable mounts holding its data."),
     ]
     verified_by: Annotated[
         list[str],
@@ -199,6 +203,69 @@ class UpgradeRecord(UpgradeRow):
             "then the bar a patch must clear."
         ),
     ]
-    steps: Annotated[
-        list[Annotated[dict[str, Any], Written(UpgradeStep)]], Describe("The steps an upgrade would take, in order.")
+
+
+class PinPart(TypedDict):
+    service: Annotated[str, Describe("The compose service the image line is under; empty when the diff does not say.")]
+    before: Annotated[
+        str | None, Describe("The image the line named before, as `registry/repository:tag`; null for a new line.")
+    ]
+    after: Annotated[str, Describe("The image the line names now, as `registry/repository:tag`.")]
+    digest: Annotated[
+        str, Describe("The digest the new image names, as pinned or as its registry says; empty when not read.")
+    ]
+    scanned: Annotated[bool, Describe("Whether the new image's packages were checked against OSV.")]
+
+
+class AppUpdateRow(TypedDict):
+    key: Annotated[str, Describe("`owner:repository:number:app`, which a read of one names it by.")]
+    repository: Annotated[str, Describe("The repository the pull request is open in, as `owner/name`.")]
+    number: Annotated[int, Describe("The pull request's number.")]
+    url: Annotated[str, Describe("The pull request on GitHub.")]
+    head: Annotated[str, Describe("The pull request's head commit.")]
+    app: Annotated[str, Describe("The app it updates: the directory under `compose/` its files are in.")]
+    containers: Annotated[list[str], Describe("Each running container it moves, as `machine:container`.")]
+    readable: Annotated[bool, Describe("Whether GitHub gave every Compose file's diff; false leaves `pins` empty.")]
+    scanned: Annotated[
+        bool, Describe("Whether every new image was checked against OSV: until then, `brings` is not known.")
+    ]
+
+
+class ChecksPart(TypedDict):
+    state: Annotated[
+        Literal["success", "pending", "failure", ""],
+        Describe("How the head's checks stand: any failing, any still running, all passed, or none ran."),
+    ]
+    total: Annotated[int, Describe("How many checks ran on the head.")]
+    failing: Annotated[list[str], Describe("The name of each check that failed.")]
+    running: Annotated[int, Describe("How many checks are still running.")]
+
+
+class MergePart(TypedDict):
+    words: Annotated[str, Describe("How the merge asked at the head stands, in the words the page shows.")]
+    tone: Annotated[str, Describe("Its status tone: `attention` while it merges, `good` merged and applying.")]
+    run_url: Annotated[str, Describe("The page of the run that applies the merge; empty before one is queued.")]
+    taken: Annotated[bool, Describe("Whether it waits, works or merged, so no second approval is offered.")]
+
+
+class AppUpdateRecord(AppUpdateRow):
+    """One open update of an app whole: its pins, checks, what it fixes and
+    brings, and where approving it stands (``app_update_approval.approval_of``)."""
+
+    title: PullTitle
+    pins: Annotated[list[PinPart], Describe("Each image line it moves.")]
+    checks: Annotated[ChecksPart, Describe("The head's checks.")]
+    merge: Annotated[MergePart | None, Describe("The merge an approval asked at the head; null before one is asked.")]
+    held: Annotated[
+        str, Describe("Why `app_update.approve` would be refused now, as the page says it; empty when it would run.")
+    ]
+    fixes: Annotated[
+        list[AdvisoryPart],
+        Describe("Of the moved containers' known vulnerabilities, those the new images are clear of."),
+    ]
+    brings: Annotated[
+        list[AdvisoryPart],
+        Describe(
+            "What the new images bring of their own: an advisory against them alone, or a serious package finding."
+        ),
     ]

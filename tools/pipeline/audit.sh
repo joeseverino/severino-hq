@@ -9,8 +9,10 @@
 # status (deprecated, quarantined), then osv-scanner over every lockfile git
 # tracks. osv-scanner reads each lock's osv-scanner.toml beside it, and judges
 # a Go advisory by whether the controller calls the vulnerable code (it needs
-# go on PATH for that, and without it reports the advisory as called). Both
-# query their advisory service, so the audit fails offline.
+# go on PATH for that, and without it reports the advisory as called). Last,
+# mise audit of the tools mise.toml pins, less what the root osv-scanner.toml
+# ignores (tools/pipeline/tool_advisories.py). Each queries its advisory
+# service, so the audit fails offline.
 set -eu
 unset CDPATH
 
@@ -33,4 +35,5 @@ while IFS= read -r lock; do
     set -- "$@" --lockfile="$host/$lock"
 done <"$listed/locks"
 osv-scanner scan "$@" || status=1
+uv run --project "$host" --locked python -m tools.pipeline.tool_advisories || status=1
 exit "$status"

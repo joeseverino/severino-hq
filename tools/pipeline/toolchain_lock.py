@@ -4,6 +4,8 @@
 images install their build tools from the same lock: an image takes nothing
 from another image but the Python it runs on and mise from its own image, by
 digest, at the release min_version names, so no build tool has a second pin.
+hk.pkl names hk's release in the schema it amends, which hk's configuration
+has no versionless form of, so that copy is held to mise.toml's pin.
 """
 
 from __future__ import annotations
@@ -29,6 +31,8 @@ MISE_IMAGE = "ghcr.io/jdx/mise"
 MISE_PINNED = re.compile(r"ghcr\.io/jdx/mise:(?P<tag>[^@\s]+)@sha256:[0-9a-f]{64}")
 STAGE = re.compile(r"^FROM\s+(\S+)(?:\s+AS\s+(\S+))?", re.MULTILINE | re.IGNORECASE)
 COPY_FROM = re.compile(r"--from=(\S+)")
+HK = "aqua:jdx/hk"
+HK_SCHEMA = re.compile(r"package://github\.com/jdx/hk/releases/download/v([^/]+)/hk@([^#]+)#")
 
 
 def pinned() -> dict[str, str]:
@@ -73,11 +77,17 @@ def foreign_images(images: dict[str, str], mise: str) -> list[str]:
     return found
 
 
+def schema_drift(hk_pkl: str, hk: str) -> list[str]:
+    releases = {release for pair in HK_SCHEMA.findall(hk_pkl) for release in pair}
+    return [f"hk.pkl amends hk {release}; mise.toml pins {hk}" for release in sorted(releases - {hk})]
+
+
 def main() -> int:
     config = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))
     tools = pinned()
     images = {name: (ROOT / name).read_text(encoding="utf-8") for name in IMAGES}
     drift = foreign_images(images, config["min_version"])
+    drift += schema_drift((ROOT / "hk.pkl").read_text(encoding="utf-8"), tools[HK])
     drift += [f"mise resolves {name} from another config than mise.toml" for name in config["tools"].keys() - tools]
     for line in drift:
         print(line, file=sys.stderr)

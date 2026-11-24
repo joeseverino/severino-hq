@@ -11,8 +11,10 @@ from pydantic import ValidationError
 
 from hq.platform.application.action_links import read_link
 from hq.platform.application.adoption_testing import managing_everything
+from hq.platform.application.command_center import command_center
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.finding_model import Finding
+from hq.platform.application.findings import finding_rules
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.markup_testing import actions, hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
@@ -218,6 +220,16 @@ class InfrastructureViewsTests(TestCase):
         response = self.client.get(reverse("control_plane:checks"))
 
         self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", hrefs(response))
+
+    def test_every_check_search_offers_opens_its_row_on_the_checks_page(self):
+        offered = command_center("", principal=READER)["checks"]
+        self.assertEqual([item.name for item in offered], [rule.name for rule in finding_rules()])
+        page = self.client.get(reverse("control_plane:checks"))
+        for item in offered:
+            path, _, anchor = item.url.partition("#")
+            self.assertEqual(path, reverse("control_plane:checks"))
+            (row,) = select(page, "id", anchor)
+            self.assertIn(item.label, row.words)
 
     def test_findings_render_only_offers_the_projection_authorized(self):
         subject = TopologyNode(

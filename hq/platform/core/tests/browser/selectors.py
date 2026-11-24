@@ -371,6 +371,12 @@ _DECLARED = {
     "unseen": _S(".visually-hidden", optional=True),
     # The flow of sibling sections or cards, and of charts (layout.css).
     "flow": _S(".section-flow, .domain-charts", "layout", optional=True),
+    # An identifier a band of facts shows as a value.
+    # The facts part's catalog entry draws a band of one reading, so it holds
+    # none of these three and none is tied to the part.
+    "band_code": _S(".facts-band > .fact > .fact-value code", optional=True),
+    # A band of readings beside a page's title.
+    "head_band": _S(".page-head .facts-band", optional=True),
     # One fact of a band, and the label that names its value.
     "band_fact": _S(".facts-band > .fact", "fact"),
     "band_label": _S(".fact-label", "fact"),
@@ -383,6 +389,8 @@ _DECLARED = {
     "chart_panel": _S(".chart-tabs .chart-panel", "partials/_chart_tabs.html"),
     # A drawing: every chart, trend, bar and calendar a page draws, an icon
     # aside.
+    # A month that ends its section's body, the box it fills (layout.css).
+    "month": _S(".section-body > .month-grid:last-child", "partials/_month_grid.html", optional=True),
     "drawing": _S("main svg:not(.icon), table.activity-calendar", "partials/_chart.html", optional=True),
     # A dialog a page declares (partials/_modal.html), and the controls that
     # open the dialog `modal-{id}`, once `{id}` is filled in (the partial

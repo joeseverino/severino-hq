@@ -38,15 +38,24 @@
 /* Cards in a row share its height: every layout stretches its members to
    the row's tallest, so their bottom edges line up and the row reads as one
    band. The added room goes to what draws taller truthfully, a chart
-   (figures.css) or a table's own frame; anything else leaves it under its
-   content, its foot at the bottom. No padding fills it. */
+   (figures.css), a month's weeks or a table's own frame; anything else
+   leaves it under its content, its foot at the bottom. No padding fills it. */
 :is(.two-col, .split, .section-flow, .domain-charts) > .section:not(details) {
   display: flex; flex-direction: column;
   & > .section-body { flex-grow: 1; }
-  & > .section-body:has(> .section-foot, > .table-scroll:only-child, > .chart-scroll) { display: flex; flex-direction: column; }
-  & > .section-body > :is(.table-scroll:only-child, .chart-scroll), & .chart-scroll > .chart-frame, & .chart-frame > :is(.bar-chart, .line-chart) { flex-grow: 1; }
+  & > .section-body:has(> .section-foot, > .table-scroll:only-child, > .chart-scroll, > .month-grid) { display: flex; flex-direction: column; }
+  & > .section-body > :is(.table-scroll:only-child, .chart-scroll, .month-grid), & .chart-scroll > .chart-frame, & .chart-frame > :is(.bar-chart, .line-chart) { flex-grow: 1; }
   & :is(.chart-scroll, .chart-frame) { display: flex; flex-direction: column; }
   & > .section-body > .section-foot { margin-block-start: auto; padding-block-start: var(--space-6); }
+}
+/* Each member of a pair takes two of its rows, a section its head on the
+   first and its body on the second (subgrid), so the heads of a row are one
+   height and the bodies beside them, a chart's plot with its gridlines, start
+   on one line however many lines a head's words take (`grid-row`, below). */
+.two-col > .section:not(details) {
+  display: grid; grid-template-rows: subgrid; row-gap: 0;
+  & > .section-head { grid-row: 1; }
+  & > .section-body { grid-row: 2; }
 }
 
 /* What is not a section or a card (a fold, a paragraph) and a section holding
@@ -73,7 +82,7 @@
    stacking margin is dead space, and a member is as narrow as its track.
    Declared after the section rules above so it wins on source order at
    equal specificity. */
-.two-col > * { min-width: 0; margin-bottom: 0; }
+.two-col > * { grid-row: span 2; min-width: 0; margin-bottom: 0; }
 
 /* What sits beside the heading takes the next line when the two do not fit.
    The row starts at the heading: a folded section's toggle mark is an item
@@ -97,10 +106,15 @@
    width. */
 .section-head > hgroup { flex: 9 1 auto; min-width: 0; margin: 0; }
 .section-lede { contain: inline-size; margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
-/* A line about the section at the head's end: a count with its unit, a
-   window, a source. Wrapped, its lines are as even as its words allow, so
-   none is left with one. */
-.section-head .count { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; text-wrap: balance; }
+/* The heading's count, and the line about the section at the head's end (a
+   count with its unit, a window, a source), are one quiet voice. Wrapped, the
+   line's lines are as even as its words allow, so none is left with one. */
+.section-head :is(.count, .section-aside) { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; font-variant-numeric: tabular-nums; text-wrap: balance; }
+/* A link in that line is set at the size of its link to the rest
+   (`.subtle-link`), which tells it from the words beside it (WCAG 1.4.1)
+   with no underline, so it reads the same alone or among them. A link with
+   a class of its own is a control and sizes itself. */
+:where(.section-aside) a:where(:not([class]), .external-link) { font-size: var(--text-xs); }
 /* What sits beside the heading is one box, so its parts (a count, a dot, a
    link) wrap as one line of text. It sits at the row's end, and under the
    heading at the end too, as a page head's actions do. It takes the row's
@@ -133,17 +147,19 @@
   --flow-basis: 30rem; display: grid; gap: var(--space-4); align-content: start; container: route / inline-size;
 }
 /* Seven equal columns: the one fixed grid here, because weeks must line up. */
-.month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+/* Its boxes are kept apart, so a day's box and its rule are a column's
+   whole width and a bar reaches across columns by them (cuts.css). */
+.month-grid { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .month-weekday { padding: 0 var(--space-2) var(--space-3); text-align: left; }
 .month-day {
+  --day-pad: var(--space-2);
+  --day-rule: 0px;
   height: 6.5rem;
-  padding: var(--space-2);
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a day keeps its week's height; it shows as many events as fit and counts the rest */
-  overflow: hidden;
+  padding: var(--day-pad);
   border-top: 1px solid var(--line-2);
   vertical-align: top;
 }
-.month-day + .month-day { border-left: 1px solid var(--line-2); }
+.month-day + .month-day { --day-rule: 1px; border-left: var(--day-rule) solid var(--line-2); }
 /* The last week closes on a rule of its own, so the month reads as ending
    there and not as running on under the card's edge. */
 .month-week:last-child > .month-day { border-bottom: 1px solid var(--line-2); }
@@ -159,7 +175,8 @@
    their own and the bars under them stay level across the week; the day
    panel lists every mark. */
 .month-day-head { display: flex; align-items: center; gap: var(--space-1); margin-bottom: var(--space-1); }
-.month-day-head > .month-mark { flex: none; }
+/* A day's marks narrow to slivers before they would leave its head. */
+.month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
 .month-date {
   display: inline-grid;
   place-items: center;
@@ -187,8 +204,14 @@
   opacity: .6;
 }
 .month-span.is-start { margin-left: 0; border-left: 3px solid var(--slot); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
-.month-span.is-end { margin-right: 0; border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+.month-span.is-end { margin-right: calc(-1 * var(--run)); border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
 .month-span.is-gap { visibility: hidden; }
+.month-span[data-reach="2"] { --reach: 2; }
+.month-span[data-reach="3"] { --reach: 3; }
+.month-span[data-reach="4"] { --reach: 4; }
+.month-span[data-reach="5"] { --reach: 5; }
+.month-span[data-reach="6"] { --reach: 6; }
+.month-span[data-reach="7"] { --reach: 7; }
 /* A title cut on its one line: its names are text the cut takes, not boxes,
    so no part of one draws past the cut, beyond the day's edge. */
 :is(.month-item > span, .month-span) :is(.token, .whole, .part) { display: contents; }
@@ -202,19 +225,15 @@
 .month-more:hover { color: var(--accent); }
 /* Compact, as the dashboard shows it: where things are, not what. Bars are
    slivers and lines fold away; the day opens the calendar for the rest. */
-.month-grid.is-compact .month-day { height: 2.5rem; padding: var(--space-1); }
+.month-grid.is-compact .month-day { --day-pad: var(--space-1); height: 2.5rem; }
 .month-grid.is-compact :is(.month-item, .month-more) { display: none; }
 .month-grid.is-compact .month-item-dot { display: inline-block; }
-/* A bar reaches across its cell's padding to meet the next, and no further. */
-.month-grid.is-compact .month-span { height: 4px; margin: 0 calc(-1 * var(--space-1)) var(--space-1); padding: 0; background: var(--slot); font-size: 0; }
-.month-grid.is-compact .month-span.is-end { margin-right: 0; }
+.month-grid.is-compact .month-span { height: 4px; padding: 0; background: var(--slot); font-size: 0; }
 .month-grid.is-compact .month-span.is-start { margin-left: 0; border-left: 0; }
 /* A day drawn small is still drawn the size of a target, so its own box is
    what is hit, and a dot that names it stands in on it. */
 .month-grid.is-compact .month-date { min-width: var(--target-min); height: var(--target-min); font-size: var(--text-2xs); }
 .month-grid.is-compact .month-mark { --mark-size: 6px; }
-/* A narrow day's marks narrow to slivers before they would leave its head. */
-.month-grid.is-compact .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
 /* A phone shows where things are, not what: dots and slivers, and the day
    panel under the month says the rest. */
 @container month (max-width: 34rem) {
@@ -222,7 +241,6 @@
   :is(.month-item, .month-more) { display: none; }
   .month-item-dot { display: inline-block; }
   .month-mark { --mark-size: 6px; }
-  .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
   .month-span { height: 4px; padding: 0; background: var(--slot); font-size: 0; }
   .month-date { min-width: var(--target-min); height: var(--target-min); }
   .month-of { display: none; }
@@ -424,12 +442,14 @@
    and a short value wide, as a description list does at width (Ant Design's
    Descriptions, Tailwind's description lists), so a few short facts fill a
    wide frame rather than stacking down its start beside an empty end. The
-   pairs of a row share their columns, so every row's labels and values line
-   up, and stand apart by more than the gap that holds a label to its value.
-   Narrower than two pairs (`--facts-across`) it is one pair to a row, as
-   above. The switch is asked of the list's own width through its tracks, as
-   the band's `--fact-min` is, so no query or script measures it: under it a
-   value's least width is three fifths of the list, room for one pair only.
+   pairs stand in columns every row shares, as many as fit a pair's basis
+   (`--facts-across` holds two), so a label stands under the label above it
+   in every row; a list of fewer pairs than columns fit spreads them over
+   the row. Every pair's label is one width, so the values of a column line
+   up too, and pairs stand apart by more than the gap that holds a label to
+   its value. Narrower than two pairs it is one pair to a row, from the
+   pair's basis, so no query or script measures it. The label's track is a
+   share of the list, so a single column's label is the list's share.
    Opened to read more (a disclosure, a popover, a dialog), set above what a
    form changes, or a table row's small print, a list is a few short pairs
    under what it serves and keeps one pair to a row. A folded section on the
@@ -437,20 +457,14 @@
    frame (a resource's other settings) is opened to read more. */
 .facts-list:not(:where(tbody, details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) *) {
   --facts-across: 42rem;
-  --fact-label-least: clamp(0px, (100% - var(--facts-across)) * 999, 6rem);
-  --fact-value-least: clamp(min(12rem, 60% - var(--space-6)), (var(--facts-across) - 100%) * 999, 60% - var(--space-6));
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a list's pairs, each a label's track and a value's */
-  grid-template-columns: repeat(auto-fit, minmax(var(--fact-label-least), max-content) minmax(var(--fact-value-least), 1fr));
-  column-gap: clamp(var(--space-6), (100% - var(--facts-across)) * 999, var(--space-16));
-  & > .fact { grid-column: span 2; }
+  container-type: inline-size; column-gap: var(--space-16);
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a list's pairs in columns every row shares */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc((var(--facts-across) - var(--space-16)) / 2)), 1fr));
+  & > .fact { grid-column: auto; grid-template-columns: min(9rem, 40cqi) minmax(0, 1fr); }
 }
-/* A value that is a list of several (names, addresses, links) wraps onto
-   lines of its own, so its fact takes the row: beside other pairs it would
-   make their row as tall as itself. */
-.facts-list > .fact:has(> .fact-value > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) {
-  grid-column: 1 / -1;
-  & > dd { grid-column: 2 / -1; }
-}
+/* A value that is a list of several (names, addresses, links) takes the
+   row, wrapping there, so its lines never squeeze into one column. */
+.facts-list > .fact:has(> .fact-value > .fact-shown > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) { grid-column: 1 / -1; }
 /* In a table's row, facts are the row's small print. */
 td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); }
 /* Opened to read more or set above what a form changes, its pairs sit closer,

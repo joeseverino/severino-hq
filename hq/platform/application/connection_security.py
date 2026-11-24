@@ -34,7 +34,7 @@ from .tone import Tone
 from .ui import counted, ended
 lazy from . import tailnet
 lazy from .facts import stored_snapshots
-lazy from .moments import ago
+lazy from .moments import when
 
 # ----- The readings ------------------------------------------------------------------
 
@@ -234,7 +234,7 @@ def _freshness(inputs: Inputs) -> Reading:
     if not read and not owed:
         return Reading.unavailable("Nothing read yet")
     oldest = min(read, key=lambda connection: connection.instance.observed_at, default=None)
-    evidence = f"Oldest reading {ago(oldest.instance.observed_at)}" if oldest is not None else "Nothing read yet"
+    evidence = f"Oldest reading {when(oldest.instance.observed_at)}" if oldest is not None else "Nothing read yet"
     if unread := sum(not connection.instance.observed_at for connection in owed):
         return Reading.unmet(evidence, detail=f"{counted(unread, 'connection has', 'connections have')} no reading.")
     return Reading.met(evidence, detail="This page shows the last reading of each connection.")

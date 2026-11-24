@@ -99,19 +99,40 @@ run = 'uv run --project "$REPO" --locked python manage.py test'
 TOML
 # A test run as Django's parallel runner makes one: two workers, each holding
 # 32 MB and running a child, as a walk runs apart, that holds 32 MB and spends
-# half a second of CPU. The child holds its memory for longer than the
-# measurer's first two samples apart.
+# half a second of CPU. Each child holds its memory until both hold theirs
+# and the measurer has since taken a whole sample, which the ps it runs
+# find first on PATH counts, so no cadence of the measurer's can miss them.
+mkdir "${work}/counted"
+cat >"${work}/counted/ps" <<'SH'
+#!/bin/sh
+printf x >>"$SAMPLES"
+PATH="$UNCOUNTED" exec ps "$@"
+SH
+chmod +x "${work}/counted/ps"
+uncounted="${PATH}"
+counted() {
+    : >"${work}/samples"
+    : >"${work}/held"
+    UNCOUNTED="${uncounted}" PATH="${work}/counted:${uncounted}" SAMPLES="${work}/samples" HELD="${work}/held" "$@"
+}
 cat >"${main}/manage.py" <<'PY'
 import multiprocessing
 import subprocess
 import sys
 
 CHILD = """
-import time
+import os, time
 held = b"\\x01" * (32 << 20)
 while time.process_time() < 0.5:
     pass
-time.sleep(3)
+with open(os.environ["HELD"], "a") as mark:
+    mark.write("x")
+while os.path.getsize(os.environ["HELD"]) < 2:
+    time.sleep(0.05)
+# The sample after next starts once the next one, which saw both children, ended.
+taken = os.path.getsize(os.environ["SAMPLES"]) + 2
+while os.path.getsize(os.environ["SAMPLES"]) < taken:
+    time.sleep(0.05)
 """
 
 
@@ -265,10 +286,11 @@ one_line "${work}/out" "a heavy task that ran another"
 # A run of tests in the turn: its CPU holds the half second each child spent,
 # and its peak names the test run, two workers of 32 MB or more each and two
 # children apart from them.
-REPO="${repo}" HQ_MEASURED_PEAK="${work}/peak" mise -C "${main}" run spend >"${work}/out" 2>&1 ||
+counted env REPO="${repo}" HQ_MEASURED_PEAK="${work}/peak" mise -C "${main}" run spend >"${work}/out" 2>&1 ||
     { cat "${work}/out" >&2; fail "a measured run of tests failed"; }
 one_line "${work}/out" "a run of tests"
-[ "$(cat "${work}/peak")" -ge $((64 << 20)) ] || fail "the peak it records, for its next run to weigh itself by, is not its own"
+[ "$(cat "${work}/peak" 2>/dev/null || echo 0)" -ge $((64 << 20)) ] ||
+    fail "the peak it records, for its next run to weigh itself by, is not its own: $(cat "${work}/out")"
 line="$(measured "${work}/out")"
 cpu="$(printf '%s\n' "${line}" | sed -nE 's/.* wall, ([0-9.]+)s CPU,.*/\1/p')"
 awk -v cpu="${cpu:-0}" 'BEGIN { exit !(cpu >= 1.0) }' || fail "the CPU its children spent is not in the line: ${line}"
@@ -288,7 +310,7 @@ import sys
 
 sys.exit(subprocess.run(sys.argv[1:], check=False).returncode)
 PY
-(cd "${main}" && ./tools/lib/measured python3 -m wrapper uv run --project "${repo}" --locked python manage.py test) \
+(cd "${main}" && counted ./tools/lib/measured python3 -m wrapper uv run --project "${repo}" --locked python manage.py test) \
     >"${work}/out" 2>&1 || { cat "${work}/out" >&2; fail "a measured run of tests under a wrapper failed"; }
 one_line "${work}/out" "a run of tests under a wrapper"
 line="$(measured "${work}/out")"

@@ -217,7 +217,7 @@ func portainerGet[T any](ctx context.Context, r *Registry, ref, path, cacheKey, 
 	if cacheKey == "" {
 		raw, err = load()
 	} else {
-		raw, err = r.cached(ctx, cacheKey, load)
+		raw, err = cached(ctx, r, cacheKey, load)
 	}
 	if err != nil {
 		var zero T

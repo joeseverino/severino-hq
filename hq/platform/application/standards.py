@@ -227,7 +227,7 @@ class CheckResult:
 class Measurement:
     subject: Any
     results: tuple[CheckResult, ...]
-    # Whether an unmet check is a fault (Advanced HQ Posture, for HQ's own).
+    # Whether an unmet check is a fault (Advanced HQ posture, for HQ's own).
     enforced: bool = True
 
     @property

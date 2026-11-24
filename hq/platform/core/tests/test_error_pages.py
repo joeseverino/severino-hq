@@ -5,7 +5,7 @@ from django.test import Client, RequestFactory, SimpleTestCase, TestCase, overri
 from django.urls import path
 
 from hq.config.urls import urlpatterns as site_urls
-from hq.platform.application.markup_testing import text, texts, with_class
+from hq.platform.application.markup_testing import elements, text, texts, with_class
 from hq.platform.core.error_views import server_error
 from hq.platform.core.testing import operator
 
@@ -35,6 +35,15 @@ class ServerErrorTests(SimpleTestCase):
 
         self.assertIn("request id is 0123abcd", text(body))
         self.assertIn("0123abcd", texts(body, "code"))
+
+    def test_a_500_marks_its_scripts_with_the_nonce_its_policy_allows(self):
+        request = RequestFactory().get("/calendar/")
+        request._csp_nonce = "example-nonce"
+
+        scripts = elements(server_error(request).content.decode(), "script")
+
+        self.assertTrue(scripts)
+        self.assertEqual({script.attrs.get("nonce") for script in scripts}, {"example-nonce"})
 
 
 @override_settings(ROOT_URLCONF=__name__)
