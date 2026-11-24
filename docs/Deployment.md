@@ -324,7 +324,7 @@ from the tree, and every unit and the deploy call it.
 The host's setup is one Ansible playbook the tree carries,
 [`deploy/ansible/host.yml`](../deploy/ansible/host.yml), run by the
 `ansible-playbook` of the runner image the release pins
-(`deploy/automation/image`), which a deploy and `hq-host install` verify
+(`AutomationImage`, which the composition writes), which a deploy and `hq-host install` verify
 against the compose workflow's identity before they pull it. It installs the
 release's units and tmpfiles rule, renders the drop-ins and the runner's sudo
 rule `host.json` decides (the rule passes the host's `visudo` first), makes the
