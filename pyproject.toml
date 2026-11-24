@@ -300,7 +300,7 @@ source-tests = [
     "pyyaml==6.0.4",
 ]
 tools = [
-    "coverage==7.17.4",
+    "coverage==7.17.5",
     # Holds the runtime dependencies to what host code imports (lint:deptry).
     "deptry==0.25.1",
     "django-stubs==6.1.2",
@@ -333,7 +333,7 @@ runner = [
 ]
 # Generates the API cases of test:api-properties, the one task that installs it.
 fuzz = [
-    "schemathesis==4.33.4",
+    "schemathesis==4.34.1",
 ]
 
 [tool.ruff]

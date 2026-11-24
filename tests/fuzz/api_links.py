@@ -202,7 +202,7 @@ class APILinkTests(InProcessAPITestCase):
             # Named from its spec, which reading it loads: hooks.py's own import of the specs is lazy here.
             schema.hooks.register_hook_with_name(_paging_only, map_query.__name__)
 
-            # Schemathesis 4.33.4 builds one rule per link and starts a scenario at a
+            # Schemathesis 4.34.1 builds one rule per link and starts a scenario at a
             # list or a write (specs/openapi/stateful/__init__.py, create_state_machine
             # and is_likely_root_transition), calls setup and teardown once a scenario
             # (generation/stateful/state_machine.py, APIStateMachine.setup), and sends
