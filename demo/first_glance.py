@@ -9,7 +9,7 @@ from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.action_items import SET_ASIDE
-from hq.platform.application.approvals import REJECT, offers
+from hq.platform.application.approvals import APPROVE, offers
 from hq.platform.application.attention import readable_by
 from hq.platform.application.automation_runs import capability_name, command_type, request_run
 from hq.platform.application.capabilities import run_capability
@@ -53,14 +53,14 @@ def settle(owner) -> list[str]:
 
 
 def _decide_held(person) -> None:
+    """Each held ask but the one kept waiting approved, so the run it asked
+    for is finished with the rest (``_finish_waiting``)."""
+
     for held in ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING).exclude(capability=_KEPT_REQUEST):
-        (reject,) = (link for link in offers(person, [held])[held.pk].actions if link.name == REJECT)
-        with doors.request(reject.url):
+        (approve,) = (link for link in offers(person, [held])[held.pk].actions if link.name == APPROVE)
+        with doors.request(approve.url):
             answer = run_capability(
-                REJECT,
-                {"approval_id": str(held.id), "note": "Not now."},
-                principal=person,
-                idempotency_key=f"demo-reject-{held.id}",
+                APPROVE, {"approval_id": str(held.id)}, principal=person, idempotency_key=f"demo-approve-{held.id}"
             ).answer
         _refused(answer)
 
