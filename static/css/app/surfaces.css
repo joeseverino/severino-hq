@@ -73,9 +73,9 @@
   meter::-webkit-meter-bar { border: 0; }
   :where(
   .btn:not(.link, .menu), button:not([class]),
-  input:is([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], [type=file], :not([type])):not(.dropzone input, .command-center-query input),
+  input:is([type=text], [type=url], [type=number], [type=password], [type=email], [type=date], [type=time], [type=datetime-local], [type=search], [type=file], :not([type])):not(.dropzone input),
   select:not(.table-sort select), textarea,
-  .table-filter-menu > button, .table-toggle, .table-sort, .command-center-query,
+  .table-filter-menu > button, .table-toggle, .table-sort,
   .pill, .scope-chip, .link-chips a, .chart-tab, .role-mark, .switch-track, .demo-flag, .demo-about, kbd,
   .choice-card, .relation-link, .topology-node, .conn-peering,
   .ladder-rung:not(.ladder-body .ladder-rung, .check-ladder.is-route > .ladder-rung), .check-ladder.is-route > .ladder-rung > details > .ladder-body,

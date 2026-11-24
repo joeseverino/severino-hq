@@ -258,30 +258,8 @@ select.toned:not(.tone-neutral) { border-color: currentColor; }
 .command-center-modal .modal-head h2 { font-size: var(--text-2xl); letter-spacing: -.02em; }
 .command-center-modal .modal-lede { margin-bottom: var(--space-6); }
 .command-center-palette { display: grid; min-height: 0; }
-.command-center-query {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-5);
-  padding: 0 var(--space-6);
-  border-color: var(--field-line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-.command-center-query:focus-within {
-  border-color: var(--accent);
-  outline: 2px solid var(--accent); outline-offset: -2px;
-}
-.command-center-query svg { width: 18px; height: 18px; fill: none; stroke: var(--muted); stroke-width: 1.8; }
-.command-center-query input[type=search] {
-  width: 100%;
-  min-height: 46px;
-  padding: 0;
-  outline: 0;
-  background: transparent;
-  font-size: var(--text-lg);
-}
-.command-center-query kbd { white-space: nowrap; }
+/* The query is one field, drawn as every field is, at the dialog's width. */
+.command-center-query { inline-size: 100%; block-size: 46px; font-size: var(--text-lg); }
 .command-center-results {
   min-height: 120px;
   max-height: min(56vh, 520px);
