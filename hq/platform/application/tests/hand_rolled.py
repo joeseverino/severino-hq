@@ -38,13 +38,13 @@ def hand_rolled_classes() -> set[tuple[str, str]]:
 
 def needless_classes() -> set[tuple[str, str]]:
     """Each class a part declares that neither its templates nor its shape
-    writes, with the part's partial."""
+    nor the module that marks what it draws writes, with the part's partial."""
 
     templates = _templates()
     needless = set()
     for part in parts():
         drawn = {word for name in part.files() for _, word in class_words(templates.get(name, ""))}
-        shaped = inspect.getsource(part.shape) if part.shape else ""
+        shaped = "".join(inspect.getsource(source) for source in (part.shape, part.marked_in) if source)
         needless |= {(part.partial, word) for word in part.owned() - drawn if f'"{word}"' not in shaped}
     return needless
 

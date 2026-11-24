@@ -12,6 +12,7 @@ from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.tables import Cell, DataTable, Row, TableColumn, check_drop, column_kind
+from hq.platform.core import table_layout
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Part, answers, slotted
 lazy from hq.platform.core.drawn_tables import drawn
@@ -480,6 +481,7 @@ DATA_TABLE = Part(
     """,
     partial="partials/_data_table.html",
     function=data_table,
+    marked_in=table_layout,
     public=True,
     example=tags.DATA_TABLE,
     states=tags.DATA_TABLE_STATES,
