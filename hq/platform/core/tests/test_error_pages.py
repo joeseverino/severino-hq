@@ -1,5 +1,7 @@
 """The error pages say whose they are, in the site's frame."""
 
+import re
+
 from django.core.exceptions import PermissionDenied
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import path
@@ -35,6 +37,15 @@ class ServerErrorTests(SimpleTestCase):
 
         self.assertIn("request id is 0123abcd", text(body))
         self.assertIn("0123abcd", texts(body, "code"))
+
+    def test_a_500_marks_its_scripts_with_the_nonce_its_policy_allows(self):
+        request = RequestFactory().get("/calendar/")
+        request._csp_nonce = "n0nce"
+
+        scripts = re.findall(r"<script\b[^>]*>", server_error(request).content.decode())
+
+        self.assertTrue(scripts)
+        self.assertEqual([tag for tag in scripts if 'nonce="n0nce"' not in tag], [])
 
 
 @override_settings(ROOT_URLCONF=__name__)
