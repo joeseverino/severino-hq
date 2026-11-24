@@ -125,28 +125,27 @@ func origin(u *url.URL) string {
 	return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Hostname()) + ":" + port
 }
 
-// Request returns the provider's answer as validated JSON, undecoded: each
-// provider decodes it once into its own type. An empty body is nil.
+// Answer is what a provider answered: its 2xx status and validated JSON body,
+// undecoded, which each provider decodes once into its own type; an empty
+// body is nil. Its headers (the ETag of the version read, what a rate limit
+// has left) come with any answer, a refusal or a body that fails its checks
+// included, and are nil only when nothing answered.
+type Answer struct {
+	Status int
+	Header http.Header
+	Body   json.RawMessage
+}
+
+// Request is Exchange's body alone.
 func (h *HTTPClient) Request(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, error) {
-	data, _, err := h.do(ctx, address, method, headers, payload)
-	if err != nil || len(data) == 0 {
+	answer, err := h.Exchange(ctx, address, method, headers, payload)
+	if err != nil {
 		return nil, err
 	}
-	return data, nil
+	return answer.Body, nil
 }
 
-// Exchange is Request with the answer's headers: the ETag of the version read,
-// what a rate limit has left. The headers come with any answer, a refusal or a
-// body that fails its checks included, and are nil only when nothing answered.
-func (h *HTTPClient) Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error) {
-	data, header, err := h.do(ctx, address, method, headers, payload)
-	if len(data) == 0 {
-		data = nil
-	}
-	return data, header, err
-}
-
-func (h *HTTPClient) do(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error) {
+func (h *HTTPClient) Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (Answer, error) {
 	timeout := time.Duration(0)
 	if _, ok := payload.(Multipart); ok {
 		timeout = MultipartTimeout
@@ -154,7 +153,7 @@ func (h *HTTPClient) do(ctx context.Context, address, method string, headers map
 	return h.send(ctx, address, method, headers, payload, timeout)
 }
 
-func (h *HTTPClient) send(ctx context.Context, address, method string, headers map[string]string, payload any, timeoutOverride time.Duration) (json.RawMessage, http.Header, error) {
+func (h *HTTPClient) send(ctx context.Context, address, method string, headers map[string]string, payload any, timeoutOverride time.Duration) (Answer, error) {
 	var body []byte
 	contentType := "application/json"
 	if payload != nil {
@@ -163,7 +162,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 			var err error
 			body, contentType, err = p.encode()
 			if err != nil {
-				return nil, nil, &ProviderError{Message: "the request could not be encoded"}
+				return Answer{}, &ProviderError{Message: "the request could not be encoded"}
 			}
 		case url.Values:
 			body = []byte(p.Encode())
@@ -176,13 +175,13 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 			var err error
 			body, err = json.Marshal(payload)
 			if err != nil {
-				return nil, nil, &ProviderError{Message: "the request could not be encoded"}
+				return Answer{}, &ProviderError{Message: "the request could not be encoded"}
 			}
 		}
 	}
 	request, err := http.NewRequestWithContext(ctx, method, address, bytes.NewReader(body))
 	if err != nil || request.URL.User != nil || request.URL.Hostname() == "" || (request.URL.Scheme != "http" && request.URL.Scheme != "https") {
-		return nil, nil, &ProviderError{Message: "not a direct API address", Failure: FailureClassAddress}
+		return Answer{}, &ProviderError{Message: "not a direct API address", Failure: FailureClassAddress}
 	}
 	request.Header.Set("Accept", "application/json")
 	for name, value := range headers {
@@ -219,32 +218,34 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	response, err := client.Do(request)
 	if err != nil {
 		if provider, ok := errors.AsType[*ProviderError](err); ok {
-			return nil, nil, provider
+			return Answer{}, provider
 		}
-		return nil, nil, requestFailure(err)
+		return Answer{}, requestFailure(err)
 	}
 	defer response.Body.Close()
+	answer := Answer{Status: response.StatusCode, Header: response.Header}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		refusal := HTTPRefusal(response.StatusCode)
 		refusal.Body, _ = io.ReadAll(io.LimitReader(response.Body, maxRefusalBytes))
-		return nil, response.Header, refusal
+		return answer, refusal
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
 	if err != nil {
-		return nil, nil, &ProviderError{Message: "the service's answer could not be read", Failure: FailureClassNetwork}
+		return Answer{}, &ProviderError{Message: "the service's answer could not be read", Failure: FailureClassNetwork}
 	}
 	if len(data) > MaxResponseBytes {
-		return nil, nil, &ProviderError{Message: "the service answered with more than 32 MB"}
+		return Answer{}, &ProviderError{Message: "the service answered with more than 32 MB"}
 	}
 	if len(data) == 0 {
-		return nil, response.Header, nil
+		return answer, nil
 	}
 	responseContentType := strings.ToLower(response.Header.Get("Content-Type"))
 	if strings.Contains(responseContentType, "text/html") || strings.Contains(responseContentType, "application/xhtml+xml") || bytes.HasPrefix(bytes.TrimSpace(data), []byte("<")) {
-		return nil, response.Header, &ProviderError{Message: "address answered with a web page, not the API; use the service's direct API address", Failure: FailureClassAddress}
+		return answer, &ProviderError{Message: "address answered with a web page, not the API; use the service's direct API address", Failure: FailureClassAddress}
 	}
 	if !json.Valid(data) {
-		return nil, response.Header, &ProviderError{Message: "the service returned invalid JSON"}
+		return answer, &ProviderError{Message: "the service returned invalid JSON"}
 	}
-	return data, response.Header, nil
+	answer.Body = data
+	return answer, nil
 }

@@ -72,7 +72,7 @@ func (r *Registry) npmSession(ctx context.Context, ref string) (string, map[stri
 	if !strings.HasSuffix(base.Path, "/api") {
 		base.Path += "/api"
 	}
-	raw, err := r.cached(ctx, "npm-token:"+base.String()+":"+connection.Ref, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, "npm-token:"+base.String()+":"+connection.Ref, func() (json.RawMessage, error) {
 		answer, err := r.HTTP.Request(ctx, base.String()+"/tokens", "POST", nil, npmapi.RequestTokenJSONBody{Identity: login.Username, Secret: login.Password})
 		if err != nil {
 			return nil, fmt.Errorf("npm sign-in: %w", err)
@@ -158,7 +158,7 @@ func (r *Registry) npmFetched(ctx context.Context, ref, path string) (json.RawMe
 	if err != nil {
 		return nil, npmSessionFailed{err}
 	}
-	return r.cached(ctx, "npm-list:"+connection.Ref+":"+path, func() (json.RawMessage, error) {
+	return cached(ctx, r, "npm-list:"+connection.Ref+":"+path, func() (json.RawMessage, error) {
 		base, headers, err := r.npmSession(ctx, ref)
 		if err != nil {
 			return nil, npmSessionFailed{err}

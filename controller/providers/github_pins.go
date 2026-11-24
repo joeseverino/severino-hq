@@ -162,7 +162,7 @@ func firstN(parts []string, n int) []string {
 // read-only token of the repository being read; only a commit that was read
 // is shared, since one repository's token failing says nothing of the next's.
 func (g *githubRepository) commitOf(ctx context.Context, source, at string) string {
-	raw, err := g.r.cached(ctx, "github.commit|"+source+"|"+at, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, g.r, "github.commit|"+source+"|"+at, func() (json.RawMessage, error) {
 		commit, err := githubGet[githubapi.Commit](ctx, g.r, g.c, "/repos/"+source+"/commits/"+url.PathEscape(at), []string{g.name}, githubRead)
 		if err != nil {
 			return nil, err

@@ -53,10 +53,10 @@ type fakeHTTP struct {
 	headers   map[string]map[string]any // response headers by path
 }
 
-func (h *fakeHTTP) Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error) {
+func (h *fakeHTTP) Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (runtime.Answer, error) {
 	data, err := h.Request(ctx, address, method, headers, payload)
 	if httpStatus(err) != 0 {
-		return nil, nil, err
+		return runtime.Answer{}, err
 	}
 	path := strings.TrimPrefix(strings.TrimPrefix(address, "https://example.invalid"), "https://api.tailscale.com/api/v2")
 	answered := http.Header{}
@@ -65,7 +65,7 @@ func (h *fakeHTTP) Exchange(ctx context.Context, address, method string, headers
 			answered.Set(name, text)
 		}
 	}
-	return data, answered, err
+	return runtime.Answer{Status: http.StatusOK, Header: answered, Body: data}, err
 }
 
 // Request answers from routes, encoded as the real transport would return it.

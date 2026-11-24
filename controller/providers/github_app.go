@@ -237,7 +237,7 @@ func installationKey(c githubConnection, owner, repo string) string {
 // githubInstallation is the installation covering one repository, asked of
 // GitHub once per sweep.
 func (r *Registry) githubInstallation(ctx context.Context, c githubConnection, owner, repo string) (int, error) {
-	raw, err := r.cached(ctx, installationKey(c, owner, repo), func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, installationKey(c, owner, repo), func() (json.RawMessage, error) {
 		raw, err := r.githubAsApp(ctx, c, "GET", "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+"/installation", nil)
 		if err != nil {
 			return nil, err
@@ -295,7 +295,7 @@ func (r *Registry) githubToken(ctx context.Context, c githubConnection, reposito
 	}
 	owner, _, _ := githubRepositoryName(names[0])
 	key := "github_app.token|" + c.ref + "|" + strings.Join(names, ",") + "|" + string(grant)
-	raw, err := r.cached(ctx, key, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, key, func() (json.RawMessage, error) {
 		installation, err := r.githubInstallation(ctx, c, owner, repos[0])
 		if err != nil {
 			return nil, err
@@ -340,7 +340,7 @@ func githubGet[T any](ctx context.Context, r *Registry, c githubConnection, path
 // Each installation is listed under a token that can read metadata only, and
 // the installation found for each repository is kept for the sweep.
 func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubConnection) ([]string, error) {
-	raw, err := r.cached(ctx, "github_app.repositories|"+c.ref, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, "github_app.repositories|"+c.ref, func() (json.RawMessage, error) {
 		installations, err := r.githubInstallations(ctx, c)
 		if err != nil {
 			return nil, err
@@ -377,7 +377,7 @@ func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubC
 				}
 				found = append(found, repository.FullName)
 				id := installation.ID
-				_, _ = r.cached(ctx, installationKey(c, owner, repo), func() (json.RawMessage, error) { return json.Marshal(id) })
+				_, _ = cached(ctx, r, installationKey(c, owner, repo), func() (json.RawMessage, error) { return json.Marshal(id) })
 			}
 		}
 		return json.Marshal(slices.Compact(slices.Sorted(slices.Values(found))))

@@ -94,18 +94,18 @@ func TestExchangeReadsBodyAndHeadersFromOneAnswer(t *testing.T) {
 		_, _ = w.Write([]byte(`{"read": true}`))
 	}))
 	defer server.Close()
-	data, header, err := (&HTTPClient{}).Exchange(t.Context(), server.URL, "GET", nil, nil)
-	if err != nil || header.Get("etag") != `"v1"` || string(data) != `{"read": true}` {
-		t.Fatalf("%s %v %v", data, header, err)
+	answer, err := (&HTTPClient{}).Exchange(t.Context(), server.URL, "GET", nil, nil)
+	if err != nil || answer.Status != http.StatusOK || answer.Header.Get("etag") != `"v1"` || string(answer.Body) != `{"read": true}` {
+		t.Fatalf("%+v %v", answer, err)
 	}
 	// A body that fails its JSON check still says which version answered.
-	if _, header, err := (&HTTPClient{}).Exchange(t.Context(), server.URL+"/broken", "GET", nil, nil); err == nil || header.Get("etag") != `"v2"` {
-		t.Fatalf("%v %v", header, err)
+	if answer, err := (&HTTPClient{}).Exchange(t.Context(), server.URL+"/broken", "GET", nil, nil); err == nil || answer.Header.Get("etag") != `"v2"` {
+		t.Fatalf("%+v %v", answer, err)
 	}
 	// A refusal keeps its headers: what a rate limit has left is said there.
 	var provider *ProviderError
-	if _, header, err := (&HTTPClient{}).Exchange(t.Context(), server.URL+"/gone", "GET", nil, nil); !errors.As(err, &provider) || provider.HTTPStatus != 412 || header.Get("X-RateLimit-Remaining") != "0" {
-		t.Fatalf("%v %v", header, err)
+	if answer, err := (&HTTPClient{}).Exchange(t.Context(), server.URL+"/gone", "GET", nil, nil); !errors.As(err, &provider) || provider.HTTPStatus != 412 || answer.Header.Get("X-RateLimit-Remaining") != "0" {
+		t.Fatalf("%+v %v", answer, err)
 	}
 }
 func TestResponseSizeIsBounded(t *testing.T) {

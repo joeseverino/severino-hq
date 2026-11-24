@@ -15,7 +15,7 @@ import (
 // What a Cloudflare account holds beyond its DNS, each list read once per sweep.
 
 func (r *Registry) cloudflareAccount(ctx context.Context, ref string) (string, error) {
-	raw, err := r.cached(ctx, "cloudflare-account:"+ref, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, "cloudflare-account:"+ref, func() (json.RawMessage, error) {
 		account, err := r.cloudflareAnalyticsAccount(ctx, ref)
 		if err != nil {
 			return nil, err

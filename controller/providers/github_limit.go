@@ -252,11 +252,11 @@ func (r *Registry) githubExchange(ctx context.Context, method, path string, head
 			return nil, err
 		}
 	}
-	raw, header, err := r.HTTP.Exchange(ctx, githubAPI+path, method, headers, payload)
+	answer, err := r.HTTP.Exchange(ctx, githubAPI+path, method, headers, payload)
 	if budget != nil {
-		budget.note(header, err, r.Now())
+		budget.note(answer.Header, err, r.Now())
 	}
-	return raw, githubRateLimited(header, err, r.Now())
+	return answer.Body, githubRateLimited(answer.Header, err, r.Now())
 }
 
 // githubRateLimitRoute answers what the allowance has left without spending any of it.

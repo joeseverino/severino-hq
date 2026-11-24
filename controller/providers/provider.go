@@ -47,9 +47,9 @@ func recordsOf[T, R any](items []T, record func(T) (R, error)) ([]R, error) {
 // into its own response type. The payload is a provider request struct, url.Values or a string.
 type Transport interface {
 	Request(context.Context, string, string, map[string]string, any) (json.RawMessage, error)
-	// Exchange is Request with the answer's headers, which a refusal keeps
-	// too: the ETag of the version read, what a rate limit has left.
-	Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error)
+	// Exchange is Request with the answer's status and headers, which a
+	// refusal keeps too: the ETag of the version read, what a rate limit has left.
+	Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (runtime.Answer, error)
 }
 
 // Action is a registered handler as the controller dispatches it: the
@@ -175,7 +175,7 @@ type Registry struct {
 }
 type cachedRead struct {
 	ready chan struct{}
-	value json.RawMessage
+	value any
 	err   error
 }
 
@@ -293,7 +293,10 @@ func (r *Registry) BeginSnapshot() func() {
 		r.snapshotMu.Unlock()
 	}
 }
-func (r *Registry) cached(ctx context.Context, key string, load func() (json.RawMessage, error)) (json.RawMessage, error) {
+
+// cached is load's answer, read once per sweep under key, which names the
+// type it holds.
+func cached[T any](ctx context.Context, r *Registry, key string, load func() (T, error)) (T, error) {
 	r.snapshotMu.Lock()
 	if r.snapshot == nil {
 		r.snapshotMu.Unlock()
@@ -304,22 +307,25 @@ func (r *Registry) cached(ctx context.Context, key string, load func() (json.Raw
 		r.snapshotMu.Unlock()
 		select {
 		case <-found.ready:
-			return found.value, found.err
+			value, _ := found.value.(T)
+			return value, found.err
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			var zero T
+			return zero, ctx.Err()
 		}
 	}
 	found := &cachedRead{ready: make(chan struct{})}
 	cache[key] = found
 	r.snapshotMu.Unlock()
-	found.value, found.err = load()
+	value, err := load()
+	found.value, found.err = value, err
 	r.snapshotMu.Lock()
-	if found.err != nil {
+	if err != nil {
 		delete(cache, key)
 	}
 	close(found.ready)
 	r.snapshotMu.Unlock()
-	return found.value, found.err
+	return value, err
 }
 
 type refusalKey struct{}

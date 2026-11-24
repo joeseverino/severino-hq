@@ -195,7 +195,7 @@ func (r *Registry) cloudflareVerification(ctx context.Context, provider runtime.
 	if err != nil {
 		return empty
 	}
-	raw, err := r.cached(ctx, "cloudflare-verification:"+held, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, "cloudflare-verification:"+held, func() (json.RawMessage, error) {
 		base, err := r.cloudflareURL(provider, ref)
 		if err != nil {
 			return nil, err
@@ -339,7 +339,7 @@ func cloudflareBatch(envelope cfEnvelope) ([]json.RawMessage, error) {
 
 // cloudflareCachedList reads one list once per sweep.
 func (r *Registry) cloudflareCachedList(ctx context.Context, key string, read func() ([]json.RawMessage, error)) ([]json.RawMessage, error) {
-	raw, err := r.cached(ctx, key, func() (json.RawMessage, error) {
+	raw, err := cached(ctx, r, key, func() (json.RawMessage, error) {
 		items, err := read()
 		if err != nil {
 			return nil, err
