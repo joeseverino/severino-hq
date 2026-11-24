@@ -145,12 +145,6 @@ def _containers() -> ActionLink:
     return opens("Open containers", reverse("control_plane:containers"))
 
 
-def upgrade_plan_link(link: ActionLink | None) -> ActionLink | None:
-    """The secondary page when HQ can send the update."""
-
-    return opens("Upgrade plan", link.url) if link else None
-
-
 def _read(running: list[Container], *, standing: bool = True) -> dict[str, Any]:
     """The oldest reading a finding about ``running`` is drawn from, and its
     kind: where each runs, and, for what its image stands at, the registry's."""
@@ -174,20 +168,7 @@ def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
         return {"primary": page, "steps": ()}
     said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
     label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
-    return {
-        "primary": opens(label, page.url),
-        "steps": _by_hand(running, plan),
-        "compose_target": plan.compose_target if len(running) == 1 else None,
-        "compose_targets": ()
-        if len(running) == 1
-        else tuple(
-            candidate.compose_target
-            for item in running
-            if (candidate := plan_for(item))
-            and (candidate.target_tag, candidate.target_digest) == (plan.target_tag, plan.target_digest)
-            and candidate.compose_target is not None
-        ),
-    }
+    return {"primary": opens(label, page.url), "steps": _by_hand(running, plan)}
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:

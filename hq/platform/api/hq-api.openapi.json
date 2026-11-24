@@ -16460,44 +16460,6 @@
         ],
         "type": "object"
       },
-      "InfrastructureComposeBatchRunRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "additionalProperties": false,
-            "description": "The command: the fields its input schema names.",
-            "properties": {
-              "operation": {
-                "description": "The adopted playbook named by the review.",
-                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
-                "type": "string"
-              },
-              "reason": {
-                "$ref": "#/components/schemas/Reason",
-                "default": "Deploy the reviewed image updates."
-              },
-              "review": {
-                "description": "The review fingerprint shown by HQ.",
-                "pattern": "^[0-9a-f]{64}$",
-                "type": "string"
-              }
-            },
-            "required": [
-              "operation",
-              "review"
-            ],
-            "type": "object"
-          }
-        },
-        "required": [
-          "payload"
-        ],
-        "type": "object"
-      },
       "InfrastructureControllerRefreshRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -24559,11 +24521,6 @@
           }
         },
         "type": "object"
-      },
-      "Reason": {
-        "description": "Why it is run, kept with the operation it queues.",
-        "maxLength": 300,
-        "type": "string"
       },
       "ReceiptAsset": {
         "anyOf": [
@@ -34300,98 +34257,6 @@
         "x-hq-effect": "remote_write"
       }
     },
-    "/api/v2/capabilities/infrastructure.compose_batch.run/": {
-      "post": {
-        "description": "Deploy the current reviewed Compose image updates as one run, stopping at the first failure.",
-        "operationId": "infrastructureComposeBatchRunV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InfrastructureComposeBatchRunRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunAskedSuccess"
-                }
-              }
-            },
-            "description": "Success.",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/CacheControl"
-              }
-            },
-            "links": {
-              "getRunsV2": {
-                "operationId": "getRunsV2",
-                "parameters": {
-                  "path.identifier": "$response.body#/data/operation/id"
-                }
-              }
-            }
-          },
-          "202": {
-            "$ref": "#/components/responses/AwaitingApprovalAccepted"
-          },
-          "400": {
-            "$ref": "#/components/responses/UntargetedChangeBadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ChangeForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ChangeNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ChangeConflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/ChangeTooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearer": [
-              "manage_infrastructure"
-            ]
-          }
-        ],
-        "summary": "Review image updates",
-        "x-hq-capability": "infrastructure.compose_batch.run",
-        "x-hq-effect": "infrastructure_change"
-      }
-    },
     "/api/v2/capabilities/infrastructure.controller.refresh/": {
       "post": {
         "description": "Ask HQ to read everything again now.",
@@ -36675,7 +36540,6 @@
                 "github.profile.read",
                 "hq.import",
                 "hq.sync",
-                "infrastructure.compose_batch.run",
                 "infrastructure.controller.refresh",
                 "infrastructure.resource.accept_observed",
                 "infrastructure.resource.adopt",

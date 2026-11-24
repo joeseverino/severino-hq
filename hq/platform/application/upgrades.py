@@ -8,7 +8,6 @@ HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
 from typing import Annotated, Any
 
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
@@ -40,21 +39,6 @@ class UpgradeStep:
     id: Annotated[str, Describe("The step's stable id.")]
     label: Annotated[str, Describe("The step, in a few words.")]
     detail: Annotated[str, Describe("What the step does, in a sentence.")]
-
-
-@dataclass(frozen=True, slots=True)
-class ComposeTarget:
-    """The running service and exact target pin a reviewed deployment must match."""
-
-    file: PurePosixPath
-    machine: str
-    project: str
-    service: str
-    image: str
-    tag: str
-    digest: str
-    needs_data_restore: bool = False
-    needs_owning_unit: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,39 +75,6 @@ class Plan:
     @property
     def stateful(self) -> bool:
         return bool(self.data)
-
-    @property
-    def compose_target(self) -> ComposeTarget | None:
-        """A Compose service and the protections its reviewed update requires."""
-
-        item = self.container
-        files = tuple(map(PurePosixPath, item.compose_files))
-        if not files:
-            return None
-        file, *overrides = files
-        service = (item.runtime or {}).get("service")
-        if (
-            not self.recommended
-            or (self.stateful and not self.verified_by)
-            or any(blocker.id != "no-apply-path" for blocker in self.blockers)
-            or not item.running.state.running
-            or (overrides and overrides != [file.parent / _standard_override(file.name)])
-            or not item.running.stack
-            or not isinstance(service, str)
-            or not service
-        ):
-            return None
-        return ComposeTarget(
-            file,
-            item.machine.name,
-            item.running.stack,
-            service,
-            item.standing.image.name,
-            self.target_tag,
-            self.target_digest,
-            needs_data_restore=self.stateful,
-            needs_owning_unit=bool(item.running.unit or overrides),
-        )
 
     @property
     def fixes_tone(self) -> str:
@@ -361,10 +312,6 @@ OVERRIDES = (
     "docker-compose.override.yaml",
     "docker-compose.override.yml",
 )
-
-
-def _standard_override(base: str) -> str:
-    return {"compose.yaml": "compose.override.yaml", "docker-compose.yml": "docker-compose.override.yml"}.get(base, "")
 
 
 def _pinned_in(item: Container) -> str:

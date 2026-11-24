@@ -989,6 +989,9 @@ that counts takes a `hq_sdk.ui.Counted` as its label, as a dashboard card does.
 `{% data_table table %}` of a `DataTable`, which draws every heading, group,
 row and control, and `hq plugin check` refuses a `<td>` or `<th>` written by
 hand.
+`PLUGIN_API_VERSION` 25 retires `hq_sdk.plugin.Finding`'s `compose_target`,
+`compose_targets`, `deployment`, `deployments`, `update_targets` and
+`reviewed_updates`: a finding offers no Compose deployment of its own.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

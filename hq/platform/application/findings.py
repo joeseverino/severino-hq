@@ -324,10 +324,9 @@ def _playbooks(
     for manifest in automation_runs.playbooks_for(finding.rule, machine):
         name = automation_runs.capability_name(manifest.id)
         if finding.rule not in manifest.investigates:
-            if manifest.compose_updates is None:
-                remedies.append(
-                    FindingRemedy(capability=name, target="", url=automation_runs.run_here_url(manifest.id, (machine,)))
-                )
+            remedies.append(
+                FindingRemedy(capability=name, target="", url=automation_runs.run_here_url(manifest.id, (machine,)))
+            )
             continue
         allowed, _ = _permitted(name, principal)
         if not allowed:
@@ -389,20 +388,6 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     the pages about its subject."""
 
     remedies, diagnostics = _playbooks(finding, subject, principal)
-    deployments = tuple(
-        deployment
-        for target in finding.update_targets
-        if (
-            deployment := automation_runs.compose_deployment(
-                finding.rule, finding_key(finding), target.machine, target, principal
-            )
-        )
-    )
-    if len(finding.update_targets) == 1 and deployments:
-        (deployment,) = deployments
-        remedies.append(
-            FindingRemedy(deployment.capability, "", intent=automation_runs.REVIEW_IMAGE_UPDATE, url=deployment.url)
-        )
     subject_reads = tuple(
         action
         for action in (subject.actions if subject else ())
@@ -410,21 +395,15 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     presses = _presses((*finding.remedies, *remedies), principal, subject)
-    has_deployment = len(finding.update_targets) == 1 and any(
-        press.link.url == deployment.url for press in presses for deployment in deployments
-    )
     check, read_now = _verification(finding, principal, subject)
     # Every field the detector set carries through; only what derivation adds changes.
     return replace(
         finding,
         remedies=(),
-        deployment=deployments[0] if has_deployment else None,
-        deployments=() if has_deployment else deployments,
         offers=(*finding.offers, *diagnostics, *subject_reads),
         investigations=investigations,
-        primary=container_findings.upgrade_plan_link(finding.primary) if has_deployment else finding.primary,
-        steps=presses if has_deployment else (*presses, *finding_steps(finding, pressed=bool(presses))),
-        no_help_reason="" if has_deployment else _no_help_reason(finding),
+        steps=(*presses, *finding_steps(finding, pressed=bool(presses))),
+        no_help_reason=_no_help_reason(finding),
         check=check,
         subject_link=read_link("subject", subject.label, subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),

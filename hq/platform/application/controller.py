@@ -128,10 +128,10 @@ def _fail_lapsed_runs(now) -> None:
         OperationRequest.objects.select_for_update()
         .select_related("resource")
         .filter(OPERATION_LAPSE.q(now), action=OperationRequest.Action.RUN)
-        .exclude(resource__spec__retry="safe", input__steps__isnull=True)
+        .exclude(resource__spec__retry="safe")
     )
     for operation in lapsed:
-        retry = "observe_first" if "steps" in operation.input else str(operation.resource.spec.get("retry") or "never")
+        retry = str(operation.resource.spec.get("retry") or "never")
         message = _UNKNOWN_OUTCOME.get(retry, _UNKNOWN_OUTCOME["never"])
         with own_operation(operation):
             _end(

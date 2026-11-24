@@ -1417,34 +1417,6 @@ fills a declared `service_unit` input that accepts its exact name. Multiple
 services leave that field for the reader to fill. The form still validates
 every input and a run still goes through the canonical capability.
 
-A Compose deploy procedure can declare `compose_updates` with its repository
-`source` directory and its absolute `destination` on the machines it serves.
-It names the image rules it fixes in `fixes` and accepts the existing Compose
-project, service and exact image inputs. The scan reads literal tag and digest
-pins directly from the files in that commit. Needs you offers **Review image
-update** when an adopted pin matches the recommended image, the observed
-service uses that file, and the runner and reader can run the procedure. This
-path requires a running service with one primary Compose file. A procedure must
-declare `restores_data` to offer a stateful service, and the service must have
-a known health check or endpoint. A Compose project started by systemd also
-requires the procedure to declare `uses_owning_unit`, including when the
-running project uses Compose's standard override beside its primary file. These declarations
-describe what the adopted playbook verifies. The target host still enforces
-its own permission and recovery policy. The review binds the service, host, image and commit through the
-normal run command. If the adopted revision or the match changes, the reader
-opens the finding again. The playbook checks the actual running service and
-effective Compose image before changing the machine.
-
-When the same adopted procedure can apply several updates, Needs you can
-offer them together. One review shows each machine and exact image in
-execution order. The shared approval binds the full set to the adopted
-revision and becomes stale if that set changes. The operation holds every
-target machine for its lease. The runner calls the existing playbook once
-per update, with only that update's machine and inputs. The plan stops on
-the first failure and records which updates completed. Earlier successful
-updates remain deployed. An interrupted batch needs fresh observations
-before a new review.
-
 The sidecar's format is published as a JSON Schema,
 `hq/platform/application/hq-procedure.schema.json`, written from
 `ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the

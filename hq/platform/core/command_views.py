@@ -29,7 +29,6 @@ from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_sc
 from hq.platform.application.integrations import held_graph
 from hq.platform.application.pages import RouteNamed, page_context
 from hq.platform.application.payload_words import value_words
-from hq.platform.application.projection import projection_scope
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.resource_operations import OperationAsked
 from hq.platform.application.security import safe_next, web_principal
@@ -37,10 +36,7 @@ from hq.platform.application.service_context import Cell, ServiceSection
 from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import run_posted
 from hq.platform.core.web_refusals import refused
-lazy from hq.platform.application import compose_batches
-lazy from hq.platform.application.automation_runs import REVIEW_IMAGE_UPDATE
 lazy from hq.platform.application.finding_runs import finding_run
-lazy from hq.platform.application.work_runs import run_url
 
 
 def _json_value(value):
@@ -187,7 +183,7 @@ class CommandView(View):
             return None
         return saved
 
-    def _context(self, form, *, result=None, reviewed=None, batch=None):
+    def _context(self, form, *, result=None):
         if result and _only_queues(result["payload"]):
             result = None
         resource = held_graph().resources.get(self.spec.subject_resource)
@@ -205,11 +201,8 @@ class CommandView(View):
         return {
             # No lede: the summary is the agent's description of the command,
             # and the page says what it changes in its fields and its button.
-            **page_context(REVIEW_IMAGE_UPDATE if reviewed else self.spec.title, trail=trail),
+            **page_context(self.spec.title, trail=trail),
             "command": self.spec,
-            "command_label": compose_batches.DEPLOY if batch else "Deploy image" if reviewed else self.spec.title,
-            "batch": batch,
-            "reviewed": reviewed,
             "chosen_target": self._chosen_target(form),
             "form": form,
             "result": result,
@@ -221,16 +214,14 @@ class CommandView(View):
             "result_json_open": not facts and table is None,
             "return_url": safe_next(self.request),
             # Cancel goes back where it was opened from, else to the trail's end.
-            "cancel_url": safe_next(
-                self.request, fallback=reverse("action_items") if reviewed or batch else trail[-1][1]
-            ),
+            "cancel_url": safe_next(self.request, fallback=trail[-1][1]),
             "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
             "resource_open": f"Open {resource.label}" if resource else "",
             "hydrates_target": bool(self.spec.target_initial_fields),
             "switch": self._switch(form),
             # A command that needs what one page hands it says to start there.
-            "starting_page": None if batch else starting_page(self.spec),
+            "starting_page": starting_page(self.spec),
             "starts_on_its_page": self.spec.reached_from == ON_ITS_PAGE,
             "saves_blanks": self._saves_blanks(schema),
             # What the command says of itself beside its form, if it says anything.
@@ -310,57 +301,23 @@ class CommandView(View):
         if target and (self.target_options is None or target in known_targets):
             initial["__target"] = target
             initial.update(capability_target_initial(self.spec, target, principal=self.principal))
-        batch = self._batch()
         start = self._finding_run()
-        named = start.initial if start else _named_records(self.form_class(initial=initial), request.GET)
-        if start and start.deployment:
-            initial["reason"] = f"Deploy the reviewed image for {start.deployment.pin.service}."
+        named = start or _named_records(self.form_class(initial=initial), request.GET)
         form = self.form_class(initial={**initial, **named})
-        reviewed = self._reviewed(form, start)
-        self._lock_batch(form, batch)
-        context = self._context(form, result=self._result(), reviewed=reviewed, batch=batch)
+        context = self._context(form, result=self._result())
         # A link that named a target the form cannot offer says so, rather than
         # opening on an empty choice that looks like the link worked.
         context["unoffered_target"] = target if target and "__target" not in initial else ""
         return TemplateResponse(request, self.template_name, context)
 
-    def _batch(self):
-        review = self.request.GET.get("review", "")
-        if self.spec.name != compose_batches.NAME or not review:
-            return None
-        with projection_scope():
-            batch = compose_batches.reviewed(self.request.GET.get("operation", ""), review, self.principal)
-        if batch is None:
-            raise FindingChanged()
-        return batch
-
-    def _lock_batch(self, form, batch):
-        if batch:
-            form.initial.update(operation=batch.manifest.id, review=batch.review, reason=compose_batches.REASON)
-            self._lock_fields(form, ("operation", "review", "reason"))
-
     def _finding_run(self):
         key = self.request.GET.get("finding", "")
         if not key:
             return None
-        review = self.request.GET.get("review", "")
-        start = finding_run(self.spec.name, key, self.principal, review=review)
-        if start is None or start.review != review:
+        start = finding_run(self.spec.name, key, self.principal)
+        if start is None:
             raise FindingChanged()
         return start
-
-    def _reviewed(self, form, start):
-        """Display the reviewed values and bind the same values on submission."""
-
-        if start is None or not start.deployment:
-            return None
-        self._lock_fields(form, start.initial)
-        return start.deployment
-
-    def _lock_fields(self, form, names):
-        for name in names:
-            form.fields[name].disabled = True
-            form.fields[name].widget = form.fields[name].hidden_widget()
 
     def _held(self, target: str) -> dict:
         """What the record a form edits holds, so a posted value its source no
@@ -372,18 +329,13 @@ class CommandView(View):
         return capability_target_initial(self.spec, target, principal=self.principal)
 
     def post(self, request, name: str):
-        batch = self._batch()
         start = self._finding_run()
         initial = self._held(request.POST.get("__target", ""))
         if start:
-            initial.update(start.initial)
+            initial.update(start)
         form = self.form_class(request.POST, request.FILES, initial=initial)
-        reviewed = self._reviewed(form, start)
-        self._lock_batch(form, batch)
         if not form.is_valid():
-            return TemplateResponse(
-                request, self.template_name, self._context(form, reviewed=reviewed, batch=batch), status=400
-            )
+            return TemplateResponse(request, self.template_name, self._context(form), status=400)
 
         payload = _json_value(form.command_payload)
         target = form.cleaned_data.get("__target")
@@ -396,11 +348,7 @@ class CommandView(View):
             expected_updated_at=expected_updated_at,
         )
         if refusal := refused(request, result, form=form):
-            return TemplateResponse(
-                request, self.template_name, self._context(form, reviewed=reviewed, batch=batch), status=refusal.status
-            )
-        if reviewed or batch:
-            return redirect(run_url(result["operation"]["id"]))
+            return TemplateResponse(request, self.template_name, self._context(form), status=refusal.status)
 
         token = secrets.token_urlsafe(18)
         request.session["command_center_result"] = {

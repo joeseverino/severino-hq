@@ -75,49 +75,6 @@ class ExampleProjectTests(ScanTestCase):
         self.assertEqual(self.scanned["revision"], self.revision)
         self.assertEqual(self.scanned["verification"], {"verified": True, "reason": "valid", "committer": "web-flow"})
 
-    def test_compose_pins_come_from_the_scanned_commit_for_an_opted_in_procedure(self):
-        files = project_files()
-        sidecar = "playbooks/service_restart.hq.yml"
-        image = f"ghcr.io/example/app:1.2.3@sha256:{'a' * 64}"
-        compose = f"services:\n  web:\n    image: {image}\n"
-        self.remote.commit(
-            {
-                **files,
-                sidecar: f"{files[sidecar]}\ncompose_updates: {{source: compose, destination: /opt/example}}\n",
-                "compose/app/compose.yaml": compose,
-                "compose/unit/compose.yaml": f"x-started-by: app.service\n{compose}",
-                "compose/override/compose.yaml": compose,
-                "compose/override/compose.override.yaml": "services: {}\n",
-                "compose/dynamic/compose.yaml": "services:\n  web:\n    image: ${WEB_IMAGE}\n",
-            }
-        )
-        found = self.by_sidecar(self.scan())
-        self.assertEqual(
-            found[sidecar]["compose_images"],
-            [{"project": "app", "service": "web", "file": "compose.yaml", "image": image}],
-        )
-        self.assertNotIn("compose_images", found["playbooks/host_health.hq.yml"])
-
-    def test_unit_managed_pins_require_an_owning_unit_procedure(self):
-        files = project_files()
-        sidecar = "playbooks/service_restart.hq.yml"
-        image = f"ghcr.io/example/app:1.2.3@sha256:{'a' * 64}"
-        self.remote.commit(
-            {
-                **files,
-                sidecar: (
-                    f"{files[sidecar]}\ncompose_updates:\n  source: compose\n"
-                    "  destination: /opt/example\n  uses_owning_unit: true\n"
-                ),
-                "compose/unit/compose.yaml": f"x-started-by: app.service\nservices:\n  web:\n    image: {image}\n",
-            }
-        )
-        found = self.by_sidecar(self.scan())
-        self.assertEqual(
-            found[sidecar]["compose_images"],
-            [{"project": "unit", "service": "web", "file": "compose.yaml", "image": image}],
-        )
-
     def test_each_sidecar_is_a_procedure_read_from_the_playbook_beside_it_and_its_roles(self):
         procedures_found = self.by_sidecar(self.scanned)
 

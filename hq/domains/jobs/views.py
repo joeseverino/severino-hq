@@ -18,7 +18,6 @@ lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import AskMixin
 lazy from hq.platform.application.automation_runs import AGAIN, cancel_action
 lazy from hq.platform.application.capabilities import capability_spec
-lazy from hq.platform.application.compose_batches import NAME as COMPOSE_BATCH
 lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.moments import duration, moment
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
@@ -131,10 +130,7 @@ class RunView(RecordPageMixin, TemplateView):
         # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
         again = (
             PageAction.command(run["capability"], variant=AGAIN, query={"hosts": tuple(run["hosts"])})
-            if not self.following_run
-            and playbook
-            and run["capability"] != COMPOSE_BATCH
-            and capability_spec(run["capability"])
+            if not self.following_run and playbook and capability_spec(run["capability"])
             else None
         )
         return tuple(action for action in (again, cancel) if action is not None)
