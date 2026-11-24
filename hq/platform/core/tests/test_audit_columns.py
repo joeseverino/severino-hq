@@ -2,19 +2,18 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import elements, with_class
-from hq.platform.application.tables import ranked
 from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import SignedInTestCase
+from hq.platform.core.testing import SignedInTestCase, leaving
 from hq_sdk.testing import plain
 
 
 class AuditColumnTests(SimpleTestCase):
     def test_a_narrow_audit_log_lets_who_go_first_and_never_what(self):
-        columns = ranked(AuditLogListView.table_columns)
+        levels = leaving(*AuditLogListView.table_columns)
 
-        self.assertEqual(next(column.label for column in columns if column.drop == 1), "User")
-        self.assertEqual(next(column.drop for column in columns if column.label == "Type"), 0)
+        self.assertEqual(min((level, label) for label, level in levels.items() if level)[1], "User")
+        self.assertEqual(levels["Type"], 0)
 
 
 class AuditWhatTests(SignedInTestCase):

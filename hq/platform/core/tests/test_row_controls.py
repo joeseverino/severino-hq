@@ -7,7 +7,8 @@ from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import all_elements
 from hq.platform.application.pages import PageAction
-from hq.platform.application.tables import Below, Cell, DataTable, Row, TableColumn, ranked
+from hq.platform.application.tables import Below, Cell, DataTable, Row, TableColumn
+from hq.platform.core.testing import leaving
 
 _ACTIONS = (PageAction("Open", "/example/open/"), PageAction("Check", "/example/check/"))
 
@@ -64,5 +65,5 @@ class RowControlsTests(SimpleTestCase):
         self.assertTrue([each for each in page if row in each.ancestors and "aria-expanded" in each.attrs])
 
     def test_a_list_never_ranks_its_column_of_controls_to_leave(self):
-        columns = ranked((TableColumn("Name"), TableColumn("Note"), TableColumn("", css="actions-col")))
-        self.assertEqual([column.drop for column in columns], [0, 1, 0])
+        levels = leaving(TableColumn("Name"), TableColumn("Note"), TableColumn("", css="actions-col"))
+        self.assertEqual(list(levels.values()), [0, 4, 0])

@@ -176,19 +176,19 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
     # every row must show (`key-col`). Controls never leave, since the
     # open line copies what leaves, where a control would be drawn twice.
     # A key (`key-col`, or the closing figure of a table that marks none)
-    # never leaves. A state (a cell said by its pills, or any under a
-    # heading of kind `status` that declares no rank) stands while any other column can, and
-    # goes to the open line only below every rank's width
-    # (`STATES_LEAVE`), where the name, the keys and the controls take
-    # the row.
+    # never leaves. A state (a cell said by its pills, a date, or in a
+    # table that ranks its columns any under a heading of kind `status`
+    # that declares no rank) stands while any other column can, and goes
+    # to the open line only below every rank's width (`STATES_LEAVE`),
+    # where the name, the keys and the controls take the row.
     heading = heads[-1] if heads else []
-    # A heading of kind `status` decides: with no rank its column is a
-    # state, and with one it leaves by it, whatever its cells hold, though
-    # never before another ranked column (`declared`).
+    # A heading of kind `status` with a rank leaves by it, whatever its
+    # cells hold, though never before another ranked column (`declared`).
     statuses = {at for at, cell in enumerate(heading) if cell.kind == "status" and at != named}
     declared = statuses & set(drops)
-    states = {place for row in records for place, cell in _placed(row) if place != named and cell.states} - declared
-    states |= statuses - declared
+    dated = {at for at in statuses if "date-col" in heading[at].classes}
+    states = {place for row in records for place, cell in _placed(row) if place != named and cell.states}
+    states = (states | dated | (statuses if drops else set())) - declared
     keys = set(_keys([(kinds.get(at, ""), cell.classes) for at, cell in enumerate(heading)]))
     does = {place for row in records for place, cell in _placed(row) if cell.fields}
     does |= {place for row in records for place, _ in _row_controls(row, kinds, named)}
@@ -424,13 +424,12 @@ def leaving_order(columns: Sequence[tuple[str, Sequence[str]]]) -> list[int]:
     the order a narrow table lets them go: ``optional-col`` columns first,
     then the rest, each from the far end. Never the first, which names the
     row, a ``key-col``, a column of the row's controls, the closing figure of
-    a table that marks no key, or a date (``date-col``), which stands as a
-    row's state does unless its table ranks it."""
+    a table that marks no key."""
 
     keys = _keys(columns)
 
     def spare(index: int, kind: str, classes: Sequence[str]) -> bool:
-        return index > 0 and index not in keys and kind != "control" and "date-col" not in classes
+        return index > 0 and index not in keys and kind != "control"
 
     far_first = [index for index in reversed(range(len(columns))) if spare(index, *columns[index])]
     return sorted(far_first, key=lambda index: "optional-col" not in columns[index][1])

@@ -457,10 +457,10 @@ and any rank past the fourth leaves with it. So a narrow box holds only the colu
 Nothing is measured, so a column may leave a box that could still hold it. What leaves shows on
 the row's open line. The gates fail a table that runs past its card.
 
-A table whose headings rank no column has its ranks derived by the region (`table_layout`), by the
-rule `ranked` follows, and lets them go only at the narrowest widths: its far column at the widest
-of them and its nearest below 40rem, so it keeps every column until a narrow box and a
-hand-written table needs no rank of its own to fit a phone. A column holding a button stands,
+A column its headings rank none for leaves by the rule `leaving_order` follows, after every
+declared rank and only at the narrowest widths: its far column at the widest of them and its
+nearest below 40rem, so a table keeps every column until a narrow box and a hand-written table
+needs no rank of its own to fit a phone. A column holding a button stands,
 since a cell held back holds none. This is the column-priority pattern of jQuery Mobile's and
 Tablesaw's column toggle (six priorities, each shown from a set width, the columns with none
 persisting) rather than their reflow mode, which stacks each cell under its label: at every width
@@ -1336,10 +1336,11 @@ share a line, names over tracks, and the theme has its row. Then where the menu 
 
 ### partials/_table_heading.html (host only)
 
-Each column that may leave has a rank, 1 first (`TableColumn(drop=N)`). A list's ranks are derived by
-`ranked`: `optional-col` first, then from the far end. It never ranks the column that names the
-row, one marked `key-col`, or the closing figure of a table that marks none; the region turns
-the ranks into the widths each leaves at.
+Each column that may leave has a rank, 1 first (`TableColumn(drop=N)`). A table that declares none
+has its order derived by the region (`table_layout.leaving_order`): `optional-col` first, then
+from the far end. It never lets go the column that names the row, one marked `key-col`, the
+closing figure of a table that marks none, a row's state or its controls; the region turns the
+ranks into the widths each leaves at.
 
 **Every table sorts.** A list its server sorts has links in its headings (`TableColumn(sort=)`). Every other
 heading has the same control, looking the same, drawn as a button, which the region keeps only

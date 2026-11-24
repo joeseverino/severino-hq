@@ -13,7 +13,7 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.db.models import Model
 
-from hq.platform.core.table_layout import SAYS_NOTHING, TRACKS, leaving_order
+from hq.platform.core.table_layout import SAYS_NOTHING, TRACKS
 lazy from hq.platform.core.included_parts import METER, READING_AGE
 lazy from hq.platform.core.templatetags import status_tags
 
@@ -88,25 +88,6 @@ def check_drop(drop: int, css: str, label: str) -> None:
         raise ValueError(f"Column {label!r}: a drop rank is 1 or more, or 0 to keep it.")
     if drop and "key-col" in css.split():
         raise ValueError(f"Column {label!r} is kept at every width, so it has no drop rank.")
-
-
-def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
-    """The columns, each with the order a narrow table lets it go in.
-
-    Ranks a list declares stand as declared. Otherwise they follow one rule:
-    ``optional-col`` columns first, then the rest, each from the far end; never
-    the column that names the row, a key column, a column of the row's
-    controls, which stand beneath its words in a narrow box instead, a date
-    (``date-col``), or the closing figure of a table that marks no key.
-    """
-
-    if columns and columns[0].drop:
-        raise ValueError(f"Column {columns[0].label!r} names each row, so it has no drop rank.")
-    if any(column.drop for column in columns):
-        return columns
-    order = leaving_order([(column.kind, column.css.split()) for column in columns])
-    rank = {index: place for place, index in enumerate(order, 1)}
-    return tuple(replace(column, drop=rank.get(index, 0)) for index, column in enumerate(columns))
 
 
 # Where a value of a cell shows: on its row's line (""), only once the row
@@ -473,8 +454,9 @@ REGION = inspect.signature(box)
 
 @dataclass(frozen=True, slots=True)
 class DataTable:
-    """A table drawn whole by ``{% data_table %}``: its columns ranked to leave
-    a narrow box as a list's do, then its rows, or its groups of rows. A list
+    """A table drawn whole by ``{% data_table %}``: its columns, each of which
+    the region lets leave a narrow box by its rank or its own rule
+    (``table_layout``), then its rows, or its groups of rows. A list
     its server sorts names the sort it stands in (``sorted_by``), and its
     headings sort there; any other table sorts on the page."""
 
@@ -511,7 +493,7 @@ class DataTable:
         # A column past its grid's last track would be drawn over that one.
         if (drawn := len(self.columns) + self.has_actions) > TRACKS:
             raise ValueError(f"{self.label!r} draws {drawn} columns; a table holds {TRACKS}, its controls among them.")
-        object.__setattr__(self, "columns", ranked(self._dated()))
+        object.__setattr__(self, "columns", self._dated())
         bound = REGION.bind(self.label, **self.region)
         bound.apply_defaults()
         object.__setattr__(self, "region", {name: value for name, value in bound.arguments.items() if name != "label"})

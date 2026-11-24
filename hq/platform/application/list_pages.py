@@ -10,7 +10,7 @@ from django.db.models import QuerySet
 from .integration_specs import SEARCH_FIELD, ListRead, ResourceSpec
 from .page_reads import Remedy
 from .pages import PageMixin
-from .tables import Cell, DataTable, Row, TableColumn, ranked, typed
+from .tables import Cell, DataTable, Row, TableColumn, typed
 from .ui import ended
 lazy from .resources import InvalidResourceInput, list_resource, resource_registry
 lazy from .security import web_principal
@@ -186,7 +186,7 @@ class ListPageMixin(PageMixin):
             "sorts": listing.sorts,
             "sort_choices": [*relevance, *((sort.name, sort.label) for sort in listing.sorts)],
             "selected_sort": asked.get("sort", default),
-            "columns": ranked(typed(self.table_columns, model)),
+            "columns": typed(self.table_columns, model),
             "selectable": self.table_selectable,
             "identifier": self.spec.identifier,
             "active_count": sum(item["selected_count"] for item in filters)
