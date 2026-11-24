@@ -1167,8 +1167,8 @@ than Linux's, so a part can fit in CI's Linux legs and wrap in Safari.
 its findings joining the other legs' in Browser verdict. `mise run browser`
 leaves it out: on a Mac, `browser:webkit` already runs those tests.
 
-CI splits each of the two into shares that run side by side, `i/n` in the
-browser job's matrix. A sweep marked `@sweep` runs in every share and reads
+CI splits each engine's gate into shares that run side by side, `i/n` in
+the browser jobs' matrices. A sweep marked `@sweep` runs in every share and reads
 its share of the pages (`BrowserGate.mine`); any other test runs in the one
 share its id picks (`hq/platform/core/tests/browser/shards.py`). The shares
 together run the whole gate, which GateReferenceTests holds.
@@ -1191,7 +1191,7 @@ What the browser gates read from the environment:
 | `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
 | `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
 | `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
-| `HQ_BROWSER_SHARD` | CI's browser matrix | `i/n` runs one share of a browser gate; unset, the whole gate |
+| `HQ_BROWSER_SHARD` | CI's browser matrices | `i/n` runs one share of a browser gate; unset, the whole gate |
 
 #### Policy, fonts and stalls
 

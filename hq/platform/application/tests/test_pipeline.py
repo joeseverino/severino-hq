@@ -754,21 +754,27 @@ class GateReferenceTests(SimpleTestCase):
     def test_every_browser_gate_has_a_leg_and_every_leg_a_gate(self):
         """The Browser job and its macOS legs run each ``browser:*`` gate,
         whole or in shares; a gate with no leg never runs in CI, and a split
-        gate runs each of its shares, 1/n through n/n, once (``shards``)."""
+        gate runs each of its shares in each engine, 1/n through n/n, once
+        (``shards``)."""
         ci = jobs(workflow("ci.yml"))
-        browser = ci["browser"]
-        legs = browser["strategy"]["matrix"]["include"]
-        (gate,) = [step for step in browser["steps"] if "GATE" in step.get("env", {})]
-        self.assertEqual(gate["env"].get("HQ_BROWSER_SHARD"), "${{ matrix.shard }}")
-        macos = ci["browser-macos"]["strategy"]["matrix"]["include"]
+        every = []
+        for job in ("browser", "browser-macos"):
+            legs = ci[job]["strategy"]["matrix"]["include"]
+            every += legs
+            (gate,) = [step for step in ci[job]["steps"] if "GATE" in step.get("env", {})]
+            self.assertEqual(gate["env"].get("HQ_BROWSER_SHARD"), "${{ matrix.shard }}", job)
+            # A split run is a gate in one engine: every key of its legs but the share.
+            shares: dict[tuple, list] = {}
+            for leg in legs:
+                run = tuple(sorted((key, value) for key, value in leg.items() if key != "shard"))
+                shares.setdefault(run, []).append(leg.get("shard"))
+            for run, said in shares.items():
+                whole = [None] if said == [None] else [f"{index}/{len(said)}" for index in range(1, len(said) + 1)]
+                self.assertCountEqual(said, whole, (job, run))
         self.assertEqual(
-            {f"browser:{leg['gate']}" for leg in [*legs, *macos]},
+            {f"browser:{leg['gate']}" for leg in every},
             {name for name in mise_tasks() if name.startswith("browser:")},
         )
-        for name in {leg["gate"] for leg in legs}:
-            said = [leg.get("shard") for leg in legs if leg["gate"] == name]
-            whole = [None] if said == [None] else [f"{index}/{len(said)}" for index in range(1, len(said) + 1)]
-            self.assertCountEqual(said, whole, name)
 
     def test_a_task_that_takes_arguments_says_what_they_are(self):
         """``mise run <task> --help`` prints a task's ``usage``. Once one is

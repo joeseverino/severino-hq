@@ -276,8 +276,9 @@ jobs:
   # The catalog in macOS's own fonts, in both engines: its monospace face is
   # wider than Linux's, so a part that fits in the Browser job can wrap in
   # Safari. A job of its own, since only an Ubuntu runner takes a container:
-  # here the toolchain installs the browsers. Its findings join the Browser
-  # job's in Browser verdict, each naming its engine and system.
+  # here the toolchain installs the browsers. Each engine's gate is split into
+  # shares as the Browser job's are. Its findings join the Browser job's in
+  # Browser verdict, each naming its engine and system.
   browser-macos:
     name: Browser on macOS
     needs: [proven, legs]
@@ -288,10 +289,16 @@ jobs:
       fail-fast: false
       matrix:
         # GateReferenceTests holds these with the Browser job's to the gates
-        # mise-tasks/browser.toml declares.
+        # mise-tasks/browser.toml declares, and each engine's shares to 1/n
+        # through n/n. An account runs five macOS jobs at once, so the sixth
+        # starts as the first ends.
         include:
-          - { gate: catalog, engine: webkit }
-          - { gate: catalog, engine: chromium }
+          - { gate: catalog, engine: webkit, shard: 1/4 }
+          - { gate: catalog, engine: webkit, shard: 2/4 }
+          - { gate: catalog, engine: webkit, shard: 3/4 }
+          - { gate: catalog, engine: webkit, shard: 4/4 }
+          - { gate: catalog, engine: chromium, shard: 1/2 }
+          - { gate: catalog, engine: chromium, shard: 2/2 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -303,20 +310,21 @@ jobs:
         env:
           GATE: browser:${{ matrix.gate }}
           HQ_BROWSER_ENGINE: ${{ matrix.engine }}
+          HQ_BROWSER_SHARD: ${{ matrix.shard }}
           HQ_BROWSER_FINDINGS: var/browser-findings
         run: mise run "$GATE"
       - name: Findings
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-findings-macos-${{ matrix.engine }}
+          name: browser-findings-macos-${{ matrix.engine }}-${{ strategy.job-index }}
           path: var/browser-findings/
           if-no-files-found: ignore
       - name: Failure screenshots
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-failures-macos-${{ matrix.engine }}
+          name: browser-failures-macos-${{ matrix.engine }}-${{ strategy.job-index }}
           path: var/browser-failures/
           if-no-files-found: ignore
 
