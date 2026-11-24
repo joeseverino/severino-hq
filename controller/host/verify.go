@@ -17,9 +17,9 @@ import (
 )
 
 // Verify reports where the host differs from the release HQ runs: the tree
-// against that image, file for file and byte for byte; the installed units
-// against the tree's; anything a release no longer installs; and the Actions
-// runner's sudo rules against the ones HQ renders. It changes
+// against that image, file for file and byte for byte; whatever the release's
+// setup would change (SetupDrift); and the Actions runner's sudo rules
+// against the ones HQ renders. It changes
 // nothing. An empty answer is a host that is what its release says.
 func (m *Machine) Verify(ctx context.Context) ([]string, error) {
 	out, err := m.Command(ctx, "docker", "inspect", "--format", "{{.Image}}", hostcore.Container).Output()
@@ -48,24 +48,13 @@ func (m *Machine) Verify(ctx context.Context) ([]string, error) {
 	}
 	drift = append(drift, differs...)
 
-	shipped, err := Shipped(m.UnitDir())
+	// What an apply of the release's playbook would change: its units, the
+	// drop-ins host.json decides, the tmpfiles rule and the deploy rule.
+	changes, err := m.SetupDrift(ctx, m.Lib)
 	if err != nil {
 		return nil, err
 	}
-	for _, name := range shipped {
-		want, _ := os.ReadFile(filepath.Join(m.UnitDir(), name))
-		have, err := os.ReadFile(filepath.Join(m.Systemd, name))
-		if err != nil || !bytes.Equal(want, have) {
-			drift = append(drift, filepath.Join(m.Systemd, name)+" is not the release's")
-		}
-	}
-	retired, err := Retired(shipped, m.Systemd)
-	if err != nil {
-		return nil, err
-	}
-	for _, name := range retired {
-		drift = append(drift, filepath.Join(m.Systemd, name)+" is not shipped by the release")
-	}
+	drift = append(drift, changes...)
 	return append(drift, m.runnerRules(ctx)...), nil
 }
 

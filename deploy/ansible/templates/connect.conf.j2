@@ -1,0 +1,11 @@
+# Rendered by hq-host install from /etc/severino-hq/host.json.
+# After Connect, which unlocks on the first authenticated request.
+[Unit]
+Requires={{ host.connect.unit }}
+After={{ host.connect.unit }}
+
+[Service]
+LoadCredentialEncrypted=
+LoadCredentialEncrypted={{ host.connect.credential }}
+Environment="SEVERINO_CONNECT_CREDENTIAL={{ host.connect.credential }}"
+Environment="OP_CONNECT_HOST={{ host.connect.url }}"

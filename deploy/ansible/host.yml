@@ -1,0 +1,196 @@
+# The host's own setup: the release's units, drop-ins and tmpfiles rule, the
+# drop-ins and deploy rule host.json decides, each unit enabled and started.
+# hq-host runs it in the runner image the release pins (controller/host/
+# setup.go, which states its security properties and gives every variable).
+#
+# Tags: `web` is what HQ's restart on a new release needs first, every drop-in
+# and the web unit; `files` is every file it writes, which hq-host verify and
+# the rehearsal read in check mode, with no privilege. Every other task acts
+# on systemd or runs a preflight, so it runs on apply alone.
+- name: Set up the host for its release
+  hosts: all
+  gather_facts: false
+  vars:
+    units: "{{ shipped | reject('search', '/') | list }}"
+    # The drop-ins, the credential mount the renderer requires, the renderer
+    # and HQ: what HQ's restart and the render before it need.
+    first: "{{ shipped | select('search', '/|\\.mount$') | list + [secrets_unit, web_unit] }}"
+    # The units an earlier release installed and this one dropped, once found.
+    retired: "{{ installed.files | map(attribute='path') | map('basename') | difference(units) }}"
+  tasks:
+    # Every variable comes from the file setup_vars names, through a lookup:
+    # Ansible renders a template in a value given on its command line or in a
+    # vars file, and never in a lookup's, so a value host.json holds is text.
+    - name: Read the setup's variables
+      ansible.builtin.set_fact:
+        "{{ item.key }}": "{{ item.value }}"
+      loop: "{{ lookup('ansible.builtin.file', setup_vars) | from_json | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      tags: [always]
+
+    - name: Check the release's units with this systemd
+      ansible.builtin.command:
+        argv: "{{ ['systemd-analyze', 'verify'] + verified }}"
+      changed_when: false
+
+    - name: Make the drop-in directories
+      ansible.builtin.file:
+        path: "{{ systemd_dir }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ (shipped | select('search', '/') | map('dirname') + [secrets_unit ~ '.d', host.runner.unit ~ '.d']) | unique }}"
+      loop_control:
+        label: "{{ systemd_dir }}/{{ item }}"
+      tags: [web, files]
+
+    - name: Install every drop-in and the units the restart needs
+      ansible.builtin.copy:
+        src: "{{ tree }}/deploy/systemd/{{ item }}"
+        dest: "{{ systemd_dir }}/{{ item }}"
+        remote_src: true
+        mode: "0644"
+      loop: "{{ first }}"
+      loop_control:
+        label: "{{ systemd_dir }}/{{ item }}"
+      tags: [web, files]
+
+    - name: Render the drop-ins host.json decides
+      ansible.builtin.template:
+        src: "{{ item.template }}"
+        dest: "{{ systemd_dir }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {template: estate.conf.j2, dest: "{{ secrets_unit }}.d/10-estate.conf"}
+        - {template: connect.conf.j2, dest: "{{ secrets_unit }}.d/20-connect.conf"}
+        - {template: runner-identity.conf.j2, dest: "{{ host.runner.unit }}.d/10-runner-identity.conf"}
+      loop_control:
+        label: "{{ systemd_dir }}/{{ item.dest }}"
+      tags: [web, files]
+
+    - name: Reload systemd for the restart
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      changed_when: false
+      tags: [web]
+
+    # The directories the units write, the renderer's among them.
+    - name: Install the tmpfiles rule
+      ansible.builtin.copy:
+        src: "{{ tree }}/deploy/tmpfiles/severino-hq.conf"
+        dest: "{{ tmpfiles_dir }}/severino-hq.conf"
+        remote_src: true
+        mode: "0644"
+      tags: [files]
+
+    - name: Make what the tmpfiles rule declares
+      ansible.builtin.command:
+        argv: [systemd-tmpfiles, --create, "{{ tmpfiles_dir }}/severino-hq.conf"]
+      changed_when: false
+
+    # What follows consumes what the renderer writes.
+    - name: Render the secrets
+      ansible.builtin.systemd_service:
+        name: "{{ secrets_unit }}"
+        state: started
+
+    # Running already on a deploy, which restarted it on the release; started
+    # here on a new host, for the preflights' bridge.
+    - name: Start HQ under its unit
+      ansible.builtin.systemd_service:
+        name: "{{ web_unit }}"
+        enabled: true
+        state: started
+
+    - name: Preflight the controller's connections against this release
+      ansible.builtin.command:
+        argv: ["{{ host_program }}", "controller"]
+      changed_when: false
+
+    - name: Preflight the content index
+      ansible.builtin.command:
+        argv: [docker, exec, "{{ container }}", hq-controller, job, content.sync]
+      changed_when: false
+
+    - name: Install the release's other units
+      ansible.builtin.copy:
+        src: "{{ tree }}/deploy/systemd/{{ item }}"
+        dest: "{{ systemd_dir }}/{{ item }}"
+        remote_src: true
+        mode: "0644"
+      loop: "{{ shipped | difference(first) }}"
+      loop_control:
+        label: "{{ systemd_dir }}/{{ item }}"
+      tags: [files]
+
+    # A drop-in beside a shipped unit is the host's own, so only units are
+    # looked for.
+    - name: Find the units installed
+      ansible.builtin.find:
+        paths: "{{ systemd_dir }}"
+        patterns: "{{ unit_patterns }}"
+        file_type: file
+      register: installed
+      tags: [files]
+
+    - name: Stop the units the release no longer ships
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: false
+        state: stopped
+      loop: "{{ retired }}"
+
+    - name: Remove the units the release no longer ships
+      ansible.builtin.file:
+        path: "{{ systemd_dir }}/{{ item }}"
+        state: absent
+      loop: "{{ retired }}"
+      loop_control:
+        label: "{{ systemd_dir }}/{{ item }}"
+      tags: [files]
+
+    # The runner's account deploys, and may do nothing else as root. The image
+    # it names is checked as root, not by the rule: sudo-rs matches no pattern
+    # inside an argument, only a trailing *. A broken file in sudoers.d stops
+    # sudo for every account, so the host's own visudo passes it first.
+    - name: Install the runner's deploy rule
+      ansible.builtin.copy:
+        content: |
+          # Rendered by hq-host install: the runner deploys, and may do nothing else as root.
+          {{ host.runner.user }} ALL=(root) NOPASSWD: {{ host_program }} deploy *
+        dest: "{{ sudoers_dir }}/severino-hq-deploy"
+        mode: "0440"
+        validate: visudo -c -q -f %s
+      tags: [files]
+
+    - name: Reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      changed_when: false
+
+    # systemd reads a unit with no [Install] section as static, which the
+    # module counts as enabled already, so only the rest change.
+    - name: Enable the release's units
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: true
+      loop: "{{ units | reject('search', '@\\.') | list }}"
+      register: enabled
+
+    - name: Start every unit that installs
+      ansible.builtin.systemd_service:
+        name: "{{ item.item }}"
+        state: started
+      loop: "{{ enabled.results | rejectattr('status.UnitFileState', 'equalto', 'static') | list }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # A run queued while host.json named no automation entry rang a doorbell
+    # that started a worker that took nothing, and nothing rings it again. The
+    # worker ends at once when nothing waits.
+    - name: Start the automation worker for what waits
+      ansible.builtin.systemd_service:
+        name: "{{ automation_unit }}"
+        state: started
+        no_block: true
+      when: host.automation

@@ -18,12 +18,6 @@ func synced(t *testing.T) *fakeHost {
 	if err := f.machine.Sync(context.Background(), next); err != nil {
 		t.Fatal(err)
 	}
-	shipped, _ := Shipped(f.machine.UnitDir())
-	for _, name := range shipped {
-		if err := InstallUnit(f.machine.UnitDir(), f.machine.Systemd, name); err != nil {
-			t.Fatal(err)
-		}
-	}
 	return f
 }
 
@@ -53,12 +47,11 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.Remove(filepath.Join(f.machine.Lib, "hq", "config", "controller.json"))
-	if err := os.WriteFile(filepath.Join(f.machine.Systemd, "severino-hq-web.service"), []byte("edited\n"), 0o644); err != nil {
+	report, err := os.ReadFile(filepath.Join("testdata", "setup-check.json"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(f.machine.Systemd, "severino-hq-old.timer"), nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	f.setupReport = string(report)
 
 	drift := strings.Join(f.verify(t), "\n")
 
@@ -66,8 +59,7 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 		"deploy/bin/hq-host differs from the image's",
 		"deploy/bin/planted is not the image's",
 		"hq/config/controller.json is missing from the tree",
-		"severino-hq-web.service is not the release's",
-		"severino-hq-old.timer is not shipped by the release",
+		"Remove the units the release no longer ships: /etc/systemd/system/severino-hq-old.timer",
 	} {
 		if !strings.Contains(drift, want) {
 			t.Errorf("not reported: %s\n%s", want, drift)

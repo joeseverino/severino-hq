@@ -1,0 +1,86 @@
+package host
+
+import (
+	jsonv2 "encoding/json/v2"
+	"errors"
+	"fmt"
+	"net/url"
+	"regexp"
+)
+
+// Config is everything about one host that the repository does not hold:
+// which vault and items HQ's secrets come from, how the renderer reaches the
+// Connect server on this machine, and which runner deploys. It lives at
+// /etc/severino-hq/host.json; deploy/host.example.json shows its shape.
+type Config struct {
+	Vault   string        `json:"vault"`
+	EnvItem string        `json:"env_item"`
+	Connect ConnectConfig `json:"connect"`
+	Runner  RunnerConfig  `json:"runner"`
+	// Grants are the GitHub App tokens the controller keeps on this host
+	// beside HQ's own (Grant).
+	Grants []Grant `json:"grants,omitempty"`
+	// Automation is where the automation worker's procedures come from;
+	// a host without it runs no worker.
+	Automation *AutomationConfig `json:"automation,omitempty"`
+}
+
+// ConnectConfig is the local 1Password Connect server the renderer reads.
+type ConnectConfig struct {
+	// Unit is the service that runs Connect, which the renderer is ordered
+	// after: Connect unlocks on the first authenticated request.
+	Unit string `json:"unit"`
+	// URL is its loopback address.
+	URL string `json:"url"`
+	// Credential is the encrypted systemd credential holding the token.
+	Credential string `json:"credential"`
+}
+
+// RunnerConfig is the Actions runner that deploys to this host.
+type RunnerConfig struct {
+	Unit string `json:"unit"`
+	User string `json:"user"`
+}
+
+var (
+	unitNamed  = regexp.MustCompile(`^[A-Za-z0-9:_.@-]+\.service$`)
+	userNamed  = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+	credNamed  = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+	plainValue = regexp.MustCompile(`^[^"\\\n\r%$]+$`)
+)
+
+// ReadConfig reads and checks the host's configuration. A field it does
+// not know, a value systemd or sudo would read as something else, or a
+// Connect that is not on loopback is refused.
+func ReadConfig(data []byte) (Config, error) {
+	var config Config
+	if err := jsonv2.Unmarshal(data, &config, jsonv2.RejectUnknownMembers(true)); err != nil {
+		return Config{}, fmt.Errorf("the host configuration is not readable: %w", err)
+	}
+	for name, value := range map[string]string{"vault": config.Vault, "env_item": config.EnvItem} {
+		if !plainValue.MatchString(value) {
+			return Config{}, fmt.Errorf("%s must be set, on one line, without quotes, backslashes, %% or $", name)
+		}
+	}
+	if !unitNamed.MatchString(config.Connect.Unit) || !unitNamed.MatchString(config.Runner.Unit) {
+		return Config{}, errors.New("connect.unit and runner.unit must be service unit names")
+	}
+	if !credNamed.MatchString(config.Connect.Credential) {
+		return Config{}, errors.New("connect.credential must be a credential name")
+	}
+	if !userNamed.MatchString(config.Runner.User) || config.Runner.User == "root" {
+		return Config{}, errors.New("runner.user must be an unprivileged account name")
+	}
+	address, err := url.Parse(config.Connect.URL)
+	if err != nil || address.Scheme != "http" || address.Hostname() != "127.0.0.1" || address.Port() == "" ||
+		address.Path != "" || address.User != nil || address.RawQuery != "" {
+		return Config{}, errors.New("connect.url must be http://127.0.0.1:PORT")
+	}
+	if err := checkGrants(config.Grants); err != nil {
+		return Config{}, err
+	}
+	if err := checkAutomation(config.Automation, config.Grants); err != nil {
+		return Config{}, err
+	}
+	return config, nil
+}

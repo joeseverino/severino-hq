@@ -57,7 +57,7 @@ fork changes them in every place listed.
 [`deploy/host.example.json`](../deploy/host.example.json), holds the vault,
 Connect, the runner and any grants.
 [Install](Install.md#6-install-the-runner-and-write-hostjson) says what each
-field is set to, and `hq-host bootstrap` renders the host's drop-ins from it
+field is set to, and the host's setup renders the host's drop-ins from it
 ([Secrets](Secrets.md#bootstrap-and-ownership)).
 
 ### The vault

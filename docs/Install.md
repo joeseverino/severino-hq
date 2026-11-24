@@ -11,8 +11,9 @@ and [Secrets](Secrets.md). This page is only the order and the commands.
 
 ### The host
 
-- Linux with systemd and Docker. systemd must support `noswap` on a tmpfs
-  (the credential mount uses it).
+- Linux with systemd, Docker and `python3`. systemd must support `noswap` on
+  a tmpfs (the credential mount uses it); the setup's modules run on the
+  host's `python3`.
 - `net.ipv4.ip_unprivileged_port_start` above the port you give Connect. The
   default, 1024, is fine.
 - On a tailnet. HQ answers the tailnet and loopback and refuses everything
@@ -313,13 +314,7 @@ docker rm "$container"
 rm /root/hq-host
 ```
 
-Render the drop-ins and the runner's sudo rule from `host.json`:
-
-```sh
-/usr/local/lib/severino-hq/deploy/bin/hq-host bootstrap
-```
-
-Record the release and make the directories the units expect:
+Record the release, then set the host up for it:
 
 ```sh
 install -d -m 0755 /var/lib/severino-hq
@@ -330,39 +325,18 @@ printf '%s\n' "$IMAGE" > /var/lib/severino-hq/release
 ```
 
 ```sh
-install -d -o root -g root -m 0700 /opt/apps/severino-hq/secrets
+/usr/local/lib/severino-hq/deploy/bin/hq-host install
 ```
 
-```sh
-systemd-tmpfiles --create /usr/local/lib/severino-hq/deploy/tmpfiles/severino-hq.conf
-```
+`install` verifies and pulls the runner image the release pins, then applies
+the release's setup playbook in it ([Host setup](Deployment.md#host-setup)):
+the units, the drop-ins and the runner's sudo rule `host.json` decides, the
+directories the units write, the render, HQ under its unit, the controller and
+content preflights, and every timer and path, enabled and started. It prints
+that HQ is installed, preflighted and enabled; its full output is in
+`/var/log/severino-hq/setup.log`. A run that fails puts every unit file back.
 
-Install the credential mount, the renderer and the web unit, then start them:
-
-```sh
-install -m 0644 '/usr/local/lib/severino-hq/deploy/systemd/run-severino\x2dhq\x2dsecrets.mount' /usr/local/lib/severino-hq/deploy/systemd/severino-hq-secrets.service /usr/local/lib/severino-hq/deploy/systemd/severino-hq-web.service /etc/systemd/system/
-```
-
-```sh
-systemctl daemon-reload
-```
-
-```sh
-systemctl start 'run-severino\x2dhq\x2dsecrets.mount'
-```
-
-```sh
-systemctl start severino-hq-secrets.service
-```
-
-```sh
-systemctl start severino-hq-web.service
-```
-
-The web unit waits for the rendered environment, then returns once HQ is
-healthy.
-
-**Check:** the render succeeded and HQ answers:
+**Check:** the render succeeded, HQ answers, and the host is its release:
 
 ```sh
 cat /run/severino-hq-secrets/status.json
@@ -373,13 +347,6 @@ at least 1 if you added a connection in step 8. The document holds no secret.
 
 ```sh
 curl -fsS http://127.0.0.1:8000/health/ready/
-```
-
-Then install and enable everything else: the controller, the timers, the
-backup and root's own cosign.
-
-```sh
-/usr/local/lib/severino-hq/deploy/bin/hq-host install
 ```
 
 ```sh
@@ -543,8 +510,8 @@ HQ is installed.
 - **Releases.** A merge to `main` reaches this host through
   Compose and Deploy, after you approve it on GitHub
   ([Releasing a deploy](Deployment.md#releasing-a-deploy)).
-  Rerun `hq-host bootstrap` whenever `host.json` changes, and once after a
-  release that changes the sudo rule it renders.
+  Each deploy sets the host up again from `host.json`; rerun `hq-host install`
+  when `host.json` changes between releases.
 - **Backup.** `hq-host install` enabled the nightly backup. It needs
   `/etc/severino-hq/backup.env`, `sqlite3`, and `age` to encrypt
   ([Backup](Backup.md)).
@@ -560,14 +527,13 @@ journalctl -u severino-hq-secrets.service -n 50
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
-| `class=config` or `class=host` naming the Connect port or `ip_unprivileged_port_start` | Connect is on a port 1024 or above, or any account can bind its port | publish Connect on `127.0.0.1` below 1024, set `connect.url` to match, rerun `hq-host bootstrap` |
+| `class=config` or `class=host` naming the Connect port or `ip_unprivileged_port_start` | Connect is on a port 1024 or above, or any account can bind its port | publish Connect on `127.0.0.1` below 1024, set `connect.url` to match, rerun `hq-host install` |
 | the renderer does not start: a dependency failed | the unit in `connect.unit` failed to start, or does not exist | fix Connect's unit; check its name in `host.json` |
 | `class=connect_denied` | Connect refused the token | encrypt the right token again (step 5); check it can read the vault |
 | `class=connect_unavailable` | Connect did not answer in 75 seconds, or the vault kept changing | check `curl -fsS http://127.0.0.1:880/health`; wait for edits to finish |
 | `class=content`, "Refusing an application environment without" | the item lacks a required variable, or holds it empty; the line names each one | add it ([step 7](#7-create-the-application-environment)) |
 | `class=content`, "a vault that resolved none" | connections were installed, and the vault now holds no item with `connection_ref`; they are kept, and HQ's environment is still rendered | put the items back in the vault `host.json` names, or check `vault` names the right one |
 | `class=content`, "must resolve to exactly one item" | `env_item` matches no item, or two | make the item's title unique and equal to `env_item` |
-| the renderer fails with `status=226/NAMESPACE` | a directory it writes is missing | `install -d -o root -g root -m 0700 /opt/apps/severino-hq/secrets` |
 | HQ answers 400 | the host name is not in `DJANGO_ALLOWED_HOSTS` | add it to the item; start `severino-hq-secrets.service` |
 | `hq-host deploy` refuses the image | not a digest-pinned reference to your repository's composition, or not signed by its Compose on `main` | use the digest from step 3 |
 
