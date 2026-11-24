@@ -133,17 +133,19 @@
   --flow-basis: 30rem; display: grid; gap: var(--space-4); align-content: start; container: route / inline-size;
 }
 /* Seven equal columns: the one fixed grid here, because weeks must line up. */
-.month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+/* Its boxes are kept apart, so a day's box and its rule are a column's
+   whole width and a bar reaches across columns by them (cuts.css). */
+.month-grid { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .month-weekday { padding: 0 var(--space-2) var(--space-3); text-align: left; }
 .month-day {
+  --day-pad: var(--space-2);
+  --day-rule: 0px;
   height: 6.5rem;
-  padding: var(--space-2);
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a day keeps its week's height; it shows as many events as fit and counts the rest */
-  overflow: hidden;
+  padding: var(--day-pad);
   border-top: 1px solid var(--line-2);
   vertical-align: top;
 }
-.month-day + .month-day { border-left: 1px solid var(--line-2); }
+.month-day + .month-day { --day-rule: 1px; border-left: var(--day-rule) solid var(--line-2); }
 /* The last week closes on a rule of its own, so the month reads as ending
    there and not as running on under the card's edge. */
 .month-week:last-child > .month-day { border-bottom: 1px solid var(--line-2); }
@@ -159,7 +161,8 @@
    their own and the bars under them stay level across the week; the day
    panel lists every mark. */
 .month-day-head { display: flex; align-items: center; gap: var(--space-1); margin-bottom: var(--space-1); }
-.month-day-head > .month-mark { flex: none; }
+/* A day's marks narrow to slivers before they would leave its head. */
+.month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
 .month-date {
   display: inline-grid;
   place-items: center;
@@ -187,8 +190,14 @@
   opacity: .6;
 }
 .month-span.is-start { margin-left: 0; border-left: 3px solid var(--slot); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
-.month-span.is-end { margin-right: 0; border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+.month-span.is-end { margin-right: calc(-1 * var(--run)); border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
 .month-span.is-gap { visibility: hidden; }
+.month-span[data-reach="2"] { --reach: 2; }
+.month-span[data-reach="3"] { --reach: 3; }
+.month-span[data-reach="4"] { --reach: 4; }
+.month-span[data-reach="5"] { --reach: 5; }
+.month-span[data-reach="6"] { --reach: 6; }
+.month-span[data-reach="7"] { --reach: 7; }
 /* A title cut on its one line: its names are text the cut takes, not boxes,
    so no part of one draws past the cut, beyond the day's edge. */
 :is(.month-item > span, .month-span) :is(.token, .whole, .part) { display: contents; }
@@ -202,19 +211,15 @@
 .month-more:hover { color: var(--accent); }
 /* Compact, as the dashboard shows it: where things are, not what. Bars are
    slivers and lines fold away; the day opens the calendar for the rest. */
-.month-grid.is-compact .month-day { height: 2.5rem; padding: var(--space-1); }
+.month-grid.is-compact .month-day { --day-pad: var(--space-1); height: 2.5rem; }
 .month-grid.is-compact :is(.month-item, .month-more) { display: none; }
 .month-grid.is-compact .month-item-dot { display: inline-block; }
-/* A bar reaches across its cell's padding to meet the next, and no further. */
-.month-grid.is-compact .month-span { height: 4px; margin: 0 calc(-1 * var(--space-1)) var(--space-1); padding: 0; background: var(--slot); font-size: 0; }
-.month-grid.is-compact .month-span.is-end { margin-right: 0; }
+.month-grid.is-compact .month-span { height: 4px; padding: 0; background: var(--slot); font-size: 0; }
 .month-grid.is-compact .month-span.is-start { margin-left: 0; border-left: 0; }
 /* A day drawn small is still drawn the size of a target, so its own box is
    what is hit, and a dot that names it stands in on it. */
 .month-grid.is-compact .month-date { min-width: var(--target-min); height: var(--target-min); font-size: var(--text-2xs); }
 .month-grid.is-compact .month-mark { --mark-size: 6px; }
-/* A narrow day's marks narrow to slivers before they would leave its head. */
-.month-grid.is-compact .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
 /* A phone shows where things are, not what: dots and slivers, and the day
    panel under the month says the rest. */
 @container month (max-width: 34rem) {
@@ -222,7 +227,6 @@
   :is(.month-item, .month-more) { display: none; }
   .month-item-dot { display: inline-block; }
   .month-mark { --mark-size: 6px; }
-  .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
   .month-span { height: 4px; padding: 0; background: var(--slot); font-size: 0; }
   .month-date { min-width: var(--target-min); height: var(--target-min); }
   .month-of { display: none; }

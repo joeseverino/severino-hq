@@ -21,6 +21,8 @@ CELLS = (
   // ellipsis, the cell itself cut by its kind) shows only as far as that box,
   // which is held on its own. A popover or a modal dialog shown is drawn in
   // the top layer, over the page, so the cell it sits in does not hold it.
+  // What reads across the cells after its own (a month's bar, `data-reach`
+  // of them) stays in those.
   const found = [];
   const cut = (el, cell) => {
     for (let b = el.parentElement; b && b !== cell.parentElement; b = b.parentElement) {
@@ -29,10 +31,13 @@ CELLS = (
     return false;
   };
   for (const cell of document.querySelectorAll('main td, main th')) {
-    const edge = box(cell).right;
+    const row = [...cell.parentElement.children];
     for (const el of cell.querySelectorAll('*')) {
       const r = box(el);
       if (r.width < 2 || r.height < 2 || !el.checkVisibility() || el.closest(':popover-open, :modal')) continue;
+      const across = el.closest('[data-reach]');
+      const reach = across && cell.contains(across) ? Number(across.dataset.reach) : 1;
+      const edge = box(row[Math.min(row.indexOf(cell) + reach, row.length) - 1]).right;
       if (r.right > edge + 1 && !cut(el, cell)) {
         found.push(`${describe(el)} runs ${Math.round(r.right - edge)}px past its cell: ${el.textContent.trim().slice(0, 40)}`);
       }

@@ -187,12 +187,14 @@ class Placed:
 
 @dataclass(frozen=True, slots=True)
 class SpanPiece:
-    """One cell's part of a span: titled where it starts or a week begins."""
+    """One cell's part of a span. Where the span starts or a week begins, its
+    piece is the bar and its title across the ``reach`` days it runs on in
+    that week; the days after it hold its lane, ``reach`` 0."""
 
     placed: Placed
     starts_here: bool
     ends_here: bool
-    titled: bool
+    reach: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -522,17 +524,7 @@ def _cell(
     marks = tuple(item for item in on_day if item.event.mark)
     items = [item for item in on_day if not item.event.mark]
     drawn, hidden = lanes[:CELL_ROWS], lanes[CELL_ROWS:]
-    pieces = tuple(
-        None
-        if lane[index] is None
-        else SpanPiece(
-            placed=lane[index],
-            starts_here=lane[index].event.first_day == day,
-            ends_here=lane[index].event.last_day == day,
-            titled=lane[index].event.first_day == day or index == 0,
-        )
-        for lane in drawn
-    )
+    pieces = tuple(None if (item := lane[index]) is None else _piece(item, lane, index, day) for lane in drawn)
     # A week's lanes take their rows in every cell of it, so bars stay level;
     # what is left holds lines, and the rest is counted, hidden bars included.
     room = max(CELL_ROWS - len(drawn), 0)
@@ -545,6 +537,18 @@ def _cell(
         items=tuple(items[:room]),
         lanes=pieces,
         more=max(len(items) - room, 0) + sum(lane[index] is not None for lane in hidden),
+    )
+
+
+def _piece(item: Placed, lane: list[Placed | None], index: int, day: date) -> SpanPiece:
+    if item.event.first_day != day and index > 0:
+        return SpanPiece(item, starts_here=False, ends_here=False)
+    reach = next((ahead for ahead, other in enumerate(lane[index:]) if other is not item), len(lane) - index)
+    return SpanPiece(
+        item,
+        starts_here=item.event.first_day == day,
+        ends_here=item.event.last_day == day + timedelta(days=reach - 1),
+        reach=reach,
     )
 
 

@@ -28,10 +28,12 @@ and a table cell outside a grid takes no aria-selected.
               {% for placed in cell.items %}<a class="swatch month-mark month-item-dot series-{{ placed.source.slot }}{% if placed.event.state %} is-{{ placed.event.state }}{% endif %}" data-hit="coarse" data-target-equivalent="{{ cell.anchor }}" href="{{ placed.event.url|default:cell.url }}" data-tip="{% if placed.event.time_label %}{{ placed.event.time_label }} {% endif %}{{ placed.event.title }}{% if placed.event.detail %} · {{ placed.event.detail }}{% endif %}"><span class="visually-hidden">{{ placed.source.label }}: {% if placed.event.time_label %}{{ placed.event.time_label }} {% endif %}{{ placed.event.title }}</span></a>{% endfor %}
             </div>
             {% for piece in cell.lanes %}
-              {% if piece %}
-                <a class="month-span series-{{ piece.placed.source.slot }}{% if piece.starts_here %} is-start{% endif %}{% if piece.ends_here %} is-end{% endif %}" data-hit="coarse" data-target-equivalent="{{ cell.anchor }}" href="{{ piece.placed.event.url|default:cell.url }}" data-tip="{{ piece.placed.event.title }}{% if piece.placed.event.detail %} · {{ piece.placed.event.detail }}{% endif %}">{% if piece.titled %}{{ piece.placed.event.title }}{% else %}<span class="visually-hidden">{{ piece.placed.event.title }}</span>{% endif %}</a>
+              {% if piece.reach %}
+                <a class="month-span series-{{ piece.placed.source.slot }}{% if piece.starts_here %} is-start{% endif %}{% if piece.ends_here %} is-end{% endif %}" data-reach="{{ piece.reach }}" data-hit="coarse" data-target-equivalent="{{ cell.anchor }}" href="{{ piece.placed.event.url|default:cell.url }}" data-tip="{{ piece.placed.event.title }}{% if piece.placed.event.detail %} · {{ piece.placed.event.detail }}{% endif %}">{{ piece.placed.event.title }}</a>
               {% else %}
                 <span class="month-span is-gap" aria-hidden="true"></span>
+                {% comment %}A bar titled on an earlier day of the week runs over this one, which still names it to a reader.{% endcomment %}
+                {% if piece %}<span class="visually-hidden">{{ piece.placed.event.title }}</span>{% endif %}
               {% endif %}
             {% endfor %}
             {% for placed in cell.items %}

@@ -169,14 +169,19 @@
 .list-rows .row-snippet :is(.token, .whole) { display: inline; }
 
 /* The calendar: a day's events on one line each, inside the day. */
-/* A span is one bar across its days: rounded only where it starts and ends,
-   titled where it starts or where a week begins. A gap holds the lane open.
-   Its tint is strong enough that the palest source still shows on a
-   weekend's fill. */
+/* A span is one bar across its days in a week, drawn from the day it is
+   titled on (where it starts or a week begins) over the `data-reach` days it
+   runs on: it reaches past its own day by that many days' columns, each a
+   day's box and its rule (layout.css), and its title runs the bar's length.
+   Placed, it draws over the days after its own and their rules.
+   Rounded only where it starts and ends. A gap holds the lane open. Its tint
+   is strong enough that the palest source still shows on a weekend's fill. */
 .month-span {
+  --run: calc((var(--reach, 1) - 1) * (100% + 2 * var(--day-pad) + var(--day-rule)));
+  position: relative;
   display: block;
   height: 1.25rem;
-  margin: 0 calc(-1 * var(--space-2)) var(--space-1);
+  margin: 0 calc(-1 * (var(--run) + var(--day-pad))) var(--space-1) calc(-1 * var(--day-pad));
   padding: 0 var(--space-3);
   background: color-mix(in srgb, var(--slot) 22%, var(--surface));
   color: var(--ink);
