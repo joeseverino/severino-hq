@@ -223,8 +223,10 @@
          that, and the value never narrows past its longest run that cannot
          break (`min-content`, a count bound to its noun), so a long label never
          squeezes its value to a letter a line or parts a number from its unit. */
-      & > .fact { grid-column: 1 / -1; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); align-items: baseline; gap: var(--space-2) var(--space-4); }
-      & dt { font-size: var(--text-sm); }
+      & > .fact { grid-column: 1 / -1; grid-row: auto; display: grid; grid-template-columns: fit-content(60%) minmax(min-content, 1fr); grid-template-rows: none; align-items: baseline; gap: var(--space-2) var(--space-4); }
+      /* A row of its own, the label stands on its value's first line rather
+         than at the foot of a row the band's cells share. */
+      & > .fact > dt { align-self: auto; font-size: var(--text-sm); }
       & .fact-value { text-align: right; font-size: var(--text-md); }
       & .fact-detail { grid-column: 1 / -1; }
       /* A value's dots stand before it, so the value keeps the right edge. */

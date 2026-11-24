@@ -327,8 +327,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 /* A band of facts beside a page's title (the dashboard's glance) stands on the page's ground: beside the title while its facts fit there, on a line of its own under it, from the page's edge, where not. */
 :is(.page-head, .page-head-copy) > :has(> .facts-band) { flex: 1 1 32rem; min-width: 0; }
 .page-head .facts-band { margin-block: 0; }
-/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; in a head under 30rem they stand from the page's edge, as many to a row as a label beside its value fits, each its label beside its value over its note, whose run wraps whole parts to the lines it needs. */
-@container band (width >= 24rem) { .page-head .facts-band > .fact { justify-self: center; } }
+/* There each reading stands at the middle of its column, so the readings spread through the room beside the greeting rather than crowding it; in a head under 30rem they stand from the page's edge, as many to a row as a label beside its value fits, each its label beside its value over its note, whose run wraps whole parts to the lines it needs. The fact keeps its column's width and centers its own content, since a grid item shrunk to fit and centered is sized short of the lines its content then lays out (Chromium), which run past the column. */
+@container band (width >= 24rem) { .page-head .facts-band > .fact { justify-content: center; } }
 /* Fewer than four readings take a column each as wide as four would, from
    the band's start, so two never stand at the far ends of the room with
    nothing between them. */
