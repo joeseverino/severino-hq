@@ -14,6 +14,7 @@ from .connections import ConnectionAbility, ConnectionSpec
 from .contracts import route_url
 from .entity_links import entity_link
 from .facts import in_zone
+from .finding_checks import check_url
 from .findings import finding_rules
 from .integrations import held_graph
 from .labels import dotted
@@ -178,11 +179,6 @@ def _resource_url(spec: ResourceSpec) -> str:
 def _lens_url(name: str) -> str:
     base = route_url("control_plane:topology")
     return with_query(base, {"lens": name}) if base else ""
-
-
-def _finding_url(name: str) -> str:
-    base = route_url("control_plane:findings")
-    return with_query(base, {"rule": name}) if base else ""
 
 
 def _live_connection_url(group, connection) -> str:
@@ -443,7 +439,7 @@ def _questions(principal: Principal) -> tuple[tuple[DiscoveryItem, ...], tuple[D
             name=rule.name,
             label=rule.title,
             summary="",
-            url=_finding_url(rule.name),
+            url=check_url(rule.name),
             destination_label="",
             badges=(rule.severity.urgency,),
         )

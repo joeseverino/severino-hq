@@ -26,6 +26,16 @@ class Check:
     open: int
 
 
+def _anchor(name: str) -> str:
+    return f"check-{name}"
+
+
+def check_url(name: str) -> str:
+    """Where the check named ``name`` is read: its row on the Checks page."""
+
+    return f"{reverse('control_plane:checks')}#{_anchor(name)}"
+
+
 def _lines(*said: str) -> Cell:
     """Each of ``said`` on a line of its own."""
 
@@ -85,7 +95,10 @@ def checks(principal: Principal) -> DataTable:
     for rule in finding_rules():
         check = Check(rule, raised[rule.name])
         grouped.setdefault(rule.domain or INFRASTRUCTURE, []).append(
-            Row(tuple(column.cell(check) for column in COLUMNS if column.cell))
+            Row(
+                tuple(column.cell(check) for column in COLUMNS if column.cell),
+                id=_anchor(rule.name),
+            )
         )
     return DataTable(
         "Checks",

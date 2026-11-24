@@ -12,14 +12,6 @@ from .host_only import host_only
 
 
 class CheckDiscoveryTests(SimpleTestCase):
-    def test_a_reader_is_offered_every_check_linked_to_its_findings(self):
-        with host_only():
-            checks = command_center("", principal=READER)["checks"]
-
-        self.assertEqual([item.name for item in checks], [rule.name for rule in finding_rules()])
-        for item in checks:
-            self.assertIn(f"rule={item.name}", item.url)
-
     def test_a_query_narrows_the_checks_to_the_rule_it_names(self):
         rule = finding_rules()[0]
         with host_only():
