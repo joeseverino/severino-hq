@@ -2,7 +2,6 @@
 
 import re
 from typing import Any, ClassVar, override
-lazy from datetime import timedelta
 
 from django import forms
 from django.conf import settings
@@ -10,7 +9,6 @@ from django.contrib.auth.views import LoginView
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.text import capfirst
 from django.views.generic import TemplateView, View
 
@@ -382,16 +380,15 @@ class AgentPolicyView(PageMixin, TemplateView):
         ]
         context["device_groups"] = agent_tables.devices(device_groups) if device_groups else None
         context["recent_days"] = agent_activity.RECENT.days
-        # Each agent's latest events, drawn as the audit log draws its rows.
+        # Each client's latest events, drawn as the audit log draws its rows,
+        # once however many people signed it in: an audit row names the client.
+        by_client = {standing.identity.client_id: standing.activity for standing in standings}
         context["agent_events"] = tuple(
-            history.HistoryGroup(
-                tuple(history.entries(list(standing.activity.latest))),
-                standing.identity.client_id,
-                len(standing.activity.latest),
-            )
-            for standing in standings
-            if standing.activity.latest
+            history.HistoryGroup(tuple(history.entries(list(activity.latest))), client, len(activity.latest))
+            for client, activity in by_client.items()
+            if activity.latest
         )
+        context["refused_count"] = sum(activity.refused for activity in by_client.values())
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
@@ -406,7 +403,6 @@ class AgentPolicyView(PageMixin, TemplateView):
             # no field: it carries what was wrong with a save, said over the tables.
             context.setdefault("form", forms.Form())
         context["awaiting_count"] = len(awaiting_ids())
-        context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context
 
     @staticmethod

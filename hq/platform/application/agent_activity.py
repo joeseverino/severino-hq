@@ -376,12 +376,6 @@ def recent_activity(clients: list[str]) -> dict[str, Activity]:
     return {agent: replace(_counts(vars(latest[0])), latest=tuple(latest)) for agent, latest in found.items()}
 
 
-def refused_since(since: datetime) -> int:
-    """Every call refused since ``since``, by any actor, counted as the Agents page's rows count them."""
-
-    return AuditLog.objects.filter(DENIED, created_at__gte=since).aggregate(refused=_refusals())["refused"] or 0
-
-
 def _refusals(among: Q | None = None) -> Sum:
     return Sum(Case(When(DENIED & among if among else DENIED, then=_each()), default=Value(0)))
 

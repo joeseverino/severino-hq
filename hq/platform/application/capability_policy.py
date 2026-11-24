@@ -314,11 +314,10 @@ def columns() -> tuple[Column, ...]:
     return tuple(
         Column(
             subject_of(identity.client_id, identity.person_key),
-            identity.client_id,
-            dotted(
-                *(interface_label(interface) for interface in identity.interfaces),
-                *(() if identity.person is None else (f"for {identity.person.get_username()}",)),
-            ),
+            # As its row on the Agents page reads: one client two people signed
+            # in is two columns, each named for its person.
+            str(identity),
+            dotted(*(interface_label(interface) for interface in identity.interfaces)),
             identity,
         )
         for identity in AgentIdentity.objects.select_related("person")
