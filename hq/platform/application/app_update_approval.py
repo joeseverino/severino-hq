@@ -327,7 +327,7 @@ def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> Operat
         raise RecordNotFound("Every container of that app runs what its default branch pins.")
     if (repositories()[command.repository].head or {}).get("sha") != command.head_sha:
         raise PolicyError("Its default branch has a new head since you looked. Look again.")
-    standing = _apply_standing(manifest.id, command.head_sha)
+    standing = _apply_standing(manifest.id, command.head_sha, items)
     if standing is not None and standing.taken:
         raise PolicyError("This update is already applied at that head, and its card says where it stands.")
     hosts = applied_on(manifest, items)
@@ -444,7 +444,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             execution_notes=(
                 "Refuse unless one adopted playbook applies app updates and you may run it.",
                 "Refuse an app whose containers each run what the default branch pins, or a head that moved.",
-                "Refuse while a run of that head waits or works, or once one applied it.",
+                "Refuse while a run of that head waits or works, or once one applied it, until the app is read again.",
                 "Refuse where a container of the app runs on a machine the playbook does not run on.",
                 "Queue one run of the playbook with the head as its revision, as you.",
                 "When an agent asks, it waits for an operator's approval.",
@@ -543,9 +543,11 @@ def _applied(merge: OperationRequest, first: str) -> MergeStanding:
     return replace(standing, words=f"Merged, {lower_first(standing.words)}", taken=True)
 
 
-def _apply_standing(operation: str, revision: str) -> MergeStanding | None:
+def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] = ()) -> MergeStanding | None:
     """How the newest run of the playbook ``operation`` that applied (rather
-    than previewed) the commit ``revision`` stands; None before one is asked."""
+    than previewed) the commit ``revision`` stands; None before one is asked,
+    and once ``items``, which run a pin from before it, were read after it
+    applied, since what they run says it no longer holds."""
 
     apply = (
         OperationRequest.objects.filter(
@@ -563,6 +565,9 @@ def _apply_standing(operation: str, revision: str) -> MergeStanding | None:
     if apply.state in _ACTIVE:
         return MergeStanding("Applying", Tone.ATTENTION, url, taken=True)
     if apply.state == OperationRequest.State.SUCCEEDED:
+        done = apply.completed_at
+        if done is not None and any(item.running.observed_at > done for item in items):
+            return None
         return MergeStanding("Applied", Tone.GOOD, url, taken=True)
     step, said = stopped_at(apply)
     return MergeStanding("Not applied", Tone.SERIOUS, url, step=step, said=said)
@@ -611,7 +616,7 @@ def apply_of(repository: str, head: str, items: tuple[Container, ...]) -> Approv
         manifest = applier()
     except PolicyError as refusal:
         return Approval(None, str(refusal), adopt=True)
-    return _approval(_apply_standing(manifest.id, head), items, "", f"Applies {repository} at {head[:7]}")
+    return _approval(_apply_standing(manifest.id, head, items), items, "", f"Applies {repository} at {head[:7]}")
 
 
 def _approval(standing: MergeStanding | None, items: tuple[Container, ...], refused: str, does: str) -> Approval:

@@ -375,6 +375,22 @@ class ApproveUpdateTests(TestCase):
         container = self.container_page().context["container"]
         self.assertEqual((container["state"].standing.words, container["act"]), ("Applied", None))
 
+    def test_a_container_read_running_an_older_pin_after_it_applied_is_applied_again(self):
+        from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderInventory
+
+        self.merged()
+        self.worked()
+        self.merged_on_main()
+
+        ProviderInventory.objects.filter(kind="portainer.container").update(observed_at=timezone.now())
+
+        apply = self.container_page().context["container"]["act"]
+        self.assertIsNotNone(apply)
+        self.assertEqual(self.client.post(apply.url, {"__retry_key": "example-apply"}).status_code, 302)
+        self.assertEqual(self.applies().count(), 2)
+
     def test_a_replayed_settle_queues_no_second_run(self):
         from ..app_update_approval import succeeded
 

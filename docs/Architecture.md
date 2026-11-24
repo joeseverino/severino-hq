@@ -1579,7 +1579,8 @@ holds keeps the upgrade plan's steps by hand. An action is offered only when
 nothing holds it, so a page never shows a press the capability would refuse:
 a machine the playbook does not run on is refused by Approve and Apply at
 their own boundary (`applied_on`). While a step HQ queued works, or once it
-applied, the update asks nothing of anyone and raises no finding
+applied and until a reading of the containers since says they still run an
+older pin, the update asks nothing of anyone and raises no finding
 (`UpdateState.at_work`). A preview or an apply that ended badly names the step
 it stopped on and what it said.
 
