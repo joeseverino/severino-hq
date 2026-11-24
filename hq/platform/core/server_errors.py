@@ -17,10 +17,10 @@ from typing import override
 from django.db import transaction
 from django.utils.text import Truncator
 
+from hq.platform.core.logging import JsonFormatter, logged_failure
 lazy from hq.platform.application import request_context
 lazy from hq.platform.application.request_identity import signed_in
 
-from .logging import JsonFormatter, logged_failure
 from .tracing import NO_TRACE, trace_id
 lazy from . import speculation
 lazy from .attribution import bound
