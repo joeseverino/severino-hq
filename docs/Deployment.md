@@ -441,7 +441,9 @@ nothing. `hq-host deploy`:
    minutes for a controller run or secret render already in flight.
 7. Replaces the tree with the image's, installs its web unit, records the
    image and restarts `severino-hq-web.service`, which returns once HQ is
-   healthy on it.
+   healthy on it. The old HQ cuts a request or stream still open at its
+   graceful bound (`GRACEFUL_SHUTDOWN_SECONDS` in `hq/config/serve.py`), so
+   production is down for that and the new image's boot.
 8. Runs the new tree's `hq-host install`: the controller preflight is the
    release's first pass against the new bridge.
 9. Starts what step 6 stopped.

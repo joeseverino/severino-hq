@@ -23,6 +23,8 @@ from typing import Any, override
 import uvicorn
 from uvicorn.protocols.http.h11_impl import H11Protocol
 
+from hq.config.serve import GRACEFUL_SHUTDOWN_SECONDS
+
 logger = logging.getLogger("severino.unix_server")
 
 SOCKET_MODE = 0o600
@@ -143,6 +145,8 @@ async def serving(application: Any, path: str) -> AsyncIterator[None]:
         lifespan="off",
         log_config=None,
         limit_concurrency=CONCURRENT_CALLS,
+        # The web's lifespan ends with this server, so HQ's stop waits on it.
+        timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS,
     )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, name="unix-server", daemon=True)

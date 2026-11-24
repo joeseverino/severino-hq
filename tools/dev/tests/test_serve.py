@@ -49,9 +49,11 @@ class ListenersTests(SimpleTestCase):
 
 
 class ServeTests(SimpleTestCase):
-    def test_it_serves_the_development_application_without_reading_proxy_headers(self):
-        """The application reads its proxy's forwarded headers itself, after recording the peer they replace."""
+    def test_it_serves_the_development_application_as_the_image_serves_it(self):
+        """The application reads its proxy's forwarded headers itself, after recording the peer they
+        replace, and a reload stops the server without waiting on a stream still open."""
 
+        from hq.config.serve import GRACEFUL_SHUTDOWN_SECONDS
         from tools.dev import serve
 
         with (
@@ -66,6 +68,7 @@ class ServeTests(SimpleTestCase):
 
         self.assertEqual(configured.call_args.args, (serve.APPLICATION,))
         self.assertIs(configured.call_args.kwargs["proxy_headers"], False)
+        self.assertEqual(configured.call_args.kwargs.get("timeout_graceful_shutdown"), GRACEFUL_SHUTDOWN_SECONDS)
 
     def bound(self, host: str, port: int) -> list[socket.socket]:
         sock = socket.create_server((host, port))
