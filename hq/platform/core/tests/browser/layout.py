@@ -1,6 +1,5 @@
 """The layout rules held over the stress estate, which the sweeps run."""
 
-import json
 from time import perf_counter
 from typing import override
 
@@ -134,8 +133,7 @@ class LayoutBrowserTests(BrowserGate):
         anchor shown in turn beside its opener."""
 
         width = self.page.viewport_size["width"]
-        if found := self.with_each_anchored_popover(lambda: self.findings(name, width)):
-            self.fail(json.dumps(found, indent=1))
+        self.assertEqual(self.with_each_anchored_popover(lambda: self.findings(name, width)), {})
 
     def with_each_anchored_popover(self, read):
         """What ``read`` finds, by check, with one popover of each kind hung
@@ -196,15 +194,13 @@ class LayoutBrowserTests(BrowserGate):
         """Text and the edges of fields and buttons against what they sit
         on, in the palette the page is drawn in."""
 
-        if found := {check: said for check, said in self.palette().items() if said}:
-            self.fail(json.dumps(found, indent=1))
+        self.assertEqual({check: said for check, said in self.palette().items() if said}, {})
 
     def every_layout_check_holds(self, name):
         """Every check the layout rules make, on the page as a reader has it:
         what `dev:look --rule survey` reports, held."""
 
-        if found := self.findings(name, self.page.viewport_size["width"]):
-            self.fail(json.dumps(found, indent=1))
+        self.assertEqual(self.findings(name, self.page.viewport_size["width"]), {})
 
     # With script: the page a person reads, sorted and selectable.
 

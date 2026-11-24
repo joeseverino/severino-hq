@@ -12,7 +12,6 @@ Each page is rendered once, opened once per width, and every check runs on
 that one load; a finding names its check, page, width and theme.
 """
 
-import json
 import re
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -322,9 +321,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     found |= self.opened(path, width)
                     found["unanswered"], self.unanswered = self.unanswered, []
                     found["refused"] = self.refusals_so_far()
-                    failed = {check: said for check, said in found.items() if said}
-                    if failed:
-                        self.fail(json.dumps(failed, indent=1))
+                    self.assertEqual({check: said for check, said in found.items() if said}, {})
         if webkit:
             self.a_refused_page_is_heard_after_every_other()
 
