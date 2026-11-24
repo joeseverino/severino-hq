@@ -227,6 +227,17 @@
       /* A row of its own, the label stands on its value's first line rather
          than at the foot of a row the band's cells share. */
       & > .fact > dt { align-self: auto; font-size: var(--text-sm); }
+      /* An identifier does not wrap as words do, so a fact whose value holds
+         one keeps its value beside its label only while the value fits there
+         whole, in whatever face draws it, and gives it a line of its own,
+         still at the right edge, where it does not. */
+      & > .fact:has(> .fact-value code) {
+        display: flex; flex-flow: row wrap;
+        & > dt { flex: 1 1 auto; }
+        & > .fact-value { margin-inline-start: auto; }
+        & > .fact-detail { flex-basis: 100%; }
+        & .change { justify-content: end; }
+      }
       & .fact-value { text-align: right; font-size: var(--text-md); }
       & .fact-detail { grid-column: 1 / -1; }
       /* A value's dots stand before it, so the value keeps the right edge. */

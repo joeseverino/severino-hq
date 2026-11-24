@@ -222,8 +222,9 @@ CHANGE = _part(
     newer release, an installed package and the version that fixes it) is `{% include
     "partials/_change.html" with from=… to=… %}`, with `code=True` for identifiers and `url` to link
     the new value. Old value, arrow and new value share one baseline. A narrow line breaks only between
-    the two values, with the arrow kept beside the new one, and a reader hears "1.2.3 to 1.3.0" rather
-    than an arrow.
+    the two values, with the arrow kept beside the new one, or on the line before it where the two do
+    not fit together, so a value breaks only where it is wider than its line alone. A reader hears
+    "1.2.3 to 1.3.0" rather than an arrow.
     """,
     states=records.CHANGE_STATES,
 )
