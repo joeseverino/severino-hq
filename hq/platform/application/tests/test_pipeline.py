@@ -229,14 +229,16 @@ class BrowserInstallTests(SimpleTestCase):
         fails here rather than downloading at run time. Pinned by digest, which
         Renovate moves with the tag. The image is built on the runner's own Ubuntu
         release, since setup-python takes the runner's tool cache, whose Python
-        links against that release's libraries."""
+        links against that release's libraries. Only an Ubuntu runner takes a
+        container, so a job on macOS, whose browsers draw in its own fonts,
+        downloads them at the release the lock pins (setup:browser)."""
         tasks = mise_tasks()
         gates = {name for name, task in tasks.items() if name != BROWSER_SETUP and needs_a_browser(task)}
         codenames = {"ubuntu-24.04": "noble", "ubuntu-26.04": "resolute"}
         checked = 0
         for path, name, job in all_jobs():
             ran = {task for step in steps(job) for task in tasks if any(p.fullmatch(task) for p in step_tasks(step))}
-            if not gates & ran:
+            if not gates & ran or str(job.get("runs-on")).startswith("macos-"):
                 continue
             checked += 1
             with self.subTest(workflow=path, job=name):
@@ -750,15 +752,18 @@ class WorkflowSecrecyTests(SimpleTestCase):
 @tag("source")
 class GateReferenceTests(SimpleTestCase):
     def test_every_browser_gate_has_a_leg_and_every_leg_a_gate(self):
-        """The Browser job runs each ``browser:*`` gate, whole or in shares;
-        a gate with no leg never runs in CI, and a split gate runs each of its
-        shares, 1/n through n/n, once (``shards``)."""
-        browser = jobs(workflow("ci.yml"))["browser"]
+        """The Browser job and its macOS legs run each ``browser:*`` gate,
+        whole or in shares; a gate with no leg never runs in CI, and a split
+        gate runs each of its shares, 1/n through n/n, once (``shards``)."""
+        ci = jobs(workflow("ci.yml"))
+        browser = ci["browser"]
         legs = browser["strategy"]["matrix"]["include"]
         (gate,) = [step for step in browser["steps"] if "GATE" in step.get("env", {})]
         self.assertEqual(gate["env"].get("HQ_BROWSER_SHARD"), "${{ matrix.shard }}")
+        macos = ci["browser-macos"]["strategy"]["matrix"]["include"]
         self.assertEqual(
-            {f"browser:{leg['gate']}" for leg in legs}, {name for name in mise_tasks() if name.startswith("browser:")}
+            {f"browser:{leg['gate']}" for leg in [*legs, *macos]},
+            {name for name in mise_tasks() if name.startswith("browser:")},
         )
         for name in {leg["gate"] for leg in legs}:
             said = [leg.get("shard") for leg in legs if leg["gate"] == name]

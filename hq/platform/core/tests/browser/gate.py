@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import pickle
+import platform
 import re
 import shlex
 import sys
@@ -94,6 +95,10 @@ _ACTION_WITHIN = 30_000
 # A browser that never comes up fails its class rather than holding the heavy
 # turn for Playwright's own three minutes.
 _LAUNCH_WITHIN = 30_000
+
+# The system a page is drawn on, named in each finding: an engine draws in
+# that system's fonts, and macOS's monospace face is wider than Linux's.
+MACHINE = {"Darwin": "macOS"}.get(platform.system(), platform.system())
 
 # What a running test holds that holds the test itself; the parent has no use
 # for either, and Django sends them as None.
@@ -861,7 +866,7 @@ class BrowserGate(SimpleTestCase):
 
     def recorded(self, params, err):
         """A failed subtest's findings as the run records them, each with
-        where it was found (the engine, the class, the page, the width and
+        where it was found (the engine and its system, the class, the page, the width and
         the state), the Part that draws what it names and the look that finds
         it again, and whether any is new to this test, so its page is shot;
         None for a subtest that passed or failed saying no findings."""
@@ -871,7 +876,7 @@ class BrowserGate(SimpleTestCase):
         rule = params.get("rule") or "findings"
         if not (found := findings_in(str(err[1]), rule)) or not any(found.values()):
             return None
-        place = f"{browser_engine()} {type(self).__name__}: {self.where_found(params)}"
+        place = f"{browser_engine()} on {MACHINE} {type(self).__name__}: {self.where_found(params)}"
         again = self.rerun(params, found)
         findings = [
             verdicts.Finding(check, said, place, *drawn_by(check, said), self.id(), again)
