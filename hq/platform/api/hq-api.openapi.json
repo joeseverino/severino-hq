@@ -306,6 +306,7 @@
               "object_type",
               "object_id",
               "object_repr",
+              "title",
               "message",
               "actor",
               "source",
@@ -6936,6 +6937,10 @@
             "description": "Where it was recorded: `hq`, `outside`, `deploy` or `container`.",
             "type": "string"
           },
+          "title": {
+            "description": "What the row was, as the log titles it: its record, else its operation.",
+            "type": "string"
+          },
           "url": {
             "$ref": "#/components/schemas/PageUrl"
           }
@@ -6949,6 +6954,7 @@
           "object_type",
           "object_id",
           "object_repr",
+          "title",
           "message",
           "actor",
           "source",
@@ -7022,6 +7028,9 @@
           },
           "source": {
             "$ref": "#/components/schemas/AuditItem/properties/source"
+          },
+          "title": {
+            "$ref": "#/components/schemas/AuditItem/properties/title"
           },
           "url": {
             "$ref": "#/components/schemas/PageUrl"
@@ -13522,6 +13531,7 @@
         "description": "What running a command does, least consequential first.",
         "enum": [
           "read",
+          "read_request",
           "remote_write",
           "infrastructure_change",
           "destructive"
@@ -32073,7 +32083,7 @@
     }
   },
   "info": {
-    "description": "HQ's versioned machine API, over the same capabilities the web UI, CLI and MCP run. Derived from HQ's routes and its capability, resource and domain registries.\n\nWhat `x-hq-effect` says running it does:\n\n- `read`: Reads and answers; changes nothing.\n- `remote_write`: Changes a record, in HQ or through a connection HQ holds.\n- `infrastructure_change`: Changes a live system HQ manages, such as a DNS record, a proxy route or a container.\n- `destructive`: Stops or deletes something; running it again does not bring it back.",
+    "description": "HQ's versioned machine API, over the same capabilities the web UI, CLI and MCP run. Derived from HQ's routes and its capability, resource and domain registries.\n\nWhat `x-hq-effect` says running it does:\n\n- `read`: Reads and answers; changes nothing.\n- `read_request`: Asks for a fresh reading, which the controller takes with its own credentials; changes nothing it reads.\n- `remote_write`: Changes a record, in HQ or through a connection HQ holds.\n- `infrastructure_change`: Changes a live system HQ manages, such as a DNS record, a proxy route or a container.\n- `destructive`: Stops or deletes something; running it again does not bring it back.",
     "title": "Severino HQ machine API",
     "version": "2"
   },
@@ -33957,7 +33967,7 @@
           "hq.dashboard"
         ],
         "x-hq-capability": "dashboard.panels.refresh",
-        "x-hq-effect": "infrastructure_change"
+        "x-hq-effect": "read_request"
       }
     },
     "/api/v2/capabilities/dashboard.panels.refresh_due/": {
@@ -34032,7 +34042,7 @@
           "hq.dashboard"
         ],
         "x-hq-capability": "dashboard.panels.refresh_due",
-        "x-hq-effect": "infrastructure_change"
+        "x-hq-effect": "read_request"
       }
     },
     "/api/v2/capabilities/dashboard.settings.update/": {
@@ -34708,7 +34718,7 @@
           "hq.watching"
         ],
         "x-hq-capability": "github.profile.read",
-        "x-hq-effect": "infrastructure_change"
+        "x-hq-effect": "read_request"
       }
     },
     "/api/v2/capabilities/hq.import/": {
@@ -34934,7 +34944,7 @@
           "hq.connections"
         ],
         "x-hq-capability": "infrastructure.controller.refresh",
-        "x-hq-effect": "infrastructure_change"
+        "x-hq-effect": "read_request"
       }
     },
     "/api/v2/capabilities/infrastructure.resource.accept_observed/": {
@@ -37096,7 +37106,7 @@
           "hq.connections"
         ],
         "x-hq-capability": "visit.refresh",
-        "x-hq-effect": "infrastructure_change"
+        "x-hq-effect": "read_request"
       }
     },
     "/api/v2/capabilities/{name}/": {

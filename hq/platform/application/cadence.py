@@ -907,7 +907,7 @@ def request_controller_sweep(
 CONTROLLER_REFRESH = CapabilitySpec(
     READ_NOW_CAPABILITY,
     "Ask HQ to read everything again now.",
-    Effect.INFRASTRUCTURE_CHANGE,
+    Effect.READ_REQUEST,
     Capability.MANAGE_INFRASTRUCTURE,
     ControllerSweepCommand,
     request_controller_sweep,

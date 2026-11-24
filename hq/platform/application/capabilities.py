@@ -59,7 +59,7 @@ from .security import (
     could_ever_hold,
     is_interactive,
 )
-lazy from . import agent_registry, automation_runs
+lazy from . import agent_registry, automation_runs, history
 lazy from .cadence import ringing
 
 
@@ -757,10 +757,13 @@ def _run(
         result = spec.handler(command, **arguments)
         if spec.effect.changes and not written:
             # A write whose handler recorded no row still leaves its act: what
-            # ran, under the row's operation, and how it ended.
+            # ran, under the row's operation, and how it ended. An ask for a
+            # reading is filed with the other read requests.
             record_event(
                 action=AuditLog.Action.DONE if result.get("ok", True) else AuditLog.Action.FAILED,
-                type_label=CAPABILITY_AUDIT_TYPE,
+                type_label=(
+                    history.read_request_type() if spec.effect is Effect.READ_REQUEST else CAPABILITY_AUDIT_TYPE
+                ),
                 message=str(result.get("message") or ""),
                 required=True,
             )

@@ -566,7 +566,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             VISIT_REFRESH,
             "Ask again for the readings one page is made of, where they are due.",
-            Effect.INFRASTRUCTURE_CHANGE,
+            Effect.READ_REQUEST,
             Capability.MANAGE_INFRASTRUCTURE,
             VisitRefreshCommand,
             request_visit_refresh,

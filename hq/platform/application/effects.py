@@ -20,6 +20,13 @@ class Effect(StrEnum):
     tone: Tone
 
     READ = "read", "Reads only", "Reads and answers; changes nothing.", Tone.NEUTRAL
+    # Its act is filed as a read request, which the audit log leaves out until asked.
+    READ_REQUEST = (
+        "read_request",
+        "Asks for a reading",
+        "Asks for a fresh reading, which the controller takes with its own credentials; changes nothing it reads.",
+        Tone.NEUTRAL,
+    )
     REMOTE_WRITE = (
         "remote_write",
         "Changes HQ",
@@ -56,6 +63,6 @@ class Effect(StrEnum):
 
     @property
     def changes(self) -> bool:
-        """Whether running it changes anything."""
+        """Whether running it records anything, an ask for a reading included."""
 
         return self is not Effect.READ

@@ -50,6 +50,7 @@ class AuditItem(TypedDict):
     object_type: Annotated[str, Describe("The kind of record it was done to; empty for none.")]
     object_id: Annotated[str, Describe("That record's id; empty for none.")]
     object_repr: Annotated[str, Describe("What that record was called when it was done.")]
+    title: Annotated[str, Describe("What the row was, as the log titles it: its record, else its operation.")]
     message: Annotated[str, Describe("What it says happened; empty when it says nothing more.")]
     actor: Annotated[str, Describe("Who or what acted; empty for nobody recorded.")]
     source: Annotated[str, Describe(ended(f"Where it was recorded: {listed(dict(history.SOURCES))}"))]
@@ -66,6 +67,7 @@ def _item(event: AuditLog) -> dict[str, Any]:
         "object_type": event.object_type,
         "object_id": event.object_id,
         "object_repr": event.object_repr,
+        "title": history.HistoryLine(event.created_at, events=(event,)).title,
         "message": event.message,
         "actor": event.who.actor,
         # The annotation audit_rows adds; the model has no such field.

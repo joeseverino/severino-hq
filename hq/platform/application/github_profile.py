@@ -156,7 +156,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             READ_NOW,
             "Ask HQ to read a user's GitHub profile now.",
-            Effect.INFRASTRUCTURE_CHANGE,
+            Effect.READ_REQUEST,
             # A public lookup that spends GitHub's allowance, and a wake of the
             # controller, as Refresh is.
             (Capability.LOOK_UP_PUBLIC_RECORDS, Capability.MANAGE_INFRASTRUCTURE),
