@@ -728,6 +728,12 @@ def _standing(reference: str, host: str, container: str) -> ImageStanding:
     )
 
 
+def published_digest(image: ImageRef) -> str:
+    """The digest ``image`` pins, else the one its registry says its tag names, else ""."""
+
+    return image.digest or str((((_published().get(image.name) or {}).get("digests")) or {}).get(image.tag, "") or "")
+
+
 def _pulled_as(image: ImageRef, pulled: Mapping[str, Any], field: str, part: str) -> str:
     """The tag (from ``tags``) or registry digest (from ``digests``) the
     machine's copy names for ``image``: what a reference without one was

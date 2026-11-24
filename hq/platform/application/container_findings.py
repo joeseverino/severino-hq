@@ -39,6 +39,7 @@ from .standards import Check
 from .tone import Tone
 from .ui import agreed, ended
 from .workflow_contracts import ActionLink
+lazy from .app_updates import update_of
 lazy from .topology_estate import machine_nodes
 lazy from .upgrades import HIGH, MAJOR, OVERRIDES, Plan, plan_for
 
@@ -166,9 +167,15 @@ def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
     page = opens("Upgrade plan", f"{lead.url}#upgrade") if plan is not None and lead.running.watcher else _containers()
     if plan is None or not plan.recommended:
         return {"primary": page, "steps": ()}
+    steps = _by_hand(running, plan)
+    update = update_of(lead)
+    if update is not None:
+        # The open pull request is the move: its pin and its judge's numbers.
+        url = f"{lead.url}#upgrade" if lead.running.watcher else update.url
+        return {"primary": opens(f"Review {update.label}", url), "steps": steps, "evidence": update.evidence}
     said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
     label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
-    return {"primary": opens(label, page.url), "steps": _by_hand(running, plan)}
+    return {"primary": opens(label, page.url), "steps": steps}
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:

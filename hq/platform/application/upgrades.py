@@ -167,14 +167,7 @@ def plan_for(item: Container) -> Plan | None:
     if standing.state not in (BEHIND, VULNERABLE) or not standing.newer:
         return None
     target = standing.latest
-    fixes = _fixed(standing, target)
-    running = {str(advisory.get("id", "")) for advisory in standing.advisories}
-    introduces = ranked(
-        (
-            *(advisory for advisory in standing.target_advisories if advisory.get("id") not in running),
-            *_brought(standing),
-        )
-    )
+    fixes, introduces = weigh(standing, target, standing.target_advisories, standing.target_checked)
     data = data_of(item.mounts)
     verified_by = _verified_by(item)
     change = change_between(standing.tag, target)
@@ -199,18 +192,29 @@ def _found(checked: Mapping[str, Any] | None) -> dict[tuple[str, str], Mapping[s
     return {(str(item.get("id")), str(item.get("package"))): item for item in (checked or {}).get("findings") or ()}
 
 
-def _fixed(standing: Any, target: str) -> tuple[Mapping[str, Any], ...]:
+def weigh(
+    standing: Any, target: str, advisories, checked: Mapping[str, Any] | None
+) -> tuple[tuple[Mapping[str, Any], ...], tuple[Mapping[str, Any], ...]]:
+    """What moving what runs (``standing``) to the version ``target`` fixes,
+    and what it brings of its own: ``advisories`` are those against the target
+    and ``checked`` its packages checked against OSV, None where not scanned.
+    The one judge of a move, whether HQ found the release or a pull request pins it."""
+
+    running = {str(advisory.get("id", "")) for advisory in standing.advisories}
+    introduces = ranked(
+        (*(advisory for advisory in advisories if advisory.get("id") not in running), *_brought(standing, checked))
+    )
+    return _fixed(standing, target, checked), introduces
+
+
+def _fixed(standing: Any, target: str, checked: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], ...]:
     """Which of what makes the running version vulnerable the target is clear
     of: an advisory its range leaves the target out of, a package finding the
     target's checked packages no longer hold."""
 
     pairs = {str(item.get("id", "")): item.get("vulnerabilities") for item in standing.advisories}
     urgent = {str(item.get("id", "")) for item in standing.urgent}
-    after = (
-        None
-        if standing.target_checked is None
-        else {str(item.get("id", "")) for item in (standing.target_checked.get("findings") or ())}
-    )
+    after = None if checked is None else {str(item.get("id", "")) for item in (checked.get("findings") or ())}
 
     def clear(item: Mapping[str, Any]) -> bool:
         key = str(item.get("id", ""))
@@ -221,15 +225,15 @@ def _fixed(standing: Any, target: str) -> tuple[Mapping[str, Any], ...]:
     return tuple(item for item in standing.known_vulnerabilities if clear(item))
 
 
-def _brought(standing: Any) -> tuple[Mapping[str, Any], ...]:
+def _brought(standing: Any, checked: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], ...]:
     """Serious vulnerabilities in the target that what runs does not have."""
 
-    if standing.checked is None or standing.target_checked is None:
+    if standing.checked is None or checked is None:
         return ()
     before = _found(standing.checked)
     return ranked(
         item
-        for key, item in _found(standing.target_checked).items()
+        for key, item in _found(checked).items()
         if key not in before and item.get("severity") in SERIOUS
     )
 

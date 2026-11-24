@@ -1,12 +1,36 @@
 {% comment %}
 A running container past its four facts (application.containers.Container and
 application.upgrades.Plan, the same the containers and upgrades resources
-serve): what upgrading it would take, and how it is run against the container
-standard, with what it uses beside its limits. Each said once; the band above has its version and standing.
+serve): what upgrading it would take, led by the open pull request that would
+move it (application.app_updates.AppUpdate, the app_updates resource's), and
+how it is run against the container standard, with what it uses beside its
+limits. Each said once; the band above has its version and standing.
 {% endcomment %}
-{% if plan %}
+{% if plan or readiness %}
 {% section "Upgrade" id="upgrade" %}
   {% facts layout="band" %}
+    {% if update %}
+    {% fact "Pull request" icon="commit" tone=update.checks_said.1 %}
+      {% entity update.url|outside label=update.label %}
+    {% detail %}
+      {% list kind="dots" %}<li><small>{{ update.checks_said.0 }}</small></li>{% if update.checks_said.2 %}<li><small>{{ update.checks_said.2 }}</small></li>{% endif %}<li><small>{{ update.app }}</small></li>{% endlist %}
+    {% endfact %}
+    {% fact "Pin" icon="deploy" %}
+      {% for pin in update.pins %}{% if pin.before %}{% include "partials/_change.html" with from=pin.before.tag to=pin.after.tag code=True only %}{% else %}<code>{{ pin.after.tag }}</code>{% endif %}{% empty %}Diff too large to read{% endfor %}
+    {% detail %}
+      {% for pin in update.pins %}<small>{% if pin.digest %}<span tabindex="0" data-tip="{{ pin.digest }}">{{ pin.digest|slice:":19" }}…</span>{% else %}Exact build not read yet{% endif %}</small>{% endfor %}
+    {% endfact %}
+    {% fact "Fixes" icon="shield" tone=update.fixes_tone %}
+      {{ update.fixes_said }}
+    {% detail %}
+      {% if update.fixes %}{% list kind="dots" %}{% for advisory in update.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% endif %}
+    {% endfact %}
+    {% fact "Brings" icon="info" tone=update.brings_tone %}
+      {{ update.brings_said }}
+    {% detail %}
+      {% if update.brings %}{% list kind="dots" %}{% for finding in update.brings|slice:":2" %}<li>{% entity finding.url|outside label=finding.id %}</li>{% endfor %}{% endlist %}{% endif %}
+    {% endfact %}
+    {% elif plan %}
     {% fact "To" icon="deploy" %}
       {% entity plan.release.url|outside label=plan.target_tag code=True %}
     {% detail %}
@@ -17,6 +41,8 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% detail %}
       {% if plan.fixes %}{% list kind="dots" %}{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% elif not item.standing.known_vulnerabilities %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
     {% endfact %}
+    {% endif %}
+    {% if plan %}
     {% fact "Data" icon="layers" tone=plan.data_tone %}
       {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}
     {% detail %}
@@ -27,22 +53,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% detail %}
       <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
     {% endfact %}
-  {% endfacts %}
-  {% if plan.viable %}
-    {% notice tone="success" title="Ready" %}{% endnotice %}
-  {% else %}
-    {% notice tone="warning" title="Not yet, because:" %}{% list %}{% for blocker in plan.blockers %}<li>{{ blocker.reason }}</li>{% endfor %}{% endlist %}{% endnotice %}
-  {% endif %}
-  {% steps numbered=True %}
-    {% for step in plan.steps %}{% step %}<strong>{{ step.label }}</strong> {% muted %}{{ step.detail }}{% endmuted %}{% endstep %}{% endfor %}
-  {% endsteps %}
-{% aside %}{% muted %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% endmuted %}
-{% endsection %}
-{% endif %}
-
-{% if not plan and readiness %}
-{% section "Upgrade" id="upgrade" %}
-  {% facts layout="band" %}
+    {% else %}
     {% fact "Checked afterwards by" icon="check-circle" tone=readiness.verified_tone %}
       {% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst }}{% else %}Nothing{% endif %}
     {% detail %}
@@ -58,10 +69,24 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% detail %}
       {% if readiness.not_automatic %}<small>{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below</small>{% endif %}
     {% endfact %}
+    {% endif %}
   {% endfacts %}
-  {% if readiness.not_automatic %}{% list %}{% for blocker in readiness.not_automatic %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}{% endif %}
-{% aside %}{% muted %}{% if readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}{% endmuted %}
+  {% if plan %}
+  {% if plan.viable %}
+    {% notice tone="success" title="Ready" %}{% endnotice %}
+  {% else %}
+    {% notice tone="warning" title="Not yet, because:" %}{% list %}{% for blocker in plan.blockers %}<li>{{ blocker.reason }}</li>{% endfor %}{% endlist %}{% endnotice %}
+  {% endif %}
+  {% steps numbered=True %}
+    {% for step in plan.steps %}{% step %}<strong>{{ step.label }}</strong> {% muted %}{{ step.detail }}{% endmuted %}{% endstep %}{% endfor %}
+  {% endsteps %}
+  {% elif readiness.not_automatic %}{% list %}{% for blocker in readiness.not_automatic %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
+  {% endif %}
+{% aside %}{% muted %}{% if plan %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% elif readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}{% endmuted %}
 {% endsection %}
+{% if update.patch %}
+{% section "Compose change" id="compose-change" fold=True %}<pre tabindex="0"><code>{{ update.patch }}</code></pre>{% endsection %}
+{% endif %}
 {% endif %}
 
 {% comment %}

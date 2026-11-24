@@ -124,6 +124,15 @@ _PULL_CHECKS = {
 }
 
 
+def pull_checks(pull: Mapping[str, Any]) -> tuple[str, str, str]:
+    """A pull request's checks as every page says them: the badge, its tone,
+    and the failing ones named while they fail."""
+
+    checks = pull.get("checks") or {}
+    badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", Tone.NEUTRAL))
+    return badge, tone, ", ".join(checks.get("failing") or ()) if checks.get("state") == "failure" else ""
+
+
 def _severity_rank(level: str) -> int:
     return SEVERITY_ORDER.index(level) if level in SEVERITY_ORDER else len(SEVERITY_ORDER)
 
@@ -261,9 +270,7 @@ class Repository:
 
         rows = []
         for pull in self.update_pulls:
-            checks = pull.get("checks") or {}
-            badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", Tone.NEUTRAL))
-            failing = ", ".join(checks.get("failing") or ()) if checks.get("state") == "failure" else ""
+            badge, tone, failing = pull_checks(pull)
             opened = f"opened {ago(pull['opened'])}" if pull["opened"] else ""
             rows.append(_pull_row(pull, failing, meta=opened, badge=badge, status=tone))
         for alert in self.unmatched_alerts:

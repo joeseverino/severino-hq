@@ -18,7 +18,19 @@ from hq.platform.application.conditions import READY
 from hq.platform.application.images import ImageRef
 from hq.platform.core.audit import stamped
 
-from .names import CONTAINERS, GITHUB, HQ_DIGEST, HQ_REVISION, NEWER, OWNER_NAME, SOURCES, hexed, iso, stamp
+from .names import (
+    CONTAINERS,
+    GITHUB,
+    HQ_DIGEST,
+    HQ_REVISION,
+    NEWER,
+    OWNER_NAME,
+    SOURCES,
+    digest,
+    hexed,
+    iso,
+    stamp,
+)
 from .sweep import store
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
@@ -27,6 +39,10 @@ REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", 
 UPDATED = "photo-library"
 # The repository whose default branch fails a check, so the queue holds GitHub's item.
 FAILING = "homelab"
+# The repository each app's Compose files live in, under ``compose/<app>/``,
+# and the app its open update moves to the newer release.
+APPS = "homelab"
+UPDATED_APP = "home-automation"
 # How many runs of each piece of HQ's own work on a clock to show.
 RUNS = 3
 # The states the latest run of the first scheduled kinds is left in, one each.
@@ -121,6 +137,8 @@ def repositories():
             record.update(_updates(name))
         if name == FAILING:
             record["checks"] = {"state": "failure", "total": 4, "failing": ["Scan"], "running": 0}
+        if name == APPS:
+            record["pull_requests"] = [_app_update(name)]
         return record
 
     store("github.repository", *(repository(name) for name in REPOSITORIES))
@@ -219,6 +237,48 @@ def _watched():
             }
         )
     return watched
+
+
+def _app_update(name):
+    """Renovate's update of one app's pin to the newer release, checks
+    passing, as GitHub lists the pull request and its one file's diff."""
+
+    image = next(image for container, _port, image in CONTAINERS if container == UPDATED_APP)
+    ref = ImageRef.parse(image)
+    after = f"{ref.name}:{NEWER[UPDATED_APP]}@{digest(ref.name, NEWER[UPDATED_APP])}"
+    patch = (
+        "@@ -1,7 +1,7 @@\n"
+        " services:\n"
+        f"   {UPDATED_APP}:\n"
+        f"-    image: {image}@{digest(ref.name, ref.tag)}\n"
+        f"+    image: {after}\n"
+        "     restart: unless-stopped\n"
+        "     ports:\n"
+        "       - 8123:8123"
+    )
+    url = f"https://github.com/example/{name}"
+    return {
+        "number": 58,
+        "title": f"Update {ref.repository} Docker tag to {NEWER[UPDATED_APP]}",
+        "url": f"{url}/pull/58",
+        "author": "renovate[bot]",
+        "draft": False,
+        "created_at": iso(timedelta(days=2)),
+        "updated_at": iso(timedelta(hours=4)),
+        "head": hexed("update", name, UPDATED_APP, length=40),
+        "branch": f"renovate/{UPDATED_APP}",
+        "labels": ["dependencies"],
+        "checks": {"state": "success", "total": 2, "failing": [], "running": 0, "names": ["validate", "scan"]},
+        "files": [
+            {
+                "path": f"compose/{UPDATED_APP}/compose.yaml",
+                "status": "modified",
+                "additions": 1,
+                "deletions": 1,
+                "patch": patch,
+            }
+        ],
+    }
 
 
 def _updates(name):

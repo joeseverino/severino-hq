@@ -35,7 +35,7 @@ declaration's machinery: the controller's actions are the buttons above, and
 {% if container.standing %}
   {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit=container.edit %}
   {% if container.running.unit %}{% muted element="p" data_run_by_unit=container.running.unit %}The systemd unit <code>{{ container.running.unit }}</code> runs it, and Start, Stop and Restart go through that unit.{% endmuted %}{% endif %}
-  {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan readiness=container.readiness edit=container.edit %}{% endif %}
+  {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan update=container.update readiness=container.readiness edit=container.edit %}{% endif %}
 {% endif %}
 
 {% if resource.certificate %}

@@ -5,6 +5,7 @@ from typing import Any, override
 from django.views.generic import TemplateView
 
 from hq.platform.application.pages import PageMixin
+lazy from hq.platform.application.app_updates import update_of
 lazy from hq.platform.application.container_findings import needs_you
 lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containers, standing_of, tally
 lazy from hq.platform.application.machines import container_context
@@ -26,7 +27,15 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
     found = container_context(resource.spec.get("host", ""), resource.spec.get("name", ""))
     running, machine = found.get("running"), found.get("machine")
     if running is None:
-        return {**found, "standing": None, "item": None, "plan": None, "readiness": None, "edit": None}
+        return {
+            **found,
+            "standing": None,
+            "item": None,
+            "plan": None,
+            "update": None,
+            "readiness": None,
+            "edit": None,
+        }
     host = machine.name if machine is not None else resource.spec.get("host", "")
     item = next(
         (each for each in containers() if each.machine.name == host and each.running.name == running.name),
@@ -37,6 +46,7 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
         "standing": item.standing if item is not None else standing_of(running.image, host, running.name),
         "item": item,
         "plan": plan_for(item) if item is not None else None,
+        "update": update_of(item) if item is not None else None,
         "readiness": readiness_of(item) if item is not None and item.standing.repository is None else None,
         # Where the operator names what its image is built from, when the image does not say.
         "edit": offered_changes([resource])[resource.key].edit(resource.key, next=request.get_full_path()),
