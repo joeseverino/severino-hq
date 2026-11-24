@@ -861,14 +861,13 @@ changed, and a last row counts the others and links to the list of them all. Its
 A run of sibling sections or cards (the sections that close a thing's page, the connection panel's
 identity, link and route, a page's run of cards) is one `{% layout %}`, the flow. It lays as many
 to a row as keep each at least `--flow-basis` wide (22rem), and one to a row where that is the whole
-width. A row's last ones share what it leaves, and each is as tall as what it holds, from the row's
-top: a short card beside a tall one ends where its content does, and only a card holding a chart
-stands as tall as its row, its plot taking the room. Every member grows into what its row leaves
-and none caps its width, so every row ends at the flow's end. It is measured against the box it
-sits in, so the same sections pair in a dialog and on a page. A part that needs more room before it
-shares a row sets a wider basis on itself (the connection panel's route); a run of charts is
-`kind="charts"`, the flow at the width a chart keeps its scale. A wide one (a table of four columns
-or more, a fold, anything that is not a section or card) goes across the row.
+width. A row's last ones share what it leaves, and each stands on a row as tall as the tallest, a
+section's foot at its frame's bottom. Every member grows into what its row leaves and none caps its
+width, so every row ends at the flow's end. It is measured against the box it sits in, so the same
+sections pair in a dialog and on a page. A part that needs more room before it shares a row sets a
+wider basis on itself (the connection panel's route); a run of charts is `kind="charts"`, the flow
+at the width a chart keeps its scale. A wide one (a table of four columns or more, a fold, anything
+that is not a section or card) goes across the row.
 
 The flow paints its members in the order the markup holds them, so what is read aloud and where the
 keyboard goes is what is drawn (WCAG 1.3.2, 2.4.3): nothing reorders them. A page therefore writes
@@ -882,7 +881,7 @@ Content with a narrower companion is `kind="split"`: the two share a row while b
 width and wrap to a column when they cannot. A month as the main takes the room, its companion
 keeping its basis beside it; a run of sections in a companion is a flow with `aside=True`, so wrapped
 under the main they pair up. A pair (`kind="pair"`) is two columns at most and pairs like with like:
-a table beside a table, a chart beside a chart.
+a table beside a table, a chart beside a chart, so each row ends together.
 
 Inside a layout the gap is the separation, so a member's own stacking margin is dead space and a
 member is as narrow as its track. No page writes a layout's class or an auto-fit grid of its own:
