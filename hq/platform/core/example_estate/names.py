@@ -164,8 +164,9 @@ SOURCES = {
 }
 
 
-# A release published since the version that runs: the one upgrade HQ has to offer.
-NEWER = {"home-automation": "2024.12.1-ubu2404-ls48"}
+# Releases published since the versions that run: home-automation's has its
+# update open, and jellyfin's waits for Renovate to open one.
+NEWER = {"home-automation": "2024.12.1-ubu2404-ls48", "jellyfin": "10.10.1"}
 
 
 def now():

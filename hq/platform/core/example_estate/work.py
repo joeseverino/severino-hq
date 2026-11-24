@@ -47,6 +47,9 @@ APPS = "homelab"
 UPDATED_APP = "home-automation"
 # The repositories HQ opens dependency updates for: each with an update open.
 OPTED_IN = (UPDATED, APPS)
+# The apps whose Compose files the apps repository holds: every container but
+# HQ, which its own pipeline releases.
+HELD_APPS = tuple(name for name, _port, _image in CONTAINERS if name != "hq")
 # How many runs of each piece of HQ's own work on a clock to show.
 RUNS = 3
 # The states the latest run of the first scheduled kinds is left in, one each.
@@ -152,6 +155,9 @@ def repositories():
             record["checks"] = {"state": "failure", "total": 4, "failing": ["Scan"], "running": 0}
         if name == APPS:
             record["pull_requests"] = [_app_update(name)]
+            # Renovate's Dashboard lists the updates it has not opened yet.
+            record["compose"] = [f"compose/{app}/compose.yaml" for app in sorted(HELD_APPS)]
+            record["dashboard"] = f"https://github.com/example/{name}/issues/12"
         return record
 
     store("github.repository", *(repository(name) for name in REPOSITORIES))
@@ -255,21 +261,12 @@ def _watched():
 
 def _app_update(name):
     """Renovate's update of one app's pin to the newer release, checks
-    passing, as GitHub lists the pull request and its one file's diff."""
+    passing, as GitHub lists the pull request and the reading loads its
+    Compose file at base and head."""
 
     image = next(image for container, _port, image in CONTAINERS if container == UPDATED_APP)
     ref = ImageRef.parse(image)
     after = f"{ref.name}:{NEWER[UPDATED_APP]}@{digest(ref.name, NEWER[UPDATED_APP])}"
-    patch = (
-        "@@ -1,7 +1,7 @@\n"
-        " services:\n"
-        f"   {UPDATED_APP}:\n"
-        f"-    image: {image}@{digest(ref.name, ref.tag)}\n"
-        f"+    image: {after}\n"
-        "     restart: unless-stopped\n"
-        "     ports:\n"
-        "       - 8123:8123"
-    )
     url = f"https://github.com/example/{name}"
     return {
         "number": 58,
@@ -280,6 +277,7 @@ def _app_update(name):
         "created_at": iso(timedelta(days=2)),
         "updated_at": iso(timedelta(hours=4)),
         "head": hexed("update", name, UPDATED_APP, length=40),
+        "base": hexed("head", name, length=40),
         "branch": f"renovate/{UPDATED_APP}",
         "labels": ["dependencies"],
         "checks": {"state": "success", "total": 2, "failing": [], "running": 0, "names": ["validate", "scan"]},
@@ -289,7 +287,13 @@ def _app_update(name):
                 "status": "modified",
                 "additions": 1,
                 "deletions": 1,
-                "patch": patch,
+            }
+        ],
+        "apps": [
+            {
+                "app": UPDATED_APP,
+                "read": True,
+                "images": [{"service": UPDATED_APP, "before": f"{image}@{digest(ref.name, ref.tag)}", "after": after}],
             }
         ],
     }
