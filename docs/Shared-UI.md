@@ -745,7 +745,9 @@ its headline figures, a forecast's hours, the dashboard's glance. It is the few 
 a page or a part, each a cell with its label and mark over its value over its detail. Its cells
 are sized by what they hold: a wrapping row where each cell starts at its own widest line, a
 row's cells share the room left over, and a cell takes the next row only when the band has no
-room for it. So a label wraps only in a band too narrow for it on one line. Each cell is its own
+room for it. So a label wraps only in a band too narrow for it on one line. A band holding an
+identifier (a version, a tag) counts its rows on a floor as wide as one, so a short version
+stands whole on its line (*Gate:* `split identifiers`). Each cell is its own
 stack, top-aligned, its value right under its label, no taller than what it holds; a ragged line
 across cells is better than a gap inside one.
 

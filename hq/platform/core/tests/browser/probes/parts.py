@@ -405,6 +405,22 @@ ROWS_SHORT = (
 }"""
 )
 
+# An identifier in a band (a version, a tag) short enough for a cell of the
+# band's identifier floor stands whole on its line (figures.css): one that
+# wraps where a cell that wide would hold it was given too narrow a cell.
+SPLIT_IDENTIFIERS = """(codes) => {
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const ink = document.createElement('canvas').getContext('2d');
+  const read = [...document.querySelectorAll(codes)].filter((code) => code.checkVisibility());
+  const found = read.filter((code) => {
+    const style = getComputedStyle(code);
+    ink.font = style.font;
+    const whole = ink.measureText(code.textContent.trim()).width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    return whole <= 11 * rem && code.getBoundingClientRect().height > 1.9 * parseFloat(style.fontSize);
+  }).map((code) => `${code.textContent.trim()} breaks across lines`);
+  return {read: read.length, found};
+}"""
+
 # Readings beside a page's title stand together (figures.css): two
 # neighbors on a row with more than a reading's width between them read as
 # unrelated things at the far ends of the head.
@@ -507,6 +523,18 @@ CHECKS = {
         (UNDRAWN, SELECTORS["drawing"]),
         reader_sees="a chart or a calendar given room and drawing nothing",
         part=CHART,
+    ),
+    "split identifiers": Check(
+        (SPLIT_IDENTIFIERS, SELECTORS["band_code"]),
+        reader_sees="a short version broken across two lines in a band of facts",
+        part=FACTS,
+        plants=(
+            Plant(
+                '<dl class="facts-band" data-band style="grid-template-columns: 6rem"><div class="fact">'
+                '<dt>Example</dt><dd class="fact-value"><code>2024.11.3-example-ls45</code></dd></div></dl>',
+                finds=("breaks",),
+            ),
+        ),
     ),
     "readings apart": Check(
         (READINGS_APART, SELECTORS["head_band"]),

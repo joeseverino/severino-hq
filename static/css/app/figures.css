@@ -304,6 +304,10 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
   container: band / inline-size;
   flex: 1 1 100%;
 }
+/* A value that is an identifier (a version, a digest, a tag) stands whole on
+   its line only in a cell as wide as one, so a band holding one counts its
+   rows on a floor that wide; a longer one still breaks at its seams. */
+.facts-band:has(> .fact > .fact-value code) { --band-floor: 11rem; }
 .facts-band > .fact {
   display: flex;
   flex-direction: column;

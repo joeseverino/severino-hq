@@ -371,6 +371,8 @@ _DECLARED = {
     "unseen": _S(".visually-hidden", optional=True),
     # The flow of sibling sections or cards, and of charts (layout.css).
     "flow": _S(".section-flow, .domain-charts", "layout", optional=True),
+    # An identifier a band of facts shows as a value.
+    "band_code": _S(".facts-band > .fact > .fact-value code", "facts", optional=True),
     # A band of readings beside a page's title.
     "head_band": _S(".page-head .facts-band", "facts", optional=True),
     # A list of facts, each label beside its value.

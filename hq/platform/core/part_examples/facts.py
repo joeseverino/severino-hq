@@ -208,6 +208,21 @@ FACTS_STATES = {
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
         "{% endfacts %}{% endcard %}"
     ),
+    # Six facts, one of them a pin's change from one version to the next, as
+    # a container's Upgrade card draws them: each version stands whole on its
+    # line, the band counting its rows on a floor as wide as one.
+    "band-pins": Example(
+        '{% card element="div" %}{% facts layout="band" %}'
+        '{% fact "Example request" icon="commit" value="#58" %}'
+        '{% fact "Example pin" icon="deploy" %}'
+        '{% include "partials/_change.html" with from="2024.11.3-example-ls45" to="2024.12.1-example-ls48" code=True only %}'
+        "{% endfact %}"
+        '{% fact "Example fixes" icon="shield" value="None known" %}'
+        '{% fact "Example brings" icon="info" value="Nothing serious" %}'
+        '{% fact "Example data" icon="layers" value="1 mount" %}'
+        '{% fact "Example check" icon="check-circle" value="Its health check" %}'
+        "{% endfacts %}{% endcard %}"
+    ),
     # An identifier longer than its fact's bound beside a plain value, then
     # one linked outside, as a container's Version and Update facts draw
     # them: each wraps a chip to a line and stands on its row's baseline.
