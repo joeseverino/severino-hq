@@ -16,7 +16,7 @@ SERIOUS = {"id": "CVE-new", "package": "libexample", "severity": "critical", "fi
 def patch(before=RUNNING, after=PINNED, service="app"):
     return (
         "@@ -1,5 +1,5 @@\n services:\n"
-        f"   {service}:\n-    image: {before}\n+    image: \"{after}\"  # pinned\n     restart: unless-stopped"
+        f'   {service}:\n-    image: {before}\n+    image: "{after}"  # pinned\n     restart: unless-stopped'
     )
 
 
@@ -118,7 +118,28 @@ class AppUpdateTests(TestCase):
         self.assertIn(("Pull request", "example/alpha#7"), card.evidence)
         self.assertIn(("Pin", "v1.2.0 to v1.2.1"), card.evidence)
         self.assertIn(("Fixes", "1 known vulnerability"), card.evidence)
-        self.assertEqual(card.primary.label, "Review #7")
+        self.assertEqual(card.primary.label, "Review #7 (fixes 1)")
+
+    def test_the_repositorys_row_of_the_update_names_its_app_and_fix_count(self):
+        from ..github_estate import repositories
+
+        self.arrange(pull(diff=patch()))
+
+        (row,) = repositories()["example/alpha"].update_rows
+
+        self.assertIn("app", row.detail)
+        self.assertIn("fixes 1", row.detail)
+
+    def test_the_resource_reads_the_same_update_by_its_key(self):
+        from ..container_reads import get_app_update, list_app_updates
+
+        self.arrange(pull(diff=patch()))
+
+        (listed,) = list_app_updates()["items"]
+        found = get_app_update(listed["key"])
+
+        self.assertEqual((found["app"], found["number"], found["containers"]), ("app", 7, ["example-box:app"]))
+        self.assertEqual([item["id"] for item in found["fixes"]], ["GHSA-high"])
 
     def test_the_cost_does_not_grow_with_the_updates_open(self):
         def arrange(size):

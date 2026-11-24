@@ -161,6 +161,51 @@
         },
         "style": "form"
       },
+      "AppUpdateRecordFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "key",
+              "repository",
+              "number",
+              "url",
+              "head",
+              "app",
+              "containers",
+              "readable",
+              "scanned",
+              "title",
+              "pins",
+              "pins.service",
+              "pins.before",
+              "pins.after",
+              "pins.digest",
+              "pins.scanned",
+              "checks",
+              "fixes",
+              "fixes.id",
+              "fixes.severity",
+              "fixes.summary",
+              "fixes.url",
+              "brings",
+              "brings.id",
+              "brings.severity",
+              "brings.summary",
+              "brings.url",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "AssetRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -2789,6 +2834,21 @@
           }
         }
       },
+      "AppUpdateRecordSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AppUpdateRecordSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
       "ApprovalWithdrawnSuccess": {
         "content": {
           "application/json": {
@@ -5385,6 +5445,281 @@
           "ok",
           "error"
         ],
+        "type": "object"
+      },
+      "AppUpdateRecord": {
+        "additionalProperties": false,
+        "description": "One open update of an app whole: its pins, checks, and what it fixes and brings.",
+        "properties": {
+          "app": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/app"
+          },
+          "brings": {
+            "description": "What the new images bring of their own: an advisory against them alone, or a serious package finding.",
+            "items": {
+              "$ref": "#/components/schemas/AdvisoryPart"
+            },
+            "type": "array"
+          },
+          "checks": {
+            "description": "The head's checks: `state`, `total`, `failing`, `running`.",
+            "type": "object"
+          },
+          "containers": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/containers"
+          },
+          "fixes": {
+            "description": "Of the moved containers' known vulnerabilities, those the new images are clear of.",
+            "items": {
+              "$ref": "#/components/schemas/AdvisoryPart"
+            },
+            "type": "array"
+          },
+          "head": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/head"
+          },
+          "key": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/key"
+          },
+          "number": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/number"
+          },
+          "pins": {
+            "description": "Each image line it moves.",
+            "items": {
+              "$ref": "#/components/schemas/PinPart"
+            },
+            "type": "array"
+          },
+          "readable": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/readable"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/repository"
+          },
+          "scanned": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/scanned"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PullTitle"
+          },
+          "url": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/url"
+          }
+        },
+        "required": [
+          "key",
+          "repository",
+          "number",
+          "url",
+          "head",
+          "app",
+          "containers",
+          "readable",
+          "scanned",
+          "title",
+          "pins",
+          "checks",
+          "fixes",
+          "brings"
+        ],
+        "type": "object"
+      },
+      "AppUpdateRecordPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/AppUpdateRecordPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AppUpdateRecordPartial": {
+        "additionalProperties": false,
+        "description": "One open update of an app whole: its pins, checks, and what it fixes and brings.",
+        "properties": {
+          "app": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/app"
+          },
+          "brings": {
+            "description": "What the new images bring of their own: an advisory against them alone, or a serious package finding.",
+            "items": {
+              "$ref": "#/components/schemas/AdvisoryPartPartial"
+            },
+            "type": "array"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/AppUpdateRecord/properties/checks"
+          },
+          "containers": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/containers"
+          },
+          "fixes": {
+            "description": "Of the moved containers' known vulnerabilities, those the new images are clear of.",
+            "items": {
+              "$ref": "#/components/schemas/AdvisoryPartPartial"
+            },
+            "type": "array"
+          },
+          "head": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/head"
+          },
+          "key": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/key"
+          },
+          "number": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/number"
+          },
+          "pins": {
+            "description": "Each image line it moves.",
+            "items": {
+              "$ref": "#/components/schemas/PinPartPartial"
+            },
+            "type": "array"
+          },
+          "readable": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/readable"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/repository"
+          },
+          "scanned": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/scanned"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PullTitle"
+          },
+          "url": {
+            "$ref": "#/components/schemas/AppUpdateRowPartial/properties/url"
+          }
+        },
+        "type": "object"
+      },
+      "AppUpdateRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AppUpdateRecordPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AppUpdateRow": {
+        "additionalProperties": false,
+        "properties": {
+          "app": {
+            "description": "The app it updates: the directory under `compose/` its files are in.",
+            "type": "string"
+          },
+          "containers": {
+            "description": "Each running container it moves, as `machine:container`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "head": {
+            "description": "The pull request's head commit.",
+            "type": "string"
+          },
+          "key": {
+            "description": "`owner:repository:number:app`, which a read of one names it by.",
+            "type": "string"
+          },
+          "number": {
+            "description": "The pull request's number.",
+            "type": "integer"
+          },
+          "readable": {
+            "description": "Whether GitHub gave every Compose file's diff; false leaves `pins` empty.",
+            "type": "boolean"
+          },
+          "repository": {
+            "description": "The repository the pull request is open in, as `owner/name`.",
+            "type": "string"
+          },
+          "scanned": {
+            "description": "Whether every new image was checked against OSV: until then, `brings` is not known.",
+            "type": "boolean"
+          },
+          "url": {
+            "description": "The pull request on GitHub.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "repository",
+          "number",
+          "url",
+          "head",
+          "app",
+          "containers",
+          "readable",
+          "scanned"
+        ],
+        "type": "object"
+      },
+      "AppUpdateRowPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "app": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/app"
+          },
+          "containers": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/containers"
+          },
+          "head": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/head"
+          },
+          "key": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/key"
+          },
+          "number": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/number"
+          },
+          "readable": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/readable"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/repository"
+          },
+          "scanned": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/scanned"
+          },
+          "url": {
+            "$ref": "#/components/schemas/AppUpdateRow/properties/url"
+          }
+        },
         "type": "object"
       },
       "AppearanceThemeSetRequest": {
@@ -21573,6 +21908,67 @@
         ],
         "type": "object"
       },
+      "PinPart": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "description": "The image the line names now, as `registry/repository:tag`.",
+            "type": "string"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The image the line named before, as `registry/repository:tag`; null for a new line."
+          },
+          "digest": {
+            "description": "The digest the new image names, as pinned or as its registry says; empty when not read.",
+            "type": "string"
+          },
+          "scanned": {
+            "description": "Whether the new image's packages were checked against OSV.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "The compose service the image line is under; empty when the diff does not say.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "before",
+          "after",
+          "digest",
+          "scanned"
+        ],
+        "type": "object"
+      },
+      "PinPartPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/PinPart/properties/after"
+          },
+          "before": {
+            "$ref": "#/components/schemas/PinPart/properties/before"
+          },
+          "digest": {
+            "$ref": "#/components/schemas/PinPart/properties/digest"
+          },
+          "scanned": {
+            "$ref": "#/components/schemas/PinPart/properties/scanned"
+          },
+          "service": {
+            "$ref": "#/components/schemas/PinPart/properties/service"
+          }
+        },
+        "type": "object"
+      },
       "PinToggleRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -23620,8 +24016,7 @@
             "description": "The pull request's number; null when not read."
           },
           "title": {
-            "description": "The pull request's title.",
-            "type": "string"
+            "$ref": "#/components/schemas/PullTitle"
           },
           "url": {
             "description": "The pull request's page.",
@@ -23646,13 +24041,17 @@
             "$ref": "#/components/schemas/PullRequestPart/properties/number"
           },
           "title": {
-            "$ref": "#/components/schemas/PullRequestPart/properties/title"
+            "$ref": "#/components/schemas/PullTitle"
           },
           "url": {
             "$ref": "#/components/schemas/PullRequestPart/properties/url"
           }
         },
         "type": "object"
+      },
+      "PullTitle": {
+        "description": "The pull request's title.",
+        "type": "string"
       },
       "PurchaseDate": {
         "anyOf": [
@@ -31613,6 +32012,7 @@
               "enum": [
                 "action_items",
                 "analytics",
+                "app_updates",
                 "approvals",
                 "assets",
                 "audit",
@@ -36930,6 +37330,7 @@
               "enum": [
                 "action_items",
                 "analytics",
+                "app_updates",
                 "approvals",
                 "assets",
                 "audit",
@@ -37225,6 +37626,148 @@
           "hq.analytics"
         ],
         "x-hq-resource": "analytics"
+      }
+    },
+    "/api/v2/resources/app_updates/": {
+      "get": {
+        "description": "Every open Renovate pull request that moves an app's Compose pins: each pin before and after, the containers it moves, its checks, and what it fixes and brings. Read-only.",
+        "operationId": "listAppUpdatesV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "$ref": "#/components/parameters/AppUpdateRecordFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppUpdateRecordPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "getAppUpdatesV2": {
+                "operationId": "getAppUpdatesV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/key"
+                }
+              },
+              "listAppUpdatesV2": {
+                "operationId": "listAppUpdatesV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "App updates: the list",
+        "tags": [
+          "hq.containers"
+        ],
+        "x-hq-resource": "app_updates"
+      }
+    },
+    "/api/v2/resources/app_updates/{identifier}/": {
+      "get": {
+        "description": "One of the records App updates lists, found by its `key`.",
+        "operationId": "getAppUpdatesV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/KeyIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/AppUpdateRecordFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AppUpdateRecordSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "App updates: one by key",
+        "tags": [
+          "hq.containers"
+        ],
+        "x-hq-identifier": "key",
+        "x-hq-resource": "app_updates"
       }
     },
     "/api/v2/resources/approvals/": {
@@ -42072,6 +42615,7 @@
               "enum": [
                 "action_items",
                 "analytics",
+                "app_updates",
                 "approvals",
                 "assets",
                 "audit",
@@ -42159,6 +42703,7 @@
             "required": true,
             "schema": {
               "enum": [
+                "app_updates",
                 "approvals",
                 "assets",
                 "calendar",

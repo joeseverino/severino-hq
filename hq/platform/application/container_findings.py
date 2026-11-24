@@ -172,7 +172,8 @@ def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
     if update is not None:
         # The open pull request is the move: its pin and its judge's numbers.
         url = f"{lead.url}#upgrade" if lead.running.watcher else update.url
-        return {"primary": opens(f"Review {update.label}", url), "steps": steps, "evidence": update.evidence}
+        label = f"Review {update.label}" + (f" ({update.fixes_counted})" if update.fixes else "")
+        return {"primary": opens(label, url), "steps": steps, "evidence": update.evidence}
     said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
     label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
     return {"primary": opens(label, page.url), "steps": steps}

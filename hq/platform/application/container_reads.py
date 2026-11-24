@@ -1,4 +1,5 @@
-"""Every running container as a registered read resource.
+"""Every running container, its upgrade and each open update of its app, as
+registered read resources.
 
 The containers page's own answer (``application.containers``), projected to
 JSON, so an agent asks the same question the page does and gets the same
@@ -14,7 +15,17 @@ from .projection import iso, page_of, projection_scope
 from .record_errors import RecordNotFound
 from .resources import BoundedQuery
 from .security import Capability
-lazy from .container_records import ContainerRecord, ContainerRow, RepositoryPart, UpgradeRecord, UpgradeRow, UsagePart
+lazy from .app_updates import app_updates
+lazy from .container_records import (
+    AppUpdateRecord,
+    AppUpdateRow,
+    ContainerRecord,
+    ContainerRow,
+    RepositoryPart,
+    UpgradeRecord,
+    UpgradeRow,
+    UsagePart,
+)
 lazy from .containers import containers
 lazy from .derived_reads import serialize_measurement
 lazy from .record_saves import row
@@ -184,10 +195,11 @@ def get_container(address: str) -> dict[str, Any]:
     return _one(containers, address, serialize_container)
 
 
-def serialize_plan(plan: Any) -> UpgradeRecord:
-    def advisories(items):
-        return [{key: item.get(key, "") for key in ("id", "severity", "summary", "url")} for item in items]
+def _advisories(items) -> list[dict[str, Any]]:
+    return [{key: item.get(key, "") for key in ("id", "severity", "summary", "url")} for item in items]
 
+
+def serialize_plan(plan: Any) -> UpgradeRecord:
     ends = {
         "from": {"tag": plan.container.standing.tag, "digest": plan.container.standing.digest},
         "to": {"tag": plan.target_tag, "digest": plan.target_digest},
@@ -205,8 +217,8 @@ def serialize_plan(plan: Any) -> UpgradeRecord:
             if plan.release
             else None
         ),
-        fixes=advisories(plan.fixes),
-        introduces=advisories(plan.introduces),
+        fixes=_advisories(plan.fixes),
+        introduces=_advisories(plan.introduces),
         data=[dict(mount) for mount in plan.data],
         **ends,
     )
@@ -220,6 +232,50 @@ def list_upgrades(*, limit: int = 50) -> dict[str, Any]:
 
 def get_upgrade(address: str) -> dict[str, Any]:
     return _one(plans, address, serialize_plan)
+
+
+def _key(update: Any) -> str:
+    return f"{update.repository.replace('/', ':')}:{update.number}:{update.app}"
+
+
+def _image(image: Any) -> str:
+    return f"{image.name}:{image.tag}" if image.tag else image.name
+
+
+def serialize_app_update(update: Any) -> AppUpdateRecord:
+    return row(
+        update,
+        AppUpdateRecord,
+        key=_key(update),
+        containers=[item.address for item in update.containers],
+        pins=[
+            {
+                "service": pin.service,
+                "before": _image(pin.before) if pin.before else None,
+                "after": _image(pin.after),
+                "digest": pin.digest,
+                "scanned": pin.scanned,
+            }
+            for pin in update.pins
+        ],
+        checks=dict(update.checks),
+        fixes=_advisories(update.fixes),
+        brings=_advisories(update.brings),
+    )
+
+
+def list_app_updates(*, limit: int = 50) -> dict[str, Any]:
+    """Every open update of an app's Compose pins, and what it would move."""
+
+    return _listed(lambda: list(app_updates()), serialize_app_update, limit)
+
+
+def get_app_update(key: str) -> dict[str, Any]:
+    with projection_scope():
+        found = next((update for update in app_updates() if _key(update) == key), None)
+        if found is None:
+            raise RecordNotFound("No open app update answers to that key.")
+        return serialize_app_update(found)
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -247,5 +303,17 @@ def resources() -> tuple[ResourceSpec, ...]:
             identifier="address",
             web_route="control_plane:containers",
             record_type=UpgradeRecord,
+        ),
+        ResourceSpec(
+            "app_updates",
+            "App updates",
+            "Every open Renovate pull request that moves an app's Compose pins: each pin before and after, "
+            "the containers it moves, its checks, and what it fixes and brings. Read-only.",
+            Capability.READ,
+            listing=ListRead(list_app_updates, BoundedQuery, AppUpdateRecord, fields=typed_keys(AppUpdateRow)),
+            detail_handler=get_app_update,
+            identifier="key",
+            web_route="control_plane:containers",
+            record_type=AppUpdateRecord,
         ),
     )

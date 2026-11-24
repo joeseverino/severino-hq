@@ -35,6 +35,7 @@ from .thresholds import Threshold
 from .tone import Tone
 from .ui import severity_tone
 from .workflow_contracts import ActionLink
+lazy from .app_updates import app_updates
 lazy from .facts import record_read_at, snapshots_of
 lazy from .images import GHCR, ImageRef
 lazy from .projects import repository_key
@@ -269,10 +270,15 @@ class Repository:
         failing ones named), an alert with its severity and what would fix it."""
 
         rows = []
+        apps: dict[Any, list[str]] = {}
+        for update in app_updates():
+            if update.repository == self.name:
+                apps.setdefault(update.number, []).extend((update.app, update.fixes_counted))
         for pull in self.update_pulls:
             badge, tone, failing = pull_checks(pull)
             opened = f"opened {ago(pull['opened'])}" if pull["opened"] else ""
-            rows.append(_pull_row(pull, failing, meta=opened, badge=badge, status=tone))
+            said = apps.get(pull.get("number"), ())
+            rows.append(_pull_row(pull, *said, failing, meta=opened, badge=badge, status=tone))
         for alert in self.unmatched_alerts:
             fixed = alert.get("first_patched_version")
             severity = str(alert.get("severity") or "")

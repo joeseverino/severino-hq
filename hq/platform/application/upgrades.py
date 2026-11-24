@@ -232,9 +232,7 @@ def _brought(standing: Any, checked: Mapping[str, Any] | None) -> tuple[Mapping[
         return ()
     before = _found(standing.checked)
     return ranked(
-        item
-        for key, item in _found(checked).items()
-        if key not in before and item.get("severity") in SERIOUS
+        item for key, item in _found(checked).items() if key not in before and item.get("severity") in SERIOUS
     )
 
 

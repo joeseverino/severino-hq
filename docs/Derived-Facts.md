@@ -777,6 +777,20 @@ known about the target (`target-unread`, `no-provenance`, `no-package-list`,
 `not-scanned`). Anything but a vetted patch waits. The program an upgrade runs
 is in [Deployment](Deployment.md#container-upgrades).
 
+`hq.platform.application.app_updates` reads each open Renovate pull request
+that changes a file under `compose/<app>/`. The app is that directory, never
+the branch or the title. Each `image:` line the diff takes out and puts in is a
+pin, under the service whose key stands above it. A pin moves a container when
+one of the container's compose files ends in the app's directory and that file's
+name, and the container runs the pin's image, under the same service where both
+name one. What a pin fixes and brings comes from the judge plans use
+(`upgrades.weigh`), run against the new pin's own OSV reading. A pin whose
+digest is not scanned yet says so and is never shown clean, and the registry
+reading lists each pin's digest for scanning. A diff GitHub leaves out is still
+an update, marked unreadable, with no pins. The container page, the image
+card, the repository's update rows and the `app_updates` resource all read
+this one answer.
+
 ## GitHub
 
 The controller reads `github.repository` through HQ's GitHub App: one

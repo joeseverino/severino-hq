@@ -112,6 +112,12 @@ class AppUpdate:
         return counted(len(self.fixes), "known vulnerability", "known vulnerabilities") if self.fixes else "None known"
 
     @property
+    def fixes_counted(self) -> str:
+        """What it fixes as a row's detail says it: ``fixes 2``, or ""."""
+
+        return f"fixes {len(self.fixes)}" if self.fixes else ""
+
+    @property
     def brings_said(self) -> str:
         if self.brings:
             return counted(len(self.brings), "serious vulnerability", "serious vulnerabilities")
@@ -151,9 +157,7 @@ def _app_updates() -> tuple[AppUpdate, ...]:
     found = []
     for name, repository in sorted(repositories().items()):
         pulls = (
-            pull
-            for pull in repository.pull_requests or ()
-            if str(pull.get("branch") or "").startswith(UPDATE_BRANCH)
+            pull for pull in repository.pull_requests or () if str(pull.get("branch") or "").startswith(UPDATE_BRANCH)
         )
         for pull in sorted(pulls, key=lambda pull: -int(pull.get("number") or 0)):
             for app, files in _by_app(pull.get("files") or ()).items():

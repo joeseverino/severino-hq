@@ -82,11 +82,9 @@ limits. Each said once; the band above has its version and standing.
   {% endsteps %}
   {% elif readiness.not_automatic %}{% list %}{% for blocker in readiness.not_automatic %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
   {% endif %}
+  {% if update.patch %}{% section "Compose change" id="compose-change" fold=True %}<pre tabindex="0"><code>{{ update.patch }}</code></pre>{% endsection %}{% endif %}
 {% aside %}{% muted %}{% if plan %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% elif readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}{% endmuted %}
 {% endsection %}
-{% if update.patch %}
-{% section "Compose change" id="compose-change" fold=True %}<pre tabindex="0"><code>{{ update.patch }}</code></pre>{% endsection %}
-{% endif %}
 {% endif %}
 
 {% comment %}
