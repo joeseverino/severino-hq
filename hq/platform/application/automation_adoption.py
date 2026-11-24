@@ -41,10 +41,11 @@ from hq.platform.core.digests import digest
 
 from . import automation_sources
 from .answer_fields import CallMessage
-from .automation_manifest import PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
+from .automation_manifest import AUTHORED, PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe, RequiredText
 from .contracts import Closed, Effect
+from .display_words import Quoted
 from .integration_specs import CapabilitySpec
 from .projection import read_once
 from .record_errors import PolicyError, RecordNotFound
@@ -98,7 +99,7 @@ class AdoptedInput(Closed):
         StrictStr | StrictInt | StrictFloat | StrictBool | tuple[StrictStr | StrictInt | StrictFloat, ...] | None
     ) = None
     choices: tuple[StrictStr | StrictInt | StrictFloat, ...] = ()
-    description: Annotated[str, StringConstraints(max_length=1000)] = ""
+    description: Annotated[str, StringConstraints(max_length=1000), AUTHORED] = ""
     bound: InputBound | None = None
 
 
@@ -108,7 +109,7 @@ class AdoptedProcedure(ProcedureTerms):
     ones of that commit no playbook runs (``shared``), each by its object id."""
 
     playbook: Annotated[str, StringConstraints(pattern=PLAYBOOK)]
-    title: Annotated[str, StringConstraints(max_length=200)]
+    title: Annotated[str, StringConstraints(max_length=200), AUTHORED]
     preconditions: tuple[Statement, ...]
     verification: tuple[Statement, ...]
     inputs: dict[Annotated[str, StringConstraints(pattern=INPUT_NAME.pattern)], AdoptedInput]
@@ -410,8 +411,8 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
         if problems or procedure is None:
             unadoptable[name] = _Unadoptable(
                 declared if isinstance(declared, str) else name,
-                scanned["title"] or name,
-                tuple(problems),
+                Quoted(scanned["title"] or name),
+                tuple(map(Quoted, problems)),
                 frozenset(used[name]),
             )
             continue
@@ -474,7 +475,8 @@ def titles(procedures: Mapping[str, AdoptedProcedure]) -> dict[str, str]:
 
 def _apart(titled: Mapping[str, str]) -> dict[str, str]:
     shared = Counter(titled.values())
-    return {key: title if shared[title] == 1 else f"{title} ({key})" for key, title in titled.items()}
+    # A key is the author's too (a sidecar's id or path), so the pair is still their words.
+    return {key: title if shared[title] == 1 else Quoted(f"{title} ({key})") for key, title in titled.items()}
 
 
 def playbook_titles(digest: str | None = None) -> dict[str, str]:
@@ -635,7 +637,7 @@ def _changes(
             key,
             called_after[key],
             "changed" if key in before else "added",
-            tuple(f"{sidecar}: {problem}" for problem in found.problems),
+            tuple(Quoted(f"{sidecar}: {problem}") for problem in found.problems),
         )
         for sidecar, (key, found) in unadoptable.items()
     )
@@ -720,7 +722,7 @@ def judged(proposal_id: int) -> AdoptionPlan:
         refused=(
             *unplaced,
             *(
-                f"{sidecar}: {problem}"
+                Quoted(f"{sidecar}: {problem}")
                 for sidecar, found in unadoptable.items()
                 if placed[sidecar] in waiting
                 for problem in found.problems

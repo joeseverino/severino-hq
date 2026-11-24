@@ -36,6 +36,7 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
+from .display_words import Quoted
 from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
 from .process_caches import kept
 from .record_errors import PolicyError, RecordNotFound
@@ -721,8 +722,10 @@ RETRY_WORDS = {
 }
 
 
-def _statements(statements: tuple[str, ...]) -> str:
-    return " ".join(ended(statement) for statement in statements)
+def _statements(statements: tuple[str, ...]) -> Quoted:
+    """An author's statements as one text, each a sentence: still theirs."""
+
+    return Quoted(" ".join(ended(statement) for statement in statements))
 
 
 def anywhere(target_kinds: Iterable[str]) -> str:
@@ -819,6 +822,7 @@ def run_preview(manifest: OperationManifest, held: ApprovalRequest) -> ChangePre
     inputs = whole_fields(json_schema(manifest.input_type))
     hosts = [str(host) for host in held.baseline.get("hosts") or ()]
     said = (
+        ("Playbook", run_title(manifest.id, automation_adoption.playbook_titles())),
         (str(MACHINES.title), get_text_list(hosts, "and")),
         *(
             (field_words(name, inputs.get(name)), value_words(value, inputs.get(name)))
@@ -863,8 +867,6 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
             f"Operation {manifest.id!r} has an id too long to be run: {name!r} is over {longest} characters."
         )
 
-    # The playbook by its title in quotes, or by its id where it has none.
-    named = f"“{titles[manifest.id]}”" if titles.get(manifest.id) else manifest.id
     run = measured_by(partial(run_subject, manifest), shown=partial(run_preview, manifest))(
         partial(request_run, manifest)
     )
@@ -879,7 +881,7 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
         run = waits_for_a_person(every_call)(run)
     return CapabilitySpec(
         name,
-        f"Run the adopted playbook {named} on the machines you name.",
+        "Run this adopted playbook on the machines you name.",
         manifest.effect,
         run_authority(manifest.effect),
         command_type(manifest),
@@ -898,8 +900,8 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
         # On a run's page once it has ended: the same playbook on the same machines.
         # A machine's page, which offers each playbook that runs there by this one name.
         variants=((AGAIN, f"{OperationRequest.Action.RUN.label} again"), (HERE, RUN_HERE)),
-        # Read on a held run's card, where the procedure is what was asked for.
-        wants=f"carry out the playbook {named}",
+        # Read on a held run's card, whose Playbook row and link name which.
+        wants="run a playbook",
         # A run belongs to Playbooks, where its playbook is listed.
         home=PLAYBOOKS,
         about=partial(about, manifest),

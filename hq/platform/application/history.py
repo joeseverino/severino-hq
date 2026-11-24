@@ -39,6 +39,7 @@ lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
 lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
 
+from .display_words import Quoted
 from .doors import Attribution
 from .entity_links import container_link, web_url
 from .facts import inventory_records
@@ -475,7 +476,8 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
         person = Cell(line.who.words, cut=True)
         state = line.state
         outcome = Cell.state(state) if isinstance(state, AuditLog.Action) else Cell(state, tone="neutral")
-        said = Cell(line.message, muted=True, role="data")
+        # The row's own text as stored, which an older release may have worded.
+        said = Cell(Quoted(line.message), muted=True, role="data")
     when = Cell(moment=line.at, muted=True)
     return Row((title, when, *((person,) if who else ()), outcome, said), key=key, **folding)
 

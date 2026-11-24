@@ -9,6 +9,7 @@ from typing import override
 from django.db import models
 from django.db.models import Q
 
+from hq.platform.application.display_words import QuotedCharField
 from hq.platform.application.labels import dotted
 from hq.platform.application.references import Kind
 from hq.platform.application.tone import Tone, TonedChoices
@@ -61,7 +62,7 @@ class DocumentationRecord(TimestampedModel):
         RESTRICTED = "restricted", "Restricted"
 
     doc_id = models.SlugField("doc ID", max_length=80, unique=True)
-    title = models.CharField(max_length=200)
+    title = QuotedCharField(max_length=200)
     doc_type = models.CharField(max_length=32, choices=DocType.choices, default=DocType.RUNBOOK)
     system_service = models.CharField(max_length=120, blank=True)
     environment = models.CharField(

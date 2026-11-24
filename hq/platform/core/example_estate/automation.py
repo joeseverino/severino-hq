@@ -83,7 +83,8 @@ PROCEDURES = (
             "effect": "infrastructure_change",
             "timeout_seconds": 300,
             "retry": "observe_first",
-            "recovery": ["The cache refills on its own as it is read."],
+            # An author's placeholder, which reads as markup.
+            "recovery": ["The cache refills as it is read; journalctl -u example-cache@<name>.service says why not."],
         },
         title="Empty a cache",
         preconditions=["The cache's service is running on the machine."],
@@ -230,7 +231,7 @@ WIDENED = (
             "recovery": ["Deleted files are gone; restore any still needed from the machine's last backup."],
             "fixes": ["filesystem-nearly-full"],
         },
-        title="Free space on a mount",
+        title="Free space on <mount>",
         preconditions=["The mount point exists on the machine, and its old logs and caches may be deleted."],
         verification=["The mount has more free space than before the run."],
         argument_spec={

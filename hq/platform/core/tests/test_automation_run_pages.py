@@ -163,11 +163,9 @@ class ProcedurePageTests(TestCase):
                         self.assertEqual(text(html).count(spec.description), 1)
 
     def test_each_procedure_s_page_is_named_by_its_playbook_s_title(self):
-        """The heading and the button say the title Playbooks gives the
-        playbook, and a held run's sentence names it so too."""
+        """The heading and the button say the title Playbooks gives the playbook."""
 
         from hq.platform.application.automation_adoption import playbook_titles
-        from hq.platform.application.capabilities import command_spec
 
         titles = playbook_titles()
         self.assertTrue(titles)
@@ -181,7 +179,6 @@ class ProcedurePageTests(TestCase):
                     if element.attrs.get("type") == "submit"
                 ]
                 self.assertEqual(buttons, [title])
-                self.assertIn(title, command_spec(f"automation.{operation_id}.run").wanted())
 
     def test_an_agent_reads_whether_its_run_waits_and_the_page_says_none_of_it(self):
         """Whether an agent's run waits for a person is in the notes
@@ -204,8 +201,8 @@ class ProcedurePageTests(TestCase):
         self.assertEqual(waits, {True, False})
 
     def test_a_held_run_s_card_says_what_approving_it_runs(self):
-        """The card names the playbook by its title, and shows the machines,
-        what the run does, its access and the commit adopted."""
+        """The card names the playbook by its title in a row of its own, and
+        shows the machines, what the run does, its access and the commit adopted."""
 
         from hq.domains.control_plane.models import ApprovalRequest
         from hq.platform.application.approval_review import review
@@ -222,8 +219,8 @@ class ProcedurePageTests(TestCase):
                 operation = request.baseline["spec"]["operation"]
                 manifest = operation_registry()[operation]
                 card = review(request, cli_principal())
-                self.assertIn(f"“{playbook_titles()[operation]}”", str(card["asked"]))
                 shown = {row.label: row.after for row in card["preview"].rows}
+                self.assertEqual(shown["Playbook"], playbook_titles()[operation])
                 for host in request.baseline["hosts"]:
                     self.assertIn(host, shown["Machines"])
                 self.assertEqual(shown["Adopted commit"], manifest.revision[:12])

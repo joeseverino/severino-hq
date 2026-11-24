@@ -177,8 +177,9 @@ def _summary(record: Mapping[str, Any], change: str) -> ChangeRow | None:
     said = record.get(SUMMARY)
     if not isinstance(said, Mapping):
         return None
-    words = str(said.get("value", ""))
-    return ChangeRow(label=str(said.get("label", "")), before=words, after=words, change=change)
+    # As written: a record's name may be its author's (``display_words.Quoted``).
+    words = said.get("value", "")
+    return ChangeRow(label=said.get("label", ""), before=words, after=words, change=change)
 
 
 def _fields(record: Any) -> dict[str, Any]:

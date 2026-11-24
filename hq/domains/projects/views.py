@@ -18,6 +18,7 @@ from hq.domains.projects.github import github_repository
 from hq.platform.application import related
 from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.capabilities import capability_words
+from hq.platform.application.display_words import Quoted
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import entity_link, page_url, record_link, web_url
 from hq.platform.application.list_pages import ListPageMixin
@@ -316,7 +317,7 @@ def _advisories(repo) -> Cell:
             status=StatusMark(item.get("severity") or "advisory", tone=severity_tone(item.get("severity"))),
             parts=(
                 Cell(item["id"], item["url"], external=True),
-                Cell(Truncator(item.get("summary") or "").chars(90)),
+                Cell(Quoted(Truncator(item["summary"]).chars(90))),
                 _published(item["published"]),
             ),
         )
@@ -329,7 +330,7 @@ def _advisories(repo) -> Cell:
 
 
 def _starred(repo) -> Cell:
-    description = Truncator(repo.get("description") or "").chars(110)
+    description = Quoted(Truncator(repo["description"]).chars(110))
     return Cell(
         repo["name"],
         repo["url"],

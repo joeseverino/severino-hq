@@ -251,6 +251,14 @@ def _run_title() -> Collate:
     return Collate(_scanned(scan_title(), Case(*acted, default=run, output_field=CharField())), "NOCASE")
 
 
+def _shown_title(kind: str, title: str) -> str:
+    """The work ``kind`` names as a page draws it: its playbook's title as the
+    author wrote it (``display_words.Quoted``), which SQL's copy of it
+    (``_run_title``) is not; else ``title``."""
+
+    return playbook_titles().get(operation_of(kind)) or title
+
+
 def scan_title() -> str:
     """A scan in words: the title of Refresh, the command that asks for one.
 
@@ -346,7 +354,10 @@ def _kinds() -> list[WorkKind]:
         .order_by()
     )
     # Two runs of a kind made in the same instant are both its latest; one names it.
-    latest = {named: WorkKind(named, title, seen) for named, title, seen in jobs.union(runs, all=True).order_by()}
+    latest = {
+        named: WorkKind(named, _shown_title(named, title), seen)
+        for named, title, seen in jobs.union(runs, all=True).order_by()
+    }
     return sorted(latest.values(), key=lambda found: found.title.casefold())
 
 
@@ -536,8 +547,8 @@ def _run_row(
     return WorkRun(
         source=RUN,
         id=str(operation.pk),
-        title=title,
-        kind=_kind_of(operation.action, str(asked.get("operation") or "")),
+        title=_shown_title(kind := _kind_of(operation.action, str(asked.get("operation") or "")), title),
+        kind=kind,
         state=seen.value,
         word=word,
         tone=tone,

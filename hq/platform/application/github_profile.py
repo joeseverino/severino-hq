@@ -20,6 +20,7 @@ from hq.platform.core.models import LinkedAccount
 from .asks import AskedAnswer, Standing, asked_read, read_standing
 from .command_fields import Describe
 from .contracts import Effect
+from .display_words import Quoted
 from .freshness import RETRY_AFTER, freshness
 from .integration_specs import CapabilitySpec
 from .linked_accounts import GITHUB
@@ -66,6 +67,8 @@ def profile(login: str) -> dict[str, Any] | None:
     watched = [
         {
             **repo,
+            # GitHub's words for it, as its owner wrote them.
+            "description": Quoted(repo.get("description") or ""),
             "starred": moment(repo["starred_at"]) if repo.get("starred_at") else None,
             "release": (
                 {**repo["release"], "published": moment(repo["release"].get("published_at", ""))}
@@ -73,7 +76,11 @@ def profile(login: str) -> dict[str, Any] | None:
                 else None
             ),
             "advisories": [
-                {**item, "published": moment(item["published_at"]) if item.get("published_at") else None}
+                {
+                    **item,
+                    "summary": Quoted(item.get("summary") or ""),
+                    "published": moment(item["published_at"]) if item.get("published_at") else None,
+                }
                 for item in repo.get("advisories") or ()
             ],
         }
