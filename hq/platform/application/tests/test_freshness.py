@@ -296,9 +296,9 @@ class ReadingAgeTests(TestCase):
         self.assertNotIn("read every", text(self.render(reading=freshness(SWEPT, timezone.now()))))
 
     def test_a_cadence_of_one_unit_says_the_unit_alone(self):
-        from ..freshness import Freshness
+        from ..freshness import Freshness, ReadCadence
 
-        reading = Freshness(STALE, timezone.now() - timedelta(days=3), timedelta(hours=1))
+        reading = Freshness(STALE, timezone.now() - timedelta(days=3), ReadCadence(timedelta(hours=1), timedelta(hours=1)))
 
         self.assertTrue(reading.cadence.endswith("every hour"))
 

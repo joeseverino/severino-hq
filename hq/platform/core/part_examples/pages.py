@@ -13,7 +13,7 @@ lazy from hq.domains.jobs.models import Job, JobState
 lazy from hq.platform.application.appearance import THEME_CHOICES, Theme
 lazy from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING, WAITING, Ask, Standing
 lazy from hq.platform.application.command_center import DiscoveryItem
-lazy from hq.platform.application.freshness import CURRENT, DUE, STALE, Freshness
+lazy from hq.platform.application.freshness import CURRENT, DUE, STALE, Freshness, ReadCadence
 lazy from hq.platform.application.pages import Page, PageAction, PageVisit
 lazy from hq.platform.application.request_channel import TAILNET_CHANNEL
 lazy from hq.platform.application.service_context import ServiceSection
@@ -407,9 +407,9 @@ READING_AGE_STATES = {
         "{% endfacts %}{% endsection %}",
         lambda: {
             "unread": "the registry refused an anonymous read (HTTP 401); the image may be private.",
-            "current": Freshness(CURRENT, DRAWN_AT - timedelta(minutes=4), timedelta(hours=1)),
-            "due": Freshness(DUE, DRAWN_AT - timedelta(minutes=22), timedelta(minutes=2)),
-            "stale": Freshness(STALE, DRAWN_AT - timedelta(days=3), timedelta(hours=1)),
+            "current": Freshness(CURRENT, DRAWN_AT - timedelta(minutes=4), ReadCadence(timedelta(hours=1), timedelta(hours=1))),
+            "due": Freshness(DUE, DRAWN_AT - timedelta(minutes=22), ReadCadence(timedelta(minutes=2), timedelta(hours=1))),
+            "stale": Freshness(STALE, DRAWN_AT - timedelta(days=3), ReadCadence(timedelta(hours=1), timedelta(hours=1))),
             "at": DRAWN_AT - timedelta(hours=2),
         },
     ),

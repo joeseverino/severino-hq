@@ -227,10 +227,18 @@ def stale_after(kind: str = "") -> timedelta:
 class Freshness:
     state: str
     observed_at: datetime | None
-    # How often its kind is read.
-    every: timedelta
+    # Its kind's cadence: how often it is read, and how old it may get.
+    read: ReadCadence
     # An ask for a reading taken on open went unanswered, so asking again is due.
     unanswered: bool = False
+
+    @property
+    def every(self) -> timedelta:
+        return self.read.every
+
+    @property
+    def stale_after(self) -> timedelta:
+        return self.read.stale_after
 
     @property
     def due(self) -> bool:
@@ -282,14 +290,14 @@ def freshness(
     found = cadence(kind)
     unanswered = found.on_open and asked_at is not None and reached(asked_at + found.stale_after, now=now)
     if observed_at is None:
-        return Freshness(NEVER, None, found.every, unanswered)
+        return Freshness(NEVER, None, found, unanswered)
     if (failed or unanswered) if found.on_open else reached(observed_at + found.stale_after, now=now):
         state = STALE
     elif reached(observed_at + found.every, now=now):
         state = DUE
     else:
         state = CURRENT
-    return Freshness(state, observed_at, found.every, unanswered)
+    return Freshness(state, observed_at, found, unanswered)
 
 
 # How far behind its own kind's newest reading a record may fall before the

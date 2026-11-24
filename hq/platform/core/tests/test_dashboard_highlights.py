@@ -17,7 +17,7 @@ from hq.platform.application.dashboard import dashboard_highlights
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.domains import Domain, domain_dashboard_cards
 from hq.platform.application.drawings import Dot, Dots, Trend
-from hq.platform.application.freshness import Freshness, last_read
+from hq.platform.application.freshness import Freshness, ReadCadence, last_read
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, links, select, text, with_class
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
@@ -87,7 +87,7 @@ class DashboardHighlightTests(SimpleTestCase):
     def test_a_window_whose_data_is_out_of_date_says_how_old_it_is(self):
         """A dated source past its cadence is never headed by its window ("Latest 4 weeks")."""
 
-        ended, cadence = timezone.now() - timedelta(days=60), timedelta(days=14)
+        ended, cadence = timezone.now() - timedelta(days=60), ReadCadence(timedelta(days=14), timedelta(days=14))
         overview = partial(DomainOverview, "A summary", "/example/", (Kpi("Work", "9"),), period="Latest 4 weeks")
         stale = {"label": "Example", "cards": [], "overview": overview(reading=Freshness("stale", ended, cadence))}
         html = render_to_string("core/_dashboard_highlights.html", {"dashboard_highlights": [stale]})
