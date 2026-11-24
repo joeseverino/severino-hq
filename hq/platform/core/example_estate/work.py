@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from hq.domains.content.content_sync import sync_content_index
 from hq.domains.content.models import ContentItem
-from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.control_plane.provider_adapters import github as delivery
@@ -579,6 +579,40 @@ _REFUSED = (
     ("Ask sudo whether the deploy login may start the pull unit", "ok", ""),
     ("Require sudo to let the deploy login start the pull unit", "failed", "sudo refuses to start the pull unit."),
 )
+
+
+# The apps repository's apps whose update stands where home-automation's
+# open one does not: merged and not applied, held by Renovate, and a Compose
+# file HQ can't match; and the app it no longer holds, moved by hand.
+MERGED_APP, HELD_APP, UNMATCHED_APP, UNHELD_APP = "immich", "jellyfin", "nginx-proxy-manager", "portainer"
+
+
+def update_states(newer: dict[str, str]) -> None:
+    """The apps repository as Renovate and its merges leave it beside the
+    open update, the newer releases ``newer`` names out."""
+
+    held = ProviderInventory.objects.get(kind="github.repository").records
+    store(
+        "github.repository",
+        *(_states(record, newer) if record["repository"] == f"example/{APPS}" else record for record in held),
+    )
+
+
+def _states(record: dict, newer: dict[str, str]) -> dict:
+    ref = ImageRef.parse(next(image for name, _port, image in CONTAINERS if name == MERGED_APP))
+    kept = [path for path in record["compose"] if path.split("/")[1] not in (UNMATCHED_APP, UNHELD_APP)]
+    return {
+        **record,
+        "compose": [*kept, f"compose/{UNMATCHED_APP}/docker-compose.yml"],
+        "compose_images": [
+            {
+                "path": f"compose/{MERGED_APP}/compose.yaml",
+                "service": MERGED_APP,
+                "image": f"{ref.name}:{newer[MERGED_APP]}",
+            }
+        ],
+        "held_branches": [{"branch": f"renovate/{HELD_APP}", "marker": "unpend", "apps": [HELD_APP]}],
+    }
 
 
 def approval(owner, ended: str) -> None:

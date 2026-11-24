@@ -303,6 +303,48 @@ def adopted(person: Principal) -> None:
     catch_up()
 
 
+APPS_APPLY = "example.apps_apply"
+APPLY_REVISION = _commit("Apply each app's Compose pins.")
+
+
+def _apply(hosts: tuple[str, ...]) -> dict[str, Any]:
+    """The procedure that applies a merged app update: it fixes an image
+    update and takes the commit to apply, written for ``hosts``."""
+
+    return _procedure(
+        "apps_apply",
+        "apps",
+        {
+            "id": APPS_APPLY,
+            "effect": "infrastructure_change",
+            "timeout_seconds": 900,
+            "retry": "observe_first",
+            "recovery": ["Run it again; each app converges to its pins."],
+            "fixes": ["container-image-update"],
+            "hosts": list(hosts),
+            "inputs": {"revision": {"pattern": "^[0-9a-f]{40}$", "max_length": 40}},
+        },
+        title="Apply the apps' pins",
+        preconditions=["The commit is on the default branch."],
+        verification=["Each app runs the image its Compose file pins."],
+        argument_spec={
+            "short_description": "Apply the apps at one commit",
+            "options": {"revision": {"type": "str", "required": True, "description": "The commit to apply."}},
+        },
+    )
+
+
+def applies_updates(person: Principal, hosts: tuple[str, ...]) -> None:
+    """A later commit of the example repository that adds the playbook
+    applying app updates on ``hosts``, refreshed and adopted by ``person``."""
+
+    found = catalog((*PROCEDURES, _apply(hosts)), APPLY_REVISION)
+    scan = _scanned(person, "example-refresh-apply", found, "Read the playbooks.", timedelta(days=2))
+    with doors.page("command", name="automation.source.adopt"):
+        _ran(ADOPT, {"proposal": scan.result["proposal"]}, principal=person, key=f"example-adopt-{scan.pk}")
+    catch_up()
+
+
 def proposed(person: Principal) -> None:
     """The commits after the one adopted, each refreshed by ``person``: one
     whose procedures HQ cannot adopt, then the newest, which widens what a

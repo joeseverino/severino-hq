@@ -233,6 +233,23 @@ ADVISED = {
 }
 
 
+# A newer release of every app the apps repository holds an update of in a
+# state of its own (``work.update_states``), and of one no repository holds.
+UPDATES = {
+    **NEWER,
+    "immich": "v1.120.1",
+    "adguard": "v1.0.0",
+    "nginx-proxy-manager": "2.12.2",
+    "portainer": "2.24.1",
+}
+
+
+def updates_out():
+    """The registries with a newer release of each app in ``UPDATES``."""
+
+    _registries(UPDATES)
+
+
 def images_left():
     """Images nothing runs: an earlier pull of a container's image and an
     untagged one, which HQ offers to remove, and each image the release pins,

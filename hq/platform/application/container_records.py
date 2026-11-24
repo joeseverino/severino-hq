@@ -252,9 +252,6 @@ class MergePart(TypedDict):
     ]
     step: Annotated[str, Describe("The step a failed preview or apply stopped on; empty for none.")]
     said: Annotated[str, Describe("What that run said as it stopped; empty for none.")]
-    again: Annotated[
-        str, Describe("The `operation.id` of the apply that failed, which Run again repeats; empty for none.")
-    ]
 
 
 class AppUpdateRecord(AppUpdateRow):

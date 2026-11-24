@@ -1552,17 +1552,25 @@ that declares `check_mode: false` (a precondition asking `sudo -n -l` whether
 the start is allowed) reads with the authority the apply has. `then` is HQ's
 alone and never reaches the worker's claim.
 
-The finding, the container page and the `app_updates` record read one answer,
-`approval_of`: the standing of the newest preview or merge at the head once
-one is asked, the reason the press would be refused now (the record's
-`held`), or the sentence saying what the press does. Approve is offered only
-when nothing is held, so a page never shows a press the capability would
-refuse. A preview or an apply that ended badly names the step it stopped on
-and what it said. A merge whose apply failed stands as merged and not
-applied, with Run again: the playbook's form, opened on that run's machines
-and commit (`finding_runs.run_again`, which fills no parameter from a
-preview). Once the pull request is closed, the container page reads that
-standing from the app's newest merge (`unapplied`).
+Every update of a running image has one state, `app_updates.update_state`,
+which the finding and the container page both draw: its words ("<container>
+has an update, <move>", the move from the pull request's pin, else the default
+branch's, else the registry's latest), its one action, and the reason there is
+none. A pull request open is Approve, through `approval_of`: the standing of
+the newest preview or merge at the head once one is asked, the reason the
+press would be refused now (the record's `held`), or the sentence saying what
+the press does. A pin the default branch's head holds that the container does
+not run (the repository record's `compose_images`) is Apply, which queues the
+playbook at that head on the machines it serves (`app_update.apply`, through
+`apply_of`). A branch the Dependency Dashboard holds with no pull request
+(`held_branches`, read from the boxes Renovate's `dependency-dashboard.ts`
+writes) says why Renovate holds it. A repository that holds the app's
+directory but not the file the container runs from says so, and a container
+no repository holds keeps the upgrade plan's steps by hand. An action is
+offered only when nothing holds it, so a page never shows a press the
+capability would refuse: a machine the playbook does not run on is refused by
+both presses at their own boundary (`unserved`). A preview or an apply that
+ended badly names the step it stopped on and what it said.
 
 Its security properties:
 
@@ -1571,8 +1579,7 @@ Its security properties:
   counts as one, so no run that acted, and no run a person asks for by hand,
   merges anything.
 - A preview never acts. `check` is set by the approval alone and kept on a
-  run put back after a lapsed lease. Run again opens a fresh form whose
-  parameters come only from a run that acted.
+  run put back after a lapsed lease. Apply never carries it.
 - No new merge rights. The merge goes through the same controller action,
   token and `Consent.require` as before; the consent is the press's, held as
   the preview's requester and `approved_by`.

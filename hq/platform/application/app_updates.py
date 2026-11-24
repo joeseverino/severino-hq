@@ -11,6 +11,7 @@ and their image, and the move is judged by the one judge every upgrade uses
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from .containers import Container, containers, published_digest, ranked, standing_of
@@ -18,8 +19,25 @@ from .github_estate import UPDATE_BRANCH, pull_checks, repositories
 from .images import ImageRef
 from .projection import projection_scope, read_once
 from .tone import Tone
-from .ui import counted
-from .upgrades import weigh
+from .ui import counted, ended
+from .upgrades import plan_for, weigh
+lazy from .app_update_approval import (
+    APPLY,
+    APPROVE,
+    Approval,
+    MergeStanding,
+    apply_of,
+    apply_target,
+    approval_of,
+    approve_target,
+)
+lazy from .container_findings import BY_HAND
+lazy from .finding_model import FindingRemedy
+lazy from .labels import lower_first
+lazy from .pages import PageAction, command_reach
+
+# What an update's new pins bring of their own, as every page labels it.
+BRINGS = "New vulnerabilities"
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,10 +53,18 @@ class Pin:
     digest: str
     # Its packages checked against OSV, None until they are.
     checked: Mapping[str, Any] | None
+    # What its publisher attached to that digest, None until read.
+    attested: Mapping[str, Any] | None = None
 
     @property
     def scanned(self) -> bool:
         return self.checked is not None
+
+    @property
+    def unlisted(self) -> bool:
+        """Whether its publisher attached no package list, so no scan can check it."""
+
+        return self.attested is not None and not self.attested.get("packages")
 
     @property
     def said(self) -> str:
@@ -97,6 +123,12 @@ class AppUpdate:
         return Tone.GOOD if self.scanned else Tone.ATTENTION
 
     @property
+    def publisher(self) -> str:
+        """Who publishes what it moves to, as its source repository names them, or ""."""
+
+        return next((item.standing.upstream for item in self.containers if item.standing.upstream), "")
+
+    @property
     def fixes_said(self) -> str:
         return counted(len(self.fixes), "known vulnerability", "known vulnerabilities") if self.fixes else "None known"
 
@@ -110,7 +142,11 @@ class AppUpdate:
     def brings_said(self) -> str:
         if self.brings:
             return counted(len(self.brings), "serious vulnerability", "serious vulnerabilities")
-        return "Nothing serious" if self.scanned else "Not scanned yet"
+        if self.scanned:
+            return "Nothing serious"
+        if any(pin.unlisted for pin in self.pins):
+            return f"Can't be checked: {self.publisher or 'its publisher'} publishes no package list"
+        return "Not checked yet"
 
     @property
     def evidence(self) -> tuple[tuple[str, str], ...]:
@@ -121,7 +157,7 @@ class AppUpdate:
             ("Pull request", f"{self.repository}{self.label}"),
             *(("Pin", pin.said) for pin in self.pins),
             ("Fixes", self.fixes_said),
-            ("Brings", self.brings_said),
+            (BRINGS, self.brings_said),
         )
 
     def moves(self, item: Container) -> bool:
@@ -254,8 +290,8 @@ def _update(
 
 def _pin(service: str, before: ImageRef | None, after: ImageRef) -> Pin:
     digest = published_digest(after)
-    checked = standing_of(f"{after.name}:{after.tag}@{digest}").checked if digest else None
-    return Pin(service, before, after, digest, checked)
+    target = standing_of(f"{after.name}:{after.tag}@{digest}") if digest else None
+    return Pin(service, before, after, digest, target.checked if target else None, target.attested if target else None)
 
 
 def _pinned(pin: Pin) -> str:
@@ -271,4 +307,179 @@ def _pin_of(item: Container, pins: tuple[Pin, ...]) -> Pin | None:
         names = {pin.after.name, *((pin.before.name,) if pin.before else ())}
         if name in names and (not pin.service or not service or pin.service == service):
             return pin
+    return None
+
+
+class UpdateKind(StrEnum):
+    """Where an app's newer release stands on its way to where it runs."""
+
+    # A pull request moves it.
+    OPEN = "open"
+    # Its repository's default branch pins it, and the container runs the pin before.
+    MERGED = "merged"
+    # Renovate holds its branch on the Dependency Dashboard, with no pull request.
+    HELD = "held"
+    # Its repository holds it, and Renovate has opened nothing for the release.
+    UNOPENED = "unopened"
+    # A repository holds its app, but not the Compose file it runs from.
+    UNMATCHED = "unmatched"
+    # No repository HQ reads holds its Compose files: a person moves it.
+    BY_HAND = "by_hand"
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateAction:
+    """The one press a state offers: its command, and the route arguments it posts to."""
+
+    capability: str
+    target: Mapping[str, str]
+
+    @property
+    def remedy(self) -> FindingRemedy:
+        url, _ = command_reach(self.capability, self.target)
+        return FindingRemedy(capability=self.capability, target="", url=url, method="POST")
+
+    def control(self, back: str) -> PageAction | None:
+        return PageAction.command(self.capability, self.target, primary=True, query={"next": back})
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateState:
+    """Where one container's update stands, and the one thing to do about it,
+    as its finding, the queue and its page all say it (``update_state``)."""
+
+    kind: UpdateKind
+    # ``2.16.0 to 2.17.1``: from what runs to the pin the state knows, "" where none.
+    move: str
+    # The sentence beside the title.
+    words: str
+    action: UpdateAction | None = None
+    # Why no press is offered, "" when one is; and what the press does.
+    reason: str = ""
+    said: str = ""
+    # Held because no one adopted playbook applies it: the Playbooks page's step.
+    adopt: bool = False
+    # How its approval or its apply stands, once one is asked.
+    standing: MergeStanding | None = None
+    update: AppUpdate | None = None
+    managed: Managed | None = None
+
+
+UNOPENED = "Renovate has not seen the release yet."
+# What each marker on the Dependency Dashboard says Renovate waits for
+# (Renovate's ``dependency-dashboard.ts``).
+WAITS_FOR = {
+    "unpend": "pending its status checks",
+    "approve": "waiting for approval",
+    "unschedule": "waiting for its schedule",
+    "unlimit": "rate-limited",
+}
+
+
+def update_state(item: Container) -> UpdateState:
+    """Where ``item``'s update stands: decided here alone, from the open pull
+    request, its repository's default branch, Renovate's dashboard and the
+    playbook that applies it, so no page and no finding decide it twice."""
+
+    plan = plan_for(item)
+    latest = f"{item.standing.tag} to {plan.target_tag}" if plan is not None else ""
+    if (update := update_of(item)) is not None:
+        pin = update.pin_of(item)
+        fixes = f", and fixes {lower_first(update.fixes_said)}" if update.fixes else ""
+        return _decided(
+            UpdateKind.OPEN,
+            pin.said if pin else latest,
+            ended(f"Pull request {update.label} moves it{fixes}"),
+            UpdateAction(APPROVE, approve_target(update)),
+            approval_of(update),
+            update=update,
+        )
+    managed = managed_by(item)
+    if managed is None:
+        if (unmatched := _unmatched(item)) is not None:
+            holder, why = unmatched
+            return UpdateState(UpdateKind.UNMATCHED, latest, ended(f"{holder} holds its app"), reason=why)
+        return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND)
+    repository = repositories()[managed.repository]
+    if (pinned := _pinned_at_head(item, repository)) is not None:
+        head = str((repository.head or {}).get("sha") or "")
+        return _decided(
+            UpdateKind.MERGED,
+            f"{item.standing.tag or item.standing.image.short} to {pinned.tag}",
+            ended(f"Merged in {managed.repository}, not applied"),
+            UpdateAction(APPLY, apply_target(managed, head)),
+            apply_of(managed.repository, head, (item,)),
+            managed=managed,
+        )
+    holds = ended(f"{managed.repository} holds it")
+    if held := _held_branch(repository, managed.app):
+        waits = WAITS_FOR.get(str(held.get("marker", "")), "")
+        why = ended(f"Renovate holds {held.get('branch', '')}" + (f", {waits}" if waits else ""))
+        return UpdateState(UpdateKind.HELD, latest, holds, reason=why, managed=managed)
+    return UpdateState(UpdateKind.UNOPENED, latest, holds, reason=UNOPENED, managed=managed)
+
+
+def _decided(
+    kind: UpdateKind, move: str, words: str, action: UpdateAction, approval: Approval, **of: Any
+) -> UpdateState:
+    """A state whose press runs while ``approval`` holds nothing back."""
+
+    if approval.held:
+        return UpdateState(
+            kind, move, words, reason=approval.held, adopt=approval.adopt, standing=approval.standing, **of
+        )
+    return UpdateState(kind, move, words, action, said=approval.said, standing=approval.standing, **of)
+
+
+def merged_of(repository: str, app: str) -> tuple[Container, ...]:
+    """The containers of ``app`` that run a pin before the one its repository's default branch holds."""
+
+    return tuple(
+        item
+        for item in containers()
+        if (managed := managed_by(item)) is not None
+        and (managed.repository, managed.app) == (repository, app)
+        and _pinned_at_head(item, repositories()[repository]) is not None
+    )
+
+
+def _pinned_at_head(item: Container, repository: Any) -> ImageRef | None:
+    """The image the default branch's head pins for ``item``, where it is not what runs."""
+
+    tails = set(map(_tail, item.compose_files))
+    service = str((item.runtime or {}).get("service", "") or "")
+    standing = item.standing
+    for each in repository.compose_images or ():
+        pinned = ImageRef.parse(str(each.get("image") or ""))
+        if (
+            pinned is None
+            or _tail(str(each.get("path") or "")) not in tails
+            or pinned.name != standing.image.name
+            or (service and each.get("service") and each["service"] != service)
+        ):
+            continue
+        moved = pinned.tag != standing.tag or bool(
+            pinned.digest and standing.digest and pinned.digest != standing.digest
+        )
+        return pinned if moved else None
+    return None
+
+
+def _held_branch(repository: Any, app: str) -> Mapping[str, Any] | None:
+    """The branch Renovate holds on the Dependency Dashboard for ``app``, with no pull request."""
+
+    return next((each for each in repository.held_branches or () if app in (each.get("apps") or ())), None)
+
+
+def _unmatched(item: Container) -> tuple[str, str] | None:
+    """The repository that holds ``item``'s app without the Compose file it
+    runs from, and why HQ can't match the two; None where none holds it."""
+
+    files = item.compose_files
+    apps = {_app(path) for path in files} or {item.running.stack or item.running.name}
+    for name, repository in sorted(repositories().items()):
+        if held := next((path for path in repository.compose if _app(path) in apps), ""):
+            if files:
+                return name, ended(f"It holds {held}, and {item.machine.name} runs it from {files[0]}")
+            return name, ended(f"HQ has not read the Compose files that run it, so it can't match them to {held}")
     return None

@@ -16,7 +16,7 @@ from . import (
     views,
     visit_views,
 )
-from .container_views import AppUpdateApproveView, ContainerListView
+from .container_views import AppUpdateApplyView, AppUpdateApproveView, ContainerListView
 from .models import OperationRequest
 
 app_name = "control_plane"
@@ -73,6 +73,11 @@ urlpatterns = [
         "app-updates/<str:owner>/<str:name>/<int:number>/<str:head_sha>/approve/",
         AppUpdateApproveView.as_view(),
         name="app_update_approve",
+    ),
+    path(
+        "app-updates/<str:owner>/<str:name>/<str:app>/<str:head_sha>/apply/",
+        AppUpdateApplyView.as_view(),
+        name="app_update_apply",
     ),
     # One specific record rather than everything a hostname answers with. A
     # container has no hostname at all, so it is unreachable from the route

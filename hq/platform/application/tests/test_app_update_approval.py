@@ -7,6 +7,7 @@ update, and stops what comes after it."""
 from typing import Annotated
 
 from django.test import TestCase
+from django.urls import reverse
 from pydantic import Field
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
@@ -15,13 +16,16 @@ from hq.platform.application.contracts import Closed
 from ..approvals import ApproveCommand, Settled, approve
 from ..capabilities import run_capability
 from ..controller import ControllerReport, claim_next_operation, report_operation
+from ..machines import Machine
 from ..resource_operations import serialize_operation
 from ..security import Capability, PolicyDenied, Principal
-from .procedures import APP, APPROVER, Supply, manifest
-from .test_app_updates import arranged, moved, pull
+from .procedures import APPROVER, Supply, manifest
+from .test_app_updates import PINNED, arranged, moved, pull
 from .test_github_estate import store
 
 APPROVE = "app_update.approve"
+# The machine the update's container runs on, which the playbook that applies it runs on.
+APP = "example-box"
 APPLY = "example.apps_apply"
 APPLY_RUN = f"automation.{APPLY}.run"
 CONTROLLER = "controller-example"
@@ -39,8 +43,8 @@ class Revision(Closed):
     revision: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$", max_length=40)]
 
 
-def applies(**fields):
-    return manifest(id=APPLY, input_type=Revision, hosts=(APP,), fixes=("container-image-update",), **fields)
+def applies(hosts=(APP,), **fields):
+    return manifest(id=APPLY, input_type=Revision, hosts=hosts, fixes=("container-image-update",), **fields)
 
 
 def stopped(task=REFUSED_TASK, message=REFUSED_SAID):
@@ -57,6 +61,7 @@ class ApproveUpdateTests(TestCase):
         managing_everything()
         arranged(pull(moves=[moved()]))
         self.supply = Supply(self, applies())
+        self.supply.machines = (*self.supply.machines, Machine(APP))
 
     def press(self, *, principal=PERSON, head=HEAD, key="example-approve-1"):
         payload = {"repository": "example/alpha", "number": 7, "head_sha": head}
@@ -121,8 +126,6 @@ class ApproveUpdateTests(TestCase):
         return merge_standing(update)
 
     def container_page(self):
-        from django.urls import reverse
-
         from hq.platform.core.testing import declare, operator
 
         operator(self.client)
@@ -203,24 +206,14 @@ class ApproveUpdateTests(TestCase):
 
     def test_the_container_page_draws_the_press_that_previews_the_update(self):
         page = self.container_page()
-        approve = page.context["container"]["approve"]
+        approve = page.context["container"]["act"]
 
         self.assertFalse(approve.disabled, approve.title)
         # Beside it, what the press does.
-        self.assertEqual(page.context["container"]["approval"].said, f"Merges #7, then applies it on {APP}.")
+        self.assertEqual(page.context["container"]["state"].said, f"Merges #7, then applies it on {APP}.")
         self.assertContains(page, "/approve/?next=")
         self.assertEqual(self.client.post(approve.url, {"__retry_key": "example-press"}).status_code, 302)
         self.assertEqual(self.preview().input["parameters"], {"revision": HEAD})
-
-    def test_the_update_card_offers_one_press_approve(self):
-        from .test_containers import queued
-
-        arranged(pull(moves=[moved()]), advisories=())
-
-        (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
-
-        self.assertEqual([step.link.capability for step in card.steps], [APPROVE])
-        self.assertEqual(card.no_help_reason, "")
 
     def test_an_agents_call_waits_for_a_person(self):
         answer = self.press(principal=AGENT)
@@ -280,6 +273,17 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(approval_of(app_updates()[0]).held, answer["error"]["message"])
         self.assertFalse(OperationRequest.objects.exists())
 
+    def test_an_update_where_the_playbook_never_runs_is_refused(self):
+        from .procedures import APP as ELSEWHERE
+
+        self.supply(applies(hosts=(ELSEWHERE,)))
+
+        answer = self.press()
+
+        self.assertFalse(answer["ok"], answer)
+        self.assertIn(APP, answer["error"]["message"])
+        self.assertFalse(OperationRequest.objects.exists())
+
     def test_a_caller_kept_off_the_playbooks_run_may_not_approve_it(self):
         from django.contrib.auth import get_user_model
 
@@ -316,29 +320,28 @@ class ApproveUpdateTests(TestCase):
         )
         self.assertEqual(context["merged_from"]["label"], "example/alpha#7")
 
-    def test_a_merge_whose_apply_fails_stands_merged_not_applied_with_run_again(self):
-        from ..finding_runs import run_again
-        from ..work_runs import run_url
+    def merged_on_main(self):
+        """Its pull request closed, and the default branch's head pinning what it merged."""
 
+        image = {"path": "compose/app/compose.yaml", "service": "app", "image": PINNED}
+        store(compose=["compose/app/compose.yaml"], head={"sha": MERGED}, compose_images=[image])
+
+    def test_a_merge_whose_apply_fails_is_applied_at_main_in_one_press(self):
         self.merged()
 
-        failed = self.worked(success=False, events=stopped("Start the pull unit", "The pull unit failed."))
+        self.worked(success=False, events=stopped("Start the pull unit", "The pull unit failed."))
 
         standing = self.standing()
         self.assertEqual((standing.words, standing.tone, standing.taken), ("Merged, not applied", "serious", True))
         self.assertEqual((standing.step, standing.said), ("Start the pull unit", "The pull unit failed."))
-        self.assertEqual((standing.run_url, standing.again), (run_url(str(failed.pk)), str(failed.pk)))
-        # Once its pull request is closed, the container's page still says so.
-        store(compose=["compose/app/compose.yaml"], pull_requests=[])
-        page = self.container_page()
-        self.assertEqual(page.context["container"]["approval"].standing.words, "Merged, not applied")
-        again = page.context["container"]["again"]
-        self.assertIn(f"again={failed.pk}", again.url)
-        self.assertContains(page, run_url(str(failed.pk)))
-        # Run again opens the playbook's own form on the failed run's machines and commit.
-        self.assertEqual(run_again(APPLY_RUN, str(failed.pk)), {"hosts": [APP], "parameters.revision": MERGED})
-        form = self.client.get(again.url).context["form"]
-        self.assertEqual(form["parameters.revision"].value(), MERGED)
+        self.merged_on_main()
+        apply = self.container_page().context["container"]["act"]
+        self.assertEqual(self.client.post(apply.url, {"__retry_key": "example-apply"}).status_code, 302)
+        again = self.applies().last()
+        self.assertEqual((again.input["parameters"], again.input["hosts"]), ({"revision": MERGED}, [APP]))
+        # Once asked, it is not offered again while it runs.
+        page = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
+        self.assertIsNone(page.context["container"]["act"])
 
     def test_run_again_of_a_preview_fills_no_run_that_acts(self):
         from ..finding_runs import run_again
@@ -355,9 +358,10 @@ class ApproveUpdateTests(TestCase):
         self.worked()
 
         self.assertEqual((self.standing().words, self.standing().tone), ("Applied", "good"))
-        # A closed update that applied leaves nothing on the container's page.
-        store(compose=["compose/app/compose.yaml"], pull_requests=[])
-        self.assertIsNone(self.container_page().context["container"]["approval"])
+        # A closed update that applied offers nothing more on the container's page.
+        self.merged_on_main()
+        container = self.container_page().context["container"]
+        self.assertEqual((container["state"].standing.words, container["act"]), ("Applied", None))
 
     def test_a_replayed_settle_queues_no_second_run(self):
         from ..app_update_approval import succeeded

@@ -11,7 +11,7 @@ and what each may do: docs/Architecture.md, "Approving an app update".
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated, Any
 
 from django.db import transaction
@@ -20,6 +20,7 @@ from pydantic import Field, ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMMIT, PULL_REQUEST_KIND, REPOSITORY
+lazy from hq.domains.control_plane.names import normalized_hostname
 
 from .command_fields import Describe
 from .contracts import Effect
@@ -29,12 +30,11 @@ from .record_fields import RecordId
 from .security import Capability, PolicyDenied
 from .tone import Tone
 from .ui import counted, ended
-lazy from .app_updates import AppUpdate, app_updates
+lazy from .app_updates import AppUpdate, app_updates, merged_of
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_manifest import OperationManifest
 lazy from .automation_runs import (
-    AGAIN,
     CHECK,
     capability_name,
     operation_registry,
@@ -46,10 +46,11 @@ lazy from .automation_runs import (
 lazy from .capabilities import Consented, command_spec, consent
 lazy from .capability_policy import Rule, decide
 lazy from .container_findings import UPDATE
+lazy from .containers import Container
 lazy from .entity_links import web_url
-lazy from .finding_model import FindingRemedy
+lazy from .github_estate import repositories
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
-lazy from .pages import PageAction, command_reach
+lazy from .labels import lower_first
 lazy from .payload_words import ChangeRow
 lazy from .resource_operations import ACTION_CAPABILITY, THEN, OperationAsked, queue_carried_merge
 lazy from .work_runs import run_url, stopped_at
@@ -77,6 +78,8 @@ class ApproveUpdateCommand:
 
 # The page a playbook is adopted on, as its refusal names it.
 PLAYBOOKS = "Playbooks"
+APPROVE = ACTION_CAPABILITY[OperationRequest.Action.MERGE]
+APPLY = "app_update.apply"
 
 
 def applier() -> OperationManifest:
@@ -235,10 +238,7 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
     standing = merge_standing(updates[0])
     if standing is not None and standing.taken:
         raise PolicyError("This update is already approved, and its card says where it stands.")
-    hosts = resolved_hosts(manifest, manifest.hosts)
-    if not hosts:
-        raise PolicyError("The playbook that applies an app update names no machine to apply it on.")
-    reached(manifest, hosts)
+    hosts = _applied_on(manifest, tuple(item for update in updates for item in update.containers))
     pull = _declared(command, consented=consented)
     correlation = f"{command.repository}#{command.number}@{command.head_sha[:12]}"
     # The preview's record is the playbook's as approved (``queue_run``):
@@ -263,6 +263,81 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
                     "correlation": correlation,
                 },
             },
+        },
+        reason="",
+        consented=consented,
+    )
+
+
+def _applied_on(manifest: OperationManifest, items: tuple[Container, ...]) -> tuple[str, ...]:
+    """The machines the playbook applies on, refused where it does not run
+    where ``items`` run, or the worker reaches none of them."""
+
+    hosts = resolved_hosts(manifest, manifest.hosts)
+    if not hosts:
+        raise PolicyError("The playbook that applies an app update names no machine to apply it on.")
+    if reason := unserved(items, hosts):
+        raise PolicyError(reason)
+    reached(manifest, hosts)
+    return hosts
+
+
+def unserved(items: tuple[Container, ...], hosts: tuple[str, ...]) -> Sentence:
+    """Why a merge could never reach where ``items`` run: a machine of theirs
+    the playbook that applies it does not run on; "" where it runs on each."""
+
+    missing = sorted({normalized_hostname(item.machine.name) for item in items} - set(hosts))
+    if not missing:
+        return ""
+    return ended(f"The playbook that applies it does not run on {get_text_list(missing, 'and')}")
+
+
+@dataclass(frozen=True, slots=True)
+class ApplyUpdateCommand:
+    """The app to apply at the head of its repository's default branch you saw."""
+
+    repository: Annotated[
+        str, Field(pattern=REPOSITORY, max_length=140), Describe("The repository that holds it, as owner/name.")
+    ]
+    app: Annotated[
+        str,
+        Field(pattern=r"^[A-Za-z0-9_.-]+$", max_length=100),
+        Describe("The app, as its directory of Compose files names it."),
+    ]
+    head_sha: Annotated[
+        str,
+        Field(pattern=COMMIT),
+        Describe(
+            "The default branch's head you saw.", api="The repository's `head`; a head that moved since is refused."
+        ),
+    ]
+
+
+@transaction.atomic
+def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> OperationAsked:
+    """Run the playbook that applies app updates at the default branch's head,
+    where a container of the app still runs a pin from before it."""
+
+    principal = consent(consented).principal
+    manifest = applier()
+    _may_run(manifest, principal)
+    items = merged_of(command.repository, command.app)
+    if not items:
+        raise RecordNotFound("Every container of that app runs what its default branch pins.")
+    if (repositories()[command.repository].head or {}).get("sha") != command.head_sha:
+        raise PolicyError("Its default branch has a new head since you looked. Look again.")
+    standing = _apply_standing(manifest.id, command.head_sha)
+    if standing is not None and standing.taken:
+        raise PolicyError("This update is already applied at that head, and its card says where it stands.")
+    hosts = _applied_on(manifest, items)
+    return queue_run(
+        manifest,
+        {
+            "operation": manifest.id,
+            "revision": manifest.revision,
+            "parameters": _parameters(manifest, command.head_sha),
+            "hosts": list(hosts),
+            "correlation": f"{command.repository}@{command.head_sha[:12]}",
         },
         reason="",
         consented=consented,
@@ -329,7 +404,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
     handler = waits_for_a_person(every_call)(measured_by(_measured, shown=_shown)(approve_update))
     return (
         CapabilitySpec(
-            ACTION_CAPABILITY[OperationRequest.Action.MERGE],
+            APPROVE,
             "Approve an app update: preview applying it where the app runs, then merge its pull request at the "
             "head you reviewed and apply the merge.",
             Effect.INFRASTRUCTURE_CHANGE,
@@ -351,6 +426,26 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             label="Approve update",
             verb="Approve",
             wants="merge and apply an app update",
+        ),
+        CapabilitySpec(
+            APPLY,
+            "Apply an app its repository's default branch pins newer than what runs: run the adopted playbook that "
+            "applies app updates at that branch's head, on its machines.",
+            Effect.INFRASTRUCTURE_CHANGE,
+            Capability.MANAGE_INFRASTRUCTURE,
+            ApplyUpdateCommand,
+            waits_for_a_person(every_call)(apply_update),
+            execution_notes=(
+                "Refuse unless one adopted playbook applies app updates and you may run it.",
+                "Refuse an app whose containers each run what the default branch pins, or a head that moved.",
+                "Refuse while a run of that head waits or works, or once one applied it.",
+                "Refuse where a container of the app runs on a machine the playbook does not run on.",
+                "Queue one run of the playbook with the head as its revision, as you.",
+                "When an agent asks, it waits for an operator's approval.",
+            ),
+            label="Apply update",
+            verb="Apply",
+            wants="apply an app update",
         ),
     )
 
@@ -388,25 +483,12 @@ class MergeStanding:
     # Of a preview or an apply that ended badly: the step it stopped on, and what it said.
     step: str = ""
     said: str = ""
-    # The apply that failed, which Run again asks for again; "" otherwise.
-    again: str = ""
 
     @property
     def lines(self) -> tuple[str, ...]:
         """Its fact's detail: the step it stopped on, then what it said."""
 
         return tuple(line for line in (self.step, self.said) if line)
-
-
-def run_again_action(standing: MergeStanding) -> PageAction | None:
-    """The press that asks for the failed apply again, its playbook's own
-    form filled from that run (``finding_runs.run_again``); None while none failed."""
-
-    run = OperationRequest.objects.filter(pk=standing.again).first() if standing.again else None
-    if run is None:
-        return None
-    name = capability_name(str((run.input or {}).get("operation", "")))
-    return PageAction.command(name, variant=AGAIN, query={"again": standing.again})
 
 
 def merge_standing(update: AppUpdate) -> MergeStanding | None:
@@ -464,49 +546,49 @@ def _merged(merge: OperationRequest) -> MergeStanding:
 
 
 def _applied(merge: OperationRequest, first: str) -> MergeStanding:
-    """How the merge's apply stands: its newest run of the merge commit, a
-    Run again's included, which acted rather than previewed."""
+    """How the merge's apply stands: its newest run of the merge commit."""
 
     queued = OperationRequest.objects.filter(pk=first).first()
+    revision = str(((queued.input or {}).get("parameters") or {}).get(REVISION) or "") if queued else ""
+    standing = _apply_standing(str((queued.input or {}).get("operation", "")), revision) if queued else None
+    if standing is None:
+        return MergeStanding("Merged", Tone.GOOD, run_url(first), taken=True)
+    if standing.tone == Tone.GOOD:
+        return standing
+    # Once merged, a failed apply is pressed again from the default branch (``app_updates.UpdateKind.MERGED``).
+    return replace(standing, words=f"Merged, {lower_first(standing.words)}", taken=True)
+
+
+def _apply_standing(operation: str, revision: str) -> MergeStanding | None:
+    """How the newest run of the playbook ``operation`` that applied (rather
+    than previewed) the commit ``revision`` stands; None before one is asked."""
+
     apply = (
         OperationRequest.objects.filter(
             action=OperationRequest.Action.RUN,
-            resource_id=queued.resource_id,
-            **{f"input__parameters__{REVISION}": (queued.input.get("parameters") or {}).get(REVISION)},
+            input__operation=operation,
+            **{f"input__parameters__{REVISION}": revision},
         )
         .exclude(input__has_key=CHECK)
         .order_by("-created_at")
         .first()
-        if queued is not None
-        else None
     )
     if apply is None:
-        return MergeStanding("Merged", Tone.GOOD, run_url(first), taken=True)
+        return None
     url = run_url(str(apply.pk))
     if apply.state in _ACTIVE:
-        return MergeStanding("Merged, applying", Tone.ATTENTION, url, taken=True)
+        return MergeStanding("Applying", Tone.ATTENTION, url, taken=True)
     if apply.state == OperationRequest.State.SUCCEEDED:
         return MergeStanding("Applied", Tone.GOOD, url, taken=True)
     step, said = stopped_at(apply)
-    return MergeStanding(
-        "Merged, not applied", Tone.SERIOUS, url, taken=True, step=step, said=said, again=str(apply.pk)
-    )
+    return MergeStanding("Not applied", Tone.SERIOUS, url, step=step, said=said)
 
 
-def unapplied(repository: str, app: str) -> MergeStanding | None:
-    """The newest approved merge of an update of ``app`` in ``repository``
-    while it has no run that applied it; None once it applied or before one
-    merged. Read where no update of the app is open any more."""
+def apply_target(managed: Any, head: str) -> dict[str, str]:
+    """The route arguments a press applying ``managed``'s app at ``head`` posts to."""
 
-    merges = OperationRequest.objects.filter(
-        action=OperationRequest.Action.MERGE,
-        state=OperationRequest.State.SUCCEEDED,
-        resource__kind=PULL_REQUEST_KIND,
-        resource__spec__repository=repository,
-    ).order_by("-created_at")
-    merge = next((each for each in merges.iterator() if app in ((each.input or {}).get("apps") or ())), None)
-    standing = _merged(merge) if merge is not None else None
-    return standing if standing is not None and standing.tone != Tone.GOOD else None
+    owner, _, name = managed.repository.partition("/")
+    return {"owner": owner, "name": name, "app": managed.app, "head_sha": head}
 
 
 def approve_target(update: AppUpdate) -> dict[str, str]:
@@ -533,23 +615,35 @@ def approval_of(update: AppUpdate) -> Approval:
     """How approving ``update`` stands now. The applier is resolved as the
     approval resolves it (``applier``), so no surface offers a press it refuses."""
 
-    standing = merge_standing(update)
+    return _approval(
+        merge_standing(update), update.containers, _unapprovable(update), f"Merges {update.label}, then applies it"
+    )
+
+
+def apply_of(repository: str, head: str, items: tuple[Container, ...]) -> Approval:
+    """How applying ``repository``'s default branch at ``head`` where ``items`` run stands now."""
+
+    try:
+        manifest = applier()
+    except PolicyError as refusal:
+        return Approval(None, str(refusal), adopt=True)
+    return _approval(_apply_standing(manifest.id, head), items, "", f"Applies {repository} at {head[:7]}")
+
+
+def _approval(standing: MergeStanding | None, items: tuple[Container, ...], refused: str, does: str) -> Approval:
+    """Its press held back while a step of it stands taken, no one playbook
+    applies it, it is ``refused``, or that playbook does not run where ``items`` run."""
+
     if standing is not None and standing.taken:
         return Approval(standing, standing.words)
     try:
         manifest = applier()
     except PolicyError as refusal:
         return Approval(standing, str(refusal), adopt=True)
-    if reason := _unapprovable(update):
-        return Approval(standing, reason)
+    if refused:
+        return Approval(standing, refused)
     hosts = resolved_hosts(manifest, manifest.hosts)
+    if reason := unserved(items, hosts):
+        return Approval(standing, reason)
     where = f" on {get_text_list(list(hosts), 'and')}" if hosts else ""
-    return Approval(standing, said=ended(f"Merges {update.label}, then applies it{where}"))
-
-
-def approve_remedy(update: AppUpdate) -> FindingRemedy:
-    """The press that approves ``update``, as a finding offers it while ``approval_of`` holds nothing back."""
-
-    name = ACTION_CAPABILITY[OperationRequest.Action.MERGE]
-    url, _ = command_reach(name, approve_target(update))
-    return FindingRemedy(capability=name, target="", url=url, method="POST")
+    return Approval(standing, said=ended(f"{does}{where}"))
