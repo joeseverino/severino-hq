@@ -35,7 +35,7 @@ from .sweep import store
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")
-# The repository HQ opens dependency updates for.
+# The repository whose dependency update and alerts are open.
 UPDATED = "photo-library"
 # The repository whose default branch fails a check, so the queue holds GitHub's item.
 FAILING = "homelab"
@@ -43,6 +43,8 @@ FAILING = "homelab"
 # and the app its open update moves to the newer release.
 APPS = "homelab"
 UPDATED_APP = "home-automation"
+# The repositories HQ opens dependency updates for: each with an update open.
+OPTED_IN = (UPDATED, APPS)
 # How many runs of each piece of HQ's own work on a clock to show.
 RUNS = 3
 # The states the latest run of the first scheduled kinds is left in, one each.
@@ -142,14 +144,14 @@ def repositories():
         return record
 
     store("github.repository", *(repository(name) for name in REPOSITORIES))
-    # This morning's update run of the opted-in repository, finished cleanly.
+    # This morning's update run of the opted-in repositories, finished cleanly.
     started = timedelta(hours=5)
     store(
         DEPENDENCY_RUN_KIND,
         {
             "connection_ref": GITHUB,
             "owner": "example",
-            "repositories": [f"example/{UPDATED}"],
+            "repositories": [f"example/{name}" for name in OPTED_IN],
             "outcome": "ok",
             "exit_code": 0,
             "started_at": iso(started),

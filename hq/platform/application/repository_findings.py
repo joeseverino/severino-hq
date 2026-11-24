@@ -174,7 +174,7 @@ def _alerts(repo: Repository) -> Iterator[Said]:
     )
     updates = _updates_url(repo) if unmatched else ""
     if unmatched:
-        body += f" {counted(unmatched, 'has', 'have')} no update pull request."
+        body += f" {counted(unmatched, 'has', 'have')} no update open."
     finding = _about(
         repo,
         ALERTS,

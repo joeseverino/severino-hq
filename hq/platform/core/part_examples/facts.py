@@ -282,7 +282,7 @@ FACTS_STATES = {
                         "id": "updates",
                         "label": Counted(2, "Example open update", "Example open updates"),
                         "url": "/example/updates/",
-                        "detail": "2 example alerts with no fix open",
+                        "detail": "2 example alerts with no update open",
                     },
                     {
                         "id": "drafts",
