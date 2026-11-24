@@ -13,7 +13,7 @@ from hq.platform.core.network import parse_ip
 
 from .entity_links import EntityLink, entity_link
 from .finding_model import Finding, FindingEstate
-from .finding_steps import Run
+from .finding_steps import Do
 from .reach import TAILNET
 from .tailnet import HQ_ADMITS_ONLY_NAMED
 from .tone import Tone
@@ -62,9 +62,9 @@ def wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
                     *(("Subnet route", route) for route in routes),
                 ),
                 steps=(
-                    Run(
-                        label="Set this where HQ is deployed, then restart HQ",
-                        command=(f"SEVERINO_TRUSTED_NETWORKS={narrowed(wide, addresses, routes)}"),
+                    Do(
+                        "Set this where HQ is deployed, then restart HQ",
+                        value=f"SEVERINO_TRUSTED_NETWORKS={narrowed(wide, addresses, routes)}",
                         notes=("A device that joins later is refused until it is added.",),
                     ),
                 ),

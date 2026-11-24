@@ -510,8 +510,9 @@ def source_attention(
                 why="Asking this source for its items raised an error, so anything it would report is missing.",
                 steps=(
                     finding_steps.Do(
-                        "Find the line in HQ's log whose event is composition.source.unreadable and whose message "
-                        f"names {source_id}; the traceback under it says what failed."
+                        f"Find the line in HQ's log with this event whose message names {source_id}; the traceback "
+                        "under it says what failed.",
+                        value="composition.source.unreadable",
                     ),
                 ),
                 read_capabilities=read_capabilities,

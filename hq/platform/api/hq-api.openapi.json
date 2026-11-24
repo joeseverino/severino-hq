@@ -54,6 +54,7 @@
               "steps.command",
               "steps.notes",
               "steps.text",
+              "steps.value",
               "no_help_reason",
               "check",
               "check.name",
@@ -519,6 +520,7 @@
               "credential_fix.steps.notes",
               "credential_fix.steps.kind",
               "credential_fix.steps.text",
+              "credential_fix.steps.value",
               "last_activity",
               "last_activity.summary",
               "last_activity.created_at",
@@ -2609,6 +2611,7 @@
               "findings.steps.command",
               "findings.steps.notes",
               "findings.steps.text",
+              "findings.steps.value",
               "findings.check",
               "findings.check.name",
               "findings.check.label",
@@ -12299,7 +12302,7 @@
       },
       "Do": {
         "additionalProperties": false,
-        "description": "What to do, in words, where no exact command can be named.",
+        "description": "What to do, in words, where no exact command can be named, with the\nvalue it has the reader set or copy, drawn as code since words cannot hold it.",
         "properties": {
           "kind": {
             "const": "do",
@@ -12314,18 +12317,24 @@
           "text": {
             "description": "What to do, in a sentence or two.",
             "type": "string"
+          },
+          "value": {
+            "default": "",
+            "description": "What it has the reader set or paste, exactly; empty when it has none.",
+            "type": "string"
           }
         },
         "required": [
           "text",
           "notes",
+          "value",
           "kind"
         ],
         "type": "object"
       },
       "DoPartial": {
         "additionalProperties": false,
-        "description": "What to do, in words, where no exact command can be named.",
+        "description": "What to do, in words, where no exact command can be named, with the\nvalue it has the reader set or copy, drawn as code since words cannot hold it.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/Do/properties/kind"
@@ -12336,6 +12345,9 @@
           },
           "text": {
             "$ref": "#/components/schemas/Do/properties/text"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Do/properties/value"
           }
         },
         "type": "object"

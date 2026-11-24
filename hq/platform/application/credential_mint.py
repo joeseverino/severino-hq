@@ -220,7 +220,7 @@ def mint_command(minter: Minter, provider: str, store: Mapping[str, str]) -> tup
         names = " and ".join(name for name, _ in minter.bootstrap)
         notes.append(
             f"The connection's 1Password item names no bootstrap item. Set {names} "
-            "first, or add a bootstrap field (op://<vault>/<item>) to the item."
+            "first, or add a bootstrap field to the item holding the 1Password reference of the item that has them."
         )
     if blocking:
         return "", tuple(blocking + notes)

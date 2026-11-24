@@ -17,7 +17,7 @@ from .finding_model import (
     Said,
     per_connection,
 )
-from .finding_steps import Do, Run
+from .finding_steps import Do
 from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort, loopback_grants
 from .tone import Tone
 from .ui import agreed, counted, counted_forms, ended
@@ -210,23 +210,23 @@ def _listens(port: LoopbackPort) -> str:
     return "HQ serves only on loopback" if port.hq else "every container publishing it binds to loopback"
 
 
-def _loopback_steps(item: LoopbackGrant) -> tuple[Run | Do, ...]:
+def _loopback_steps(item: LoopbackGrant) -> tuple[Do, ...]:
     """The grant without the ports, then each test that accepts them with them moved to deny."""
 
     whom = f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"
     fragment = item.fragment
     edit = (
-        Run(
+        Do(
             f"In the Tailscale admin console, open Access controls and replace the grant from {whom} with this one.",
-            json.dumps(fragment),
+            value=json.dumps(fragment),
         )
         if fragment
         else Do(ended(f"In the Tailscale admin console, open Access controls and remove the grant from {whom}"))
     )
     tests = tuple(
-        Run(
-            label="Replace the policy test that accepts the port with this one, which denies it.",
-            command=json.dumps(test),
+        Do(
+            "Replace the policy test that accepts the port with this one, which denies it.",
+            value=json.dumps(test),
             notes=("Tailscale rejects a policy whose test fails, so the port cannot be opened again by mistake.",),
         )
         for test in item.tests

@@ -29,7 +29,15 @@ def steps_text(finding) -> str:
     """Every word of a serialized finding's operator steps."""
 
     return " ".join(
-        " ".join((step.get("label", ""), step.get("text", ""), step.get("command", ""), *step.get("notes", ())))
+        " ".join(
+            (
+                step.get("label", ""),
+                step.get("text", ""),
+                step.get("command", ""),
+                step.get("value", ""),
+                *step.get("notes", ()),
+            )
+        )
         for step in finding["steps"]
     )
 

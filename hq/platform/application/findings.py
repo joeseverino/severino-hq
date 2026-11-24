@@ -476,7 +476,9 @@ def _no_help_reason(finding: Finding) -> str:
     offer and no exact command to name. Judged before a principal's remedies
     are filtered: a remedy this reader may not run is still a remedy."""
 
-    if finding.remedies or any(isinstance(step, Run) for step in finding.steps):
+    if finding.remedies or any(
+        isinstance(step, Run) or (isinstance(step, Do) and step.value) for step in finding.steps
+    ):
         return ""
     found = _RULE_BY_NAME.get(finding.rule)
     return finding.no_help_reason or (found.no_help_reason if found else "")

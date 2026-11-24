@@ -217,7 +217,7 @@ def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
         return Help(no_help_reason=REASONS[check.id], offers=settings)
     runs = tuple(Run(label, command) for repo in missing for label, command in derive(repo))
     called = tuple(
-        Do(f"{repo.short}: check that {workflow} pins its own actions, then require pinning.")
+        Do(f"{repo.short}: check that this workflow pins its own actions, then require pinning.", value=workflow)
         for repo in missing
         for workflow in (calls_workflows(repo) if check.id == "actions-pinned" else ())
     )

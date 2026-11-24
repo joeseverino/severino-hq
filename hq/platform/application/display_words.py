@@ -24,11 +24,19 @@ MACHINE_TEXT = {
     "a dumped record": re.compile(r"\{'[^']*': "),
     "a dumped list": re.compile(r"\[(?:'[^']*'|\{)"),
     "a bare flag": re.compile(r"(?<![\w-])(?:True|False)(?![\w-])"),
+    "an image digest": re.compile(r"\bsha(?:256|384|512):[0-9a-f]{8,}"),
     "markup": re.compile(r"<[a-z][\w-]*[\s/>]|(?<![\w-])[a-z][\w-]*=\"[^\"]*\""),
 }
 # A field's metadata when it quotes a record's own text (a search match): a
 # person or a provider wrote it, and a page shows it as they did.
 QUOTED: Mapping[str, bool | str] = MappingProxyType({"quoted": True})
+
+
+class Code(str):
+    """What a machine wrote that a reader reads or copies exactly (an image
+    reference, a digest, a path), drawn in the code face, never in words."""
+
+    __slots__ = ()
 
 
 def quoted_when(flag: str) -> Mapping[str, bool | str]:
@@ -58,10 +66,11 @@ def _machine_text(text: str, *, label: bool = False) -> str:
     """What a machine wrote in ``text``, named, or "" when it is words.
 
     A ``label`` (a heading, a fact's name) is also refused as a snake_case key.
-    What a person wrote outside HQ (``Quoted``) is words.
+    What a person wrote outside HQ (``Quoted``) is words, and ``Code`` is
+    drawn as code.
     """
 
-    if isinstance(text, Quoted):
+    if isinstance(text, Quoted | Code):
         return ""
     for name, shape in MACHINE_TEXT.items():
         if found := shape.search(text):
