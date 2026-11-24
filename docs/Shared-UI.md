@@ -1192,11 +1192,11 @@ which sends what it carries.
 
 ### partials/_page_head.html (host only)
 
-**One head.** Trail, title, controls, lede, laid out the same at every width. The controls stand
-at the head's top right, beside the trail and the title together, so the trail's line is as tall
-as its words, or beside the title alone where there is no trail (the title wraps before the
-controls move). Every line after the title has the head's whole width: what the page says about
-its thing and the lede never share a line with the controls. Two controls stand there at every
+**One head.** Trail, title, controls, lede, laid out the same at every width. The trail has a
+line of its own; the controls end the title's line, and where the title and they don't fit side
+by side they wrap to a line of their own under it, so neither squeezes the other. Every line
+after the title has the head's whole width: what the page says about its thing and the lede
+never share a line with the controls. Two controls stand there at every
 width, the lead and the next the page names, and the rest go behind the overflow menu. A head too narrow for three (a container query on
 the head) folds the second in too. The lead is chosen by what each control is for, never by where
 it stands: not a destructive one while another is offered, then one that can be pressed, then the
