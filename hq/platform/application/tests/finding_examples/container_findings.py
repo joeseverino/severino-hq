@@ -70,7 +70,8 @@ ADVISED = "ghcr.io/example/app:v1.2.0 has 1 known vulnerability"
 UNFIXED = {**HIGH, "id": "GHSA-unfixed", "vulnerabilities": [["< 2.0.0", ""]]}
 BROUGHT = {**HIGH, "id": "GHSA-brought", "vulnerabilities": [[">= 1.3.0", ""]]}
 SET_APP = Do(
-    "On example-box, set the image of app to ghcr.io/example/app:v1.3.0 where it is defined, then start it again."
+    "On example-box, set the image of app where it is defined, then start it again.",
+    value="image: ghcr.io/example/app:v1.3.0",
 )
 PINNED = f"ghcr.io/example/app:v1.2.1@{TARGET}"
 PLANNED, LISTED = "/infrastructure/example-box-app/#upgrade", "/infrastructure/containers/"

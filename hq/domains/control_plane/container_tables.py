@@ -148,7 +148,7 @@ def _image(standing: Any) -> Cell:
     """The image by its short name, then its tag, how it is pinned and when it was built."""
 
     pinned = (
-        Cell("locked", tip=f"Locked to {standing.image.digest[:19]}…", dot=True)
+        Cell("locked", tip="It runs the one image its digest names, wherever the tag moves.", dot=True)
         if standing.pinned
         else Cell("tag only", tip="It runs whatever the tag pointed at when it was pulled.", dot=True)
     )

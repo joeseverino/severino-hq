@@ -20,6 +20,7 @@ from hq.platform.application.routes import reverse
 from .action_links import command_action, read_link
 from .container_standard import STANDARD
 from .containers import VULNERABLE, Container, ImageStanding, containers
+from .display_words import Code
 from .entity_links import entity_link
 from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
@@ -272,7 +273,7 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
         severity=Tone.ATTENTION,
         title=f"{running[0].running.image} runs by tag alone",
         explanation="A tag can later name a different build.",
-        evidence=tuple(("Pin it as", pin) for pin in pins),
+        evidence=tuple(("Pin it as", Code(pin)) for pin in pins),
         steps=_compose_steps(running, _pin),
         primary=_containers(),
     )
@@ -315,11 +316,18 @@ def _compose_steps(running: list[Container], image: Callable[[Container], str]) 
             if files and all(services)
             else ""
         )
-        steps.append(
-            Run(f"On {machine}, set the image of {names} to {wanted} in {_sets_image(files)}, then run", command)
-            if command
-            else Do(f"On {machine}, set the image of {names} to {wanted} where it is defined, then start it again.")
-        )
+        if command:
+            steps.append(
+                Do(f"On {machine}, set the image of {names} in {_sets_image(files)}.", value=f"image: {wanted}")
+            )
+            steps.append(Run("Then start it again", command))
+        else:
+            steps.append(
+                Do(
+                    f"On {machine}, set the image of {names} where it is defined, then start it again.",
+                    value=f"image: {wanted}",
+                )
+            )
     return tuple(steps)
 
 
