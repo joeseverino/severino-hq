@@ -9,6 +9,7 @@ from hq.platform.application.error_reads import SERVER_ERRORS
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.moments import moment
 from hq.platform.application.pages import RecordPageMixin
+from hq.platform.application.quoted import Quoted
 from hq.platform.application.security import Capability
 from hq.platform.application.tables import Cell, TableColumn
 
@@ -36,7 +37,7 @@ class ServerErrorListView(ListPageMixin, TemplateView):
     table_empty_remedy = False
     table_columns = (
         TableColumn("Error", kind="prose", cell=lambda row: Cell(_short(row["exception"]), row["url"], role="data")),
-        TableColumn("Message", kind="prose", cell=lambda row: Cell(row["message"], cut=bool(row["message"]))),
+        TableColumn("Message", kind="prose", cell=lambda row: Cell(Quoted(row["message"]), cut=bool(row["message"]))),
         TableColumn("Path", kind="prose", cell=lambda row: Cell(f"{row['method']} {row['path']}".strip(), cut=True)),
         TableColumn("By", kind="prose", cell=lambda row: Cell(row["by"])),
         TableColumn("When", sort="occurred_at", cell=lambda row: Cell(moment=moment(row["occurred_at"]))),
