@@ -1020,6 +1020,10 @@
           "approved_by": {
             "type": "string",
             "description": "The person who approved a held run; absent for one nobody held."
+          },
+          "check": {
+            "type": "boolean",
+            "description": "Whether the run is a preview, run in Ansible's check mode; absent for a run that acts."
           }
         },
         "additionalProperties": false,

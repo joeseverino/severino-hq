@@ -2560,6 +2560,9 @@ type RunInput struct {
 	// ApprovedBy The person who approved a held run; absent for one nobody held.
 	ApprovedBy string `json:"approved_by,omitempty"`
 
+	// Check Whether the run is a preview, run in Ansible's check mode; absent for a run that acts.
+	Check bool `json:"check,omitempty"`
+
 	// Correlation The asker's own id for finding it later; empty for none.
 	Correlation string `json:"correlation"`
 

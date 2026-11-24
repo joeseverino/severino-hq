@@ -179,6 +179,10 @@ def arguments(run: Run, private_data_dir: Path) -> dict[str, Any]:
         # ansible-runner's own job timeout: past it, the run is killed and
         # ends as ``timeout``.
         "timeout": run.timeout_seconds,
+        # A preview is Ansible's check mode, where only a task that declares
+        # ``check_mode: false`` acts (ansible-runner adds ``cmdline`` to the
+        # command it builds).
+        **({"cmdline": "--check"} if run.check else {}),
         "suppress_env_files": True,
         "suppress_output_file": True,
         "suppress_ansible_output": True,
