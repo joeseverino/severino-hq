@@ -16,6 +16,7 @@ from ..certificate_expiry import HeldCertificate, judged as certificates_judged
 from ..credential_findings import EXPIRES, expiring as credentials_expiring
 from ..registration_findings import RULES as REGISTRATION_RULES
 from ..tailnet_presence import Presence
+from ..topology_model import TopologyNode
 from ..zones import find_zone
 from .zone_records import sweep
 
@@ -36,12 +37,9 @@ def at_now():
     return mock.patch("hq.platform.application.derivations.clock", return_value=NOW)
 
 
-def node(**facts) -> SimpleNamespace:
-    return SimpleNamespace(
-        id="connection:example-edge",
-        kind="connection",
-        label="example-edge",
-        facts=tuple(facts.items()),
+def node(**facts) -> TopologyNode:
+    return TopologyNode(
+        id="connection:example-edge", kind="connection", label="example-edge", subtitle="", facts=tuple(facts.items())
     )
 
 

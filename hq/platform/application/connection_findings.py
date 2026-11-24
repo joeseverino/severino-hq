@@ -4,6 +4,7 @@ from hq.domains.control_plane.provider_adapters.contracts import ADDRESS_FAILURE
 
 from . import credential_findings
 from .credential_findings import mint_steps
+from .entity_links import entity_link
 from .finding_model import (
     THEN_CHECK_AGAIN,
     Finding,
@@ -103,7 +104,7 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                     ),
                 ),
                 evidence=(
-                    *(("Did not answer", name) for name in names),
+                    *(("Did not answer", entity_link("service", name)) for name in names),
                     *(("Blocked by tailnet policy", path) for path in refused),
                 ),
                 remedies=open_the_path(node) if refused else reconcile_remedy(node),

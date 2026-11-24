@@ -1155,8 +1155,8 @@ narrower.
 
 A value that names a record is its link: its owner hands the record as the link builder answers
 for it (`("Machine", entity_link("machine", name))`, a `Fact`), never its name alone, and it is
-drawn as every entity is, a page outside HQ with its arrow. A value that is itself a web address
-links to it, through `web_url`.
+drawn as every entity is, a page outside HQ with its arrow, its address held to `link_url`. Text
+is never a link, a web address included.
 
 ### partials/_linked_text.html (host only)
 

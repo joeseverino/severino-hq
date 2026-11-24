@@ -17,7 +17,7 @@ from .action_links import ActionLink, read_link
 from .cadence import CONTROLLER_REFRESH
 from .describe import Describe
 from .display_words import as_members, in_words
-from .entity_links import EntityLink, link_url, web_url
+from .entity_links import EntityLink, link_url
 from .finding_steps import Do, Press, Run, Step
 from .moments import moment
 from .tone import Tone
@@ -87,11 +87,10 @@ class FindingEvidence(TypedDict):
 
 
 def written_fact(label: str, value: str | EntityLink) -> FindingEvidence:
-    """A line of evidence as every door answers it: a record by its page, and
-    a value that is itself a web address as that address."""
+    """A line of evidence as every door answers it, a record with its page."""
 
     if isinstance(value, str):
-        return {"label": label, "value": value, "url": web_url(value)}
+        return {"label": label, "value": value, "url": ""}
     return {"label": label, "value": value.label, "url": link_url(value.url)}
 
 

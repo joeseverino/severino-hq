@@ -14,6 +14,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .action_links import command_url
+from .entity_links import node_link
 from .expiry import days_until
 from .facts import Joined, inventory_records
 from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRemedy, FindingRule, opens
@@ -242,7 +243,7 @@ def _finding(node, certificate: HeldCertificate, days: int, apart: tuple[str, st
         explanation=_SERVING_EXPLANATION if names else _UNUSED_EXPLANATION,
         evidence=(
             ("Certificate", title),
-            ("Held in", node.label),
+            ("Held in", node_link(node)),
             ("Expires", expiry_phrase(stamp)),
             *((("Issued by", issuer),) if issuer else ()),
             *((("Serves", ", ".join(certificate.names)),) if names else ()),

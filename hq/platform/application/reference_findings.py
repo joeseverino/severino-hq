@@ -15,7 +15,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS, read_record
 
 from .connection_lifecycle import UNREPORTED_NODE
-from .entity_links import node_name
+from .entity_links import entity_link, node_name
 from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule
 from .references import Kind
 from .tone import Tone
@@ -106,7 +106,7 @@ def _no_connection(node: TopologyNode, ref: str, reported: tuple[str, ...]) -> F
         severity=Tone.ATTENTION,
         explanation="Nothing reads it or applies its settings.",
         evidence=(
-            ("Connection it names", ref),
+            ("Connection it names", entity_link("connection", ref)),
             ("Connections the controllers have", counted(len(reported), "connection")),
         ),
         remedies=_edit(node),

@@ -11,12 +11,14 @@ from django.conf import settings
 
 from hq.platform.core.network import parse_ip
 
+from .entity_links import EntityLink, entity_link
 from .finding_model import Finding, FindingEstate
 from .finding_steps import Run
 from .reach import TAILNET
 from .tailnet import HQ_ADMITS_ONLY_NAMED
 from .tone import Tone
 from .ui import counted
+lazy from .policy_links import PolicyNames
 
 
 def wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -32,6 +34,7 @@ def wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
     if not wide:
         return ()
     found: list[Finding] = []
+    owners = PolicyNames(hosts={})
     for node in estate.nodes():
         if node.kind != "connection" or any(key == HQ_ADMITS_ONLY_NAMED for key, _ in node.facts):
             continue
@@ -55,7 +58,7 @@ def wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 evidence=(
                     *(("Trusted", str(network)) for network in wide),
-                    *(("Device address", address) for address in addresses),
+                    *(("Device address", _device(owners, address)) for address in addresses),
                     *(("Subnet route", route) for route in routes),
                 ),
                 steps=(
@@ -77,6 +80,13 @@ def _network(cidr: Any):
         return ip_network(str(cidr).strip(), strict=False)
     except ValueError:
         return None
+
+
+def _device(owners: PolicyNames, address: str) -> str | EntityLink:
+    """A device address, linked to the machine the catalog says answers there."""
+
+    owner = owners.machine_at(address)
+    return entity_link("machine", owner, label=address) if owner else address
 
 
 def _wide_trust() -> tuple:

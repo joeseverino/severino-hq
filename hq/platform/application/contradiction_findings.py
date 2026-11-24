@@ -17,6 +17,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
+from .entity_links import entity_link
 from .exposure import FRONT_DOOR_PORTS, front_door_names, listening_ports, public_name, publicly_answering
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
@@ -118,7 +119,7 @@ def _answered_by_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
                     severity=Tone.ATTENTION,
                     explanation=f"Nothing on {last.name} serves it.",
                     evidence=(
-                        ("Name", name),
+                        ("Name", entity_link("service", name)),
                         ("Path", route.line),
                         ("Proxy route", "none"),
                         ("Container on a web port", "none"),
@@ -191,7 +192,7 @@ def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
                         title=title,
                         severity=Tone.SERIOUS if container else Tone.ATTENTION,
                         explanation=said,
-                        evidence=(("Name", name), ("Path", route.line), shown),
+                        evidence=(("Name", entity_link("service", name)), ("Path", route.line), shown),
                         remedies=tuple(_update(key, intent="Change where it points") for key in proxies),
                         steps=steps,
                     )
@@ -224,7 +225,7 @@ def _gates_guarding_nothing(_estate: FindingEstate) -> tuple[Finding, ...]:
                         title=f"{name} has an access rule but no DNS record",
                         severity=Tone.NEUTRAL,
                         explanation="Published again, it would get this rule unreviewed.",
-                        evidence=(("Access rule", f"{spec.label} {title}"), ("Name", name)),
+                        evidence=(("Access rule", f"{spec.label} {title}"), ("Name", entity_link("service", name))),
                         steps=(Do(f"Remove {name} from {title}", notes=((console,) if console else ())),),
                     )
                 )
@@ -316,7 +317,7 @@ def _unfronted_ports(_estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.SERIOUS,
                 explanation="No proxy is in front of it.",
                 evidence=(
-                    ("Container", item.running.name),
+                    ("Container", item.link),
                     ("Published", item.running.published),
                     ("Open to the internet", ", ".join(str(port) for port in open_ports)),
                 ),

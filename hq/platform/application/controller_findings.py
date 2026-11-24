@@ -11,7 +11,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from .cadence import CONTROLLER_REFRESH, sweep_interval
 from .credential_findings import UNREPORTED
 from .derivations import since
-from .entity_links import kind_label, node_name
+from .entity_links import kind_label, node_link, node_name
 from .finding_model import (
     CHECK_AGAIN,
     THEN_CHECK_AGAIN,
@@ -208,7 +208,7 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                     *((("Status", str(environment["status"])),) if environment.get("status") else ()),
                     ("Listed until", when(last, estate.now)),
                     *((_when(LAST_READ, newest),) if newest else ()),
-                    ("Not listed", ", ".join(node.label for node in containers)),
+                    *(("Not listed", node_link(node)) for node in containers),
                 ),
                 remedies=(_read_again(),),
                 steps=restart,
@@ -671,7 +671,6 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
     found: list[Finding] = []
     for controller_id, connections in sorted(held.items()):
         node = by_id[controller_id]
-        names = ", ".join(sorted(connection.label for connection in connections))
         since = when(min(fact_values(connection, UNREPORTED)[0] for connection in connections), estate.now)
         found.append(
             Finding(
@@ -680,7 +679,10 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=f"The controller on {node.label} reports no connections",
                 severity=Tone.SERIOUS,
                 explanation="Check that this machine's vault still holds their items.",
-                evidence=(("Last reported", names), ("None since", since)),
+                evidence=(
+                    *(("Last reported", node_link(each)) for each in sorted(connections, key=lambda each: each.label)),
+                    ("None since", since),
+                ),
                 remedies=(_read_again(),),
                 steps=_refresh_steps(node.label),
                 no_help_reason=cannot_run_commands(node.label),

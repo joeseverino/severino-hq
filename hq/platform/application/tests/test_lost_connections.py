@@ -39,9 +39,9 @@ class ConnectionsLostTests(TestCase):
 
         self.assertEqual(finding["severity"], "serious")
         self.assertEqual(finding["title"], f"The controller on {CONTROLLER} reports no connections")
-        self.assertIn(
-            {"label": "Last reported", "value": "example-dns, example-tunnel", "url": ""}, finding["evidence"]
-        )
+        reported = [fact for fact in finding["evidence"] if fact["label"] == "Last reported"]
+        self.assertEqual([fact["value"] for fact in reported], ["example-dns", "example-tunnel"])
+        self.assertTrue(all(fact["url"] for fact in reported), reported)
         self.assertIn("systemctl start severino-hq-secrets.service", steps_text(finding))
         self.assertEqual(
             [step["link"]["capability"] for step in finding["steps"] if step["kind"] == "press"],
@@ -67,7 +67,9 @@ class ConnectionsLostTests(TestCase):
         report()
 
         (finding,) = raised(RULE)
-        self.assertIn({"label": "Last reported", "value": "example-dns", "url": ""}, finding["evidence"])
+        self.assertEqual(
+            [fact["value"] for fact in finding["evidence"] if fact["label"] == "Last reported"], ["example-dns"]
+        )
 
         report("example-dns")
         self.assertEqual(raised(RULE), [])
