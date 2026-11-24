@@ -440,7 +440,10 @@
    values of a column line up, and pairs stand apart by more than the gap
    that holds a label to its value. Narrower than two pairs
    (`--facts-across`) it is one pair to a row, from each pair's basis, so no
-   query or script measures it.
+   query or script measures it. The label's track is a share of the list,
+   a length a pair's widest line counts as it lays it out, where a share of
+   the pair, not yet known, would count for nothing: one pair to a row, the
+   list's width is the pair's.
    Opened to read more (a disclosure, a popover, a dialog), set above what a
    form changes, or a table row's small print, a list is a few short pairs
    under what it serves and keeps one pair to a row. A folded section on the
@@ -448,17 +451,14 @@
    frame (a resource's other settings) is opened to read more. */
 .facts-list:not(:where(tbody, details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) *) {
   --facts-across: 42rem;
-  display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-16);
-  & > .fact { flex: 1 1 calc((var(--facts-across) - var(--space-16)) / 2); min-width: 0; grid-template-columns: var(--fact-label, min(9rem, 40%)) minmax(0, 1fr); }
+  container-type: inline-size; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-16);
+  & > .fact { flex: 1 1 calc((var(--facts-across) - var(--space-16)) / 2); min-width: 0; grid-template-columns: min(9rem, 40cqi) minmax(0, 1fr); }
 }
 /* A value that is a list of several (names, addresses, links) asks for its
    widest line and keeps it, so on the page a short list shares a row as
    any pair does and a long one takes the row, wrapping there. */
 .facts-list > .fact:has(> .fact-value > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) {
   flex: 1 0 max-content; min-width: min(100%, calc((var(--facts-across, 0px) - var(--space-16)) / 2)); max-width: 100%;
-  /* A share of a size not yet known counts for nothing in a widest line, so
-     its label's track is a length. */
-  --fact-label: 9rem;
 }
 /* In a table's row, facts are the row's small print. */
 td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); }
