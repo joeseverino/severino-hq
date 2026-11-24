@@ -16,7 +16,7 @@ from ..controller import ControllerReport, claim_next_operation, report_operatio
 from ..resource_operations import serialize_operation
 from ..security import Capability, PolicyDenied, Principal
 from .procedures import APP, APPROVER, Supply, manifest
-from .test_app_updates import arranged, patch, pull
+from .test_app_updates import arranged, moved, pull
 from .test_github_estate import store
 
 APPROVE = "app_update.approve"
@@ -41,7 +41,7 @@ class ApproveUpdateTests(TestCase):
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
-        arranged(pull(diff=patch()))
+        arranged(pull(moves=[moved()]))
         self.supply = Supply(self, applies())
 
     def press(self, *, principal=PERSON, head=HEAD, key="example-approve-1"):
@@ -113,7 +113,7 @@ class ApproveUpdateTests(TestCase):
     def test_the_update_card_offers_one_press_approve(self):
         from .test_containers import queued
 
-        arranged(pull(diff=patch()), advisories=())
+        arranged(pull(moves=[moved()]), advisories=())
 
         (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
 
@@ -125,6 +125,12 @@ class ApproveUpdateTests(TestCase):
 
         self.assertEqual(answer.get("status"), "awaiting_approval", answer)
         self.assertFalse(OperationRequest.objects.exists())
+        # The person deciding sees each pin it moves, and every file it changes a link away.
+        from ..approval_review import preview
+
+        shown = preview(ApprovalRequest.objects.get())
+        self.assertEqual([(row.label, row.change) for row in shown.rows], [("app app", "changed")])
+        self.assertEqual(shown.more_url, "https://github.com/example/alpha/pull/7/files")
 
     def test_a_head_that_moves_while_it_waits_stales_the_approval(self):
         from django.contrib.auth import get_user_model
@@ -132,7 +138,7 @@ class ApproveUpdateTests(TestCase):
         from ..security import web_principal
 
         self.press(principal=AGENT)
-        store(pull_requests=[pull(diff=patch()) | {"head": "e" * 40}])
+        store(pull_requests=[pull(moves=[moved()]) | {"head": "e" * 40}])
 
         approver, _ = get_user_model().objects.get_or_create(username=APPROVER)
         with self.assertRaises(Settled):

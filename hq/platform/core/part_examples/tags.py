@@ -562,7 +562,7 @@ CHANGE_TABLE_STATES = {
     # none, one that moves, one that is new (said by its summary, its fields
     # folded), one that goes, one that stays and so is only named under the
     # table, and a document that would not parse, said as a line diff. Each
-    # kind of change has its own status.
+    # kind of change has its own status. The whole change is one link away.
     "many": Example(
         "{% change_table preview %}",
         lambda: {
@@ -595,6 +595,8 @@ CHANGE_TABLE_STATES = {
                         label="",
                     ).lines
                 ),
+                more_label="Example changes",
+                more_url="https://example.com/changes",
             )
         },
     ),

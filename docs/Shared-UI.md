@@ -362,7 +362,8 @@ record and the field ("Empty a cache › Access"), says a record that comes or g
 row (its name and its summary, its fields folded under it), and names the ones that stay on one
 line under the table. A record a held request's warning names has its rows marked for attention
 (`data-attention` on the `tr`), and the card does not say the warning again. The rows keep the
-change's own order. An empty preview draws nothing. An approval card and an audit event draw it
+change's own order. A preview whose rows are part of a larger change (an app update's pins, its files on GitHub) names
+the whole as `more_label` and `more_url`, the section's quiet link. An empty preview draws nothing. An approval card and an audit event draw it
 (*Gate:* the `change-table` shape of `hand_drawn.SHAPES`).
 
 ### check_ladder (host only)

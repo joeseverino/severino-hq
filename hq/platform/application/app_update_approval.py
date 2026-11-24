@@ -41,6 +41,7 @@ lazy from .automation_runs import (
 lazy from .capabilities import Consented, command_spec, consent
 lazy from .capability_policy import Rule, decide
 lazy from .container_findings import UPDATE
+lazy from .entity_links import web_url
 lazy from .finding_model import FindingRemedy
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
 lazy from .pages import command_reach
@@ -144,8 +145,12 @@ def _measured(command: ApproveUpdateCommand) -> ApprovalSubject | None:
     )
 
 
+# The pull request's own view of every file it changes, as GitHub names its tab.
+FILES = "Files changed"
+
+
 def _shown(held: Any) -> ChangePreview:
-    """Each pin it moves, and the diff of its Compose files while its head is the one measured."""
+    """Each pin it moves, and the files it changes one link away, on GitHub."""
 
     rows = tuple(
         ChangeRow(
@@ -156,14 +161,18 @@ def _shown(held: Any) -> ChangePreview:
         )
         for pin in held.baseline.get("pins") or ()
     )
-    # Read from what was measured: its subject is the pull request, `owner/name#number`.
-    head = held.baseline.get("head")
-    patch = "\n".join(
-        update.patch
-        for update in app_updates()
-        if (update.head, f"{update.repository}#{update.number}") == (head, held.resource_key)
+    # Its subject is the pull request, `owner/name#number`, whose files GitHub shows under its address.
+    pull = next(
+        (
+            web_url(update.url)
+            for update in app_updates()
+            if f"{update.repository}#{update.number}" == held.resource_key
+        ),
+        "",
     )
-    return ChangePreview(label="Pins", rows=rows, lines=tuple(patch.splitlines()))
+    return ChangePreview(
+        label="Pins", rows=rows, lines=(), more_label=FILES if pull else "", more_url=f"{pull}/files" if pull else ""
+    )
 
 
 def _may_run(manifest: OperationManifest, principal: Any) -> None:
@@ -305,7 +314,7 @@ def _unapprovable(update: AppUpdate) -> Sentence:
     """Why ``update`` cannot be approved as it stands, or ""."""
 
     if not update.readable:
-        return "GitHub gave no diff of this update, so HQ cannot show what it moves. Review it on GitHub."
+        return "HQ could not read the images this update moves from its Compose files. Review it on GitHub."
     if (update.checks or {}).get("state") != "success":
         return "Its checks are not passing. Approve it once they pass."
     return ""

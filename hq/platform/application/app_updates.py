@@ -1,16 +1,15 @@
-"""Each open Renovate pull request that moves an app's Compose pins.
+"""Each open Renovate pull request that moves an app's Compose pins, and the
+apps a repository holds whether or not one is open.
 
-Read from the GitHub App's ``github.repository`` reading, which keeps each
-update's files and the diff of each Compose file (``github_readings.go``). The
-app is the directory under ``compose/`` a file sits in; each ``image:`` line
-the diff takes out and puts in is a pin moved. A pin joins to the containers
-it moves by the compose file that defines them and their image, and the move
-is judged by the one judge every upgrade uses (``upgrades.weigh``). Every
-page, the API and MCP read ``app_updates()``.
+Read from the GitHub App's ``github.repository`` reading, which keeps, for a
+repository opted in to updates, each app's Compose files and each update's
+images before and after as compose-go loads them (``github_compose.go``). A
+pin joins to the containers it moves by the compose file that defines them
+and their image, and the move is judged by the one judge every upgrade uses
+(``upgrades.weigh``). Every page, the API and MCP read ``app_updates()``.
 """
 
-import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,20 +21,11 @@ from .tone import Tone
 from .ui import counted
 from .upgrades import weigh
 
-# The directory each app's Compose files sit under, one directory per app: the
-# only paths whose diff the reading keeps.
-APPS = "compose/"
-# An ``image:`` line, its reference unquoted and without a comment, and a
-# line that opens a mapping (``  web:``), which an ``image:`` below it belongs to.
-_IMAGE = re.compile(r"""^\s*image:\s*["']?(?P<reference>[^"'\s#]+)""")
-_KEY = re.compile(r"^\s*(?P<key>[\w.-]+):\s*(?:#.*)?$")
-
 
 @dataclass(frozen=True, slots=True)
 class Pin:
-    """One ``image:`` line a pull request moves."""
+    """One service's image a pull request moves."""
 
-    # The compose service it is under, or "" where the diff's lines do not say.
     service: str
     # None where the line is new.
     before: ImageRef | None
@@ -75,10 +65,9 @@ class AppUpdate:
     fixes: tuple[Mapping[str, Any], ...]
     brings: tuple[Mapping[str, Any], ...]
     checks: Mapping[str, Any]
-    # Whether GitHub gave the diff of every Compose file it changes: a large
-    # diff comes without one, and its pins are read on GitHub alone.
+    # Whether its Compose files loaded at base and head with every image
+    # resolved: otherwise its pins are read on GitHub alone.
     readable: bool
-    patch: str
 
     @property
     def label(self) -> str:
@@ -139,7 +128,7 @@ class AppUpdate:
         return any(each.address == item.address for each in self.containers)
 
     def pin_of(self, item: Container) -> Pin | None:
-        """The pin that moves ``item``, where the diff says which."""
+        """The pin that moves ``item``."""
 
         return _pin_of(item, self.pins)
 
@@ -157,6 +146,46 @@ def update_of(item: Container) -> AppUpdate | None:
     return next((update for update in app_updates() if update.moves(item)), None)
 
 
+@dataclass(frozen=True, slots=True)
+class Managed:
+    """The repository that holds a container's Compose files."""
+
+    repository: str
+    app: str
+    # Its Dependency Dashboard, where Renovate lists an update it has not
+    # opened yet, or "" where it keeps none.
+    dashboard: str
+    url: str
+
+
+def managed_by(item: Container) -> Managed | None:
+    """The repository whose Compose files define ``item``, whether or not an
+    update of it is open."""
+
+    with projection_scope():
+        held = read_once("app_updates.managed", _managed)
+    return next((held[end] for end in map(_tail, item.compose_files) if end in held), None)
+
+
+def _managed() -> dict[str, Managed]:
+    found: dict[str, Managed] = {}
+    for name, repository in sorted(repositories().items()):
+        for path in repository.compose:
+            found.setdefault(_tail(path), Managed(name, _app(path), str(repository.dashboard), str(repository.url)))
+    return found
+
+
+def _tail(path: str) -> str:
+    """A Compose file as its app's directory and its name, ``<app>/<file>``:
+    where a repository's path and a machine's meet."""
+
+    return "/".join(path.rsplit("/", 2)[-2:])
+
+
+def _app(path: str) -> str:
+    return _tail(path).partition("/")[0]
+
+
 def _app_updates() -> tuple[AppUpdate, ...]:
     running = containers()
     found = []
@@ -165,29 +194,36 @@ def _app_updates() -> tuple[AppUpdate, ...]:
             pull for pull in repository.pull_requests or () if str(pull.get("branch") or "").startswith(UPDATE_BRANCH)
         )
         for pull in sorted(pulls, key=lambda pull: -int(pull.get("number") or 0)):
-            for app, files in _by_app(pull.get("files") or ()).items():
-                found.append(_update(name, pull, app, files, running))
+            for change in pull.get("apps") or ():
+                app = str(change.get("app") or "")
+                files = {
+                    _tail(path)
+                    for path in (
+                        *repository.compose,
+                        *(str(each.get("path") or "") for each in pull.get("files") or ()),
+                    )
+                    if _app(path) == app
+                }
+                found.append(_update(name, pull, change, files, running))
     return tuple(found)
 
 
-def _by_app(files: Iterable[Mapping[str, Any]]) -> dict[str, list[Mapping[str, Any]]]:
-    """The files under each app's directory: ``compose/<app>/…``."""
-
-    found: dict[str, list[Mapping[str, Any]]] = {}
-    for item in files:
-        app, _, rest = str(item.get("path") or "").removeprefix(APPS).partition("/")
-        if str(item.get("path") or "").startswith(APPS) and app and rest:
-            found.setdefault(app, []).append(item)
-    return found
-
-
 def _update(
-    repository: str, pull: Mapping[str, Any], app: str, files: list[Mapping[str, Any]], running: list[Container]
+    repository: str, pull: Mapping[str, Any], change: Mapping[str, Any], files: set[str], running: list[Container]
 ) -> AppUpdate:
-    readable = all(item.get("patch") for item in files)
-    patch = "\n".join(str(item.get("patch") or "") for item in files if item.get("patch"))
-    pins = tuple(_pin(service, before, after) for service, before, after in _moved(patch))
-    moved = tuple(item for item in running if _defined_in(item, files) and (not pins or _pin_of(item, pins)))
+    pins = tuple(
+        _pin(
+            str(image.get("service") or ""),
+            ImageRef.parse(str(image["before"])) if image.get("before") else None,
+            ImageRef.parse(str(image.get("after") or "")),
+        )
+        for image in change.get("images") or ()
+    )
+    moved = tuple(
+        item
+        for item in running
+        if any(_tail(path) in files for path in item.compose_files) and (not pins or _pin_of(item, pins))
+    )
     fixes: dict[str, Mapping[str, Any]] = {}
     brings: dict[tuple[str, str], Mapping[str, Any]] = {}
     for item in moved:
@@ -206,14 +242,13 @@ def _update(
         url=str(pull.get("url") or ""),
         title=str(pull.get("title") or ""),
         head=str(pull.get("head") or ""),
-        app=app,
+        app=str(change.get("app") or ""),
         pins=pins,
         containers=moved,
         fixes=ranked(fixes.values()),
         brings=ranked(brings.values()),
         checks=pull.get("checks") or {},
-        readable=readable,
-        patch=patch,
+        readable=bool(change.get("read")),
     )
 
 
@@ -225,48 +260,6 @@ def _pin(service: str, before: ImageRef | None, after: ImageRef) -> Pin:
 
 def _pinned(pin: Pin) -> str:
     return f"{pin.after.name}:{pin.after.tag}" + (f"@{pin.digest}" if pin.digest else "")
-
-
-def _moved(patch: str) -> tuple[tuple[str, ImageRef | None, ImageRef], ...]:
-    """Each ``image:`` line the diff puts in, with the service it is under and
-    the line it takes out for it: the same service's, else the same image's."""
-
-    taken: list[tuple[str, ImageRef]] = []
-    put: list[tuple[str, ImageRef]] = []
-    # The mappings open above the line, by indent: the nearest is its owner.
-    above: list[tuple[int, str]] = []
-    for line in patch.splitlines():
-        mark, text = line[:1], line[1:]
-        if line.startswith("@@"):
-            above = []
-        if mark not in (" ", "+", "-") or not text.strip():
-            continue
-        indent = len(text) - len(text.lstrip())
-        above = [(depth, key) for depth, key in above if depth < indent]
-        if found := _IMAGE.match(text):
-            reference = found["reference"]
-            image = None if "$" in reference else ImageRef.parse(reference)
-            if image is not None and mark != " ":
-                (put if mark == "+" else taken).append((above[-1][1] if above else "", image))
-        elif found := _KEY.match(text):
-            above.append((indent, found["key"]))
-    moved = []
-    for service, after in put:
-        before = next(
-            (image for owner, image in taken if (owner == service if owner and service else image.name == after.name)),
-            None,
-        )
-        if before != after:
-            moved.append((service, before, after))
-    return tuple(moved)
-
-
-def _defined_in(item: Container, files: list[Mapping[str, Any]]) -> bool:
-    """Whether a compose file that defines ``item`` is one the update changes:
-    the machine's path ends in the app's directory and the file's name."""
-
-    ends = tuple("/" + str(each.get("path") or "").removeprefix(APPS) for each in files)
-    return any(path.endswith(ends) for path in item.compose_files)
 
 
 def _pin_of(item: Container, pins: tuple[Pin, ...]) -> Pin | None:

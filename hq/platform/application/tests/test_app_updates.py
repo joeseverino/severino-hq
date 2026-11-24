@@ -13,14 +13,13 @@ PINNED = f"ghcr.io/example/app:v1.2.1@{TARGET}"
 SERIOUS = {"id": "CVE-new", "package": "libexample", "severity": "critical", "fixed": ["2.0"], "url": "u"}
 
 
-def patch(before=RUNNING, after=PINNED, service="app"):
-    return (
-        "@@ -1,5 +1,5 @@\n services:\n"
-        f'   {service}:\n-    image: {before}\n+    image: "{after}"  # pinned\n     restart: unless-stopped'
-    )
+def moved(before=RUNNING, after=PINNED, service="app"):
+    """One service's image as the reading says an update moves it."""
+
+    return {"service": service, "before": before, "after": after}
 
 
-def pull(number=7, app="app", diff=None):
+def pull(number=7, app="app", moves=(), read=True):
     file = {"path": f"compose/{app}/compose.yaml", "status": "modified", "additions": 1, "deletions": 1}
     return {
         "number": number,
@@ -29,7 +28,8 @@ def pull(number=7, app="app", diff=None):
         "head": "f" * 40,
         "branch": f"renovate/app-{number}",
         "checks": {"state": "success", "total": 1, "failing": [], "running": 0},
-        "files": [file | ({"patch": diff} if diff else {})],
+        "files": [file],
+        "apps": [{"app": app, "read": read, "images": list(moves)}],
     }
 
 
@@ -51,7 +51,7 @@ def arranged(*pulls, scanned=(TARGET,), target_findings=(), advisories=(HIGH,)):
         "registry.vulnerabilities",
         [checked("sha256:aaa"), *(checked(digest, target_findings) for digest in scanned)],
     )
-    store(pull_requests=list(pulls))
+    store(compose=["compose/app/compose.yaml"], pull_requests=list(pulls))
 
 
 class AppUpdateTests(TestCase):
@@ -60,7 +60,7 @@ class AppUpdateTests(TestCase):
         return found
 
     def test_a_pin_moved_names_its_app_its_container_and_what_it_fixes(self):
-        arranged(pull(diff=patch()))
+        arranged(pull(moves=[moved()]))
 
         found = self.update()
 
@@ -72,8 +72,8 @@ class AppUpdateTests(TestCase):
         self.assertEqual((found.brings, found.scanned, found.readable), ((), True, True))
         self.assertEqual(found.checks_said[0], "Checks passing")
 
-    def test_a_diff_too_large_to_read_is_still_the_update_of_its_app(self):
-        arranged(pull())
+    def test_an_app_whose_files_did_not_load_is_still_the_update_of_its_app(self):
+        arranged(pull(read=False))
 
         found = self.update()
 
@@ -82,7 +82,7 @@ class AppUpdateTests(TestCase):
         self.assertEqual([item.running.name for item in found.containers], ["app"])
 
     def test_a_pin_not_yet_scanned_is_never_clean(self):
-        arranged(pull(diff=patch()), scanned=())
+        arranged(pull(moves=[moved()]), scanned=())
 
         found = self.update()
 
@@ -94,19 +94,19 @@ class AppUpdateTests(TestCase):
         from ..public_registry import wanted_digests
 
         held = "sha256:" + "8" * 64
-        arranged(pull(diff=patch(after=f"ghcr.io/example/app:v1.2.1@{held}")))
+        arranged(pull(moves=[moved(after=f"ghcr.io/example/app:v1.2.1@{held}")]))
 
         self.assertIn(f"ghcr.io/example/app@{held}", wanted_digests())
 
     def test_an_app_nothing_runs_moves_no_container(self):
-        arranged(pull(app="other", diff=patch(service="other")))
+        arranged(pull(app="other", moves=[moved(service="other")]))
 
         found = self.update()
 
         self.assertEqual((found.app, found.containers, found.fixes), ("other", (), ()))
 
     def test_a_serious_finding_the_new_pin_brings_is_named(self):
-        arranged(pull(diff=patch()), target_findings=[SERIOUS])
+        arranged(pull(moves=[moved()]), target_findings=[SERIOUS])
 
         found = self.update()
 
@@ -114,7 +114,7 @@ class AppUpdateTests(TestCase):
         self.assertEqual(found.brings_tone, "serious")
 
     def test_the_card_of_the_container_it_moves_names_the_pull_request_and_its_numbers(self):
-        arranged(pull(diff=patch()))
+        arranged(pull(moves=[moved()]))
 
         (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
 
@@ -123,7 +123,7 @@ class AppUpdateTests(TestCase):
         self.assertIn(("Fixes", "1 known vulnerability"), card.evidence)
 
     def test_an_update_card_names_the_container_and_the_move(self):
-        arranged(pull(diff=patch()), advisories=())
+        arranged(pull(moves=[moved()]), advisories=())
 
         (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
 
@@ -140,7 +140,7 @@ class AppUpdateTests(TestCase):
     def test_the_repositorys_row_of_the_update_names_its_app_and_fix_count(self):
         from ..github_estate import repositories
 
-        arranged(pull(diff=patch()))
+        arranged(pull(moves=[moved()]))
 
         (row,) = repositories()["example/alpha"].update_rows
 
@@ -150,7 +150,7 @@ class AppUpdateTests(TestCase):
     def test_the_resource_reads_the_same_update_by_its_key(self):
         from ..container_reads import get_app_update, list_app_updates
 
-        arranged(pull(diff=patch()))
+        arranged(pull(moves=[moved()]))
 
         (listed,) = list_app_updates()["items"]
         found = get_app_update(listed["key"])
@@ -160,6 +160,6 @@ class AppUpdateTests(TestCase):
 
     def test_the_cost_does_not_grow_with_the_updates_open(self):
         def arrange(size):
-            arranged(*(pull(number, diff=patch()) for number in range(1, size + 1)))
+            arranged(*(pull(number, moves=[moved()]) for number in range(1, size + 1)))
 
         assert_cost_does_not_grow(self, sizes=(1, 8), arrange=arrange, draw=lambda _size: app_updates(), rows=len)

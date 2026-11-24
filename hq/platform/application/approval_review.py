@@ -82,6 +82,10 @@ class ChangePreview:
     # Whether the change is made, as an audit entry's is, so each row says
     # what it did; one held for approval says what it would do.
     made: bool = False
+    # The whole change where the rows show part of it (an update's files on
+    # GitHub), the section's quiet link; "" for none.
+    more_label: str = ""
+    more_url: str = ""
 
     @property
     def changes(self) -> tuple[ChangeRow, ...]:
