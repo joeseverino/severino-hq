@@ -188,7 +188,9 @@ STATES = (
     # what holds it back is its one step.
     update(pull(moves=[moved()]), on=None, raises=(held_by(NO_PLAYBOOK),)),
     update(
-        pull(moves=[moved()]), on=(EDGE,), raises=(held_by(f"The playbook that applies it does not run on {BOX}."),)
+        pull(moves=[moved()]),
+        on=(EDGE,),
+        raises=(held_by("The playbook that applies it does not run on every machine the app runs on."),),
     ),
     # Merged on the default branch and not applied: one press applies it at that head.
     update(

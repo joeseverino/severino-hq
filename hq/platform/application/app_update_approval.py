@@ -282,8 +282,8 @@ def applied_on(manifest: OperationManifest, items: tuple[Container, ...]) -> tup
     hosts = tuple(sorted({normalized_hostname(item.machine.name) for item in items}))
     if not hosts:
         raise PolicyError("HQ reads no container of the app, so it has no machine to apply it on.")
-    if missing := [host for host in hosts if not manifest.admits(MACHINE_KIND, host)]:
-        raise PolicyError(ended(f"The playbook that applies it does not run on {get_text_list(missing, 'and')}"))
+    if not all(manifest.admits(MACHINE_KIND, host) for host in hosts):
+        raise PolicyError("The playbook that applies it does not run on every machine the app runs on.")
     return hosts
 
 
