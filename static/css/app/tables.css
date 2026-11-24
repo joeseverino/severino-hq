@@ -371,7 +371,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
     & > [data-field]:not(:has(~ [data-field])) { border-bottom-width: 1px; }
   }
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
-  .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; white-space: normal; }
+  /* Asking its column for nothing, it wraps between its words, a whole part's (`cell-part`) too. */
+  .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; white-space: normal; & .cell-part { white-space: normal; } }
   /* A value its clamp holds here (`cell-clamp`, cuts.css) opens its row, which releases it in place. The toggle shows whether or not the value overran its clamp, since no CSS every engine has can tell. */
   .data-table > tbody > tr:has(.cell-clamp) .row-expand { display: grid; }
   .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
@@ -423,10 +424,9 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table > tbody > tr.row-detail { display: none; }
 /* An open row's line is drawn only where it holds something at this width: a block moved there whole, an entry shown at every width, or a column that has left (above), so a row opened narrow and widened draws no empty line. */
 .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > :not(.row-columns), > td > .row-columns > :not([data-drop]:not([data-holds]))) { display: grid; }
-/* It starts where its row's words do, past the tick-boxes' column and the toggle, so nothing it holds sits left of them. */
-.data-table .row-detail > td { --cell: open; padding-block: 0 var(--row-pad); padding-inline-start: calc(var(--row-lead) + var(--row-inset, var(--cell-pad))); }
-/* What it holds asks its columns for no width, so opening a row moves no column. */
-.row-detail > td > * { contain: inline-size; margin-block: 0 var(--row-pad); }
+/* It starts where its row's words do, past the tick-boxes' column and the toggle, so nothing it holds sits left of them. It asks its columns for no width past its own pad, which the cells it spans already hold, so opening a row moves no column, an empty track's included. */
+.data-table .row-detail > td { --cell: open; contain: inline-size; padding-block: 0 var(--row-pad); padding-inline-start: calc(var(--row-lead) + var(--row-inset, var(--cell-pad))); }
+.row-detail > td > * { margin-block: 0 var(--row-pad); }
 .row-detail > td > :last-child { margin-block-end: 0; }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
 /* The declared lines inside a block space their parts with a gap, leaving only the cell's pad after the last line. */

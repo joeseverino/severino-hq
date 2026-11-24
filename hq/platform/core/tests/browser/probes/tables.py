@@ -328,10 +328,12 @@ CUT_BESIDE_ROOM = (
       if (cell.colSpan === 1 && cell.checkVisibility()) asks.set(cell.cellIndex, cell.getBoundingClientRect().width);
     }
     ruler.remove();
+    // A cell that stands beneath its row (its controls on a line of their own) is beside no other column, so its room is none of theirs.
+    const beneath = (cell) => getComputedStyle(cell).gridColumnEnd === '-1';
     const slack = new Map();
     for (const cell of cells) {
       const place = cell.cellIndex;
-      const held = cuts.some((cut) => cut.cell.cellIndex === place) ? 0 : cell.getBoundingClientRect().width - (asks.get(place) ?? Infinity);
+      const held = cuts.some((cut) => cut.cell.cellIndex === place) || beneath(cell) ? 0 : cell.getBoundingClientRect().width - (asks.get(place) ?? Infinity);
       slack.set(place, Math.max(0, Math.min(slack.get(place) ?? Infinity, held)));
     }
     // A fixed layout's columns are set by its first row and never share.
@@ -377,9 +379,7 @@ CUT_BESIDE_ROOM = (
       const own = Math.max(0, inner(cell).right - end);
       const asksNothing = boxes.some((box) => /flex/.test(getComputedStyle(box.parentElement).display)
         && getComputedStyle(box).flexGrow !== '0' && parseFloat(getComputedStyle(box).flexBasis) === 0);
-      // A cell that stands beneath its row spans it, beside no other column.
-      const spans = getComputedStyle(cell).gridColumnEnd === '-1';
-      const others = asksNothing || spans ? 0 : [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
+      const others = asksNothing || beneath(cell) ? 0 : [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
       const room = own + others;
       if (room < 1) continue;
       // Each box that cuts it given the room, to see whether it then shows
