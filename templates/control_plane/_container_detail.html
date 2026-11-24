@@ -6,7 +6,7 @@ move it (application.app_updates.AppUpdate, the app_updates resource's), and
 how it is run against the container standard, with what it uses beside its
 limits. Each said once; the band above has its version and standing.
 {% endcomment %}
-{% if plan or readiness %}
+{% if plan or readiness or approval %}
 {% section "Upgrade" id="upgrade" %}
   {% facts layout="band" %}
     {% if update %}
@@ -30,13 +30,6 @@ limits. Each said once; the band above has its version and standing.
     {% detail %}
       {% if update.brings %}{% list kind="dots" %}{% for finding in update.brings|slice:":2" %}<li>{% entity finding.url|outside label=finding.id %}</li>{% endfor %}{% endlist %}{% endif %}
     {% endfact %}
-    {% with merge=approval.standing %}{% if merge %}
-    {% fact "Merge" icon="commit" tone=merge.tone %}
-      {{ merge.words }}
-    {% detail %}
-      {% if merge.run_url %}<small><a href="{{ merge.run_url }}">The run that applies it</a></small>{% endif %}
-    {% endfact %}
-    {% endif %}{% endwith %}
     {% elif plan %}
     {% fact "To" icon="deploy" %}
       {% entity plan.release.url|outside label=plan.target_tag code=True %}
@@ -49,6 +42,7 @@ limits. Each said once; the band above has its version and standing.
       {% if plan.fixes %}{% list kind="dots" %}{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% elif not item.standing.known_vulnerabilities %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
     {% endfact %}
     {% endif %}
+    {% with merge=approval.standing %}{% if merge %}{% fact "Approval" icon="commit" value=merge.words url=merge.run_url tone=merge.tone detail=merge.lines %}{% endif %}{% endwith %}
     {% if plan %}
     {% fact "Data" icon="layers" tone=plan.data_tone %}
       {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }}{% else %}Keeps no data{% endif %}
@@ -60,7 +54,7 @@ limits. Each said once; the band above has its version and standing.
     {% detail %}
       <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
     {% endfact %}
-    {% else %}
+    {% elif readiness %}
     {% fact "Checked afterwards by" icon="check-circle" tone=readiness.verified_tone %}
       {% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst }}{% else %}Nothing{% endif %}
     {% detail %}
@@ -78,6 +72,7 @@ limits. Each said once; the band above has its version and standing.
     {% endfact %}
     {% endif %}
   {% endfacts %}
+  {% if again %}{% button_row %}{% include "partials/_page_action.html" with action=again only %}{% endbutton_row %}{% endif %}
   {% if update %}
     {% if held or approve or update.patch %}{% button_row %}{% if approve %}{% include "partials/_page_action.html" with action=approve only %}{% muted %}{{ approval.said }}{% endmuted %}{% elif held %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% if update.patch %}{% section "Compose change" id="compose-change" fold=True %}<pre tabindex="0"><code>{{ update.patch }}</code></pre>{% endsection %}{% endif %}{% endbutton_row %}{% endif %}
   {% elif not plan and readiness.not_automatic %}{% list %}{% for blocker in readiness.not_automatic %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}

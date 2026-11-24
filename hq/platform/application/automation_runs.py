@@ -62,6 +62,7 @@ lazy from .payload_words import ChangeRow, field_words, value_words
 lazy from .resource_operations import (
     Prepared,
     RunAsked,
+    acting_for,
     asked_fields,
     enqueue,
     operation_asked,
@@ -96,6 +97,9 @@ def operation_registry(generation: str | None = None) -> OperationRegistry:
 
 # The variant of a playbook's run command that runs it again as it ran.
 AGAIN = "again"
+# The word of a run's input that makes it a preview, run in Ansible's check
+# mode (the bridge's ``RunInput.check``); no run command takes it.
+CHECK = "check"
 HERE = "here"
 RUN_HERE = "Run playbook"
 
@@ -488,14 +492,7 @@ def queue_follow_up(
             raise PolicyError("The playbook adopted now is not the one approved, so nothing ran.")
         return resource
 
-    acting = Principal(
-        asked.requested_actor,
-        asked.requested_interface,
-        frozenset(),
-        approved_by=str((asked.input or {}).get("approved_by") or ""),
-        person_key=asked.requested_person_key,
-        device=asked.requested_device,
-    )
+    acting = acting_for(asked)
     # Its rows are its requester's, under the operation that carried it.
     with own_operation(asked, operation=capability_name(manifest.id), principal=acting):
         operation, _ = _enqueue_run(record, bound, acting, reason=asked.reason, once=once)

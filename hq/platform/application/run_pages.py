@@ -38,7 +38,7 @@ def run_context(record: dict[str, Any], *, user: Any) -> dict[str, Any]:
     approval = approval_of(record)
     approval_url = reverse("core:approval_entry", kwargs={"approval_id": approval.pk}) if approval else ""
     capability = record["capability"]
-    # A run an approved merge asked for (``app_update_approval.merged``) names
+    # A run an approved merge asked for (``app_update_approval.succeeded``) names
     # that merge's pull request, the change it applies.
     merge = (
         OperationRequest.objects.filter(

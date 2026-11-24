@@ -598,6 +598,19 @@ def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:
     return (problem.get("message") if problem else "") or said
 
 
+def stopped_at(operation: OperationRequest) -> tuple[str, str]:
+    """The task a run that ended badly stopped on and what it said, the task
+    "" where it stopped before any ran."""
+
+    events = (operation.result or {}).get("events") or ()
+    failed = next(
+        (event for event in events if event.get("outcome") in (TaskOutcome.FAILED, TaskOutcome.UNREACHABLE)), None
+    )
+    if failed is not None:
+        return str(failed.get("task") or ""), str(failed.get("message") or "")
+    return "", _said(operation, None)
+
+
 def shown_result(result: dict[str, Any]) -> dict[str, Any]:
     """An operation's result less the certificate, which is on its record's
     page: a row of history is not a second copy."""

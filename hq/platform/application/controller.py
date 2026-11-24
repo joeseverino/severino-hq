@@ -36,8 +36,8 @@ from .infrastructure import CALLED_OFF, controller_contract, resolved_spec, seri
 from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
 from .projection import iso
-from .resource_operations import REPLACES, Prepared, enqueue, serialize_operation
-lazy from .app_update_approval import merged
+from .resource_operations import REPLACES, THEN, Prepared, enqueue, serialize_operation
+lazy from .app_update_approval import succeeded
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -203,7 +203,7 @@ def _pending(operation: OperationRequest, *, claimed: bool = False) -> dict[str,
     # and hosts it was asked and approved for. A peek leases nothing, so it
     # is told none of it.
     if claimed and operation.action == OperationRequest.Action.RUN:
-        pending["input"] = operation.input
+        pending["input"] = {name: value for name, value in (operation.input or {}).items() if name != THEN}
     return pending
 
 
@@ -664,6 +664,8 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
         _stopped(operation, result)
     else:
         _finish(operation, report, result)
+        if report.success:
+            succeeded(operation)
     for event in events:
         if event["outcome"] in AUDITED_OUTCOMES:
             said = {name: event[name] for name in ("host", "task", "outcome")}
@@ -717,8 +719,8 @@ def _settle_report(operation: OperationRequest, report: ControllerReport) -> dic
     if report.success:
         _confirm_delivery_targets(resource, report.status)
     _read_back_lifecycle(operation)
-    if report.success and operation.action == OperationRequest.Action.MERGE:
-        merged(operation)
+    if report.success:
+        succeeded(operation)
 
     if report.success and operation.action == OperationRequest.Action.DELETE:
         # The declaration outlived the thing it described. Keeping it would put

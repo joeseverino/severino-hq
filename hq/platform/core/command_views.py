@@ -37,7 +37,7 @@ from hq.platform.application.service_context import Cell, ServiceSection
 from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import run_posted
 from hq.platform.core.web_refusals import refused
-lazy from hq.platform.application.finding_runs import finding_run
+lazy from hq.platform.application.finding_runs import finding_run, run_again
 
 
 def _json_value(value):
@@ -322,6 +322,8 @@ class CommandView(View):
 
     def _finding_run(self):
         key = self.request.GET.get("finding", "")
+        if again := self.request.GET.get("again", ""):
+            return run_again(self.spec.name, again) or None
         if not key:
             return None
         start = finding_run(self.spec.name, key, self.principal)

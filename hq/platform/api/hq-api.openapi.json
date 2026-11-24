@@ -196,6 +196,9 @@
               "merge.tone",
               "merge.run_url",
               "merge.taken",
+              "merge.step",
+              "merge.said",
+              "merge.again",
               "held",
               "fixes",
               "fixes.id",
@@ -20372,20 +20375,32 @@
       "MergePart": {
         "additionalProperties": false,
         "properties": {
+          "again": {
+            "description": "The `operation.id` of the apply that failed, which Run again repeats; empty for none.",
+            "type": "string"
+          },
           "run_url": {
-            "description": "The page of the run that applies the merge; empty before one is queued.",
+            "description": "The page of the run it stands on, the preview or the apply; empty for none.",
+            "type": "string"
+          },
+          "said": {
+            "description": "What that run said as it stopped; empty for none.",
+            "type": "string"
+          },
+          "step": {
+            "description": "The step a failed preview or apply stopped on; empty for none.",
             "type": "string"
           },
           "taken": {
-            "description": "Whether it waits, works or merged, so no second approval is offered.",
+            "description": "Whether it previews, merges, applies or merged, so no second approval is offered.",
             "type": "boolean"
           },
           "tone": {
-            "description": "Its status tone: `attention` while it merges, `good` merged and applying.",
+            "description": "Its status tone: `attention` while it works, `good` once applied.",
             "type": "string"
           },
           "words": {
-            "description": "How the merge asked at the head stands, in the words the page shows.",
+            "description": "How the approval asked at the head stands (its preview, merge and apply), in the page's words.",
             "type": "string"
           }
         },
@@ -20393,15 +20408,27 @@
           "words",
           "tone",
           "run_url",
-          "taken"
+          "taken",
+          "step",
+          "said",
+          "again"
         ],
         "type": "object"
       },
       "MergePartPartial": {
         "additionalProperties": false,
         "properties": {
+          "again": {
+            "$ref": "#/components/schemas/MergePart/properties/again"
+          },
           "run_url": {
             "$ref": "#/components/schemas/MergePart/properties/run_url"
+          },
+          "said": {
+            "$ref": "#/components/schemas/MergePart/properties/said"
+          },
+          "step": {
+            "$ref": "#/components/schemas/MergePart/properties/step"
           },
           "taken": {
             "$ref": "#/components/schemas/MergePart/properties/taken"
@@ -32377,7 +32404,7 @@
     },
     "/api/v2/capabilities/app_update.approve/": {
       "post": {
-        "description": "Approve an app update: merge its pull request at the head you reviewed, then apply the merge where the app runs.",
+        "description": "Approve an app update: preview applying it where the app runs, then merge its pull request at the head you reviewed and apply the merge.",
         "operationId": "appUpdateApproveV2",
         "parameters": [
           {

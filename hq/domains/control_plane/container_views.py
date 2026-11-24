@@ -14,8 +14,15 @@ from hq.platform.application.security import safe_next
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.held_values import format_html
 from hq.platform.core.web_refusals import refused
-lazy from hq.platform.application.app_update_approval import PLAYBOOKS, approval_of, approve_target
-lazy from hq.platform.application.app_updates import update_of
+lazy from hq.platform.application.app_update_approval import (
+    PLAYBOOKS,
+    Approval,
+    approval_of,
+    approve_target,
+    run_again_action,
+    unapplied,
+)
+lazy from hq.platform.application.app_updates import managed_by, update_of
 lazy from hq.platform.application.container_findings import needs_you
 lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containers, standing_of, tally
 lazy from hq.platform.application.machines import container_context
@@ -45,6 +52,7 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
             "update": None,
             "approval": None,
             "approve": None,
+            "again": None,
             "held": "",
             "readiness": None,
             "edit": None,
@@ -55,7 +63,7 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
         None,
     )
     update = update_of(item) if item is not None else None
-    approval = approval_of(update) if update is not None else None
+    approval = approval_of(update) if update is not None else _closed(item)
     return {
         **found,
         "standing": item.standing if item is not None else standing_of(running.image, host, running.name),
@@ -73,11 +81,21 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
             if update is not None and approval is not None and not approval.held
             else None
         ),
+        "again": run_again_action(approval.standing) if approval is not None and approval.standing else None,
         "held": _held(approval),
         "readiness": readiness_of(item) if item is not None and item.standing.repository is None else None,
         # Where the operator names what its image is built from, when the image does not say.
         "edit": offered_changes([resource])[resource.key].edit(resource.key, next=request.get_full_path()),
     }
+
+
+def _closed(item: Any) -> Any:
+    """Where no update of ``item`` is open: the approval of its app's newest
+    merge while that merge is not applied, else None."""
+
+    managed = managed_by(item) if item is not None else None
+    standing = unapplied(managed.repository, managed.app) if managed is not None else None
+    return Approval(standing, standing.words) if standing is not None else None
 
 
 def _held(approval: Any) -> str:

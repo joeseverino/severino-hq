@@ -1516,45 +1516,77 @@ A refused run, or a retry answered with the run already queued, rings nothing.
 ### Approving an app update
 
 One press of `app_update.approve` (`hq/platform/application/app_update_approval.py`)
-merges an app update's pull request at the head commit the person reviewed,
-then applies the merge where the app runs. The command names the repository,
-the number and that head. The handler resolves the one adopted playbook whose
-manifest `fixes` the image-update finding and takes a `revision` input. It
-refuses none, and more than one, naming them, since HQ never picks. It also
-refuses a caller that the playbook's own run command would refuse (its
-authority, and an agent rule that denies it), a head that moved, an update
-whose diff GitHub did not give, and checks that are not passing. Otherwise it
-writes the playbook's record as adopted now and the `github.pull_request`
-record at that head, then queues the merge once per head. The merge's `input`
-carries `then`: the playbook's id, its adopted revision, its machines as
-resolved, and the correlation the merge and the run share. When the
-controller settles the merge with its commit, `controller._settle_report`
-queues that one run with the commit as its `revision`
-(`automation_runs.queue_follow_up`). The merge's result says which run, or why
-none ran. An agent's call waits for a person every time. Its approval is
-measured against the head, every pin before and after, what the new pins fix
-and bring, and `then`, so a moved head, a changed pin or a new adoption stales
-it.
+previews applying an app update where the app runs, merges its pull request at
+the head commit the person reviewed once the preview passes, then applies the
+merge. The command names the repository, the number and that head. The
+handler resolves the one adopted playbook whose manifest `fixes` the
+image-update finding and takes a `revision` input. It refuses none, and more
+than one, naming them, since HQ never picks. It also refuses a caller that the
+playbook's own run command would refuse (its authority, and an agent rule that
+denies it), a head that moved, an update whose diff GitHub did not give,
+checks that are not passing, and an approval at that head that is previewing,
+merging, applying or merged. Otherwise it writes the `github.pull_request`
+record at that head and queues the preview: a run of the playbook, as the
+person, on its machines as resolved, with the head as its `revision` and
+`check` set (`automation_runs.queue_run`, which writes the playbook's record as
+adopted now).
+
+Each step carries the next in its `input` under `then`, and
+`succeeded` queues it once the step succeeds: the worker's report of a passing
+preview queues the merge once per head, as the preview's requester and
+approver (`resource_operations.queue_carried_merge`); the controller's settle
+of the merge with its commit queues the apply, that commit as its `revision`
+(`automation_runs.queue_follow_up`). The merge's `then` is the playbook's id,
+its adopted revision, its machines and the correlation all three share. Each
+step's result says what it queued, or why nothing was. A preview that fails
+queues nothing, so nothing merges. An agent's call waits for a person every
+time. Its approval is measured against the head, every pin before and after,
+what the new pins fix and bring, and the apply, so a moved head, a changed pin
+or a new adoption stales it.
+
+A preview is Ansible's check mode: the run's `input` carries `check`, which
+no run command takes, and the worker passes `--check` for it
+(`hq_runner/ansible.py`); a `check` that is not a boolean is refused before
+anything runs. It goes through the playbook's own privilege login, so a task
+that declares `check_mode: false` (a precondition asking `sudo -n -l` whether
+the start is allowed) reads with the authority the apply has. `then` is HQ's
+alone and never reaches the worker's claim.
 
 The finding, the container page and the `app_updates` record read one answer,
-`approval_of`: the merge's standing once one is asked, the reason the press
-would be refused now (the record's `held`), or the sentence saying what the
-press does. Approve is offered only when nothing is held, so a page never
-shows a press the capability would refuse.
+`approval_of`: the standing of the newest preview or merge at the head once
+one is asked, the reason the press would be refused now (the record's
+`held`), or the sentence saying what the press does. Approve is offered only
+when nothing is held, so a page never shows a press the capability would
+refuse. A preview or an apply that ended badly names the step it stopped on
+and what it said. A merge whose apply failed stands as merged and not
+applied, with Run again: the playbook's form, opened on that run's machines
+and commit (`finding_runs.run_again`, which fills no parameter from a
+preview). Once the pull request is closed, the container page reads that
+standing from the app's newest merge (`unapplied`).
 
 Its security properties:
 
-- The follow-up was fixed at approval. Its playbook, revision, machines and
-  correlation are the merge's `input`. The only value it takes later is
-  GitHub's merge commit, which must be 40 hex and must pass the playbook's
-  own input type.
-- It runs as the approver and never exceeds them. The run is asked as the
-  merge's requester, with its `approved_by` (`attribution.own_operation`
-  rebinds an operation only to its own requester). Their authority to run the
-  playbook was checked at the press. The pause and an agent's block still
-  stop it at the claim.
-- It runs once per merge commit. It is keyed `<playbook>:<commit>`, so a
-  replayed settle queues nothing.
+- Nothing merges before the host shows it can apply. Only a preview that
+  succeeded queues a merge, and only a run whose `input` carries `check`
+  counts as one, so no run that acted, and no run a person asks for by hand,
+  merges anything.
+- A preview never acts. `check` is set by the approval alone and kept on a
+  run put back after a lapsed lease. Run again opens a fresh form whose
+  parameters come only from a run that acted.
+- No new merge rights. The merge goes through the same controller action,
+  token and `Consent.require` as before; the consent is the press's, held as
+  the preview's requester and `approved_by`.
+- The follow-ups were fixed at approval. The merge's pull request and head,
+  and the apply's playbook, revision, machines and correlation, are the
+  preview's `input`. The only value taken later is GitHub's merge commit,
+  which must be 40 hex and must pass the playbook's own input type.
+- Each runs as the approver and never exceeds them. Each step is asked as
+  the requester of the one before, with its `approved_by`
+  (`attribution.own_operation` rebinds an operation only to its own
+  requester). Their authority to run the playbook was checked at the press.
+  The pause and an agent's block still stop it at the claim.
+- Each runs once. The merge is keyed per head and the apply per merge commit
+  (`<playbook>:<commit>`), so a replayed report or settle queues nothing.
 - Nothing the person did not approve runs. A playbook adopted since the
   approval, or a record that no longer pins it, runs nothing, and the merge
   says why.
@@ -1565,8 +1597,8 @@ Its security properties:
 
 The press is the update finding's one remedy and the container page's Upgrade
 band, beside the pull request it reviews. The merge's `input` holds the head,
-so the band reads how the approval at that head stands (merging, merged with
-its run, or refused and why), and the run's page names the pull request it
+so the band reads how the approval at that head stands (previewing, merging,
+applying, applied, or where it stopped and why), and the run's page names the pull request it
 applies. A playbook that `fixes` a finding but needs an input of its own (this
 one's `revision`) is never offered from the finding as a plain run
 (`findings._playbooks`): only the press that supplies the input asks for it.

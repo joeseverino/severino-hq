@@ -204,6 +204,17 @@ def _policy_change(owner) -> None:
     example_estate.agents.asks_to_open_the_policy()
 
 
+def _approved(ended: str) -> Callable[[Any], None]:
+    """The example estate with its app update approved and ended as
+    ``ended`` says, so its container's Upgrade card draws that standing."""
+
+    def seed(owner) -> None:
+        _estate(owner)
+        example_estate.work.approval(owner, ended)
+
+    return seed
+
+
 @contextmanager
 def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
@@ -244,6 +255,7 @@ SEEDS: dict[str, Seed] = {
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
+    **{f"update-{ended}": Seed(_approved(ended), _SET_UP) for ended in ("preview-failed", "not-applied", "applied")},
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

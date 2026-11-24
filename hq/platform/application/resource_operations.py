@@ -9,6 +9,7 @@ import secrets
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Annotated, Any, Literal, TypedDict, cast
 
 from django.db import transaction
@@ -19,6 +20,7 @@ from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
+lazy from hq.platform.core.attribution import own_operation
 
 from .adoption import (
     NOTHING_LIVE_CHANGED,
@@ -61,7 +63,7 @@ from .record_saves import Created, row
 from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
 lazy from . import tailnet
-lazy from .capabilities import Consented, capability_words, consent
+lazy from .capabilities import Consent, Consented, capability_words, consent
 lazy from .containers import Running
 lazy from .history import asked_by
 lazy from .integration_specs import requested
@@ -299,6 +301,9 @@ def _resource_for_operation(key: str) -> ManagedResource:
 # The key of a reconcile's input holding the copy of a declaration an apply by
 # hand may only replace.
 REPLACES = "replaces"
+# The key of an operation's input holding the step HQ queues once it
+# succeeds: HQ's own, never told to the worker that runs it.
+THEN = "then"
 
 
 type Prepared = tuple[ManagedResource, dict[str, Any]]
@@ -369,24 +374,19 @@ def _queue_operation(
     """Queue ``action`` on ``resource`` under the consent of the run asking,
     with what its worker reads beside the generation in ``carries``."""
 
-    def prepare() -> Prepared:
-        if require_enabled and not resource.enabled:
-            raise PolicyError("This record is switched off in HQ.")
-        require_writable(resource.kind, resource.spec)
-        # Nothing enters the queue for a gated kind without a person behind
-        # it. The controller's own automatic work does not pass through here
-        # (it queues as itself, converging toward a declaration somebody has
-        # already agreed to) so this refuses exactly the case it is about: a
-        # credential asking for the world to be changed.
-        consent(consented).require(resource.kind)
-        allowed, explanation = controller_action_policy(resource.kind, action)
-        if not allowed:
-            raise PolicyError(explanation)
-        return resource, asked_fields(
-            consent(consented).principal, reason=command.reason, generation=resource.generation, **(carries or {})
-        )
-
-    operation, queued = enqueue(action, prepare, once=once)
+    operation, queued = enqueue(
+        action,
+        partial(
+            _prepared,
+            resource,
+            consent(consented),
+            action,
+            reason=command.reason,
+            require_enabled=require_enabled,
+            carries=carries,
+        ),
+        once=once,
+    )
     said = requested(capability_words(ACTION_CAPABILITY[action]), resource.key, again=not queued)
     if not queued:
         return operation_asked(operation, queued=False, message=said)
@@ -395,6 +395,63 @@ def _queue_operation(
     # ring in the same commit it is one ring.
     ask()
     return operation_asked(operation, queued=True, message=said)
+
+
+def _prepared(
+    resource: ManagedResource,
+    granted: Consent,
+    action: str,
+    *,
+    reason: str,
+    require_enabled: bool = True,
+    carries: dict[str, Any] | None = None,
+) -> Prepared:
+    if require_enabled and not resource.enabled:
+        raise PolicyError("This record is switched off in HQ.")
+    require_writable(resource.kind, resource.spec)
+    # Nothing enters the queue for a gated kind without a person behind
+    # it. The controller's own automatic work does not pass through here
+    # (it queues as itself, converging toward a declaration somebody has
+    # already agreed to) so this refuses exactly the case it is about: a
+    # credential asking for the world to be changed.
+    granted.require(resource.kind)
+    allowed, explanation = controller_action_policy(resource.kind, action)
+    if not allowed:
+        raise PolicyError(explanation)
+    return resource, asked_fields(granted.principal, reason=reason, generation=resource.generation, **(carries or {}))
+
+
+def acting_for(asked: OperationRequest) -> Principal:
+    """Who the step ``asked`` carries acts as: its requester, and its approver."""
+
+    return Principal(
+        asked.requested_actor,
+        asked.requested_interface,
+        frozenset(),
+        approved_by=str((asked.input or {}).get("approved_by") or ""),
+        person_key=asked.requested_person_key,
+        device=asked.requested_device,
+    )
+
+
+def queue_carried_merge(
+    resource: ManagedResource, *, asked: OperationRequest, carries: dict[str, Any]
+) -> OperationRequest:
+    """Queue the merge ``asked`` carries as its next step, once per head, as
+    its requester and its approver, whose consent is held as a capability's
+    is (``Consent.require``)."""
+
+    acting = acting_for(asked)
+    action = OperationRequest.Action.MERGE
+    with own_operation(asked, operation=ACTION_CAPABILITY[action], principal=acting):
+        operation, queued = enqueue(
+            action,
+            partial(_prepared, resource, Consent(acting), action, reason=asked.reason, carries=carries),
+            once=f"merge:{resource.pk}:{resource.spec.get('head_sha', '')}",
+        )
+    if queued:
+        ask()
+    return operation
 
 
 def queue_reconcile(
@@ -417,20 +474,6 @@ def queue_reconcile(
         # The copy an apply by hand may only replace (``controller.over_live``).
         carries={REPLACES: replaces} if replaces is not None else None,
         once=f"reconcile:{resource.pk}:g{resource.generation}",
-    )
-
-
-def queue_merge(resource: ManagedResource, *, consented: Consented, carries: dict[str, Any]) -> OperationAsked:
-    """Queue the merge of a pull request just declared at the head approved,
-    once per head, with the step it carries once it merges."""
-
-    return _queue_operation(
-        resource,
-        OperationCommand(),
-        consented=consented,
-        action=OperationRequest.Action.MERGE,
-        carries=carries,
-        once=f"merge:{resource.pk}:{resource.spec.get('head_sha', '')}",
     )
 
 
