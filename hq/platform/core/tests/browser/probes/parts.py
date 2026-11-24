@@ -1,6 +1,6 @@
 """Probes of a page's parts: disclosures, labels, the dashboard's readings, drawings and a check's evidence."""
 
-from hq.platform.core.included_parts import CHART, MODAL
+from hq.platform.core.included_parts import CHART, MODAL, MONTH_GRID
 from hq.platform.core.templatetags.ladder_tags import CHECK_RUNG
 from hq.platform.core.tests.browser.probes import Check, Example, Plant
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
@@ -344,6 +344,33 @@ UNDRAWN = """(drawings) => {
   return {read: read.length, found};
 }"""
 
+# A month in a card fills the body its card is stretched to, its weeks
+# sharing the room (layout.css), so it never ends short of its frame.
+MONTHS_SHORT = """(months) => {
+  const room = 1.5 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const read = [...document.querySelectorAll(months)].filter((month) => month.checkVisibility());
+  const found = read.filter((month) => {
+    const body = month.parentElement;
+    const style = getComputedStyle(body);
+    const end = body.getBoundingClientRect().bottom - parseFloat(style.paddingBottom) - parseFloat(style.borderBottomWidth);
+    return end - month.getBoundingClientRect().bottom > room;
+  }).map((month) => `${month.closest('section')?.id || 'a month'} ends short of its frame`);
+  return {read: read.length, found};
+}"""
+
+# A month as a split's main beside a taller companion, its weeks held to
+# their own height.
+_SHORT_MONTH = (
+    '<div class="split"><section class="section"><div class="section-body">'
+    '<table class="month-grid" style="flex-grow: 0"><tbody>'
+    + '<tr class="month-week">'
+    + '<td class="month-day">1</td>' * 7
+    + "</tr>"
+    + '</tbody></table></div></section><section class="section"><div class="section-body">'
+    + "<p>Example line</p>" * 30
+    + "</div></section></div>"
+)
+
 # Whether a box scrolls wider than it shows, which a plant's premise asks.
 _WIDENED = """(box) => document.querySelector(box).scrollWidth > document.querySelector(box).clientWidth
   ? [] : [`${box} scrolls no wider than it shows`]"""
@@ -406,6 +433,12 @@ CHECKS = {
         (UNDRAWN, SELECTORS["drawing"]),
         reader_sees="a chart or a calendar given room and drawing nothing",
         part=CHART,
+    ),
+    "months short of their frame": Check(
+        (MONTHS_SHORT, SELECTORS["month"]),
+        reader_sees="a month ending short of its card, empty space under its last week",
+        part=MONTH_GRID,
+        plants=(Plant(_SHORT_MONTH, finds=("ends short",)),),
     ),
     "pills in pieces": Check(
         PILLS_IN_PIECES, table=True, reader_sees="one pill's words drawn as two pills, a line each"

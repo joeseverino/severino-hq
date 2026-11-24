@@ -38,13 +38,13 @@
 /* Cards in a row share its height: every layout stretches its members to
    the row's tallest, so their bottom edges line up and the row reads as one
    band. The added room goes to what draws taller truthfully, a chart
-   (figures.css) or a table's own frame; anything else leaves it under its
-   content, its foot at the bottom. No padding fills it. */
+   (figures.css), a month's weeks or a table's own frame; anything else
+   leaves it under its content, its foot at the bottom. No padding fills it. */
 :is(.two-col, .split, .section-flow, .domain-charts) > .section:not(details) {
   display: flex; flex-direction: column;
   & > .section-body { flex-grow: 1; }
-  & > .section-body:has(> .section-foot, > .table-scroll:only-child, > .chart-scroll) { display: flex; flex-direction: column; }
-  & > .section-body > :is(.table-scroll:only-child, .chart-scroll), & .chart-scroll > .chart-frame, & .chart-frame > :is(.bar-chart, .line-chart) { flex-grow: 1; }
+  & > .section-body:has(> .section-foot, > .table-scroll:only-child, > .chart-scroll, > .month-grid) { display: flex; flex-direction: column; }
+  & > .section-body > :is(.table-scroll:only-child, .chart-scroll, .month-grid), & .chart-scroll > .chart-frame, & .chart-frame > :is(.bar-chart, .line-chart) { flex-grow: 1; }
   & :is(.chart-scroll, .chart-frame) { display: flex; flex-direction: column; }
   & > .section-body > .section-foot { margin-block-start: auto; padding-block-start: var(--space-6); }
 }
