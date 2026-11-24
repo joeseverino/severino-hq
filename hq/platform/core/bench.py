@@ -35,7 +35,7 @@ from hq.domains.receipts.models import Receipt
 from hq.platform.application.conditions import READY
 from hq.platform.application.references import Kind
 from hq.platform.application.security import API_INTERFACE, WEB_INTERFACE
-from hq.platform.core.example_estate import automation
+from hq.platform.core.example_estate import automation, doors
 from hq.platform.core.models import AuditLog
 from hq.platform.search_index.services import rebuild_search_index
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
@@ -80,10 +80,11 @@ class Seeded:
 def unchanged_sweep() -> None:
     """What the controller reports when nothing changed.
 
-    The bridge's own ``inventory`` and ``connections`` actions, given what the
-    estate already holds: every row is written again and none says anything
-    new. The first sweep of a seeded estate adopts what it finds; every one
-    after it changes nothing but when it was read.
+    The bridge's own ``inventory`` and ``connections`` actions, each through
+    the controller's door whatever runs it (a bench command's shell), given
+    what the estate already holds: every row is written again and none says
+    anything new. The first sweep of a seeded estate adopts what it finds;
+    every one after it changes nothing but when it was read.
     """
 
     by_name = {action.name: action for action in ACTIONS}
@@ -103,8 +104,9 @@ def unchanged_sweep() -> None:
         }
         for row in ProviderConnection.objects.all()
     ]
-    by_name["inventory"].run({"controller-id": CONTROLLER}, inventory)
-    by_name["connections"].run({"controller-id": CONTROLLER}, connections)
+    for name, payload in (("inventory", inventory), ("connections", connections)):
+        with doors.controller(name):
+            by_name[name].run({"controller-id": CONTROLLER}, payload)
 
 
 def _count(scale: float, full: int) -> int:
