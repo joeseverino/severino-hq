@@ -74,7 +74,8 @@ class ActionItemsView(PageMixin, TemplateView):
             show_action_count=True,
             action_sources=sources,
             action_urgencies=_URGENCIES,
-            action_shown=len(items),
+            # What is open on the page: a dismissed item waits in its closed fold.
+            action_shown=len(doing) + len(told),
             action_total=len(all_items),
             action_query=query,
             action_status=status,
