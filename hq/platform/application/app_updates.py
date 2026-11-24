@@ -39,6 +39,8 @@ lazy from .pages import PageAction, command_reach
 
 # What an update's new pins bring of their own, as every page labels it.
 BRINGS = "New vulnerabilities"
+# What an update that moves no image brings, as its fact says it.
+REBUILT = "Not checked: it rebuilds on the host"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,9 +105,10 @@ class AppUpdate:
     @property
     def scanned(self) -> bool:
         """Whether every new pin's packages were checked: until then, what it
-        brings is not known."""
+        brings is not known. An update that moves no pin rebuilds on the host,
+        from files no scan reads."""
 
-        return self.readable and all(pin.scanned for pin in self.pins)
+        return self.readable and bool(self.pins) and all(pin.scanned for pin in self.pins)
 
     @property
     def checks_said(self) -> tuple[str, str, str]:
@@ -145,6 +148,8 @@ class AppUpdate:
             return counted(len(self.brings), "serious vulnerability", "serious vulnerabilities")
         if self.scanned:
             return "Nothing serious"
+        if self.readable and not self.pins:
+            return REBUILT
         if any(pin.unlisted for pin in self.pins):
             return f"Can't be checked: {self.publisher or 'its publisher'} publishes no package list"
         return "Not checked yet"

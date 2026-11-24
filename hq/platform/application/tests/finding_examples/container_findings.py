@@ -184,6 +184,17 @@ STATES = (
             ),
         ),
     ),
+    # Its build inputs alone change: it rebuilds on the host, from files no scan reads.
+    update(
+        pull(),
+        raises=(
+            Raised(
+                title=MOVED,
+                presses=(APPROVE,),
+                evidence=facts(PULLED, ("New vulnerabilities", "Not checked: it rebuilds on the host")),
+            ),
+        ),
+    ),
     # No press where no playbook applies it, or where the one that does never runs where it runs:
     # what holds it back is its one step.
     update(pull(moves=[moved()]), on=None, raises=(held_by(NO_PLAYBOOK),)),
