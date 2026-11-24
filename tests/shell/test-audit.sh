@@ -1,7 +1,7 @@
 #!/bin/sh
 # Prove the audit runs uv's on the named project alone, and on the host runs
-# uv's on its project and osv-scanner on every lockfile git tracks, failing
-# when either finds something.
+# uv's on its project, osv-scanner on every lockfile git tracks and the
+# pinned tools' audit, failing when any finds something.
 set -eu
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -10,10 +10,15 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/package"
 
-# uv: an audit records the project it was given, and fails when UV_FINDS is set.
+# uv: an audit records the project it was given, and fails when UV_FINDS is
+# set; a run is the pinned tools' audit, which fails when TOOLS_FIND is set.
 cat >"$work/bin/uv" <<EOF
 #!/bin/sh
 command=\$1; shift
+if [ "\$command" = run ]; then
+    : >"$work/tools-audited"
+    [ -z "\${TOOLS_FIND:-}" ]; exit
+fi
 project=""
 while [ "\$#" -gt 0 ]; do
     case "\$1" in
@@ -48,6 +53,7 @@ audit "$work/package"
 [ "$(cat "$work/audited")" = "$work/package" ] \
     || fail "an extension's lock was not audited: $(cat "$work/audited")"
 [ ! -e "$work/scanned" ] || fail "an extension's audit ran osv-scanner, which its admission has no mise to install"
+[ ! -e "$work/tools-audited" ] || fail "an extension's audit ran the host's tool audit"
 
 audit
 [ "$(cat "$work/audited")" = "$repo_dir" ] \
@@ -60,9 +66,11 @@ done
 while IFS= read -r lock; do
     grep -qx "$repo_dir/$lock" "$work/scanned" || fail "osv-scanner did not scan $lock"
 done <"$work/tracked"
+[ -e "$work/tools-audited" ] || fail "the host's audit left out the pinned tools"
 
 rm "$work/scanned"
 if UV_FINDS=1 audit; then fail "the host's audit passed when uv found a vulnerability"; fi
 [ -s "$work/scanned" ] || fail "a finding by uv kept osv-scanner from running"
 if OSV_FINDS=1 audit; then fail "the host's audit passed when osv-scanner found a vulnerability"; fi
+if TOOLS_FIND=1 audit; then fail "the host's audit passed when a pinned tool had an advisory"; fi
 echo "audit tests passed"

@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="The advisories against each package of every lockfile git tracks, and each adverse status, as lint:audit's uv audit and osv-scanner report them; read-only, and it needs the network"
+#MISE description="The advisories against each package of every lockfile git tracks, and each adverse status, as lint:audit's uv audit, osv-scanner and mise audit report them; read-only, and it needs the network"
 #MISE hide=true
 #MISE extends="audit"
 #MISE depends=["setup:sandbox osv-scanner"]
