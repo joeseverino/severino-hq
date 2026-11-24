@@ -87,7 +87,7 @@ def held(why: str, primary=("Open containers", LISTED), **said) -> Example:
 
 
 BOX, EDGE = "example-box", "example-edge"
-APPROVE, APPLY = "app_update.approve", "app_update.apply"
+APPROVE, APPLY, OPEN_PR = "app_update.approve", "app_update.apply", "app_update.open"
 KUMA = "kuma has an update, 1 to 2"
 # What the pull request and the default branch pin: one release past what runs.
 MOVED = "app has an update, v1.2.0 to v1.2.1"
@@ -181,9 +181,13 @@ STATES = (
         compose_images=[{"path": "compose/app/compose.yaml", "service": "app", "image": PINNED}],
         raises=(Raised(title=MOVED, presses=(APPLY,)),),
     ),
-    # Renovate holds its branch, or has not seen the release; or HQ can't match the repository's files.
-    update(held_branches=[{"branch": "renovate/app", "marker": "unpend", "apps": ["app"]}], raises=(MOVED,)),
-    update(compose=["compose/app/compose.yaml"], raises=(MOVED,)),
+    # Renovate holds its branch, or has not seen the release: one press has it open the pull request.
+    # Where HQ can't match the repository's files to what runs, it says so.
+    update(
+        held_branches=[{"branch": "renovate/app", "marker": "unpend", "apps": ["app"]}],
+        raises=(Raised(title=MOVED, presses=(OPEN_PR,)),),
+    ),
+    update(compose=["compose/app/compose.yaml"], raises=(Raised(title=MOVED, presses=(OPEN_PR,)),)),
     update(compose=["compose/app/docker-compose.yml"], raises=(MOVED,)),
 )
 

@@ -9,7 +9,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..app_updates import app_updates
 from .test_container_standard import runtime
-from .test_containers import HIGH, estate, inventory, queued
+from .test_containers import HIGH, estate, inventory, named, queued
 from .test_github_estate import store
 from .test_upgrades import TARGET, published
 
@@ -121,9 +121,10 @@ class AppUpdateTests(TestCase):
     def test_the_card_of_the_container_it_moves_names_the_pull_request_and_its_numbers(self):
         arranged(pull(moves=[moved()]))
 
-        (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
+        (card,) = [item for item in queued() if "app" in named(item, "Container")]
 
-        self.assertIn(("Pull request", "example/alpha#7"), card.evidence)
+        linked = dict(card.evidence)["Pull request"]
+        self.assertEqual((str(linked), linked.url), ("example/alpha#7", "https://github.com/example/alpha/pull/7"))
         self.assertIn(("Pin", "v1.2.0 to v1.2.1"), card.evidence)
         self.assertIn(("Fixes", "1 known vulnerability"), card.evidence)
 
@@ -166,7 +167,7 @@ class OneStateTests(TestCase):
             with self.subTest(example=index), transaction.atomic():
                 declare("example-box-app", "portainer.container", spec)
                 with example.given() or nullcontext():
-                    (card,) = [item for item in queued(UPDATE) if ("Container", "app") in item.evidence]
+                    (card,) = [item for item in queued(UPDATE) if "app" in named(item, "Container")]
                     page = self.client.get(reverse("control_plane:detail", args=["example-box-app"])).context
                 transaction.set_rollback(True)
                 act, state = page["container"]["act"], page["container"]["state"]

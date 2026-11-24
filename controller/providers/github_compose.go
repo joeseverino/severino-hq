@@ -116,9 +116,9 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 			named[app] = append(named[app], imageName(images[service]))
 		}
 	}
-	var body string
-	layout.dashboard, body, err = g.dashboard(ctx)
-	for _, line := range githubHeldLine.FindAllStringSubmatch(body, -1) {
+	issue, err := g.dashboard(ctx)
+	layout.dashboard = issue.HTMLURL
+	for _, line := range githubHeldLine.FindAllStringSubmatch(issue.Body, -1) {
 		held := GitHubHeldBranch{Branch: line[2], Marker: line[1], Apps: []string{}}
 		for _, app := range sortedKeys(named) {
 			if slices.ContainsFunc(named[app], func(name string) bool { return namesImage(line[3], name) }) {
@@ -186,18 +186,18 @@ func (g *githubRepository) composeFiles(ctx context.Context, branch string) ([]s
 	return found[:min(len(found), githubComposeKept)], nil
 }
 
-// dashboard is the address and body of the open Dependency Dashboard, or "":
-// Renovate edits it every run, so it is among the issues updated last.
-func (g *githubRepository) dashboard(ctx context.Context) (string, string, error) {
+// dashboard is the open Dependency Dashboard, or the zero issue: Renovate
+// edits it every run, so it is among the issues updated last.
+func (g *githubRepository) dashboard(ctx context.Context) (githubapi.Issue, error) {
 	issues, err := json200(g.api.IssuesListForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.IssuesListForRepoParams{
 		State: new(githubapi.IssuesListForRepoParamsStateOpen), Sort: new(githubapi.IssuesListForRepoParamsSortUpdated), PerPage: new(githubListPage),
 	}))
 	for _, issue := range issues {
 		if issue.PullRequest.URL == "" && issue.Title == githubDashboard {
-			return issue.HTMLURL, issue.Body, err
+			return issue, err
 		}
 	}
-	return "", "", err
+	return githubapi.Issue{}, err
 }
 
 // appChanges is each app whose Compose files an update's pull request

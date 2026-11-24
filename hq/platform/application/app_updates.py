@@ -15,6 +15,7 @@ from enum import StrEnum
 from typing import Any
 
 from .containers import Container, containers, published_digest, ranked, standing_of
+from .entity_links import EntityLink
 from .github_estate import UPDATE_BRANCH, pull_checks, repositories
 from .images import ImageRef
 from .projection import projection_scope, read_once
@@ -31,8 +32,9 @@ lazy from .app_update_approval import (
     approval_of,
     approve_target,
 )
+lazy from .app_update_open import OPEN, open_target
 lazy from .container_findings import BY_HAND
-lazy from .finding_model import FindingRemedy
+lazy from .finding_model import Fact, FindingRemedy
 lazy from .labels import lower_first
 lazy from .pages import PageAction, command_reach
 
@@ -149,12 +151,12 @@ class AppUpdate:
         return "Not checked yet"
 
     @property
-    def evidence(self) -> tuple[tuple[str, str], ...]:
+    def evidence(self) -> tuple[Fact, ...]:
         """The update as a card's evidence: where it is open, each pin's move,
         and what it fixes and brings."""
 
         return (
-            ("Pull request", f"{self.repository}{self.label}"),
+            ("Pull request", EntityLink(f"{self.repository}{self.label}", self.url, external=True)),
             *(("Pin", pin.said) for pin in self.pins),
             ("Fixes", self.fixes_said),
             (BRINGS, self.brings_said),
@@ -364,15 +366,21 @@ class UpdateState:
     update: AppUpdate | None = None
     managed: Managed | None = None
 
+    @property
+    def at_work(self) -> bool:
+        """Whether HQ is moving it now, or moved it: nothing is asked of anyone."""
+
+        return self.standing is not None and self.standing.taken
+
 
 UNOPENED = "Renovate has not seen the release yet."
-# What each marker on the Dependency Dashboard says Renovate waits for
-# (Renovate's ``dependency-dashboard.ts``).
-WAITS_FOR = {
-    "unpend": "pending its status checks",
-    "approve": "waiting for approval",
-    "unschedule": "waiting for its schedule",
-    "unlimit": "rate-limited",
+# What Renovate waits for, by the marker of the box it holds the branch under
+# (its ``dependency-dashboard.ts``).
+UNTIL = {
+    "unpend": "until its checks pass",
+    "approve": "until it is approved",
+    "unschedule": "until its schedule allows",
+    "unlimit": "while it is at its pull request limit",
 }
 
 
@@ -398,7 +406,8 @@ def update_state(item: Container) -> UpdateState:
     if managed is None:
         if (unmatched := _unmatched(item)) is not None:
             holder, why = unmatched
-            return UpdateState(UpdateKind.UNMATCHED, latest, ended(f"{holder} holds its app"), reason=why)
+            words = ended(f"HQ can't match it to the Compose files in {holder}")
+            return UpdateState(UpdateKind.UNMATCHED, latest, words, reason=why)
         return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND)
     repository = repositories()[managed.repository]
     if (pinned := _pinned_at_head(item, repository)) is not None:
@@ -411,12 +420,13 @@ def update_state(item: Container) -> UpdateState:
             apply_of(managed.repository, head, (item,)),
             managed=managed,
         )
-    holds = ended(f"{managed.repository} holds it")
-    if held := _held_branch(repository, managed.app):
-        waits = WAITS_FOR.get(str(held.get("marker", "")), "")
-        why = ended(f"Renovate holds {held.get('branch', '')}" + (f", {waits}" if waits else ""))
-        return UpdateState(UpdateKind.HELD, latest, holds, reason=why, managed=managed)
-    return UpdateState(UpdateKind.UNOPENED, latest, holds, reason=UNOPENED, managed=managed)
+    action = UpdateAction(OPEN, open_target(managed.repository, managed.app))
+    if held := held_branch(repository, managed.app):
+        until = UNTIL.get(str(held.get("marker", "")), "")
+        words = ended(" ".join(("Renovate is holding its branch", until)).strip())
+        said = f"Ticks {held.get('branch', '')} on the Dependency Dashboard, then asks Renovate to run."
+        return UpdateState(UpdateKind.HELD, latest, words, action, said=said, managed=managed)
+    return UpdateState(UpdateKind.UNOPENED, latest, UNOPENED, action, said="Asks Renovate to run.", managed=managed)
 
 
 def _decided(
@@ -431,15 +441,21 @@ def _decided(
     return UpdateState(kind, move, words, action, said=approval.said, standing=approval.standing, **of)
 
 
-def merged_of(repository: str, app: str) -> tuple[Container, ...]:
-    """The containers of ``app`` that run a pin before the one its repository's default branch holds."""
+def of_app(repository: str, app: str) -> tuple[Container, ...]:
+    """The containers of ``app``, whose Compose files ``repository`` holds."""
 
     return tuple(
         item
         for item in containers()
-        if (managed := managed_by(item)) is not None
-        and (managed.repository, managed.app) == (repository, app)
-        and _pinned_at_head(item, repositories()[repository]) is not None
+        if (managed := managed_by(item)) is not None and (managed.repository, managed.app) == (repository, app)
+    )
+
+
+def merged_of(repository: str, app: str) -> tuple[Container, ...]:
+    """The containers of ``app`` that run a pin before the one its repository's default branch holds."""
+
+    return tuple(
+        item for item in of_app(repository, app) if _pinned_at_head(item, repositories()[repository]) is not None
     )
 
 
@@ -465,7 +481,7 @@ def _pinned_at_head(item: Container, repository: Any) -> ImageRef | None:
     return None
 
 
-def _held_branch(repository: Any, app: str) -> Mapping[str, Any] | None:
+def held_branch(repository: Any, app: str) -> Mapping[str, Any] | None:
     """The branch Renovate holds on the Dependency Dashboard for ``app``, with no pull request."""
 
     return next((each for each in repository.held_branches or () if app in (each.get("apps") or ())), None)

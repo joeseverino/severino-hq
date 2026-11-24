@@ -3593,6 +3593,21 @@
           }
         }
       },
+      "OperationAskedAskedAnswerSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OperationAskedAskedAnswerSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
       "OperationAskedDeclarationForgottenSuccess": {
         "content": {
           "application/json": {
@@ -5466,6 +5481,12 @@
         ],
         "type": "object"
       },
+      "App": {
+        "description": "The app, as its directory of Compose files names it.",
+        "maxLength": 100,
+        "pattern": "^[A-Za-z0-9_.-]+$",
+        "type": "string"
+      },
       "AppUpdateApplyRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -5478,10 +5499,7 @@
             "description": "The app to apply at the head of its repository's default branch you saw.",
             "properties": {
               "app": {
-                "description": "The app, as its directory of Compose files names it.",
-                "maxLength": 100,
-                "pattern": "^[A-Za-z0-9_.-]+$",
-                "type": "string"
+                "$ref": "#/components/schemas/App"
               },
               "head_sha": {
                 "description": "The default branch's head you saw. The repository's `head`; a head that moved since is refused.",
@@ -5489,10 +5507,7 @@
                 "type": "string"
               },
               "repository": {
-                "description": "The repository that holds it, as owner/name.",
-                "maxLength": 140,
-                "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-                "type": "string"
+                "$ref": "#/components/schemas/Holder"
               }
             },
             "required": [
@@ -5541,6 +5556,36 @@
               "repository",
               "number",
               "head_sha"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "AppUpdateOpenRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The app whose update Renovate is to open.",
+            "properties": {
+              "app": {
+                "$ref": "#/components/schemas/App"
+              },
+              "repository": {
+                "$ref": "#/components/schemas/Holder"
+              }
+            },
+            "required": [
+              "repository",
+              "app"
             ],
             "type": "object"
           }
@@ -11952,6 +11997,19 @@
         },
         "type": "object"
       },
+      "DeclaredGitHubDashboardBoxSpec": {
+        "properties": {
+          "kind": {
+            "const": "github.dashboard_box",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/GitHubDashboardBoxSpec"
+          }
+        },
+        "type": "object"
+      },
       "DeclaredGitHubDeliverySpec": {
         "properties": {
           "kind": {
@@ -15515,6 +15573,39 @@
         ],
         "type": "object"
       },
+      "GitHubDashboardBoxSpec": {
+        "additionalProperties": false,
+        "description": "One box on a repository's Dependency Dashboard, ticked so Renovate opens its branch's pull request.",
+        "properties": {
+          "branch": {
+            "description": "The branch Renovate holds.",
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "title": "Branch",
+            "type": "string"
+          },
+          "marker": {
+            "description": "The word Renovate marks its box with.",
+            "enum": [
+              "unpend",
+              "approve",
+              "unschedule",
+              "unlimit"
+            ],
+            "title": "Marker",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/Repository"
+          }
+        },
+        "required": [
+          "repository",
+          "branch",
+          "marker"
+        ],
+        "type": "object"
+      },
       "GitHubDeliverySpec": {
         "additionalProperties": false,
         "description": "The repository and workflow that deploy HQ, which HQ checks production against.",
@@ -15570,10 +15661,7 @@
             "type": "integer"
           },
           "repository": {
-            "description": "The repository, as owner/name.",
-            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-            "title": "Repository",
-            "type": "string"
+            "$ref": "#/components/schemas/Repository"
           }
         },
         "required": [
@@ -16188,6 +16276,12 @@
           "data"
         ],
         "type": "object"
+      },
+      "Holder": {
+        "description": "The repository that holds it, as owner/name.",
+        "maxLength": 140,
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        "type": "string"
       },
       "HopCheck": {
         "additionalProperties": false,
@@ -17228,6 +17322,10 @@
                 "title": "Declared git hub pull request spec"
               },
               {
+                "$ref": "#/components/schemas/DeclaredGitHubDashboardBoxSpec",
+                "title": "Declared git hub dashboard box spec"
+              },
+              {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
                 "title": "Declared portainer container spec"
               },
@@ -17429,6 +17527,10 @@
               {
                 "$ref": "#/components/schemas/DeclaredGitHubPullRequestSpec",
                 "title": "Declared git hub pull request spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredGitHubDashboardBoxSpec",
+                "title": "Declared git hub dashboard box spec"
               },
               {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
@@ -19000,6 +19102,7 @@
           "npm.proxy_host",
           "github.delivery",
           "github.pull_request",
+          "github.dashboard_box",
           "portainer.container",
           "tailscale.device",
           "tailscale.policy",
@@ -19022,6 +19125,7 @@
           "caddy.route": "Caddy route",
           "cloudflare.dns_record": "Public DNS record",
           "cloudflare.zone": "Domain",
+          "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.pull_request": "Pull request",
           "machine": "Machine",
@@ -21159,6 +21263,33 @@
           "message",
           "queued",
           "operation"
+        ],
+        "type": "object"
+      },
+      "OperationAskedAskedAnswerSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OperationAsked",
+                "title": "Operation asked"
+              },
+              {
+                "$ref": "#/components/schemas/AskedAnswer",
+                "title": "Asked answer"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names."
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -26384,6 +26515,12 @@
         },
         "type": "object"
       },
+      "Repository": {
+        "description": "The repository, as owner/name.",
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        "title": "Repository",
+        "type": "string"
+      },
       "RepositoryPart": {
         "additionalProperties": false,
         "properties": {
@@ -29087,6 +29224,7 @@
           "cloudflare.tunnel",
           "cloudflare.zone",
           "github.allowance",
+          "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
           "github.profile",
@@ -29154,6 +29292,7 @@
           "cloudflare.tunnel": "Tunnel",
           "cloudflare.zone": "Domain",
           "github.allowance": "GitHub hourly allowance",
+          "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.dependency_run": "Dependency update run",
           "github.profile": "GitHub profile",
@@ -32618,6 +32757,81 @@
           "hq.infrastructure"
         ],
         "x-hq-capability": "app_update.approve",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
+    "/api/v2/capabilities/app_update.open/": {
+      "post": {
+        "description": "Have Renovate open the pull request of an app's newer release: tick the box it holds the app's branch under on the Dependency Dashboard, then ask a dependency run.",
+        "operationId": "appUpdateOpenV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUpdateOpenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedAskedAnswerSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Open PR",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "app_update.open",
         "x-hq-effect": "infrastructure_change"
       }
     },
@@ -37296,6 +37510,7 @@
                 "action_item.set_aside",
                 "app_update.apply",
                 "app_update.approve",
+                "app_update.open",
                 "appearance.theme.set",
                 "approval.withdraw",
                 "asset.create",
@@ -40684,7 +40899,7 @@
             "required": false,
             "schema": {
               "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
               "type": "string"
             },
             "style": "form"
@@ -40702,6 +40917,7 @@
                 "npm.proxy_host",
                 "github.delivery",
                 "github.pull_request",
+                "github.dashboard_box",
                 "portainer.container",
                 "tailscale.device",
                 "tailscale.policy",

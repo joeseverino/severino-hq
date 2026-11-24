@@ -1,9 +1,11 @@
-"""GitHub as HQ declares it: continuous delivery, and the pull requests it merges.
+"""GitHub as HQ declares it: continuous delivery, the pull requests it merges and the Renovate boxes it ticks.
 
 Delivery: the controller (controller/providers/github_delivery.go) compares
 the running image's lock with each extension's latest admission on GitHub and
 reports each stage there; HQ starts nothing. A pull request is merged at the
-head commit a person approved (controller/providers/github_merge.go).
+head commit a person approved (controller/providers/github_merge.go), and a
+Dependency Dashboard box is ticked so Renovate opens a branch it holds
+(controller/providers/github_dashboard.go).
 """
 
 from collections.abc import Mapping
@@ -128,6 +130,10 @@ DEFINITION = ProviderSpec(
 
 
 PULL_REQUEST_KIND = "github.pull_request"
+# A repository a declaration names.
+type Repository = Annotated[
+    str, Describe("", api="The repository, as owner/name."), Field(pattern=REPOSITORY, title="Repository")
+]
 # The action that merges one, ``OperationRequest.Action.MERGE``.
 MERGE = "merge"
 # Why GitHub would not merge one: the head moved after the approval (409),
@@ -139,9 +145,7 @@ MergeRefusal = Literal["head_moved", "not_mergeable", "checks_failing", "not_ins
 class GitHubPullRequestSpec(ProviderModel):
     """One pull request, at the head commit a person approved merging."""
 
-    repository: Annotated[str, Describe("", api="The repository, as owner/name.")] = Field(
-        pattern=REPOSITORY, title="Repository"
-    )
+    repository: Repository
     number: Annotated[RecordId, Describe("", api="The pull request's number.")] = Field(title="Number")
     head_sha: Annotated[str, Describe("", api="The head commit approved; GitHub refuses the merge once it moves.")] = (
         Field(pattern=COMMIT, title="Head commit")
@@ -173,7 +177,36 @@ PULL_REQUEST = ProviderSpec(
     declaration_only=True,
     unobserved_reason="Each merge reports the commit it made.",
 )
-DEFINITIONS = (DEFINITION, PULL_REQUEST)
+DASHBOARD_BOX_KIND = "github.dashboard_box"
+# The words Renovate marks a box with for a branch it holds with no pull
+# request (its dependency-dashboard.ts): ticked, Renovate opens it.
+HeldMarker = Literal["unpend", "approve", "unschedule", "unlimit"]
+
+
+class GitHubDashboardBoxSpec(ProviderModel):
+    """One box on a repository's Dependency Dashboard, ticked so Renovate opens its branch's pull request."""
+
+    repository: Repository
+    branch: Annotated[str, Describe("", api="The branch Renovate holds.")] = Field(
+        pattern=r"^[A-Za-z0-9_./-]+$", max_length=200, title="Branch"
+    )
+    marker: Annotated[HeldMarker, Describe("", api="The word Renovate marks its box with.")] = Field(title="Marker")
+
+
+DASHBOARD_BOX = ProviderSpec(
+    DASHBOARD_BOX_KIND,
+    "A box HQ ticks on a Dependency Dashboard, so Renovate opens the branch's pull request.",
+    GitHubDashboardBoxSpec,
+    actions={"reconcile": applies()},
+    label="Dashboard box",
+    name=lambda spec: f"{spec.get('repository', '')} {spec.get('branch', '')}",
+    connection_providers=(PROVIDER,),
+    identity=lambda spec: (str(spec["repository"]), str(spec["branch"])),
+    key_hint=lambda spec: f"{spec.get('repository', '')}-{spec.get('branch', '')}".replace("/", "-"),
+    declaration_only=True,
+    unobserved_reason="Renovate rewrites the Dashboard on every run.",
+)
+DEFINITIONS = (DEFINITION, PULL_REQUEST, DASHBOARD_BOX)
 OBSERVATIONS = readings.OBSERVATIONS
 
 SHARED = (
@@ -192,6 +225,11 @@ SHARED = (
     ),
     SharedValue(
         "GitHubPullRequestSpec", GitHubPullRequestSpec, "A github.pull_request declaration: what a merge merges."
+    ),
+    SharedValue(
+        "GitHubDashboardBoxSpec",
+        GitHubDashboardBoxSpec,
+        "A github.dashboard_box declaration: the box a reconcile ticks.",
     ),
     SharedValue(
         "GitHubMergeRefusal",

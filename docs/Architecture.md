@@ -1564,13 +1564,19 @@ not run (the repository record's `compose_images`) is Apply, which queues the
 playbook at that head on the machines it serves (`app_update.apply`, through
 `apply_of`). A branch the Dependency Dashboard holds with no pull request
 (`held_branches`, read from the boxes Renovate's `dependency-dashboard.ts`
-writes) says why Renovate holds it. A repository that holds the app's
-directory but not the file the container runs from says so, and a container
-no repository holds keeps the upgrade plan's steps by hand. An action is
-offered only when nothing holds it, so a page never shows a press the
-capability would refuse: a machine the playbook does not run on is refused by
-both presses at their own boundary (`unserved`). A preview or an apply that
-ended badly names the step it stopped on and what it said.
+writes), or a release Renovate has not seen, is Open PR (`app_update.open`,
+`app_update_open.py`): it ticks the branch's box through a
+`github.dashboard_box` reconcile, whose token holds Issues write on that one
+repository, and asks a dependency run once the tick lands, or asks the run
+alone where there is no box. A repository that holds the app's directory but
+not the file the container runs from says so, and a container no repository
+holds keeps the upgrade plan's steps by hand. An action is offered only when
+nothing holds it, so a page never shows a press the capability would refuse:
+a machine the playbook does not run on is refused by Approve and Apply at
+their own boundary (`unserved`). While a step HQ queued works, or once it
+applied, the update asks nothing of anyone and raises no finding
+(`UpdateState.at_work`). A preview or an apply that ended badly names the step
+it stopped on and what it said.
 
 Its security properties:
 

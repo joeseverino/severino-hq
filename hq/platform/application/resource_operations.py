@@ -455,7 +455,12 @@ def queue_carried_merge(
 
 
 def queue_reconcile(
-    resource: ManagedResource, *, consented: Consented, reason: str, replaces: dict[str, Any] | None = None
+    resource: ManagedResource,
+    *,
+    consented: Consented,
+    reason: str,
+    replaces: dict[str, Any] | None = None,
+    then: dict[str, Any] | None = None,
 ) -> OperationAsked:
     """Queue a reconcile of a declaration just written, as the write's own act.
 
@@ -463,17 +468,23 @@ def queue_reconcile(
     contact inbox under contacts), so it is checked against the same policy
     as any other reconcile. Keyed on the generation: asking twice for one
     generation queues it once. ``replaces`` is the copy the write replaced,
-    which the claim holds the live record to.
+    which the claim holds the live record to. ``then`` is the step its
+    success queues (``app_update_approval.succeeded``), asked again on every
+    call while none waits, since what it acts on changes outside HQ.
     """
 
+    carries = {
+        # The copy an apply by hand may only replace (``controller.over_live``).
+        **({REPLACES: replaces} if replaces is not None else {}),
+        **({THEN: then} if then is not None else {}),
+    }
     return _queue_operation(
         resource,
         OperationCommand(reason=reason),
         consented=consented,
         action=OperationRequest.Action.RECONCILE,
-        # The copy an apply by hand may only replace (``controller.over_live``).
-        carries={REPLACES: replaces} if replaces is not None else None,
-        once=f"reconcile:{resource.pk}:g{resource.generation}",
+        carries=carries or None,
+        once="" if then is not None else f"reconcile:{resource.pk}:g{resource.generation}",
     )
 
 

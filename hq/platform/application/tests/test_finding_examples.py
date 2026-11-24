@@ -120,7 +120,10 @@ def said(finding: Finding, raised: Raised | None = None) -> tuple[Any, ...]:
         finding.title,
         finding.severity,
         presses,
-        finding.evidence if raised is None or raised.evidence is not None else None,
+        # A fact that links its record is stated by its words.
+        tuple((label, str(value)) for label, value in finding.evidence)
+        if raised is None or raised.evidence is not None
+        else None,
         told if raised is None or raised.steps is not None else None,
         (finding.primary.label, finding.primary.url) if finding.primary and raised and raised.primary else None,
     )

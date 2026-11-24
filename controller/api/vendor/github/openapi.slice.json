@@ -2064,6 +2064,269 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/issues/{issue_number}": {
+   "patch": {
+    "operationId": "issues/update",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "issue_number",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "allOf": [
+          {
+           "$ref": "#/components/schemas/issue"
+          },
+          {
+           "type": "object",
+           "properties": {
+            "suggestions": {
+             "type": "object",
+             "description": "Pending suggestions for each suggestible field (`type`,\n`issue_field_values`, `labels`, `assignees`, `state`) the\nrequest touched. Omitted for fields not in the request or\nwith no pending or ignored suggestions. Items tagged\n`ignored` are echoes of the current request's inputs that\nwere not persisted as pending suggestions.\n",
+             "properties": {
+              "type": {
+               "type": "array",
+               "items": {
+                "type": "object",
+                "properties": {
+                 "value": {
+                  "type": "string"
+                 },
+                 "rationale": {
+                  "type": "string"
+                 },
+                 "suggest": {
+                  "type": "boolean"
+                 },
+                 "confidence": {
+                  "type": "string",
+                  "enum": [
+                   "low",
+                   "medium",
+                   "high"
+                  ]
+                 },
+                 "ignored": {
+                  "type": "boolean"
+                 },
+                 "ignored_reason": {
+                  "type": "string",
+                  "enum": [
+                   "already_applied",
+                   "issue_already_closed"
+                  ]
+                 }
+                }
+               }
+              },
+              "issue_field_values": {
+               "type": "array",
+               "items": {
+                "type": "object",
+                "properties": {
+                 "field_id": {
+                  "type": "integer"
+                 },
+                 "value": {
+                  "oneOf": [
+                   {
+                    "type": "string"
+                   },
+                   {
+                    "type": "number"
+                   },
+                   {
+                    "type": "array",
+                    "items": {
+                     "type": "string"
+                    }
+                   }
+                  ]
+                 },
+                 "rationale": {
+                  "type": "string"
+                 },
+                 "suggest": {
+                  "type": "boolean"
+                 },
+                 "confidence": {
+                  "type": "string",
+                  "enum": [
+                   "low",
+                   "medium",
+                   "high"
+                  ]
+                 },
+                 "ignored": {
+                  "type": "boolean"
+                 },
+                 "ignored_reason": {
+                  "type": "string",
+                  "enum": [
+                   "already_applied",
+                   "issue_already_closed"
+                  ]
+                 }
+                }
+               }
+              },
+              "labels": {
+               "type": "array",
+               "items": {
+                "type": "object",
+                "properties": {
+                 "name": {
+                  "type": "string"
+                 },
+                 "rationale": {
+                  "type": "string"
+                 },
+                 "suggest": {
+                  "type": "boolean"
+                 },
+                 "confidence": {
+                  "type": "string",
+                  "enum": [
+                   "low",
+                   "medium",
+                   "high"
+                  ]
+                 },
+                 "ignored": {
+                  "type": "boolean"
+                 },
+                 "ignored_reason": {
+                  "type": "string",
+                  "enum": [
+                   "already_applied",
+                   "issue_already_closed"
+                  ]
+                 }
+                }
+               }
+              },
+              "assignees": {
+               "type": "array",
+               "items": {
+                "type": "object",
+                "properties": {
+                 "login": {
+                  "type": "string"
+                 },
+                 "rationale": {
+                  "type": "string"
+                 },
+                 "suggest": {
+                  "type": "boolean"
+                 },
+                 "confidence": {
+                  "type": "string",
+                  "enum": [
+                   "low",
+                   "medium",
+                   "high"
+                  ]
+                 },
+                 "ignored": {
+                  "type": "boolean"
+                 },
+                 "ignored_reason": {
+                  "type": "string",
+                  "enum": [
+                   "already_applied",
+                   "issue_already_closed"
+                  ]
+                 }
+                }
+               }
+              },
+              "state": {
+               "type": "array",
+               "items": {
+                "type": "object",
+                "properties": {
+                 "value": {
+                  "type": "string"
+                 },
+                 "state_reason": {
+                  "type": "string"
+                 },
+                 "duplicate_issue_id": {
+                  "type": "integer"
+                 },
+                 "rationale": {
+                  "type": "string"
+                 },
+                 "suggest": {
+                  "type": "boolean"
+                 },
+                 "confidence": {
+                  "type": "string",
+                  "enum": [
+                   "low",
+                   "medium",
+                   "high"
+                  ]
+                 },
+                 "ignored": {
+                  "type": "boolean"
+                 },
+                 "ignored_reason": {
+                  "type": "string",
+                  "enum": [
+                   "already_applied",
+                   "issue_already_closed"
+                  ]
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {}
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/issues/{issue_number}/comments": {
    "get": {
     "operationId": "issues/list-comments",
@@ -3966,6 +4229,11 @@
      "html_url": {
       "type": "string"
      },
+     "number": {
+      "description": "Number uniquely identifying the issue within its repository",
+      "example": 42,
+      "type": "integer"
+     },
      "title": {
       "description": "Title of the issue",
       "example": "Widget creation fails in Safari on OS X 10.8",
@@ -4011,6 +4279,7 @@
     },
     "required": [
      "html_url",
+     "number",
      "title"
     ],
     "x-github-breaking-changes": [

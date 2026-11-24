@@ -38,6 +38,12 @@ def queued(rule=""):
     return tuple(item for item in found if not rule or rule_of(finding_key(item)) == rule)
 
 
+def named(item, label):
+    """The words of each of ``item``'s facts under ``label``, a linked record's included."""
+
+    return [str(value) for each, value in item.evidence if each == label]
+
+
 def inventory(kind, records):
     ProviderInventory.objects.update_or_create(
         kind=kind,
@@ -166,12 +172,12 @@ class StandingTests(TestCase):
             (advisory.part, advisory.subject_link.label, advisory.severity),
             ("ghcr.io/example/app:v1.2.0", "example-box", "serious"),
         )
-        self.assertIn(("Container", "app"), advisory.evidence)
+        self.assertEqual(named(advisory, "Container"), ["app"])
         self.assertIn(("Fixed in", "1.2.1"), advisory.evidence)
         # The body is the images. What to do is a step, and why HQ does not
         # do it is one sentence that names no machine.
         self.assertEqual(update.part, "example/kuma:1")
-        self.assertIn(("Container", "kuma"), update.evidence)
+        self.assertEqual(named(update, "Container"), ["kuma"])
         # A card says how old its reading is, and leads with the containers' page.
         self.assertIsNotNone(update.observed_at)
         self.assertEqual(update.primary.url, reverse("control_plane:containers"))

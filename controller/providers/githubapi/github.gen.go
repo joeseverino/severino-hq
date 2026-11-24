@@ -1062,6 +1062,201 @@ func (e IssuesListForRepoParamsSort) Valid() bool {
 	}
 }
 
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidenceHigh   IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence = "high"
+	IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidenceLow    IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence = "low"
+	IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidenceMedium IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence = "medium"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidenceHigh:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidenceLow:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidenceMedium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReasonAlreadyApplied     IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason = "already_applied"
+	IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReasonIssueAlreadyClosed IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason = "issue_already_closed"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReasonAlreadyApplied:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReasonIssueAlreadyClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidenceHigh   IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence = "high"
+	IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidenceLow    IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence = "low"
+	IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidenceMedium IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence = "medium"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidenceHigh:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidenceLow:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidenceMedium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReasonAlreadyApplied     IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason = "already_applied"
+	IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReasonIssueAlreadyClosed IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason = "issue_already_closed"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReasonAlreadyApplied:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReasonIssueAlreadyClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidenceHigh   IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence = "high"
+	IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidenceLow    IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence = "low"
+	IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidenceMedium IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence = "medium"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidenceHigh:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidenceLow:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidenceMedium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReasonAlreadyApplied     IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason = "already_applied"
+	IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReasonIssueAlreadyClosed IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason = "issue_already_closed"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReasonAlreadyApplied:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReasonIssueAlreadyClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsStateConfidence.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsStateConfidenceHigh   IssuesUpdate200JSONResponseBodySuggestionsStateConfidence = "high"
+	IssuesUpdate200JSONResponseBodySuggestionsStateConfidenceLow    IssuesUpdate200JSONResponseBodySuggestionsStateConfidence = "low"
+	IssuesUpdate200JSONResponseBodySuggestionsStateConfidenceMedium IssuesUpdate200JSONResponseBodySuggestionsStateConfidence = "medium"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsStateConfidence enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsStateConfidence) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsStateConfidenceHigh:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsStateConfidenceLow:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsStateConfidenceMedium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReasonAlreadyApplied     IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason = "already_applied"
+	IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReasonIssueAlreadyClosed IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason = "issue_already_closed"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReasonAlreadyApplied:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReasonIssueAlreadyClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsTypeConfidenceHigh   IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence = "high"
+	IssuesUpdate200JSONResponseBodySuggestionsTypeConfidenceLow    IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence = "low"
+	IssuesUpdate200JSONResponseBodySuggestionsTypeConfidenceMedium IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence = "medium"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsTypeConfidenceHigh:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsTypeConfidenceLow:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsTypeConfidenceMedium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason.
+const (
+	IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReasonAlreadyApplied     IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason = "already_applied"
+	IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReasonIssueAlreadyClosed IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason = "issue_already_closed"
+)
+
+// Valid indicates whether the value is a known member of the IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason enum.
+func (e IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason) Valid() bool {
+	switch e {
+	case IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReasonAlreadyApplied:
+		return true
+	case IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReasonIssueAlreadyClosed:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PullsListParamsState.
 const (
 	PullsListParamsStateAll    PullsListParamsState = "all"
@@ -1670,8 +1865,11 @@ type Integration struct {
 // Issue Issues are a great way to keep track of tasks, enhancements, and bugs for your projects.
 type Issue struct {
 	// Body Contents of the issue
-	Body        string `json:"body,omitempty"`
-	HTMLURL     string `json:"html_url"`
+	Body    string `json:"body,omitempty"`
+	HTMLURL string `json:"html_url"`
+
+	// Number Number uniquely identifying the issue within its repository
+	Number      int `json:"number"`
 	PullRequest struct {
 		DiffURL  string `json:"diff_url"`
 		HTMLURL  string `json:"html_url"`
@@ -2527,6 +2725,53 @@ type IssuesListForRepoParamsState string
 // IssuesListForRepoParamsSort defines parameters for IssuesListForRepo.
 type IssuesListForRepoParamsSort string
 
+// IssuesUpdateJSONBody defines body for IssuesUpdate for application/json ContentType.
+type IssuesUpdateJSONBody = any
+
+// IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence defines model for IssuesUpdate200JSONResponseBody.Suggestions.Assignees.Confidence.
+type IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence string
+
+// IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason defines model for IssuesUpdate200JSONResponseBody.Suggestions.Assignees.IgnoredReason.
+type IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason string
+
+// IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence defines model for IssuesUpdate200JSONResponseBody.Suggestions.IssueFieldValues.Confidence.
+type IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence string
+
+// IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason defines model for IssuesUpdate200JSONResponseBody.Suggestions.IssueFieldValues.IgnoredReason.
+type IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason string
+
+// IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0 defines model for IssuesUpdate200JSONResponseBody.Suggestions.IssueFieldValues.Value.0.
+type IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0 = string
+
+// IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1 defines model for IssuesUpdate200JSONResponseBody.Suggestions.IssueFieldValues.Value.1.
+type IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1 = float32
+
+// IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2 defines model for IssuesUpdate200JSONResponseBody.Suggestions.IssueFieldValues.Value.2.
+type IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2 = []string
+
+// IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value defines model for IssuesUpdate200JSONResponseBody.Suggestions.IssueFieldValues.Value.
+type IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value struct {
+	union json.RawMessage
+}
+
+// IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence defines model for IssuesUpdate200JSONResponseBody.Suggestions.Labels.Confidence.
+type IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence string
+
+// IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason defines model for IssuesUpdate200JSONResponseBody.Suggestions.Labels.IgnoredReason.
+type IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason string
+
+// IssuesUpdate200JSONResponseBodySuggestionsStateConfidence defines model for IssuesUpdate200JSONResponseBody.Suggestions.State.Confidence.
+type IssuesUpdate200JSONResponseBodySuggestionsStateConfidence string
+
+// IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason defines model for IssuesUpdate200JSONResponseBody.Suggestions.State.IgnoredReason.
+type IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason string
+
+// IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence defines model for IssuesUpdate200JSONResponseBody.Suggestions.Type.Confidence.
+type IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence string
+
+// IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason defines model for IssuesUpdate200JSONResponseBody.Suggestions.Type.IgnoredReason.
+type IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason string
+
 // IssuesListCommentsParams defines parameters for IssuesListComments.
 type IssuesListCommentsParams struct {
 	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
@@ -2637,6 +2882,9 @@ type ChecksCreateJSONRequestBody ChecksCreateJSONBody
 
 // ChecksUpdateJSONRequestBody defines body for ChecksUpdate for application/json ContentType.
 type ChecksUpdateJSONRequestBody ChecksUpdateJSONBody
+
+// IssuesUpdateJSONRequestBody defines body for IssuesUpdate for application/json ContentType.
+type IssuesUpdateJSONRequestBody = IssuesUpdateJSONBody
 
 // IssuesCreateCommentJSONRequestBody defines body for IssuesCreateComment for application/json ContentType.
 type IssuesCreateCommentJSONRequestBody IssuesCreateCommentJSONBody
@@ -2980,6 +3228,94 @@ func (t *RepositoryRuleDetailed) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0 returns the union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value as a IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0
+func (t IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) AsIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0() (IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0, error) {
+	var body IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0 overwrites any union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value as the provided IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0
+func (t *IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) FromIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0(v IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0) error {
+	b, err := runtime.JSONMarshal(v)
+	t.union = b
+	return err
+}
+
+// MergeIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0 performs a merge with any union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value, using the provided IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0
+func (t *IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) MergeIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0(v IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue0) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1 returns the union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value as a IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1
+func (t IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) AsIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1() (IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1, error) {
+	var body IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1 overwrites any union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value as the provided IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1
+func (t *IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) FromIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1(v IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1) error {
+	b, err := runtime.JSONMarshal(v)
+	t.union = b
+	return err
+}
+
+// MergeIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1 performs a merge with any union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value, using the provided IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1
+func (t *IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) MergeIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1(v IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue1) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2 returns the union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value as a IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2
+func (t IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) AsIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2() (IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2, error) {
+	var body IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2 overwrites any union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value as the provided IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2
+func (t *IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) FromIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2(v IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2) error {
+	b, err := runtime.JSONMarshal(v)
+	t.union = b
+	return err
+}
+
+// MergeIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2 performs a merge with any union data inside the IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value, using the provided IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2
+func (t *IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) MergeIssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2(v IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesValue2) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
 
@@ -3161,6 +3497,14 @@ type ClientInterface interface {
 
 	// IssuesListForRepo performs a GET /repos/{owner}/{repo}/issues (the `IssuesListForRepo` operationId) request.
 	IssuesListForRepo(ctx context.Context, owner string, repo string, params *IssuesListForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IssuesUpdateWithBody performs a PATCH /repos/{owner}/{repo}/issues/{issue_number} (the `IssuesUpdate` operationId) request,
+	// with any type of body and a specified content type.
+	IssuesUpdateWithBody(ctx context.Context, owner string, repo string, issueNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// IssuesUpdate performs a PATCH /repos/{owner}/{repo}/issues/{issue_number} (the `IssuesUpdate` operationId) request.
+	// Takes a body of the `application/json` content type.
+	IssuesUpdate(ctx context.Context, owner string, repo string, issueNumber string, body IssuesUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// IssuesListComments performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
 	IssuesListComments(ctx context.Context, owner string, repo string, issueNumber string, params *IssuesListCommentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3653,6 +3997,34 @@ func (c *Client) AppsGetRepoInstallation(ctx context.Context, owner string, repo
 // IssuesListForRepo performs a GET /repos/{owner}/{repo}/issues (the `IssuesListForRepo` operationId) request.
 func (c *Client) IssuesListForRepo(ctx context.Context, owner string, repo string, params *IssuesListForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewIssuesListForRepoRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IssuesUpdateWithBody performs a PATCH /repos/{owner}/{repo}/issues/{issue_number} (the `IssuesUpdate` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) IssuesUpdateWithBody(ctx context.Context, owner string, repo string, issueNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIssuesUpdateRequestWithBody(c.Server, owner, repo, issueNumber, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// IssuesUpdate performs a PATCH /repos/{owner}/{repo}/issues/{issue_number} (the `IssuesUpdate` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) IssuesUpdate(ctx context.Context, owner string, repo string, issueNumber string, body IssuesUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewIssuesUpdateRequest(c.Server, owner, repo, issueNumber, body)
 	if err != nil {
 		return nil, err
 	}
@@ -5768,6 +6140,67 @@ func NewIssuesListForRepoRequest(server string, owner string, repo string, param
 	return req, nil
 }
 
+// NewIssuesUpdateRequest calls the generic IssuesUpdate builder with application/json body
+func NewIssuesUpdateRequest(server string, owner string, repo string, issueNumber string, body IssuesUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewIssuesUpdateRequestWithBody(server, owner, repo, issueNumber, "application/json", bodyReader)
+}
+
+// NewIssuesUpdateRequestWithBody constructs an http.Request for the IssuesUpdate method, with any body, and a specified content type
+func NewIssuesUpdateRequestWithBody(server string, owner string, repo string, issueNumber string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "issue_number", issueNumber, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/issues/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewIssuesListCommentsRequest constructs an http.Request for the IssuesListComments method
 func NewIssuesListCommentsRequest(server string, owner string, repo string, issueNumber string, params *IssuesListCommentsParams) (*http.Request, error) {
 	var err error
@@ -6878,6 +7311,16 @@ type ClientWithResponsesInterface interface {
 	//
 	// Returns a wrapper object for the known response body format(s).
 	IssuesListForRepoWithResponse(ctx context.Context, owner string, repo string, params *IssuesListForRepoParams, reqEditors ...RequestEditorFn) (*IssuesListForRepoReply, error)
+
+	// IssuesUpdateWithBodyWithResponse performs a PATCH /repos/{owner}/{repo}/issues/{issue_number} (the `IssuesUpdate` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	IssuesUpdateWithBodyWithResponse(ctx context.Context, owner string, repo string, issueNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IssuesUpdateReply, error)
+
+	// IssuesUpdateWithResponse performs a PATCH /repos/{owner}/{repo}/issues/{issue_number} (the `IssuesUpdate` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	IssuesUpdateWithResponse(ctx context.Context, owner string, repo string, issueNumber string, body IssuesUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*IssuesUpdateReply, error)
 
 	// IssuesListCommentsWithResponse performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
 	//
@@ -8307,6 +8750,185 @@ func (r IssuesListForRepoReply) ContentType() string {
 	return ""
 }
 
+type IssuesUpdateReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		// Body Contents of the issue
+		Body    string `json:"body,omitempty"`
+		HTMLURL string `json:"html_url"`
+
+		// Number Number uniquely identifying the issue within its repository
+		Number      int `json:"number"`
+		PullRequest struct {
+			DiffURL  string `json:"diff_url"`
+			HTMLURL  string `json:"html_url"`
+			MergedAt string `json:"merged_at,omitempty"`
+			PatchURL string `json:"patch_url"`
+			URL      string `json:"url"`
+		} `json:"pull_request,omitempty"`
+
+		// Suggestions Pending suggestions for each suggestible field (`type`,
+		// `issue_field_values`, `labels`, `assignees`, `state`) the
+		// request touched. Omitted for fields not in the request or
+		// with no pending or ignored suggestions. Items tagged
+		// `ignored` are echoes of the current request's inputs that
+		// were not persisted as pending suggestions.
+		Suggestions struct {
+			Assignees []struct {
+				Confidence    IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence    `json:"confidence,omitempty"`
+				Ignored       bool                                                             `json:"ignored,omitempty"`
+				IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason `json:"ignored_reason,omitempty"`
+				Login         string                                                           `json:"login,omitempty"`
+				Rationale     string                                                           `json:"rationale,omitempty"`
+				Suggest       bool                                                             `json:"suggest,omitempty"`
+			} `json:"assignees,omitempty"`
+			IssueFieldValues []struct {
+				Confidence    IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence    `json:"confidence,omitempty"`
+				FieldID       int                                                                     `json:"field_id,omitempty"`
+				Ignored       bool                                                                    `json:"ignored,omitempty"`
+				IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason `json:"ignored_reason,omitempty"`
+				Rationale     string                                                                  `json:"rationale,omitempty"`
+				Suggest       bool                                                                    `json:"suggest,omitempty"`
+				Value         IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value      `json:"value,omitempty"`
+			} `json:"issue_field_values,omitempty"`
+			Labels []struct {
+				Confidence    IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence    `json:"confidence,omitempty"`
+				Ignored       bool                                                          `json:"ignored,omitempty"`
+				IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason `json:"ignored_reason,omitempty"`
+				Name          string                                                        `json:"name,omitempty"`
+				Rationale     string                                                        `json:"rationale,omitempty"`
+				Suggest       bool                                                          `json:"suggest,omitempty"`
+			} `json:"labels,omitempty"`
+			State []struct {
+				Confidence       IssuesUpdate200JSONResponseBodySuggestionsStateConfidence    `json:"confidence,omitempty"`
+				DuplicateIssueID int                                                          `json:"duplicate_issue_id,omitempty"`
+				Ignored          bool                                                         `json:"ignored,omitempty"`
+				IgnoredReason    IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason `json:"ignored_reason,omitempty"`
+				Rationale        string                                                       `json:"rationale,omitempty"`
+				StateReason      string                                                       `json:"state_reason,omitempty"`
+				Suggest          bool                                                         `json:"suggest,omitempty"`
+				Value            string                                                       `json:"value,omitempty"`
+			} `json:"state,omitempty"`
+			Type []struct {
+				Confidence    IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence    `json:"confidence,omitempty"`
+				Ignored       bool                                                        `json:"ignored,omitempty"`
+				IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason `json:"ignored_reason,omitempty"`
+				Rationale     string                                                      `json:"rationale,omitempty"`
+				Suggest       bool                                                        `json:"suggest,omitempty"`
+				Value         string                                                      `json:"value,omitempty"`
+			} `json:"type,omitempty"`
+		} `json:"suggestions,omitempty"`
+
+		// Title Title of the issue
+		Title string `json:"title"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r IssuesUpdateReply) GetJSON200() *struct {
+	// Body Contents of the issue
+	Body    string `json:"body,omitempty"`
+	HTMLURL string `json:"html_url"`
+
+	// Number Number uniquely identifying the issue within its repository
+	Number      int `json:"number"`
+	PullRequest struct {
+		DiffURL  string `json:"diff_url"`
+		HTMLURL  string `json:"html_url"`
+		MergedAt string `json:"merged_at,omitempty"`
+		PatchURL string `json:"patch_url"`
+		URL      string `json:"url"`
+	} `json:"pull_request,omitempty"`
+
+	// Suggestions Pending suggestions for each suggestible field (`type`,
+	// `issue_field_values`, `labels`, `assignees`, `state`) the
+	// request touched. Omitted for fields not in the request or
+	// with no pending or ignored suggestions. Items tagged
+	// `ignored` are echoes of the current request's inputs that
+	// were not persisted as pending suggestions.
+	Suggestions struct {
+		Assignees []struct {
+			Confidence    IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence    `json:"confidence,omitempty"`
+			Ignored       bool                                                             `json:"ignored,omitempty"`
+			IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason `json:"ignored_reason,omitempty"`
+			Login         string                                                           `json:"login,omitempty"`
+			Rationale     string                                                           `json:"rationale,omitempty"`
+			Suggest       bool                                                             `json:"suggest,omitempty"`
+		} `json:"assignees,omitempty"`
+		IssueFieldValues []struct {
+			Confidence    IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence    `json:"confidence,omitempty"`
+			FieldID       int                                                                     `json:"field_id,omitempty"`
+			Ignored       bool                                                                    `json:"ignored,omitempty"`
+			IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason `json:"ignored_reason,omitempty"`
+			Rationale     string                                                                  `json:"rationale,omitempty"`
+			Suggest       bool                                                                    `json:"suggest,omitempty"`
+			Value         IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value      `json:"value,omitempty"`
+		} `json:"issue_field_values,omitempty"`
+		Labels []struct {
+			Confidence    IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence    `json:"confidence,omitempty"`
+			Ignored       bool                                                          `json:"ignored,omitempty"`
+			IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason `json:"ignored_reason,omitempty"`
+			Name          string                                                        `json:"name,omitempty"`
+			Rationale     string                                                        `json:"rationale,omitempty"`
+			Suggest       bool                                                          `json:"suggest,omitempty"`
+		} `json:"labels,omitempty"`
+		State []struct {
+			Confidence       IssuesUpdate200JSONResponseBodySuggestionsStateConfidence    `json:"confidence,omitempty"`
+			DuplicateIssueID int                                                          `json:"duplicate_issue_id,omitempty"`
+			Ignored          bool                                                         `json:"ignored,omitempty"`
+			IgnoredReason    IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason `json:"ignored_reason,omitempty"`
+			Rationale        string                                                       `json:"rationale,omitempty"`
+			StateReason      string                                                       `json:"state_reason,omitempty"`
+			Suggest          bool                                                         `json:"suggest,omitempty"`
+			Value            string                                                       `json:"value,omitempty"`
+		} `json:"state,omitempty"`
+		Type []struct {
+			Confidence    IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence    `json:"confidence,omitempty"`
+			Ignored       bool                                                        `json:"ignored,omitempty"`
+			IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason `json:"ignored_reason,omitempty"`
+			Rationale     string                                                      `json:"rationale,omitempty"`
+			Suggest       bool                                                        `json:"suggest,omitempty"`
+			Value         string                                                      `json:"value,omitempty"`
+		} `json:"type,omitempty"`
+	} `json:"suggestions,omitempty"`
+
+	// Title Title of the issue
+	Title string `json:"title"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r IssuesUpdateReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r IssuesUpdateReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r IssuesUpdateReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r IssuesUpdateReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type IssuesListCommentsReply struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -9246,6 +9868,28 @@ func (c *ClientWithResponses) IssuesListForRepoWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseIssuesListForRepoReply(rsp)
+}
+
+// IssuesUpdateWithBodyWithResponse performs a PATCH /repos/{owner}/{repo}/issues/{issue_number} (the `IssuesUpdate` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) IssuesUpdateWithBodyWithResponse(ctx context.Context, owner string, repo string, issueNumber string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*IssuesUpdateReply, error) {
+	rsp, err := c.IssuesUpdateWithBody(ctx, owner, repo, issueNumber, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIssuesUpdateReply(rsp)
+}
+
+// IssuesUpdateWithResponse performs a PATCH /repos/{owner}/{repo}/issues/{issue_number} (the `IssuesUpdate` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) IssuesUpdateWithResponse(ctx context.Context, owner string, repo string, issueNumber string, body IssuesUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*IssuesUpdateReply, error) {
+	rsp, err := c.IssuesUpdate(ctx, owner, repo, issueNumber, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseIssuesUpdateReply(rsp)
 }
 
 // IssuesListCommentsWithResponse performs a GET /repos/{owner}/{repo}/issues/{issue_number}/comments (the `IssuesListComments` operationId) request.
@@ -10258,6 +10902,101 @@ func ParseIssuesListForRepoReply(rsp *http.Response) (*IssuesListForRepoReply, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []Issue
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseIssuesUpdateReply parses an HTTP response from a IssuesUpdateWithResponse call
+func ParseIssuesUpdateReply(rsp *http.Response) (*IssuesUpdateReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &IssuesUpdateReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			// Body Contents of the issue
+			Body    string `json:"body,omitempty"`
+			HTMLURL string `json:"html_url"`
+
+			// Number Number uniquely identifying the issue within its repository
+			Number      int `json:"number"`
+			PullRequest struct {
+				DiffURL  string `json:"diff_url"`
+				HTMLURL  string `json:"html_url"`
+				MergedAt string `json:"merged_at,omitempty"`
+				PatchURL string `json:"patch_url"`
+				URL      string `json:"url"`
+			} `json:"pull_request,omitempty"`
+
+			// Suggestions Pending suggestions for each suggestible field (`type`,
+			// `issue_field_values`, `labels`, `assignees`, `state`) the
+			// request touched. Omitted for fields not in the request or
+			// with no pending or ignored suggestions. Items tagged
+			// `ignored` are echoes of the current request's inputs that
+			// were not persisted as pending suggestions.
+			Suggestions struct {
+				Assignees []struct {
+					Confidence    IssuesUpdate200JSONResponseBodySuggestionsAssigneesConfidence    `json:"confidence,omitempty"`
+					Ignored       bool                                                             `json:"ignored,omitempty"`
+					IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsAssigneesIgnoredReason `json:"ignored_reason,omitempty"`
+					Login         string                                                           `json:"login,omitempty"`
+					Rationale     string                                                           `json:"rationale,omitempty"`
+					Suggest       bool                                                             `json:"suggest,omitempty"`
+				} `json:"assignees,omitempty"`
+				IssueFieldValues []struct {
+					Confidence    IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesConfidence    `json:"confidence,omitempty"`
+					FieldID       int                                                                     `json:"field_id,omitempty"`
+					Ignored       bool                                                                    `json:"ignored,omitempty"`
+					IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsIssueFieldValuesIgnoredReason `json:"ignored_reason,omitempty"`
+					Rationale     string                                                                  `json:"rationale,omitempty"`
+					Suggest       bool                                                                    `json:"suggest,omitempty"`
+					Value         IssuesUpdate200JSONResponseBody_Suggestions_IssueFieldValues_Value      `json:"value,omitempty"`
+				} `json:"issue_field_values,omitempty"`
+				Labels []struct {
+					Confidence    IssuesUpdate200JSONResponseBodySuggestionsLabelsConfidence    `json:"confidence,omitempty"`
+					Ignored       bool                                                          `json:"ignored,omitempty"`
+					IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsLabelsIgnoredReason `json:"ignored_reason,omitempty"`
+					Name          string                                                        `json:"name,omitempty"`
+					Rationale     string                                                        `json:"rationale,omitempty"`
+					Suggest       bool                                                          `json:"suggest,omitempty"`
+				} `json:"labels,omitempty"`
+				State []struct {
+					Confidence       IssuesUpdate200JSONResponseBodySuggestionsStateConfidence    `json:"confidence,omitempty"`
+					DuplicateIssueID int                                                          `json:"duplicate_issue_id,omitempty"`
+					Ignored          bool                                                         `json:"ignored,omitempty"`
+					IgnoredReason    IssuesUpdate200JSONResponseBodySuggestionsStateIgnoredReason `json:"ignored_reason,omitempty"`
+					Rationale        string                                                       `json:"rationale,omitempty"`
+					StateReason      string                                                       `json:"state_reason,omitempty"`
+					Suggest          bool                                                         `json:"suggest,omitempty"`
+					Value            string                                                       `json:"value,omitempty"`
+				} `json:"state,omitempty"`
+				Type []struct {
+					Confidence    IssuesUpdate200JSONResponseBodySuggestionsTypeConfidence    `json:"confidence,omitempty"`
+					Ignored       bool                                                        `json:"ignored,omitempty"`
+					IgnoredReason IssuesUpdate200JSONResponseBodySuggestionsTypeIgnoredReason `json:"ignored_reason,omitempty"`
+					Rationale     string                                                      `json:"rationale,omitempty"`
+					Suggest       bool                                                        `json:"suggest,omitempty"`
+					Value         string                                                      `json:"value,omitempty"`
+				} `json:"type,omitempty"`
+			} `json:"suggestions,omitempty"`
+
+			// Title Title of the issue
+			Title string `json:"title"`
+		}
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

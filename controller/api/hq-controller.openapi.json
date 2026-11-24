@@ -3597,6 +3597,42 @@
         ],
         "type": "object"
       },
+      "GitHubDashboardBoxSpec": {
+        "additionalProperties": false,
+        "description": "A github.dashboard_box declaration: the box a reconcile ticks.",
+        "properties": {
+          "repository": {
+            "$ref": "#/components/schemas/GitHubDashboardBoxSpecRepository"
+          },
+          "branch": {
+            "description": "The branch Renovate holds.",
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "type": "string"
+          },
+          "marker": {
+            "description": "The word Renovate marks its box with.",
+            "enum": [
+              "unpend",
+              "approve",
+              "unschedule",
+              "unlimit"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "branch",
+          "marker"
+        ],
+        "type": "object"
+      },
+      "GitHubDashboardBoxSpecRepository": {
+        "description": "The repository, as owner/name.",
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        "type": "string"
+      },
       "GitHubDeliveryProduction": {
         "type": "string",
         "description": "What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.",
@@ -3806,9 +3842,7 @@
         "description": "A github.pull_request declaration: what a merge merges.",
         "properties": {
           "repository": {
-            "description": "The repository, as owner/name.",
-            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-            "type": "string"
+            "$ref": "#/components/schemas/GitHubPullRequestSpecRepository"
           },
           "number": {
             "description": "The pull request's number.",
@@ -3828,6 +3862,11 @@
           "head_sha"
         ],
         "type": "object"
+      },
+      "GitHubPullRequestSpecRepository": {
+        "description": "The repository, as owner/name.",
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        "type": "string"
       },
       "GitHubRepositoryCollaborator": {
         "properties": {
@@ -6041,6 +6080,7 @@
           "cloudflare.tunnel",
           "cloudflare.zone",
           "github.allowance",
+          "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
           "github.profile",
@@ -6106,6 +6146,7 @@
           "ResourceKindCloudflareTunnel",
           "ResourceKindCloudflareZone",
           "ResourceKindGitHubAllowance",
+          "ResourceKindGitHubDashboardBox",
           "ResourceKindGitHubDelivery",
           "ResourceKindGitHubDependencyRun",
           "ResourceKindGitHubProfile",

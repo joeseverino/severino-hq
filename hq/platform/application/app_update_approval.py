@@ -30,6 +30,7 @@ from .record_fields import RecordId
 from .security import Capability, PolicyDenied
 from .tone import Tone
 from .ui import counted, ended
+lazy from .app_update_open import ticked
 lazy from .app_updates import AppUpdate, app_updates, merged_of
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
@@ -276,34 +277,40 @@ def _applied_on(manifest: OperationManifest, items: tuple[Container, ...]) -> tu
     hosts = resolved_hosts(manifest, manifest.hosts)
     if not hosts:
         raise PolicyError("The playbook that applies an app update names no machine to apply it on.")
-    if reason := unserved(items, hosts):
-        raise PolicyError(reason)
+    if unserved(items, hosts):
+        raise PolicyError(UNSERVED)
     reached(manifest, hosts)
     return hosts
 
 
-def unserved(items: tuple[Container, ...], hosts: tuple[str, ...]) -> Sentence:
-    """Why a merge could never reach where ``items`` run: a machine of theirs
-    the playbook that applies it does not run on; "" where it runs on each."""
+UNSERVED = "The playbook that applies it does not run on every machine the app runs on."
 
-    missing = sorted({normalized_hostname(item.machine.name) for item in items} - set(hosts))
-    if not missing:
-        return ""
-    return ended(f"The playbook that applies it does not run on {get_text_list(missing, 'and')}")
+
+def unserved(items: tuple[Container, ...], hosts: tuple[str, ...]) -> list[str]:
+    """Each machine ``items`` run on that the playbook applying them does not
+    run on, where a merge could never reach."""
+
+    return sorted({normalized_hostname(item.machine.name) for item in items} - set(hosts))
+
+
+# The repository that holds an app's Compose files, and the app, as an
+# update to apply or to open names them.
+type Holder = Annotated[
+    str, Field(pattern=REPOSITORY, max_length=140), Describe("The repository that holds it, as owner/name.")
+]
+type App = Annotated[
+    str,
+    Field(pattern=r"^[A-Za-z0-9_.-]+$", max_length=100),
+    Describe("The app, as its directory of Compose files names it."),
+]
 
 
 @dataclass(frozen=True, slots=True)
 class ApplyUpdateCommand:
     """The app to apply at the head of its repository's default branch you saw."""
 
-    repository: Annotated[
-        str, Field(pattern=REPOSITORY, max_length=140), Describe("The repository that holds it, as owner/name.")
-    ]
-    app: Annotated[
-        str,
-        Field(pattern=r"^[A-Za-z0-9_.-]+$", max_length=100),
-        Describe("The app, as its directory of Compose files names it."),
-    ]
+    repository: Holder
+    app: App
     head_sha: Annotated[
         str,
         Field(pattern=COMMIT),
@@ -345,12 +352,16 @@ def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> Operat
 
 
 def succeeded(operation: OperationRequest) -> None:
-    """Queue the step ``operation`` carries now that it succeeded (a
-    preview's merge, a merge's apply), and say on it what was queued or why
-    nothing was."""
+    """Queue the step ``operation`` carries now that it succeeded (a ticked
+    Dashboard box's run, a preview's merge, a merge's apply), and say on it
+    what was queued or why nothing was."""
 
     then = (operation.input or {}).get(THEN)
-    step = {OperationRequest.Action.RUN: _merge, OperationRequest.Action.MERGE: _follow}.get(operation.action)
+    step = {
+        OperationRequest.Action.RUN: _merge,
+        OperationRequest.Action.MERGE: _follow,
+        OperationRequest.Action.RECONCILE: ticked,
+    }.get(operation.action)
     if not isinstance(then, dict) or step is None:
         return
     try:
@@ -643,7 +654,9 @@ def _approval(standing: MergeStanding | None, items: tuple[Container, ...], refu
     if refused:
         return Approval(standing, refused)
     hosts = resolved_hosts(manifest, manifest.hosts)
-    if reason := unserved(items, hosts):
-        return Approval(standing, reason)
+    if missing := unserved(items, hosts):
+        return Approval(
+            standing, ended(f"The playbook that applies it does not run on {get_text_list(missing, 'and')}")
+        )
     where = f" on {get_text_list(list(hosts), 'and')}" if hosts else ""
     return Approval(standing, said=ended(f"{does}{where}"))

@@ -281,7 +281,6 @@ class ApproveUpdateTests(TestCase):
         answer = self.press()
 
         self.assertFalse(answer["ok"], answer)
-        self.assertIn(APP, answer["error"]["message"])
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_a_caller_kept_off_the_playbooks_run_may_not_approve_it(self):
@@ -339,9 +338,12 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(self.client.post(apply.url, {"__retry_key": "example-apply"}).status_code, 302)
         again = self.applies().last()
         self.assertEqual((again.input["parameters"], again.input["hosts"]), ({"revision": MERGED}, [APP]))
-        # Once asked, it is not offered again while it runs.
+        # Once asked, it is not offered again while it runs, and asks nothing of anyone.
         page = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
         self.assertIsNone(page.context["container"]["act"])
+        from .test_containers import named, queued
+
+        self.assertEqual([item for item in queued("container-image-update") if "app" in named(item, "Container")], [])
 
     def test_run_again_of_a_preview_fills_no_run_that_acts(self):
         from ..finding_runs import run_again

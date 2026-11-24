@@ -20,10 +20,12 @@ from hq.platform.application.routes import reverse
 from .action_links import command_action, read_link
 from .container_standard import STANDARD
 from .containers import VULNERABLE, Container, ImageStanding, containers
+from .entity_links import entity_link
 from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     CONTAINERS_CARD,
+    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -94,13 +96,12 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
     if standing.state == VULNERABLE:
         if needs_you(standing, running):
             yield _advisory(running, subject, plan)
-    elif plan is not None and plan.recommended:
-        state = update_state(_lead(running))
+    elif plan is not None and plan.recommended and not (state := update_state(_lead(running))).at_work:
         title = f"{_names(running)} has an update" + (f", {state.move}" if state.move else "")
         upgrade = _upgrade(running, plan, state)
         # What the title and its line say is not said again among its facts.
         said = f"{title} {state.words}".casefold()
-        upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if fact[1].casefold() not in said)
+        upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if str(fact[1]).casefold() not in said)
         yield _found(
             running,
             subject,
@@ -152,8 +153,8 @@ def _found(running: list[Container], subject: str, **said: Any) -> Finding:
         subject=subject,
         part=running[0].standing.label,
         evidence=(
-            *(("Container", item.running.name) for item in running),
-            ("Machine", running[0].machine.name),
+            *(("Container", item.link) for item in running),
+            ("Machine", entity_link("machine", running[0].machine.name)),
             *said.pop("evidence", ()),
         ),
         **_read(running),
@@ -194,12 +195,9 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
         said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
         label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
         return {"primary": opens(label, page.url), "steps": _by_hand(running, plan), "evidence": evidence}
-    # The pull request it reviews, a link among the card's facts beside its one press.
-    review = (opens(f"Review {state.update.label}", state.update.url),) if state.update else ()
     return {
         "steps": (),
         "evidence": evidence,
-        "offers": review,
         "remedies": (state.action.remedy,) if state.action else (),
         "no_help_reason": state.reason,
     }
@@ -466,7 +464,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _images(UPDATE),
         gathered=True,
-        operator_action="Move the container to the newer release.",
+        operator_action=f"Clear what holds it back. {THEN_CHECK_AGAIN}",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
         bars={

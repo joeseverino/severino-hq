@@ -155,6 +155,30 @@ func (e FailureClass) Valid() bool {
 	}
 }
 
+// Defines values for GitHubDashboardBoxSpecMarker.
+const (
+	Approve    GitHubDashboardBoxSpecMarker = "approve"
+	Unlimit    GitHubDashboardBoxSpecMarker = "unlimit"
+	Unpend     GitHubDashboardBoxSpecMarker = "unpend"
+	Unschedule GitHubDashboardBoxSpecMarker = "unschedule"
+)
+
+// Valid indicates whether the value is a known member of the GitHubDashboardBoxSpecMarker enum.
+func (e GitHubDashboardBoxSpecMarker) Valid() bool {
+	switch e {
+	case Approve:
+		return true
+	case Unlimit:
+		return true
+	case Unpend:
+		return true
+	case Unschedule:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GitHubDeliveryProduction.
 const (
 	GitHubDeliveryProductionCurrent GitHubDeliveryProduction = "Every extension's latest admission, confirmed on GitHub"
@@ -677,6 +701,7 @@ const (
 	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
 	ResourceKindGitHubAllowance              ResourceKind = "github.allowance"
+	ResourceKindGitHubDashboardBox           ResourceKind = "github.dashboard_box"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
@@ -763,6 +788,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindCloudflareZone:
 		return true
 	case ResourceKindGitHubAllowance:
+		return true
+	case ResourceKindGitHubDashboardBox:
 		return true
 	case ResourceKindGitHubDelivery:
 		return true
@@ -1607,6 +1634,24 @@ type GitHubAllowanceRecord struct {
 	Used          int    `json:"used"`
 }
 
+// GitHubDashboardBoxSpec A github.dashboard_box declaration: the box a reconcile ticks.
+type GitHubDashboardBoxSpec struct {
+	// Branch The branch Renovate holds.
+	Branch string `json:"branch"`
+
+	// Marker The word Renovate marks its box with.
+	Marker GitHubDashboardBoxSpecMarker `json:"marker"`
+
+	// Repository The repository, as owner/name.
+	Repository GitHubDashboardBoxSpecRepository `json:"repository"`
+}
+
+// GitHubDashboardBoxSpecMarker The word Renovate marks its box with.
+type GitHubDashboardBoxSpecMarker string
+
+// GitHubDashboardBoxSpecRepository The repository, as owner/name.
+type GitHubDashboardBoxSpecRepository = string
+
 // GitHubDeliveryProduction What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.
 type GitHubDeliveryProduction string
 
@@ -1683,8 +1728,11 @@ type GitHubPullRequestSpec struct {
 	Number int `json:"number"`
 
 	// Repository The repository, as owner/name.
-	Repository string `json:"repository"`
+	Repository GitHubPullRequestSpecRepository `json:"repository"`
 }
+
+// GitHubPullRequestSpecRepository The repository, as owner/name.
+type GitHubPullRequestSpecRepository = string
 
 // GitHubRepositoriesPlan Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.
 type GitHubRepositoriesPlan struct {

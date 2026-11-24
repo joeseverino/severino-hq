@@ -5,6 +5,8 @@ sends = ["apps/create-installation-access-token", "checks/create", "checks/updat
 # GitHub answers each model bare, so the generated client decodes it, and
 # [decodes] names only the variant of a union answer the provider reads.
 answers = true
+# The Dashboard's body alone is sent, so the rest of the issue stays as it is.
+encodes = ["issues/update"]
 
 [queries]
 "actions/list-artifacts-for-repo" = ["per_page"]
@@ -63,7 +65,7 @@ answers = true
 "installation" = ["id", "account"]
 "installation-token" = ["token", "expires_at"]
 "integration" = ["slug"]
-"issue" = ["html_url", "title", "body", "pull_request"]
+"issue" = ["number", "html_url", "title", "body", "pull_request"]
 "issue-comment" = ["body"]
 "job" = ["steps"]
 "nullable-git-user" = ["name", "date"]
