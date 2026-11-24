@@ -66,8 +66,9 @@ FACTS = Part(
     forecast's hours are, a note under one marked; `regular`, status facts; `large`, the headline
     figures a page is read for; `lead`, headline figures led by the first, which stands larger and on
     a row of its own where the band has no room for it beside them. Given `items` (each a `Kpi`), the
-    band draws each as its fact. Under 24rem a band reads as a list, each fact a row of its own; small
-    figures keep their grid, and headline figures (`large`, `lead`) and a band beside a page's title
+    band draws each as its fact. Under 24rem a band reads as a list, each fact a row of its own, its
+    value beside its label; a value holding an identifier stays there only while it fits whole, and
+    takes a line of its own under the label where it does not. Small figures keep their grid, and headline figures (`large`, `lead`) and a band beside a page's title
     their counted rows, two to a row (a phone's head: label beside value, over a note whose run wraps
     whole parts to the lines it needs). Headline figures stand on a wider floor, so three take a row
     only once the band is about 360px wide, each value sized to its cell, never under the band's.
