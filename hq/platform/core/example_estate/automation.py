@@ -174,8 +174,11 @@ def _reaches() -> list[dict[str, str]]:
     return [{"machine": machine.name, "profile": profile} for machine in machine_catalog() for profile in PROFILES]
 
 
-def catalog(procedures: tuple[dict[str, Any], ...] = PROCEDURES, revision: str = REVISION) -> dict[str, Any]:
-    """The example repository as the worker's scan reports it (``SourceCatalog``)."""
+def catalog(
+    procedures: tuple[dict[str, Any], ...] = PROCEDURES, revision: str = REVISION, plugins: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """The example repository as the worker's scan reports it (``SourceCatalog``),
+    holding each plugins directory of ``plugins``."""
 
     return {
         "branch": "main",
@@ -183,7 +186,7 @@ def catalog(procedures: tuple[dict[str, Any], ...] = PROCEDURES, revision: str =
         "verification": {"verified": True, "reason": "valid", "committer": "example-maintainer"},
         "procedures": [dict(procedure) for procedure in procedures],
         "files": _files(procedures),
-        "unpinned": [],
+        "unpinned": [{"path": path, "kind": "plugins"} for path in plugins],
         "reaches": _reaches(),
     }
 
@@ -237,14 +240,18 @@ WIDENED = (
     ),
 )
 WIDENED_REVISION = _commit("Escalate the cache flush; add a disk cleanup; retire the upgrade.")
-# The commit before it, whose upgrade names a role the repository does not
-# hold, said as the worker's scan says it (``hq_runner.ansible.role_spec``).
+# The commit before it, which HQ can't adopt: it holds a plugins directory,
+# its upgrade names a role the repository does not hold, said as the
+# worker's scan says it (``hq_runner.ansible.role_spec``), and a new cache
+# change declares neither preconditions nor verification.
 UNREADY = (
     _FLUSH,
     _REPORT,
     _moved(_UPGRADE, problems=["Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."]),
+    _renamed(_FLUSH, "cache_warm", title="Warm a cache", preconditions=[], verification=[]),
 )
-UNREADY_REVISION = _commit("Move the upgrade onto a new role.")
+UNREADY_REVISION = _commit("Move the upgrade onto a new role; add a cache warm.")
+UNREADY_PLUGINS = ("collections",)
 
 
 def _scanned(
@@ -302,7 +309,11 @@ def proposed(person: Principal) -> None:
     failed after them."""
 
     _scanned(
-        person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the playbooks.", timedelta(days=1)
+        person,
+        "example-refresh-unready",
+        catalog(UNREADY, UNREADY_REVISION, UNREADY_PLUGINS),
+        "Read the playbooks.",
+        timedelta(days=1),
     )
     _scanned(
         person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the playbooks.", timedelta(hours=3)
@@ -315,6 +326,18 @@ def rescanned(owner) -> None:
     now, so nothing waits to be adopted."""
 
     _scanned(web_principal(owner), "example-refresh-again", catalog(), "Read the playbooks.")
+
+
+def unadoptable(owner) -> None:
+    """A Refresh by ``owner`` after the estate's that read the commit HQ
+    can't adopt again, so it is the one that waits."""
+
+    _scanned(
+        web_principal(owner),
+        "example-refresh-unadoptable",
+        catalog(UNREADY, UNREADY_REVISION, UNREADY_PLUGINS),
+        "Read the playbooks.",
+    )
 
 
 def scanning(owner) -> None:
