@@ -103,6 +103,14 @@ class SearchPageTests(SignedInTestCase):
         self.assertEqual(records.call_args.kwargs["limit_per_scope"], 3)
         contacts.assert_not_called()
 
+    def test_the_empty_palette_offers_every_page_and_nothing_to_do(self):
+        response = self.client.get("/search/", HTTP_X_FRAGMENT="palette")
+
+        offered = [option.attrs["href"] for option in select(response, "data-command-center-option")]
+        self.assertIn(reverse("projects:list"), offered)
+        self.assertIn(reverse("control_plane:connections"), offered)
+        self.assertFalse([url for url in offered if url.startswith(command_url("project.create")[:10])])
+
     def test_palette_includes_indexed_records_beside_destinations(self):
         project = Project.objects.create(
             name="Palette record target",

@@ -476,12 +476,14 @@ class SearchView(PageMixin, TemplateView):
         "audit": 100,
     }
 
-    def _palette_groups(self, discovery):
+    def _palette_groups(self, discovery, q):
         remaining = self.palette_result_limit
+        # A group shares the list with the others only once something is asked.
+        group_limit = self.palette_group_limit if q else remaining
         groups = []
         for key in PALETTE_GROUPS:
             label = DISCOVERY_GROUPS[key]
-            items = tuple(item for item in discovery[key] if item.url)[: min(self.palette_group_limit, remaining)]
+            items = tuple(item for item in discovery[key] if item.url)[: min(group_limit, remaining)]
             if items:
                 groups.append({"key": key, "label": label, "items": items})
                 remaining -= len(items)
@@ -598,19 +600,19 @@ class SearchView(PageMixin, TemplateView):
                 if not palette_request:
                     contacts = inbox.search(q, limit=self.result_limit)
                     total += len(contacts)
-            # With nothing asked, the page is a search box. The palette still
-            # opens on a short list of where to go.
-            discovery = (
-                command_center(q, principal=principal, include_live_connections=True)
-                if q or palette_request
-                else dict.fromkeys(DISCOVERY_GROUPS, ())
-            )
+            # With nothing asked, the page is a search box, and the palette
+            # opens on where to go: every page, as declared.
+            if q:
+                discovery = command_center(q, principal=principal, include_live_connections=True)
+            else:
+                pages = command_center(q, principal=principal)["resources"] if palette_request else ()
+                discovery = {**dict.fromkeys(DISCOVERY_GROUPS, ()), "resources": pages}
         # A page to go to: a resource with no page of its own is the API's.
         discovery = {
             **discovery,
             "resources": tuple(item for item in discovery["resources"] if item.url),
         }
-        palette_groups = self._palette_groups(discovery)
+        palette_groups = self._palette_groups(discovery, q)
         palette_search_groups = self._palette_search_groups(groups)
         palette_search_count = sum(len(group["items"]) for group in palette_search_groups)
         discovery_total = sum(len(discovery[key]) for key in discovery)
