@@ -6,7 +6,7 @@ here. What it binds to, and what its approval is measured against:
 docs/Architecture.md, "Running a playbook".
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
@@ -30,6 +30,7 @@ lazy from hq.domains.control_plane.models import (
 lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
+lazy from hq.platform.core.attribution import own_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
@@ -347,7 +348,7 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
     )
 
 
-def _record(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
+def record_of(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
     """The procedure's record, written as its manifest now says.
 
     Written when a run is asked for, where a transaction, an actor and an audit
@@ -463,13 +464,54 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, consented: 
 def queue_run(manifest: OperationManifest, bound: dict[str, Any], *, reason: str, consented: Consented) -> RunAsked:
     """Queue a bound request through the same machine locks and audit trail."""
 
+    operation, queued = _enqueue_run(
+        partial(record_of, manifest, consented=consented), bound, consent(consented).principal, reason=reason
+    )
+    return operation_asked(operation, queued=queued)
+
+
+@transaction.atomic
+def queue_follow_up(
+    manifest: OperationManifest, bound: dict[str, Any], *, asked: OperationRequest, once: str
+) -> OperationRequest:
+    """Queue the run another operation carries as its own next step, as that
+    operation's requester and its approver, once for ``once``.
+
+    It writes no record: the run's record is the one written when the step
+    was approved (``record_of``), and one that no longer pins ``manifest``
+    refuses it, as an adoption since then does.
+    """
+
+    def record() -> ManagedResource:
+        resource = ManagedResource.objects.select_for_update().filter(key=resource_key(manifest.id)).first()
+        if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(manifest):
+            raise PolicyError("The playbook adopted now is not the one approved, so nothing ran.")
+        return resource
+
+    acting = Principal(
+        asked.requested_actor,
+        asked.requested_interface,
+        frozenset(),
+        approved_by=str((asked.input or {}).get("approved_by") or ""),
+        person_key=asked.requested_person_key,
+        device=asked.requested_device,
+    )
+    # Its rows are its requester's, under the operation that carried it.
+    with own_operation(asked, operation=capability_name(manifest.id), principal=acting):
+        operation, _ = _enqueue_run(record, bound, acting, reason=asked.reason, once=once)
+    return operation
+
+
+def _enqueue_run(
+    record: Callable[[], ManagedResource], bound: dict[str, Any], principal: Principal, *, reason: str, once: str = ""
+) -> tuple[OperationRequest, bool]:
     def prepare() -> Prepared:
         # A run no worker will take would wait for nothing: the finding that
         # says so (``automation_findings``) carries how to set one up.
         untaken = automation_standing().cannot("run", now=timezone.now())
         if untaken:
             raise PolicyError(untaken)
-        resource = _record(manifest, consented=consented)
+        resource = record()
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
         # A claim whose lease ran out is ended or put back first, by the rule
@@ -482,18 +524,15 @@ def queue_run(manifest: OperationManifest, bound: dict[str, Any], *, reason: str
                 "Ask again once it ends.",
                 details=_held_by(holder, resource, bound["hosts"]),
             )
-        return resource, asked_fields(
-            consent(consented).principal, reason=reason, generation=resource.generation, **bound
-        )
+        return resource, asked_fields(principal, reason=reason, generation=resource.generation, **bound)
 
-    operation, queued = enqueue(OperationRequest.Action.RUN, prepare)
-    if not queued:
-        return operation_asked(operation, queued=False)
-    OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
-    # The worker pulls the run over the bridge; the ring only says one waits,
-    # and only once it is stored for the claim to find.
-    ask(doorbell="automation")
-    return operation_asked(operation, queued=True)
+    operation, queued = enqueue(OperationRequest.Action.RUN, prepare, once=once)
+    if queued:
+        OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
+        # The worker pulls the run over the bridge; the ring only says one
+        # waits, and only once it is stored for the claim to find.
+        ask(doorbell="automation")
+    return operation, queued
 
 
 CANCEL = "automation.run.cancel"

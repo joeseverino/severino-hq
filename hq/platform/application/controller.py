@@ -39,6 +39,7 @@ from .labels import lower_first
 from .plugin_admission import admitted_sources
 from .projection import iso
 from .resource_operations import REPLACES, Prepared, enqueue, serialize_operation
+lazy from .app_update_approval import merged
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -751,6 +752,8 @@ def _settle_report(operation: OperationRequest, report: ControllerReport) -> dic
     if report.success:
         _confirm_delivery_targets(resource, report.status)
     _read_back_lifecycle(operation)
+    if report.success and operation.action == OperationRequest.Action.MERGE:
+        merged(operation)
 
     if report.success and operation.action == OperationRequest.Action.DELETE:
         # The declaration outlived the thing it described. Keeping it would put

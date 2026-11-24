@@ -26,6 +26,9 @@ KIND = "github.delivery"
 CURRENT = "Every extension's latest admission, confirmed on GitHub"
 COMPOSE_WORKFLOW = ".github/workflows/compose.yml"
 MAIN_BRANCH = "main"
+# A repository as owner/name, and a commit by its whole sha, as GitHub names each.
+REPOSITORY = r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+COMMIT = r"^[0-9a-f]{40}$"
 
 
 def _from_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -74,7 +77,7 @@ class GitHubDeliverySpec(ProviderModel):
     """The repository and workflow that deploy HQ, which HQ checks production against."""
 
     repository: str = Field(
-        pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        pattern=REPOSITORY,
         title="Repository",
         description="The repository whose deploy workflow deploys HQ.",
     )
@@ -137,11 +140,11 @@ class GitHubPullRequestSpec(ProviderModel):
     """One pull request, at the head commit a person approved merging."""
 
     repository: Annotated[str, Describe("", api="The repository, as owner/name.")] = Field(
-        pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", title="Repository"
+        pattern=REPOSITORY, title="Repository"
     )
     number: Annotated[RecordId, Describe("", api="The pull request's number.")] = Field(title="Number")
     head_sha: Annotated[str, Describe("", api="The head commit approved; GitHub refuses the merge once it moves.")] = (
-        Field(pattern=r"^[0-9a-f]{40}$", title="Head commit")
+        Field(pattern=COMMIT, title="Head commit")
     )
 
 
@@ -164,6 +167,7 @@ PULL_REQUEST = ProviderSpec(
     name=lambda spec: f"{spec.get('repository', '')}#{spec.get('number', '')}",
     connection_providers=(PROVIDER,),
     identity=lambda spec: (str(spec["repository"]), str(spec["number"])),
+    key_hint=lambda spec: f"{spec.get('repository', '')}-{spec.get('number', '')}".replace("/", "-"),
     console=lambda spec: f"https://github.com/{spec.get('repository', '')}/pull/{spec.get('number', '')}",
     console_label="Open pull request on GitHub",
     declaration_only=True,

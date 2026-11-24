@@ -11,7 +11,7 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, spec_withheld
 
-from . import infrastructure, resource_context, resource_operations as operations, services
+from . import app_update_approval, infrastructure, resource_context, resource_operations as operations, services
 from .adoption import ADOPT_SERVICE, AdoptServiceCommand, adopt_service
 from .cadence import CONTROLLER_REFRESH
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
@@ -276,6 +276,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             label="Upload a certificate",
             variants=(("replace", "Replace certificate"),),
         ),
+        *app_update_approval.capabilities(),
     )
 
 

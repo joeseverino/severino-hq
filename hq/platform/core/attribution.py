@@ -9,7 +9,7 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from typing import Any
 
-lazy from hq.domains.control_plane.models import ApprovalRequest
+lazy from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 lazy from hq.platform.application import request_context
 lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE, WEB_INTERFACE
 
@@ -66,7 +66,8 @@ def own_operation(
     A ``requester`` (a job's) is bound outermost, since the job's rows are its
     requester's wherever it runs. A held approval's binding may name someone
     other than whoever started the operation around it: an approved change
-    runs as its requester, and a lapse as HQ.
+    runs as its requester, and a lapse as HQ. So may an operation's binding
+    name its own requester, for the step it carries that runs as them.
     """
 
     if requester is not None:
@@ -78,7 +79,10 @@ def own_operation(
         operation_id=str(record.pk),
         cause=made_in(record),
     )
-    return _rebound(binding) if isinstance(record, ApprovalRequest) else binding
+    rebinds = isinstance(record, ApprovalRequest) or (
+        isinstance(record, OperationRequest) and getattr(principal, "actor", None) == record.requested_actor
+    )
+    return _rebound(binding) if rebinds else binding
 
 
 @contextmanager

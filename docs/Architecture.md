@@ -1505,6 +1505,50 @@ worker on the host. It says only that a run waits; the worker claims it over
 the bridge, so a forged or replayed ring starts a worker that finds nothing.
 A refused run, or a retry answered with the run already queued, rings nothing.
 
+### Approving an app update
+
+One press of `app_update.approve` (`hq/platform/application/app_update_approval.py`)
+merges an app update's pull request at the head commit the person reviewed,
+then applies the merge where the app runs. The command names the repository,
+the number and that head. The handler resolves the one adopted playbook whose
+manifest `fixes` the image-update finding and takes a `revision` input. It
+refuses none, and more than one, naming them, since HQ never picks. It also
+refuses a caller that the playbook's own run command would refuse (its
+authority, and an agent rule that denies it), a head that moved, an update
+whose diff GitHub did not give, and checks that are not passing. Otherwise it
+writes the playbook's record as adopted now and the `github.pull_request`
+record at that head, then queues the merge once per head. The merge's `input`
+carries `then`: the playbook's id, its adopted revision, its machines as
+resolved, and the correlation the merge and the run share. When the
+controller settles the merge with its commit, `controller._settle_report`
+queues that one run with the commit as its `revision`
+(`automation_runs.queue_follow_up`). The merge's result says which run, or why
+none ran. An agent's call waits for a person every time. Its approval is
+measured against the head, every pin before and after, what the new pins fix
+and bring, and `then`, so a moved head, a changed pin or a new adoption stales
+it.
+
+Its security properties:
+
+- The follow-up was fixed at approval. Its playbook, revision, machines and
+  correlation are the merge's `input`. The only value it takes later is
+  GitHub's merge commit, which must be 40 hex and must pass the playbook's
+  own input type.
+- It runs as the approver and never exceeds them. The run is asked as the
+  merge's requester, with its `approved_by` (`attribution.own_operation`
+  rebinds an operation only to its own requester). Their authority to run the
+  playbook was checked at the press. The pause and an agent's block still
+  stop it at the claim.
+- It runs once per merge commit. It is keyed `<playbook>:<commit>`, so a
+  replayed settle queues nothing.
+- Nothing the person did not approve runs. A playbook adopted since the
+  approval, or a record that no longer pins it, runs nothing, and the merge
+  says why.
+- Every check a run passes still applies: a worker must take runs, one run
+  per playbook, one writer per machine (`_holding`), and a login for each
+  machine (`reached`). A refused merge (`head_moved`, `checks_failing`) queues
+  no run.
+
 ### The automation worker
 
 `hq_runner/` is the worker that claims a run (`automation.operation:run`) and
