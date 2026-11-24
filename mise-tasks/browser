@@ -15,14 +15,15 @@
 #MISE   "pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env",
 #MISE ]
 #MISE outputs=[]
-#USAGE arg "[target]..." var=#true double_dash="automatic" help="Legs by name (webkit, demo), each the gate browser:<leg>; every leg but the Chromium one by default. With --linux, a leg or test labels then any options for Django's test command, as mise run test takes them"
+#USAGE arg "[target]..." var=#true double_dash="automatic" help="Legs by name (webkit, demo), each the gate browser:<leg>; every leg but CI's Chromium and macOS ones by default. With --linux, a leg or test labels then any options for Django's test command, as mise run test takes them"
 #USAGE flag "--linux" help="In the Playwright image CI's browser job runs, on this checkout: a layout only CI's Linux shows, reproduced here"
 #USAGE flag "--engine <engine>" default="chromium" help="With --linux, the engine test labels are drawn in; a leg keeps its own" {
 #USAGE   choices "webkit" "chromium" "firefox"
 #USAGE }
 
 # One gate at a time, each in a heavy turn of its own: each starts a browser
-# per core. The Chromium leg is CI's alone, since HQ is read in Safari.
+# per core. The Chromium leg is CI's alone, since HQ is read in Safari, and
+# so is the catalog's macOS leg, whose tests the WebKit leg runs here.
 set -eu
 # shellcheck source=tools/lib/remote.sh
 . ./tools/lib/remote.sh
@@ -40,7 +41,7 @@ done
 
 if [ "${usage_linux:-}" != true ]; then
     if [ "$#" -eq 0 ]; then
-        exec env MISE_TASK_SKIP=browser:chromium \
+        exec env MISE_TASK_SKIP=browser:chromium,browser:catalog \
             uv run python -m tools.gate.verdict browser mise run -c -j 1 'browser:*'
     fi
     # The gates named, joined as mise runs several.
