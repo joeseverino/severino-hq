@@ -109,6 +109,13 @@ class SurveyCheckTests(SimpleTestCase):
         self.assertIn("contrast", sources)
         self.assertEqual(sorted(check for check, source in sources.items() if not source.startswith(first)), [])
 
+    def test_a_finding_is_fixed_at_the_part_that_names_its_class(self):
+        """A class one Part names outranks a prefix another Part writes
+        (`is-*`), wherever each stands in the finding."""
+
+        said = "th.is-folded in tr.row-detail is drawn over tr#example.is-expanded by 200x20px"
+        self.assertEqual(survey.drawn_by("into a neighbor", said)[1], "templates/partials/_data_table.html")
+
 
 def _declared(path: Path) -> list[tuple[str, ast.expr]]:
     """Each check a module's ``CHECKS`` literal declares and what it declares

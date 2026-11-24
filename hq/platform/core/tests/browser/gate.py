@@ -898,9 +898,11 @@ class BrowserGate(SimpleTestCase):
             f"--engine {self.browser.browser_type.name}",
             *(["--no-script"] if not self.runs_script else []),
             *(["--dark"] if params.get("scheme") == "dark" else []),
+            # A rule that opens every fold judges only what it opened, so the look leaves them closed for it.
             *(
                 ["--open"]
-                if params.get("disclosures") == "open" or any(c.endswith((" shown", ", opened")) for c in checks)
+                if params.get("rule") != "opens_every_fold"
+                and (params.get("disclosures") == "open" or any(c.endswith((" shown", ", opened")) for c in checks))
                 else []
             ),
             *(["--expand"] if params.get("rows") == "open" else []),

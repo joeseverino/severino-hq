@@ -482,8 +482,8 @@ DATA_TABLE = Part(
     public=True,
     example=tags.DATA_TABLE,
     states=tags.DATA_TABLE_STATES,
-    # Its box, and a row's open line.
-    classes=("data-table", "is-pane", "row-columns", "row-detail", "table-scroll"),
+    # Its box, a row that is open, and its open line.
+    classes=("data-table", "is-expanded", "is-pane", "row-columns", "row-detail", "table-scroll"),
 )
 slotted(DATA_TABLE, library=register)
 ROW_TOGGLE = Part(

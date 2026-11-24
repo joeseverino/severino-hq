@@ -139,11 +139,16 @@ def _owners() -> dict[str, Part]:
     return {word: part for part in parts() for word in part.owned()}
 
 
-def _owner(word: str) -> Part | None:
+def _owner(words: list[str]) -> Part | None:
+    """The Part that owns one of ``words`` by its name, else by a prefix
+    (`is-*`), so a prefix never takes a class another Part names."""
+
     owners = _owners()
-    return owners.get(word) or next(
-        (part for owned, part in owners.items() if owned.endswith("*") and word.startswith(owned[:-1])), None
+    named = (owners.get(word) for word in words)
+    prefixed = (
+        part for word in words for owned, part in owners.items() if owned.endswith("*") and word.startswith(owned[:-1])
     )
+    return next(filter(None, named), None) or next(prefixed, None)
 
 
 def drawn_by(check: str, said: str) -> tuple[str, str]:
@@ -154,7 +159,7 @@ def drawn_by(check: str, said: str) -> tuple[str, str]:
 
     declared = CHECKS.get(check.partition(", with ")[0])
     part = declared.part if declared is not None and declared.part is not None else None
-    part = part or next(filter(None, map(_owner, _NAMED_CLASS.findall(said))), None)
+    part = part or _owner(_NAMED_CLASS.findall(said))
     if part is None:
         return "", ""
     if part.partial:
