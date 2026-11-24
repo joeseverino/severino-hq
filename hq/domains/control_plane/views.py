@@ -321,7 +321,7 @@ def _record_cells(row: dict) -> tuple[Cell, ...]:
         replace(Cell.of(entity_link("resource", row["key"], label=row["name"]), name=True), lines=lines),
         Cell(
             status=StatusMark(standing["label"], tone=standing["tone"], title=standing.get("detail", "")),
-            lines=(Cell(moment=since, form="ago", muted=True),) if since else (),
+            lines=(Cell(moment=since, muted=True),) if since else (),
         ),
         Cell(piece=reading_age(at=moment(row["last_observed_at"])), muted=True),
     )

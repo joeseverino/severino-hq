@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from .derivations import reached
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .moments import ago, duration, moment
+from .moments import duration, moment, when
 from .references import Kind
 from .tone import Tone
 from .ui import counted, ended
@@ -44,11 +44,11 @@ def _offline(_estate: FindingEstate) -> tuple[Finding, ...]:
                 title=f"{machine.name} is offline",
                 severity=Tone.SERIOUS if machine.hostnames or machine.roles or machine.runs_hq else Tone.ATTENTION,
                 explanation=(
-                    f"Last seen {ago(seen)}."
+                    f"Last seen {when(seen)}."
                     + (ended(f" It is the {what}") if what else "")
                     + (f" It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "")
                 ),
-                evidence=(("Last seen by Tailscale", ago(seen)),),
+                evidence=(("Last seen by Tailscale", when(seen)),),
                 primary=opens("Open machine", machine.url),
             )
         )

@@ -12,7 +12,7 @@ for it. Nothing here asks it anything.
   {% detail %}
     {% if not standing.known %}<small>No controller has connected to this HQ yet.</small>
     {% elif standing.silent %}<small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>
-    {% else %}<small>Last connected {{ standing.seen_at|when:"ago" }}.</small>{% endif %}
+    {% else %}<small>Last connected {{ standing.seen_at|when }}.</small>{% endif %}
   {% endfact %}
   {% fact "Reading" icon="eye" tone=sight.tone %}
     {% include "partials/_reading_age.html" with at=controller.swept_at only %}

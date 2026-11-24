@@ -25,7 +25,7 @@ from .calendar import CalendarEvent, CalendarSource, gather
 from .command_fields import Checked, Choices, Describe, Reason, Refers, stored_in
 from .derivations import derivation
 from .integration_specs import Kept, keeps
-from .moments import when_day
+from .moments import clock, weekday, when_day, when_range
 from .projection import iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import Notes
@@ -405,27 +405,12 @@ def upcoming(entry: Entry, *, count: int = 5, today: date | None = None) -> tupl
     return tuple(found)
 
 
-def _meridiem(value: Any) -> str:
-    return "AM" if value.hour < 12 else "PM"
-
-
-def _clock(value: time) -> str:
-    return f"{value.hour % 12 or 12}{f':{value.minute:02d}' if value.minute else ''}"
-
-
 def when_label(entry: Entry) -> str:
-    """When an entry is, as a person says it: "Wed, Sep 30 · 3–4 PM"."""
+    """When an entry is, as a person says it: "Wed, Sep 30 · 3 PM – 4 PM"."""
 
-    first = f"{entry.starts_on:%a}, {entry.starts_on:%b} {entry.starts_on.day}"
     if entry.ends_on and entry.ends_on != entry.starts_on:
-        days = f"{entry.starts_on:%b} {entry.starts_on.day} – {entry.ends_on:%b} {entry.ends_on.day}"
+        days = when_range(entry.starts_on, entry.ends_on)
     else:
-        days = first
-    if entry.starts_at is None:
-        return days
-    if entry.ends_at is None:
-        return dotted(days, f"{_clock(entry.starts_at)} {_meridiem(entry.starts_at)}")
-    start = _clock(entry.starts_at)
-    if _meridiem(entry.starts_at) != _meridiem(entry.ends_at):
-        start += f" {_meridiem(entry.starts_at)}"
-    return dotted(days, f"{start}–{_clock(entry.ends_at)} {_meridiem(entry.ends_at)}")
+        days = f"{weekday(entry.starts_on, short=True)}, {when_day(entry.starts_on)}"
+    times = [clock(datetime.combine(entry.starts_on, at)) for at in (entry.starts_at, entry.ends_at) if at]
+    return dotted(days, " – ".join(times if entry.starts_at else ()))

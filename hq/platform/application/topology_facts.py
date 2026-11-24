@@ -21,7 +21,7 @@ lazy from .credential_mint import credential_fixes
 lazy from .estate import refused_connections
 lazy from .facts import Subject, connection_facts, inventory_about, snapshots_of
 lazy from .history import near
-lazy from .moments import ago
+lazy from .moments import when
 lazy from .tailnet import device_at, may_reach, observer, posture_facts
 lazy from .zones import ZONE_KIND
 
@@ -255,7 +255,7 @@ def _drift_facts(resource) -> tuple[tuple[str, str], ...]:
     others = [item for item in near(since, limit=20) if not _own_bookkeeping(item, resource.key)]
     return (
         ("drift-since", since.isoformat()),
-        *(("drift-near", f"{item.title} ({ago(item.at)})") for item in others[:5]),
+        *(("drift-near", f"{item.title} ({when(item.at)})") for item in others[:5]),
     )
 
 

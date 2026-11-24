@@ -22,7 +22,7 @@ evidence.
 {% partialdef piece %}{% if facts %}{% fact label %}{% include part %}{% endfact %}{% elif line %}<div><dt>{{ label }}</dt><dd><div class="row-below" data-label="{{ label }}">{% include part %}</div></dd></div>{% else %}<div class="row-below" data-label="{{ label }}">{% include part %}</div>{% endif %}{% endpartialdef %}
 {% partialdef machines %}{% for host in evidence.hosts %}{% entity "machine"|entity_of:host mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endpartialdef %}
 {% partialdef correlation %}<code>{{ evidence.correlation }}</code>{% endpartialdef %}
-{% partialdef lease %}{{ evidence.worker }}, until {{ evidence.lease_until|when }}{% endpartialdef %}
+{% partialdef lease %}{{ evidence.worker }}, until {{ evidence.lease_until|when:"at" }}{% endpartialdef %}
 {% partialdef attempts %}{{ evidence.attempts }}{% endpartialdef %}
 {% partialdef readings %}{% for kind in evidence.stated %}<code>{{ kind }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endpartialdef %}
 {% partialdef tasks %}{% list %}{% for event in evidence.events %}<li class="prose">{% status event.outcome tone=event.tone %} <strong>{{ event.task }}</strong>{% if event.host %}{% dot %}{% entity "machine"|entity_of:event.host %}{% endif %}{% if event.message %}{% dot %}{{ event.message }}{% endif %}</li>{% endfor %}{% endlist %}{% endpartialdef %}

@@ -366,15 +366,6 @@ class CardTests(TestCase):
         self.assertEqual(watching(), ())
 
 
-class ShortAgeTests(TestCase):
-    def test_an_age_is_one_unit(self):
-        from datetime import timedelta
-
-        from ..moments import ago
-
-        self.assertEqual(ago(timezone.now() - timedelta(days=5, hours=15)), "5\xa0days ago")
-
-
 class AppProofTests(TestCase):
     def test_the_app_reading_your_repositories_is_a_second_proof(self):
         from hq.domains.control_plane.models import ProviderInventory

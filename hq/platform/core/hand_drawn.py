@@ -603,7 +603,7 @@ SHAPES = (
         said='A "since" written before a moment, which reads "since 3 days ago" beside an age.',
         instead='{{ at|when:"since" }}, which says its own "since"',
         find=matched(r"\bsince\s+\{\{[^}]*\|when\b"),
-        refuses=('Online since {{ at|when:"ago" }}',),
+        refuses=("Online since {{ at|when }}",),
         keeps=('Online {{ at|when:"since" }}',),
     ),
     Shape(

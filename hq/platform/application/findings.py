@@ -96,7 +96,7 @@ lazy from . import automation_runs, cadence, capabilities
 lazy from .domains import resources_of
 lazy from .estate import estate_reading
 lazy from .gathered_findings import gather_findings
-lazy from .moments import ago
+lazy from .moments import when
 lazy from .record_saves import row
 lazy from .ui import counted
 
@@ -247,7 +247,7 @@ class Coverage:
     def sentence(self) -> str:
         return (
             f"{counted(self.rules, 'check')} over {counted(self.machines, 'machine')} and "
-            f"{counted(self.services, 'service')}, from readings {ago(self.read_at)}."
+            f"{counted(self.services, 'service')}, from readings {when(self.read_at)}."
         )
 
 

@@ -474,7 +474,7 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
         state = line.state
         outcome = Cell.state(state) if isinstance(state, AuditLog.Action) else Cell(state, tone="neutral")
         said = Cell(line.message, muted=True, role="data")
-    when = Cell(moment=line.at, form="clock", muted=True)
+    when = Cell(moment=line.at, muted=True)
     return Row((title, when, *((person,) if who else ()), outcome, said), key=key, **folding)
 
 

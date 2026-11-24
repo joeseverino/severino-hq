@@ -57,7 +57,7 @@ lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import fields as whole_fields, json_schema
 lazy from .labels import lower_first
 lazy from .machines import machine_catalog
-lazy from .moments import ago, moment, when
+lazy from .moments import moment, since_when, when
 lazy from .payload_words import ChangeRow, field_words, value_words
 lazy from .resource_operations import (
     Prepared,
@@ -427,7 +427,7 @@ def held_words(details: object, principal: Principal | None = None) -> HeldWords
     title = run_title(playbook, automation_adoption.playbook_titles())
     state = OperationRequest.State(holding["state"])
     asked_at = moment(holding.get("created_at"))
-    since = f"{lower_first(state.as_job.label)} since {when(asked_at)}" if asked_at else lower_first(state.as_job.label)
+    since = f"{lower_first(state.as_job.label)} {since_when(asked_at)}" if asked_at else lower_first(state.as_job.label)
     machines = [str(host) for host in details.get("machines") or ()]
     shared = [str(host) for host in details.get("shared") or ()]
     if shared:
@@ -771,7 +771,7 @@ def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSect
                 reverse("core:approval_entry", kwargs={"approval_id": held.id}),
                 tone=Tone.ATTENTION,
             ),
-            Cell(ago(held.created_at), muted=True),
+            Cell(when(held.created_at), muted=True),
             Cell(who.get(str(held.pk), NOBODY).words),
         )
         for held in waiting

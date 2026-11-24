@@ -26,7 +26,7 @@ from .derivations import passed, present
 from .reach import NETWORKS, network_of
 lazy from . import tailnet
 lazy from .inventory import record_inventory
-lazy from .moments import ago, moment
+lazy from .moments import moment, when
 lazy from .request_channel import forwarding_of
 lazy from .tailnet_presence import tailnet_presence
 
@@ -224,7 +224,7 @@ class Arrival:
     def phrase(self) -> str:
         """ "3 hours ago, directly over the tailnet"."""
 
-        return f"{ago(self.last_seen)}, {self.how}"
+        return f"{when(self.last_seen)}, {self.how}"
 
 
 def arrivals(snapshots=()) -> dict[str, Arrival]:

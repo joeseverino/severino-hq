@@ -22,7 +22,7 @@ from .standards import Standing
 from .tone import Tone
 lazy from . import connection_tables
 lazy from .freshness import Freshness, freshness as reading_freshness
-lazy from .moments import ago
+lazy from .moments import when
 
 if TYPE_CHECKING:
     from .standards import CheckResult
@@ -157,8 +157,8 @@ class Certificate:
         if not self.verified_fingerprint:
             return ""
 
-        when = self.source.observed_at if self.source else None
-        return f"confirmed on this site {ago(when)}" if when else "confirmed on this site"
+        confirmed = self.source.observed_at if self.source else None
+        return f"confirmed on this site {when(confirmed)}" if confirmed else "confirmed on this site"
 
     @property
     def confirmed_on(self) -> str:

@@ -13,7 +13,7 @@ from .finding_model import (
     open_the_path,
     reconcile_remedy,
 )
-from .moments import elapsed
+from .moments import when
 from .tone import Tone
 from .ui import ended
 lazy from .topology_facts import PATH_DENIED, UNREACHABLE
@@ -53,7 +53,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                 evidence=(
                     ("State", "Refused" if refused else node.status_label or "Unreachable"),
                     *((("Cause", credential_findings.FAILURE_LABELS[failure]),) if failure and not refused else ()),
-                    *((("Last checked", elapsed(node.observed_at)),) if node.observed_at else ()),
+                    *((("Last checked", when(node.observed_at)),) if node.observed_at else ()),
                 ),
                 steps=mint_steps(node) if refused else credential_findings.answer_steps(node),
             )

@@ -82,7 +82,7 @@ last done to it is read before its parts.
     last request from its own address says nothing about whether it is
     there.
     {% endcomment %}
-    {% with arrival=machine.presence.reached_hq %}{% if arrival and not machine.presence.observer %}{% fact "Last reached HQ" %}{{ arrival.last_seen|when_text:"ago"|capfirst }}, {{ arrival.how }}{% endfact %}{% endif %}{% endwith %}
+    {% with arrival=machine.presence.reached_hq %}{% if arrival and not machine.presence.observer %}{% fact "Last reached HQ" %}{{ arrival.last_seen|when_text|capfirst }}, {{ arrival.how }}{% endfact %}{% endif %}{% endwith %}
     {% fact "Node key" %}{% if machine.presence.key_expires %}{{ machine.presence.key_expires|when_text:"expiry"|capfirst }}{% else %}Does not expire{% endif %}{% endfact %}
     {% fact "Runs" %}{{ machine.presence.os|or_empty }}{% if tailscale_version %}{% dot %}<span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}{% endfact %}
     {% comment %}
@@ -155,7 +155,7 @@ last done to it is read before its parts.
     {% endcomment %}
     {% section "Peered with HQ" %}
       {% facts %}
-        {% fact "Handshake" %}Completed {{ peering.last_handshake|when:"ago" }}{% if peering.active %}{% dot %}active{% endif %}{% endfact %}
+        {% fact "Handshake" %}Completed {{ peering.last_handshake|when }}{% if peering.active %}{% dot %}active{% endif %}{% endfact %}
         {% fact "Path" %}
           {% if peering.path == "direct" %}
             Direct: {% with mark=peering.relay|then:"," %}<code>{{ peering.direct_endpoint|breakable:mark }}</code>{% endwith %}{% if peering.relay %} fallback relay <code>{{ peering.relay }}</code>{% endif %}

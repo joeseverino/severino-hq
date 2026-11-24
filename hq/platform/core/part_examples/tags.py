@@ -833,7 +833,7 @@ def _every_kind() -> DataTable:
             (
                 Cell(name, f"/example/{name}/", readout=True, name=True, fold=bool(options.get("folds"))),
                 Cell("example-operator, on the web", cut=True),
-                Cell(moment=DRAWN_AT - timedelta(hours=2), form="clock", muted=True),
+                Cell(moment=DRAWN_AT - timedelta(hours=2), muted=True),
                 Cell(amount=Decimal(12)),
                 Cell("Online", tone="good"),
                 Cell("an example note that wraps wherever it must", muted=True, role="data"),

@@ -20,11 +20,11 @@ so, with how to set one up, stands above it (`problems`).
   {% facts label="Run" %}
     {% if playbook_url %}{% fact ran_label value=run.title url=playbook_url %}{% else %}{% fact ran_label value=run.title %}{% endif %}
     {% if approval_url %}{% fact "Asked by" value=run.by url=approval_url %}{% else %}{% fact "Asked by" value=run.by|or_empty %}{% endif %}
-    {% fact "Asked" %}{{ run.created_at|when:"exact" }}{% endfact %}
+    {% fact "Asked" %}{{ run.created_at|when }}{% endfact %}
     {% if merged_from %}{% fact "Applies" value=merged_from.label url=merged_from.url %}{% endif %}
     {% if run.reason %}{% fact "Reason" value=run.reason %}{% endif %}
-    {% if run.started_at %}{% fact "Started" %}{{ run.started_at|when:"exact" }}{% endfact %}{% endif %}
-    {% if run.finished_at %}{% fact "Finished" %}{{ run.finished_at|when:"exact" }}{% endfact %}{% endif %}
+    {% if run.started_at %}{% fact "Started" %}{{ run.started_at|when }}{% endfact %}{% endif %}
+    {% if run.finished_at %}{% fact "Finished" %}{{ run.finished_at|when }}{% endfact %}{% endif %}
     {% if run.duration_seconds is not None %}{% fact "Duration" value=run.duration_seconds|seconds %}{% endif %}
     {% if run.headline %}{% fact "Result" value=run.headline %}{% endif %}
     {% run_evidence run layout="facts" %}

@@ -22,7 +22,7 @@ lazy from hq.platform.application.routes import reverse
 from .entity_links import link_url
 lazy from . import domains
 lazy from .calendar_entries import CHOOSE_SOURCE, own_sources
-lazy from .moments import month as month_name, weekday
+lazy from .moments import clock, month as month_name, weekday
 lazy from .pages import PageAction
 
 logger = logging.getLogger("severino.calendar")
@@ -114,12 +114,7 @@ class CalendarEvent:
 
     @property
     def time_label(self) -> str:
-        if not self.timed:
-            return ""
-        start = timezone.localtime(self.starts)
-        return (
-            f"{start.hour % 12 or 12}{f':{start.minute:02d}' if start.minute else ''}{'a' if start.hour < 12 else 'p'}"
-        )
+        return clock(self.starts) if self.timed else ""
 
     def covers(self, day: date) -> bool:
         return self.first_day <= day <= self.last_day

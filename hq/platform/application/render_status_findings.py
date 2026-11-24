@@ -29,7 +29,7 @@ from .finding_model import (
 )
 from .finding_steps import Do, Run
 from .freshness import missed
-from .moments import ago, duration, moment, when
+from .moments import duration, moment, since_when, when
 from .projection import iso
 from .reading_facts import ReadingRow, stated, unjudged
 from .tone import Tone
@@ -292,7 +292,7 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.SERIOUS if stale else Tone.ATTENTION,
                 explanation=(
                     (
-                        f"It is still using the ones it got {ago(failed[0].confirmed_at, estate.now)}."
+                        f"It is still using the ones it got {when(failed[0].confirmed_at, estate.now)}."
                         if last_good is not None
                         else "It is still using the ones from its last good refresh."
                     )
@@ -304,8 +304,8 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                     for item in (
                         ("Job", rendering.name),
                         ("Reason", _why(rendering)),
-                        ("Last tried", ago(rendering.attempted_at, estate.now)),
-                        ("Last refreshed", ago(rendering.confirmed_at, estate.now)),
+                        ("Last tried", when(rendering.attempted_at, estate.now)),
+                        ("Last refreshed", when(rendering.confirmed_at, estate.now)),
                     )
                 ),
                 steps=_journal(node, failed) + _run_again(node, failed, "Run it again"),
@@ -318,9 +318,9 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
 def _stale_evidence(rendering: Rendering, now: datetime) -> tuple[tuple[str, str], ...]:
     return (
         ("Job", rendering.name),
-        ("Last refreshed", ago(rendering.confirmed_at, now)),
-        ("Last read in full", ago(rendering.rendered_at, now)),
-        ("Last tried", ago(rendering.attempted_at, now)),
+        ("Last refreshed", when(rendering.confirmed_at, now)),
+        ("Last read in full", when(rendering.rendered_at, now)),
+        ("Last tried", when(rendering.attempted_at, now)),
     )
 
 
@@ -336,7 +336,7 @@ def _stale_title(machine: str, stale: tuple[Rendering, ...]) -> str:
     since = moment(stamp)
     if since is None:
         return f"{machine} has never {did}"
-    return f"{machine} has not {did} since {when(since)}"
+    return f"{machine} has not {did} {since_when(since)}"
 
 
 def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -422,7 +422,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                     for item in (
                         ("Job", rendering.name),
                         ("Updates from 1Password", rendering.sync),
-                        ("Connect last read", ago(rendering.sync_read_at, estate.now)),
+                        ("Connect last read", when(rendering.sync_read_at, estate.now)),
                     )
                 ),
                 steps=(

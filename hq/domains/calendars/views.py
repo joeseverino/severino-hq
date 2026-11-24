@@ -21,7 +21,7 @@ from hq.platform.application.calendar_entries import (
 from hq.platform.application.capabilities import capability_title
 from hq.platform.application.card_items import ListRow
 from hq.platform.application.entity_links import web_url
-from hq.platform.application.moments import stamp_day, when_day
+from hq.platform.application.moments import stamp_day, when, when_day, when_range
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.references import reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
@@ -110,16 +110,6 @@ def _is_uuid(value: str) -> bool:
     return True
 
 
-def _range(event) -> str:
-    """A span's days, as the day panel names them beside its title."""
-
-    if not event.span:
-        return ""
-    first, last = event.first_day, event.last_day
-    end = f"{last:%b} {last.day}" if last.month != first.month else str(last.day)
-    return f"{first:%b} {first.day} – {end}"
-
-
 def _upcoming(calendar) -> tuple:
     """What is ahead in the month shown, as the shared record rows: each
     title in full beside its day, which a narrow grid cannot spell out."""
@@ -131,7 +121,7 @@ def _upcoming(calendar) -> tuple:
         rows.append(
             ListRow(
                 title=event.title,
-                meta=" ".join(filter(None, (when_day(day), event.time_label))),
+                meta=when(event.starts) if event.timed else when_day(day),
                 url=event.url or month_url(day.replace(day=1), day),
                 external=bool(web_url(event.url)),
             )
@@ -149,7 +139,7 @@ def _rows(day, *, opened: str = "") -> tuple:
             ListRow(
                 title=event.title,
                 detail=event.detail,
-                meta=event.time_label or _range(event),
+                meta=event.time_label or (when_range(event.first_day, event.last_day) if event.span else ""),
                 url=event.url,
                 external=bool(web_url(event.url)),
             )

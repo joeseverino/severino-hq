@@ -8,7 +8,7 @@ from typing import Any
 from django.utils.text import capfirst
 
 from hq.platform.application.agent_activity import CLIENT_SETUP, Activity, AgentStanding, DeviceRow, Streams
-from hq.platform.application.moments import ago
+from hq.platform.application.moments import when
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Row, StatusMark, TableColumn
 from hq.platform.core.templatetags.value_tags import agreed, counted, interface_label, measured
 
@@ -63,7 +63,7 @@ def _agent(standing: AgentStanding, actions: Any) -> Row:
     cells = (
         name,
         Cell(lines=tuple(granted), sort=str(len(standing.in_force))),
-        Cell(moment=identity.last_seen, form="ago"),
+        Cell(moment=identity.last_seen),
         _activity(standing.activity, standing.streams),
     )
     return Row(cells, actions=actions, data=data)
@@ -94,13 +94,13 @@ def _held(standing: AgentStanding) -> tuple[Below, ...]:
     identity = standing.identity
     lines = []
     if identity.blocked_at:
-        lines.append(Cell(_by(f"Blocked {ago(identity.blocked_at)}", identity.blocked_by)))
+        lines.append(Cell(_by(f"Blocked {when(identity.blocked_at)}", identity.blocked_by)))
     if person := identity.person:
         if standing.acts_for_nobody:
             said = f"{person.get_username()} holds no role, so its calls are refused."
             lines.append(Cell(said, data={"role": "none"}))
         else:
-            confirmed = Cell(moment=standing.role_confirmed, form="ago")
+            confirmed = Cell(moment=standing.role_confirmed)
             lines.append(Cell("Role confirmed", parts=(confirmed,), data={"role": standing.role}))
     streams = standing.streams
     if streams.open and not streams.full:
@@ -208,8 +208,8 @@ def _device(device: DeviceRow, actions: Any) -> Row:
     cells = (
         name,
         Cell(lines=tuple(approval)),
-        Cell(moment=device.first_seen, form="ago"),
-        Cell(moment=device.last_seen, form="ago"),
+        Cell(moment=device.first_seen),
+        Cell(moment=device.last_seen),
         _activity(device.activity, None),
     )
     return Row(cells, actions=actions, id=device.anchor, data={"device-standing": str(device.standing)})
@@ -225,9 +225,9 @@ def _record(record: Any) -> tuple[Below, ...]:
     else:
         lines = [Cell("Calls as itself, so anyone who governs agents approves it.")]
     if record.approved_at:
-        lines.append(Cell(_by(f"Approved {ago(record.approved_at)}", record.approved_by)))
+        lines.append(Cell(_by(f"Approved {when(record.approved_at)}", record.approved_by)))
     if record.blocked_at:
-        lines.append(Cell(_by(f"Blocked {ago(record.blocked_at)}", record.blocked_by)))
+        lines.append(Cell(_by(f"Blocked {when(record.blocked_at)}", record.blocked_by)))
     return (Below("", tuple(lines)),)
 
 
@@ -237,7 +237,7 @@ def own_devices(found: Sequence[tuple[Any, Any]]) -> DataTable:
     columns = (TableColumn("App", kind="identifier"), TableColumn("Registered", kind="status"))
     rows = tuple(
         Row(
-            (replace(_code(device.client_id), header=True), Cell(moment=device.registered_at, form="ago")),
+            (replace(_code(device.client_id), header=True), Cell(moment=device.registered_at)),
             actions=actions,
             data={"device": device.client_id},
         )

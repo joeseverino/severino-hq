@@ -27,12 +27,12 @@ from .drawings import Dot, Dots
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .integration_specs import ListRead, ResourceSpec
-from .moments import moment, when_day
+from .moments import moment, span, when_day
 from .projection import read_once
 from .resources import EmptyQuery
 from .security import Capability, Principal
 from .tone import Tone
-from .ui import DomainOverview, counted
+from .ui import DomainOverview
 from .workflow_contracts import ActionLink
 lazy from . import connections, derived_reads, services, zones
 lazy from .connection_catalog import connection_total
@@ -308,7 +308,7 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
                 {
                     "id": card_id,
                     "label": label,
-                    "value": counted(max(first.days, 0), "day"),
+                    "value": span(max(first.days, 0)),
                     "url": first.url or reverse(listed),
                     "detail": dotted(first.subject, first.source, "not renewed by its issuer" if first.overdue else ""),
                     **({"status": Tone.ATTENTION} if first.overdue else {}),

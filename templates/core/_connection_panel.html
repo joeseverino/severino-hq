@@ -59,7 +59,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% section "The link" %}
     {% comment %}A reading older than the panel asks again for is what HQ last saw: the rows below are as of then.{% endcomment %}
     {% if connection.tailnet_observed_at and not connection.tailnet_current %}
-      {% muted element="p" data_last_seen=True %}Tailnet read {{ connection.tailnet_observed_at|when }}.{% endmuted %}
+      {% muted element="p" data_last_seen=True %}Tailnet{% dot %}{% include "partials/_reading_age.html" with at=connection.tailnet_observed_at only %}{% endmuted %}
     {% endif %}
     {% facts %}
       {% if connection.path_label %}{% fact "Path" %}<strong>{{ connection.path_label }}</strong>{% endfact %}{% endif %}

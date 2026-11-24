@@ -87,7 +87,7 @@ class ReceiptListView(ListPageMixin, TemplateView):
             "Uploaded",
             "uploaded_at",
             kind="status",
-            cell=lambda row: Cell(moment=moment(row["uploaded_at"]), form="ago", muted=True),
+            cell=lambda row: Cell(moment=moment(row["uploaded_at"]), muted=True),
         ),
     )
     table_search_placeholder = "Search vendors, filenames, and notes…"

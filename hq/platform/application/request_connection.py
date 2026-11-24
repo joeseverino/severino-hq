@@ -26,7 +26,7 @@ lazy from .entity_links import entity_link
 lazy from .hq_self import hq_machine, hq_service, own_addresses, served_at
 lazy from .infrastructure import declared_machines
 lazy from .locate import index_of
-lazy from .moments import ago, moment
+lazy from .moments import moment, when
 lazy from .tailnet_presence import tailnet_presence
 lazy from .zones import public_answers_for
 
@@ -308,7 +308,7 @@ class Connection:
             return MISSING
         if self.tailnet_current or not moment(self.presence.last_handshake):
             return self.presence.handshake
-        age = ago(self.presence.last_handshake, now=self.tailnet_observed_at)
+        age = when(self.presence.last_handshake, now=self.tailnet_observed_at)
         if age == "just now":
             return "At the read"
         return f"{age.removesuffix(' ago')} before the read"

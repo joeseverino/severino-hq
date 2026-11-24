@@ -95,7 +95,7 @@ class ContractTests(SimpleTestCase):
             datetime.combine(TODAY + timedelta(days=1), time(0), zone),
         )
         self.assertFalse(late.span)
-        self.assertEqual(late.time_label, "10p")
+        self.assertEqual(late.time_label, "10\xa0PM")
 
     def test_a_link_is_hqs_own_path_or_a_web_address(self):
         self.assertEqual(CalendarEvent("a", "x", TODAY, url="/calendar/").url, "/calendar/")

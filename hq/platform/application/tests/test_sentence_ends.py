@@ -75,7 +75,7 @@ class SentenceEndRuleTests(SimpleTestCase):
     def test_hq_own_words_stay_bare(self):
         source = "\n".join(
             (
-                'a = f"From readings {ago(read_at)}."',
+                'a = f"From readings {when(read_at)}."',
                 'b = f"Plugin {name!r}."',
                 'c = f"{share:.0%}."',
                 'd = f"Then press {CHECK_AGAIN}."',

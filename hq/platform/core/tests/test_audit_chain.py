@@ -214,23 +214,6 @@ class ChainBudgetTests(_Signed):
 
 
 class TimeAndWhoTests(_Signed):
-    def test_events_within_one_minute_say_their_seconds(self):
-        minute = timezone.now().replace(second=5, microsecond=0) - timedelta(hours=1)
-        AuditLog.objects.bulk_create(
-            AuditLog(
-                action=AuditLog.Action.CREATED,
-                object_type="example.record",
-                object_repr=f"example-{second}",
-                created_at=minute + timedelta(seconds=second),
-            )
-            for second in (0, 30)
-        )
-
-        page = self.client.get(reverse("core:audit_list"))
-        times = [element.words for element in all_elements(page.content.decode()) if element.tag == "time"]
-
-        self.assertEqual(len(set(times)), len(times))
-
     def test_who_names_the_decider_beside_the_actor(self):
         AuditLog.objects.create(
             action=AuditLog.Action.CREATED,

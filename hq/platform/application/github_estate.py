@@ -29,7 +29,7 @@ from .derivations import whole
 from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
-from .moments import ago, moment
+from .moments import moment, when
 from .projection import read_once
 from .thresholds import Threshold
 from .tone import Tone
@@ -100,7 +100,7 @@ def _age(stamp: object) -> str:
     """How long ago a provider's stamp was, or nothing where it has none."""
 
     found = moment(str(stamp or ""))
-    return ago(found) if found else ""
+    return when(found) if found else ""
 
 
 def _pull_row(pull: Mapping[str, Any], *details: str, meta: str = "", badge: str = "", status: str = "") -> ListRow:
@@ -276,7 +276,7 @@ class Repository:
                 apps.setdefault(update.number, []).extend((update.app, update.fixes_counted))
         for pull in self.update_pulls:
             badge, tone, failing = pull_checks(pull)
-            opened = f"opened {ago(pull['opened'])}" if pull["opened"] else ""
+            opened = f"opened {when(pull['opened'])}" if pull["opened"] else ""
             said = apps.get(pull.get("number"), ())
             rows.append(_pull_row(pull, *said, failing, meta=opened, badge=badge, status=tone))
         for alert in self.unmatched_alerts:

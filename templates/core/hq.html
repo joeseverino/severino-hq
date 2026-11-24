@@ -65,7 +65,7 @@ uptime and how the request came.
     {% if release.image %}
     {% fact "Image" %}
         <code title="{{ release.image }}">{{ container.standing.image.short }}</code>{% if release.digest %} {% muted tip=release.digest %}pinned by digest{% endmuted %}{% endif %}
-    {% detail %}{% if release.built %}Built {{ release.built|when:"ago" }}{% endif %}
+    {% detail %}{% if release.built %}Built {{ release.built|when }}{% endif %}
     {% endfact %}
     {% fact "Signature" %}{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}{% muted %}{% include "partials/_reading_age.html" with unread=release.signed_unread only %}{% endmuted %}{% endif %}{% endfact %}
     {% fact "Vulnerabilities" %}<span class="prose">{% if release.vulnerabilities_unread %}{% muted %}{% include "partials/_reading_age.html" with unread=release.vulnerabilities_unread only %}{% endmuted %}{% else %}{{ release.vulnerabilities|capfirst }}{% if release.vulnerabilities_note %} {% muted %}{{ release.vulnerabilities_note }}{% endmuted %}{% endif %}{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}

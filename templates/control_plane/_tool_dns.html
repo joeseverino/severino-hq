@@ -46,7 +46,7 @@
             {% endif %}
           {% endfacts %}
           {% if reread %}
-            <div class="help">Read {{ reading.observed_at|when }} {% include "partials/_page_action.html" with action=reread extra="ghost compact" only %}</div>
+            <div class="help">{% include "partials/_reading_age.html" with at=reading.observed_at only %} {% include "partials/_page_action.html" with action=reread extra="ghost compact" only %}</div>
           {% endif %}
         {% else %}
           <p class="help">{{ reading.message|default:"Lookup failed." }}</p>

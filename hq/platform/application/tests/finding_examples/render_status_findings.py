@@ -135,12 +135,12 @@ EXAMPLES = (
             # A renderer that stopped running is serious.
             rendering(
                 read(attempted=STALE, confirmed=STALE, rendered=STALE),
-                raises=("example-controller has not refreshed its credentials since Jan\xa015, 2:57\xa0AM",),
+                raises=("example-controller has not refreshed its credentials since 2:57\xa0AM",),
             ),
             # A full read overdue is stale while every run says current.
             rendering(
                 read(rendered=RENDERED_WITHIN + MINUTE),
-                raises=("example-controller has not read its credentials in full since Jan\xa014, 2:57\xa0AM",),
+                raises=("example-controller has not read its credentials in full since Jan\xa014",),
             ),
             # Behind when it was read, it is still behind hours later.
             rendering(
@@ -150,7 +150,7 @@ EXAMPLES = (
                     rendered=timedelta(hours=2) + STALE,
                 ),
                 age=timedelta(hours=2),
-                raises=("example-controller has not refreshed its credentials since Jan\xa015, 12:57\xa0AM",),
+                raises=("example-controller has not refreshed its credentials since 12:57\xa0AM",),
             ),
         ),
         quiet=(

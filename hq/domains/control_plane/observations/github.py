@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, StrictInt
 from pydantic.json_schema import SkipJsonSchema
 
-lazy from hq.platform.application.moments import moment, when
+lazy from hq.platform.application.moments import moment, since_when, when
 
 from ..permissions import GitHub
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
@@ -323,7 +323,7 @@ def _allowance(record: Mapping[str, Any]) -> str:
     if (others := record.get("others_spent")) is not None:
         said += f", others {int(others):,}"
         if (since := moment(record.get("others_since"))) is not None:
-            said += f" since {when(since)}"
+            said += f" {since_when(since)}"
     return said
 
 

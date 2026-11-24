@@ -13,8 +13,9 @@ from .tailnet import TAILNET_KIND, snapshots
 lazy from .arrivals import arrivals
 lazy from .expiry import days_until
 lazy from .locate import container_hosts, host_of
-lazy from .moments import elapsed, expiry_words, moment
+lazy from .moments import expiry_words, moment, when
 lazy from .reach import is_public, network_of
+lazy from .ui import MISSING
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +128,8 @@ class Presence:
         """When the two keys last completed a handshake, phrased as HQ phrases
         every other elapsed time."""
 
-        return elapsed(self.last_handshake)
+        found = moment(self.last_handshake)
+        return when(found) if found else MISSING
 
     @property
     def peer_path(self) -> str:

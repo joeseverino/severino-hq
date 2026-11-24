@@ -22,7 +22,7 @@ from .finding_model import (
     journal_step,
     machine_step,
 )
-from .moments import ago, duration, moment
+from .moments import duration, moment, when
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
@@ -209,7 +209,7 @@ def _ended(unit: UnitState) -> str:
 
 
 def _failed_when(machine: str, unit: UnitState, now: datetime) -> str:
-    return ago(unit.ended_at, now) if unit.ended_at else f"before {machine} last started"
+    return when(unit.ended_at, now) if unit.ended_at else f"before {machine} last started"
 
 
 def _failed_since(machine: str, failed: tuple[UnitState, ...], now: datetime) -> str:
@@ -390,7 +390,7 @@ def _stalled_finding(
             for item in (
                 ("Timer", timer.unit),
                 ("Why", why),
-                ("Last ran", ago(timer.last_trigger_at, now)),
+                ("Last ran", when(timer.last_trigger_at, now)),
             )
         ),
         steps=tuple(

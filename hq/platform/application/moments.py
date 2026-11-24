@@ -13,7 +13,7 @@ lazy from django.utils.timesince import timesince
 
 lazy from .derivations import reached, since, this_year
 lazy from .expiry import days_until
-lazy from .ui import MISSING, counted
+lazy from .ui import counted
 
 # How a stamp without an offset is read: "utc" is what every provider that
 # omits one means; "keep" leaves it naive, for a caller comparing it only with
@@ -70,45 +70,6 @@ def stamp_day(value: object) -> date | None:
         return None
 
 
-# ``ago`` names its argument ``moment``, as the SDK states it, which hides the
-# parser inside it.
-_moment = moment
-
-
-def elapsed(stamp: str) -> str:
-    """A provider's timestamp as an age, or as the fact that there is none."""
-
-    found = moment(stamp)
-    if found is None:
-        return MISSING
-    if not reached(found):
-        return "just now"
-    return ago(found)
-
-
-def ago(moment: date | str, now: datetime | None = None) -> str:
-    """How long ago something happened, in the one phrasing HQ uses: "5 days ago".
-
-    One unit. An age is read at a glance, and "5 days, 15 hours ago" beside
-    "5 days ago" is two phrasings of one fact; the exact moment is what
-    ``when_exact`` says, and the ``when`` filter puts it behind the age.
-    A provider's stamp is read as it is written; one that is empty or does not
-    parse is "never". ``now`` is the instant a derivation was made at.
-    """
-
-    found = _moment(moment) if isinstance(moment, str) else moment
-    if found is None:
-        return "never"
-    if isinstance(found, datetime):
-        # The wording changes at the next whole unit of age; ``since`` says so to
-        # the derivation that read it, which is why a datetime goes through it.
-        since(found, now=now)
-        age = timesince(found, now, depth=1)
-    else:
-        age = timesince(found, depth=1)
-    return "just now" if age.startswith(("0\xa0minutes", "0 minutes")) else f"{age} ago"
-
-
 # How HQ writes a day and a time of day, as Django date-format strings. Spelled
 # here and nowhere else: ``when``, ``when_day`` and ``when_exact`` are built from
 # them, and ``config.formats`` hands the same ones to Django, so a datetime a
@@ -150,46 +111,57 @@ def when_day(value: date) -> str:
     return _written(value, DAY_FORMAT if value.year == this_year() else DAY_YEAR_FORMAT)
 
 
-def when(value: date) -> str:
-    """A moment as HQ writes one: "Oct 3, 9:29 AM", "Oct 3, 2025, 9:29 AM".
+# How near now a moment is said as how far it lies ("3 minutes ago", "in 3
+# hours"); one further off is said as its day and time. The one rule for when
+# a moment is relative: within a day an age is what a person reads, and past
+# it the day says more. GitHub's ``relative-time`` keeps a threshold the same way.
+NEAR = timedelta(days=1)
 
-    Twelve-hour clock, in the timezone HQ is read in. A bare date has no time
-    of day and reads as ``when_day`` writes it.
-    """
 
-    if not isinstance(value, datetime):
-        return when_day(value)
+def clock(value: datetime) -> str:
+    """The time of day a moment falls at here: "7 PM", "7:30 PM"."""
+
     value = _local(value)
-    return f"{when_day(value)}, {_written(value, CLOCK_FORMAT)}"
+    return _written(value, HOUR_FORMAT if value.minute == 0 else CLOCK_FORMAT)
 
 
-def when_clock(value: date) -> str:
-    """A moment to the second: "Oct 3, 9:29:15 AM", "Oct 3, 2025, 9:29:15 AM".
+def when_at(value: date) -> str:
+    """A moment's day and time, "Oct 3, 9:29 AM", the year said only when it
+    is not this one: what ``when`` says past a day, and what a sentence says
+    after "for", "until" or "between", where an age would not read. A bare
+    date is its day."""
 
-    What a list of events says when several fall within one minute and their
-    order is the point. A bare date reads as ``when_day`` writes it.
+    return f"{when_day(value)}, {clock(value)}" if isinstance(value, datetime) else when_day(value)
+
+
+def when(value: date | str | None, now: datetime | None = None) -> str:
+    """A moment as HQ writes one, on every page and in every sentence.
+
+    Within ``NEAR`` of now, how far it lies: "just now", "5 minutes ago", "in
+    3 hours". Further off, as ``when_at`` says it. A bare date is its day. A
+    provider's stamp is read as it is written; one that is missing or does
+    not parse is "never". ``now`` is the instant a derivation was made at.
     """
 
-    if not isinstance(value, datetime):
-        return when_day(value)
-    value = _local(value)
-    return f"{when_day(value)}, {_written(value, CLOCK_EXACT_FORMAT)}"
-
-
-def when_hour(value: datetime) -> str:
-    """The hour a moment starts, in the timezone HQ is read in: "2 PM".
-
-    What a row of hours says of each, where the day is the row's.
-    """
-
-    return _written(_local(value), HOUR_FORMAT)
+    found = moment(value) if isinstance(value, str) else value
+    if found is None:
+        return "never"
+    if not isinstance(found, datetime) or reached(found + NEAR, now=now) or not reached(found - NEAR, now=now):
+        return when_at(found)
+    # ``since`` holds the wording until the next whole unit, ahead or behind.
+    age = since(found, now=now)
+    start = datetime(2000, 1, 1, tzinfo=UTC)
+    said = timesince(start, start + abs(age), depth=1)
+    if said.startswith(("0\xa0minutes", "0 minutes")):
+        return "just now" if age >= timedelta(0) else "in under a minute"
+    return f"{said} ago" if age >= timedelta(0) else f"in {said}"
 
 
 def when_exact(value: date) -> str:
     """A moment in full: "Oct 3, 2026, 9:29:15 AM CDT".
 
-    Always the year, the seconds and the zone: what a ``title`` says behind an
-    age, and what a detail page says of the one event it is about.
+    Always the year, the seconds and the zone: what a ``title`` says behind
+    every moment, and what a printed page, which has no title, says.
     """
 
     if not isinstance(value, datetime):
@@ -244,17 +216,6 @@ def length(moment: date, now: datetime | None = None) -> str:
     return "under a minute" if said.startswith(("0\xa0minutes", "0 minutes")) else said
 
 
-def ahead(moment: date, now: datetime | None = None) -> str:
-    """A moment to come as how soon it is: "in 3 days"; one already past as
-    ``ago`` says it. A bare date is the day."""
-
-    if not isinstance(moment, datetime):
-        return when_day(moment)
-    if reached(moment, now=now):
-        return ago(moment, now)
-    return f"in {length(moment, now)}"
-
-
 def when_range(start: date, end: date) -> str:
     """A run of days as HQ writes one: "Oct 3 – Oct 9", "Oct 3 – Oct 9, 2025".
 
@@ -274,7 +235,7 @@ def when_range(start: date, end: date) -> str:
 
 
 def duration(delta: timedelta, *, short: bool = False) -> str:
-    """A length of time in the phrasing ``ago`` uses, without the "ago"; ``short``, a run time as ``ask.js``'s
+    """A length of time in the phrasing ``when`` gives an age, without the "ago"; ``short``, a run time as ``ask.js``'s
     ``elapsed`` ticks one: "45 s", "4 min 33 s", "1 h 2 min", never a zero part after a larger one."""
 
     delta = max(delta, timedelta(0))
@@ -331,31 +292,23 @@ def since_when(value: date) -> str:
     ("since 3 days ago")."""
 
     if isinstance(value, datetime) and _local(value).date() == _local(timezone.now()).date():
-        return f"since {_written(_local(value), CLOCK_FORMAT)}"
+        return f"since {clock(value)}"
     return f"since {when_day(value)}"
-
-
-def _ago_or_day(value: date) -> str:
-    """An age for a moment; a bare date, which has no time of day, as its day."""
-
-    return ago(value) if isinstance(value, datetime) else when_day(value)
 
 
 # What the ``when`` and ``when_text`` filters can be asked for, and the words each form writes.
 # A new form is added here and in docs/Design.md's table, nowhere else.
 WHEN_FORMS = {
-    "": when,  # "Oct 3, 9:29 AM"; a date reads "Oct 3"
-    "ago": _ago_or_day,  # "5 days ago"
-    "clock": when_clock,  # "Oct 3, 9:29:15 AM", where events within a minute are told apart
+    "": when,  # "5 minutes ago" within a day of now, else "Oct 3, 9:29 AM"; a date reads "Oct 3"
+    "at": when_at,  # "Oct 3, 9:29 AM" however near, after "from" or "until" in a sentence
     "day": when_day,  # the day a moment fell on
-    "exact": when_exact,  # "Oct 3, 2026, 9:29:15 AM CDT"
+    "exact": when_exact,  # "Oct 3, 2026, 9:29:15 AM CDT", where no title shows: a printed page
     "weekday": weekday,  # "Monday"
     "dateline": lambda value: f"{weekday(value)}, {when_day(value)}",  # "Wednesday, Nov 18", a page's day
     "initials": weekday_initials,  # "Mo", where a column is narrow
     "month": month,  # "October 2026", the month a calendar shows
     "numeral": numeral,  # "3", the day of the month in a calendar's cell
     "length": length,  # "5 minutes", how far it lies from now either way
-    "ahead": ahead,  # "in 3 days", or "5 days ago" once it has passed
     "since": since_when,  # "since 9:29 AM" today, "since Oct 3" before
     "expiry": expiry_words,  # "expires in 3 days", "expired 4 days ago"
 }

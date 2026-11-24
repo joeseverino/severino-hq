@@ -22,7 +22,7 @@
     {% endbutton_row %}
   {% endif %}
 {% aside %}
-  Asked {% if entry.who.door %}{{ entry.who.door }} {% endif %}{{ entry.held.created_at|when_text:"ago" }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
-  {% else %}{% dot %}<strong>{{ entry.held.get_state_display }}</strong>{% if entry.decided_by %} by {{ entry.decided_by.words }}{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|when_text:"ago" }}{% endif %}
+  Asked {% if entry.who.door %}{{ entry.who.door }} {% endif %}{{ entry.held.created_at|when_text }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when }}
+  {% else %}{% dot %}<strong>{{ entry.held.get_state_display }}</strong>{% if entry.decided_by %} by {{ entry.decided_by.words }}{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|when_text }}{% endif %}
   {% endif %}
 {% endsection %}

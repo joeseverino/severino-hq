@@ -47,7 +47,7 @@ lazy from .github_estate import build_of, repositories
 lazy from .infrastructure import enabled_resources
 lazy from .inventory import record_token
 lazy from .machines import machine as machine_named, served_by
-lazy from .moments import ago
+lazy from .moments import when
 lazy from .projects import projects_by_repository, repository_key
 lazy from .supply_chain import supply_chain_of
 
@@ -85,7 +85,7 @@ def up_for(status: str, started_at: object, *, running: bool) -> str:
     started = moment(str(started_at or ""))
     if started is None or not running:
         return uptime_of(status)
-    age = ago(started)
+    age = when(started)
     return "Just started" if age == "just now" else f"Up {age.removesuffix(' ago')}"
 
 

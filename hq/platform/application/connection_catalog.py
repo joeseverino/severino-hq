@@ -32,7 +32,7 @@ from .contracts import SCOPE_NAME, endpoint_has_private_parts
 from .derivations import present
 from .freshness import freshness, last_read
 from .integrations import held_graph
-from .moments import ago
+from .moments import when
 from .projection import read_once
 from .security import Principal
 from .tone import Tone
@@ -244,7 +244,7 @@ class ConnectionView:
         if self.lifecycle == Lifecycle.STALE:
             return last_read(observed)
         if self.lifecycle == Lifecycle.UNREACHABLE:
-            return f"Last tried {ago(observed)}" if observed else ""
+            return f"Last tried {when(observed)}" if observed else ""
         if self.lifecycle == Lifecycle.UNAUTHORIZED:
             missing = tuple(dict.fromkeys(scope for state in self.abilities for scope in state.missing_scopes))
             return f"Needs {', '.join(missing)}" if missing else ""

@@ -13,7 +13,7 @@ from hq.domains.control_plane.observations.github import ALLOWANCE_KIND, OTHERS_
 from .facts import records_for_connection
 from .finding_model import Finding, FindingEstate, FindingRule
 from .finding_steps import Do, Run
-from .moments import moment, when
+from .moments import moment, when_at
 from .tone import Tone
 
 RULE = "github-others-spent"
@@ -46,7 +46,7 @@ def _between(since: str, until: str) -> str:
     start, end = moment(since), moment(until)
     if start is None or end is None:
         return "this hour"
-    return f"between {when(start)} and {when(end)}"
+    return f"between {when_at(start)} and {when_at(end)}"
 
 
 @dataclass(frozen=True, slots=True)

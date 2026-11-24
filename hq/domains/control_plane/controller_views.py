@@ -9,7 +9,7 @@ from hq.platform.application.controller_page import controller_page
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.freshness import reading_age
 from hq.platform.application.hq_context.sight_part import sight
-from hq.platform.application.moments import ago
+from hq.platform.application.moments import when
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.tables import Cell, DataTable, TableColumn
@@ -18,7 +18,7 @@ PENDING = (
     TableColumn("Record", kind="identifier", cell=lambda work: Cell.of(entity_link("resource", work.resource))),
     TableColumn("Change", drop=2, cell=lambda work: Cell(work.action)),
     TableColumn("State", kind="status", css="key-col", cell=lambda work: Cell(work.state)),
-    TableColumn("Asked", kind="status", drop=1, cell=lambda work: Cell(ago(work.created_at))),
+    TableColumn("Asked", kind="status", drop=1, cell=lambda work: Cell(when(work.created_at))),
 )
 
 
@@ -32,9 +32,7 @@ def _result(reading) -> Cell:
 
 READINGS = (
     TableColumn("Reading", cell=lambda reading: Cell(reading.label, name=True, title=reading.kind)),
-    TableColumn(
-        "Last tried", kind="status", drop=3, cell=lambda reading: Cell(moment=reading.attempted_at, form="ago")
-    ),
+    TableColumn("Last tried", kind="status", drop=3, cell=lambda reading: Cell(moment=reading.attempted_at)),
     TableColumn(
         "Reading",
         kind="status",

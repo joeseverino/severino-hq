@@ -118,7 +118,7 @@ class _ContentSectionView(ListPageMixin, TemplateView):
                 "Updated",
                 "updated_at",
                 drop=2,
-                cell=lambda row: Cell(moment=moment(row["updated_at"]), form="ago", muted=True),
+                cell=lambda row: Cell(moment=moment(row["updated_at"]), muted=True),
             ),
             TableColumn("Live page", css="actions-col", drop=4, cell=_live),
         )

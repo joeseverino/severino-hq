@@ -83,17 +83,17 @@ class PublicEndpointTests(TestCase):
 
 class WhenTextFilterTests(TestCase):
     def render(self, value):
-        return Template('{% load value_tags %}{{ value|when_text:"ago" }}').render(Context({"value": value}))
+        return Template("{% load value_tags %}{{ value|when_text }}").render(Context({"value": value}))
 
-    def test_a_moment_and_a_stamp_read_as_ui_ago(self):
+    def test_a_moment_and_a_stamp_read_as_moments_when(self):
         from datetime import timedelta
 
-        from ..moments import ago
+        from ..moments import when
 
         moment = timezone.now() - timedelta(hours=3)
 
-        self.assertEqual(self.render(moment), ago(moment))
-        self.assertEqual(self.render(moment.isoformat()), ago(moment))
+        self.assertEqual(self.render(moment), when(moment))
+        self.assertEqual(self.render(moment.isoformat()), when(moment))
         self.assertEqual(self.render(""), "")
 
 

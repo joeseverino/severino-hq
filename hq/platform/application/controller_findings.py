@@ -31,7 +31,7 @@ from .finding_model import (
 from .freshness import LAST_READ, OUT_OF_DATE, behind, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
-from .moments import ago, duration
+from .moments import duration, when, when_at
 from .reading_facts import refusals
 from .render_status_findings import RENDERER_UNITS
 from .tone import Tone
@@ -65,7 +65,7 @@ def _the_others(count: int, noun: str, kind_key: str) -> str:
 def _when(label: str, at: date | str | None) -> tuple[str, str]:
     """A "last read" or "last seen" fact: how long ago, or never."""
 
-    return (label, "never" if at is None else ago(at))
+    return (label, "never" if at is None else when(at))
 
 
 def _read_again(variant: str = "") -> FindingRemedy:
@@ -103,7 +103,7 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
                 # The point first: a narrow card shows only the first line.
                 explanation=(
                     "It has probably been removed or renamed. "
-                    f"{_the_others(others, lower_first(node.subtitle), node.kind_key)} read {ago(newest)}, "
+                    f"{_the_others(others, lower_first(node.subtitle), node.kind_key)} read {when(newest)}, "
                     "and this one was "
                     f"last seen {duration(behind)} earlier."
                 ),
@@ -220,7 +220,7 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 severity=Tone.SERIOUS,
                 explanation=(
-                    f"It listed {counted(len(containers), 'container')} until {ago(last, estate.now)} and none in "
+                    f"It listed {counted(len(containers), 'container')} until {when_at(last)} and none in "
                     "HQ's last read. "
                     + (
                         f"Docker probably restarted under {holder}, which still holds the old socket. Restart it."
@@ -231,7 +231,7 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                 evidence=(
                     ("Environment", name or machine),
                     *((("Status", str(environment["status"])),) if environment.get("status") else ()),
-                    ("Listed until", ago(last, estate.now)),
+                    ("Listed until", when(last, estate.now)),
                     *((_when(LAST_READ, newest),) if newest else ()),
                     ("Not listed", ", ".join(node.label for node in containers)),
                 ),
@@ -405,7 +405,7 @@ def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
     first = moment(since[0])
     near = fact_values(node, "drift-near")
     return (
-        ("Changed", ago(first) if first else since[0]),
+        ("Changed", when(first) if first else since[0]),
         *(("What else happened around then", item) for item in near),
         *(
             (("What else happened around then", "Nothing else was recorded in the six hours before or after."),)
@@ -597,7 +597,9 @@ def _unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=f"{_what(node, node.label)} could not be checked",
             severity=Tone.ATTENTION,
-            explanation=f"It was last read {ago(node.observed_at)}." if node.observed_at else "It has never been read.",
+            explanation=f"It was last read {when(node.observed_at)}."
+            if node.observed_at
+            else "It has never been read.",
             remedies=reconcile_remedy(node),
         )
         for node in estate.nodes()
@@ -700,7 +702,7 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
     for controller_id, connections in sorted(held.items()):
         node = by_id[controller_id]
         names = ", ".join(sorted(connection.label for connection in connections))
-        since = ago(min(fact_values(connection, UNREPORTED)[0] for connection in connections), estate.now)
+        since = when(min(fact_values(connection, UNREPORTED)[0] for connection in connections), estate.now)
         found.append(
             Finding(
                 rule="connections-lost",
@@ -755,7 +757,7 @@ def _report_refused(estate: FindingEstate) -> tuple[Finding, ...]:
             evidence=(
                 ("Report", refusal.action),
                 ("Reason", refusal.detail),
-                ("Last refused", ago(refusal.refused_at, estate.now)),
+                ("Last refused", when(refusal.refused_at, estate.now)),
             ),
             steps=_controller_steps(node.label),
             no_help_reason=cannot_run_commands(node.label),

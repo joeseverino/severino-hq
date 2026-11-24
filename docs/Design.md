@@ -345,8 +345,11 @@ arrow, the words themselves for text that means something. *Gate:* `lint:css`
 refuses a generated string with no alternative, or a space before a mark.
 
 A moment, a date and an age are each written one way, by
-`hq/platform/application/moments.py`: `when`, `when_day`, `ago`, `when_exact`
-and `when_range`. The year is said only when it is not this one. The spaces inside a date and inside a time are no-break spaces, so
+`hq/platform/application/moments.py`: `when`, `when_at`, `when_day`, `when_exact`
+and `when_range`. A moment within a day of now (`moments.NEAR`) says how far
+it lies, "5 minutes ago" or "in 3 hours"; one further off says its day and
+time, "Oct 3, 9:29 AM". That rule is `when`'s alone, so no caller chooses
+between an age and a moment. The year is said only when it is not this one. The spaces inside a date and inside a time are no-break spaces, so
 neither wraps inside itself.
 
 A page shows them through the built-in `|when` filter, which wraps the words
@@ -355,18 +358,16 @@ column needs nothing else.
 
 | Write | Says | For |
 | --- | --- | --- |
-| `{{ at\|when }}` | "Oct 3, 9:29 AM" | a detail page |
-| `{{ at\|when:"ago" }}` | "5 days ago", one unit, the exact moment on hover | a list |
+| `{{ at\|when }}` | "5 minutes ago", or "Oct 3, 9:29 AM" past a day, the exact moment on hover | a moment, on any page |
+| `when:"at"` | "Oct 3, 9:29 AM" however near | a sentence, after "from" or "until", where an age would not read |
 | `when:"day"` | "Oct 3" | a day |
-| `when:"exact"` | "Oct 3, 2026, 9:29:15 AM CDT" | the exact moment |
-| `when:"clock"` | "Oct 3, 9:29:15 AM" | a list of events, where several fall in one minute |
+| `when:"exact"` | "Oct 3, 2026, 9:29:15 AM CDT" | a printed page, which has no hover |
 | `when:"weekday"`, `"month"`, `"numeral"` | "Monday", "October 2026", "3" | a calendar |
 | `when:"dateline"` | "Wednesday, Nov 18" | the day a page opens on, over its title |
 | `when:"length"` | "5 minutes", either way from now | a wait |
-| `when:"ahead"` | "in 3 days" | a wait |
 | `when:"since"` | "since 9:29 AM" today, "since Oct 3" before | how long a state has held; the form says the "since" |
 | `when:"expiry"` | "expires in 3 days", "expired 4 days ago" | a deadline |
-| `{{ at\|when_text:"ago" }}` | the words of any form, as plain text | an attribute, or a table cell's line, which sorts on the first `<time>` it holds |
+| `{{ at\|when_text }}` | the words of any form, as plain text | an attribute, or a table cell's line, which sorts on the first `<time>` it holds |
 | `when_range` | "Oct 3 – Oct 9", a year both ends share said once | a run of days |
 
 `when` is the only way a template writes a moment. HQ's engine

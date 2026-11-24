@@ -23,7 +23,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.platform.core.included_parts import READING_AGE
 
 from .derivations import reached
-from .moments import ago
+from .moments import when
 from .process_caches import kept
 lazy from . import plugins, readings
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
@@ -43,7 +43,7 @@ OUT_OF_DATE = "Out of date"
 def last_read(at: datetime | str) -> str:
     """When a reading was taken, as a sentence in plain text."""
 
-    return f"{LAST_READ} {ago(at)}"
+    return f"{LAST_READ} {when(at)}"
 
 
 def reading_age(reading: Freshness | None = None, *, at: datetime | None = None, unread: str = "") -> Piece:
