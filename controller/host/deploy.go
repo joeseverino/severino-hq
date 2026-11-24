@@ -185,7 +185,8 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	}
 	// Before anything live is held: a release refused here leaves production
 	// exactly as it was.
-	if err := d.pullRunner(ctx, image); err != nil {
+	runner, err := d.pullRunner(ctx, image)
+	if err != nil {
 		return err
 	}
 	if err := d.rehearse(ctx, image); err != nil {
@@ -232,7 +233,8 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		return err
 	}
 	fmt.Fprintln(d.Out, "Tree synced from the image.")
-	if err := d.installWebUnit(ctx); err != nil {
+	// The web unit and every drop-in, so HQ comes up as this release defines it.
+	if err := d.Setup(ctx, runner, d.Lib, "web"); err != nil {
 		return err
 	}
 	if err := d.Record(image); err != nil {
@@ -250,7 +252,7 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		return fmt.Errorf("the new image did not become healthy: %w", err)
 	}
 	fmt.Fprintln(d.Out, "HQ is healthy on the new image.")
-	if err := d.private(ctx, "Release install", "release-install", filepath.Join(d.Lib, "deploy", "bin", "hq-host"), "install"); err != nil {
+	if err := d.Setup(ctx, runner, d.Lib); err != nil {
 		return err
 	}
 	d.restart(held)
@@ -263,41 +265,42 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	return d.verifyRelease(ctx)
 }
 
-// pullRunner verifies and pulls the automation worker's image the release
-// pins (AutomationImage), so the worker only ever runs what a deploy
-// verified: `hq-host automation` runs that digest from the host, never
-// pulling it. It runs in the release's own hq-host, so the release that first
-// pins an image is the one that pulls it. A release that pins none has no
-// worker to pull.
-func (d *Deployer) pullRunner(ctx context.Context, image string) error {
+// pullRunner verifies and pulls the runner image the release pins
+// (AutomationImage), and returns it: it runs the host's setup and the
+// automation worker, and `hq-host automation` runs that digest from the host,
+// never pulling it. It runs in the release's own hq-host, so the release that
+// first pins an image is the one that pulls it.
+func (d *Deployer) pullRunner(ctx context.Context, image string) (string, error) {
 	dir, err := os.MkdirTemp(d.Runtime, "severino-hq-runner.")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer os.RemoveAll(dir)
 	pin := filepath.Join(dir, "image")
 	if err := d.copyOut(ctx, image, "/app/"+AutomationImage, pin); err != nil {
-		if errors.As(err, new(notShipped)) {
-			fmt.Fprintln(d.Out, "This release pins no automation worker image.")
-			return nil
-		}
-		return err
+		return "", fmt.Errorf("refusing to deploy %s: %w", image, err)
 	}
 	data, err := os.ReadFile(pin)
 	if err != nil {
+		return "", err
+	}
+	runner := strings.TrimSpace(string(data))
+	if err := d.pullVerified(ctx, runner); err != nil {
+		return "", fmt.Errorf("refusing to deploy %s: %w", image, err)
+	}
+	return runner, nil
+}
+
+// pullVerified pulls runner once it is the source's runner image by digest
+// and its signature is the compose workflow's.
+func (d *Deployer) pullVerified(ctx context.Context, runner string) error {
+	if _, err := d.Source.RunnerImage(runner); err != nil {
+		return fmt.Errorf("its runner image: %w", err)
+	}
+	if err := d.verified(ctx, runner, "its runner image "+runner); err != nil {
 		return err
 	}
-	runner, err := d.Source.RunnerImage(strings.TrimSpace(string(data)))
-	if err != nil {
-		return fmt.Errorf("refusing to deploy %s: its automation worker image: %w", image, err)
-	}
-	if err := d.verified(ctx, runner, "its automation worker image "+runner); err != nil {
-		return err
-	}
-	if err := d.private(ctx, "Automation worker image pull", "pull-runner", "docker", "pull", runner); err != nil {
-		return fmt.Errorf("refusing to deploy %s: %w", image, err)
-	}
-	return nil
+	return d.private(ctx, "Runner image pull", "pull-runner", "docker", "pull", runner)
 }
 
 // verifyRelease runs the drift unit on the release just installed, so a check
@@ -313,20 +316,6 @@ func (d *Deployer) verifyRelease(ctx context.Context) error {
 	}
 	fmt.Fprintln(d.Out, "The host is its release.")
 	return nil
-}
-
-// installWebUnit installs the synced tree's web unit and every drop-in.
-func (d *Deployer) installWebUnit(ctx context.Context) error {
-	shipped, err := Shipped(d.UnitDir())
-	if err != nil {
-		return err
-	}
-	for _, name := range WithDropIns(shipped, hostcore.WebUnit) {
-		if err := InstallUnit(d.UnitDir(), d.Systemd, name); err != nil {
-			return err
-		}
-	}
-	return d.run(ctx, "systemctl", "daemon-reload")
 }
 
 func (d *Deployer) rollBack(previous, tree string, units func() error, kept string, held []string) error {
@@ -441,20 +430,11 @@ func (d *Deployer) restoreTree(backup string) error {
 func (d *Deployer) copyOut(ctx context.Context, image, from, to string) error {
 	return d.open(ctx, image, func(container string) error {
 		if err := d.run(ctx, "docker", "cp", container+":"+from, to); err != nil {
-			return notShipped{from, err}
+			return fmt.Errorf("the image ships no %s: %w", from, err)
 		}
 		return os.Chmod(to, 0o700)
 	})
 }
-
-// notShipped is a file an image that opened does not hold.
-type notShipped struct {
-	path string
-	err  error
-}
-
-func (e notShipped) Error() string { return "the image ships no " + e.path + ": " + e.err.Error() }
-func (e notShipped) Unwrap() error { return e.err }
 
 // registryConfig writes the registry credential, if one was given, to a
 // private directory for this deploy alone. It arrives on stdin, never as an

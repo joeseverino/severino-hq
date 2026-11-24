@@ -32,6 +32,8 @@ type Machine struct {
 	Runs string
 	// Sudoers is where the runner's sudo rule is installed.
 	Sudoers string
+	// HostConfig is the host's own configuration (Config).
+	HostConfig string
 	// Verifier installs the signature verifier a deploy uses.
 	Verifier func(ctx context.Context) error
 	// Command builds a command; a test substitutes its own.

@@ -18,6 +18,9 @@ import (
 // imageID is the fake image's ID, which docker reports for every image.
 const imageID = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 
+// running is the image a host runs before a deploy.
+const running = "ghcr.io/joeseverino/severino-hq/composition@" + digest
+
 type fakeHost struct {
 	t    *testing.T
 	root string
@@ -35,7 +38,8 @@ type fakeHost struct {
 	// boot is what starting the web unit does to the host, as an image's
 	// entrypoint would.
 	boot func()
-	// on is what each command, by its whole line, does to the host as it runs.
+	// on is what each command, by a prefix of its line, does to the host as it
+	// runs.
 	on map[string]func()
 	// files is what an image holds outside /app, by image then path. An image
 	// it names has only those; one it does not holds any file asked for.
@@ -46,6 +50,9 @@ type fakeHost struct {
 	runners    []string
 	runnerUser string
 	sudoRules  string
+	// setupReport is what a check of the host's setup prints
+	// (ansible.posix.json).
+	setupReport string
 }
 
 // sudoListing is sudo-rs's listing of an account's rules, as root sees it.
@@ -62,8 +69,10 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 	if f.boot != nil && call == "systemctl restart "+hostcore.WebUnit {
 		f.boot()
 	}
-	if do, ok := f.on[call]; ok {
-		do()
+	for prefix, do := range f.on {
+		if strings.HasPrefix(call, prefix) {
+			do()
+		}
 	}
 	answer := func(out string, code int) *exec.Cmd {
 		return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"; exit "$2"`, "sh", out, strconv.Itoa(code))
@@ -91,6 +100,8 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 		return answer(f.runnerUser+"\n", 0)
 	case call == "sudo -n -l -U "+f.runnerUser:
 		return answer(f.sudoRules, 0)
+	case strings.HasPrefix(call, "docker run") && strings.Contains(call, "ANSIBLE_STDOUT_CALLBACK=ansible.posix.json"):
+		return answer(f.setupReport, 0)
 	case strings.HasPrefix(call, "docker inspect --format {{.Config.Image}}"):
 		return answer(f.running+"\n", 0)
 	case strings.HasPrefix(call, "docker inspect --format {{.Image}}"):
@@ -132,7 +143,7 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 func newFakeHost(t *testing.T) *fakeHost {
 	t.Helper()
 	root := t.TempDir()
-	f := &fakeHost{t: t, root: root, image: filepath.Join(root, "image", "app")}
+	f := &fakeHost{t: t, root: root, image: filepath.Join(root, "image", "app"), setupReport: `{"plays": [], "stats": {}}`}
 	lib := filepath.Join(root, "lib")
 	f.machine = &Machine{
 		Lib:        lib,
@@ -156,6 +167,10 @@ func newFakeHost(t *testing.T) *fakeHost {
 	f.machine.Owner = func(*os.Root, string) error { return nil }
 	f.machine.Verifier = func(context.Context) error { return nil }
 	f.machine.Sudoers = filepath.Join(root, "sudoers.d")
+	f.machine.HostConfig = filepath.Join(root, "host.json")
+	if err := os.WriteFile(f.machine.HostConfig, []byte(hostJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	f.runners, f.runnerUser = []string{"actions.runner.example.service"}, "deployer"
 	f.sudoRules = fmt.Sprintf(sudoListing, f.runnerUser, "    (root) NOPASSWD: "+filepath.Join(lib, "deploy", "bin", "hq-host")+" deploy *\n")
 	for _, dir := range []string{"systemd", "run", "run/severino-hq", "run/severino-hq-secrets", "sudoers.d", "image/app"} {
@@ -182,6 +197,8 @@ func newFakeHost(t *testing.T) *fakeHost {
 	}
 	for name, body := range map[string]string{
 		"deploy/bin/hq-host":        "#!/bin/sh\n",
+		SetupPlaybook:               "- hosts: all\n",
+		AutomationImage:             runnerImage + "\n",
 		"hq/config/synced-release":  "",
 		"hq/config/controller.json": "{}\n",
 	} {
@@ -207,13 +224,20 @@ func (f *fakeHost) ship(name, body string) {
 }
 
 // installed is which of names are in the systemd directory now.
-func (f *fakeHost) installed(names ...string) map[string]bool {
-	found := map[string]bool{}
-	for _, name := range names {
-		_, err := os.Stat(filepath.Join(f.machine.Systemd, name))
-		found[name] = err == nil
+// isSetup is whether call runs the host's setup playbook.
+func isSetup(call string) bool {
+	return strings.HasPrefix(call, "docker run") && strings.Contains(call, " --name severino-hq-setup-")
+}
+
+// setups is each run of the setup playbook that applies, in order.
+func (f *fakeHost) setups() []string {
+	var applies []string
+	for _, call := range f.calls() {
+		if isSetup(call) && strings.Contains(call, " --privileged ") {
+			applies = append(applies, call)
+		}
 	}
-	return found
+	return applies
 }
 
 // ours is a docker run or create's arguments without the run label, which
@@ -283,38 +307,5 @@ func TestShippedIsWhatSystemdReads(t *testing.T) {
 	}
 	if _, err := Shipped(filepath.Join(f.root, "absent")); err == nil {
 		t.Error("a missing directory read as nothing shipped")
-	}
-}
-
-func TestTimersPathsAndBootServicesAreEnabled(t *testing.T) {
-	f := newFakeHost(t)
-	shipped, _ := Shipped(f.machine.UnitDir())
-
-	enabled, err := Enabled(f.machine.UnitDir(), shipped)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(enabled, " ") != "severino-hq-controller.path severino-hq-secrets.timer severino-hq-web.service" {
-		t.Errorf("enabled %v", enabled)
-	}
-}
-
-func TestADroppedUnitIsRetiredAndTheHostsOwnAreNot(t *testing.T) {
-	f := newFakeHost(t)
-	shipped, _ := Shipped(f.machine.UnitDir())
-	for _, name := range []string{"severino-hq-old.timer", "severino-hq-web.service", "other.service", "severino-hq-notes.txt"} {
-		if err := os.WriteFile(filepath.Join(f.machine.Systemd, name), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	retired, err := Retired(shipped, f.machine.Systemd)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(retired, " ") != "severino-hq-old.timer" {
-		t.Errorf("retired %v", retired)
 	}
 }

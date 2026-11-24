@@ -18,10 +18,10 @@ rules they keep.
 
 The host's own values live in `/etc/severino-hq/host.json`, field by field in
 [Install](Install.md#6-install-the-runner-and-write-hostjson).
-`hq-host bootstrap` renders them into drop-ins for
-`severino-hq-secrets.service` (`10-estate.conf`, `20-connect.conf`). It refuses
-a value systemd would read as something else, or a Connect that is not on
-`127.0.0.1`. The tmpfs is `deploy/systemd/run-severino\x2dhq\x2dsecrets.mount`,
+The host's setup ([Host setup](Deployment.md#host-setup)) renders them into
+drop-ins for `severino-hq-secrets.service` (`10-estate.conf`,
+`20-connect.conf`). `hq-host` refuses a value systemd would read as something
+else, or a Connect that is not on `127.0.0.1`. The tmpfs is `deploy/systemd/run-severino\x2dhq\x2dsecrets.mount`,
 root-only, `noswap`.
 
 | What | Rule |
@@ -294,10 +294,10 @@ SSH identities and signing keys are written beside the document, in `ssh/`:
 Halves are parsed and proven to be one key before anything is written. An
 identity is written in OpenSSH format, a signing key as PKCS#8 for `openssl`.
 
-`hq-host install` installs the renderer's units first and alone, starts a
-render, and checks the connections document before anything that reads it.
-A failed install restores the prior units; a deploy's rollback restores the
-prior tree.
+The host's setup installs the renderer's units with HQ's, makes the
+renderer's directories, starts a render, and checks the connections document
+before anything that reads it. A failed `hq-host install` restores the prior
+units; a deploy's rollback restores the prior tree.
 
 ## Status document
 
