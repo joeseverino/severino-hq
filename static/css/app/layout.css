@@ -430,11 +430,8 @@
 
 /* A list of facts (`{% facts %}`): each label beside its value, one pair to
    a row, the label column as wide as its longest label, up to two fifths of
-   the list, the values taking the rest. Where lists stand as siblings (the
-   pairs of a page's list, the rows of a table), every label is one width
-   instead (`--fact-label`), so the values of every pair and every row line
-   up whatever their own labels hold, with no list measuring another. */
-.facts-list { --fact-label: 11em; display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-4) var(--space-6); margin: 0 0 var(--stack-gap); font-size: var(--text-sm); }
+   the list, the values taking the rest. */
+.facts-list { display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-4) var(--space-6); margin: 0 0 var(--stack-gap); font-size: var(--text-sm); }
 .facts-list dt { color: var(--muted); font-weight: 500; overflow-wrap: break-word; }
 .facts-list dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 /* Each fact is a row of the list's columns, its detail under its value, its
@@ -463,20 +460,13 @@
   container-type: inline-size; column-gap: var(--space-16);
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a list's pairs in columns every row shares */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, calc((var(--facts-across) - var(--space-16)) / 2)), 1fr));
-  & > .fact { grid-column: auto; grid-template-columns: min(var(--fact-label), 40cqi) minmax(0, 1fr); }
+  & > .fact { grid-column: auto; grid-template-columns: min(9rem, 40cqi) minmax(0, 1fr); }
 }
 /* A value that is a list of several (names, addresses, links) takes the
    row, wrapping there, so its lines never squeeze into one column. */
 .facts-list > .fact:has(> .fact-value > .fact-shown > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) { grid-column: 1 / -1; }
-/* In a table's row, facts are the row's small print, their labels one
-   width in every row, so the rows' values stand in one column (a share of
-   the table where narrow: a percentage inside a cell resolves against a
-   width the table is still computing). A track sized by the rows' labels
-   would be the table's, which an opened row never moves. */
+/* In a table's row, facts are the row's small print. */
 td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); }
-@container style(--cell: line) or style(--cell: open) {
-  .facts-list { grid-template-columns: min(var(--fact-label), 40cqi) minmax(0, 1fr); }
-}
 /* Opened to read more or set above what a form changes, its pairs sit closer,
    and it ends where what holds it ends. Where only, so a table's row in any
    of them keeps its own small print. */

@@ -845,8 +845,7 @@ WORK_QUEUE_STATES = {
     # The dashboard's form, each row's meaning on its title's line.
     "glance": Example('{% include "partials/_work_queue.html" %}', _glance),
     # Rows opened as the queue page draws them: what each opens onto starts
-    # where its title does, the values of both rows' facts in one column
-    # however long each row's labels, commands in one column, a lone step close.
+    # where its title does, commands in one column, a lone step close.
     "opened": Example(
         '{% include "partials/_work_queue.html" %}', lambda: {"items": opened_problems(), "grouped": True}
     ),
