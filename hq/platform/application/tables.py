@@ -18,7 +18,7 @@ lazy from hq.platform.core.included_parts import METER, READING_AGE
 lazy from hq.platform.core.templatetags import status_tags
 
 from .describe import Describe
-from .display_words import QUOTED, display
+from .display_words import QUOTED, display, quoted_when
 lazy from .freshness import last_read
 
 if TYPE_CHECKING:
@@ -167,7 +167,8 @@ class Cell:
     a cell (its emptiness, its length, whether it names the row or holds a
     control) is known from this before it is drawn."""
 
-    text: str = ""
+    # A record's own text when the cell is a ``readout``, shown as it arrived.
+    text: str = field(default="", metadata=quoted_when("readout"))
     url: str = ""
     # Leaves HQ. Rendered so the operator knows before clicking, and so the
     # linked page cannot reach back through window.opener.

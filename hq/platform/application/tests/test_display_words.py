@@ -55,6 +55,16 @@ class ConstructionTests(SimpleTestCase):
             with self.assertRaisesRegex(ValueError, "say it in words"):
                 build()
 
+    def test_a_readout_is_shown_as_it_arrived(self):
+        """A header, an address or an identifier is a record's own text, whatever it holds."""
+
+        value = '"Chromium";v="159", "Not)A;Brand";v="24"'
+        self.assertEqual(Cell(value, readout=True).text, value)
+        with self.assertRaisesRegex(ValueError, "say it in words"):
+            Cell(value)
+        with self.assertRaisesRegex(ValueError, "is words"):
+            Cell(None, readout=True)
+
     def test_a_value_that_is_not_text_is_refused(self):
         for build in (
             lambda: Kpi("Enabled", value=True),

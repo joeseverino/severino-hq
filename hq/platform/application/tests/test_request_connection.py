@@ -348,11 +348,16 @@ class ConnectionPageTests(TestCase):
         self.assertEqual(self.client.get(reverse("connection")).status_code, 302)
 
     def test_every_header_the_request_carried_is_shown(self):
-        """Read, declined or ignored: the panel drops none, and a declined one says why."""
+        """Read, declined or ignored: the panel drops none, whatever a value
+        holds, and a declined one says why."""
 
         self.client.force_login(self.user)
+        # A Chromium browser sends this on every request; its value reads as markup.
+        brands = '"Chromium";v="159", "Not)A;Brand";v="24"'
 
-        response = self.client.get(reverse("connection"), HTTP_X_REAL_IP="100.64.0.5", HTTP_X_EXAMPLE="example")
+        response = self.client.get(
+            reverse("connection"), HTTP_X_REAL_IP="100.64.0.5", HTTP_X_EXAMPLE="example", HTTP_SEC_CH_UA=brands
+        )
 
         shown = [element.text.strip() for element in within(response, "data-connection-protocol")]
         for header in response.context["request_path"].headers:
