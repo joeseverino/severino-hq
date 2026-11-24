@@ -11,9 +11,9 @@ depends_post = ["image:docker stop"]
 run = 'tools/pipeline/image-health.sh "${IMAGE:-severino-hq:ci-local}"'
 
 ["image:verify:host-boot"]
-description = "It boots under its unit: waits for its environment, survives a crash and a reboot"
+description = "It boots under its unit: waits for its environment, survives a crash and a reboot; then the host is set up by its playbook in the worker image (RUNNER_IMAGE) and checks clean"
 hide = true
 extends = "heavy"
-depends = ["image:build"]
+depends = ["image:build --runner-tag severino-hq-runner:ci-local"]
 depends_post = ["image:docker stop"]
-run = 'tools/pipeline/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}"'
+run = 'tools/pipeline/host-boot-drill.sh "${IMAGE:-severino-hq:ci-local}" "${RUNNER_IMAGE:-severino-hq-runner:ci-local}"'

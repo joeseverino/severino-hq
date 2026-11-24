@@ -11,8 +11,6 @@ extend-exclude = [
   "**/migrations/",
   # A sealed test vector, base64.
   "controller/runtime/testdata/",
-  # A check's report as Ansible wrote it, its file modes named by its stat.
-  "controller/host/testdata/setup-check.json",
 ]
 
 [default]

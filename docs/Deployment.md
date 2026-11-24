@@ -311,6 +311,7 @@ from the tree, and every unit and the deploy call it.
 | `deploy IMAGE` | verifies the signature, refuses an image that drops an extension production runs, pulls, and hands over to the image's own `hq-host release` |
 | `release IMAGE` | verifies the worker image the release pins against the compose workflow's identity and pulls it, before anything live is held. A pin that is not the source's signed runner image refuses the release. Then it syncs the tree, applies the setup's `web` tag (the web unit, the credential mount, the renderer and every drop-in), restarts HQ on the image and applies the whole setup. Any failure rolls back, the database too when the release migrated it. Once the release stands it runs `severino-hq-script-drift.service`, so the release is verified at once. Drift fails the deploy without rolling it back, since what verify finds is the host's, and `journalctl -u severino-hq-script-drift.service` there names it |
 | `install [--check]` | installs root's verifier, verifies and pulls the runner image the tree pins, and applies the host's setup in it ([Host setup](#host-setup)); a failed run puts every unit file back. `--check` prints what an apply would change and changes nothing |
+| `setup RUNNER` | install's second half: applies the tree's setup in RUNNER, a digest-pinned image the host already holds, verifying nothing. The runner's sudo rule does not reach it |
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
 | `verify` | reports where the host differs from its release: the tree, each file the setup would change (a check run of it), and the Actions runner's sudo rules. It holds them to one runner unit, not root, with its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render. A failure names the command and the grep that finds its file. Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
@@ -344,8 +345,8 @@ installs. `controller/host/setup.go` states its security properties.
   root's, read through a lookup: Ansible never renders a template in a
   lookup's text, so a value is written as it is.
 
-`mise run smoke:host-setup` runs the playbook against a host made of
-directories, with systemd and visudo faked, and prints each run's wall time.
+The host boot drill (`tools/pipeline/host-boot-drill.sh`) applies it on CI's
+systemd through the runner image CI built, then checks it clean.
 
 ### Units
 
@@ -510,8 +511,8 @@ directory is not its account's alone. The design is in
 ## A new host
 
 [Install](Install.md) brings up a new host, step by step.
-`tools/pipeline/host-boot-drill.sh` does the web unit's part of it on every
-image CI builds.
+`tools/pipeline/host-boot-drill.sh` does the web unit's part of it, and the
+setup past its signature checks, on every image CI builds.
 
 Every later change arrives through Deploy, which sets the host up again from
 `host.json`. Rerun `hq-host install` when `host.json` changes between

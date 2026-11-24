@@ -50,9 +50,6 @@ type fakeHost struct {
 	runners    []string
 	runnerUser string
 	sudoRules  string
-	// setupReport is what a check of the host's setup prints
-	// (ansible.posix.json).
-	setupReport string
 }
 
 // sudoListing is sudo-rs's listing of an account's rules, as root sees it.
@@ -101,7 +98,7 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 	case call == "sudo -n -l -U "+f.runnerUser:
 		return answer(f.sudoRules, 0)
 	case strings.HasPrefix(call, "docker run") && strings.Contains(call, "ANSIBLE_STDOUT_CALLBACK=ansible.posix.json"):
-		return answer(f.setupReport, 0)
+		return answer(`{"plays": [], "stats": {}}`, 0)
 	case strings.HasPrefix(call, "docker inspect --format {{.Config.Image}}"):
 		return answer(f.running+"\n", 0)
 	case strings.HasPrefix(call, "docker inspect --format {{.Image}}"):
@@ -143,7 +140,7 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 func newFakeHost(t *testing.T) *fakeHost {
 	t.Helper()
 	root := t.TempDir()
-	f := &fakeHost{t: t, root: root, image: filepath.Join(root, "image", "app"), setupReport: `{"plays": [], "stats": {}}`}
+	f := &fakeHost{t: t, root: root, image: filepath.Join(root, "image", "app")}
 	lib := filepath.Join(root, "lib")
 	f.machine = &Machine{
 		Lib:        lib,

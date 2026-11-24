@@ -124,13 +124,6 @@ func (m *Machine) setupVars(tree string) (string, error) {
 	return path, nil
 }
 
-// setupInputs mounts the playbook in tree and the variables file vars, each
-// read-only at its own path, and names the file to the playbook.
-func setupInputs(tree, vars string) []string {
-	playbook := filepath.Join(tree, filepath.Dir(SetupPlaybook))
-	return []string{"--mount", readOnly(playbook, playbook), "--mount", readOnly(filepath.Dir(vars), filepath.Dir(vars))}
-}
-
 // pinnedRunner is the runner image the tree at tree pins.
 func pinnedRunner(tree string) (string, error) {
 	pin, err := os.ReadFile(filepath.Join(tree, AutomationImage))
@@ -140,98 +133,67 @@ func pinnedRunner(tree string) (string, error) {
 	return Pinned(strings.TrimSpace(string(pin)))
 }
 
-// setupApply is an apply's container, which acts on the host as root.
-func setupApply(name, image, tree, vars, label string, tags ...string) []string {
-	args := []string{
-		"run", "--rm", "--pull", "never", "--name", name, label,
-		"--user", "0", "--privileged", "--pid", "host", "--network", "none",
-		"--read-only", "--tmpfs", "/tmp",
-		"--env", "ANSIBLE_REMOTE_TMP=" + setupTmp,
-	}
-	args = append(append(append(args, setupInputs(tree, vars)...), setupEnv(tree)...), "--entrypoint", "ansible-playbook", image,
-		"--inventory", "host,", "--connection", "community.docker.nsenter", "--extra-vars", "setup_vars="+vars)
-	if len(tags) > 0 {
-		args = append(args, "--tags", strings.Join(tags, ","))
-	}
-	return append(args, filepath.Join(tree, SetupPlaybook))
-}
-
-// setupCheck is a check's container, which reads and cannot write; callback
-// is Ansible's for what it prints.
-func (m *Machine) setupCheck(name, image, tree, vars, label, callback string) []string {
-	args := []string{
-		"run", "--rm", "--pull", "never", "--name", name, label,
-		"--user", "0", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
-		"--network", "none", "--read-only", "--tmpfs", "/tmp",
-	}
-	for _, dir := range []string{tree, m.Systemd, m.Tmpfiles, m.Sudoers, filepath.Dir(vars)} {
-		args = append(args, "--mount", readOnly(dir, dir))
-	}
-	args = append(args, setupEnv(tree)...)
-	return append(args, "--env", "ANSIBLE_REMOTE_TMP=/tmp/ansible/remote", "--env", "ANSIBLE_STDOUT_CALLBACK="+callback,
-		"--env", "ANSIBLE_JSON_INDENT=0", "--entrypoint", "ansible-playbook", image,
-		"--inventory", "host,", "--connection", "local", "--extra-vars", "setup_vars="+vars,
-		"--check", "--diff", "--tags", "files", filepath.Join(tree, SetupPlaybook))
-}
-
-func setupEnv(tree string) []string {
-	return []string{
-		"--env", "ANSIBLE_CONFIG=" + filepath.Join(tree, filepath.Dir(SetupPlaybook), "ansible.cfg"),
-		"--env", "ANSIBLE_HOME=/tmp/ansible",
-		"--env", "ANSIBLE_LOCAL_TEMP=/tmp/ansible/local",
-	}
-}
-
 // Setup applies the playbook in tree with image, tags narrowing it, its output
-// in the private log.
+// in the private log. Its container acts on the host as root.
 func (m *Machine) Setup(ctx context.Context, image, tree string, tags ...string) error {
-	vars, err := m.setupVars(tree)
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(filepath.Dir(vars))
-	label := "Host setup"
+	label, play := "Host setup", []string{"--connection", "community.docker.nsenter"}
 	if len(tags) > 0 {
 		label += " (" + strings.Join(tags, ", ") + ")"
+		play = append(play, "--tags", strings.Join(tags, ","))
 	}
-	return m.setupRun(ctx, func(ctx context.Context, name, own string) error {
-		return m.private(ctx, label, "setup", "docker", setupApply(name, image, tree, vars, own, tags...)...)
+	playbook := filepath.Join(tree, filepath.Dir(SetupPlaybook))
+	confine := []string{"--privileged", "--pid", "host", "--mount", readOnly(playbook, playbook), "--env", "ANSIBLE_REMOTE_TMP=" + setupTmp}
+	return m.setupRun(ctx, image, tree, confine, play, func(ctx context.Context, args []string) error {
+		return m.private(ctx, label, "setup", "docker", args...)
 	})
 }
 
-// setupRun runs one container of the playbook as a run of HQ's, removed at
-// setupBound or when its caller stops waiting, whichever comes first.
-func (m *Machine) setupRun(ctx context.Context, run func(ctx context.Context, name, label string) error) error {
-	own := m.beginRun()
-	defer own.end()
-	name := "severino-hq-setup-" + strings.ToLower(own.nonce)
-	ctx, cancel := context.WithTimeout(ctx, setupBound)
-	defer cancel()
-	defer func() { _ = m.run(context.WithoutCancel(ctx), "docker", "rm", "--force", name) }()
-	return run(ctx, name, own.label())
-}
-
-// CheckSetup runs the playbook in tree in check mode, which changes nothing,
-// writing what Ansible's callback prints to out.
+// CheckSetup runs the playbook in tree in check mode, in a container that reads
+// and cannot write, writing what Ansible's callback prints to out.
 func (m *Machine) CheckSetup(ctx context.Context, tree, callback string, out io.Writer) error {
 	image, err := pinnedRunner(tree)
 	if err != nil {
 		return err
 	}
-	vars, err := m.setupVars(tree)
-	if err != nil {
-		return err
+	confine := []string{"--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+		"--env", "ANSIBLE_REMOTE_TMP=/tmp/ansible/remote", "--env", "ANSIBLE_STDOUT_CALLBACK=" + callback, "--env", "ANSIBLE_JSON_INDENT=0"}
+	for _, dir := range []string{tree, m.Systemd, m.Tmpfiles, m.Sudoers} {
+		confine = append(confine, "--mount", readOnly(dir, dir))
 	}
-	defer os.RemoveAll(filepath.Dir(vars))
-	return m.setupRun(ctx, func(ctx context.Context, name, own string) error {
+	play := []string{"--connection", "local", "--check", "--diff", "--tags", "files"}
+	return m.setupRun(ctx, image, tree, confine, play, func(ctx context.Context, args []string) error {
 		var said bytes.Buffer
-		command := m.Command(ctx, "docker", m.setupCheck(name, image, tree, vars, own, callback)...)
+		command := m.Command(ctx, "docker", args...)
 		command.Stdout, command.Stderr = out, &said
 		if err := command.Run(); err != nil {
 			return fmt.Errorf("the setup's check failed: %w: %s", err, strings.TrimSpace(said.String()))
 		}
 		return nil
 	})
+}
+
+// setupRun runs the playbook in tree with image as one run of HQ's, confined
+// as confine says, its variables file lent read-only at its own path. The
+// container is removed at setupBound or when its caller stops waiting.
+func (m *Machine) setupRun(ctx context.Context, image, tree string, confine, play []string, run func(context.Context, []string) error) error {
+	vars, err := m.setupVars(tree)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(filepath.Dir(vars))
+	own := m.beginRun()
+	defer own.end()
+	name := "severino-hq-setup-" + strings.ToLower(own.nonce)
+	ctx, cancel := context.WithTimeout(ctx, setupBound)
+	defer cancel()
+	defer func() { _ = m.run(context.WithoutCancel(ctx), "docker", "rm", "--force", name) }()
+	args := append([]string{"run", "--rm", "--pull", "never", "--name", name, own.label(),
+		"--user", "0", "--network", "none", "--read-only", "--tmpfs", "/tmp",
+		"--mount", readOnly(filepath.Dir(vars), filepath.Dir(vars)),
+		"--env", "ANSIBLE_CONFIG=" + filepath.Join(tree, filepath.Dir(SetupPlaybook), "ansible.cfg"),
+		"--env", "ANSIBLE_HOME=/tmp/ansible", "--env", "ANSIBLE_LOCAL_TEMP=/tmp/ansible/local"}, confine...)
+	args = append(append(args, "--entrypoint", "ansible-playbook", image, "--inventory", "host,", "--extra-vars", "setup_vars="+vars), play...)
+	return run(ctx, append(args, filepath.Join(tree, SetupPlaybook)))
 }
 
 // SetupDrift is what an apply of the playbook in tree would change on this
