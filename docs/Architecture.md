@@ -1527,7 +1527,10 @@ denies it), a head that moved, an update whose diff GitHub did not give,
 checks that are not passing, and an approval at that head that is previewing,
 merging, applying or merged. Otherwise it writes the `github.pull_request`
 record at that head and queues the preview: a run of the playbook, as the
-person, on its machines as resolved, with the head as its `revision` and
+person, on each machine the update's containers run on (`applied_on`, which
+preview, merge and apply all read, since the playbook releases every app of
+the machine it runs on and refuses a commit that moves an app the machine does
+not run), with the head as its `revision` and
 `check` set (`automation_runs.queue_run`, which writes the playbook's record as
 adopted now).
 
@@ -1563,7 +1566,7 @@ the newest preview or merge at the head once one is asked, the reason the
 press would be refused now (the record's `held`), or the sentence saying what
 the press does. A pin the default branch's head holds that the container does
 not run (the repository record's `compose_images`) is Apply, which queues the
-playbook at that head on the machines it serves (`app_update.apply`, through
+playbook at that head on the machines the app runs on (`app_update.apply`, through
 `apply_of`). A branch the Dependency Dashboard holds with no pull request
 (`held_branches`, read from the boxes Renovate's `dependency-dashboard.ts`
 writes), or a release Renovate has not seen, is Open PR (`app_update.open`,
@@ -1575,7 +1578,7 @@ not the file the container runs from says so, and a container no repository
 holds keeps the upgrade plan's steps by hand. An action is offered only when
 nothing holds it, so a page never shows a press the capability would refuse:
 a machine the playbook does not run on is refused by Approve and Apply at
-their own boundary (`unserved`). While a step HQ queued works, or once it
+their own boundary (`applied_on`). While a step HQ queued works, or once it
 applied, the update asks nothing of anyone and raises no finding
 (`UpdateState.at_work`). A preview or an apply that ended badly names the step
 it stopped on and what it said.

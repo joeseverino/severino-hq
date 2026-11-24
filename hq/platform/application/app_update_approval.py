@@ -21,6 +21,7 @@ from pydantic import Field, ValidationError
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMMIT, PULL_REQUEST_KIND, REPOSITORY
 lazy from hq.domains.control_plane.names import normalized_hostname
+lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from .app_updates import MergeStanding
 from .command_fields import Describe
@@ -43,7 +44,6 @@ lazy from .automation_runs import (
     queue_follow_up,
     queue_run,
     reached,
-    resolved_hosts,
 )
 lazy from .capabilities import Consented, command_spec, consent
 lazy from .capability_policy import Rule, decide
@@ -127,10 +127,11 @@ def _measured(command: ApproveUpdateCommand) -> ApprovalSubject | None:
         return None
     try:
         manifest = applier()
+        hosts = applied_on(manifest, tuple(item for update in updates for item in update.containers))
     except PolicyError:
         then = None
     else:
-        then = {"operation": manifest.id, "revision": manifest.revision, "hosts": list(manifest.hosts)}
+        then = {"operation": manifest.id, "revision": manifest.revision, "hosts": list(hosts)}
     return ApprovalSubject(
         PULL_REQUEST_KIND,
         f"{command.repository}#{command.number}",
@@ -240,7 +241,8 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
     standing = merge_standing(updates[0])
     if standing is not None and standing.taken:
         raise PolicyError("This update is already approved, and its card says where it stands.")
-    hosts = _applied_on(manifest, tuple(item for update in updates for item in update.containers))
+    hosts = applied_on(manifest, tuple(item for update in updates for item in update.containers))
+    reached(manifest, hosts)
     pull = _declared(command, consented=consented)
     correlation = f"{command.repository}#{command.number}@{command.head_sha[:12]}"
     # The preview's record is the playbook's as approved (``queue_run``):
@@ -271,27 +273,18 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
     )
 
 
-def _applied_on(manifest: OperationManifest, items: tuple[Container, ...]) -> tuple[str, ...]:
-    """The machines the playbook applies on, refused where it does not run
-    where ``items`` run, or the worker reaches none of them."""
+def applied_on(manifest: OperationManifest, items: tuple[Container, ...]) -> tuple[str, ...]:
+    """The machines an update of ``items`` applies on: each one they run on,
+    refused where the playbook may not run. The playbook releases every app
+    of the machine it runs on and refuses a commit that moves an app the
+    machine does not run, so it never runs anywhere else."""
 
-    hosts = resolved_hosts(manifest, manifest.hosts)
+    hosts = tuple(sorted({normalized_hostname(item.machine.name) for item in items}))
     if not hosts:
-        raise PolicyError("The playbook that applies an app update names no machine to apply it on.")
-    if unserved(items, hosts):
-        raise PolicyError(UNSERVED)
-    reached(manifest, hosts)
+        raise PolicyError("HQ reads no container of the app, so it has no machine to apply it on.")
+    if missing := [host for host in hosts if not manifest.admits(MACHINE_KIND, host)]:
+        raise PolicyError(ended(f"The playbook that applies it does not run on {get_text_list(missing, 'and')}"))
     return hosts
-
-
-UNSERVED = "The playbook that applies it does not run on every machine the app runs on."
-
-
-def unserved(items: tuple[Container, ...], hosts: tuple[str, ...]) -> list[str]:
-    """Each machine ``items`` run on that the playbook applying them does not
-    run on, where a merge could never reach."""
-
-    return sorted({normalized_hostname(item.machine.name) for item in items} - set(hosts))
 
 
 # The repository that holds an app's Compose files, and the app, as an
@@ -337,7 +330,8 @@ def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> Operat
     standing = _apply_standing(manifest.id, command.head_sha)
     if standing is not None and standing.taken:
         raise PolicyError("This update is already applied at that head, and its card says where it stands.")
-    hosts = _applied_on(manifest, items)
+    hosts = applied_on(manifest, items)
+    reached(manifest, hosts)
     return queue_run(
         manifest,
         {
@@ -428,7 +422,8 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 "Refuse an update whose head moved, whose diff GitHub did not give, or whose checks are not passing.",
                 "Refuse while an approval at that head previews, merges or applies, or once it merged.",
                 (
-                    "Queue a preview of that playbook at the head, in check mode, on its machines. Once it passes, "
+                    "Queue a preview of that playbook at the head, in check mode, on the machines the app runs on. "
+                    "Once it passes, "
                     "queue the merge at that head; once GitHub makes the merge commit, queue one run of the "
                     "playbook with the commit as its revision. Each runs as you, joined by one correlation."
                 ),
@@ -631,10 +626,8 @@ def _approval(standing: MergeStanding | None, items: tuple[Container, ...], refu
         return Approval(standing, str(refusal), adopt=True)
     if refused:
         return Approval(standing, refused)
-    hosts = resolved_hosts(manifest, manifest.hosts)
-    if missing := unserved(items, hosts):
-        return Approval(
-            standing, ended(f"The playbook that applies it does not run on {get_text_list(missing, 'and')}")
-        )
-    where = f" on {get_text_list(list(hosts), 'and')}" if hosts else ""
-    return Approval(standing, said=ended(f"{does}{where}"))
+    try:
+        hosts = applied_on(manifest, items)
+    except PolicyError as refusal:
+        return Approval(standing, str(refusal))
+    return Approval(standing, said=ended(f"{does} on {get_text_list(list(hosts), 'and')}"))

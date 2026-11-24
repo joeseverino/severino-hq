@@ -283,6 +283,16 @@ class ApproveUpdateTests(TestCase):
         self.assertFalse(answer["ok"], answer)
         self.assertFalse(OperationRequest.objects.exists())
 
+    def test_a_playbook_written_for_more_machines_previews_and_applies_only_where_the_app_runs(self):
+        from .procedures import APP as ELSEWHERE
+
+        self.supply(applies(hosts=(APP, ELSEWHERE)))
+
+        self.merged()
+
+        self.assertEqual(self.preview().input["hosts"], [APP])
+        self.assertEqual([run.input["hosts"] for run in self.applies()], [[APP]])
+
     def test_a_caller_kept_off_the_playbooks_run_may_not_approve_it(self):
         from django.contrib.auth import get_user_model
 
