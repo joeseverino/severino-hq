@@ -1055,11 +1055,12 @@ time to stop and report) or the operation was cancelled. A run whose lease
 lapses may have changed machines. So the next claim, or the next ask for a
 run (`controller.release_lapsed`, the one rule for a lapsed lease), ends it
 `cancelled` with `reason: OutcomeUnknown` instead of queuing it again, unless
-its manifest's `retry` is `safe`. `observe_first` ends the same way and says
-so, and the observation is the worker's to make. A worker that reports
+its manifest's `retry` is `safe`. `observe_first` ends the same way, and the
+observation is the worker's to make. A worker that reports
 `OutcomeUnknown` itself ends its run the same way, so a run that stopped
-reporting reads "Stopped early" before HQ ends it and after. A run's report writes nothing to its
-playbook's record: a `status` is refused. Its `events` land on the run's
+reporting reads "Stopped early", its result "Stopped reporting"
+(`work_runs.STOPPED_REPORTING`), before HQ ends it and after. A run's report
+writes nothing to its playbook's record: a `status` is refused. Its `events` land on the run's
 result: each task's outcome on one machine, bounded by the contract's
 `RunEvent` and struck of secrets at the bridge's door. Each changed or failed
 one is an audit row under the run's own id that leads back to the ask, and

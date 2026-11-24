@@ -23,9 +23,9 @@ from ..resources import list_resource
 from ..security import Capability, Principal, operator_capabilities
 from ..work_runs import (
     JOB,
-    LAPSED,
     NEWEST,
     RUN,
+    STOPPED_REPORTING,
     TaskOutcome,
     hydrated,
     job_seen_state,
@@ -220,7 +220,7 @@ class SameWordsTests(WorkRunsTestCase):
         (row,) = self.listed()
         (stopped,) = self.read(state=JobState.LOST)
 
-        self.assertEqual((row.word, row.note), ("Stopped early", LAPSED))
+        self.assertEqual((row.word, row.note), ("Stopped early", STOPPED_REPORTING))
         self.assertEqual(stopped["id"], str(run.pk))
         self.assertEqual(self.read(state=JobState.RUNNING), [])
 

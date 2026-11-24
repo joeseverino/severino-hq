@@ -242,7 +242,7 @@ class LapsedRunTests(LeasedRunTestCase):
         ended = AuditLog.objects.filter(
             object_type=audited_labels()[OperationRequest], object_id=self.operation_id, operation_id=self.operation_id
         ).latest("pk")
-        self.assertIn("unknown", ended.message)
+        self.assertEqual(ended.message, "Stopped reporting")
 
     def test_it_reads_stopped_early_before_and_after_the_next_claim_ends_it(self):
         self.claim()
@@ -261,12 +261,13 @@ class LapsedRunTests(LeasedRunTestCase):
 
         self.assertEqual(self.operation().state, OperationRequest.State.CANCELLED)
         self.assertEqual(self.word(), "Stopped early")
+        self.assertEqual(self.operation().result["message"], "Stopped reporting")
 
 
 class ObserveFirstLapsedRunTests(LeasedRunTestCase):
     retry = "observe_first"
 
-    def test_it_fails_naming_observe_first_and_is_not_run_again(self):
+    def test_it_ends_as_a_never_run_does_and_is_not_run_again(self):
         self.claim()
         self.lapse()
 
@@ -276,8 +277,6 @@ class ObserveFirstLapsedRunTests(LeasedRunTestCase):
         self.assertEqual(
             (operation.state, operation.result["reason"]), (OperationRequest.State.CANCELLED, "OutcomeUnknown")
         )
-        self.assertEqual(operation.result["retry"], "observe_first")
-        self.assertIn("checks the machines", operation.result["message"])
 
 
 class SafeLapsedRunTests(LeasedRunTestCase):

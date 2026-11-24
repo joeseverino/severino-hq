@@ -570,7 +570,13 @@ class OperationStandingTests(TestCase):
 
         from hq.domains.jobs.models import JobState
         from hq.platform.application.asks import DONE, FAILED, QUEUED, RUNNING
-        from hq.platform.application.work_runs import LAPSED, NOT_STARTED, run_rows, seen_as_runs, standing_of
+        from hq.platform.application.work_runs import (
+            NOT_STARTED,
+            STOPPED_REPORTING,
+            run_rows,
+            seen_as_runs,
+            standing_of,
+        )
 
         expected = {JobState.QUEUED: QUEUED, JobState.RUNNING: RUNNING, JobState.SUCCEEDED: DONE}
         runs = list(seen_as_runs(OperationRequest.objects.select_related("resource"), timezone.now()))
@@ -582,6 +588,6 @@ class OperationStandingTests(TestCase):
                 self.assertEqual(standing.state, FAILED if waits else expected.get(JobState(run.seen), FAILED))
                 self.assertEqual(standing.label, NOT_STARTED if waits else JobState(run.seen).label)
                 if run.seen == JobState.LOST and run.state == OperationRequest.State.CLAIMED:
-                    self.assertEqual(standing.note, LAPSED)
+                    self.assertEqual(standing.note, STOPPED_REPORTING)
             seen.add(run.seen)
         self.assertLessEqual({JobState.QUEUED, JobState.RUNNING, JobState.SUCCEEDED, JobState.LOST}, seen)

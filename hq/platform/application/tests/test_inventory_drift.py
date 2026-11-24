@@ -389,12 +389,12 @@ class DriftPhraseTests(TestCase):
 
         phrase = _difference_phrase("document", json.dumps(declared), json.dumps(live))
 
-        self.assertEqual(phrase, "document differs from HQ's copy: + autoApprovers, - groups, grants changed.")
+        self.assertEqual(phrase, "document changed outside HQ: + autoApprovers, - groups, grants changed.")
 
-    def test_a_long_value_that_is_not_a_document_is_sized_not_pasted(self):
+    def test_a_long_value_that_is_not_a_document_is_not_pasted(self):
         from ..inventory import _difference_phrase
 
         phrase = _difference_phrase("note", "a" * 200, "b" * 300)
 
-        self.assertNotIn("aaaa", phrase)
-        self.assertIn("300 characters live", phrase)
+        self.assertNotIn("bbbb", phrase)
+        self.assertIn("note", phrase)

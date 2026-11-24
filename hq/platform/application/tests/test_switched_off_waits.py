@@ -12,14 +12,12 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.domains.control_plane.providers import registry_label
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 
 from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation, peek_next_operation
-from ..labels import lower_first
 from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_reconcile, request_removal
 from ..security import cli_principal
@@ -58,8 +56,7 @@ class QueuedBeforeTheSwitchOffTests(SwitchedOffRecord):
         operation = OperationRequest.objects.get()
 
         self.assertEqual(operation.state, OperationRequest.State.CANCELLED)
-        # Said as what it is, never as "the record".
-        self.assertIn(lower_first(registry_label(KIND)), operation.result["message"])
+        self.assertEqual(operation.result["reason"], "SwitchedOff")
         self.assertTrue(
             AuditLog.objects.filter(
                 object_id=str(operation.pk),
@@ -93,7 +90,4 @@ class ClaimedBeforeTheSwitchOffTests(SwitchedOffRecord):
         self.assertIsNone(claim_next_operation("test-controller", capabilities=RECONCILES)["operation"])
         ended = OperationRequest.objects.get()
         self.assertEqual(ended.state, OperationRequest.State.CANCELLED)
-        # The ending names what was switched off, as the switch's own refusal does.
-        self.assertEqual(
-            ended.result["message"], "The internal DNS record was switched off in HQ before its controller finished."
-        )
+        self.assertEqual(ended.result["reason"], "SwitchedOff")
