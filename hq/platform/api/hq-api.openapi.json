@@ -42647,7 +42647,7 @@
             "style": "form"
           },
           {
-            "description": "The order the records come in; absent, the best match first for a search, else failed first.",
+            "description": "The order the records come in; absent, the best match first for a search, else failing first.",
             "explode": true,
             "in": "query",
             "name": "sort",
