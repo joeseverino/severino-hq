@@ -407,9 +407,15 @@ READING_AGE_STATES = {
         "{% endfacts %}{% endsection %}",
         lambda: {
             "unread": "the registry refused an anonymous read (HTTP 401); the image may be private.",
-            "current": Freshness(CURRENT, DRAWN_AT - timedelta(minutes=4), ReadCadence(timedelta(hours=1), timedelta(hours=1))),
-            "due": Freshness(DUE, DRAWN_AT - timedelta(minutes=22), ReadCadence(timedelta(minutes=2), timedelta(hours=1))),
-            "stale": Freshness(STALE, DRAWN_AT - timedelta(days=3), ReadCadence(timedelta(hours=1), timedelta(hours=1))),
+            "current": Freshness(
+                CURRENT, DRAWN_AT - timedelta(minutes=4), ReadCadence(timedelta(hours=1), timedelta(hours=1))
+            ),
+            "due": Freshness(
+                DUE, DRAWN_AT - timedelta(minutes=22), ReadCadence(timedelta(minutes=2), timedelta(hours=1))
+            ),
+            "stale": Freshness(
+                STALE, DRAWN_AT - timedelta(days=3), ReadCadence(timedelta(hours=1), timedelta(hours=1))
+            ),
             "at": DRAWN_AT - timedelta(hours=2),
         },
     ),
