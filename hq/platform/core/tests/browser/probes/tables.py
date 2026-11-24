@@ -144,10 +144,9 @@ TABLE_PROMISES = (
     for (const cell of table.querySelectorAll(':scope > tbody > tr > [colspan]')) {
       if (cell.checkVisibility() && cell.getBoundingClientRect().width < width - 2) found.add(`${name}: a cell across its row spans less`);
     }
-    // The headings stick as cells of their row.
+    // The heading row sticks, a box of the table's grid.
     const head = table.querySelector(':scope > thead > tr');
-    const sticks = (el) => el && getComputedStyle(el).position === 'sticky';
-    if (head && !sticks(head.parentElement) && ![...head.children].every(sticks)) found.add(`${name}: its heading row does not stick`);
+    if (head && getComputedStyle(head).position !== 'sticky') found.add(`${name}: its heading row does not stick`);
   }
   return {read, found: [...found]};
 }"""
@@ -413,7 +412,8 @@ CUT_BESIDE_ROOM = (
 # line are read from the table laid out again at its max-content, unseen,
 # beside it, and a column needs the most its cells do; a cell drawn across
 # the row or stacked beneath it asks no column for anything. A short value
-# holds its line up to its share, then wraps as the table contract allows.
+# (`cell-short`) and a heading need their line whole, past any share: a
+# column of longer values or words gives way first.
 # A band (`data-band`) is held to the same: its cells stacked one to a row
 # while as many of them as its count puts on a row, each as wide as its
 # words, fit side by side, a cell drawn across the band (a band read as a
@@ -443,7 +443,7 @@ ROOM_UNSHARED = (
     return width;
   };
   for (const table of document.querySelectorAll('main table.data-table')) {
-    if (!table.checkVisibility() || getComputedStyle(table).display !== 'table') continue;
+    if (!table.checkVisibility()) continue;
     const cells = placed(table);
     const region = table.closest('.table-scroll');
     const heads = [...table.querySelectorAll(':scope > thead > tr:last-child > th')];
@@ -452,9 +452,7 @@ ROOM_UNSHARED = (
     const ruler = table.cloneNode(true);
     ruler.setAttribute('aria-hidden', 'true');
     ruler.style.cssText += '; position: absolute; visibility: hidden; inset: 0 auto auto 0; inline-size: max-content; max-inline-size: none';
-    // A column held to its widest line by a width on its heading asks no more than its narrowest there.
-    ruler.querySelectorAll(':scope > thead th').forEach((head) => { head.style.inlineSize = 'auto'; });
-    // A short value whole is the value past its share.
+    // A short value whole is the value past any cap on its box.
     ruler.querySelectorAll('.cell-short, :scope > thead th > *').forEach((box) => { box.style.maxInlineSize = 'none'; });
     table.after(ruler);
     // A cell is as tall as its row, so its words' own box says how many lines they take.
@@ -472,8 +470,8 @@ ROOM_UNSHARED = (
       const at = whole.get(cell);
       if (!at) continue;
       const r = said(cell);
-      const line = lineOf(cell, share);
-      const asks = Math.min(at.width - padded(cell), line);
+      const held = cell.querySelector(':scope > .cell-short') || cell.closest('thead');
+      const asks = held ? at.width - padded(cell) : Math.min(at.width - padded(cell), lineOf(cell, share));
       // A value that keeps its line (a state, a row's controls) needs it whole.
       const keeps = getComputedStyle(cell).whiteSpace === 'nowrap';
       const column = columns.get(cell.cellIndex) ?? {width: r.width, needs: 0, name: heads[cell.cellIndex]?.textContent.trim()};

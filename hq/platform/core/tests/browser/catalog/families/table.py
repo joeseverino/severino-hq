@@ -159,6 +159,45 @@ def _identifiers() -> dict[str, DataTable]:
     return {"steps": steps, "access": access}
 
 
+def _crowded() -> DataTable:
+    """Nine columns, as Services draws: short identifiers beside long ones and a sentence."""
+
+    def chip(value: str) -> Cell:
+        return Cell(value, readout=True)
+
+    return table(
+        "Example services",
+        (
+            TableColumn("Service", kind="identifier"),
+            "Open to",
+            "Address",
+            "Proxy",
+            "Certificate",
+            "Runs on",
+            "Note",
+            TableColumn("State", kind="status"),
+            TableColumn("Since", kind="status"),
+        ),
+        *(
+            (
+                Cell(name, name=True),
+                "Tailnet only",
+                chip(address),
+                chip(f"{address}:{port}"),
+                chip("wildcard-example-com"),
+                "example-host-01 · example-app",
+                "Served through the proxy with a certificate from the example authority.",
+                Cell("Health check passing", tone="good"),
+                "1 day",
+            )
+            for name, address, port in (
+                ("home-automation-dashboard.example.com", "198.51.100.214", "8000"),
+                ("status.example.com", "198.51.100.215", "8443"),
+            )
+        ),
+    )
+
+
 def _blank_column() -> DataTable:
     def ran() -> Cell:
         return Cell(piece=Piece(included_parts.DOTS, {"dots": runs()}, words=""))
@@ -284,6 +323,10 @@ ENTRIES = {
     # ranked columns to let go, so a narrow box lets a column leave before it
     # breaks a name at its seams.
     "table/identifiers": Example(_sectioned(steps="Example steps", access="Example access"), _identifiers),
+    # A table of nine columns, short identifiers (an address and its port, a
+    # certificate's name) beside a long host name and a sentence: each short
+    # one is whole while a long one or the sentence still has room to give.
+    "table/crowded": Example(_sectioned(services="Example services"), lambda: {"services": _crowded()}),
     # A column of dashes beside a column of marks with no words and a column
     # of short words: the server marks the dashes' column blank and it is not
     # drawn, the marks are, and no short word is split however its column's
