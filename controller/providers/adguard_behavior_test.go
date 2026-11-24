@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/providers/adguardapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -107,8 +107,8 @@ func TestAdGuardMalformedRewriteListIsAnError(t *testing.T) {
 }
 
 func TestAdGuardQueryLogEntryWithoutATimeIsAnError(t *testing.T) {
-	get := func(string) (json.RawMessage, error) {
-		return encoded(Object{"data": []Object{{"time": "yesterday", "question": Object{"name": "example.test"}}}})
+	get := func(string) (adguardapi.QueryLog, error) {
+		return queryLog(Object{"data": []Object{{"time": "yesterday", "question": Object{"name": "example.test"}}}})
 	}
 	if _, err := summarizeQueries(get, []string{"example.test"}, "dns", time.Now(), false); err == nil {
 		t.Error("an entry whose time does not parse was skipped, not refused")

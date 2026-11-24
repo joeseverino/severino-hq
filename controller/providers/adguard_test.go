@@ -32,8 +32,11 @@ func asRecords(v any) []map[string]any {
 	return out
 }
 
-// encoded is a test answer as the transport returns it.
-func encoded(v any) (json.RawMessage, error) { return json.Marshal(v) }
+// queryLog is a query log page as AdGuard answers it, decoded as the client does.
+func queryLog(page Object) (adguardapi.QueryLog, error) {
+	data, _ := json.Marshal(page)
+	return decodeAs[adguardapi.QueryLog](data, "query log")
+}
 
 type request struct {
 	path, method string
@@ -83,6 +86,10 @@ func (h *fakeHTTP) answer(_ context.Context, address, method string, headers map
 	path := strings.TrimPrefix(address, "https://example.invalid")
 	path = strings.TrimPrefix(path, "https://api.tailscale.com/api/v2")
 	h.mu.Lock()
+	// A generated client's body is the JSON bytes it encoded.
+	if body, ok := payload.([]byte); ok {
+		payload = json.RawMessage(body)
+	}
 	h.requests = append(h.requests, request{path, method, payload, headers["If-Match"]})
 	h.mu.Unlock()
 	if method != "GET" {
@@ -149,6 +156,31 @@ func TestAdguardReconcileAndPlan(t *testing.T) {
 		}
 	}
 }
+
+// A sweep reads each endpoint once whichever kinds need it, and a write still
+// reads the live list first.
+func TestAdguardSweepReadsOnceAndAWriteReadsFresh(t *testing.T) {
+	r := adguardFixture()
+	h := r.HTTP.(*fakeHTTP)
+	h.routes["/control/status"] = Object{"version": "example"}
+	h.routes["/control/rewrite/list"] = []Object{{"domain": "example.test", "answer": "192.0.2.1"}}
+	done := r.BeginSnapshot()
+	defer done()
+	for range 2 {
+		if _, err := r.adguardProbe(t.Context(), "example"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.adguardInventory(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := r.runAction(t.Context(), runtime.ResourceKindAdGuardRewrite, "reconcile", Object{"domain": "example.test", "answer": "192.0.2.1"}, nil, true); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.requests) != 3 || h.requests[2].path != "/control/rewrite/list" {
+		t.Fatalf("%#v", h.requests)
+	}
+}
 func TestAdguardRefusesDuplicateRewriteWithoutWriting(t *testing.T) {
 	r := adguardFixture()
 	h := r.HTTP.(*fakeHTTP)
@@ -190,8 +222,8 @@ func TestClientsDeduplicateAddressesAndDoNotExposeExtraFields(t *testing.T) {
 }
 func TestQueriesOnlyAggregateRewrittenNamesAndHonorAnonymization(t *testing.T) {
 	now := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
-	get := func(string) (json.RawMessage, error) {
-		return encoded(Object{"data": []Object{
+	get := func(string) (adguardapi.QueryLog, error) {
+		return queryLog(Object{"data": []Object{
 			{"time": "2026-01-02T11:00:00Z", "question": Object{"name": "Example.Test."}, "client": "192.0.2.1", "reason": "FilteredBlackList"},
 			{"time": "2026-01-02T10:00:00Z", "question": Object{"name": "private.example"}, "client": "192.0.2.2"},
 			{"time": "2026-01-02T09:00:00Z", "question": Object{"name": "child.zone.test"}, "client": "192.0.2.1"},
@@ -220,9 +252,9 @@ func TestQueryPaginationHasAHardLimit(t *testing.T) {
 	for range 500 {
 		entries = append(entries, Object{"time": now.Format(time.RFC3339Nano), "question": Object{"name": "example.test"}})
 	}
-	get := func(string) (json.RawMessage, error) {
+	get := func(string) (adguardapi.QueryLog, error) {
 		pages++
-		return encoded(Object{"data": entries, "oldest": "unchanged"})
+		return queryLog(Object{"data": entries, "oldest": "unchanged"})
 	}
 	summaries, err := summarizeQueries(get, []string{"example.test"}, "example", now, false)
 	found := asRecords(summaries)

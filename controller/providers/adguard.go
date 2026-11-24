@@ -1,9 +1,9 @@
 package providers
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -38,68 +38,30 @@ func (r *Registry) admitAdGuard() {
 	r.probe(runtime.ConnectionProviderAdGuard, r.adguardProbe)
 }
 
-func (r *Registry) adguardRequest(ctx context.Context, ref, path, method string, payload any) (json.RawMessage, error) {
+// adguard is the generated client for one AdGuard connection. A sweep's
+// client reads each endpoint once, whichever kinds need it; a write's reads
+// fresh. A connection that is missing or holds no login fails every call.
+func (r *Registry) adguard(ref string, sweep bool) *adguardapi.ClientWithResponses {
 	connection, err := r.Supplied.For(runtime.ConnectionProviderAdGuard, ref)
-	if err != nil {
-		return nil, err
+	login, missing := runtime.Need(connection.Login)
+	doer := vendorDoer{r: r, err: cmp.Or(err, missing), headers: map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(login.Username+":"+login.Password))}}
+	if sweep {
+		doer.cache = "adguard:" + ref
 	}
-	login, err := runtime.Need(connection.Login)
-	if err != nil {
-		return nil, err
-	}
-	headers := map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(login.Username+":"+login.Password))}
-	return r.HTTP.Request(ctx, strings.TrimRight(login.URL, "/")+path, method, headers, payload)
+	return &adguardapi.ClientWithResponses{ClientInterface: &adguardapi.API{Server: strings.TrimRight(login.URL, "/") + adguardapi.ServerUrlControl + "/", Client: doer}}
 }
 
-// adguardDecode decodes one AdGuard answer into its generated type; an empty
-// answer is the zero value, a malformed one an error.
-func adguardDecode[T any](raw json.RawMessage, what string) (T, error) {
-	if len(raw) == 0 {
-		var empty T
-		return empty, nil
-	}
-	return decodeAs[T](raw, "adguard "+what+" did not decode")
-}
-
-// adguardGet reads one AdGuard endpoint into its response type. A sweep reads
-// each endpoint once, whichever kinds need it.
-func adguardGet[T any](ctx context.Context, r *Registry, ref, path, what string) (T, error) {
-	raw, err := r.cached(ctx, "adguard-get:"+ref+":"+path, func() (json.RawMessage, error) {
-		return r.adguardRequest(ctx, ref, path, "GET", nil)
-	})
-	if err != nil {
-		var zero T
-		return zero, fmt.Errorf("adguard %s: %w", what, err)
-	}
-	return adguardDecode[T](raw, what)
-}
-
-func (r *Registry) adguardRewrites(ctx context.Context, ref string, cached bool) ([]adguardapi.RewriteEntry, error) {
-	load := func() (json.RawMessage, error) {
-		return r.adguardRequest(ctx, ref, "/control/rewrite/list", "GET", nil)
-	}
-	var raw json.RawMessage
-	var err error
-	if cached {
-		raw, err = r.cached(ctx, "adguard-rewrites:"+ref, load)
-	} else {
-		raw, err = load()
-	}
+func adguardRewrites(ctx context.Context, client *adguardapi.ClientWithResponses) (adguardapi.RewriteList, error) {
+	rewrites, err := json200(client.RewriteListWithResponse(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("adguard rewrite list: %w", err)
-	}
-	rewrites, err := adguardDecode[[]adguardapi.RewriteEntry](raw, "rewrite list")
-	if err != nil {
-		return nil, err
-	}
-	if rewrites == nil {
-		rewrites = []adguardapi.RewriteEntry{}
 	}
 	return rewrites, nil
 }
 
 func (r *Registry) adguardReconcile(ctx context.Context, spec AdGuardRewriteSpec, observed AdGuardRewriteObserved, apply bool) (Result, error) {
-	rewrites, err := r.adguardRewrites(ctx, "", false)
+	client := r.adguard("", false)
+	rewrites, err := adguardRewrites(ctx, client)
 	if err != nil {
 		return Result{}, err
 	}
@@ -117,13 +79,13 @@ func (r *Registry) adguardReconcile(ctx context.Context, spec AdGuardRewriteSpec
 	}
 	changed := len(matches) == 0 || deref(live.Domain) != spec.Domain || deref(live.Answer) != spec.Answer
 	if changed && apply {
-		path, method, payload := "/control/rewrite/add", "POST", any(desired)
 		if len(matches) == 1 {
-			path, method = "/control/rewrite/update", "PUT"
 			target := rewritePair(deref(live.Domain), deref(live.Answer))
-			payload = adguardapi.RewriteUpdate{Target: &target, Update: &desired}
+			_, err = client.RewriteUpdateWithResponse(ctx, adguardapi.RewriteUpdate{Target: &target, Update: &desired})
+		} else {
+			_, err = client.RewriteAddWithResponse(ctx, desired)
 		}
-		if _, err := r.adguardRequest(ctx, "", path, method, payload); err != nil {
+		if err != nil {
 			return Result{}, fmt.Errorf("adguard write rewrite: %w", err)
 		}
 	}
@@ -149,7 +111,8 @@ func matchingRewrites(rewrites []adguardapi.RewriteEntry, domain string) []adgua
 }
 
 func (r *Registry) adguardDelete(ctx context.Context, spec AdGuardRewriteSpec, _ struct{}, apply bool) (Result, error) {
-	rewrites, err := r.adguardRewrites(ctx, "", false)
+	client := r.adguard("", false)
+	rewrites, err := adguardRewrites(ctx, client)
 	if err != nil {
 		return Result{}, err
 	}
@@ -160,7 +123,7 @@ func (r *Registry) adguardDelete(ctx context.Context, spec AdGuardRewriteSpec, _
 	}
 	if apply {
 		for _, match := range matches {
-			if _, err := r.adguardRequest(ctx, "", "/control/rewrite/delete", "POST", rewritePair(deref(match.Domain), deref(match.Answer))); err != nil {
+			if _, err := client.RewriteDeleteWithResponse(ctx, rewritePair(deref(match.Domain), deref(match.Answer))); err != nil {
 				return Result{}, fmt.Errorf("adguard delete rewrite: %w", err)
 			}
 		}
@@ -171,7 +134,8 @@ func (r *Registry) adguardDelete(ctx context.Context, spec AdGuardRewriteSpec, _
 func (r *Registry) adguardInventory(ctx context.Context) ([]any, error) {
 	found := []any{}
 	for _, ref := range r.refs(runtime.ConnectionProviderAdGuard) {
-		rewrites, err := r.adguardRewrites(ctx, ref, true)
+		client := r.adguard(ref, true)
+		rewrites, err := adguardRewrites(ctx, client)
 		if err != nil {
 			return nil, err
 		}
@@ -189,9 +153,10 @@ func (r *Registry) adguardInventory(ctx context.Context) ([]any, error) {
 // with a version is AdGuard's status; dns_addresses may be null, which is
 // AdGuard listening on nothing yet, and says nothing about the credential.
 func (r *Registry) adguardProbe(ctx context.Context, ref string) (ProbeResult, error) {
-	status, err := adguardGet[adguardapi.ServerStatus](ctx, r, ref, "/control/status", "status")
+	client := r.adguard(ref, true)
+	status, err := json200(client.StatusWithResponse(ctx))
 	if err != nil {
-		return ProbeResult{}, err
+		return ProbeResult{}, fmt.Errorf("adguard status: %w", err)
 	}
 	if deref(status.Version) == "" {
 		return ProbeResult{}, &ProviderError{Message: "adguard status has no version, so it is not AdGuard's answer", Failure: runtime.FailureClassAddress}
