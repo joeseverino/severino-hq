@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -61,19 +62,88 @@ func (g *githubRepository) optedIn() bool {
 	})
 }
 
-// githubLayout is the apps part: the Compose files and the Dashboard.
-type githubLayout struct {
-	compose   []string
-	dashboard string
+// GitHubComposeImage is one service's image in an app's Compose files at the
+// default branch's head: what a merge pins. Path is the app's first file.
+type GitHubComposeImage struct {
+	Path    string `json:"path"`
+	Service string `json:"service"`
+	Image   string `json:"image"`
 }
 
-func (g *githubRepository) apps(ctx context.Context, branch string) (githubLayout, error) {
+// GitHubHeldBranch is a branch the Dependency Dashboard lists with a box to
+// tick and no pull request: Marker is the box's word, and Apps each app whose
+// image its line names.
+type GitHubHeldBranch struct {
+	Branch string   `json:"branch"`
+	Marker string   `json:"marker"`
+	Apps   []string `json:"apps"`
+}
+
+// githubHeldLine is a Dashboard line whose box, ticked, has Renovate open the
+// branch's pull request: the four kinds it lists with none open, as
+// dependency-dashboard.ts writes them (getCheckbox, getListItem).
+var githubHeldLine = regexp.MustCompile(`(?m)^ - \[ \] <!-- (unpend|approve|unschedule|unlimit)-branch=(\S+) -->(.*)$`)
+
+// githubLayout is the apps part: the Compose files, the images they pin and
+// the Dashboard with the branches it holds.
+type githubLayout struct {
+	compose   []string
+	images    []GitHubComposeImage
+	dashboard string
+	held      []GitHubHeldBranch
+}
+
+func (g *githubRepository) apps(ctx context.Context, branch, head string) (githubLayout, error) {
 	compose, err := g.composeFiles(ctx, branch)
 	if err != nil {
 		return githubLayout{}, err
 	}
-	dashboard, err := g.dashboard(ctx)
-	return githubLayout{compose: compose, dashboard: dashboard}, err
+	files := map[string][]string{}
+	for _, file := range compose {
+		app, _ := composeApp(file)
+		files[app] = append(files[app], file)
+	}
+	layout := githubLayout{compose: compose, images: []GitHubComposeImage{}, held: []GitHubHeldBranch{}}
+	named := map[string][]string{}
+	for _, app := range sortedKeys(files) {
+		// An app that does not load pins nothing HQ can say.
+		images, err := g.composeImages(ctx, app, files[app], head)
+		if err != nil {
+			continue
+		}
+		for _, service := range sortedKeys(images) {
+			layout.images = append(layout.images, GitHubComposeImage{Path: files[app][0], Service: service, Image: images[service]})
+			named[app] = append(named[app], imageName(images[service]))
+		}
+	}
+	issue, err := g.dashboard(ctx)
+	layout.dashboard = issue.HTMLURL
+	for _, line := range githubHeldLine.FindAllStringSubmatch(issue.Body, -1) {
+		held := GitHubHeldBranch{Branch: line[2], Marker: line[1], Apps: []string{}}
+		for _, app := range sortedKeys(named) {
+			if slices.ContainsFunc(named[app], func(name string) bool { return namesImage(line[3], name) }) {
+				held.Apps = append(held.Apps, app)
+			}
+		}
+		layout.held = append(layout.held, held)
+	}
+	return layout, err
+}
+
+// imageName is an image reference without its tag or digest, as Renovate
+// names the package in a Dashboard line.
+func imageName(image string) string {
+	image, _, _ = strings.Cut(image, "@")
+	if colon := strings.LastIndex(image, ":"); colon > strings.LastIndex(image, "/") {
+		image = image[:colon]
+	}
+	return image
+}
+
+// namesImage is whether a Dashboard line names an image whole, never as part
+// of a longer name.
+func namesImage(line, name string) bool {
+	return regexp.MustCompile("(^|[\\s`(])" + regexp.QuoteMeta(name) + "($|[\\s`),])").MatchString(line)
 }
 
 // composeApp is the app a path's Compose file belongs to: a file directly in
@@ -116,18 +186,18 @@ func (g *githubRepository) composeFiles(ctx context.Context, branch string) ([]s
 	return found[:min(len(found), githubComposeKept)], nil
 }
 
-// dashboard is the address of the open Dependency Dashboard, or "": Renovate
+// dashboard is the open Dependency Dashboard, or the zero issue: Renovate
 // edits it every run, so it is among the issues updated last.
-func (g *githubRepository) dashboard(ctx context.Context) (string, error) {
+func (g *githubRepository) dashboard(ctx context.Context) (githubapi.Issue, error) {
 	issues, err := json200(g.api.IssuesListForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.IssuesListForRepoParams{
 		State: new(githubapi.IssuesListForRepoParamsStateOpen), Sort: new(githubapi.IssuesListForRepoParamsSortUpdated), PerPage: new(githubListPage),
 	}))
 	for _, issue := range issues {
 		if issue.PullRequest.URL == "" && issue.Title == githubDashboard {
-			return issue.HTMLURL, err
+			return issue, err
 		}
 	}
-	return "", err
+	return githubapi.Issue{}, err
 }
 
 // appChanges is each app whose Compose files an update's pull request

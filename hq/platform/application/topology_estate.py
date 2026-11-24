@@ -19,7 +19,7 @@ from hq.domains.control_plane.providers import PROVIDERS, record_spec
 lazy from hq.domains.control_plane.observations.contract import container_key
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
-from .action_links import ActionLink as TopologyAction, read_link
+from .action_links import open_link
 from .connection_lifecycle import UNREPORTED_NODE, Lifecycle
 from .connections import machines_once
 from .entity_links import entity_link
@@ -155,10 +155,6 @@ def _observed(nodes, edges, estate: _Estate) -> None:
             nodes[node_id] = replace(node, observed_at=stamp)
 
 
-def _open(url: str) -> tuple[TopologyAction, ...]:
-    return (read_link("open", "Open", url),) if url else ()
-
-
 def _declared_by(edges, node_id: str, resource_id: str, nodes) -> None:
     if resource_id in nodes:
         relation = edge_between(node_id, resource_id, "declared_by")
@@ -183,7 +179,7 @@ def _machines(nodes, edges) -> _Estate:
             status_label="Reachable" if machine.reachable else "",
             url=machine.url,
             kind_key="machine",
-            actions=_open(machine.url),
+            actions=open_link(machine.name, machine.url),
         )
         if machine.declaration:
             _declared_by(edges, node_id, Kind.RESOURCE.of(machine.declaration), nodes)
@@ -219,7 +215,7 @@ def _zones(nodes, edges, resources, estate: _Estate) -> tuple[str, ...]:
             subtitle="Domain",
             url=url,
             kind_key="zone",
-            actions=_open(url),
+            actions=open_link(name, url),
         )
         # Every name under the domain: its Access applications and edge
         # certificates are the domain's as much as any one service's.
@@ -254,7 +250,7 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             url=service.url,
             kind_key="service",
             facts=tuple((contradiction_findings.SERVICE_FAULT, fault) for fault in service.faults),
-            actions=_open(service.url),
+            actions=open_link(service.hostname, service.url),
         )
         estate.subjects[node_id] = Subject.of(
             hostnames=(

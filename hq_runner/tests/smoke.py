@@ -103,6 +103,26 @@ TEMPLATED_FILES = {
 }
 
 
+# A preview of a playbook that writes a file: in check mode it ends well and
+# the file is never written.
+PREVIEWED = "playbooks/previewed_write.yml"
+PREVIEWED_FILES = {
+    PREVIEWED: """\
+- name: Write a file
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+  tasks:
+    - name: Write it
+      ansible.builtin.copy:
+        dest: "{{ written }}"
+        content: written
+        mode: "0600"
+""",
+}
+
+
 # Two playbooks Ansible stops before their first task, which
 # ``recorded_stopped_events.json`` was recorded from: each run's report says
 # the error the recorded events give.
@@ -272,10 +292,17 @@ def main() -> int:
         remote = Remote(root / "remote")
         wrong.extend(_collections(root))
         revision = remote.commit(
-            {**project_files(), **ESCALATING_FILES, **TEMPLATED_FILES, **STOPPED_FILES, **MODULE_FILES}
+            {
+                **project_files(),
+                **ESCALATING_FILES,
+                **TEMPLATED_FILES,
+                **PREVIEWED_FILES,
+                **STOPPED_FILES,
+                **MODULE_FILES,
+            }
         )
-        run, escalating, templated, shipped, *stops = (
-            fakes.pending(revision=revision, effect="read", privilege="") for _ in range(4 + len(STOPPED))
+        run, escalating, templated, shipped, previewed, *stops = (
+            fakes.pending(revision=revision, effect="read", privilege="") for _ in range(5 + len(STOPPED))
         )
         for index, (asked, playbook) in enumerate(
             (
@@ -283,6 +310,7 @@ def main() -> int:
                 (escalating, ESCALATING),
                 (templated, TEMPLATED),
                 (shipped, SHIPPED),
+                (previewed, PREVIEWED),
                 *zip(stops, STOPPED.values(), strict=True),
             )
         ):
@@ -292,7 +320,9 @@ def main() -> int:
                 asked["operation"]["id"] = f"{index + 2:08d}-4444-4555-8666-777777777777"
         evaluated = root / "evaluated"
         templated["input"]["parameters"] = {"said": _templated(evaluated)}
-        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated, shipped, *stops)
+        written = root / "written"
+        previewed["input"].update(parameters={"written": str(written)}, check=True)
+        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated, shipped, previewed, *stops)
         config = Config.read(_environment(root))
         # The one change from the configuration the environment gives: the
         # repository is this machine's, reached over git's file transport.
@@ -305,8 +335,12 @@ def main() -> int:
             wrong.append("the project's own ansible.cfg loaded a callback of the project's")
         if evaluated.exists():
             wrong.append("a parameter's template was evaluated on the worker")
-    reports = 5 + len(STOPPED)
-    scanned, ran, read, given, used, *stopped = [*bridge.reports, *({} for _ in range(reports))][:reports]
+        if written.exists():
+            wrong.append("a preview wrote the file its playbook writes")
+    reports = 6 + len(STOPPED)
+    scanned, ran, read, given, used, shown, *stopped = [*bridge.reports, *({} for _ in range(reports))][:reports]
+    if shown.get("success") is not True:
+        wrong.append(f"a preview of a playbook that writes a file did not succeed: {shown.get('message')}")
     for name, report in zip(STOPPED, stopped, strict=True):
         if report.get("success") is not False or report.get("message") != _recorded_stop(name):
             wrong.append(

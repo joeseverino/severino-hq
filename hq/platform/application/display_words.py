@@ -14,12 +14,17 @@ from functools import cache
 from types import MappingProxyType, UnionType
 from typing import Any, Literal, Union, dataclass_transform, get_args, get_origin
 
+from django.db import models
+
+from .quoted import Quoted
+
 # What only a machine writes, by what it is.
 MACHINE_TEXT = {
     "a date-time stamp": re.compile(r"\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}|\A\d{4}-\d{2}-\d{2}\Z"),
     "a dumped record": re.compile(r"\{'[^']*': "),
     "a dumped list": re.compile(r"\[(?:'[^']*'|\{)"),
     "a bare flag": re.compile(r"(?<![\w-])(?:True|False)(?![\w-])"),
+    "an image digest": re.compile(r"\bsha(?:256|384|512):[0-9a-f]{8,}"),
     "markup": re.compile(r"<[a-z][\w-]*[\s/>]|(?<![\w-])[a-z][\w-]*=\"[^\"]*\""),
 }
 # A field's metadata when it quotes a record's own text (a search match): a
@@ -27,10 +32,30 @@ MACHINE_TEXT = {
 QUOTED: Mapping[str, bool | str] = MappingProxyType({"quoted": True})
 
 
+class Code(str):
+    """What a machine wrote that a reader reads or copies exactly (an image
+    reference, a digest, a path), drawn in the code face, never in words."""
+
+    __slots__ = ()
+
+
 def quoted_when(flag: str) -> Mapping[str, bool | str]:
     """``QUOTED`` whenever its view's ``flag`` is set: a readout's words."""
 
     return MappingProxyType({"quoted": flag})
+
+
+class QuotedCharField(models.CharField):
+    """A column of text a person wrote outside HQ (a vault doc's title, a
+    writeup's), read back from the database as ``Quoted``."""
+
+    def from_db_value(self, value: str | None, _expression: Any, _connection: Any) -> str | None:
+        return None if value is None else Quoted(value)
+
+    def deconstruct(self) -> Any:
+        # Stored as any CharField: how it is read back changes no column.
+        name, _path, args, kwargs = super().deconstruct()
+        return name, "django.db.models.CharField", args, kwargs
 
 
 # A field's name as code writes it, where its label belongs.
@@ -41,8 +66,12 @@ def _machine_text(text: str, *, label: bool = False) -> str:
     """What a machine wrote in ``text``, named, or "" when it is words.
 
     A ``label`` (a heading, a fact's name) is also refused as a snake_case key.
+    What a person wrote outside HQ (``Quoted``) is words, and ``Code`` is
+    drawn as code.
     """
 
+    if isinstance(text, Quoted | Code):
+        return ""
     for name, shape in MACHINE_TEXT.items():
         if found := shape.search(text):
             return f"{name}, {found.group(0)!r}"
@@ -103,8 +132,8 @@ def said_in_words(view: Any) -> None:
     and each str a field holds, in a tuple too, is words. A field named
     ``label`` or ``…_label`` is a label. A field marked ``QUOTED``, or
     ``quoted_when`` its flag is set, holds a record's own text, shown as it
-    was written, so it is not held to words. A field typed by an enum holds
-    its member (``as_members``).
+    was written, so it is not held to words, nor is ``Quoted`` text in any
+    field. A field typed by an enum holds its member (``as_members``).
     """
 
     as_members(view)

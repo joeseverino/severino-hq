@@ -9,8 +9,11 @@ import hq_sdk.ui
 
 from ..card_items import Kpi, ListRow
 from ..display_words import in_words
-from ..finding_model import Finding
+from ..finding_model import Finding, written_fact
+from ..finding_steps import Do, Run
 from ..service_context import Cell
+
+DIGEST = "example/app:1.2@sha256:" + "0f" * 32
 
 
 class InWordsTests(SimpleTestCase):
@@ -25,6 +28,7 @@ class InWordsTests(SimpleTestCase):
             "confirm_prune to True",
             'value="web:key" id="id_key"',
             "<input type",
+            "set it to example/app:1.2@sha256:" + "0f" * 32,
         ):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 in_words(text)
@@ -51,9 +55,21 @@ class ConstructionTests(SimpleTestCase):
             lambda: ListRow("Message", meta="2026-10-22"),
             lambda: Cell("[{'name': 'web'}]"),
             lambda: Finding("example", "example", "Device", "good", "Body", evidence=(("Seen", "True"),)),
+            lambda: Do(f"Pin it to {DIGEST}"),
+            lambda: Run(f"Pin it to {DIGEST}", "example-cli up"),
         ):
             with self.assertRaisesRegex(ValueError, "say it in words"):
                 build()
+
+    def test_what_a_machine_wrote_is_drawn_as_written_in_its_own_place(self):
+        from ..display_words import Code
+
+        self.assertEqual(Do("Pin its image by its digest", value=DIGEST).value, DIGEST)
+        self.assertEqual(Run("Pin it", f"example-cli pin {DIGEST}").command, f"example-cli pin {DIGEST}")
+        pinned = Finding("example", "example", "Device", "good", "Body", evidence=(("Pin it as", Code(DIGEST)),))
+        self.assertEqual(written_fact(*pinned.evidence[0])["code"], True)
+        with self.assertRaisesRegex(ValueError, "say it in words"):
+            Finding("example", "example", "Device", "good", "Body", evidence=(("Pin it as", DIGEST),))
 
     def test_a_readout_is_shown_as_it_arrived(self):
         """A header, an address or an identifier is a record's own text, whatever it holds."""

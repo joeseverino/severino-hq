@@ -58,5 +58,5 @@ class KeyTests(TestCase):
 
         (finding,) = found
         self.assertEqual(
-            [value for label, value in finding.evidence if label == "Container"], ["example-one", "example-two"]
+            [str(value) for label, value in finding.evidence if label == "Container"], ["example-one", "example-two"]
         )

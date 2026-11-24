@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.platform.application.contracts import DOTTED_NAME, Closed, Effect
 from hq.platform.application.non_empty import NonEmpty, RequiredText
+from hq.platform.application.quoted import Quoted
 from hq.platform.application.reasons import Checked, Reason, checked
 
 # An hour: a procedure that needs longer is more than one procedure, and a
@@ -116,7 +117,10 @@ def sorted_unique(names: tuple[str, ...]) -> tuple[str, ...]:
 DottedName = Annotated[str, StringConstraints(pattern=DOTTED_NAME.pattern)]
 # A finding rule's name, in the spelling every rule has (``filesystem-nearly-full``).
 RuleName = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=64)]
-Statement = Annotated[RequiredText, StringConstraints(strip_whitespace=True, max_length=500)]
+# What a playbook's author wrote (a title, a statement, an input's words),
+# held as ``Quoted`` so every page shows it as written: last of a field's terms.
+AUTHORED = Checked(Quoted)
+Statement = Annotated[RequiredText, StringConstraints(strip_whitespace=True, max_length=500), AUTHORED]
 Statements = Annotated[tuple[Statement, ...], NonEmpty()]
 
 

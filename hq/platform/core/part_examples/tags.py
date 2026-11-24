@@ -24,7 +24,7 @@ lazy from hq.platform.application.contracts import Effect
 lazy from hq.platform.application.credential_mint import CredentialFix
 lazy from hq.platform.application.doors import NOBODY, Attribution
 lazy from hq.platform.application.entity_links import EntityLink
-lazy from hq.platform.application.finding_steps import Run
+lazy from hq.platform.application.finding_steps import Do, Run
 lazy from hq.platform.application.labels import dotted
 lazy from hq.platform.application.pages import PageAction, RowMark, RowOrder
 lazy from hq.platform.application.payload_words import ChangeRow
@@ -329,12 +329,12 @@ CREDENTIAL_FIX = Example(
 )
 
 STEPS_STATES = {
-    # Steps done in order, each numbered: said in words, and a command to run
-    # with its notes, as a credential's fix draws one.
+    # Steps done in order, each numbered: said in words, a command to run
+    # with its notes, as a credential's fix draws one, and a value to set.
     "numbered": Example(
         '{% section "Example upgrade" %}{% steps numbered=True %}'
         '{% step %}<strong>Pull the example image</strong> <span class="muted">An example sentence that says what the step does.</span>{% endstep %}'
-        '{% include "partials/_operator_step.html" %}'
+        '{% include "partials/_operator_step.html" %}{% include "partials/_operator_step.html" with step=pin %}'
         "{% step %}<strong>Check the example</strong>{% endstep %}"
         "{% endsteps %}{% endsection %}",
         lambda: {
@@ -342,7 +342,8 @@ STEPS_STATES = {
                 "Make a new example token on your Mac",
                 "example-mint --account example-01 --item example-token --permission example.read",
                 notes=("HQ could not tell which example account holds it.", "Then press Refresh."),
-            )
+            ),
+            "pin": Do("Pin example-app's image by its digest", value="example/app:1.2@sha256:" + "0f" * 32),
         },
     ),
     # Steps and checks side by side: met, unmet, done and plain.

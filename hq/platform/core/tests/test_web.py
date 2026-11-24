@@ -22,7 +22,7 @@ from django.urls import reverse
 from hq.platform.application import request_context
 from hq.platform.application.markup_testing import elements, hrefs
 from hq.platform.core.audit import record_event
-from hq.platform.core.logging import JsonFormatter
+from hq.platform.core.log_lines import LineFormatter
 from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
 from hq.platform.core.testing import operator
 
@@ -266,7 +266,7 @@ class SecurityBoundaryTests(TestCase):
             record.path = "/search/"
             record.status = 200
             record.duration_ms = 4.2
-            payload = json.loads(JsonFormatter().format(record))
+            payload = json.loads(LineFormatter().format(record))
 
         self.assertEqual(payload["request_id"], minted)
         self.assertEqual(payload["path"], "/search/")

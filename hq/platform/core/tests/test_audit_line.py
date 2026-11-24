@@ -8,7 +8,7 @@ from django.test import TestCase
 from hq.platform.application import denials
 from hq.platform.application.refusal_codes import Code
 from hq.platform.core.audit import record_event
-from hq.platform.core.logging import JsonFormatter
+from hq.platform.core.log_lines import LineFormatter
 from hq.platform.core.models import AuditLog
 
 AUDIT_LOGGER = "severino.audit"
@@ -24,7 +24,7 @@ class AuditLineTests(TestCase):
 
         with self.assertLogs(AUDIT_LOGGER, "INFO") as logs, self.captureOnCommitCallbacks(execute=True):
             write()
-        return [json.loads(JsonFormatter().format(record)) for record in logs.records]
+        return [json.loads(LineFormatter().format(record)) for record in logs.records]
 
     def test_a_committed_event_writes_one_line_carrying_its_row(self):
         from hq.platform.core import tracing

@@ -1,7 +1,7 @@
 # New Domain
 
 A new host domain is its own Django app (such as `hq/domains/expenses/`) plus one
-`DomainDescriptor` in `HOST_DOMAINS` (`hq/platform/application/domains.py`). No other
+`DomainDescriptor` in `HOST_DOMAINS` (`hq/platform/application/host_sections.py`). No other
 file names it. The descriptor carries:
 
 - `apps` and `mounts`: `hq/config/settings.py` installs the apps and `hq/config/urls.py`

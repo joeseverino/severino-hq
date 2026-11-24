@@ -101,6 +101,30 @@ class SuccessTests(PassTestCase):
         self.assertEqual(sent["capabilities"], CAPABILITIES)
         self.assertIn("automation.operation:run", sent["capabilities"])
 
+    def test_a_preview_runs_in_check_mode_and_any_other_spelling_of_one_runs_nothing(self):
+        from hq_runner.ansible import arguments
+
+        for check, mode in ((True, "--check"), (False, None)):
+            with self.subTest(check=check), tempfile.TemporaryDirectory() as private:
+                claim = fakes.pending()
+                claim["input"]["check"] = check
+                runner = fakes.Runner()
+
+                self.work(fakes.Bridge(claim), runner)
+
+                (run,) = runner.runs
+                self.assertEqual(arguments(run, Path(private)).get("cmdline"), mode)
+        for spelled in ("true", 1, None):
+            with self.subTest(check=spelled):
+                claim = fakes.pending()
+                claim["input"]["check"] = spelled
+                bridge, runner = fakes.Bridge(claim), fakes.Runner()
+
+                self.work(bridge, runner)
+
+                self.assertEqual(runner.runs, [])
+                self.assertEqual(self.only_report(bridge)["conditions"][0]["reason"], "Unrunnable")
+
     def test_nothing_waiting_runs_nothing_and_reports_nothing(self):
         bridge = fakes.Bridge()
         runner = fakes.Runner()

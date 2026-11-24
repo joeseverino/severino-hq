@@ -4,13 +4,14 @@ Apart from ``finding_model`` so a record an answer carries can name these
 without loading every detector.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
 from .action_links import ActionLink
 from .command_fields import Describe
+from .display_words import QUOTED, display
 from .json_schemas import Written
 from .workflows import WrittenAction
 
@@ -28,12 +29,14 @@ class Press:
     kind: Annotated[Literal["press"], Describe("A command HQ runs, pressed through `link`.")] = "press"
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Run:
     """A command an operator runs on their own machine. HQ never runs it."""
 
     label: Annotated[str, Describe("What running it does, said before the command.")]
-    command: Annotated[str, Describe("The exact command to paste into a shell on the machine it names.")]
+    command: Annotated[str, Describe("The exact command to paste into a shell on the machine it names.")] = field(
+        metadata=QUOTED
+    )
     notes: StepNotes = ()
     kind: Annotated[Literal["run"], Describe("A command the operator runs.")] = "run"
 
@@ -42,12 +45,16 @@ class Run:
             raise ValueError("A Run names its command; a step said in words is a Do.")
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class Do:
-    """What to do, in words, where no exact command can be named."""
+    """What to do, in words, where no exact command can be named, with the
+    value it has the reader set or copy, drawn as code since words cannot hold it."""
 
     text: Annotated[str, Describe("What to do, in a sentence or two.")]
     notes: StepNotes = ()
+    value: Annotated[str, Describe("What it has the reader set or paste, exactly; empty when it has none.")] = field(
+        default="", metadata=QUOTED
+    )
     kind: Annotated[Literal["do"], Describe("An instruction in words.")] = "do"
 
     def __post_init__(self) -> None:

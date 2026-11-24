@@ -443,4 +443,4 @@ class ServiceFaultRowTests(SimpleTestCase):
         )
         # Each fault said once: the first in the title, the others in the facts.
         self.assertEqual(rows[0]["detail"], "")
-        self.assertEqual(rows[0]["facts"], [["Also", faults[1]]])
+        self.assertEqual([(fact["label"], fact["value"]) for fact in rows[0]["facts"]], [("Also", faults[1])])

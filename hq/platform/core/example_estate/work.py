@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from hq.domains.content.content_sync import sync_content_index
 from hq.domains.content.models import ContentItem
-from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.control_plane.provider_adapters import github as delivery
@@ -23,6 +23,7 @@ from .names import (
     GITHUB,
     HQ_DIGEST,
     HQ_REVISION,
+    MACHINE,
     NEWER,
     OWNER_NAME,
     SOURCES,
@@ -567,4 +568,113 @@ def units():
                 },
             },
         },
+    )
+
+
+# How the app update's approval ends in each seed that draws one: its preview
+# refused on the host, its merge made and the apply refused, or applied.
+PREVIEW_FAILED, NOT_APPLIED = "preview-failed", "not-applied"
+# The steps a run stops on when the host refuses to start the pull.
+_REFUSED = (
+    ("Ask sudo whether the deploy login may start the pull unit", "ok", ""),
+    ("Require sudo to let the deploy login start the pull unit", "failed", "sudo refuses to start the pull unit."),
+)
+
+
+# The apps repository's apps whose update stands where home-automation's
+# open one does not: merged and not applied, held by Renovate, and a Compose
+# file HQ can't match; and the app it no longer holds, moved by hand.
+MERGED_APP, HELD_APP, UNMATCHED_APP, UNHELD_APP = "immich", "jellyfin", "nginx-proxy-manager", "portainer"
+
+
+def update_states(newer: dict[str, str]) -> None:
+    """The apps repository as Renovate and its merges leave it beside the
+    open update, the newer releases ``newer`` names out."""
+
+    held = ProviderInventory.objects.get(kind="github.repository").records
+    store(
+        "github.repository",
+        *(_states(record, newer) if record["repository"] == f"example/{APPS}" else record for record in held),
+    )
+
+
+def _states(record: dict, newer: dict[str, str]) -> dict:
+    ref = ImageRef.parse(next(image for name, _port, image in CONTAINERS if name == MERGED_APP))
+    kept = [path for path in record["compose"] if path.split("/")[1] not in (UNMATCHED_APP, UNHELD_APP)]
+    return {
+        **record,
+        "compose": [*kept, f"compose/{UNMATCHED_APP}/docker-compose.yml"],
+        "compose_images": [
+            {
+                "path": f"compose/{MERGED_APP}/compose.yaml",
+                "service": MERGED_APP,
+                "image": f"{ref.name}:{newer[MERGED_APP]}",
+            }
+        ],
+        "held_branches": [{"branch": f"renovate/{HELD_APP}", "marker": "unpend", "apps": [HELD_APP]}],
+    }
+
+
+def approval(owner, ended: str) -> None:
+    """The open app update approved and ended as ``ended`` says, each step
+    queued as its approval queues it and ended as its worker leaves it."""
+
+    from hq.domains.control_plane.models import OperationRequest
+    from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
+    from hq.platform.application.automation_runs import CHECK
+    from hq.platform.application.resource_operations import THEN, asked_fields, enqueue
+    from hq.platform.application.security import web_principal
+
+    update = _app_update(APPS)
+    repository = f"example/{APPS}"
+    # A playbook with no run waiting, since a record queues one at a time.
+    waiting = (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
+    playbook = (
+        ManagedResource.objects.filter(kind=OPERATION_KIND)
+        .exclude(operations__state__in=waiting)
+        .order_by("key")
+        .first()
+    )
+    hosts = [MACHINE]
+    applies = {
+        "operation": playbook.spec["operation"],
+        "revision": playbook.spec["revision"],
+        "hosts": hosts,
+        "correlation": f"{repository}#{update['number']}@{update['head'][:12]}",
+    }
+    events = [{"host": MACHINE, "task": task, "outcome": outcome, "message": said} for task, outcome, said in _REFUSED]
+    at = timezone.now() - timedelta(minutes=5)
+
+    def record(resource, action, state, *, asked, result):
+        fields = asked_fields(web_principal(owner), reason="", **asked)
+        operation, _ = enqueue(action, lambda: (resource, fields))
+        finished = {"state": state, "result": result, "claimed_at": at, "completed_at": at}
+        OperationRequest.objects.filter(pk=operation.pk).update(**finished)
+        return operation
+
+    merging = {"head_sha": update["head"], "apps": [UPDATED_APP], THEN: applies}
+    if ended == PREVIEW_FAILED:
+        previewed = {**applies, "parameters": {"revision": update["head"]}, CHECK: True, THEN: merging}
+        record(playbook, "run", "failed", asked=previewed, result={"message": "A task failed.", "events": events})
+        return
+    pull = ManagedResource.objects.create(
+        key=f"example-pull-request-{APPS}-{update['number']}",
+        kind=delivery.PULL_REQUEST_KIND,
+        spec={"repository": repository, "number": update["number"], "head_sha": update["head"]},
+    )
+    merged = hexed("merged", APPS, length=40)
+    failed = ended == NOT_APPLIED
+    applied = record(
+        playbook,
+        "run",
+        "failed" if failed else "succeeded",
+        asked={**applies, "parameters": {"revision": merged}},
+        result={"message": "A task failed.", "events": events} if failed else {"message": "Applied."},
+    )
+    record(
+        pull,
+        "merge",
+        "succeeded",
+        asked={**merging, "correlation": applies["correlation"]},
+        result={"status": {"merge_sha": merged}, THEN: {"run": str(applied.pk)}},
     )

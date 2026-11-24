@@ -93,6 +93,10 @@ type GitHubRepositoryRecord struct {
 	// to updates (github_compose.go).
 	Compose   []string `json:"compose"`
 	Dashboard string   `json:"dashboard"`
+	// ComposeImages is each service's image those files pin at the head, and
+	// HeldBranches each branch the Dashboard holds with no pull request.
+	ComposeImages []GitHubComposeImage `json:"compose_images"`
+	HeldBranches  []GitHubHeldBranch   `json:"held_branches"`
 	// Fingerprint is what GitHub's change query answered before the read,
 	// hashed, and ReadAt when the read was made: what HQ's plan sends back.
 	Fingerprint string `json:"fingerprint"`
@@ -354,6 +358,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	record := GitHubRepositoryRecord{
 		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, Archived: repo.Archived, URL: repo.HTMLURL,
 		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit), Compose: []string{},
+		ComposeImages: []GitHubComposeImage{}, HeldBranches: []GitHubHeldBranch{},
 	}
 	if uses, ok := part(ctx, g, runtime.PartWorkflowPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {
 		record.Pins, record.CalledWorkflows = uses.pins, uses.called
@@ -361,8 +366,9 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	// layout is nil where the apps are not read, so no update's images are.
 	var layout []string
 	if g.optedIn() {
-		if apps, ok := part(ctx, g, runtime.PartCompose, func() (githubLayout, error) { return g.apps(ctx, branch) }); ok {
+		if apps, ok := part(ctx, g, runtime.PartCompose, func() (githubLayout, error) { return g.apps(ctx, branch, commit.Sha) }); ok {
 			record.Compose, record.Dashboard, layout = apps.compose, apps.dashboard, apps.compose
+			record.ComposeImages, record.HeldBranches = apps.images, apps.held
 		}
 	}
 	githubs := githubOwnSuites(runs.WorkflowRuns)

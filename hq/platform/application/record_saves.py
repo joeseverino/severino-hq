@@ -36,7 +36,8 @@ from django.db.models import Model
 from .answer_fields import CallMessage
 from .command_fields import Names, names_of
 from .describe import Describe
-from .domains import load, records_of
+from .domains import records_of
+from .host_sections import load
 from .integration_specs import TARGET_KINDS, Kept, keeps
 from .json_schemas import Written, as_written
 from .record_declaration import Records

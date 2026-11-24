@@ -9,13 +9,15 @@ import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink, read_link
 from .cadence import CONTROLLER_REFRESH
-from .display_words import as_members, in_words
+from .describe import Describe
+from .display_words import Code, as_members, in_words
+from .entity_links import EntityLink, link_url
 from .finding_steps import Do, Press, Run, Step
 from .moments import moment
 from .tone import Tone
@@ -70,6 +72,30 @@ class FindingRemedy:
         return url, "GET" if answers_get else "POST"
 
 
+# A line of what a finding rests on: its label, and its value in words,
+# what a machine wrote as it reads (``Code``, a digest or a path), or the
+# record it names as the link builder answers for it (``entity_link``), which
+# every door links.
+Fact = tuple[str, str | EntityLink]
+
+
+class FindingEvidence(TypedDict):
+    """One line of what a finding rests on."""
+
+    label: Annotated[str, Describe("What this line of evidence is, as a problem card labels it.")]
+    value: Annotated[str, Describe("What was found, most often a name or a sentence.")]
+    url: Annotated[str, Describe("The page of what it names: a path in HQ, or an outside address. Empty for none.")]
+    code: Annotated[bool, Describe("Whether the value is what a machine wrote (a digest, a path), to read exactly.")]
+
+
+def written_fact(label: str, value: str | EntityLink) -> FindingEvidence:
+    """A line of evidence as every door answers it, a record with its page."""
+
+    if isinstance(value, str):
+        return {"label": label, "value": value, "url": "", "code": isinstance(value, Code)}
+    return {"label": label, "value": value.label, "url": link_url(value.url), "code": False}
+
+
 @dataclass(frozen=True, slots=True)
 class Finding:
     """One claim, the evidence for it, and what could be done about it."""
@@ -79,7 +105,7 @@ class Finding:
     title: str
     severity: Tone
     explanation: str
-    evidence: tuple[tuple[str, str], ...] = ()
+    evidence: tuple[Fact, ...] = ()
     # The commands that would fix it, as its detector names them. Derivation
     # resolves each once, into a ``Press`` among its steps for a reader who may
     # run it, and empties this.
@@ -167,7 +193,7 @@ class Finding:
             in_words(text)
         for label, value in self.evidence:
             in_words(label, label=True)
-            in_words(value)
+            in_words(value if isinstance(value, str) else str(value))
 
     @property
     def one_press(self) -> bool:

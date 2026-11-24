@@ -22,8 +22,8 @@ from .tone import Tone
 from .ui import DomainOverview
 lazy from . import finding_model, finding_steps
 lazy from .action_items import item_key
-lazy from .domains import NAVIGATION_GROUPS
 lazy from .findings import finding_key
+lazy from .host_sections import NAVIGATION_GROUPS
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
 
@@ -139,7 +139,7 @@ class NavigationGroup:
 
     ``name`` is the ``group`` its items give; ``description`` is the sentence a
     reader of the machine contract reads under the group's name, as the host's
-    own groups say theirs (``domains.NAVIGATION_GROUPS``).
+    own groups say theirs (``host_sections.NAVIGATION_GROUPS``).
     """
 
     name: str
@@ -510,8 +510,9 @@ def source_attention(
                 why="Asking this source for its items raised an error, so anything it would report is missing.",
                 steps=(
                     finding_steps.Do(
-                        "Find the line in HQ's log whose event is composition.source.unreadable and whose message "
-                        f"names {source_id}; the traceback under it says what failed."
+                        f"Find the line in HQ's log with this event whose message names {source_id}; the traceback "
+                        "under it says what failed.",
+                        value="composition.source.unreadable",
                     ),
                 ),
                 read_capabilities=read_capabilities,

@@ -431,7 +431,7 @@ class WalkedStatesTests(TestCase):
             item
             for group in page.context["action_groups"]
             for item in group["items"]
-            if held_twice in " ".join((item["label"], *(value for _label, value in item["facts"])))
+            if held_twice in " ".join((item["label"], *(fact["value"] for fact in item["facts"])))
         ]
         self.assertIn("expires in 5 days", item["label"])
         with projection_scope():

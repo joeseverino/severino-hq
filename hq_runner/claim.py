@@ -71,6 +71,8 @@ class Run:
     profile: str = READ_PROFILE
     # What its record says shows it worked, each a sentence without its stop.
     verification: tuple[str, ...] = ()
+    # A preview: Ansible's check mode, which HQ alone asks for (``RunInput.check``).
+    check: bool = False
 
     @property
     def escalates(self) -> bool:
@@ -149,6 +151,10 @@ def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
         raise Refused("Unrunnable", "The run names no machine to run on.")
     if not isinstance(parameters, Mapping):
         raise Refused("Unrunnable", "The run's parameters are not an object.")
+    # Anything but a plain boolean is refused, so no spelling of a preview runs for real.
+    check = run_input.get("check", False)
+    if not isinstance(check, bool):
+        raise Refused("Unrunnable", "The run's check is neither true nor false.")
     timeout = spec.get("timeout_seconds")
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout < 1:
         raise Refused("Unrunnable", "The procedure's record declares no timeout.")
@@ -179,6 +185,7 @@ def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
         timeout_seconds=timeout,
         profile=login,
         verification=tuple(each for each in _list(spec.get("verification")) if isinstance(each, str) and each.strip()),
+        check=check,
     )
 
 

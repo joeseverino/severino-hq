@@ -6,7 +6,8 @@ the document)."""
 
 from django.test import TestCase
 
-from hq.platform.application.domains import host_records, load
+from hq.platform.application.domains import host_records
+from hq.platform.application.host_sections import load
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media

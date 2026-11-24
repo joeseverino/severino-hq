@@ -13,6 +13,7 @@ from hq.domains.control_plane.observations.adguard import (
     UNUSED_AFTER_HOURS,
 )
 
+from .entity_links import entity_link, node_link
 from .finding_model import Finding, FindingEstate, FindingRule
 from .tone import Tone
 from .topology_model import TopologyNode
@@ -97,8 +98,8 @@ def unused_names(estate: FindingEstate) -> tuple[Finding, ...]:
             severity=Tone.NEUTRAL,
             explanation="AdGuard still has a record for it.",
             evidence=(
-                ("Name", name),
-                ("Read from", node.label),
+                ("Name", entity_link("service", name)),
+                ("Read from", node_link(node)),
                 ("Query log covers", f"{UNUSED_AFTER_HOURS} hours or more"),
             ),
         )

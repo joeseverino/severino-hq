@@ -30,6 +30,7 @@ from hq.platform.application.projects import (
     projects_by_repository,
     repository_key,
 )
+from hq.platform.application.quoted import Quoted
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.references import Kind
 from hq.platform.application.security import web_principal
@@ -316,7 +317,7 @@ def _advisories(repo) -> Cell:
             status=StatusMark(item.get("severity") or "advisory", tone=severity_tone(item.get("severity"))),
             parts=(
                 Cell(item["id"], item["url"], external=True),
-                Cell(Truncator(item.get("summary") or "").chars(90)),
+                Cell(Quoted(Truncator(item["summary"]).chars(90))),
                 _published(item["published"]),
             ),
         )
@@ -329,7 +330,7 @@ def _advisories(repo) -> Cell:
 
 
 def _starred(repo) -> Cell:
-    description = Truncator(repo.get("description") or "").chars(110)
+    description = Quoted(Truncator(repo["description"]).chars(110))
     return Cell(
         repo["name"],
         repo["url"],

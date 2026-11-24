@@ -20,6 +20,8 @@ from hq.platform.application.routes import reverse
 from .action_links import command_action, read_link
 from .container_standard import STANDARD
 from .containers import VULNERABLE, Container, ImageStanding, containers
+from .display_words import Code
+from .entity_links import entity_link
 from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
@@ -41,10 +43,7 @@ from .standards import Check
 from .tone import Tone
 from .ui import agreed, ended
 from .workflow_contracts import ActionLink
-lazy from .app_update_approval import approval_of, approve_remedy
-lazy from .app_updates import managed_by, update_of
-lazy from .entity_links import web_url
-lazy from .labels import lower_first
+lazy from .app_updates import UpdateKind, UpdateState, update_state
 lazy from .topology_estate import machine_nodes
 lazy from .upgrades import HIGH, MAJOR, Plan, plan_for
 
@@ -58,8 +57,6 @@ OVERRIDES = (
 # Why an update is a person's to apply: no repository holds the container's
 # Compose files, so no pull request will move it.
 BY_HAND = "No repository HQ reads holds its Compose files."
-# Why a repository's container waits: HQ approves the update Renovate opens.
-NOT_OPENED = "Renovate has not opened its update yet."
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 ADVISORY = "container-image-advisory"
 UPDATE = "container-image-update"
@@ -71,9 +68,10 @@ def _images(rule: str) -> Callable[[FindingEstate], tuple[Finding, ...]]:
     """The detector of ``rule``: its findings among every image's."""
 
     def detect(_estate: FindingEstate) -> tuple[Finding, ...]:
-        return distinct(
+        found = distinct(
             finding for finding in read_once("container_findings.images", _image_findings) if finding.rule == rule
         )
+        return tuple(sorted(found, key=lambda finding: finding.title))
 
     return detect
 
@@ -98,28 +96,19 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
     if standing.state == VULNERABLE:
         if needs_you(standing, running):
             yield _advisory(running, subject, plan)
-    elif plan is not None and plan.recommended:
-        update = update_of(_lead(running))
-        upgrade = _upgrade(running, plan)
-        if update is not None:
-            pin = update.pin_of(_lead(running))
-            title = f"{_names(running)} has an update" + (f", {pin.said}" if pin else "")
-            fixes = f", and fixes {lower_first(update.fixes_said)}" if update.fixes else ""
-            explanation = ended(f"Pull request {update.label} moves it{fixes}")
-            # What the title and its line say is not said again among its facts.
-            said = {("Pin", pin.said) if pin else (), ("Fixes", update.fixes_said) if fixes else ()}
-            upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if fact not in said)
-        else:
-            title = f"{standing.label} has an update"
-            explanation = ended(f"{standing.label} to {standing.latest}")
-            upgrade["evidence"] = (*upgrade.get("evidence", ()), *_risk(plan))
+    elif plan is not None and plan.recommended and not (state := update_state(_lead(running))).at_work:
+        title = f"{_names(running)} has an update" + (f", {state.move}" if state.move else "")
+        upgrade = _upgrade(running, plan, state)
+        # What the title and its line say is not said again among its facts.
+        said = f"{title} {state.words}".casefold()
+        upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if str(fact[1]).casefold() not in said)
         yield _found(
             running,
             subject,
             rule=UPDATE,
             severity=Tone.ATTENTION,
             title=title,
-            explanation=explanation,
+            explanation=state.words,
             **upgrade,
         )
     if by_tag := [item for item in running if _unpinned(item.standing)]:
@@ -154,19 +143,23 @@ def _found(running: list[Container], subject: str, **said: Any) -> Finding:
     what the card leads with and the steps it gives, and the containers page,
     which helps whatever the card leads with."""
 
-    primary = said.pop("primary")
+    primary = said.pop("primary", None)
     containers = _containers()
+    offers = (
+        *said.pop("offers", ()),
+        *(() if primary is not None and primary.url == containers.url else (containers,)),
+    )
     return Finding(
         subject=subject,
         part=running[0].standing.label,
         evidence=(
-            *(("Container", item.running.name) for item in running),
-            ("Machine", running[0].machine.name),
+            *(("Container", item.link) for item in running),
+            ("Machine", entity_link("machine", running[0].machine.name)),
             *said.pop("evidence", ()),
         ),
         **_read(running),
         primary=primary,
-        offers=() if primary.url == containers.url else (containers,),
+        offers=offers,
         **said,
     )
 
@@ -185,42 +178,27 @@ def _read(running: list[Container], *, standing: bool = True) -> dict[str, Any]:
     return {"observed_at": at, "reads": kind}
 
 
-def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
-    """What a card about moving ``running`` on leads with and the steps it
-    gives, from the one decision its plan makes (``Plan.recommended``): the
-    move and how to make it by hand, or the page that plans it and no step to
-    make a move the card says is not worth making."""
+def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | None = None) -> dict[str, Any]:
+    """What a card about moving ``running`` on does: the one action its
+    update's state offers (``update_state``), else why it offers none; and
+    the page that plans it with no step, for a move its plan says is not
+    worth making (``Plan.recommended``)."""
 
     lead = _lead(running)
     # HQ plans only what it watches; the containers page stands in for any other.
     page = opens("Upgrade plan", f"{lead.url}#upgrade") if plan is not None and lead.running.watcher else _containers()
     if plan is None or not plan.recommended:
         return {"primary": page, "steps": ()}
-    update = update_of(lead)
-    if update is not None:
-        # The open pull request is the move: one approval merges and applies
-        # it, beside the page that reviews it.
-        url = f"{lead.url}#upgrade" if lead.running.watcher else update.url
-        held = approval_of(update).held
-        return {
-            "primary": opens(f"Review {update.label}", url),
-            "steps": (),
-            "evidence": update.evidence,
-            "remedies": () if held else (approve_remedy(update),),
-            "no_help_reason": held,
-        }
-    if (managed := managed_by(lead)) is not None:
-        # Its repository moves it: the Dashboard lists the update Renovate holds.
-        where = web_url(managed.dashboard)
-        found = (
-            opens("Dependency Dashboard", where)
-            if where
-            else opens(managed.repository, web_url(managed.url) or page.url)
-        )
-        return {"primary": found, "steps": (), "no_help_reason": NOT_OPENED}
-    said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
-    label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
-    return {"primary": opens(label, page.url), "steps": _by_hand(running, plan)}
+    state = state or update_state(lead)
+    evidence = (*(state.update.evidence if state.update else ()), *_risk(plan))
+    if state.kind == UpdateKind.BY_HAND:
+        said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
+        label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
+        return {"primary": opens(label, page.url), "steps": _by_hand(running, plan), "evidence": evidence}
+    if state.action is None:
+        # What holds it back is what to clear, so it is the one step, said once.
+        return {"steps": (Do(state.reason),), "evidence": evidence, "no_help_reason": state.reason}
+    return {"steps": (), "evidence": evidence, "remedies": (state.action.remedy,)}
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:
@@ -256,7 +234,6 @@ def _advisory(running: list[Container], subject: str, plan: Plan | None) -> Find
         *upgrade.get("evidence", ()),
         ("Worst severity", capfirst(standing.worst)),
         *((("Fixed in", fixed),) if fixed else ()),
-        *(_risk(plan) if plan is not None and plan.recommended else ()),
     )
     return _found(
         running,
@@ -293,7 +270,7 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
         severity=Tone.ATTENTION,
         title=f"{running[0].running.image} runs by tag alone",
         explanation="A tag can later name a different build.",
-        evidence=tuple(("Pin it as", pin) for pin in pins),
+        evidence=tuple(("Pin it as", Code(pin)) for pin in pins),
         steps=_compose_steps(running, _pin),
         primary=_containers(),
     )
@@ -336,11 +313,18 @@ def _compose_steps(running: list[Container], image: Callable[[Container], str]) 
             if files and all(services)
             else ""
         )
-        steps.append(
-            Run(f"On {machine}, set the image of {names} to {wanted} in {_sets_image(files)}, then run", command)
-            if command
-            else Do(f"On {machine}, set the image of {names} to {wanted} where it is defined, then start it again.")
-        )
+        if command:
+            steps.append(
+                Do(ended(f"On {machine}, set the image of {names} in {_sets_image(files)}"), value=f"image: {wanted}")
+            )
+            steps.append(Run("Then start it again", command))
+        else:
+            steps.append(
+                Do(
+                    f"On {machine}, set the image of {names} where it is defined, then start it again.",
+                    value=f"image: {wanted}",
+                )
+            )
     return tuple(steps)
 
 
@@ -485,7 +469,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _images(UPDATE),
         gathered=True,
-        operator_action="Move the container to the newer release.",
+        operator_action="Move it to the newer release.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
         bars={

@@ -200,9 +200,8 @@ class PostureHelpTests(TestCase):
         self.assertNotIn("sha_pinning_required", str(item.steps))
         # Why, in one sentence that names no workflow; which workflows, as a
         # step each.
-        *each, reason = told(item)
-        self.assertEqual(reason, PINS_CALLED)
-        self.assertEqual(each, [f"alpha: check that {called[0]} pins its own actions, then require pinning."])
+        self.assertEqual(told(item)[-1], PINS_CALLED)
+        self.assertEqual([step.value for step in item.steps if isinstance(step, Do) and step.value], called)
 
     def test_a_tag_that_could_not_be_resolved_holds_back_the_setting(self):
         pins = [

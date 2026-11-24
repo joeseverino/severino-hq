@@ -14,7 +14,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from hq.platform.application.routes import reverse
 
-from .finding_model import Finding, FindingRule, opens
+from .finding_model import Finding, FindingRule, opens, written_fact
 from .findings import estate_findings, finding_rules, rule_for
 from .infrastructure import ResourceState, enabled_resources, resource_health
 from .labels import lower_first
@@ -184,7 +184,7 @@ def readable_by[Item: Mapping[str, Any]](principal, items: list[Item]) -> list[I
 def _offering[Item: Mapping[str, Any]](item: Item, offer: Offer) -> Item:
     """A held request's item with the decisions its reader may take, and why any other is withheld."""
 
-    facts = [*item.get("facts", ()), *([["Decision", offer.withheld]] if offer.withheld else [])]
+    facts = [*item.get("facts", ()), *([written_fact("Decision", offer.withheld)] if offer.withheld else [])]
     return cast(Item, {**item, "actions": [*item.get("actions", ()), *map(asdict, offer.actions)], "facts": facts})
 
 

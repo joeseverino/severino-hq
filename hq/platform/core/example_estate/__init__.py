@@ -13,7 +13,7 @@ from hq.platform.application import cadence, first_seen, freshness, pins, proble
 from hq.platform.application.linked_accounts import GITHUB, record_claimed_accounts
 from hq.platform.core.network import SOCKET_PEER
 
-from . import agents, automation, docker, history, infra, network, records, web, work
+from . import agents, automation, docker, failures, history, infra, network, records, web, work
 from .names import HQ, LAPTOP, OWNER, OWNER_NAME, OWNER_USERNAME, PROXY, SSO
 
 # The services the operator starred, to keep at the top of the list.
@@ -87,6 +87,7 @@ def _seed(owner):
         web.analytics()
         web.contact()
         agents.seen(owner)
+        failures.raised(owner)
     history.settle()
     agents.lately(owner)
     # Last, so no later step's claim takes the run left waiting.

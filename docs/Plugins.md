@@ -49,7 +49,7 @@ plugin = PluginManifest(
 
 `description` says what the domain holds and each `NavigationGroup` what a
 group the extension's items add is for, as a host section and the host's own
-groups (`NAVIGATION_GROUPS` in `hq/platform/application/domains.py`) say
+groups (`NAVIGATION_GROUPS` in `hq/platform/application/host_sections.py`) say
 theirs. The API document reads both under each tag.
 
 Locally, set `SEVERINO_HQ_PLUGINS=example_notes.plugin:plugin`, install the

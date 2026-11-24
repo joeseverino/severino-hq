@@ -52,6 +52,7 @@ VERBS = frozenset(
         "accept_observed",
         "adopt",
         "allow",
+        "apply",
         "approve",
         "cancel",
         "choose",

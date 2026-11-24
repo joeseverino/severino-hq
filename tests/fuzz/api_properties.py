@@ -29,7 +29,8 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.command_fields import Describe
-from hq.platform.application.domains import load, records_of
+from hq.platform.application.domains import records_of
+from hq.platform.application.host_sections import load
 from hq.platform.application.integration_specs import STALE_WRITE_KEYWORD
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import compile_integration_graph

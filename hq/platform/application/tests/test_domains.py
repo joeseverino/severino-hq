@@ -16,13 +16,13 @@ from hq.platform.application.security import cli_principal
 
 from ..dashboard import work_queue
 from ..domains import (
-    HOST_DOMAINS,
     Domain,
     domain_attention_items,
     domain_dashboard_cards,
     host_records,
 )
 from ..finding_model import Finding, opens
+from ..host_sections import HOST_DOMAINS
 from ..plugins import PluginIntegration
 
 

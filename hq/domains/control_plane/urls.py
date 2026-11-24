@@ -1,5 +1,7 @@
 from django.urls import path
 
+from hq.platform.application.app_update_approval import APPLY, APPROVE
+from hq.platform.application.app_update_open import OPEN
 from hq.platform.application.resource_capabilities import CREATE_CAPABILITY, UPDATE_CAPABILITY
 
 from . import (
@@ -16,7 +18,7 @@ from . import (
     views,
     visit_views,
 )
-from .container_views import AppUpdateApproveView, ContainerListView
+from .container_views import AppUpdatePressView, ContainerListView
 from .models import OperationRequest
 
 app_name = "control_plane"
@@ -71,8 +73,18 @@ urlpatterns = [
     path("adopt/<str:hostname>/", resource_form_views.AdoptView.as_view(), name="adopt"),
     path(
         "app-updates/<str:owner>/<str:name>/<int:number>/<str:head_sha>/approve/",
-        AppUpdateApproveView.as_view(),
+        AppUpdatePressView.as_view(runs=(APPROVE,)),
         name="app_update_approve",
+    ),
+    path(
+        "app-updates/<str:owner>/<str:name>/<str:app>/<str:head_sha>/apply/",
+        AppUpdatePressView.as_view(runs=(APPLY,)),
+        name="app_update_apply",
+    ),
+    path(
+        "app-updates/<str:owner>/<str:name>/<str:app>/open/",
+        AppUpdatePressView.as_view(runs=(OPEN,)),
+        name="app_update_open",
     ),
     # One specific record rather than everything a hostname answers with. A
     # container has no hostname at all, so it is unreachable from the route

@@ -8,6 +8,7 @@ from typing import Any
 
 from django.utils.text import capfirst, slugify
 
+from hq.platform.application.display_words import Code
 from hq.platform.application.entity_links import declared_link, entity_link, web_url
 from hq.platform.application.moments import when
 from hq.platform.application.tables import Below, Cell, DataTable, Row, StatusMark, TableColumn
@@ -86,7 +87,7 @@ def machine_containers(
         )
         stack = container.stack if container.stack and container.stack != container.name else ""
         image = (
-            Cell(standing.label, readout=True, tip=container.image)
+            Cell(standing.label, readout=True, tip=Code(container.image))
             if standing
             else Cell(container.image_label, readout=True)
         )
@@ -147,7 +148,7 @@ def _image(standing: Any) -> Cell:
     """The image by its short name, then its tag, how it is pinned and when it was built."""
 
     pinned = (
-        Cell("locked", tip=f"Locked to {standing.image.digest[:19]}…", dot=True)
+        Cell("locked", tip="It runs the one image its digest names, wherever the tag moves.", dot=True)
         if standing.pinned
         else Cell("tag only", tip="It runs whatever the tag pointed at when it was pulled.", dot=True)
     )

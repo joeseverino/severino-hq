@@ -11,7 +11,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from .tone import Tone
-lazy from .entity_links import web_url
+lazy from .entity_links import EntityLink, web_url
 lazy from .findings import rule_origin
 lazy from .freshness import Freshness, freshness
 lazy from .moments import moment
@@ -76,14 +76,16 @@ def _one_primary(actions: list[dict[str, Any]], named: list[dict[str, Any]]) -> 
     return [{**action, "recommended": index == lead} for index, action in enumerate(actions)]
 
 
-def _facts(pairs: Any) -> list[dict[str, Any]]:
+def _facts(facts: Any) -> list[dict[str, Any]]:
     """Facts by label, in the order first given: each label once, with every
-    value it was given, and a value that is a web address as a link."""
+    value it was given, one that names a page as its link to it, the kind of
+    thing it is said by its label."""
 
-    grouped: dict[str, list[dict[str, str]]] = {}
-    for label, value in pairs:
-        text = str(value)
-        grouped.setdefault(str(label), []).append({"text": text, "url": web_url(text)})
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for fact in facts:
+        label, text, url = fact["label"], fact["value"], fact["url"]
+        link = EntityLink(text, url, external=bool(web_url(url)), kind_label=label) if url else None
+        grouped.setdefault(label, []).append({"text": text, "link": link, "code": fact["code"]})
     return [{"label": label, "values": values} for label, values in grouped.items()]
 
 

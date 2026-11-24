@@ -333,26 +333,30 @@ class DemoSiteTests(unittest.TestCase):
         with sync_playwright() as playwright:
             browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 900})
+            filtered = []
             for path in sorted(lists):
                 with self.subTest(path=path):
                     page.goto(self.origin + path, wait_until="networkidle")
                     choice = page.locator("[data-table-toolbar] input[type=checkbox]").first
-                    # Each panel the choice is folded into, outermost first: the
-                    # bar's Filters, where its row has no room, then its own.
-                    panels = choice.locator("xpath=ancestor::*[@popover]")
-                    for at in range(panels.count()):
-                        opener = page.locator(f'[popovertarget="{panels.nth(at).get_attribute("id")}"]')
-                        if opener.is_visible():
-                            opener.click()
-                    name, value = choice.get_attribute("name"), choice.get_attribute("value")
-                    # Answered in place from the saved copy, the page busy until it lands.
-                    with page.expect_response(lambda response: "/__q/" in response.url):
-                        choice.check()
-                    page.wait_for_url(re.compile(rf"[?&]{re.escape(name)}="))
-                    page.wait_for_function("() => !document.querySelector('main[aria-busy]')")
-                    self.assertEqual(page.locator("#content > .messages").count(), 0, "the filter was saved")
-                    ticked = page.locator(f'[data-table-toolbar] input[name="{name}"][value="{value}"]')
-                    self.assertTrue(ticked.is_checked(), "the copy shows the filter it answers")
+                    # A list that offers no filter (a log read newest first) is searched only.
+                    if choice.count():
+                        # Each panel the choice is folded into, outermost first: the
+                        # bar's Filters, where its row has no room, then its own.
+                        panels = choice.locator("xpath=ancestor::*[@popover]")
+                        for at in range(panels.count()):
+                            opener = page.locator(f'[popovertarget="{panels.nth(at).get_attribute("id")}"]')
+                            if opener.is_visible():
+                                opener.click()
+                        name, value = choice.get_attribute("name"), choice.get_attribute("value")
+                        # Answered in place from the saved copy, the page busy until it lands.
+                        with page.expect_response(lambda response: "/__q/" in response.url):
+                            choice.check()
+                        page.wait_for_url(re.compile(rf"[?&]{re.escape(name)}="))
+                        page.wait_for_function("() => !document.querySelector('main[aria-busy]')")
+                        self.assertEqual(page.locator("#content > .messages").count(), 0, "the filter was saved")
+                        ticked = page.locator(f'[data-table-toolbar] input[name="{name}"][value="{value}"]')
+                        self.assertTrue(ticked.is_checked(), "the copy shows the filter it answers")
+                        filtered.append(path)
                     page.goto(self.origin + path, wait_until="networkidle")
                     # The search the reader types in, not the unseen copy the bar measures its room with.
                     search = page.locator("[data-table-toolbar] input[type=search] >> visible=true")
@@ -362,6 +366,7 @@ class DemoSiteTests(unittest.TestCase):
                     self.assertEqual(search.input_value(), "example")
                     self.assertIn("Find anything", page.locator("#content > .messages").inner_text())
             browser.close()
+        self.assertTrue(filtered, "a list's toolbar filters")
 
     def test_what_a_page_or_its_copies_link_with_a_query_is_saved(self):
         # Each address with a query a page links (a day, a filter, a search
@@ -682,7 +687,7 @@ class DemoSiteTests(unittest.TestCase):
                             asked.append(request.url)
 
                     page.on("request", note)
-                    page.locator('main a[href*="/?"]').first.click()
+                    page.locator('main a[href*="/?"]:visible').first.click()
                     page.wait_for_function("() => document.querySelector('meta[name=hq-demo-address]')")
                     page.remove_listener("request", note)
                     self.assertEqual(len(opened), 2, "the address, then its copy")

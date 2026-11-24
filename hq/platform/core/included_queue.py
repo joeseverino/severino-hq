@@ -43,12 +43,13 @@ WORK_QUEUE = _part(
     opening it shows something more, or releases a cut meaning, and with no script every row shows all
     of it. The line beneath holds, in order:
 
-    - what was read that shows it (`Insight(facts=...)`), each label once with its values beside it;
+    - what was read that shows it (`Insight(facts=...)`), each label once with its values beside it,
+      a record linked to its page;
     - what to do, where a command or an instruction is a step, one standing alone and several
       numbered. A command is `{% command text=... %}`;
     - the reason it cannot be done from here, as a sentence and never as a step;
-    - the pages that help look into it (`Insight(links=...)`), the map's as icons with HQ's
-      tooltip;
+    - the pages that help look into it (`Insight(links=...)`), each in words, the map's opening
+      with its icon;
 
     The survey holds "words swapped for a glyph".
 
@@ -121,6 +122,12 @@ INSIGHT_FACTS = _part(
     "insight_facts",
     "What was read that shows a problem, `facts`: each label once, with every value it was given.",
     example=records.INSIGHT_FACTS,
+    rules="""
+    A value that names a record is its link: its owner hands the record as the link builder answers
+    for it (`("Machine", entity_link("machine", name))`, a `Fact`), never its name alone, and it is
+    drawn as every entity is, a page outside HQ with its arrow, its address held to `link_url`. Text
+    is never a link, a web address included.
+    """,
 )
 OPERATOR_STEPS = _part(
     "operator_steps",
@@ -129,6 +136,13 @@ OPERATOR_STEPS = _part(
 )
 ICON_LINKS = _part(
     "icon_links",
-    "The pages that help look into a problem, `links`: one HQ maps to an icon drawn as it, its label the tip.",
+    "The pages that help look into a problem, `links`: each its words, one HQ draws an icon for opening with it.",
     example=records.ICON_LINKS,
+    states=records.ICON_LINKS_STATES,
+    rules="""
+    A run of links on one line (`{% list kind="dots" %}`), each a link of words that says what it
+    opens: a thing's page is "Open" and its name (`action_links.open_link`). An icon never stands in
+    for the words, so every link is read and pressed alike and each stands on the line's one
+    baseline, the dot between any two.
+    """,
 )

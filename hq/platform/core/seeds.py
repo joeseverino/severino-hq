@@ -204,6 +204,37 @@ def _policy_change(owner) -> None:
     example_estate.agents.asks_to_open_the_policy()
 
 
+def _approved(ended: str) -> Callable[[Any], None]:
+    """The example estate with its app update approved and ended as
+    ``ended`` says, so its container's Upgrade card draws that standing."""
+
+    def seed(owner) -> None:
+        _estate(owner)
+        example_estate.work.approval(owner, ended)
+
+    return seed
+
+
+def _updates(on: str = "") -> Callable[[Any], None]:
+    """The example estate with an update of each app in a state of its own
+    (``example_estate.work.update_states``), applied by a playbook written
+    for its machine, or, given ``on``, only for that other machine."""
+
+    def seed(owner) -> None:
+        from hq.platform.application.security import web_principal
+
+        _estate(owner)
+        example_estate.docker.updates_out()
+        example_estate.work.update_states(example_estate.docker.UPDATES)
+        hosts = (example_estate.names.MACHINE,)
+        if on:
+            apps.get_model("control_plane", "ManagedResource").objects.create(key=on, kind="machine", spec={"name": on})
+            hosts = (on,)
+        example_estate.automation.applies_updates(web_principal(owner), hosts)
+
+    return seed
+
+
 @contextmanager
 def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
@@ -244,6 +275,10 @@ SEEDS: dict[str, Seed] = {
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
+    **{f"update-{ended}": Seed(_approved(ended), _SET_UP) for ended in ("preview-failed", "not-applied", "applied")},
+    "app-updates": Seed(_updates(), _SET_UP),
+    # Applied only by a playbook written for another machine.
+    "app-updates-elsewhere": Seed(_updates("edge-01"), _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

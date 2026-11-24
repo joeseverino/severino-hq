@@ -6,7 +6,8 @@ stands outside the page frame and so titles itself.
 
 `code` is the HTTP status, said over the title; `body` is what happened and
 what to do, in words; `request_id`, where the page has one, is the id the log
-line for this failure carries; `search` offers the search field. Every error
+line for this failure carries, linked to `error_url`, its error's page, where
+the reader may open it; `search` offers the search field. Every error
 page ends with the one way out, back to the dashboard. Deliberately plain: the
 reader is here by accident, so the page orients and offers a way on rather
 than decorating the mistake.
@@ -14,7 +15,7 @@ than decorating the mistake.
 <div class="error-page">
   <p class="error-page-code">{{ code }}</p>
   <h1>{{ title }}</h1>
-  <p class="error-page-body">{{ body }}{% if request_id %} Its request id is <code>{{ request_id }}.</code>{% endif %}</p>
+  <p class="error-page-body">{{ body }}{% if request_id %} Its request id is {% if error_url %}<a href="{{ error_url }}"><code>{{ request_id }}.</code></a>{% else %}<code>{{ request_id }}.</code>{% endif %}{% endif %}</p>
   {% if search %}
   {% url 'search' as search_url %}
   {% filter_bar search="Find anything" verb="Search" action=search_url %}{% endfilter_bar %}

@@ -605,6 +605,36 @@ class IdempotencyRecord(models.Model):
         return f"A retry key of {self.actor}"
 
 
+class ServerError(models.Model):
+    """One unhandled error HQ logged while serving a request, kept so the request id its 500 page
+    prints reads the error in HQ (``core.server_errors``). Never a frame's locals."""
+
+    request_id = models.CharField("request ID", max_length=64, unique=True)
+    occurred_at = models.DateTimeField(default=timezone.now)
+    method = models.CharField(max_length=16, blank=True)
+    # The path alone: a query string can carry what the caller sent.
+    path = models.CharField(max_length=512, blank=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    # The agent or door the request was bound to, where it names one (``attribution.bound``).
+    actor = models.CharField(max_length=200, blank=True)
+    interface = models.CharField(max_length=32, blank=True)
+    exception = models.CharField(max_length=255)
+    message = models.TextField(blank=True)
+    traceback = models.TextField()
+
+    class Meta:
+        ordering = ("-occurred_at", "-pk")
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.exception} at {self.path or 'HQ'}"
+
+    def get_absolute_url(self) -> str:
+        return reverse("errors:detail", args=[self.request_id])
+
+
 class Revision(models.Model):
     """How many times one table has been written.
 

@@ -595,6 +595,22 @@
         "example"
       ],
       "dashboard": "example",
+      "compose_images": [
+        {
+          "path": "example",
+          "service": "example",
+          "image": "example"
+        }
+      ],
+      "held_branches": [
+        {
+          "branch": "example",
+          "marker": "example",
+          "apps": [
+            "example"
+          ]
+        }
+      ],
       "fingerprint": "example",
       "read_at": "example",
       "carried": true

@@ -4,7 +4,7 @@ whose items are in it."""
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
-from ..domains import NAVIGATION_GROUPS
+from ..host_sections import NAVIGATION_GROUPS
 from ..plugin_testing import installed, sibling
 from ..plugins import DeclarationRefused, NavigationGroup, NavigationItem, installed_plugins
 

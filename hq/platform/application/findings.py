@@ -70,11 +70,13 @@ from .finding_model import (
     PLAYBOOK_INVESTIGATION,
     Finding,
     FindingEstate,
+    FindingEvidence,
     FindingRemedy,
     FindingRule,
     Gathered,
     is_observable,
     parse_stamp,
+    written_fact,
 )
 from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenSteps
 from .first_seen import recorded
@@ -474,10 +476,14 @@ def _no_help_reason(finding: Finding) -> str:
     offer and no exact command to name. Judged before a principal's remedies
     are filtered: a remedy this reader may not run is still a remedy."""
 
-    if finding.remedies or any(isinstance(step, Run) for step in finding.steps):
+    if finding.remedies or any(
+        isinstance(step, Run) or (isinstance(step, Do) and step.value) for step in finding.steps
+    ):
         return ""
     found = _RULE_BY_NAME.get(finding.rule)
-    return finding.no_help_reason or (found.no_help_reason if found else "")
+    reason = finding.no_help_reason or (found.no_help_reason if found else "")
+    # A reason its step already says is said once, as the step.
+    return "" if any(isinstance(step, Do) and step.text == reason for step in finding.steps) else reason
 
 
 def _read_subject(finding: Finding, subject: TopologyNode | None) -> cadence.ControllerSweepCommand | None:
@@ -674,13 +680,6 @@ def rule_of(item_key: str) -> str:
     return rest.split(":", 1)[0] if found else ""
 
 
-class FindingEvidence(TypedDict):
-    """One line of what a finding rests on."""
-
-    label: Annotated[str, Describe("What this line of evidence is, as a problem card labels it.")]
-    value: Annotated[Any, Describe("What was found, most often a name or a sentence.")]
-
-
 class FindingFacts(TypedDict):
     """What a finding says the same at every door: what it is about, what it
     rests on, and why HQ cannot help where it cannot. Each door adds its steps
@@ -726,7 +725,7 @@ class SerializedFinding(FindingFacts):
 def _computed(finding: Finding) -> dict[str, Any]:
     return {
         "id": finding_id(finding),
-        "evidence": [{"label": label, "value": value} for label, value in finding.evidence],
+        "evidence": [written_fact(*fact) for fact in finding.evidence],
     }
 
 

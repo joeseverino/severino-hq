@@ -18,6 +18,8 @@ from hq.domains.control_plane.observations.portainer import IMAGE_KIND, image_ti
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 lazy from hq.platform.application.routes import reverse
 
+from .display_words import Code
+from .entity_links import container_link, entity_link
 from .facts import inventory_records
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
@@ -176,7 +178,10 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
                         f"docker rm -f {shlex.quote(name)}",
                     ),
                     part=name,
-                    evidence=(("Container", name), ("Machine", node.label)),
+                    evidence=(
+                        ("Container", container_link(node.label, name)),
+                        ("Machine", entity_link("machine", node.label)),
+                    ),
                     remedies=(
                         FindingRemedy(
                             capability="infrastructure.resource.create",
@@ -216,7 +221,7 @@ def _stated(estate: FindingEstate, key: str) -> Iterator[tuple[Any, ...]]:
     for node, host, records in _environments(estate):
         for fact, container, reference, running, tagged, service in image_verdicts(records):
             if fact == key:
-                yield node, container, host, reference, short_id(running), short_id(tagged), service
+                yield node, container, host, Code(reference), Code(short_id(running)), Code(short_id(tagged)), service
 
 
 def images_unused(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -234,7 +239,7 @@ def images_unused(estate: FindingEstate) -> tuple[Finding, ...]:
                     title=f"{counted(len(spare), 'unused image', 'unused images')} on {node.label}",
                     severity=Tone.NEUTRAL,
                     explanation=ended(f"They take {size}"),
-                    evidence=tuple(("Image", image_title(record)) for record in spare),
+                    evidence=tuple(("Image", Code(image_title(record))) for record in spare),
                     steps=machine_step(
                         f"Remove them from {host}",
                         host,
@@ -258,7 +263,7 @@ def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
             explanation="Recreate it to run what was pulled.",
             part=container,
             evidence=(
-                ("Container", container),
+                ("Container", container_link(node.label, container)),
                 ("Image reference", reference),
                 ("Running", running),
                 ("Tagged now", tagged),
@@ -281,7 +286,7 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
             explanation="Its version cannot be told or reproduced.",
             part=container,
             evidence=(
-                ("Container", container),
+                ("Container", container_link(node.label, container)),
                 ("Image", running),
                 *((("Started from", reference),) if reference else ()),
             ),

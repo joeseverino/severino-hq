@@ -1,0 +1,21 @@
+{% extends "page.html" %}
+{% comment %}
+One error HQ kept of a request it failed (`error_reads.ServerErrorRecord`):
+its request id, when, the request, who asked, what was raised and the
+traceback its log line carries.
+{% endcomment %}
+{% block page %}
+{% layout %}
+{% section "Error" %}
+  {% facts label="Error" %}
+    {% fact "Request id" %}<code>{{ error.request_id }}</code>{% endfact %}
+    {% fact "When" %}{{ error.occurred_at|when }}{% endfact %}
+    {% fact "Request" %}{{ error.method }} <code>{{ error.path }}</code>{% endfact %}
+    {% if error.by %}{% fact "By" value=error.by %}{% endif %}
+    {% fact "Exception" %}<code>{{ error.exception }}</code>{% endfact %}
+    {% if error.message %}{% fact "Message" value=error.message %}{% endif %}
+  {% endfacts %}
+{% endsection %}
+{% section "Traceback" %}<pre tabindex="0">{{ error.traceback }}</pre>{% endsection %}
+{% endlayout %}
+{% endblock %}

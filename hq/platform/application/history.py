@@ -45,6 +45,7 @@ from .facts import inventory_records
 from .labels import lower_first, plural
 from .moments import moment
 from .projection import read_once
+from .quoted import Quoted
 from .routes import reverse
 from .tables import Cell, DataTable, Group, Row, TableColumn
 from .ui import counted
@@ -475,7 +476,8 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
         person = Cell(line.who.words, cut=True)
         state = line.state
         outcome = Cell.state(state) if isinstance(state, AuditLog.Action) else Cell(state, tone="neutral")
-        said = Cell(line.message, muted=True, role="data")
+        # The row's own text as stored, which an older release may have worded.
+        said = Cell(Quoted(line.message), muted=True, role="data")
     when = Cell(moment=line.at, muted=True)
     return Row((title, when, *((person,) if who else ()), outcome, said), key=key, **folding)
 

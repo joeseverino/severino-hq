@@ -10,7 +10,7 @@ from typing import Any
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .finding_steps import Run
+from .finding_steps import Do, Run
 from .moments import when
 from .security import Capability, Principal
 from .tone import Tone
@@ -31,12 +31,12 @@ HOST_CONFIGURATION = "/etc/severino-hq/host.json"
 
 # As deploy/host.example.json shows it: the grant is one of the file's own,
 # and reads that repository's contents.
-_ENTRY = Run(
-    label=(
-        'On HQ\'s machine, add "automation": {"repository": "OWNER/REPOSITORY", "grant": "GRANT"}, '
-        "naming the repository your playbooks are in and, for a private one, the grant that reads it"
+_ENTRY = (
+    Run(label="On HQ's machine, open its configuration", command=f"sudoedit {HOST_CONFIGURATION}"),
+    Do(
+        "Add this, naming the repository your playbooks are in and, for a private one, the grant that reads it",
+        value='"automation": {"repository": "OWNER/REPOSITORY", "grant": "GRANT"}',
     ),
-    command=f"sudoedit {HOST_CONFIGURATION}",
 )
 _START = Run(
     label="Start the worker, which names anything still missing",
@@ -85,7 +85,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.ATTENTION,
                 explanation="Refresh and playbook runs are refused.",
                 evidence=(("Last seen", "never"),),
-                steps=(_ENTRY, _START),
+                steps=(*_ENTRY, _START),
                 primary=playbooks,
             ),
         )

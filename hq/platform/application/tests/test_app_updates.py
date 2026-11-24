@@ -1,10 +1,16 @@
-from django.test import TestCase
+from contextlib import nullcontext
 
+from django.db import transaction
+from django.test import TestCase
+from django.urls import reverse
+
+from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..app_updates import app_updates
+from ..finding_steps import Do
 from .test_container_standard import runtime
-from .test_containers import HIGH, estate, inventory, queued
+from .test_containers import HIGH, estate, inventory, named, queued
 from .test_github_estate import store
 from .test_upgrades import TARGET, published
 
@@ -116,26 +122,12 @@ class AppUpdateTests(TestCase):
     def test_the_card_of_the_container_it_moves_names_the_pull_request_and_its_numbers(self):
         arranged(pull(moves=[moved()]))
 
-        (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
+        (card,) = [item for item in queued() if "app" in named(item, "Container")]
 
-        self.assertIn(("Pull request", "example/alpha#7"), card.evidence)
+        linked = dict(card.evidence)["Pull request"]
+        self.assertEqual((str(linked), linked.url), ("example/alpha#7", "https://github.com/example/alpha/pull/7"))
         self.assertIn(("Pin", "v1.2.0 to v1.2.1"), card.evidence)
         self.assertIn(("Fixes", "1 known vulnerability"), card.evidence)
-
-    def test_an_update_card_names_the_container_and_the_move(self):
-        arranged(pull(moves=[moved()]), advisories=())
-
-        (card,) = [item for item in queued() if ("Container", "app") in item.evidence]
-
-        self.assertEqual(card.title, "app has an update, v1.2.0 to v1.2.1")
-        self.assertEqual(card.explanation, "Pull request #7 moves it.")
-        self.assertNotIn("Pin", dict(card.evidence))
-        self.assertEqual(card.primary.label, "Review #7")
-        # No playbook applies it, so no approval is offered, and the card says the step.
-        self.assertNotIn(
-            "app_update.approve", [getattr(step, "link", None) and step.link.capability for step in card.steps]
-        )
-        self.assertIn("Playbooks", card.no_help_reason)
 
     def test_the_repositorys_row_of_the_update_names_its_app_and_fix_count(self):
         from ..github_estate import repositories
@@ -163,3 +155,27 @@ class AppUpdateTests(TestCase):
             arranged(*(pull(number, moves=[moved()]) for number in range(1, size + 1)))
 
         assert_cost_does_not_grow(self, sizes=(1, 8), arrange=arrange, draw=lambda _size: app_updates(), rows=len)
+
+
+class OneStateTests(TestCase):
+    def test_the_finding_and_the_container_page_say_each_state_alike(self):
+        from ..container_findings import UPDATE
+        from .finding_examples.container_findings import STATES
+
+        operator(self.client)
+        spec = {"host": "example-box", "name": "app", "connection_ref": "example-portainer"}
+        for index, example in enumerate(STATES):
+            with self.subTest(example=index), transaction.atomic():
+                declare("example-box-app", "portainer.container", spec)
+                with example.given() or nullcontext():
+                    (card,) = [item for item in queued(UPDATE) if "app" in named(item, "Container")]
+                    page = self.client.get(reverse("control_plane:detail", args=["example-box-app"])).context
+                transaction.set_rollback(True)
+                act, state = page["container"]["act"], page["container"]["state"]
+                self.assertEqual([press.url for press in card.presses], [act.url.partition("?")[0]] if act else [])
+                # What holds it back is said once, as its one step.
+                told = [step.text for step in card.steps if isinstance(step, Do)]
+                self.assertEqual(
+                    (card.explanation, told, card.no_help_reason),
+                    (state.words, [state.reason] if state.reason else [], ""),
+                )

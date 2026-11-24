@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 from unittest import mock
 
 from django.utils import timezone
@@ -6,9 +7,14 @@ from hq.platform.core.testing import declare
 
 from ...exposure import OPEN, PRIVATE
 from ...finding_steps import Do
+from ...machines import Machine
 from ...tone import Tone
+from ..test_app_update_approval import applies
+from ..test_app_updates import arranged, moved, pull
 from ..test_container_standard import KEPT, runtime
 from ..test_containers import HIGH, estate, exposed, inventory, running
+from ..test_github_estate import store
+from ..test_upgrades import TARGET
 from . import Example, Examples, Raised
 
 PROXY = "example/socket-proxy"
@@ -64,8 +70,10 @@ ADVISED = "ghcr.io/example/app:v1.2.0 has 1 known vulnerability"
 UNFIXED = {**HIGH, "id": "GHSA-unfixed", "vulnerabilities": [["< 2.0.0", ""]]}
 BROUGHT = {**HIGH, "id": "GHSA-brought", "vulnerabilities": [[">= 1.3.0", ""]]}
 SET_APP = Do(
-    "On example-box, set the image of app to ghcr.io/example/app:v1.3.0 where it is defined, then start it again."
+    "On example-box, set the image of app where it is defined, then start it again.",
+    value="image: ghcr.io/example/app:v1.3.0",
 )
+PINNED = f"ghcr.io/example/app:v1.2.1@{TARGET}"
 PLANNED, LISTED = "/infrastructure/example-box-app/#upgrade", "/infrastructure/containers/"
 # proxy, started from the newest tag its registry holds, by digest.
 NEWEST = started(f"{PROXY}:1.13.1@{DIGEST}", f"{PROXY}@{DIGEST}")
@@ -77,6 +85,132 @@ def held(why: str, primary=("Open containers", LISTED), **said) -> Example:
 
     steps = (Do("Move it to a release that fixes it."),)
     return box(reach=OPEN, raises=(Raised(title=f"{ADVISED}, and {why}", primary=primary, steps=steps),), **said)
+
+
+BOX, EDGE = "example-box", "example-edge"
+APPROVE, APPLY, OPEN_PR = "app_update.approve", "app_update.apply", "app_update.open"
+KUMA = "kuma has an update, 1 to 2"
+# What the pull request and the default branch pin: one release past what runs.
+MOVED = "app has an update, v1.2.0 to v1.2.1"
+REPOSITORY = {"compose": ["compose/app/compose.yaml"]}
+# The digest the new pin names, as its publisher attached nothing to it.
+UNLISTED = {"digest": f"ghcr.io/example/app@{TARGET}", "image": "ghcr.io/example/app", "packages": [], "sbom": ""}
+
+
+def applied_on(*hosts: str) -> ExitStack:
+    """The one adopted playbook that applies an app update, written for
+    ``hosts``, among the machines HQ knows."""
+
+    stack = ExitStack()
+    stack.enter_context(
+        mock.patch("hq.platform.application.app_update_approval.applier", return_value=applies(hosts=hosts))
+    )
+    machines = (Machine(BOX), Machine(EDGE))
+    stack.enter_context(mock.patch("hq.platform.application.automation_runs.machine_catalog", return_value=machines))
+    return stack
+
+
+def update(*pulls, on: tuple[str, ...] | None = (BOX,), raises, scanned=(TARGET,), digests=(), **held) -> Example:
+    """example-box's app, held in example/alpha with ``pulls`` open and the
+    repository's ``held`` fields, applied by a playbook written for ``on``
+    (None for no playbook); its new pin's packages ``scanned``, and what its
+    publisher attached to each digest in ``digests``."""
+
+    def given():
+        arranged(*pulls, scanned=scanned, advisories=())
+        if held:
+            store(**{**REPOSITORY, **held})
+        if digests:
+            inventory("registry.digest", list(digests))
+        return applied_on(*on) if on is not None else None
+
+    return Example(given=given, raises=(*raises, KUMA))
+
+
+# What holds an update back where no adopted playbook applies it, as the approval refuses it.
+NO_PLAYBOOK = "No adopted playbook applies an app update. On Playbooks, Refresh and adopt the one that does."
+
+
+def held_by(why: str) -> Raised:
+    """The update, held back by ``why``, which is all it says to do."""
+
+    return Raised(title=MOVED, steps=(Do(why),))
+
+
+def facts(pulled, brings) -> tuple[tuple[str, str], ...]:
+    return (("Container", "app"), ("Machine", BOX), *pulled, brings)
+
+
+# The pull request, and what it fixes of what runs.
+PULLED = (("Pull request", "example/alpha#7"), ("Fixes", "None known"))
+
+
+# An app a repository holds, in each state its update can stand in.
+STATES = (
+    # An open pull request is approved in one press, which previews, merges and applies it.
+    update(
+        pull(moves=[moved()]),
+        raises=(
+            Raised(
+                title=MOVED,
+                presses=(APPROVE,),
+                evidence=facts(PULLED, ("New vulnerabilities", "Nothing serious")),
+            ),
+        ),
+    ),
+    # Its new pin not checked yet, or never checkable: its publisher attached no package list.
+    update(
+        pull(moves=[moved()]),
+        scanned=(),
+        raises=(
+            Raised(
+                title=MOVED,
+                presses=(APPROVE,),
+                evidence=facts(PULLED, ("New vulnerabilities", "Not checked yet")),
+            ),
+        ),
+    ),
+    update(
+        pull(moves=[moved()]),
+        scanned=(),
+        digests=(UNLISTED,),
+        raises=(
+            Raised(
+                title=MOVED,
+                presses=(APPROVE,),
+                evidence=facts(
+                    PULLED, ("New vulnerabilities", "Can't be checked: example/app publishes no package list")
+                ),
+            ),
+        ),
+    ),
+    # No press where no playbook applies it, or where the one that does never runs where it runs:
+    # what holds it back is its one step.
+    update(pull(moves=[moved()]), on=None, raises=(held_by(NO_PLAYBOOK),)),
+    update(
+        pull(moves=[moved()]),
+        on=(EDGE,),
+        raises=(held_by("The playbook that applies it does not run on every machine the app runs on."),),
+    ),
+    # Merged on the default branch and not applied: one press applies it at that head.
+    update(
+        compose_images=[{"path": "compose/app/compose.yaml", "service": "app", "image": PINNED}],
+        raises=(Raised(title=MOVED, presses=(APPLY,)),),
+    ),
+    # Renovate holds its branch, or has not seen the release: one press has it open the pull request.
+    # Where HQ can't match the repository's files to what runs, it says so.
+    update(
+        held_branches=[{"branch": "renovate/app", "marker": "unpend", "apps": ["app"]}],
+        raises=(Raised(title=MOVED, presses=(OPEN_PR,)),),
+    ),
+    update(compose=["compose/app/compose.yaml"], raises=(Raised(title=MOVED, presses=(OPEN_PR,)),)),
+    update(
+        compose=["compose/app/docker-compose.yml"],
+        raises=(
+            held_by(f"It holds compose/app/docker-compose.yml, and {BOX} runs it from /srv/apps/app/compose.yaml."),
+        ),
+    ),
+)
 
 
 EXAMPLES = (
@@ -122,15 +256,16 @@ EXAMPLES = (
     Examples(
         "container-image-update",
         fires=(
-            # A major move says so where the card leads.
+            # No repository holds them: a person moves each by hand, and a major move says so where the card leads.
             box(
                 raises=(
-                    Raised(title="example/kuma:1 has an update", primary=("Upgrade to 2 (major)", LISTED)),
-                    Raised(title="ghcr.io/example/app:v1.2.0 has an update", steps=(SET_APP,)),
+                    Raised(title="app has an update, v1.2.0 to v1.3.0", steps=(SET_APP,)),
+                    Raised(title=KUMA, primary=("Upgrade to 2 (major)", LISTED)),
                 )
             ),
             # A newer release that brings a vulnerability is no update to make.
-            box(advisories=[BROUGHT], raises=("example/kuma:1 has an update",)),
+            box(advisories=[BROUGHT], raises=(KUMA,)),
+            *STATES,
         ),
         quiet=(NEWEST,),
     ),

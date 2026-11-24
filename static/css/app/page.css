@@ -111,9 +111,11 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 /* A part that is a run of its own (a machine's addresses) moves to the next
    line whole and wraps inside itself only where a line cannot hold it, its
    dot beside it. A line list's rest (`line-rest`, cuts.css) is the same run
-   carried on, never a part of its own. */
-.dot-list > :has(> .dot-list):not(.line-rest) { display: flex; align-items: baseline; min-width: 0; }
-.dot-list > :not(.line-rest) > .dot-list { min-width: 0; }
+   carried on, never a part of its own. Any part may shrink to its line, so
+   one longer than a line (a digest in code) wraps inside it rather than
+   standing past the box. */
+.dot-list > :not(.line-rest), .dot-list > :not(.line-rest) > .dot-list { min-width: 0; }
+.dot-list > :has(> .dot-list):not(.line-rest) { display: flex; align-items: baseline; }
 .dot-list > * + *::before {
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;

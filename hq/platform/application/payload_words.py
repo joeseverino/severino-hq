@@ -19,6 +19,7 @@ from hq.platform.core.digests import canonical
 from .labels import field_label, lower_first
 from .moments import moment
 from .printable import admitted
+from .quoted import Quoted
 from .ui import counted
 lazy from .moments import when
 
@@ -94,7 +95,10 @@ def _list_words(items: list[Any], schema: Mapping[str, Any] | None) -> str:
     is a single word."""
 
     if all(_scalar(item) for item in items):
-        return ", ".join(value_words(item) for item in items)
+        words = [value_words(item) for item in items]
+        joined = ", ".join(words)
+        # An author's words joined only with more of theirs stay theirs.
+        return Quoted(joined) if words and all(isinstance(each, Quoted) for each in words) else joined
     names = entry_names(items)
     if items and all(names):
         said = ", ".join(names[:NAMED])
@@ -131,6 +135,8 @@ def _plain_words(value: Any) -> str:
     """A value that is neither a record nor a list: a moment as HQ says one,
     text and numbers as they are, and nothing a page would refuse to print."""
 
+    if isinstance(value, Quoted):
+        return value
     if isinstance(value, str):
         value = _instant(value) or value
     if isinstance(value, date):

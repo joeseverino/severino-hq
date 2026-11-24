@@ -44,6 +44,7 @@ output-options:
     - issues/create-comment
     - issues/list-comments
     - issues/list-for-repo
+    - issues/update
     - pulls/list
     - pulls/list-files
     - pulls/merge

@@ -12,11 +12,11 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 from hq_sdk.testing import plain
 
 from ..attention import infrastructure
-from ..container_findings import ADVISORY, BY_HAND, UPDATE
+from ..container_findings import ADVISORY, UPDATE
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, containers, tally
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
-from ..finding_steps import Run
+from ..finding_steps import Do, Run
 from ..findings import finding_key, rule_of
 from ..github_estate import Repository
 
@@ -36,6 +36,12 @@ def queued(rule=""):
     with uncached():
         found = [item for item in tuple(infrastructure()) if rule_of(finding_key(item)) in {ADVISORY, UPDATE}]
     return tuple(item for item in found if not rule or rule_of(finding_key(item)) == rule)
+
+
+def named(item, label):
+    """The words of each of ``item``'s facts under ``label``, a linked record's included."""
+
+    return [str(value) for each, value in item.evidence if each == label]
 
 
 def inventory(kind, records):
@@ -166,44 +172,16 @@ class StandingTests(TestCase):
             (advisory.part, advisory.subject_link.label, advisory.severity),
             ("ghcr.io/example/app:v1.2.0", "example-box", "serious"),
         )
-        self.assertIn(("Container", "app"), advisory.evidence)
+        self.assertEqual(named(advisory, "Container"), ["app"])
         self.assertIn(("Fixed in", "1.2.1"), advisory.evidence)
-        # The body is the images. What to do is a step, and why HQ does not
-        # do it is one sentence that names no machine.
+        # The body is the images. What to do is a step, which hands the image
+        # to set as its value.
         self.assertEqual(update.part, "example/kuma:1")
-        self.assertIn("example/kuma:1 to 2.", update.explanation)
-        self.assertIn(("Container", "kuma"), update.evidence)
+        self.assertEqual(named(update, "Container"), ["kuma"])
         # A card says how old its reading is, and leads with the containers' page.
         self.assertIsNotNone(update.observed_at)
         self.assertEqual(update.primary.url, reverse("control_plane:containers"))
-        self.assertEqual(update.no_help_reason, BY_HAND)
-
-    def test_a_container_its_repository_holds_waits_on_renovate_with_no_step_by_hand(self):
-        from .test_github_estate import store
-
-        estate()
-        inventory(
-            "portainer.compose_project",
-            [
-                {
-                    "connection_ref": "example-portainer",
-                    "host": "example-box",
-                    "name": "kuma",
-                    "config_files": ["/opt/apps/kuma/compose.yaml"],
-                }
-            ],
-        )
-        dashboard = "https://github.com/example/alpha/issues/1"
-        for held, url in ((dashboard, dashboard), ("", "https://github.com/example/alpha")):
-            with self.subTest(dashboard=held):
-                store(compose=["compose/kuma/compose.yaml"], dashboard=held)
-
-                (update,) = [item for item in queued(UPDATE) if item.part == "example/kuma:1"]
-
-                self.assertEqual(
-                    (update.no_help_reason, update.primary.url), ("Renovate has not opened its update yet.", url)
-                )
-                self.assertFalse([step for step in update.steps if isinstance(step, Run)])
+        self.assertEqual([step.value for step in update.steps], ["image: docker.io/example/kuma:2"])
 
     def test_an_update_names_the_command_when_its_compose_project_was_read(self):
         estate()
@@ -232,17 +210,17 @@ class StandingTests(TestCase):
 
         (item,) = [item for item in queued(UPDATE) if item.part == "example/kuma:1"]
 
-        (step,) = [step for step in item.steps if isinstance(step, Run)]
         self.assertEqual(
-            (step.label, step.command),
+            item.steps,
             (
-                (
-                    "On example-box, set the image of kuma to docker.io/example/kuma:2 in "
-                    "/opt/apps/kuma/compose.override.yaml, then run"
+                Do(
+                    "On example-box, set the image of kuma in /opt/apps/kuma/compose.override.yaml.",
+                    value="image: docker.io/example/kuma:2",
                 ),
-                (
+                Run(
+                    "Then start it again",
                     'ssh example-box "sudo docker compose -f /opt/apps/kuma/compose.yaml '
-                    '-f /opt/apps/kuma/compose.override.yaml up -d kuma-web"'
+                    '-f /opt/apps/kuma/compose.override.yaml up -d kuma-web"',
                 ),
             ),
         )

@@ -4,6 +4,7 @@ from typing import override
 
 from django.db import models
 
+from hq.platform.application.display_words import QuotedCharField
 from hq.platform.application.lists import split_list
 from hq.platform.application.references import Kind
 from hq.platform.application.tone import Tone, TonedChoices
@@ -28,11 +29,11 @@ class ContentItem(TimestampedModel):
         PUBLISHED = "published", Tone.GOOD, "Published"
         ARCHIVED = "archived", Tone.NEUTRAL, "Archived"
 
-    title = models.CharField(max_length=200)
+    title = QuotedCharField(max_length=200)
     slug = models.SlugField(max_length=220, unique=True, blank=True)
     content_type = models.CharField(max_length=24, choices=Type.choices, default=Type.ARTICLE)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
-    topic = models.CharField("description", max_length=300, blank=True)
+    topic = QuotedCharField("description", max_length=300, blank=True)
     tags = models.CharField(max_length=300, blank=True)
     published_url = models.URLField("published URL", blank=True)
     published_at = models.DateField(null=True, blank=True)

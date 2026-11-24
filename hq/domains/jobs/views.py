@@ -127,9 +127,9 @@ class RunView(RecordPageMixin, TemplateView):
         cancel = cancel_action(
             run["operation_id"], playbook, run["state"], run["effect"], web_principal(self.request.user)
         )
-        # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
+        # Its playbook again as it was asked (``finding_runs.run_again``), once it has ended, while that playbook is adopted.
         again = (
-            PageAction.command(run["capability"], variant=AGAIN, query={"hosts": tuple(run["hosts"])})
+            PageAction.command(run["capability"], variant=AGAIN, query={"again": str(run["operation_id"])})
             if not self.following_run and playbook and capability_spec(run["capability"])
             else None
         )

@@ -148,7 +148,7 @@ class ImageFindingTests(TestCase):
         (advisory,) = [finding for finding in about_images() if finding["rule"] == ADVISORY]
 
         self.assertEqual(sorted(named(advisory, "Container")), ["oauth2-proxy", "oauth2-proxy-npm"])
-        commands = [step["command"] for step in advisory["steps"]]
+        commands = [step["command"] for step in advisory["steps"] if "command" in step]
         self.assertEqual(len(commands), 2, advisory["steps"])
         self.assertTrue(any("/opt/example/auth/compose.yaml" in command for command in commands), commands)
         self.assertTrue(any("/opt/example/npm/compose.yaml" in command for command in commands), commands)

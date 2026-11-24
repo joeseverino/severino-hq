@@ -242,10 +242,16 @@ class ChecksPart(TypedDict):
 
 
 class MergePart(TypedDict):
-    words: Annotated[str, Describe("How the merge asked at the head stands, in the words the page shows.")]
-    tone: Annotated[str, Describe("Its status tone: `attention` while it merges, `good` merged and applying.")]
-    run_url: Annotated[str, Describe("The page of the run that applies the merge; empty before one is queued.")]
-    taken: Annotated[bool, Describe("Whether it waits, works or merged, so no second approval is offered.")]
+    words: Annotated[
+        str, Describe("How the approval asked at the head stands (its preview, merge and apply), in the page's words.")
+    ]
+    tone: Annotated[str, Describe("Its status tone: `attention` while it works, `good` once applied.")]
+    run_url: Annotated[str, Describe("The page of the run it stands on, the preview or the apply; empty for none.")]
+    taken: Annotated[
+        bool, Describe("Whether it previews, merges, applies or merged, so no second approval is offered.")
+    ]
+    step: Annotated[str, Describe("The step a failed preview or apply stopped on; empty for none.")]
+    said: Annotated[str, Describe("What that run said as it stopped; empty for none.")]
 
 
 class AppUpdateRecord(AppUpdateRow):

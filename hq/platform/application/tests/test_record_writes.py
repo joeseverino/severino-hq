@@ -12,8 +12,9 @@ from hq.domains.expenses.models import Expense
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.testing import SignedInTestCase
 
-from ..domains import host_records, load
+from ..domains import host_records
 from ..expenses import ExpenseCommand, save_expense
+from ..host_sections import load
 from ..routes import routed
 from ..security import cli_principal
 from ..writes import CapabilityDeleteMixin, CapabilityFormMixin

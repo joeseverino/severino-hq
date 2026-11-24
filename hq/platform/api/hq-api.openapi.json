@@ -54,6 +54,7 @@
               "steps.command",
               "steps.notes",
               "steps.text",
+              "steps.value",
               "no_help_reason",
               "check",
               "check.name",
@@ -91,6 +92,10 @@
               "notice",
               "observed_at",
               "facts",
+              "facts.label",
+              "facts.value",
+              "facts.url",
+              "facts.code",
               "links",
               "links.name",
               "links.label",
@@ -196,6 +201,8 @@
               "merge.tone",
               "merge.run_url",
               "merge.taken",
+              "merge.step",
+              "merge.said",
               "held",
               "fixes",
               "fixes.id",
@@ -513,6 +520,7 @@
               "credential_fix.steps.notes",
               "credential_fix.steps.kind",
               "credential_fix.steps.text",
+              "credential_fix.steps.value",
               "last_activity",
               "last_activity.summary",
               "last_activity.created_at",
@@ -2122,6 +2130,15 @@
         },
         "style": "form"
       },
+      "RequestIdIdentifier": {
+        "description": "The record's `request_id`, as each item of the list carries it.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "RunRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -2230,6 +2247,59 @@
         "schema": {
           "title": "Search text",
           "type": "string"
+        },
+        "style": "form"
+      },
+      "ServerErrorItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "request_id",
+              "url",
+              "occurred_at",
+              "method",
+              "path",
+              "by",
+              "exception",
+              "message",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
+      "ServerErrorRecordFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "request_id",
+              "url",
+              "occurred_at",
+              "method",
+              "path",
+              "by",
+              "exception",
+              "message",
+              "traceback",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
         },
         "style": "form"
       },
@@ -2583,6 +2653,8 @@
               "findings.evidence",
               "findings.evidence.label",
               "findings.evidence.value",
+              "findings.evidence.url",
+              "findings.evidence.code",
               "findings.no_help_reason",
               "findings.since",
               "findings.steps",
@@ -2602,6 +2674,7 @@
               "findings.steps.command",
               "findings.steps.notes",
               "findings.steps.text",
+              "findings.steps.value",
               "findings.check",
               "findings.check.name",
               "findings.check.label",
@@ -3582,6 +3655,21 @@
           }
         }
       },
+      "OperationAskedAskedAnswerSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OperationAskedAskedAnswerSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
       "OperationAskedDeclarationForgottenSuccess": {
         "content": {
           "application/json": {
@@ -3965,6 +4053,21 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/ScanResultSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
+      "ServerErrorRecordSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ServerErrorRecordSuccess"
             }
           }
         },
@@ -4534,12 +4637,9 @@
             "$ref": "#/components/schemas/ActionItemRow/properties/detail"
           },
           "facts": {
-            "description": "What was read that shows it, each a label and its value.",
+            "description": "What was read that shows it, a labeled line each.",
             "items": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
+              "$ref": "#/components/schemas/FindingEvidence"
             },
             "type": "array"
           },
@@ -4677,7 +4777,11 @@
             "$ref": "#/components/schemas/ActionItemRowPartial/properties/detail"
           },
           "facts": {
-            "$ref": "#/components/schemas/ActionItem/properties/facts"
+            "description": "What was read that shows it, a labeled line each.",
+            "items": {
+              "$ref": "#/components/schemas/FindingEvidencePartial"
+            },
+            "type": "array"
           },
           "key": {
             "$ref": "#/components/schemas/ActionItem/properties/key"
@@ -5454,6 +5558,48 @@
         ],
         "type": "object"
       },
+      "App": {
+        "description": "The app, as its directory of Compose files names it.",
+        "maxLength": 100,
+        "pattern": "^[A-Za-z0-9_.-]+$",
+        "type": "string"
+      },
+      "AppUpdateApplyRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The app to apply at the head of its repository's default branch you saw.",
+            "properties": {
+              "app": {
+                "$ref": "#/components/schemas/App"
+              },
+              "head_sha": {
+                "description": "The default branch's head you saw. The repository's `head`; a head that moved since is refused.",
+                "pattern": "^[0-9a-f]{40}$",
+                "type": "string"
+              },
+              "repository": {
+                "$ref": "#/components/schemas/Holder"
+              }
+            },
+            "required": [
+              "repository",
+              "app",
+              "head_sha"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
       "AppUpdateApproveRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -5487,6 +5633,36 @@
               "repository",
               "number",
               "head_sha"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "AppUpdateOpenRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The app whose update Renovate is to open.",
+            "properties": {
+              "app": {
+                "$ref": "#/components/schemas/App"
+              },
+              "repository": {
+                "$ref": "#/components/schemas/Holder"
+              }
+            },
+            "required": [
+              "repository",
+              "app"
             ],
             "type": "object"
           }
@@ -11898,6 +12074,19 @@
         },
         "type": "object"
       },
+      "DeclaredGitHubDashboardBoxSpec": {
+        "properties": {
+          "kind": {
+            "const": "github.dashboard_box",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/GitHubDashboardBoxSpec"
+          }
+        },
+        "type": "object"
+      },
       "DeclaredGitHubDeliverySpec": {
         "properties": {
           "kind": {
@@ -12291,7 +12480,7 @@
       },
       "Do": {
         "additionalProperties": false,
-        "description": "What to do, in words, where no exact command can be named.",
+        "description": "What to do, in words, where no exact command can be named, with the\nvalue it has the reader set or copy, drawn as code since words cannot hold it.",
         "properties": {
           "kind": {
             "const": "do",
@@ -12306,18 +12495,24 @@
           "text": {
             "description": "What to do, in a sentence or two.",
             "type": "string"
+          },
+          "value": {
+            "default": "",
+            "description": "What it has the reader set or paste, exactly; empty when it has none.",
+            "type": "string"
           }
         },
         "required": [
           "text",
           "notes",
+          "value",
           "kind"
         ],
         "type": "object"
       },
       "DoPartial": {
         "additionalProperties": false,
-        "description": "What to do, in words, where no exact command can be named.",
+        "description": "What to do, in words, where no exact command can be named, with the\nvalue it has the reader set or copy, drawn as code since words cannot hold it.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/Do/properties/kind"
@@ -12328,6 +12523,9 @@
           },
           "text": {
             "$ref": "#/components/schemas/Do/properties/text"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Do/properties/value"
           }
         },
         "type": "object"
@@ -15130,17 +15328,28 @@
         "additionalProperties": false,
         "description": "One line of what a finding rests on.",
         "properties": {
+          "code": {
+            "description": "Whether the value is what a machine wrote (a digest, a path), to read exactly.",
+            "type": "boolean"
+          },
           "label": {
             "description": "What this line of evidence is, as a problem card labels it.",
             "type": "string"
           },
+          "url": {
+            "description": "The page of what it names: a path in HQ, or an outside address. Empty for none.",
+            "type": "string"
+          },
           "value": {
-            "description": "What was found, most often a name or a sentence."
+            "description": "What was found, most often a name or a sentence.",
+            "type": "string"
           }
         },
         "required": [
           "label",
-          "value"
+          "value",
+          "url",
+          "code"
         ],
         "type": "object"
       },
@@ -15148,8 +15357,14 @@
         "additionalProperties": false,
         "description": "One line of what a finding rests on.",
         "properties": {
+          "code": {
+            "$ref": "#/components/schemas/FindingEvidence/properties/code"
+          },
           "label": {
             "$ref": "#/components/schemas/FindingEvidence/properties/label"
+          },
+          "url": {
+            "$ref": "#/components/schemas/FindingEvidence/properties/url"
           },
           "value": {
             "$ref": "#/components/schemas/FindingEvidence/properties/value"
@@ -15435,6 +15650,39 @@
         ],
         "type": "object"
       },
+      "GitHubDashboardBoxSpec": {
+        "additionalProperties": false,
+        "description": "One box on a repository's Dependency Dashboard, ticked so Renovate opens its branch's pull request.",
+        "properties": {
+          "branch": {
+            "description": "The branch Renovate holds.",
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "title": "Branch",
+            "type": "string"
+          },
+          "marker": {
+            "description": "The word Renovate marks its box with.",
+            "enum": [
+              "unpend",
+              "approve",
+              "unschedule",
+              "unlimit"
+            ],
+            "title": "Marker",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/Repository"
+          }
+        },
+        "required": [
+          "repository",
+          "branch",
+          "marker"
+        ],
+        "type": "object"
+      },
       "GitHubDeliverySpec": {
         "additionalProperties": false,
         "description": "The repository and workflow that deploy HQ, which HQ checks production against.",
@@ -15490,10 +15738,7 @@
             "type": "integer"
           },
           "repository": {
-            "description": "The repository, as owner/name.",
-            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-            "title": "Repository",
-            "type": "string"
+            "$ref": "#/components/schemas/Repository"
           }
         },
         "required": [
@@ -16108,6 +16353,12 @@
           "data"
         ],
         "type": "object"
+      },
+      "Holder": {
+        "description": "The repository that holds it, as owner/name.",
+        "maxLength": 140,
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        "type": "string"
       },
       "HopCheck": {
         "additionalProperties": false,
@@ -17148,6 +17399,10 @@
                 "title": "Declared git hub pull request spec"
               },
               {
+                "$ref": "#/components/schemas/DeclaredGitHubDashboardBoxSpec",
+                "title": "Declared git hub dashboard box spec"
+              },
+              {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
                 "title": "Declared portainer container spec"
               },
@@ -17349,6 +17604,10 @@
               {
                 "$ref": "#/components/schemas/DeclaredGitHubPullRequestSpec",
                 "title": "Declared git hub pull request spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredGitHubDashboardBoxSpec",
+                "title": "Declared git hub dashboard box spec"
               },
               {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
@@ -18920,6 +19179,7 @@
           "npm.proxy_host",
           "github.delivery",
           "github.pull_request",
+          "github.dashboard_box",
           "portainer.container",
           "tailscale.device",
           "tailscale.policy",
@@ -18942,6 +19202,7 @@
           "caddy.route": "Caddy route",
           "cloudflare.dns_record": "Public DNS record",
           "cloudflare.zone": "Domain",
+          "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.pull_request": "Pull request",
           "machine": "Machine",
@@ -20373,19 +20634,27 @@
         "additionalProperties": false,
         "properties": {
           "run_url": {
-            "description": "The page of the run that applies the merge; empty before one is queued.",
+            "description": "The page of the run it stands on, the preview or the apply; empty for none.",
+            "type": "string"
+          },
+          "said": {
+            "description": "What that run said as it stopped; empty for none.",
+            "type": "string"
+          },
+          "step": {
+            "description": "The step a failed preview or apply stopped on; empty for none.",
             "type": "string"
           },
           "taken": {
-            "description": "Whether it waits, works or merged, so no second approval is offered.",
+            "description": "Whether it previews, merges, applies or merged, so no second approval is offered.",
             "type": "boolean"
           },
           "tone": {
-            "description": "Its status tone: `attention` while it merges, `good` merged and applying.",
+            "description": "Its status tone: `attention` while it works, `good` once applied.",
             "type": "string"
           },
           "words": {
-            "description": "How the merge asked at the head stands, in the words the page shows.",
+            "description": "How the approval asked at the head stands (its preview, merge and apply), in the page's words.",
             "type": "string"
           }
         },
@@ -20393,7 +20662,9 @@
           "words",
           "tone",
           "run_url",
-          "taken"
+          "taken",
+          "step",
+          "said"
         ],
         "type": "object"
       },
@@ -20402,6 +20673,12 @@
         "properties": {
           "run_url": {
             "$ref": "#/components/schemas/MergePart/properties/run_url"
+          },
+          "said": {
+            "$ref": "#/components/schemas/MergePart/properties/said"
+          },
+          "step": {
+            "$ref": "#/components/schemas/MergePart/properties/step"
           },
           "taken": {
             "$ref": "#/components/schemas/MergePart/properties/taken"
@@ -21063,6 +21340,33 @@
           "message",
           "queued",
           "operation"
+        ],
+        "type": "object"
+      },
+      "OperationAskedAskedAnswerSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OperationAsked",
+                "title": "Operation asked"
+              },
+              {
+                "$ref": "#/components/schemas/AskedAnswer",
+                "title": "Asked answer"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names."
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
         ],
         "type": "object"
       },
@@ -26288,6 +26592,12 @@
         },
         "type": "object"
       },
+      "Repository": {
+        "description": "The repository, as owner/name.",
+        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+        "title": "Repository",
+        "type": "string"
+      },
       "RepositoryPart": {
         "additionalProperties": false,
         "properties": {
@@ -27899,6 +28209,213 @@
         },
         "type": "object"
       },
+      "ServerErrorItem": {
+        "additionalProperties": false,
+        "description": "One request HQ failed with an unhandled error: where, for whom, and what was raised.",
+        "properties": {
+          "by": {
+            "description": "Who asked, through which door, as the audit log names them; empty for nobody signed in.",
+            "type": "string"
+          },
+          "exception": {
+            "description": "The exception raised, by its module and class.",
+            "type": "string"
+          },
+          "message": {
+            "description": "What the exception said; empty when it said nothing.",
+            "type": "string"
+          },
+          "method": {
+            "description": "The request's HTTP method.",
+            "type": "string"
+          },
+          "occurred_at": {
+            "description": "When it failed, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "path": {
+            "description": "The path it asked for, without its query.",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "The request's id, which its error page printed and its page names it by.",
+            "type": "string"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "required": [
+          "request_id",
+          "url",
+          "occurred_at",
+          "method",
+          "path",
+          "by",
+          "exception",
+          "message"
+        ],
+        "type": "object"
+      },
+      "ServerErrorItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ServerErrorItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ServerErrorItemPartial": {
+        "additionalProperties": false,
+        "description": "One request HQ failed with an unhandled error: where, for whom, and what was raised.",
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/by"
+          },
+          "exception": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/exception"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/message"
+          },
+          "method": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/method"
+          },
+          "occurred_at": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/occurred_at"
+          },
+          "path": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/path"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/request_id"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "type": "object"
+      },
+      "ServerErrorRecord": {
+        "additionalProperties": false,
+        "description": "One error whole: its row, and the traceback its log line carries.",
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/by"
+          },
+          "exception": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/exception"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/message"
+          },
+          "method": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/method"
+          },
+          "occurred_at": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/occurred_at"
+          },
+          "path": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/path"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/request_id"
+          },
+          "traceback": {
+            "description": "The traceback, as the log line carries it; it holds no frame's values.",
+            "type": "string"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ServerErrorItem/properties/url"
+          }
+        },
+        "required": [
+          "request_id",
+          "url",
+          "occurred_at",
+          "method",
+          "path",
+          "by",
+          "exception",
+          "message",
+          "traceback"
+        ],
+        "type": "object"
+      },
+      "ServerErrorRecordPartial": {
+        "additionalProperties": false,
+        "description": "One error whole: its row, and the traceback its log line carries.",
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/ServerErrorItemPartial/properties/by"
+          },
+          "exception": {
+            "$ref": "#/components/schemas/ServerErrorItemPartial/properties/exception"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ServerErrorItemPartial/properties/message"
+          },
+          "method": {
+            "$ref": "#/components/schemas/ServerErrorItemPartial/properties/method"
+          },
+          "occurred_at": {
+            "$ref": "#/components/schemas/ServerErrorItemPartial/properties/occurred_at"
+          },
+          "path": {
+            "$ref": "#/components/schemas/ServerErrorItemPartial/properties/path"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/ServerErrorItemPartial/properties/request_id"
+          },
+          "traceback": {
+            "$ref": "#/components/schemas/ServerErrorRecord/properties/traceback"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ServerErrorItemPartial/properties/url"
+          }
+        },
+        "type": "object"
+      },
+      "ServerErrorRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ServerErrorRecordPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "ServiceAdopted": {
         "additionalProperties": false,
         "description": "The records behind one hostname, taken under HQ's management.",
@@ -28991,6 +29508,7 @@
           "cloudflare.tunnel",
           "cloudflare.zone",
           "github.allowance",
+          "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
           "github.profile",
@@ -29058,6 +29576,7 @@
           "cloudflare.tunnel": "Tunnel",
           "cloudflare.zone": "Domain",
           "github.allowance": "GitHub hourly allowance",
+          "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.dependency_run": "Dependency update run",
           "github.profile": "GitHub profile",
@@ -32178,6 +32697,7 @@
                 "request.path",
                 "runs",
                 "search",
+                "server_errors",
                 "service.paths",
                 "services",
                 "tailnet",
@@ -32375,9 +32895,84 @@
         "x-hq-effect": "remote_write"
       }
     },
+    "/api/v2/capabilities/app_update.apply/": {
+      "post": {
+        "description": "Apply the release an app's default branch pins where it runs something older.",
+        "operationId": "appUpdateApplyV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUpdateApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Apply update",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "app_update.apply",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
     "/api/v2/capabilities/app_update.approve/": {
       "post": {
-        "description": "Approve an app update: merge its pull request at the head you reviewed, then apply the merge where the app runs.",
+        "description": "Approve an app update: preview applying it where the app runs, then merge its pull request at the head you reviewed and apply the merge.",
         "operationId": "appUpdateApproveV2",
         "parameters": [
           {
@@ -32447,6 +33042,81 @@
           "hq.infrastructure"
         ],
         "x-hq-capability": "app_update.approve",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
+    "/api/v2/capabilities/app_update.open/": {
+      "post": {
+        "description": "Have Renovate open an app's update: tick its branch's box on the Dependency Dashboard, then ask a run.",
+        "operationId": "appUpdateOpenV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppUpdateOpenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedAskedAnswerSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Open PR",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "app_update.open",
         "x-hq-effect": "infrastructure_change"
       }
     },
@@ -37123,7 +37793,9 @@
               "enum": [
                 "action_item.restore",
                 "action_item.set_aside",
+                "app_update.apply",
                 "app_update.approve",
+                "app_update.open",
                 "appearance.theme.set",
                 "approval.withdraw",
                 "asset.create",
@@ -37572,6 +38244,7 @@
                 "request.path",
                 "runs",
                 "search",
+                "server_errors",
                 "service.paths",
                 "services",
                 "tailnet",
@@ -40512,7 +41185,7 @@
             "required": false,
             "schema": {
               "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
               "type": "string"
             },
             "style": "form"
@@ -40530,6 +41203,7 @@
                 "npm.proxy_host",
                 "github.delivery",
                 "github.pull_request",
+                "github.dashboard_box",
                 "portainer.container",
                 "tailscale.device",
                 "tailscale.policy",
@@ -42214,6 +42888,168 @@
         "x-hq-resource": "search"
       }
     },
+    "/api/v2/resources/server_errors/": {
+      "get": {
+        "description": "The unhandled errors of the requests HQ failed, each by its request id, with its traceback.",
+        "operationId": "listServerErrorsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else newest error.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-occurred_at",
+                "occurred_at"
+              ],
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "$ref": "#/components/parameters/ServerErrorItemPageFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerErrorItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "getServerErrorsV2": {
+                "operationId": "getServerErrorsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/request_id"
+                }
+              },
+              "listServerErrorsV2": {
+                "operationId": "listServerErrorsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read_audit_log"
+            ]
+          }
+        ],
+        "summary": "Errors: the list",
+        "tags": [
+          "hq.errors"
+        ],
+        "x-hq-resource": "server_errors"
+      }
+    },
+    "/api/v2/resources/server_errors/{identifier}/": {
+      "get": {
+        "description": "One of the records Errors lists, found by its `request_id`.",
+        "operationId": "getServerErrorsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestIdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/ServerErrorRecordFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ServerErrorRecordSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read_audit_log"
+            ]
+          }
+        ],
+        "summary": "Errors: one by request id",
+        "tags": [
+          "hq.errors"
+        ],
+        "x-hq-identifier": "request_id",
+        "x-hq-resource": "server_errors"
+      }
+    },
     "/api/v2/resources/service.paths/{identifier}/": {
       "get": {
         "description": "The path a request for a service's hostname takes, hop by hop, with each hop's reading and certificate.",
@@ -42855,6 +43691,7 @@
                 "receipts",
                 "request.path",
                 "search",
+                "server_errors",
                 "services",
                 "tailnet",
                 "upgrades",
@@ -42936,6 +43773,7 @@
                 "readings",
                 "relationships",
                 "runs",
+                "server_errors",
                 "service.paths",
                 "services",
                 "upgrades",
@@ -43103,7 +43941,7 @@
   },
   "tags": [
     {
-      "description": "HQ's own machinery: its audit log, its agents, this API and HQ itself.\n\n- [API](#tag/hqapi)\n- [Audit](#tag/hqaudit)\n- [HQ](#tag/hqself)",
+      "description": "HQ's own machinery: its audit log, its agents, this API and HQ itself.\n\n- [API](#tag/hqapi)\n- [Audit](#tag/hqaudit)\n- [HQ](#tag/hqself)\n- [Errors](#tag/hqerrors)",
       "kind": "nav",
       "name": "nav.system",
       "summary": "System"
@@ -43128,6 +43966,13 @@
       "name": "hq.self",
       "parent": "nav.system",
       "summary": "HQ"
+    },
+    {
+      "description": "The unhandled errors of the requests HQ failed, each by the request id its error page printed.",
+      "kind": "nav",
+      "name": "hq.errors",
+      "parent": "nav.system",
+      "summary": "Errors"
     },
     {
       "description": "The first page: what needs attention and how each part of HQ stands.",

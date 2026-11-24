@@ -1,5 +1,4 @@
 {% comment %}
-The pages that help look into a problem, given `links`: a run of them, one
-HQ draws as an icon (`link_icon`) an icon button its label tips, the rest
-their words.
-{% endcomment %}{% list kind="dots" data_attention_links=True %}{% for link in links %}<li>{% with icon=link|link_icon %}{% if icon %}{% button link.label link.url look="ghost glyph" icon=icon data_tip=link.label %}{% else %}<a href="{{ link.url }}">{{ link.label }}</a>{% endif %}{% endwith %}</li>{% endfor %}{% endlist %}
+The pages that help look into a problem, given `links`: a run of links, each
+its words, one HQ draws an icon for (`link_icon`) opening with it.
+{% endcomment %}{% list kind="dots" data_attention_links=True %}{% for link in links %}<li><a href="{{ link.url }}">{% with icon=link|link_icon %}{% if icon %}{% include "partials/_icon.html" with name=icon only %} {% endif %}{% endwith %}{{ link.label }}</a></li>{% endfor %}{% endlist %}

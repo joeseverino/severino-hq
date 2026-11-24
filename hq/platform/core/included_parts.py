@@ -466,7 +466,8 @@ PARTS = (
         search=user.is_authenticated only %}` is the whole of what 403, 404 and 500 show. It stands
         outside the page frame and so titles itself: the status over the title, what happened and what to
         do, and the one way back to the dashboard. `request_id` names the id the log line for the failure
-        carries, and `search` offers the search field.
+        carries, linked to `error_url`, the page of the error HQ kept under it, for a reader who may open
+        it, and `search` offers the search field.
         """,
         example=pages.ERROR_PAGE,
         states=pages.ERROR_PAGE_STATES,

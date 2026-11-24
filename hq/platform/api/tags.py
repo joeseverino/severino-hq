@@ -6,7 +6,8 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from hq.platform.application.capabilities import CapabilitySpec
-from hq.platform.application.domains import NAVIGATION_GROUPS, Domain, all_domains, domain_navigation
+from hq.platform.application.domains import Domain, all_domains, domain_navigation
+from hq.platform.application.host_sections import NAVIGATION_GROUPS
 from hq.platform.application.plugins import NavigationItem
 
 from .fragments import camel

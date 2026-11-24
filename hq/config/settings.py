@@ -874,13 +874,13 @@ FILE_UPLOAD_PERMISSIONS = 0o640
 SEVERINO_LOG_LEVEL = env_str("SEVERINO_LOG_LEVEL", "INFO").upper()
 if SEVERINO_LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
     raise RuntimeError("SEVERINO_LOG_LEVEL must be a standard Python log level.")
+# What the loggers pass on: an error always, so each is kept however little the console prints.
+_LOGGED_LEVEL = "ERROR" if SEVERINO_LOG_LEVEL == "CRITICAL" else SEVERINO_LOG_LEVEL
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "formatters": {
-        "json": {"()": "hq.platform.core.logging.JsonFormatter"},
-    },
+    "formatters": {"json": {"()": "hq.platform.core.log_lines.LineFormatter"}},
     "handlers": {
         # The level is the handler's as well as the root's, so a logger that
         # keeps a level of its own below it still prints nothing quieter.
@@ -889,11 +889,13 @@ LOGGING = {
             "formatter": "json",
             "level": SEVERINO_LOG_LEVEL,
         },
+        # Each error a request logs with its traceback, kept in HQ by its request id.
+        "server_errors": {"()": "hq.platform.core.server_errors.ServerErrorHandler"},
     },
-    "root": {"handlers": ["console"], "level": SEVERINO_LOG_LEVEL},
+    "root": {"handlers": ["console", "server_errors"], "level": _LOGGED_LEVEL},
     # Every logger takes the root's level but Django's, which its own
     # default logging sets to INFO.
-    "loggers": {"django": {"level": SEVERINO_LOG_LEVEL}},
+    "loggers": {"django": {"level": _LOGGED_LEVEL}},
 }
 
 

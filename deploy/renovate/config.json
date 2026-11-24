@@ -6,7 +6,6 @@
   "allowedUnsafeExecutions": ["mise"],
   "platformCommit": "enabled",
   "extends": ["config:best-practices"],
-  "minimumReleaseAge": "14 days",
   "vulnerabilityAlerts": { "enabled": true },
   "osvVulnerabilityAlerts": true,
   "dependencyDashboard": true
