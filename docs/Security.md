@@ -262,7 +262,10 @@ is refused the audit log (`read_audit_log`) and the calendar
 - An error a request logs with its traceback is also kept in HQ under that
   request's id (`hq/platform/core/server_errors.py`, a handler on the root
   logger): its method and path without the query, who asked, the exception
-  and the traceback the log line carries, never a frame's values. The newest
+  and the traceback the log line carries, never a frame's values. The
+  exception's own message is kept as it was raised, in the message and the
+  traceback alike; only a validation failure is summarized, without the value
+  sent. The newest
   `KEPT` are kept and each write deletes the rest. A failure to keep one is
   logged and dropped, so the request's answer never changes, and a
   speculative request keeps nothing. A traceback can carry configuration and
