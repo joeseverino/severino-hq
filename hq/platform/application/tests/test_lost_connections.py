@@ -39,7 +39,6 @@ class ConnectionsLostTests(TestCase):
 
         self.assertEqual(finding["severity"], "serious")
         self.assertEqual(finding["title"], f"The controller on {CONTROLLER} reports no connections")
-        self.assertIn("2 connections", finding["explanation"])
         self.assertIn({"label": "Last reported", "value": "example-dns, example-tunnel"}, finding["evidence"])
         self.assertIn("systemctl start severino-hq-secrets.service", steps_text(finding))
         self.assertEqual(

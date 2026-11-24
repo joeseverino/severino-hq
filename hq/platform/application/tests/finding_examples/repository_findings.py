@@ -64,7 +64,7 @@ EXAMPLES = (
                         "verified": [{"name": "Verify the image was signed", "conclusion": "failure"}],
                     }
                 ],
-                raises=("alpha's last deploy did not pass its own verification",),
+                raises=("alpha's last deploy failed verification",),
             ),
         ),
         quiet=(QUIET,),

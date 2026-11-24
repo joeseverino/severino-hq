@@ -96,7 +96,7 @@ def raising(*records: dict, raises: tuple[Raised | str, ...], **fields) -> Examp
     return Example(readings={KIND: stored(*records, **fields) if fields else records}, raises=raises)
 
 
-STALLED = f"{TIMER} on example-controller is on but its job is not running"
+STALLED = f"{TIMER} on example-controller is not starting its job"
 LOOPING = "“Example upload” keeps restarting on example-controller"
 UNREAD = "HQ cannot check the background jobs on example-controller"
 

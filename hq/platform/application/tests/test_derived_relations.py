@@ -31,7 +31,7 @@ class NamedBacklogTests(TestCase):
 
         self.assertEqual(item.count, 4)
         lacks = " (no purchase date or cost)"
-        self.assertTrue(item.explanation.startswith(f"Anvil{lacks}, Bench{lacks}, Camera{lacks} and 1 other. "))
+        self.assertEqual(item.explanation, f"Anvil{lacks}, Bench{lacks}, Camera{lacks} and 1 other.")
         self.assertEqual([link.label for link in item.pages], ["Anvil", "Bench", "Camera"])
         self.assertTrue(all(link.url.startswith("/assets/") for link in item.pages))
 
@@ -40,7 +40,7 @@ class NamedBacklogTests(TestCase):
 
         (item,) = tuple(raised("hq.assets"))
 
-        self.assertTrue(item.explanation.startswith("Desk (no purchase date or cost). "))
+        self.assertEqual(item.explanation, "Desk (no purchase date or cost).")
 
 
 class CertificateUseTests(TestCase):

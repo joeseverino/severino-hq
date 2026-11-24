@@ -164,7 +164,7 @@ EXAMPLES = (
                 },
                 raises=(
                     Raised(
-                        title="example-router offers 1 route that is not approved yet",
+                        title="example-router offers 1 unapproved route",
                         presses=("tailnet.routes.approve",),
                     ),
                 ),
@@ -179,7 +179,7 @@ EXAMPLES = (
                 },
                 raises=(
                     Raised(
-                        title="example-router offers 2 routes that are not approved yet",
+                        title="example-router offers 2 unapproved routes",
                         presses=("tailnet.routes.approve",),
                     ),
                 ),

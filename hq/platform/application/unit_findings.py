@@ -26,7 +26,7 @@ from .moments import duration, moment, when
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
-from .ui import agreed, counted, ended
+from .ui import agreed, counted
 
 # ``LoadState`` when systemd holds the unit's configuration, and
 # ``UnitFileState`` when the file is there and nothing starts it at boot.
@@ -212,12 +212,6 @@ def _failed_when(machine: str, unit: UnitState, now: datetime) -> str:
     return when(unit.ended_at, now) if unit.ended_at else f"before {machine} last started"
 
 
-def _failed_since(machine: str, failed: tuple[UnitState, ...], now: datetime) -> str:
-    if len(failed) > 1:
-        return "None of them has run successfully since it failed."
-    return f"It failed {_failed_when(machine, failed[0], now)} and has not run successfully since."
-
-
 def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
     """A unit systemd holds as failed.
 
@@ -246,7 +240,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                     else f"{counted(len(failed), 'background job', 'background jobs')} failed on {node.label}"
                 ),
                 severity=Tone.ATTENTION if all(unit.unit in scheduled for unit in failed) else Tone.SERIOUS,
-                explanation=_failed_since(node.label, failed, estate.now),
+                explanation=agreed(len(failed), "It has not run since.", "None has run since."),
                 evidence=tuple(
                     item
                     for unit in failed
@@ -297,10 +291,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                     else f"{counted(len(absent), 'background job', 'background jobs')} are not set up on {node.label}"
                 ),
                 severity=Tone.SERIOUS,
-                explanation=(
-                    f"So {agreed(len(absent), 'its', 'their')} work is not happening. "
-                    f"Deploying HQ sets {agreed(len(absent), 'it', 'them')} up."
-                ),
+                explanation=f"Deploying HQ sets {agreed(len(absent), 'it', 'them')} up.",
                 evidence=tuple(item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))),
                 steps=tuple(
                     step
@@ -374,16 +365,13 @@ def _stalled_finding(
         subject=node.id,
         scope=UNIT_KIND,
         title=(
-            f"{timers[0].named} on {node.label} is on but its job is not running"
+            f"{timers[0].named} on {node.label} is not starting its job"
             if len(timers) == 1
-            else f"{counted(len(timers), 'timer')} on {node.label} are on but their jobs are not running"
+            else f"{counted(len(timers), 'timer')} on {node.label} are not starting their jobs"
         ),
         severity=Tone.SERIOUS,
-        explanation=(
-            ended(stalled[0][1])
-            if len(stalled) == 1
-            else "Each timer is on and the job it starts is not running on schedule."
-        ),
+        # Why each is stalled is its evidence.
+        explanation="",
         evidence=tuple(
             item
             for timer, why in stalled
@@ -429,11 +417,7 @@ _restarting = OnEachMachine(
         if len(looping) == 1
         else f"{counted(len(looping), 'service keeps', 'services keep')} restarting on {node.label}"
     ),
-    explanation=lambda looping: agreed(
-        len(looping),
-        "systemd starts it again each time it stops, and it does not stay up.",
-        "systemd starts each again when it stops, and none stays up.",
-    ),
+    explanation=lambda _looping: "",
     evidence=lambda unit: (
         ("Service", unit.unit),
         ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
@@ -470,7 +454,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=UNIT_KIND,
                 title=_cannot_check(node),
                 severity=Tone.ATTENTION,
-                explanation="If one of them failed, HQ would not know.",
+                explanation="",
                 evidence=tuple(("Why", UNREAD_REASONS.get(reason, "Could not be read")) for reason in reasons),
                 steps=machine_step(
                     "See whether systemd answers for HQ's jobs",
@@ -492,38 +476,38 @@ def _cannot_check(node: TopologyNode) -> str:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "unit-failed",
-        "A background job failed",
+        "Background job failed",
         Tone.SERIOUS,
         _failed,
         gathered=True,
-        operator_action=("On the machine, read the job's log for why it failed, fix that, then start it again."),
+        operator_action="Read the job's log on the machine, fix what it names, then start it again.",
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: "a job nothing starts again on its own has failed",
-            Tone.ATTENTION: "a scheduled job's last run failed, which its timer runs again",
+            Tone.ATTENTION: "a scheduled job failed, which its timer runs again",
         },
     ),
     FindingRule(
         "unit-not-installed",
-        "A background job is not set up",
+        "Background job not set up",
         Tone.SERIOUS,
         _absent,
         gathered=True,
-        operator_action=("Deploy HQ, which sets up every background job, or turn the job on on the machine."),
+        operator_action="Deploy HQ, or turn the job on on the machine.",
         no_help_reason=cannot_run_commands(),
-        bars={Tone.SERIOUS: "a job HQ's machine needs is not installed or not turned on"},
+        bars={Tone.SERIOUS: "a job HQ needs is not installed or not turned on"},
     ),
     FindingRule(
         "timer-stalled",
-        "A scheduled job is not running",
+        "Scheduled job not running",
         Tone.SERIOUS,
         _stalled,
         gathered=True,
-        operator_action=("On the machine, see when the timer last ran and read its job's log, then start the job."),
+        operator_action="Read the job's log on the machine, then start the job.",
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: (
-                f"a timer is {duration(OVERDUE_AFTER)} past when it was due, "
+                f"a timer is {duration(OVERDUE_AFTER)} overdue, "
                 f"or its job has been starting for {duration(STARTING_TOO_LONG)}"
             )
         },
@@ -531,31 +515,26 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "unit-restarting",
-        "A service keeps restarting",
+        "Service keeps restarting",
         Tone.SERIOUS,
         _restarting,
         gathered=True,
-        operator_action=(
-            "On the machine, read the service's log for why it keeps stopping, fix that, then clear its restart count."
-        ),
+        operator_action="Read the service's log on the machine, fix what it names, then clear its restart count.",
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: (
-                f"systemd has restarted a service on its own {RESTARTING_FROM} times "
-                f"and it has not stayed up for {duration(SETTLED_AFTER)}"
+                f"a service restarted {RESTARTING_FROM} times without staying up for {duration(SETTLED_AFTER)}"
             )
         },
         clears=f"the service stays up for {duration(SETTLED_AFTER)}, or its restart count is cleared",
     ),
     FindingRule(
         "unit-state-unread",
-        "Cannot check background jobs",
+        "Background jobs not checked",
         Tone.ATTENTION,
         _unread,
         gathered=True,
-        operator_action=(
-            "Check that systemd answers on the controller's machine. If it does and this stays, deploy HQ."
-        ),
+        operator_action="Check that systemd answers on the controller's machine. If it does and this stays, deploy HQ.",
         no_help_reason=cannot_run_commands(),
         bars={Tone.ATTENTION: "HQ cannot read whether its background jobs run"},
     ),

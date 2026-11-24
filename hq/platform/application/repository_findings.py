@@ -133,13 +133,13 @@ def _unverified(repo: Repository) -> Iterator[Said]:
     finding = _about(
         repo,
         UNVERIFIED,
-        title=f"{repo.short}'s last deploy did not pass its own verification",
+        title=f"{repo.short}'s last deploy failed verification",
         severity=Tone.SERIOUS,
         explanation=_named("Failed step", "Failed steps", failed),
         evidence=(("Failed steps", str(len(failed))),),
         primary=opens("Open deploy", web_url(repo.production.get("url")) or repo.url),
     )
-    yield finding, f"{repo.short}'s last deploy had not passed its own verification"
+    yield finding, f"{repo.short}'s last deploy had failed verification"
 
 
 def _alerts_said(repo: Repository) -> tuple[str, str, str]:
@@ -199,7 +199,7 @@ def _lapsing(repo: Repository) -> Iterator[Said]:
             artifact["name"],
             title=f"{repo.short}'s admission lapses in {days} days",
             severity=Tone.SERIOUS if days <= ARTIFACT_SERIOUS_DAYS.value else Tone.ATTENTION,
-            explanation="Once it lapses, HQ's next build leaves it out. Run its admission again to renew it.",
+            explanation="Run its admission again to keep it in the build.",
             evidence=(("Lapses in", counted(days, "day")),),
             primary=opens("Open actions", f"{repo.url}/actions"),
         )
@@ -265,7 +265,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _each(_waiting),
         operator_action="Approve or reject the run on GitHub, as one of its required reviewers.",
-        no_help_reason="Only a required reviewer can approve a deployment, and HQ reads GitHub with read-only tokens.",
+        no_help_reason="Only a required reviewer can approve a deployment.",
         bars={
             Tone.SERIOUS: f"a run has waited on a reviewer for {WAITING_SERIOUS_AFTER}",
             Tone.ATTENTION: "a run waits on a reviewer",
@@ -279,25 +279,20 @@ RULES: tuple[FindingRule, ...] = (
         "Failing workflows",
         Tone.SERIOUS,
         _each(_failing),
-        operator_action="Read the failing run's log on GitHub, then fix the code or the workflow it names.",
-        no_help_reason="HQ reads which checks fail, not their logs, and the fix is a change to the code or a workflow.",
+        operator_action="Read the failing run's log on GitHub, then fix what it names.",
+        no_help_reason="HQ reads which checks fail, not their logs.",
         bars={Tone.SERIOUS: "a check fails on the newest commit to the default branch"},
         domain=PROJECTS,
         gathered=True,
     ),
     FindingRule(
         UNVERIFIED,
-        "Unverified commits",
+        "Unverified deploys",
         Tone.SERIOUS,
         _each(_unverified),
         operator_action="Read the failed step in the deploy's log on GitHub, then fix the repository.",
-        no_help_reason=(
-            "HQ sees which step failed, not why. The cause is in the deploy's log, "
-            "and the fix in the repository, which HQ never writes to."
-        ),
-        bars={
-            Tone.SERIOUS: "a step of the last deploy's own verification failed, so production may not be what was meant"
-        },
+        no_help_reason="HQ sees which step failed, not why.",
+        bars={Tone.SERIOUS: "a step of the last deploy's verification failed"},
         domain=PROJECTS,
         gathered=True,
     ),
@@ -306,24 +301,22 @@ RULES: tuple[FindingRule, ...] = (
         "Security alerts",
         Tone.ATTENTION,
         _each(_alerts),
-        operator_action="Upgrade the code each alert names, or revoke the leaked credential, then let GitHub close it.",
-        no_help_reason="An alert closes when the code is upgraded. HQ never writes to the repository.",
+        operator_action="Upgrade what each alert names, or revoke the leaked credential.",
+        no_help_reason=CANNOT_WRITE,
         bars={
-            Tone.SERIOUS: "a leaked credential or a critical alert is open, which anyone who finds it can use",
-            Tone.ATTENTION: "a high severity alert is open, which stays open to attack until the code is upgraded",
+            Tone.SERIOUS: "a leaked credential or a critical alert is open",
+            Tone.ATTENTION: "a high severity alert is open",
         },
         domain=PROJECTS,
         gathered=True,
     ),
     FindingRule(
         LAPSING,
-        "Workflow artifacts",
+        "Lapsing admissions",
         Tone.ATTENTION,
         _each(_lapsing),
-        operator_action="Run the extension's admission workflow again on GitHub, which renews the artifact.",
-        no_help_reason=(
-            "The reading names the artifact but not the workflow that makes it, so HQ cannot name the run to repeat."
-        ),
+        operator_action="Run the extension's admission workflow again on GitHub.",
+        no_help_reason="HQ cannot tell which workflow makes the artifact.",
         bars={
             Tone.SERIOUS: f"an admission artifact lapses within {ARTIFACT_SERIOUS_DAYS}",
             Tone.ATTENTION: f"an admission artifact lapses within {ARTIFACT_ATTENTION_DAYS}",

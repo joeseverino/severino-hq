@@ -31,7 +31,7 @@ from .finding_model import (
 from .freshness import LAST_READ, OUT_OF_DATE, behind, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
-from .moments import duration, when, when_at
+from .moments import duration, when
 from .reading_facts import refusals
 from .render_status_findings import RENDERER_UNITS
 from .tone import Tone
@@ -49,17 +49,6 @@ def _many(kind_key: str) -> str:
 
     provider = PROVIDERS.get(kind_key)
     return (provider.label_plural if provider else "") or plural(kind_label(kind_key))
-
-
-def _the_others(count: int, noun: str, kind_key: str) -> str:
-    """The rest of a record's type as the start of a sentence about them; its
-    type, when it is the only one."""
-
-    if count == 0:
-        return f"{_many(kind_key)} were"
-    if count == 1:
-        return f"The one other {noun} was"
-    return f"The other {count} {plural(noun)} were"
 
 
 def _when(label: str, at: date | str | None) -> tuple[str, str]:
@@ -88,28 +77,21 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
     for node in estate.nodes():
         if node.id in emptied or not _left_behind(estate, node):
             continue
-        moment = estate.observed[node.id]
         newest = estate.latest_by_kind[node.kind_key]
-        behind = newest - moment
         siblings = sum(1 for other in estate.nodes() if other.kind_key == node.kind_key and other.id in estate.observed)
-        name = node_name(node)
         others = siblings - 1
+        noun = lower_first(node.subtitle)
         found.append(
             Finding(
                 rule="skipped-by-a-sweep",
                 subject=node.id,
-                title=f"{name} was missing from HQ's last read",
+                title=f"{node_name(node)} was missing from HQ's last read",
                 severity=Tone.SERIOUS,
-                # The point first: a narrow card shows only the first line.
-                explanation=(
-                    "It has probably been removed or renamed. "
-                    f"{_the_others(others, lower_first(node.subtitle), node.kind_key)} read {when(newest)}, "
-                    "and this one was "
-                    f"last seen {duration(behind)} earlier."
-                ),
+                explanation="",
                 evidence=(
                     _when("Last seen", node.observed_at),
                     _when("Others read" if others else LAST_READ, newest),
+                    *((("Others", counted(others, noun, plural(noun))),) if others else ()),
                 ),
                 remedies=_skipped_remedies(node),
             )
@@ -219,15 +201,8 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                     else f"Portainer lists no containers on {machine}"
                 ),
                 severity=Tone.SERIOUS,
-                explanation=(
-                    f"It listed {counted(len(containers), 'container')} until {when_at(last)} and none in "
-                    "HQ's last read. "
-                    + (
-                        f"Docker probably restarted under {holder}, which still holds the old socket. Restart it."
-                        if holder
-                        else "Restart whatever gives Portainer this machine's Docker socket."
-                    )
-                ),
+                # Its step says to restart what holds the socket, where HQ can name it.
+                explanation="" if holder else "Restart what gives Portainer its Docker socket.",
                 evidence=(
                     ("Environment", name or machine),
                     *((("Status", str(environment["status"])),) if environment.get("status") else ()),
@@ -244,7 +219,7 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
 
 
 def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
-    """The two answers the explanation gives, as the actions that carry them out.
+    """What to do about a record the last read missed, as the actions that do it.
 
     A record missing from a sweep is gone: HQ can create it again from its
     config, or stop holding it. A container is either one that runs now and
@@ -267,6 +242,9 @@ def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
         return (remove,)
     recreate = tuple(replace(remedy, intent="Create it again") for remedy in reconcile_remedy(node))
     return (*recreate, remove)
+
+
+REFRESH_OR_FIX = "Refresh them, or fix the connection that reads them."
 
 
 def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -296,7 +274,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=kind_key,
                 title=f"{_many(kind_key)} have not been read for {duration(silent)}",
                 severity=Tone.SERIOUS,
-                explanation="Refresh them. If that fails, the connection that reads them needs fixing.",
+                explanation=REFRESH_OR_FIX,
                 evidence=(
                     _when(LAST_READ, newest),
                     ("Read every", duration(sweep_interval())),
@@ -317,10 +295,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=kind_key,
                 title=f"{_many(kind_key)} have never been read",
                 severity=Tone.SERIOUS,
-                explanation=(
-                    "What HQ shows for them is only what was entered in HQ. Refresh "
-                    "them. If that fails, the connection that reads them needs fixing."
-                ),
+                explanation=REFRESH_OR_FIX,
                 evidence=(
                     _when(LAST_READ, None),
                     ("In HQ", str(estate.declared_counts.get(kind_key, 0))),
@@ -362,14 +337,13 @@ def _controller_stopped(estate: FindingEstate, machine: str, controller: str, ki
     return Finding(
         rule="controller-sweep-stale",
         subject=controller,
-        title=(
-            f"The controller on {machine} has not read "
-            f"{counted(len(kinds), 'type of record', 'types of record')}"
-            + (f" for {duration(since(last, now=estate.now))}" if last else "")
-        ),
+        title=f"The controller on {machine} stopped reading",
         severity=Tone.SERIOUS,
-        explanation="Everything listed is read by the same controller, so check it first.",
-        evidence=(("Not read", ", ".join(sorted(_many(kind) for kind in kinds))),),
+        explanation="",
+        evidence=(
+            ("Not read", ", ".join(sorted(_many(kind) for kind in kinds))),
+            *((_when(LAST_READ, last),) if last else ()),
+        ),
         remedies=(_read_again("all"),),
         steps=_controller_steps(machine),
         no_help_reason=cannot_run_commands(machine),
@@ -415,20 +389,24 @@ def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
     )
 
 
-def _fault_title(node: TopologyNode, otherwise: str) -> str:
-    """What the resource itself says is wrong, as far as its first sentence;
-    a resource that says nothing gets ``otherwise``."""
+def _fault_said(node: TopologyNode, otherwise: tuple[str, str]) -> tuple[str, str]:
+    """What the resource itself says is wrong, as a title as far as its first
+    sentence and what it says after that; a resource that says nothing, or
+    too much to title, gets ``otherwise``'s title."""
 
     said = node.detail.strip()
     if not said:
         return otherwise
-    first = re.split(r"(?<=[.!?])\s", said, maxsplit=1)[0].rstrip(".")
+    first, *rest = re.split(r"(?<=[.!?])\s", said, maxsplit=1)
+    first = first.rstrip(".")
     # "what failed: the detail" is headed by what failed. "name: what is wrong
     # with it" is one statement, and its name alone would say nothing.
-    lead, colon, _rest = first.partition(": ")
+    lead, colon, after = first.partition(": ")
     if colon and " " in lead:
-        first = lead
-    return first if len(first) <= 110 else otherwise
+        first, rest = lead, [ended(after), *rest]
+    if len(first) > 110:
+        return otherwise[0], said
+    return first, " ".join(rest)
 
 
 def _fault_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
@@ -490,9 +468,9 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="reporting-a-fault",
             subject=node.id,
-            title=_fault_title(node, f"{node_name(node)} reports an error"),
+            title=title,
             severity=Tone.SERIOUS if node.status == Tone.SERIOUS else Tone.ATTENTION,
-            explanation=node.detail or "It reports an error, and your last change to it has not been applied.",
+            explanation=explanation,
             evidence=_fault_evidence(node),
             remedies=_fault_remedies(node),
             no_help_reason=_cannot_fix_report(node),
@@ -504,6 +482,9 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
         # The other rule owns the converged case and says something sharper
         # about it, so this one takes what is left rather than doubling it.
         and (node.declared_revision != node.observed_revision or _reports_itself(node))
+        for title, explanation in (
+            _fault_said(node, (f"{node_name(node)} reports an error", "Your last change to it is not applied yet.")),
+        )
     )
 
 
@@ -521,13 +502,9 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="reconciled-but-still-wrong",
             subject=node.id,
-            title=_fault_title(node, f"{node_name(node)} is not set the way HQ last set it"),
+            title=title,
             severity=Tone.SERIOUS,
-            explanation=node.detail
-            or (
-                f"HQ applied its settings and {node_name(node)} still differs. Applying again "
-                "will not help. Keep the live version, or change what HQ expects."
-            ),
+            explanation=explanation,
             evidence=_fault_evidence(node),
             # Applying again is the one thing already known not to work. Where
             # the live record was changed, the choice is which side to keep.
@@ -547,6 +524,11 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
         and node.declared_revision == node.observed_revision
         and node.declared_revision > 0
         and not _reports_itself(node)
+        for title, explanation in (
+            _fault_said(
+                node, (f"{node_name(node)} still differs after HQ applied it", "Applying again will not help.")
+            ),
+        )
     )
 
 
@@ -565,11 +547,8 @@ def _never_observed(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=f"{node_name(node)} has never been found",
             severity=Tone.ATTENTION,
-            explanation=(
-                f"HQ found the other {lower_first(_many(node.kind_key))} but never this one. "
-                "What you see for it is only what was entered in HQ."
-            ),
-            evidence=(_when("Last seen", None),),
+            explanation="Check its name on the service.",
+            evidence=(_when("Last seen", None), _when("Others read", estate.latest_by_kind[node.kind_key])),
             remedies=reconcile_remedy(node),
         )
         for node in estate.nodes()
@@ -597,9 +576,8 @@ def _unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=f"{_what(node, node.label)} could not be checked",
             severity=Tone.ATTENTION,
-            explanation=f"It was last read {when(node.observed_at)}."
-            if node.observed_at
-            else "It has never been read.",
+            explanation="",
+            evidence=(_when(LAST_READ, node.observed_at or None),),
             remedies=reconcile_remedy(node),
         )
         for node in estate.nodes()
@@ -620,13 +598,9 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
         Finding(
             rule="weakly-verified",
             subject=node.id,
-            title=(f"HQ could not confirm {counted(len(node.unconfirmed_fields), 'setting')} of {node_name(node)}"),
+            title=f"HQ could not confirm {counted(len(node.unconfirmed_fields), 'setting')} of {node_name(node)}",
             severity=Tone.ATTENTION,
-            explanation=(
-                f"HQ set these and the last reading did not include them: {ended(_settings(node))} "
-                "Apply HQ's config to set them and read them back. If this stays after applying, "
-                "HQ cannot read them from the service."
-            ),
+            explanation="Apply HQ's config to read them back.",
             evidence=(
                 ("Could not check", _settings(node)),
                 _when(LAST_READ, node.observed_at),
@@ -671,15 +645,11 @@ def _work_that_keeps_failing(estate: FindingEstate) -> tuple[Finding, ...]:
 
 def _keeps_failing(node: TopologyNode, unfinished: tuple[str, ...], machine: str) -> Said:
     return {
-        "title": (
-            f"{node.label} connects, but "
-            f"{counted(len(unfinished), 'thing it does keeps failing', 'things it does keep failing')}"
+        "title": f"Work through {node.label} keeps failing",
+        "explanation": "",
+        "steps": journal_step(
+            "Read the controller's log", machine, CONTROLLER_UNIT, ("It retries every few minutes.",)
         ),
-        "explanation": ended(
-            "It retries every few minutes and has not succeeded. The reason is "
-            f"in the controller's log{f' on {machine}' if machine else ''}"
-        ),
-        "steps": journal_step("Read the controller's log", machine, CONTROLLER_UNIT),
     }
 
 
@@ -709,11 +679,7 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 title=f"The controller on {node.label} reports no connections",
                 severity=Tone.SERIOUS,
-                explanation=(
-                    f"It reported {counted(len(connections), 'connection', 'connections')} until {since}, "
-                    "and none since, so nothing is read or changed through them. "
-                    "Check that the vault this machine reads still holds their items."
-                ),
+                explanation="Check that this machine's vault still holds their items.",
                 evidence=(("Last reported", names), ("None since", since)),
                 remedies=(_read_again(),),
                 steps=_refresh_steps(node.label),
@@ -749,11 +715,7 @@ def _report_refused(estate: FindingEstate) -> tuple[Finding, ...]:
             part=refusal.action,
             title=f"HQ refuses the controller's {refusal.action} report from {node.label}",
             severity=Tone.SERIOUS,
-            explanation=(
-                "Nothing in it is stored, so what HQ shows from it stops changing. "
-                "HQ and the controller disagree about the contract between them; the reason "
-                "says where."
-            ),
+            explanation="Deploy HQ so it and the controller match.",
             evidence=(
                 ("Report", refusal.action),
                 ("Reason", refusal.detail),
@@ -782,58 +744,52 @@ def _controller_machines(estate: FindingEstate) -> dict[str, str]:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "report-refused",
-        "HQ refuses what the controller reports",
+        "Controller report refused",
         Tone.SERIOUS,
         _report_refused,
         gathered=True,
-        operator_action=(
-            "Read the reason, then deploy HQ so the controller and HQ are built from one release. "
-            "If it stays, fix the side that departs from the contract."
-        ),
+        operator_action="Deploy HQ so it and the controller match. If it stays, fix what the reason names.",
         no_help_reason="HQ cannot change what the controller sends.",
-        bars={Tone.SERIOUS: "the controller's report breaks the contract, so nothing new is read"},
+        bars={Tone.SERIOUS: "HQ refuses the controller's report, so nothing new is read"},
     ),
     FindingRule(
         "connections-lost",
-        "The controller reports no connections",
+        "No connections reported",
         Tone.SERIOUS,
         _connections_lost,
         operator_action=(
-            "Check that the vault this machine reads holds the connection items, "
-            f"run the refresh job, then press {CONTROLLER_REFRESH.words()}."
+            f"Check the machine's vault holds the connection items, run the refresh job, then press "
+            f"{CONTROLLER_REFRESH.words()}."
         ),
         no_help_reason="HQ cannot read the vault.",
         bars={Tone.SERIOUS: "the controller reports no connections at all"},
     ),
     FindingRule(
         "work-that-keeps-failing",
-        "A connection works but something through it keeps failing",
+        "Work that keeps failing",
         Tone.ATTENTION,
         _work_that_keeps_failing,
-        operator_action=("Read the controller's log for this connection and fix what it names."),
+        operator_action="Read the controller's log and fix what it names.",
         no_help_reason="HQ cannot read the controller's log.",
-        bars={Tone.ATTENTION: "work sent through a connection that answers keeps failing"},
+        bars={Tone.ATTENTION: "work through a connection that answers keeps failing"},
     ),
     FindingRule(
         "controller-sweep-stale",
-        "The controller has stopped reading",
+        "Controller stopped reading",
         Tone.SERIOUS,
         _controller_sweep_stale,
-        operator_action=f"On its machine, check the controller is running, then press {CONTROLLER_REFRESH.words('all')}.",
+        operator_action=f"Check the controller is running, then press {CONTROLLER_REFRESH.words('all')}.",
         no_help_reason="HQ cannot start the controller.",
         subsumes=("kind-never-swept",),
         bars={Tone.SERIOUS: "one controller is behind on two or more types of record"},
     ),
     FindingRule(
         "environment-read-empty",
-        "A Docker environment lists no containers",
+        "Docker lists no containers",
         Tone.SERIOUS,
         _environment_read_empty,
-        operator_action=(
-            "On the machine, restart Portainer, or its agent where the machine is read through one, "
-            f"then press {CHECK_AGAIN}."
-        ),
-        no_help_reason="HQ restarts containers through Portainer, which cannot reach Docker there now.",
+        operator_action=f"Restart Portainer, or its agent, on the machine, then press {CHECK_AGAIN}.",
+        no_help_reason="HQ restarts containers through Portainer, which cannot reach Docker there.",
         bars={Tone.SERIOUS: "a Docker environment that had containers lists none"},
     ),
     FindingRule(
@@ -841,30 +797,30 @@ RULES: tuple[FindingRule, ...] = (
         "Missing from HQ's last read",
         Tone.SERIOUS,
         _skipped_by_a_sweep,
-        operator_action=("If it is gone, remove it from HQ. If it only runs sometimes, mark it so."),
+        operator_action="Remove it from HQ if it is gone, or mark it as running only sometimes.",
         no_help_reason="HQ cannot tell whether it was removed on purpose.",
         subsumes=("resource-unchecked",),
-        bars={Tone.SERIOUS: "the last read found its siblings but not it"},
+        bars={Tone.SERIOUS: "the last read found the others but not it"},
     ),
     FindingRule(
         "kind-never-swept",
-        "Something has not been read for days",
+        "Not read lately",
         Tone.SERIOUS,
         _kind_never_swept,
         operator_action=f"Fix the connection that reads them, then press {CONTROLLER_REFRESH.words()}.",
-        no_help_reason="HQ cannot fix a connection that is not answering.",
+        no_help_reason="HQ cannot fix a connection that does not answer.",
         # When the sweep itself is the fault, every record of the kind looks
         # skipped. Saying it once about the kind beats saying it about each.
         subsumes=("skipped-by-a-sweep", "never-observed", "environment-read-empty", "resource-unchecked"),
-        bars={Tone.SERIOUS: "a type of record has gone unread past the interval HQ reads it at"},
+        bars={Tone.SERIOUS: "a type of record has gone unread past its interval"},
     ),
     FindingRule(
         "reporting-a-fault",
-        "Something reports an error",
+        "Errors reported",
         Tone.SERIOUS,
         _reporting_a_fault,
-        operator_action="Open it, read the error, fix it, then apply again.",
-        no_help_reason="HQ cannot tell what to change from the error alone.",
+        operator_action="Open it, fix the error, then apply again.",
+        no_help_reason="HQ cannot tell what to change from the error.",
         bars={
             Tone.SERIOUS: "the service reports a serious error",
             Tone.ATTENTION: "the service reports an error",
@@ -875,36 +831,36 @@ RULES: tuple[FindingRule, ...] = (
         "Differs from HQ's config",
         Tone.SERIOUS,
         _reconciled_but_still_wrong,
-        operator_action=("Change HQ's config to something the service accepts, then apply again."),
+        operator_action="Change HQ's config to one the service accepts, then apply again.",
         no_help_reason="HQ cannot tell which setting was refused.",
         bars={Tone.SERIOUS: "HQ applied its config and the service still differs"},
     ),
     FindingRule(
         "weakly-verified",
-        "Settings HQ could not check",
+        "Unconfirmed settings",
         Tone.ATTENTION,
         _weakly_verified,
-        operator_action="Apply HQ's config, so HQ sets them and reads them back.",
+        operator_action="Apply HQ's config to read them back.",
         no_help_reason="HQ cannot read this setting from the service.",
         subsumes=("resource-unchecked",),
         bars={Tone.ATTENTION: "HQ cannot read back a setting it holds"},
     ),
     FindingRule(
         "never-observed",
-        "Added to HQ but never found",
+        "Records never found",
         Tone.ATTENTION,
         _never_observed,
-        operator_action=("Check it exists on the service under this exact name, or remove it from HQ."),
+        operator_action="Check its exact name on the service, or remove it from HQ.",
         no_help_reason="HQ cannot tell whether it exists under another name.",
         subsumes=("resource-unchecked",),
-        bars={Tone.ATTENTION: "a record added to HQ has never been found on its service"},
+        bars={Tone.ATTENTION: "a record in HQ was never found on its service"},
     ),
     FindingRule(
         "resource-unchecked",
-        "Could not be checked",
+        "Records not checked",
         Tone.ATTENTION,
         _unchecked,
-        operator_action="Apply HQ's config to it, so HQ reads it back.",
+        operator_action="Apply HQ's config to it to read it back.",
         no_help_reason="HQ does not change this type. Change it at its source.",
         bars={Tone.ATTENTION: "HQ has no way to check a record against its service"},
     ),
