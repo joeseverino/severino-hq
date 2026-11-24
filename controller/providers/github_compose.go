@@ -200,13 +200,24 @@ func (g *githubRepository) dashboard(ctx context.Context) (githubapi.Issue, erro
 	return githubapi.Issue{}, err
 }
 
-// appChanges is each app whose Compose files an update's pull request
-// changes, with every service whose image differs between its base and head.
-// layout is the default branch's Compose files, which name the files an app
-// keeps unchanged.
+// appDirectory is the app whose directory, compose/<app>/, holds a path at
+// any depth.
+func appDirectory(file string) (string, bool) {
+	app, rest, nested := strings.Cut(strings.TrimPrefix(file, githubApps+"/"), "/")
+	return app, strings.HasPrefix(file, githubApps+"/") && nested && app != "" && rest != ""
+}
+
+// appChanges is each app whose directory an update's pull request changes,
+// with every service whose image differs between its base and head: a change
+// to an app's build inputs alone (its Dockerfile, its lock file) moves no
+// image and is still that app's change. layout is the default branch's
+// Compose files, which name the files an app keeps unchanged.
 func (g *githubRepository) appChanges(ctx context.Context, pull GitHubPull, layout []string) []GitHubAppChange {
 	files := map[string][]string{}
 	for _, file := range pull.Files {
+		if app, ok := appDirectory(file.Path); ok && files[app] == nil {
+			files[app] = []string{}
+		}
 		if app, ok := composeApp(file.Path); ok {
 			files[app] = append(files[app], file.Path)
 		}

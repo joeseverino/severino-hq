@@ -78,7 +78,9 @@ func TestAnOptedInRepositoryReadsItsApps(t *testing.T) {
 
 // A file an update adds is absent at its base, and an app whose files do not
 // load, or whose image needs a variable only the host sets, is read false,
-// with no images: the reading never guesses a move.
+// with no images: the reading never guesses a move. An app whose build inputs
+// alone change, at any depth of its directory, is a change that moves no
+// image, and a file beside the apps is none.
 func TestAnAppThatDoesNotLoadMovesNothing(t *testing.T) {
 	api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
 	routes := githubRepositoryRoutes()
@@ -89,7 +91,10 @@ func TestAnAppThatDoesNotLoadMovesNothing(t *testing.T) {
 	routes[api("/contents/compose/large/compose.yml?ref=dddd")] = githubContent("services: {}\n")
 	routes[api("/pulls/6/files?per_page=100")] = `[{"filename":"compose/example/compose.yml","status":"added","additions":3,"deletions":0},
 		{"filename":"compose/large/compose.yml","status":"modified","additions":1,"deletions":1},
-		{"filename":"compose/unset/compose.yml","status":"modified","additions":1,"deletions":1}]`
+		{"filename":"compose/unset/compose.yml","status":"modified","additions":1,"deletions":1},
+		{"filename":"compose/built/Dockerfile","status":"modified","additions":1,"deletions":1},
+		{"filename":"compose/built/reader/go.mod","status":"modified","additions":1,"deletions":1},
+		{"filename":"compose/notes.md","status":"modified","additions":1,"deletions":1}]`
 	routes[api("/contents/compose/unset/compose.yml?ref=dddd")] = githubContent("services:\n  db:\n    image: example/db:1\n")
 	routes[api("/contents/compose/unset/compose.yml?ref=eeee")] = githubContent("services:\n  db:\n    image: example/db:${DB_TAG}\n")
 	h := newGitHubHarness(t, routes, runtime.Environment{})
@@ -102,7 +107,7 @@ func TestAnAppThatDoesNotLoadMovesNothing(t *testing.T) {
 		t.Fatalf("report %+v", report)
 	}
 	record := report.Records[0].(GitHubRepositoryRecord)
-	want := `[{"app":"example","read":true,"images":[{"service":"web","before":"","after":"example/app:2"}]},{"app":"large","read":false,"images":[]},{"app":"unset","read":false,"images":[]}]`
+	want := `[{"app":"built","read":true,"images":[]},{"app":"example","read":true,"images":[{"service":"web","before":"","after":"example/app:2"}]},{"app":"large","read":false,"images":[]},{"app":"unset","read":false,"images":[]}]`
 	if encoded, _ := json.Marshal(record.PullRequests[0].Apps); string(encoded) != want || record.Compose == nil || len(record.Compose) != 0 || record.Dashboard != "" {
 		t.Fatalf("apps %s, compose %v, dashboard %q", encoded, record.Compose, record.Dashboard)
 	}
