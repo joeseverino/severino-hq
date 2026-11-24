@@ -13,7 +13,7 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.db.models import Model
 
-from hq.platform.core.table_layout import SAYS_NOTHING, leaving_order
+from hq.platform.core.table_layout import SAYS_NOTHING, TRACKS, leaving_order
 lazy from hq.platform.core.included_parts import METER, READING_AGE
 lazy from hq.platform.core.templatetags import status_tags
 
@@ -508,6 +508,9 @@ class DataTable:
             raise ValueError("Only a table of one column with no headings sizes each row's controls apart.")
         if self.rows and self.groups:
             raise ValueError("A table holds rows or groups of them, not both.")
+        # A column past its grid's last track would be drawn over that one.
+        if (drawn := len(self.columns) + self.has_actions) > TRACKS:
+            raise ValueError(f"{self.label!r} draws {drawn} columns; a table holds {TRACKS}, its controls among them.")
         object.__setattr__(self, "columns", ranked(self.columns))
         bound = REGION.bind(self.label, **self.region)
         bound.apply_defaults()

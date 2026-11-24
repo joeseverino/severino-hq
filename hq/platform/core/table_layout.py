@@ -48,6 +48,9 @@ STATES_LEAVE = RANKS + 1
 # How many columns at most a table's share is counted over (`data-columns`),
 # one rule each in tables.css.
 COUNTED = 10
+# How many columns at most a table draws, its row's controls among them: the
+# tracks of its grid (tables.css) after a row's tick-box, which leads.
+TRACKS = 16
 
 
 @dataclass(slots=True)

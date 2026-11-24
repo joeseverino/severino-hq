@@ -19,6 +19,7 @@ from hq.platform.application.routes import routed
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Row, TableColumn, ranked, typed
 from hq.platform.core.part_examples import table
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
+from hq.platform.core.table_layout import TRACKS
 from hq.platform.core.testing import SignedInTestCase
 
 TEMPLATES = Path(__file__).resolve().parents[4] / "templates"
@@ -512,6 +513,17 @@ class TableColumnTests(SimpleTestCase):
             ranked((TableColumn("Name", drop=1), TableColumn("Note")))
         columns = (TableColumn("Name"), TableColumn("Note", drop=1))
         self.assertEqual(ranked(columns), columns)
+
+    def test_a_table_draws_no_more_columns_than_its_grid_has_tracks(self):
+        columns = tuple(TableColumn(f"Column {at}") for at in range(TRACKS))
+        acted = Row(tuple(Cell(column.label) for column in columns), actions=(PageAction("Open", "/"),))
+        DataTable("Things", columns)
+        for refused in (
+            lambda: DataTable("Things", (*columns, TableColumn("Over"))),
+            lambda: DataTable("Things", columns, (acted,)),
+        ):
+            with self.subTest(refused), self.assertRaises(ValueError):
+                refused()
 
     def _ranks(self, *columns):
         return {column.label: column.drop for column in ranked(columns)}

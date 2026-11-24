@@ -435,7 +435,9 @@ column is one width down the table. No width is computed in Python. Its columns 
 Primer's DataTable sizes its own (`auto` beside `grow`): each column starts at the least its cells
 can wrap to, every column grows alike toward its values whole, and the room left past every
 column's values goes to the column that names the rows, which is `auto` where every other is
-`fit-content(100%)` (tables.css). A value that keeps its line (a status, a figure, a row's
+`fit-content(100%)` (tables.css). The grid has a track for each of `table_layout.TRACKS` columns
+after a row's tick-box, a row's controls among them, and a table that declares more is refused,
+so no column is drawn over another. A value that keeps its line (a status, a figure, a row's
 controls, a date) starts whole. A short value (`cell-short`, `table_layout.SHORT`: an address and
 its port, a host, a mailbox, a project's name) starts whole up to its column's share, its region's
 width over one more than the count of columns it shows (`--share`, over the count the region
@@ -517,7 +519,7 @@ its state is. Below every rank's width (20rem) the state goes to the open line l
 does. A hash or key with no break in it may break anywhere (cuts.css).
 
 A table's headings, cells, open lines and group headings keep their roles in its grid (table,
-row, column header, cell, in WebKit and Chromium), and its heading pins. A narrow table whose rows
+row, column header, cell), and its heading pins. A narrow table whose rows
 hold labeled controls (below 48rem where a row holds four, which ask a line of their own sooner)
 gives them a line of their own: a row's labeled controls take its last line, on
 a line of their own from where its name starts, in every row alike, the row's pad under them,
