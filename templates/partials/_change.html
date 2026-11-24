@@ -4,5 +4,9 @@ replaces it: {% include "partials/_change.html" with from=installed to=fixed %},
 with `code=True` to show both as identifiers and `url` to link the new one
 outside HQ. The arrow is drawn for the eye and read as `word`, "to" unless the
 pair says otherwise (a mount's source is "mounted at" its destination), and
-keeps to the line of the value it points at (.change, figures.css).
-{% endcomment %}<span class="change">{% if code %}<code>{{ from }}</code>{% else %}<span>{{ from }}</span>{% endif %}<span class="change-to"><span class="change-arrow" aria-hidden="true">→</span><span class="visually-hidden">{% if word %}{{ word }}{% else %}to{% endif %}</span>{% if url %}{% entity url|outside label=to code=code %}{% elif code %}<code>{{ to }}</code>{% else %}<span>{{ to }}</span>{% endif %}</span></span>
+keeps to the line of the value it points at (.change, figures.css). The change
+is a box, where a line may break even before a no-break space, so what follows
+it with a mark (`mark="·"` for a dot, as `breakable` takes it) passes the mark
+in, drawn inside the new value's last box and the space after it outside the
+box, where a flex item's own last space would be dropped.
+{% endcomment %}<span class="change">{% if code %}<code>{{ from }}</code>{% else %}<span>{{ from }}</span>{% endif %}<span class="change-to"><span class="change-arrow" aria-hidden="true">→</span><span class="visually-hidden">{% if word %}{{ word }}{% else %}to{% endif %}</span>{% if url %}{% entity url|outside label=to code=code mark=mark %}{% elif code %}<code>{% if mark %}{{ to|breakable:mark }}{% else %}{{ to }}{% endif %}</code>{% else %}<span>{% if mark %}{{ to|breakable:mark }}{% else %}{{ to }}{% endif %}</span>{% endif %}</span></span>{% if mark %} {% endif %}
