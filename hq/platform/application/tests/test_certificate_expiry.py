@@ -17,7 +17,7 @@ def _certificate_named(item) -> str:
     finding's evidence names, an estate item's subject. A certificate left over
     serves none, so it is its own item and names nothing here."""
 
-    facts = dict(map(tuple, item["facts"]))
+    facts = {fact["label"]: fact["value"] for fact in item["facts"]}
     if "Certificate" in facts:
         return facts.get("Serves", "").split(", ")[0]
     return (item["subject"] or {}).get("label", "") if ":estate-certificate:" in item["key"] else ""

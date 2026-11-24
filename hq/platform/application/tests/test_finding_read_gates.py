@@ -267,7 +267,8 @@ class AMachineAGatedFamilyNamesTests(TestCase):
             naming("open", Capability.READ, "example-host", controller="example-host")
         )
 
-        self.assertEqual([action.url for action in machine.actions if action.name == "open"], [machine.url])
+        opens = [(action.url, action.label) for action in machine.actions if action.name == "open"]
+        self.assertEqual(opens, [(machine.url, f"Open {machine.label}")])
 
     def test_what_a_family_any_reader_may_read_names_is_still_folded_onto_the_machine(self):
         machine, _relations, by_id = self.machine(

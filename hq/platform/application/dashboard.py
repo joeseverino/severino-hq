@@ -26,7 +26,7 @@ from .domains import (
     provided,
     reader_variant,
 )
-from .finding_model import PLAYBOOK_INVESTIGATION, Finding
+from .finding_model import PLAYBOOK_INVESTIGATION, Finding, FindingEvidence, written_fact
 from .finding_steps import WrittenStep
 from .findings import finding_key, rule_for
 from .json_schemas import as_written
@@ -152,8 +152,7 @@ class QueueItem(TypedDict):
     observed_at: str
     # The kind of reading observed_at dates, or "".
     reads: str
-    # Each a label and its value.
-    facts: list[list[str]]
+    facts: list[FindingEvidence]
     links: list[WrittenAction]
     read_capabilities: list[str]
 
@@ -207,7 +206,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "since": iso(finding.since) or "",
         "observed_at": iso(finding.observed_at) or "",
         "reads": finding.reads,
-        "facts": [list(fact) for fact in finding.evidence],
+        "facts": [written_fact(*fact) for fact in finding.evidence],
         "links": [as_written(link) for link in pages if link.name != PLAYBOOK_INVESTIGATION],
         "read_capabilities": list(finding.read_capabilities),
     }

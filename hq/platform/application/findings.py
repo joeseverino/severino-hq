@@ -70,11 +70,13 @@ from .finding_model import (
     PLAYBOOK_INVESTIGATION,
     Finding,
     FindingEstate,
+    FindingEvidence,
     FindingRemedy,
     FindingRule,
     Gathered,
     is_observable,
     parse_stamp,
+    written_fact,
 )
 from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenSteps
 from .first_seen import recorded
@@ -674,13 +676,6 @@ def rule_of(item_key: str) -> str:
     return rest.split(":", 1)[0] if found else ""
 
 
-class FindingEvidence(TypedDict):
-    """One line of what a finding rests on."""
-
-    label: Annotated[str, Describe("What this line of evidence is, as a problem card labels it.")]
-    value: Annotated[Any, Describe("What was found, most often a name or a sentence.")]
-
-
 class FindingFacts(TypedDict):
     """What a finding says the same at every door: what it is about, what it
     rests on, and why HQ cannot help where it cannot. Each door adds its steps
@@ -726,7 +721,7 @@ class SerializedFinding(FindingFacts):
 def _computed(finding: Finding) -> dict[str, Any]:
     return {
         "id": finding_id(finding),
-        "evidence": [{"label": label, "value": value} for label, value in finding.evidence],
+        "evidence": [written_fact(*fact) for fact in finding.evidence],
     }
 
 

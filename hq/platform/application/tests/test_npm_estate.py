@@ -222,7 +222,7 @@ class CertificateFindingTests(TestCase):
 
         self.assertEqual(finding["severity"], "serious")
         self.assertTrue(finding["title"].startswith("NPM certificate example wildcard expires"))
-        self.assertIn({"label": "Serves", "value": "app.example.com"}, finding["evidence"])
+        self.assertIn({"label": "Serves", "value": "app.example.com", "url": ""}, finding["evidence"])
 
     def test_an_expired_one_says_so_and_a_distant_one_is_not_a_finding(self):
         store("npm.certificate", certificate(in_days(-2)))

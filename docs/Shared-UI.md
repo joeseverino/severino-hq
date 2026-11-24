@@ -1135,6 +1135,13 @@ control, its label for a screen reader alone (the column's heading names it on t
 errors under it. A row's own buttons are posting `{% button %}`s, which post the page's own form,
 so they sit in this one.
 
+### partials/_icon_links.html (host only)
+
+A run of links on one line (`{% list kind="dots" %}`), each a link of words that says what it
+opens: a thing's page is "Open" and its name (`action_links.open_link`). An icon never stands in
+for the words, so every link is read and pressed alike and each stands on the line's one
+baseline, the dot between any two.
+
 ### partials/_identity.html
 
 **An account is named by this part.** It draws its picture (a `data:` URI or an HQ path, never
@@ -1143,6 +1150,13 @@ leads to it, then a line in its own words. In a card followed by a band of count
 layout="band" %}`), the two share one line once the card holds the identity beside four counts
 across, as the Starred page heads with your GitHub profile, and the band takes the line below when
 narrower.
+
+### partials/_insight_facts.html (host only)
+
+A value that names a record is its link: its owner hands the record as the link builder answers
+for it (`("Machine", entity_link("machine", name))`, a `Fact`), never its name alone, and it is
+drawn as every entity is, a page outside HQ with its arrow. A value that is itself a web address
+links to it, through `web_url`.
 
 ### partials/_linked_text.html (host only)
 
@@ -1458,12 +1472,13 @@ by its toggle into the line beneath, from the title's edge to the table's. A row
 opening it shows something more, or releases a cut meaning, and with no script every row shows all
 of it. The line beneath holds, in order:
 
-- what was read that shows it (`Insight(facts=...)`), each label once with its values beside it;
+- what was read that shows it (`Insight(facts=...)`), each label once with its values beside it,
+  a record linked to its page;
 - what to do, where a command or an instruction is a step, one standing alone and several
   numbered. A command is `{% command text=... %}`;
 - the reason it cannot be done from here, as a sentence and never as a step;
-- the pages that help look into it (`Insight(links=...)`), the map's as icons with HQ's
-  tooltip;
+- the pages that help look into it (`Insight(links=...)`), each in words, the map's opening
+  with its icon;
 
 The survey holds "words swapped for a glyph".
 

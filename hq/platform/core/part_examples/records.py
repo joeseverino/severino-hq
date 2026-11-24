@@ -741,12 +741,27 @@ WORK_QUEUE = Example(
 )
 
 
+# Where on the map to look around a row's subject, as every finding about a node carries them.
+_INVESTIGATIONS = (
+    read_link("topology", "Map neighborhood", "/example/topology/"),
+    read_link("impact", "Impact", "/example/topology/?direction=outbound"),
+)
+
+
 def opened_problems():
     """Rows that open onto what was read and what to do: commands whose
     labels differ in length, and one step alone between the facts and the
     reason it cannot be done from here."""
 
-    facts = (("Waiting since", "Jan 3, 1:42 AM"), ("Packages", "example-kernel, example-libc"))
+    pull = EntityLink(
+        "example-org/example-app#26", "https://github.example/example-org/example-app/pull/26", external=True
+    )
+    facts = (
+        ("Machine", EntityLink("example-host-01", "/example/machines/example-host-01/")),
+        ("Pull request", pull),
+        ("Waiting since", "Jan 3, 1:42 AM"),
+        ("Packages", "example-kernel, example-libc"),
+    )
     return list(
         finding_rows(
             "example",
@@ -759,6 +774,8 @@ def opened_problems():
                     title="example-host-01 waits on a restart",
                     explanation="An installed update takes effect only once the machine restarts.",
                     evidence=facts,
+                    investigations=_INVESTIGATIONS,
+                    offers=(read_link("open", "Open example-host-01", "/example/machines/example-host-01/"),),
                     steps=(
                         Run("See what waits on the restart", 'ssh example-host-01 "cat /run/reboot-required.pkgs"'),
                         Run("See when", 'ssh example-host-01 "shutdown --show"', notes=("shutdown -c cancels it.",)),
@@ -790,19 +807,20 @@ ORIGIN_PANEL = Example(
     '{% include "partials/_urgency_pill.html" %}{% include "partials/_origin_panel.html" %}',
     lambda: {"item": decision(opened_problems()[0])},
 )
-# What was read: each label once, a value of several words beside one of several names.
+# What was read: each label once, a record HQ has a page for and one outside it linked, then a value of
+# several words beside one of several names.
 INSIGHT_FACTS = Example(context=_opened("facts"))
 # Two commands, the second with its note.
 OPERATOR_STEPS = Example(context=_opened("steps"))
-# A page HQ draws as its icon, and one it names in words.
-ICON_LINKS = Example(
-    context={
-        "links": (
-            {"name": "topology", "label": "Open on the map", "url": "/example/topology/"},
-            {"name": "", "label": "Example runbook", "url": "/example/runbook/"},
-        )
-    }
-)
+# The pages HQ draws an icon for, each with its words, then one it names in words alone.
+ICON_LINKS = Example(context=_opened("links"))
+ICON_LINKS_STATES = {
+    # Only pages HQ draws an icon for.
+    "icons": Example(
+        '{% include "partials/_icon_links.html" %}',
+        lambda: {"links": [asdict(link) for link in _INVESTIGATIONS]},
+    ),
+}
 
 
 def _glance():

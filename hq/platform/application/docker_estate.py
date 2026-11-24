@@ -18,6 +18,7 @@ from hq.domains.control_plane.observations.portainer import IMAGE_KIND, image_ti
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 lazy from hq.platform.application.routes import reverse
 
+from .entity_links import container_link, entity_link
 from .facts import inventory_records
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
@@ -176,7 +177,10 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
                         f"docker rm -f {shlex.quote(name)}",
                     ),
                     part=name,
-                    evidence=(("Container", name), ("Machine", node.label)),
+                    evidence=(
+                        ("Container", container_link(node.label, name)),
+                        ("Machine", entity_link("machine", node.label)),
+                    ),
                     remedies=(
                         FindingRemedy(
                             capability="infrastructure.resource.create",
@@ -258,7 +262,7 @@ def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
             explanation="Recreate it to run what was pulled.",
             part=container,
             evidence=(
-                ("Container", container),
+                ("Container", container_link(node.label, container)),
                 ("Image reference", reference),
                 ("Running", running),
                 ("Tagged now", tagged),
@@ -281,7 +285,7 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
             explanation="Its version cannot be told or reproduced.",
             part=container,
             evidence=(
-                ("Container", container),
+                ("Container", container_link(node.label, container)),
                 ("Image", running),
                 *((("Started from", reference),) if reference else ()),
             ),

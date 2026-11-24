@@ -67,6 +67,13 @@ def read_link(name: str, label: str, url: str, *, reason: str = "", recommended:
     return _built(name=name, label=label, effect=Effect.READ, url=url, reason=reason, recommended=recommended)
 
 
+def open_link(name: str, url: str) -> tuple[ActionLink, ...]:
+    """The page of the thing called ``name``, said by that name wherever the
+    link stands apart from it; none without a page."""
+
+    return (read_link("open", f"Open {name}", url),) if url else ()
+
+
 def _built(**values: Any) -> ActionLink:
     """The link whose fields the page or command factory has derived."""
 

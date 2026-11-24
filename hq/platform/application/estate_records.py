@@ -5,6 +5,7 @@ from typing import Annotated, TypedDict
 
 from .answer_fields import Since
 from .describe import Describe, listed
+from .finding_model import FindingEvidence
 from .finding_steps import WrittenCheck, WrittenReason, WrittenSteps
 from .plugins import ATTENTION_ORDER
 from .ui import ended
@@ -47,7 +48,7 @@ class ActionItem(ActionItemRow):
     ]
     notice: Annotated[bool, Describe("Whether it only reports something, with nothing to resolve.")]
     observed_at: Annotated[str, Describe("When the reading it is drawn from was taken, in ISO 8601; empty for none.")]
-    facts: Annotated[list[list[str]], Describe("What was read that shows it, each a label and its value.")]
+    facts: Annotated[list[FindingEvidence], Describe("What was read that shows it, a labeled line each.")]
     links: Annotated[
         list[WrittenAction], Describe("Pages that help look into it, such as where it sits; never one that acts.")
     ]

@@ -66,7 +66,7 @@ class FixFollowsCauseTests(TestCase):
         self.assertEqual(step["text"], "Point the connection at Nginx Proxy Manager's own API address")
         self.assertIn(address_fields(), " ".join(step["notes"]))
         self.assertIn("https://proxy.example.com is not the API.", step["notes"])
-        self.assertIn({"label": "Cause", "value": "The address is not the API"}, found["evidence"])
+        self.assertIn({"label": "Cause", "value": "The address is not the API", "url": ""}, found["evidence"])
         self.assertNotIn("credential", step["text"].lower())
 
     def test_no_answer_asks_to_check_the_machine_and_route(self):

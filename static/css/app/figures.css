@@ -443,6 +443,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 
 /* With the line set's paint, which each symbol of img/icons.svg inherits through its <use> unless it says its own. */
 .icon { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* An icon leading a link's words is one of them: it stands on their line, its foot as far under the baseline as a letter's descent, so the words beside it keep the baseline every part of their line shares. */
+a:not(.btn) > .icon:first-child { vertical-align: -0.15em; }
 /* Each control is its own POST, so its own form, laid inline so the actions row does not stack them as blocks. */
 .page-actions form { margin: 0; display: inline-flex; }
 

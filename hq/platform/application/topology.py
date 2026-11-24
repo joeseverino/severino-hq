@@ -27,6 +27,7 @@ from .action_links import (
     capability_action_link,
     command_action,
     connection_action_links,
+    open_link,
     read_link,
     topology_url,
 )
@@ -88,10 +89,10 @@ def _resource_status(resource: ManagedResource) -> tuple[Tone, str, str]:
 
 
 def _resource_actions(
-    resource: ManagedResource, principal: Principal, *, removal_pending: bool, manages
+    resource: ManagedResource, name: str, principal: Principal, *, removal_pending: bool, manages
 ) -> tuple[TopologyAction, ...]:
     key = resource.key
-    actions = [read_link("open", "Open", resource.get_absolute_url())]
+    actions = [*open_link(name, resource.get_absolute_url())]
     if not principal.permits(Capability.MANAGE_INFRASTRUCTURE) or removal_pending:
         return tuple(actions)
     capabilities = resource_capabilities(resource, running=(), removal_pending=removal_pending, manages=manages)
@@ -130,7 +131,7 @@ def _link_node(
         label=link.label,
         subtitle=reached if kind == "target" else "Not read yet",
         url=link.url,
-        actions=((read_link("open", "Open", link.url),) if link.url else ()),
+        actions=open_link(link.label, link.url),
         read_capabilities=read_capabilities,
     )
 
@@ -243,9 +244,8 @@ def _merge_controller_node(
     Its observed time is the newest of the connections it reports.
     """
 
-    action = read_link("open", f"Open {group_label}", url) if url else None
     refresh = capability_action_link(READ_NOW_CAPABILITY, principal=principal)
-    emitted = tuple(item for item in (action, refresh) if item is not None)
+    emitted = (*open_link(group_label, url), *((refresh,) if refresh is not None else ()))
     current = nodes.get(node_id)
     if current is None:
         nodes[node_id] = TopologyNode(
@@ -557,7 +557,7 @@ def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
             on_demand=bool((resource.spec or {}).get("on_demand")),
             unconfirmed_fields=_unconfirmed(resource, provider),
             actions=_resource_actions(
-                resource, principal, removal_pending=resource.key in pending_removal, manages=manages
+                resource, node_name(node), principal, removal_pending=resource.key in pending_removal, manages=manages
             ),
         )
     return nodes

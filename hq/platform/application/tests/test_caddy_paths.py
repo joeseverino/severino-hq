@@ -234,8 +234,8 @@ class ServedCertificateExpiryTests(TestCase):
 
         self.assertEqual(finding["severity"], "serious")
         self.assertTrue(finding["title"].startswith("Certificate example.dev expires"))
-        self.assertIn({"label": "Held in", "value": "example-edge"}, finding["evidence"])
-        self.assertIn({"label": "Serves", "value": "*.example.dev, example.dev"}, finding["evidence"])
+        self.assertIn({"label": "Held in", "value": "example-edge", "url": ""}, finding["evidence"])
+        self.assertIn({"label": "Serves", "value": "*.example.dev, example.dev", "url": ""}, finding["evidence"])
 
     def test_a_distant_one_and_a_route_caddy_manages_say_nothing(self):
         self.routes(400, "example.dev")
