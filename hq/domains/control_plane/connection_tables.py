@@ -129,7 +129,7 @@ def _name(row: Any, *, starts: bool) -> Cell:
         lines.append(Cell(sight.summary, muted=True, parts=age))
     if row.fix:
         lines.append(Cell(status=_fix_mark(row.fix)))
-    return replace(Cell.of(connection.name_link, name=True), lines=tuple(lines))
+    return replace(Cell.of(connection.name_link), lines=tuple(lines))
 
 
 def _reached(row: Any) -> Cell | None:

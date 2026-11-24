@@ -177,7 +177,8 @@ class Cell:
     link: EntityLink | None = None
     # A state: ``text`` is its word and this its tone, drawn as a status.
     tone: str = ""
-    # In bold, the name its row is read by.
+    # In bold: a word its row stresses. The column that names each row draws
+    # its value as the row's name without it (``drawn_tables``).
     name: bool = False
     # It shows nothing at all, not even the empty value's mark: the side of a
     # change its row's record already says.

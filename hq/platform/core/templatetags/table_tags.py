@@ -427,8 +427,9 @@ DATA_TABLE = Part(
 
     What each part of a cell is decides how it wraps, and the region marks it (`data-cell`,
     `table_layout`). The stylesheet keys its cuts, holds and wraps on that mark, never on a
-    page's class or a cell's tags. The bold a cell leads with, or its leading link's, is the row's
-    `name`; free text (a message, a record's words) is declared `Cell(role="data")` and marked `data`;
+    page's class or a cell's tags. The row's `name` is the value of the column that names it, words or
+    a link to its record's page, drawn bold whether or not it links, which no table declares; an
+    identifier drawn as code, a sentence (`role="prose"`), a muted note, a moment or a state there names nothing. Free text (a message, a record's words) is declared `Cell(role="data")` and marked `data`;
     what a row means in words is `Cell(role="prose")`. A context line is a muted cell. A table declared
     later sets as every other does by declaring those, and `lint:css` refuses a table primitive rule
     that tells a cell's part by anything else. Free text breaks a run with no seam in it (a link, a

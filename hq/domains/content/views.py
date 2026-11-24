@@ -97,7 +97,7 @@ class _ContentSectionView(ListPageMixin, TemplateView):
             TableColumn(
                 "Title",
                 "title",
-                cell=lambda row: Cell.of(entity_link("writeup", row["slug"], label=row["title"]), name=True),
+                cell=lambda row: Cell.of(entity_link("writeup", row["slug"], label=row["title"])),
             ),
             *typed,
             TableColumn("Status", "status", css="key-col", cell=lambda row: Cell.state(row["state"])),

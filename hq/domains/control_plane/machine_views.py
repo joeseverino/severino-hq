@@ -109,7 +109,7 @@ def _machine_cells(item: dict) -> tuple[Cell, ...]:
     containers, what it serves and its one state."""
 
     roles = tuple(Cell(status=StatusMark(role["label"], chip=True, title=role["detail"])) for role in item["roles"])
-    name = Cell.of(entity_link("machine", item["name"]), name=True)
+    name = Cell.of(entity_link("machine", item["name"]))
     unanswered = set(item["unanswered"])
     if item["containers"]:
         containers = Cell(ContainerCount(item["running"], len(item["containers"])).said)

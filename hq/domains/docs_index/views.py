@@ -46,7 +46,7 @@ class DocsListView(ListPageMixin, TemplateView):
             "Title",
             "title",
             css="key-col",
-            cell=lambda row: Cell.of(entity_link("document", row["doc_id"], label=row["title"]), name=True),
+            cell=lambda row: Cell.of(entity_link("document", row["doc_id"], label=row["title"])),
         ),
         TableColumn("ID", "doc_id", cell=lambda row: Cell(row["doc_id"], readout=True)),
         TableColumn("Type", "doc_type", cell=lambda row: Cell(row["doc_type_label"])),

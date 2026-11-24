@@ -54,7 +54,6 @@ COLUMNS = (
         "Check",
         cell=lambda check: Cell(
             check.rule.title,
-            name=True,
             lines=(
                 Cell(check.rule.name, readout=True, muted=True),
                 *(

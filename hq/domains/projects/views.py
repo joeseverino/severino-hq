@@ -102,7 +102,7 @@ def _named(row) -> Cell:
 
     link = entity_link(Kind.PROJECT, row["slug"], label=row["name"])
     slug = (Cell(row["slug"], muted=True),) if row["slug"] != slugify(row["name"]) else ()
-    return replace(Cell.of(link, name=True), lines=slug)
+    return replace(Cell.of(link), lines=slug)
 
 
 def _updates(row) -> tuple[Cell, ...]:
@@ -334,7 +334,6 @@ def _starred(repo) -> Cell:
         repo["name"],
         repo["url"],
         external=True,
-        name=True,
         lines=(Cell(description, muted=True),) if description else (),
     )
 

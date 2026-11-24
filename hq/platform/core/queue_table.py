@@ -79,7 +79,7 @@ def _family(context: Any, entry: Mapping[str, Any], family: str, away: Any) -> R
     words = Tone(status).urgency
     mark = Cell(status=StatusMark(words, tone=status, css=css, tip=words))
     gist = Cell(entry["summary"], shows="gist", data={"attention-detail": ""})
-    name = Cell(entry["family"], name=True, lead=True, count=len(entry["items"]), fold=True, parts=(mark, gist))
+    name = Cell(entry["family"], lead=True, count=len(entry["items"]), fold=True, parts=(mark, gist))
     return Row(
         (name,),
         actions=tuple(remedies(context, entry["lead"])),

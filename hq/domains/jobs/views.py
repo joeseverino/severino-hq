@@ -51,7 +51,7 @@ class JobListView(ListPageMixin, TemplateView):
     page_title = "Background jobs"
     table_search_placeholder = "Search jobs and results…"
     table_columns = (
-        TableColumn("Job", kind="prose", cell=lambda row: Cell(row["title"], row["url"], name=True, role="data")),
+        TableColumn("Job", kind="prose", cell=lambda row: Cell(row["title"], row["url"], role="data")),
         TableColumn(
             "State", css="key-col", kind="status", cell=lambda row: Cell(row["state_label"], tone=str(row["tone"]))
         ),

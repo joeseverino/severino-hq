@@ -17,7 +17,7 @@ def _unread(result: Any) -> Row:
         reason = Cell(f"{reading.evidence}:", role="prose", parts=(Cell(ended(reading.fix), reading.fix_url),))
     else:
         reason = Cell(ended(reading.evidence), role="prose")
-    return Row((Cell(result.check.label, name=True), reason), data={"posture-unread": result.check.id})
+    return Row((Cell(result.check.label), reason), data={"posture-unread": result.check.id})
 
 
 def unread(posture: Any) -> DataTable:

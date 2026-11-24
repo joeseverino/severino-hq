@@ -318,7 +318,7 @@ def _record_cells(row: dict) -> tuple[Cell, ...]:
         *((Cell("on", muted=True, parts=(Cell.of(entity_link("machine", machine["name"])),)),) if machine else ()),
     )
     return (
-        replace(Cell.of(entity_link("resource", row["key"], label=row["name"]), name=True), lines=lines),
+        replace(Cell.of(entity_link("resource", row["key"], label=row["name"])), lines=lines),
         Cell(
             status=StatusMark(standing["label"], tone=standing["tone"], title=standing.get("detail", "")),
             lines=(Cell(moment=since, muted=True),) if since else (),
@@ -522,7 +522,6 @@ def _consumer(consumer: dict) -> Cell:
     return Cell(
         consumer["name"],
         consumer["url"],
-        name=True,
         lines=(Cell("through", muted=True, parts=(Cell.of(entity_link("connection", through)),)),) if through else (),
     )
 
@@ -550,7 +549,7 @@ CONSUMER_COLUMNS = (
     ),
 )
 SAVED_COLUMNS = (
-    TableColumn("Item", kind="identifier", cell=lambda publication: Cell(publication["target"], name=True)),
+    TableColumn("Item", kind="identifier", cell=lambda publication: Cell(publication["target"])),
     TableColumn("Last saved", kind="status", cell=_saved),
 )
 

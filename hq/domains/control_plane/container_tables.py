@@ -80,9 +80,9 @@ def machine_containers(
     def cells(container: Any) -> tuple[Cell, ...]:
         standing = standings.get(container.name)
         name = (
-            Cell.of(entity_link("resource", container.watcher, label=container.name), name=True)
+            Cell.of(entity_link("resource", container.watcher, label=container.name))
             if container.watcher
-            else Cell(container.name, name=True)
+            else Cell(container.name)
         )
         stack = container.stack if container.stack and container.stack != container.name else ""
         image = (
@@ -129,7 +129,6 @@ def every_container(found: Sequence[Any]) -> DataTable:
                     Cell(
                         item.running.name,
                         item.url,
-                        name=True,
                         lines=(Cell("on", muted=True, parts=(Cell.of(item.machine.link),)),),
                     ),
                     _image(item.standing),

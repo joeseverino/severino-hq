@@ -77,7 +77,7 @@ class ReceiptListView(ListPageMixin, TemplateView):
         TableColumn(
             "Vendor",
             "vendor",
-            cell=lambda row: Cell.of(entity_link("receipt", row["id"], label=row["label"]), name=True),
+            cell=lambda row: Cell.of(entity_link("receipt", row["id"], label=row["label"])),
         ),
         TableColumn("Date", "date", cell=lambda row: Cell(moment=stamp_day(row["date"]))),
         TableColumn("Amount", "amount", css="key-col", kind="numeric", cell=lambda row: Cell(amount=row["amount"])),

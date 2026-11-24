@@ -64,7 +64,7 @@ def _row_actions() -> DataTable:
     return DataTable(
         "Example messages",
         (TableColumn("From", kind="identifier"), TableColumn("Note")),
-        tuple(Row((Cell(name, name=True), Cell(note)), actions=actions) for name, note, actions in rows),
+        tuple(Row((Cell(name), Cell(note)), actions=actions) for name, note, actions in rows),
     )
 
 
@@ -74,7 +74,6 @@ def _many_actions() -> DataTable:
             (
                 Cell(
                     f"example-{at:02} was started outside its compose project",
-                    name=True,
                     lines=(Cell("An example note long enough to wrap over several lines beside the row's actions."),),
                 ),
             ),
@@ -97,7 +96,7 @@ def _controls_per_row() -> DataTable:
             label,
             (
                 Row(
-                    (Cell(f"An example {fold.split('-')[0]} item", name=True),),
+                    (Cell(f"An example {fold.split('-')[0]} item"),),
                     actions=(PageAction(action, f"/example/{fold}/"),),
                     folded=fold,
                 ),
@@ -184,7 +183,7 @@ def _crowded() -> DataTable:
         ),
         *(
             (
-                Cell(name, name=True),
+                Cell(name),
                 "Tailnet only",
                 chip(address),
                 chip(f"{address}:{port}"),
@@ -311,10 +310,10 @@ ENTRIES = {
                 "Example records 5",
                 (TableColumn("Name", kind="identifier"), "Note"),
                 (
-                    Cell("example-01", name=True),
+                    Cell("example-01"),
                     Cell("An example note", below=(Below("", (Cell("An example line the row holds back."),)),)),
                 ),
-                (Cell("example-02", name=True), "Another example note"),
+                (Cell("example-02"), "Another example note"),
             )
         },
     ),
@@ -326,8 +325,8 @@ ENTRIES = {
             "runs": table(
                 "Example runs 2",
                 (TableColumn("Run", kind="identifier"), "Asked by"),
-                (Cell("example-01", name=True), Cell("example-owner, on the web", cut=True)),
-                (Cell("example-02", name=True), Cell("example-agent, over MCP", cut=True)),
+                (Cell("example-01"), Cell("example-owner, on the web", cut=True)),
+                (Cell("example-02"), Cell("example-agent, over MCP", cut=True)),
             )
         },
     ),

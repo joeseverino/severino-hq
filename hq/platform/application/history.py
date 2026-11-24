@@ -447,13 +447,13 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
 
     folding = {"folded": folded} if folded else {"folds": line.fold if line.grouped else "", "folded": line.under}
     if line.rest is not None:
-        return Row((Cell(line.rest.more_words, line.url, name=True),), across=True, **folding)
+        return Row((Cell(line.rest.more_words, line.url),), across=True, **folding)
     if line.burst or line.moment is not None:
         moment = line.burst[0] if line.burst else line.moment
         title = (
-            Cell(line.title, line.url, name=True, role="data", fold=True)
+            Cell(line.title, line.url, role="data", fold=True)
             if line.burst
-            else Cell(moment.title, line.url, external=moment.external, name=True, role="data")
+            else Cell(moment.title, line.url, external=moment.external, role="data")
         )
         person, outcome = Cell(moment.actor), Cell(moment.source, tone="neutral")
         said = Cell(moment.detail, muted=True, role="data")

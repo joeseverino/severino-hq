@@ -378,11 +378,7 @@ def records_table(
 
 def _record_cells(record: Mapping, *, ttl_set: bool, managed: bool) -> tuple[Cell, ...]:
     summary = record.get("summary")
-    name = (
-        Cell.of(entity_link("service", record["service"]), name=True)
-        if record.get("service")
-        else Cell(record["name"], name=True)
-    )
+    name = Cell.of(entity_link("service", record["service"])) if record.get("service") else Cell(record["name"])
     proxied = (Cell(status=StatusMark("Proxied", tone="neutral")),) if record.get("proxied") else ()
     return (
         replace(name, lines=(Cell(summary, muted=True, role="data", shows="narrow"),) if summary else ()),

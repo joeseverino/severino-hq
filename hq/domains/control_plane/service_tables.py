@@ -63,7 +63,7 @@ def _service_cells(service: Any, facets: list[str], *, projects: bool) -> tuple[
         Cell(status=StatusMark(words, tone=tone, title=service.health.detail)) for tone, words in service.health.parts
     ]
     return (
-        Cell.of(entity_link("service", service.hostname), name=True),
+        Cell.of(entity_link("service", service.hostname)),
         Cell(
             status=StatusMark(
                 exposure.short, tone=exposure.tone, title=exposure.sentence, pill=False, data_exposure=exposure.level
@@ -155,7 +155,6 @@ def unmanaged_table(unmanaged: Sequence[tuple[Any, tuple[PageAction, ...]]]) -> 
                 (
                     Cell(
                         service.hostname,
-                        name=True,
                         lines=() if actions else (Cell("Read only", muted=True),),
                     ),
                     *(Cell(value, readout=True) for _id, _label, value in service.facets),
@@ -293,7 +292,7 @@ def _read_from(part: Any) -> Cell:
 
 
 ALIAS_COLUMNS = (
-    TableColumn("Record", kind="identifier", cell=lambda each: Cell.of(EntityLink(**each["link"]), name=True)),
+    TableColumn("Record", kind="identifier", cell=lambda each: Cell.of(EntityLink(**each["link"]))),
     TableColumn("Type", drop=2, cell=lambda each: Cell(kind_label(each["kind"]))),
     TableColumn("For", kind="identifier", drop=1, cell=lambda each: Cell(each["alias"])),
     TableColumn(

@@ -31,7 +31,7 @@ def _result(reading) -> Cell:
 
 
 READINGS = (
-    TableColumn("Reading", cell=lambda reading: Cell(reading.label, name=True, title=reading.kind)),
+    TableColumn("Reading", cell=lambda reading: Cell(reading.label, title=reading.kind)),
     TableColumn("Last tried", kind="status", drop=3, cell=lambda reading: Cell(moment=reading.attempted_at)),
     TableColumn(
         "Reading",

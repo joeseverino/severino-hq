@@ -162,8 +162,7 @@ def _arranged_rows() -> DataTable:
         ("shop.example.com", RowMark("/example/pin/", False, "shop.example.com", "favorites"), None),
     ]
     rows = tuple(
-        tables.Row((Cell(name, name=True), Cell("Example network")), mark=mark, order=order)
-        for name, mark, order in arranged
+        tables.Row((Cell(name), Cell("Example network")), mark=mark, order=order) for name, mark, order in arranged
     )
     return DataTable("Example services", (TableColumn("Service", kind="identifier"), TableColumn("Open to")), rows)
 
@@ -503,7 +502,7 @@ RUN_EVIDENCE_IN_ROWS = Example(
             "Example runs",
             (TableColumn("Playbook"), TableColumn("State", kind="status"), TableColumn("Result")),
             tuple(
-                tables.Row((Cell(title, name=True), Cell(word, tone=tone), Cell(note)), evidence=evidence)
+                tables.Row((Cell(title), Cell(word, tone=tone), Cell(note)), evidence=evidence)
                 for title, word, tone, note, evidence in _example_runs()
             ),
         )
@@ -863,7 +862,7 @@ def _every_kind() -> DataTable:
             *head.cells[5:],
         ),
     )
-    rest = tables.Row((Cell("1 more change", "/example/rest/", name=True),), folded="example-fold", across=True)
+    rest = tables.Row((Cell("1 more change", "/example/rest/"),), folded="example-fold", across=True)
     blank = row("example-host-03")
     run = tuple(Cell(status=tables.StatusMark(name, chip=True)) for name in ("Debian", "Caddy", "Tailscale", "SQLite"))
     blank = replace(blank, cells=(blank.cells[0], Cell(fit=True, parts=run), *blank.cells[2:-1], Cell(blank=True)))
@@ -873,7 +872,6 @@ def _every_kind() -> DataTable:
         (
             Cell(
                 "example-host-04",
-                name=True,
                 title="An example host",
                 parts=(Cell(status=tables.StatusMark("Edge", chip=True)),),
                 below=(
@@ -949,7 +947,7 @@ def _queue_kind() -> DataTable:
             piece(OPERATOR_STEPS, steps=item["steps"]),
             piece(ICON_LINKS, **LINKS.given()),
         )
-        title = Cell(item["label"], "/example/", name=True, parts=(mark, gist), below=(tables.Below("", pieces),))
+        title = Cell(item["label"], "/example/", parts=(mark, gist), below=(tables.Below("", pieces),))
         return tables.Row((title,))
 
     return DataTable("Example queue", (TableColumn("Item"),), tuple(row(decision(each)) for each in opened_problems()))
