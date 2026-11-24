@@ -78,10 +78,10 @@ class DashboardSettingsTests(TestCase):
         self.assertFalse(DashboardConfiguration.objects.filter(weather_label="Outside").exists())
 
     def test_an_operator_without_the_grant_is_refused_on_the_page(self):
-        with without("op", Capability.SET_PREFERENCES):
+        with without("op", Capability.ARRANGE_DASHBOARD):
             response = self.save(weather_point="41.1, -87.2")
 
-        self.assertIn("set_preferences", text(response))
+        self.assertIn("arrange_dashboard", text(response))
         self.assertFalse(DashboardConfiguration.objects.filter(weather_label="Outside").exists())
         self.assertEqual(denials(DASHBOARD_SETTINGS), 1)
 

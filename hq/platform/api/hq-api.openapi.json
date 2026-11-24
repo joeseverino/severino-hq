@@ -33873,7 +33873,7 @@
         "security": [
           {
             "bearer": [
-              "set_preferences"
+              "arrange_dashboard"
             ]
           }
         ],
@@ -34098,7 +34098,7 @@
         "security": [
           {
             "bearer": [
-              "set_preferences"
+              "arrange_dashboard"
             ]
           }
         ],

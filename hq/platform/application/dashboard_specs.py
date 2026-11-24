@@ -88,7 +88,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             glance.DASHBOARD_SETTINGS,
             "Set the dashboard's weather location and its panel names.",
             Effect.REMOTE_WRITE,
-            Capability.SET_PREFERENCES,
+            Capability.ARRANGE_DASHBOARD,
             glance.DashboardSettingsCommand,
             glance.save_dashboard_settings,
             execution_notes=(
@@ -97,13 +97,11 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             ),
             label="Save dashboard settings",
         ),
-        # The dashboard everyone's pages share, arranged by whoever holds
-        # set_preferences: an operator's, since a viewer holds only reads.
         CapabilitySpec(
             glance.DASHBOARD_MACHINE,
             "Show a machine's telemetry on the dashboard, or take it off.",
             Effect.REMOTE_WRITE,
-            Capability.SET_PREFERENCES,
+            Capability.ARRANGE_DASHBOARD,
             glance.DashboardMachineCommand,
             glance.select_dashboard_machine,
             "key",

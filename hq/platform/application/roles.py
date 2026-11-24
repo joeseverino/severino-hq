@@ -37,14 +37,16 @@ def grants(role: str) -> frozenset[Capability | str]:
 
 
 def viewer_capabilities() -> frozenset[Capability | str]:
-    """The read base: HQ's own reads and every extension's, what a viewer holds,
-    sensitive docs among them, and showing stand-ins for what they read."""
+    """The read base: HQ's own reads and every extension's, sensitive docs among
+    them, and what changes only the viewer's own view: showing stand-ins for
+    what they read and their preferences (``SET_PREFERENCES``)."""
 
     return frozenset(
         {
             Capability.READ,
             Capability.READ_SENSITIVE_DOCUMENTATION,
             Capability.SHOW_DEMO,
+            Capability.SET_PREFERENCES,
             *plugin_capabilities("mcp_read"),
         }
     )

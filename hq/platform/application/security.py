@@ -61,13 +61,17 @@ class Capability(StrEnum):
     # credential approves what a credential asked for, or pauses or grants agents.
     DECIDE_APPROVALS = "decide_approvals"
     GOVERN_AGENTS = "govern_agents"
-    # A person's own settings (their theme and calendar choices, and the
-    # dashboard's shared settings), pins and set-aside action items. Held by a
-    # principal with a person behind it (``NEEDS_A_PERSON``): a machine's token
-    # is nobody's, so it has none of them to keep.
+    # A person's own view (their theme and calendar choices), pins and
+    # set-aside action items. Held by a principal with a person behind it
+    # (``NEEDS_A_PERSON``): a machine's token is nobody's, so it has none of
+    # them to keep. A viewer holds ``SET_PREFERENCES``, since what it changes
+    # reaches no one else's pages.
     SET_PREFERENCES = "set_preferences"
     PIN_FAVORITES = "pin_favorites"
     SET_ASIDE_ACTION_ITEMS = "set_aside_action_items"
+    # The dashboard everyone's pages share: its weather point, panel names and
+    # machine tiles. An operator's, and decided by a person (``NEEDS_A_PERSON``).
+    ARRANGE_DASHBOARD = "arrange_dashboard"
     # Ends a person's sessions when the identity provider signs them out. Held
     # only by HQ itself (``HELD_ONLY_AT``): the provider's signed logout token
     # is its credential, so no person or token signs anyone out through it.
@@ -167,7 +171,12 @@ HELD_ONLY_AT: dict[str, frozenset[str]] = {
 # ``Principal.require`` refuses them one whatever their grant says, and the
 # catalog lists it to them as not permitted.
 NEEDS_A_PERSON: frozenset[str] = frozenset(
-    {Capability.SET_PREFERENCES, Capability.PIN_FAVORITES, Capability.SET_ASIDE_ACTION_ITEMS}
+    {
+        Capability.SET_PREFERENCES,
+        Capability.PIN_FAVORITES,
+        Capability.SET_ASIDE_ACTION_ITEMS,
+        Capability.ARRANGE_DASHBOARD,
+    }
 )
 
 
