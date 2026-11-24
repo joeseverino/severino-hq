@@ -92,10 +92,7 @@ def others_spent(estate: FindingEstate) -> tuple[Finding, ...]:
                     part=account,
                     title=f"Something besides HQ spent {spent} GitHub requests{on}",
                     severity=Tone.ATTENTION,
-                    explanation=(
-                        f"The App's installation{on} answered {spent} requests {between} that HQ did not "
-                        "make. Its key or a token may have leaked, or another program shares the App."
-                    ),
+                    explanation="Check whether its key or a token leaked.",
                     evidence=(
                         ("Requests", spent),
                         ("When", between),
@@ -111,12 +108,12 @@ def others_spent(estate: FindingEstate) -> tuple[Finding, ...]:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         RULE,
-        "Something besides HQ spends its App's hourly allowance",
+        "App requests HQ did not make",
         Tone.ATTENTION,
         others_spent,
         gathered=True,
-        operator_action=("Delete every App key on GitHub that is not HQ's, then rotate HQ's."),
-        no_help_reason="HQ cannot see or delete the App's keys: GitHub lists them only on the App's settings page.",
+        operator_action="Delete every App key on GitHub that is not HQ's, then rotate HQ's.",
+        no_help_reason="GitHub lists the App's keys only on its settings page.",
         bars={Tone.ATTENTION: "something besides HQ spends the App's requests in an hour"},
     ),
 )

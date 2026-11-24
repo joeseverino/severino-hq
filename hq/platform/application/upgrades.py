@@ -10,6 +10,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, Any
 
+from django.utils.text import capfirst, get_text_list
+
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .describe import Describe
 from .images import affected, version
@@ -103,21 +105,21 @@ class Plan:
 
         reasons = []
         if self.change in (MAJOR, MINOR):
-            reasons.append(f"it is a {self.change} version change")
+            reasons.append(f"a {self.change} version")
         if self.introduces:
-            reasons.append("the new version has a known vulnerability of its own")
+            reasons.append("a vulnerable new version")
         if self.stateful:
-            reasons.append("it keeps data")
+            reasons.append("stored data")
         if not self.verified_by:
-            reasons.append("nothing checks that it works afterwards")
-        return "" if self.risk == LOW else " and ".join(reasons)
+            reasons.append("no check afterwards")
+        return "" if self.risk == LOW else get_text_list(reasons, "and")
 
     @property
     def risk_said(self) -> str:
         """The risk as a sentence, as every page and card says it."""
 
         reason = self.risk_reason
-        return ended(f"Upgrade risk {self.risk}, because {reason}" if reason else f"Upgrade risk {self.risk}")
+        return ended(f"{capfirst(self.risk)} risk: {reason}" if reason else f"{capfirst(self.risk)} risk")
 
 
 def change_between(running: str, target: str) -> str:

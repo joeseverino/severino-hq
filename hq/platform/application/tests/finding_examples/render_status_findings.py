@@ -64,7 +64,7 @@ QUIET = (
     Example(),
 )
 STALE = CONFIRMED_WITHIN + MINUTE
-REFUSED = "example-controller could not refresh its credentials from 1Password: "
+REFUSED = "example-controller could not refresh its credentials: "
 UNTOLD = "HQ cannot tell whether example-controller's credentials are fresh"
 
 

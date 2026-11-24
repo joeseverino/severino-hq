@@ -14,7 +14,7 @@ from .finding_model import Finding, FindingEstate, FindingRule, opens
 from .moments import duration, moment, when
 from .references import Kind
 from .tone import Tone
-from .ui import counted, ended
+from .ui import counted
 lazy from .estate import estate_reading
 
 OFFLINE = "machine-offline"
@@ -43,12 +43,8 @@ def _offline(_estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=Kind.MACHINE.of(machine.name),
                 title=f"{machine.name} is offline",
                 severity=Tone.SERIOUS if machine.hostnames or machine.roles or machine.runs_hq else Tone.ATTENTION,
-                explanation=(
-                    f"Last seen {when(seen)}."
-                    + (ended(f" It is the {what}") if what else "")
-                    + (f" It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "")
-                ),
-                evidence=(("Last seen by Tailscale", when(seen)),),
+                explanation=f"It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "",
+                evidence=(("Last seen by Tailscale", when(seen)), *((("Role", what),) if what else ())),
                 primary=opens("Open machine", machine.url),
             )
         )
@@ -62,8 +58,8 @@ RULES: tuple[FindingRule, ...] = (
         "Machines offline",
         Tone.ATTENTION,
         _offline,
-        operator_action="Bring the machine back on the machine itself: power, network, then Tailscale.",
-        no_help_reason="HQ has no power or console access to machines. Bring it back on the machine itself.",
+        operator_action="Bring it back at the machine: power, network, then Tailscale.",
+        no_help_reason="HQ has no power or console access to machines.",
         bars={
             Tone.SERIOUS: f"a machine that serves a name or a role has been away for {duration(OFFLINE_AFTER)}",
             Tone.ATTENTION: f"a machine that serves no name or role has been away for {duration(OFFLINE_AFTER)}",

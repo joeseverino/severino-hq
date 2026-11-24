@@ -22,7 +22,6 @@ from .moments import when
 from .references import Kind
 from .tone import Tone
 from .topology_model import TopologyNode, derived_id
-from .ui import ended
 lazy from .facts import snapshots_of
 lazy from .refused_reports import READINGS_ACTION, open_refusals
 lazy from .topology_estate import machine_nodes
@@ -231,10 +230,7 @@ class Unjudged:
 
     @property
     def explanation(self) -> str:
-        said = f"The controller last sent this reading {when(self.taken)}, too long ago to tell how things stand now."
-        if self.refusal is None:
-            return said
-        return f"{said} HQ is refusing the report its readings arrive in: {ended(self.refusal.detail)}"
+        return "HQ refuses the reports it arrives in." if self.refusal else "The last reading is too old to judge."
 
     @property
     def evidence(self) -> tuple[tuple[str, str], ...]:

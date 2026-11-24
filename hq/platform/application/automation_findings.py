@@ -81,9 +81,9 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule=RULE,
                 subject="",
                 read_capabilities=_READ,
-                title="HQ's playbook worker is not set up",
+                title="Playbooks are not set up",
                 severity=Tone.ATTENTION,
-                explanation="Refresh and playbook runs are refused until it is set up on HQ's machine.",
+                explanation="Refresh and playbook runs are refused.",
                 evidence=(("Last seen", "never"),),
                 steps=(_ENTRY, _START),
                 primary=playbooks,
@@ -94,9 +94,9 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
             rule=RULE,
             subject="",
             read_capabilities=_READ,
-            title="HQ's playbook worker has stopped reporting",
+            title="Playbooks stopped reporting",
             severity=Tone.SERIOUS,
-            explanation="Refresh and playbook runs are refused until it reports again; start it on HQ's machine.",
+            explanation="Refresh and playbook runs are refused.",
             evidence=(("Last seen", when(worker.seen_at, now=estate.now)),),
             steps=(_START, _LOG),
             primary=playbooks,
@@ -108,17 +108,15 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         RULE,
-        "HQ's playbook worker is not reporting",
+        "Playbooks not reporting",
         Tone.ATTENTION,
         _absent,
         gathered=True,
-        operator_action=(
-            f"On HQ's machine, add an automation entry to {HOST_CONFIGURATION}, then run {HQ_HOST} automation as root."
-        ),
-        no_help_reason="HQ cannot change its machine's configuration or start its worker.",
+        operator_action=f"Add an automation entry to {HOST_CONFIGURATION}, then run {HQ_HOST} automation as root.",
+        no_help_reason="HQ cannot change its own machine's setup.",
         bars={
-            Tone.SERIOUS: "the playbook worker has stopped reporting, so refresh and playbook runs are refused",
-            Tone.ATTENTION: "the playbook worker is not set up, so refresh and playbook runs are refused",
+            Tone.SERIOUS: "playbooks stopped reporting",
+            Tone.ATTENTION: "playbooks are not set up",
         },
     ),
 )

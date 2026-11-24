@@ -167,7 +167,7 @@ class StandingTests(TestCase):
             ("ghcr.io/example/app:v1.2.0", "example-box", "serious"),
         )
         self.assertIn(("Container", "app"), advisory.evidence)
-        self.assertIn("Fixed in 1.2.1", advisory.explanation)
+        self.assertIn(("Fixed in", "1.2.1"), advisory.evidence)
         # The body is the images. What to do is a step, and why HQ does not
         # do it is one sentence that names no machine.
         self.assertEqual(update.part, "example/kuma:1")

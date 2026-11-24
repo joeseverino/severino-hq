@@ -173,7 +173,7 @@ class PageTests(TestCase):
             response = self.client.get(page)
             self.assertEqual(response.status_code, 200)
             body = response.content.decode()
-            self.assertIn("could not refresh its credentials from 1Password", body)
+            self.assertIn("could not refresh its credentials", body)
             self.assertIn("sudo systemctl start severino-hq-secrets.service", commands_on(body))
             emitted += [
                 (element.attrs["href"], "GET")

@@ -56,7 +56,7 @@ def started(reference: str, *digests: str, registry: dict | None = None, raises=
 
 
 def pinned(title: str, pin: str) -> Raised:
-    return Raised(title=title, evidence=(("Container", "proxy"), ("Pin it as", pin)))
+    return Raised(title=title, evidence=(("Container", "proxy"), ("Machine", "example-box"), ("Pin it as", pin)))
 
 
 ADVISED = "ghcr.io/example/app:v1.2.0 has 1 known vulnerability"
@@ -75,7 +75,7 @@ def held(why: str, primary=("Open containers", LISTED), **said) -> Example:
     """A vulnerable app the internet reaches with no move worth making: said,
     not urged, and no step makes one."""
 
-    steps = (Do("Move the container to a release that fixes it, once one does."),)
+    steps = (Do("Move it to a release that fixes it."),)
     return box(reach=OPEN, raises=(Raised(title=f"{ADVISED}, and {why}", primary=primary, steps=steps),), **said)
 
 

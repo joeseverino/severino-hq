@@ -108,14 +108,7 @@ def _title(node: TopologyNode, rows: tuple[RebootState, ...]) -> str:
 
 def _explanation(rows: tuple[RebootState, ...]) -> str:
     (row, *_) = rows
-    waiting = (
-        "An installed update takes effect only once the machine restarts. Until then it runs the code the "
-        "update replaced."
-    )
-    if not row.scheduled:
-        return waiting
-    scheduled = f"systemd will {row.action} it at that time, and everything on it stops until it is back."
-    return f"{waiting} {scheduled}" if row.waiting else scheduled
+    return "Everything on it stops until it is back." if row.scheduled else ""
 
 
 def _evidence(row: RebootState) -> tuple[tuple[str, str], ...]:
@@ -190,7 +183,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _restarts,
         gathered=True,
-        operator_action="On the machine, read what waits on the restart, then schedule it for a time that suits.",
+        operator_action="Schedule the restart for a quiet hour.",
         no_help_reason=cannot_run_commands(),
         bars={Tone.ATTENTION: "an update waits on a restart to take effect"},
     ),

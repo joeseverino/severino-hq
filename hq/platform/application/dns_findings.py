@@ -50,7 +50,7 @@ def protection_off(estate: FindingEstate) -> tuple[Finding, ...]:
         PROTECTION_OFF,
         "dns-protection-off",
         "Protection",
-        "AdGuard is answering every lookup without blocklists, safe browsing or client rules.",
+        "Blocklists, safe browsing and client rules are skipped.",
     )
 
 
@@ -74,9 +74,7 @@ def plain_upstream(estate: FindingEstate) -> tuple[Finding, ...]:
                     "unencrypted"
                 ),
                 severity=Tone.NEUTRAL,
-                explanation=(
-                    "Your internet provider, and anyone else on the way, can see every name your devices look up."
-                ),
+                explanation="Your provider can see every name looked up.",
                 evidence=tuple(("Unencrypted server", host) for host in hosts),
             )
         )
@@ -97,11 +95,12 @@ def unused_names(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=services.get(name, node.id),
             title=f"No device looked up {name}",
             severity=Tone.NEUTRAL,
-            explanation=(
-                "AdGuard has a record for it, and no device asked for it in "
-                f"the time AdGuard's query log covers, {UNUSED_AFTER_HOURS} hours or more."
+            explanation="AdGuard still has a record for it.",
+            evidence=(
+                ("Name", name),
+                ("Read from", node.label),
+                ("Query log covers", f"{UNUSED_AFTER_HOURS} hours or more"),
             ),
-            evidence=(("Name", name), ("Read from", node.label)),
         )
         for node in _connections(estate)
         for name in _values(node, NAME_UNUSED)
@@ -135,20 +134,16 @@ RULES: tuple[FindingRule, ...] = (
         title="DNS lookups sent unencrypted",
         severity=Tone.NEUTRAL,
         detect=plain_upstream,
-        operator_action=(
-            "Replace each one with its DNS-over-TLS or DNS-over-HTTPS address under Settings, DNS settings in AdGuard."
-        ),
+        operator_action="Switch each to its DNS-over-TLS or DNS-over-HTTPS address in AdGuard.",
         no_help_reason="HQ cannot change AdGuard's upstream servers.",
         bars={Tone.NEUTRAL: "an upstream server takes lookups unencrypted"},
     ),
     FindingRule(
         name="dns-name-unused",
-        title="A name nothing looks up",
+        title="Unused name",
         severity=Tone.NEUTRAL,
         detect=unused_names,
-        operator_action=(
-            "If nothing uses it, remove the service. If something should, check that device uses AdGuard for DNS."
-        ),
+        operator_action="Remove the service, or check its devices use AdGuard for DNS.",
         no_help_reason="HQ cannot tell whether anything still needs it.",
         bars={Tone.NEUTRAL: "nothing has looked up a name AdGuard answers"},
     ),

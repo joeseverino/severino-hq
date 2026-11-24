@@ -32,7 +32,7 @@ def _devices_join_without_approval(estate: FindingEstate) -> tuple[Finding, ...]
             subject=node.id,
             title="New devices join the tailnet without approval",
             severity=Tone.ATTENTION,
-            explanation="Any valid auth key adds a device with no review.",
+            explanation="Any valid auth key adds a device.",
             evidence=(("Device approval", "Off"),),
         )
         for node in estate.nodes()
@@ -84,9 +84,7 @@ class _GrantedToNobody:
         }
 
 
-_EMPTY_GROUP = (
-    "A rule for an empty group grants nothing. Remove the group from the policy, or add the members it was meant for."
-)
+_EMPTY_GROUP = "Anyone added later gets this access."
 _EMPTY_GROUP_GRANTED = _GrantedToNobody(
     rule="empty-group-granted",
     shown_as="Empty group",
@@ -104,13 +102,7 @@ _TAG_GRANTED_TO_NOBODY = _GrantedToNobody(
     one="{names} is granted access but no device has it",
     counted_as=("tag is", "tags are"),
     many="granted access but no device has them",
-    because=(
-        "No device has {names}, so this rule lets nothing in now. Any device given the tag later gets this access.",
-        (
-            "No device has these tags, so their rules let nothing in now. "
-            "Any device given one of them later gets that access."
-        ),
-    ),
+    because=("Any device tagged later gets this access.", "Any device tagged later gets that access."),
     step="Remove {names} from the rules that name them, or tag the devices they were meant for.",
 )
 
@@ -164,9 +156,7 @@ def _tailnet_dns_off_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
                 f"Tailnet DNS points at {', '.join(resolvers)}, which "
                 f"{agreed(len(resolvers), 'is not a tailnet address', 'are not tailnet addresses')}"
             ),
-            "explanation": (
-                "Devices reach it through a subnet router or the internet, so the DNS server sees them all as one device."
-            ),
+            "explanation": "The DNS server sees every device as one.",
         },
     )
 
@@ -195,13 +185,13 @@ def _loopback_finding(node, grants: tuple[LoopbackGrant, ...]) -> Finding:
         subject=node.id,
         severity=Tone.NEUTRAL,
         title=_loopback_title(grants),
-        explanation=" ".join(_loopback_why(item, port) for item in grants for port in item.ports),
+        explanation=agreed(sum(len(item.ports) for item in grants), "It reaches nothing.", "They reach nothing."),
         evidence=tuple(
             evidence
             for item in grants
             for evidence in (
                 ("Grant", f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"),
-                *(("Port", f"{item.machine} {port.entry}") for port in item.ports),
+                *(("Port", f"{item.machine} {port.entry}, {_listens(port)}") for port in item.ports),
             )
         ),
         steps=tuple(step for item in grants for step in _loopback_steps(item)),
@@ -212,20 +202,12 @@ def _loopback_title(grants: tuple[LoopbackGrant, ...]) -> str:
     ports = [port for item in grants for port in item.ports]
     if len(grants) == 1 and len(ports) == 1:
         (item,), (port,) = grants, ports
-        listens = "HQ serves only on loopback" if port.hq else "every container publishing it binds to loopback"
-        return f"A grant opens {port.entry} on {item.machine}, which {listens}"
+        return f"A grant opens {port.entry} on {item.machine}, which {_listens(port)}"
     return f"{counted(len(ports), 'granted port is', 'granted ports are')} bound only to loopback"
 
 
-def _loopback_why(item: LoopbackGrant, port: LoopbackPort) -> str:
-    if port.hq:
-        return ended(
-            f"HQ listens on {port.port} only on loopback, so this grant reaches nothing of HQ's on {item.machine}"
-        )
-    return (
-        f"Every container publishing {port.port} on {item.machine} binds it to loopback, "
-        "so this grant reaches none of them."
-    )
+def _listens(port: LoopbackPort) -> str:
+    return "HQ serves only on loopback" if port.hq else "every container publishing it binds to loopback"
 
 
 def _loopback_steps(item: LoopbackGrant) -> tuple[Run | Do, ...]:
@@ -257,10 +239,10 @@ def _loopback_steps(item: LoopbackGrant) -> tuple[Run | Do, ...]:
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "tag-granted-to-nobody",
-        "A tag in the policy that no device has",
+        "Tag no device has",
         Tone.NEUTRAL,
         _tag_granted_to_nobody,
-        operator_action="Remove the tag from the rules that name it, or tag the devices it was meant for.",
+        operator_action="Remove the tag from its rules, or tag its devices.",
         no_help_reason="HQ cannot tell whether the rule or the devices are wrong.",
         bars={Tone.NEUTRAL: "the policy grants a tag that no device carries"},
     ),
@@ -269,10 +251,8 @@ RULES: tuple[FindingRule, ...] = (
         "Tailnet DNS is not a tailnet address",
         Tone.ATTENTION,
         _tailnet_dns_off_tailnet,
-        operator_action=(
-            "In the Tailscale admin console, open DNS and set the nameserver to the DNS server's tailnet address."
-        ),
-        no_help_reason=("HQ cannot change the tailnet's DNS settings."),
+        operator_action="In Tailscale's DNS settings, set the nameserver to the DNS server's tailnet address.",
+        no_help_reason="HQ cannot change the tailnet's DNS settings.",
         bars={Tone.ATTENTION: "the tailnet's nameserver is not a tailnet address"},
     ),
     FindingRule(
@@ -280,10 +260,8 @@ RULES: tuple[FindingRule, ...] = (
         "New devices join without approval",
         Tone.ATTENTION,
         _devices_join_without_approval,
-        operator_action=(
-            "In the Tailscale admin console, open Settings, then Device management, and turn on Device approval."
-        ),
-        no_help_reason=("HQ cannot change this setting."),
+        operator_action="In Tailscale's device management settings, turn on Device approval.",
+        no_help_reason="HQ cannot change this setting.",
         bars={Tone.ATTENTION: "a new device can join the tailnet without anyone approving it"},
     ),
     FindingRule(
@@ -291,22 +269,18 @@ RULES: tuple[FindingRule, ...] = (
         "Empty group still granted access",
         Tone.NEUTRAL,
         _empty_group_granted,
-        operator_action=(
-            "Remove the group from the policy's groups and from every rule that names it, or add its members."
-        ),
-        no_help_reason=("HQ can only edit the policy once the policy is managed in HQ."),
+        operator_action="Remove the group from the policy, or add its members.",
+        no_help_reason="HQ edits only a policy it manages.",
         bars={Tone.NEUTRAL: "the policy grants access to a group with no members"},
     ),
     FindingRule(
         GRANT_REACHES_ONLY_LOOPBACK,
-        "A grant opens a port bound only to loopback",
+        "Grant to a loopback port",
         Tone.NEUTRAL,
         _grant_reaches_only_loopback,
         gathered=True,
-        operator_action=(
-            "In Tailscale's admin console, remove the port from the grant and deny it in the test that accepts it."
-        ),
-        no_help_reason="HQ cannot edit the tailnet policy in Tailscale's admin console.",
+        operator_action="Remove the port from the grant, and deny it in its policy test.",
+        no_help_reason="HQ cannot edit the tailnet policy.",
         bars={Tone.NEUTRAL: "a grant opens a port that only answers on the machine itself"},
     ),
     FindingRule(
@@ -314,10 +288,8 @@ RULES: tuple[FindingRule, ...] = (
         "Trusted networks wider than the tailnet",
         Tone.NEUTRAL,
         trusted_networks.wider_than_tailnet,
-        operator_action=(
-            "Narrow the trusted networks in HQ's settings to the addresses and routes the tailnet uses, then restart HQ."
-        ),
-        no_help_reason=("HQ cannot change its own deploy settings."),
+        operator_action="Narrow HQ's trusted networks to the tailnet's addresses and routes, then restart HQ.",
+        no_help_reason="HQ cannot change its own deploy settings.",
         bars={Tone.NEUTRAL: "HQ trusts addresses beyond the tailnet's"},
     ),
 )

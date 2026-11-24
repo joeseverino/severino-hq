@@ -10,6 +10,8 @@ from collections.abc import Callable, Iterator
 from functools import partial
 from typing import Any
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -34,7 +36,7 @@ from .finding_steps import Do, Run
 from .images import fixed_in
 from .projection import read_once
 from .references import Kind
-from .standard_findings import Help, Measured, Per, Standard
+from .standard_findings import Help, Measured, Per, Standard, why
 from .standards import Check
 from .tone import Tone
 from .ui import agreed, ended
@@ -109,7 +111,8 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
             upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if fact not in said)
         else:
             title = f"{standing.label} has an update"
-            explanation = ended(f"{standing.label} to {standing.latest}") + _running_as(running) + _risk(plan)
+            explanation = ended(f"{standing.label} to {standing.latest}")
+            upgrade["evidence"] = (*upgrade.get("evidence", ()), *_risk(plan))
         yield _found(
             running,
             subject,
@@ -140,10 +143,6 @@ def _names(running: list[Container]) -> str:
     return ", ".join(item.running.name for item in running)
 
 
-def _running_as(running: list[Container]) -> str:
-    return " " + ended(f"Running as {_names(running)} on {running[0].machine.name}")
-
-
 def _lead(running: list[Container]) -> Container:
     """The container whose page plans the image's upgrade: the first HQ watches."""
 
@@ -160,7 +159,11 @@ def _found(running: list[Container], subject: str, **said: Any) -> Finding:
     return Finding(
         subject=subject,
         part=running[0].standing.label,
-        evidence=(*(("Container", item.running.name) for item in running), *said.pop("evidence", ())),
+        evidence=(
+            *(("Container", item.running.name) for item in running),
+            ("Machine", running[0].machine.name),
+            *said.pop("evidence", ()),
+        ),
         **_read(running),
         primary=primary,
         offers=() if primary.url == containers.url else (containers,),
@@ -233,10 +236,10 @@ def _held_back(standing: ImageStanding, plan: Plan | None) -> str:
     return ""
 
 
-def _risk(plan: Plan) -> str:
+def _risk(plan: Plan) -> tuple[tuple[str, str], ...]:
     """The upgrade's risk, where it is high enough to weigh before moving."""
 
-    return f" {plan.risk_said}" if plan.risk == HIGH else ""
+    return (("Upgrade", plan.risk_said),) if plan.risk == HIGH else ()
 
 
 def _advisory(running: list[Container], subject: str, plan: Plan | None) -> Finding:
@@ -248,17 +251,21 @@ def _advisory(running: list[Container], subject: str, plan: Plan | None) -> Find
     )
     held = _held_back(standing, plan)
     level, reached = _reach(running)
-    fixed_in_words = f" {ended(f'Fixed in {fixed}')}" if fixed else ""
+    upgrade = _upgrade(running, plan)
+    upgrade["evidence"] = (
+        *upgrade.get("evidence", ()),
+        ("Worst severity", capfirst(standing.worst)),
+        *((("Fixed in", fixed),) if fixed else ()),
+        *(_risk(plan) if plan is not None and plan.recommended else ()),
+    )
     return _found(
         running,
         subject,
         rule=ADVISORY,
         severity=status_at(Tone.SERIOUS if standing.serious and not held else Tone.ATTENTION, level),
         title=f"{standing.label} has {standing.summary}{held}",
-        explanation=f"Worst severity: {ended(standing.worst)}{_running_as(running)}{fixed_in_words}"
-        + (_risk(plan) if plan is not None and plan.recommended else "")
-        + f" {reached}",
-        **_upgrade(running, plan),
+        explanation=reached,
+        **upgrade,
     )
 
 
@@ -285,7 +292,7 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
         rule=UNPINNED,
         severity=Tone.ATTENTION,
         title=f"{running[0].running.image} runs by tag alone",
-        explanation=f"A tag can later name a different build. Pin it by digest.{_running_as(running)}",
+        explanation="A tag can later name a different build.",
         evidence=tuple(("Pin it as", pin) for pin in pins),
         steps=_compose_steps(running, _pin),
         primary=_containers(),
@@ -390,10 +397,7 @@ def _reach(running: list[Container]) -> tuple[str, str]:
 
 def _help(check_id: str) -> str:
     if check_id == "no-docker-socket":
-        return (
-            "HQ cannot tell which Docker calls it needs, so it cannot write a socket proxy. "
-            "Mark it if it is meant to control Docker, and HQ stops warning about it."
-        )
+        return "HQ cannot tell which calls it needs. Mark it if it should control Docker."
     return "The compose change is on its page."
 
 
@@ -418,7 +422,9 @@ def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
                     reason="The lines to add to its compose file, and what each can break.",
                 )
             )
-    return Help(steps=(Do(check.fix, notes=(_help(check.id),)),), remedies=tuple(remedies), offers=tuple(offers))
+    return Help(
+        steps=(Do(check.fix, notes=(*why(check), _help(check.id))),), remedies=tuple(remedies), offers=tuple(offers)
+    )
 
 
 SOCKET_HOLDER_INTENT = "Mark as intended"
@@ -464,7 +470,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _images(ADVISORY),
         gathered=True,
-        operator_action="Move the container to a release that fixes it, once one does.",
+        operator_action="Move it to a release that fixes it.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
         bars={
@@ -493,7 +499,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _images(UNPINNED),
         gathered=True,
-        operator_action="Pin the image by digest in the compose file that runs it and recreate its containers.",
+        operator_action="Pin it by digest in its compose file, then recreate it.",
         no_help_reason=CANNOT_EDIT_COMPOSE,
         card=CONTAINERS_CARD,
         bars={Tone.ATTENTION: "an image a registry holds is run by its tag, with no digest"},

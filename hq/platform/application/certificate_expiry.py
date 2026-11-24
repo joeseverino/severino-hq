@@ -23,7 +23,6 @@ from .references import Kind
 from .thresholds import Threshold
 from .tone import Tone
 from .topology_model import TopologyNode
-from .ui import ended
 lazy from .estate import Expiry, managed_certificates
 lazy from .topology_estate import machine_nodes, readers_of
 
@@ -251,11 +250,8 @@ def _finding(node, certificate: HeldCertificate, days: int, apart: tuple[str, st
     )
 
 
-_SERVING_EXPLANATION = (
-    "Visitors get a certificate error on every name it serves once it expires. "
-    "Renew it where it is held, or find why the automatic renewal failed."
-)
-_UNUSED_EXPLANATION = "It serves no name, so nothing breaks when it expires. Delete it where it is held."
+_SERVING_EXPLANATION = "Every name it serves breaks when it expires."
+_UNUSED_EXPLANATION = "It serves no name, so delete it."
 
 
 def _renewals(estate: FindingEstate) -> Iterator[tuple[TopologyNode, Expiry]]:
@@ -280,7 +276,8 @@ def renewals_judged(found: Iterable[tuple[Any, Expiry]], now: datetime) -> tuple
                 subject=node.id,
                 severity=Tone.SERIOUS if days <= SERIOUS_DAYS.value else Tone.ATTENTION,
                 title=f"{expiry.subject} {expiry_words(days)}",
-                explanation=f"Expires {ended(expiry_phrase(expiry.expires.isoformat()))} Renewal has not run; renew it.",
+                explanation="Its renewal has not run.",
+                evidence=(("Expires", expiry_phrase(expiry.expires.isoformat())),),
                 primary=opens("Open certificate", expiry.url),
                 remedies=(
                     FindingRemedy(
@@ -304,10 +301,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         expiring,
         gathered=True,
-        operator_action=(
-            "Renew the certificate from its page in HQ, or where it is held, or fix its automatic renewal. "
-            f"{THEN_CHECK_AGAIN}"
-        ),
+        operator_action=f"Renew it from its page or where it is held, or fix its renewal. {THEN_CHECK_AGAIN}",
         no_help_reason="HQ cannot renew this certificate.",
         bars={
             Tone.SERIOUS: f"a certificate in use expires within {SERIOUS_DAYS}",

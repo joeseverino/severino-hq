@@ -288,15 +288,12 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="render-failing",
                 subject=node.id,
                 scope=RENDER_STATUS_KIND,
-                title=f"{node.label} could not refresh its credentials from 1Password: {reasons}",
+                title=f"{node.label} could not refresh its credentials: {reasons}",
                 severity=Tone.SERIOUS if stale else Tone.ATTENTION,
                 explanation=(
-                    (
-                        f"It is still using the ones it got {when(failed[0].confirmed_at, estate.now)}."
-                        if last_good is not None
-                        else "It is still using the ones from its last good refresh."
-                    )
-                    + " Anything changed in 1Password since then has not reached it."
+                    f"Changes in 1Password since {when(failed[0].confirmed_at, estate.now)} have not reached it."
+                    if last_good is not None
+                    else "Changes in 1Password have not reached it."
                 ),
                 evidence=tuple(
                     item
@@ -365,12 +362,11 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=RENDER_STATUS_KIND,
                 title=_stale_title(node.label, stale),
                 severity=Tone.SERIOUS,
-                explanation=(
-                    f"It should refresh them every {duration(RENDER_EVERY)} and read "
-                    f"1Password in full every {duration(FULL_READ_EVERY)}. The job is "
-                    "either not running or failing before it starts."
+                explanation="Its refresh job is not running.",
+                evidence=(
+                    *(item for rendering in stale for item in _stale_evidence(rendering, estate.now)),
+                    ("Due", f"Every {duration(RENDER_EVERY)}, in full every {duration(FULL_READ_EVERY)}"),
                 ),
-                evidence=tuple(item for rendering in stale for item in _stale_evidence(rendering, estate.now)),
                 steps=tuple(
                     step
                     for rendering in stale
@@ -412,10 +408,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=RENDER_STATUS_KIND,
                 title=f"1Password Connect on {node.label} has stopped syncing",
                 severity=Tone.ATTENTION,
-                explanation=(
-                    "It is serving an old copy of the vault, so changes made in "
-                    f"1Password are not reaching {ended(node.label)}"
-                ),
+                explanation=ended(f"Changes in 1Password are not reaching {node.label}"),
                 evidence=tuple(
                     item
                     for rendering in stalled
@@ -461,11 +454,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=RENDER_STATUS_KIND,
                 title=_cannot_tell(node),
                 severity=Tone.ATTENTION,
-                explanation=(
-                    "The job that refreshes them has not reported. It may not have "
-                    f"run since {node.label} started, or HQ and the job are "
-                    "different versions."
-                ),
+                explanation="Its refresh job has not reported.",
                 evidence=tuple(
                     item
                     for rendering in unread
@@ -496,9 +485,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.SERIOUS,
         _failing,
         gathered=True,
-        operator_action=(
-            "On the machine, read the refresh job's log for why it failed, fix that, then start the job again."
-        ),
+        operator_action="Read the refresh job's log, fix the cause, then run it again.",
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: f"a refresh fails and nothing has confirmed credentials current for {duration(CONFIRMED_WITHIN)}",
@@ -512,7 +499,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.SERIOUS,
         _stale,
         gathered=True,
-        operator_action=("On the machine, check that the refresh job's timer is on, then start the job."),
+        operator_action="Check the refresh job's timer is on, then run the job.",
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: (
@@ -528,7 +515,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _sync_stalled,
         gathered=True,
-        operator_action=("Restart 1Password Connect on the machine, then start the refresh job."),
+        operator_action="Restart 1Password Connect, then run the refresh job.",
         no_help_reason=cannot_run_commands(),
         bars={Tone.ATTENTION: "1Password Connect no longer reports its sync as active"},
     ),
@@ -538,7 +525,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _unread,
         gathered=True,
-        operator_action=("Start the refresh job on the machine. If this stays, deploy HQ."),
+        operator_action="Run the refresh job. If this stays, deploy HQ.",
         no_help_reason=cannot_run_commands(),
         bars={Tone.ATTENTION: "HQ cannot read when credentials were last refreshed"},
     ),

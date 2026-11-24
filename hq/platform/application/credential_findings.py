@@ -153,11 +153,7 @@ def missing_permissions(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 title=f"{node.label}'s token is missing {counted(len(missing), 'permission')}",
                 severity=Tone.ATTENTION,
-                explanation=(
-                    f"The token works, but {_service(node)} will not let it read "
-                    f"{ended(', '.join(unseen) or 'everything HQ asks for')} "
-                    "Make a new token that includes them."
-                ),
+                explanation=f"It works, but {_service(node)} refuses it some reads.",
                 evidence=(
                     *(("Missing", name) for name in missing),
                     *(("Cannot read", label) for label in unseen),
@@ -187,9 +183,9 @@ def expiring(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=f"{node.label}'s token {expiry_words(when)}",
                 severity=Tone.SERIOUS if expired else Tone.ATTENTION,
                 explanation=(
-                    f"HQ cannot read anything through {node.label} until it is replaced."
+                    f"HQ cannot read {node.label} until it is replaced."
                     if expired
-                    else ended(f"After that HQ cannot read anything through {node.label}")
+                    else f"After that, HQ cannot read {node.label}."
                 ),
                 evidence=(("Expires", expiry_phrase(stamp)),),
                 steps=mint_steps(node),
@@ -204,19 +200,19 @@ _CANNOT_ISSUE = "HQ cannot issue a token."
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "credential-missing-permissions",
-        "A token is missing permissions",
+        "Token missing permissions",
         Tone.ATTENTION,
         missing_permissions,
-        operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
+        operator_action=f"Make a new token from the connection's page. {THEN_REFRESH}",
         no_help_reason=_CANNOT_ISSUE,
         bars={Tone.ATTENTION: "a token lacks a permission HQ uses"},
     ),
     FindingRule(
         "credential-expiring",
-        "A token is expiring",
+        "Token expiring",
         Tone.ATTENTION,
         expiring,
-        operator_action=(f"Make a new token with the command on the connection's page. {THEN_REFRESH}"),
+        operator_action=f"Make a new token from the connection's page. {THEN_REFRESH}",
         no_help_reason=_CANNOT_ISSUE,
         bars={
             Tone.SERIOUS: "a token has expired",
