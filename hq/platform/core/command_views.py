@@ -25,6 +25,7 @@ from hq.platform.application.command_targets import (
     with_requested_target,
 )
 from hq.platform.application.contracts import route_url
+from hq.platform.application.domains import all_domains
 from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_schema, kept_by
 from hq.platform.application.integrations import held_graph
 from hq.platform.application.pages import RouteNamed, page_context
@@ -127,6 +128,18 @@ def _named_records(form, query) -> dict[str, Any]:
     return named
 
 
+def _declaring_page(name: str) -> str:
+    """The route of the first nav item of the domain that declares the
+    command ``name``, so its form's trail says what the navigation says;
+    empty when no domain with a page declares it."""
+
+    for domain in all_domains():
+        provider = domain.integration.capabilities
+        if domain.navigation and provider and any(spec.name == name for spec in provider()):
+            return domain.navigation[0].route
+    return ""
+
+
 class FindingChanged(Http404):
     """A contextual command no longer matches the finding that opened it."""
 
@@ -191,11 +204,12 @@ class CommandView(View):
         facts, table = _result_projection(result["payload"]) if result else ((), None)
         resource_url = route_url(resource.web_route) if resource else ""
         # The trail names where the form lives: the records it writes, the
-        # page it declares as its home, or Search for a command that has neither.
+        # page it declares as its home, the page of the domain that declares
+        # it, or Search for a command that has none of them.
         if resource_url:
             trail = ((resource.label, resource_url),)
-        elif self.spec.home:
-            trail = (page_named(self.spec.home),)
+        elif home := self.spec.home or _declaring_page(self.spec.name):
+            trail = (page_named(home),)
         else:
             trail = (("Search", reverse("search")),)
         return {

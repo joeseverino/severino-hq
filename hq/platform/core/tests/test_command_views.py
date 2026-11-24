@@ -114,20 +114,27 @@ class CommandViewTests(SignedInTestCase):
         self.assertEqual(trail, [("Projects", "/projects/")])
 
     def test_a_command_with_a_home_leads_back_there(self):
-        """A command whose records are no resource of its own (Refresh, of
-        Playbooks) leads back to the page it declares, by its navigation's
-        name, from its trail and its Cancel."""
+        """A command whose records are no resource of its own leads back, by
+        its navigation's name, from its trail and its Cancel, to the page it
+        declares (Refresh, of Playbooks), else to its domain's page (a
+        lookup, of Tools)."""
 
-        spec = command_spec("automation.source.refresh")
-        home = reverse("control_plane:playbooks")
-        response = self.client.get(f"/commands/{spec.name}/")
+        for name, label, route in (
+            ("automation.source.refresh", "Playbooks", "control_plane:playbooks"),
+            ("lookup.name.read", "Tools", "control_plane:tools"),
+        ):
+            with self.subTest(command=name):
+                home = reverse(route)
+                response = self.client.get(f"/commands/{name}/")
 
-        trail = [
-            (link.words, link.attrs["href"]) for link in within(response, "class", "page-trail") if link.tag == "a"
-        ]
-        self.assertEqual(trail, [("Playbooks", home)])
-        cancels = [href for words, href in links(response) if words == "Cancel"]
-        self.assertEqual(cancels, [home])
+                trail = [
+                    (link.words, link.attrs["href"])
+                    for link in within(response, "class", "page-trail")
+                    if link.tag == "a"
+                ]
+                self.assertEqual(trail, [(label, home)])
+                cancels = [href for words, href in links(response) if words == "Cancel"]
+                self.assertEqual(cancels, [home])
 
     def test_a_field_reads_as_its_model_declares_it(self):
         response = self.client.get("/commands/project.create/")
