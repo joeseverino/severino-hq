@@ -23,6 +23,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.platform.core.included_parts import READING_AGE
 
 from .derivations import reached
+from .labels import dotted
 from .moments import duration, when
 from .process_caches import kept
 lazy from . import plugins, readings
@@ -51,8 +52,8 @@ def reading_age(reading: Freshness | None = None, *, at: datetime | None = None,
     every page uses (``partials/_reading_age.html``), given as it takes them."""
 
     if reading is not None:
-        words = reading.last_read
-        words += f" · {reading.label.lower()}{reading.cadence}" if reading.observed_at and reading.stale else ""
+        stale = reading.observed_at and reading.stale
+        words = dotted(reading.last_read, f"{reading.label.lower()}{reading.cadence}" if stale else "")
     else:
         words = last_read(at) if at else unread or "No reading yet"
     return Piece(READING_AGE, {"reading": reading, "at": at, "unread": unread}, words)

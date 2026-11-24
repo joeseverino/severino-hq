@@ -25,6 +25,7 @@ lazy from hq.platform.application.credential_mint import CredentialFix
 lazy from hq.platform.application.doors import NOBODY, Attribution
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_steps import Run
+lazy from hq.platform.application.labels import dotted
 lazy from hq.platform.application.pages import PageAction, RowMark, RowOrder
 lazy from hq.platform.application.payload_words import ChangeRow
 lazy from hq.platform.application.security import MCP_INTERFACE
@@ -579,7 +580,7 @@ CHANGE_TABLE_STATES = {
                             "example.third": {
                                 SUMMARY: {
                                     "label": "An example record",
-                                    "value": "Changes an example thing\u00a0· Any example machine\u00a0· No sudo",
+                                    "value": dotted("Changes an example thing", "Any example machine", "No sudo"),
                                 },
                                 **_CHANGED_AFTER,
                             },

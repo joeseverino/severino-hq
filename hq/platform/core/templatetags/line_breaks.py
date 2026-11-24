@@ -258,17 +258,20 @@ def _inside_last(drawn: list[str], markup: str) -> list[str]:
 # A word a value ends on that a name before it holds: one word of letters,
 # perhaps with its sentence's mark ("TXT", "pulled").
 _TAIL = re.compile(r"\w*[^\W\d_]\w*[.,;:!?]?")
+# A dot between two parts, ``labels.DOT`` or one typed between two spaces, so
+# a value that holds one draws it held to the part before it either way.
+_SEPARATOR = re.compile(r"\s·\s")
 
 
 def _line(value, *, sole: bool | None = None) -> list[str]:
     """``value``'s words as ``breakable`` draws them, held so that no line they
-    wrap onto starts with a stray: a dot ``labels.dotted`` joined parts with
+    wrap onto starts with a stray: a dot between two parts (``_SEPARATOR``)
     stays on the line of the part before it, and a word a value ends on
     after a name stays on the name's last line. Each is held inside the box before it, since a box as wide as
     its line leaves what follows no room there; a word a name holds stays
     outside the parts of it a cell cuts."""
 
-    parts = str(value).split(DOT)
+    parts = _SEPARATOR.split(str(value))
     alone = (len(parts) == 1 and not _WORDS.search(parts[0])) if sole is None else sole
     drawn: list[str] = []
     for at, part in enumerate(parts):
