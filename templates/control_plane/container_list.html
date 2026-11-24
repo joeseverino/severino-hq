@@ -17,14 +17,14 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
       <small>{% if tally.vulnerable %}in {{ tally.vulnerable_images|counted:"image" }}{% endif %}{% if tally.unchecked %}{% if tally.vulnerable %}{% dot %}{% endif %}{{ tally.unchecked }} of {{ tally.count.total }} cannot be checked{% endif %}</small>
     {% endfact %}
     {% fact "Updates" icon="deploy" tone=tally.updates_tone %}
-      {% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.count.total %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date }} of {{ tally.count.total|measured:"up to date" }}{% else %}Unknown{% endif %}
+      {% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.pulled %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date }} of {{ tally.pulled|measured:"up to date" }}{% else %}Unknown{% endif %}
     {% detail %}
-      <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|measured:"up to date" }}{% if tally.update_unknown and tally.up_to_date != tally.count.total %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.count.total %}{{ tally.update_unknown|measured:"unknown" }}{% endif %}{% if tally.update_available and tally.up_to_date or tally.update_unknown and tally.up_to_date != tally.count.total %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
+      <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|measured:"up to date" }}{% if tally.update_unknown and tally.up_to_date != tally.pulled %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.pulled %}{{ tally.update_unknown|measured:"unknown" }}{% endif %}{% if tally.update_available and tally.up_to_date or tally.update_unknown and tally.up_to_date != tally.pulled %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
     {% endfact %}
     {% fact "Pinned" icon="lock" tone=tally.pinned_tone %}
-      {{ tally.pinned }} of {{ tally.count.total }}
+      {{ tally.pinned }} of {{ tally.pulled }}
     {% detail %}
-      <small>{% if tally.pinned == tally.count.total %}All by digest{% else %}The rest run by tag{% endif %}</small>
+      <small>{% if tally.pinned == tally.pulled %}All by digest{% else %}The rest run by tag{% endif %}</small>
     {% endfact %}
   {% endfacts %}{% endcard %}
 

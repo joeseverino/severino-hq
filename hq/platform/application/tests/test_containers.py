@@ -19,6 +19,7 @@ from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names,
 from ..finding_steps import Do, Run
 from ..findings import finding_key, rule_of
 from ..github_estate import Repository
+from .test_github_estate import store
 
 
 def exposed(level):
@@ -226,6 +227,63 @@ class StandingTests(TestCase):
         )
 
 
+def built(*, digests=(), build=True, **held):
+    """thumb on example-box, from a tag no registry holds, of a service the
+    apps repository's Compose file builds (or names only, ``build`` false),
+    with the repository's ``held`` fields; its machine's copy holds ``digests``."""
+
+    reference = "example-thumb:local"
+    inventory("portainer.container", [running("thumb", reference)])
+    copy = {"connection_ref": "example-portainer", "host": "example-box", "id": "sha256:ccc", "tags": [reference]}
+    users = [{"container": "thumb", "reference": reference, "service": "thumb"}]
+    inventory("portainer.image", [{**copy, "digests": list(digests), "containers": users}])
+    project = {"connection_ref": "example-portainer", "host": "example-box", "name": "thumb"}
+    inventory("portainer.compose_project", [{**project, "config_files": ["/srv/apps/thumb/compose.yaml"]}])
+    service = {"path": "compose/thumb/compose.yaml", "service": "thumb", "image": reference, "build": build}
+    store(compose=["compose/thumb/compose.yaml"], compose_images=[service], **held)
+
+
+class BuiltHereTests(TestCase):
+    """An image built on its host is classified once, where its standing is."""
+
+    def thumb(self):
+        (found,) = containers()
+        return found
+
+    def test_it_reads_as_built_on_its_host_and_no_registry_is_asked(self):
+        from ..public_registry import wanted_images
+
+        built()
+
+        found = self.thumb()
+
+        self.assertTrue(found.standing.local)
+        self.assertEqual((found.standing.state, found.standing.summary), (CURRENT, "Built on its host"))
+        self.assertEqual(found.standing.label, "example-thumb:local")
+        self.assertEqual(wanted_images(), {})
+        # Counted neither unknown nor run by tag.
+        counted = tally([found])
+        self.assertEqual((counted.update_unknown, counted.pinned_tone), (0, "good"))
+
+    def test_the_checks_only_a_registry_image_can_meet_are_left_out(self):
+        built()
+
+        checked = {result.check.id for result in self.thumb().supply_chain.results}
+
+        self.assertFalse(checked & {"pinned", "source-known", "provenance", "sbom", "tag-current"})
+        self.assertIn("no-urgent", checked)
+
+    def test_an_image_a_registry_digest_names_or_a_service_that_builds_nothing_is_pulled(self):
+        from ..public_registry import wanted_images
+
+        for case in ({"digests": ["docker.io/library/example-thumb@sha256:ddd"]}, {"build": False}):
+            with self.subTest(**case):
+                built(**case)
+
+                self.assertFalse(self.thumb().standing.local)
+                self.assertEqual(list(wanted_images()), ["docker.io/library/example-thumb"])
+
+
 class ToneTests(TestCase):
     """Each fact's tone, decided where the fact is built."""
 
@@ -309,6 +367,7 @@ class ToneTests(TestCase):
             update_available=0,
             up_to_date=2,
             pinned=2,
+            pulled=2,
             checkable=2,
         )
 

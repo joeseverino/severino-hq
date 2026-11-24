@@ -162,11 +162,13 @@ def wanted_images() -> dict[str, tuple[str, ...]]:
     """``{registry/repository: the references running}`` for every image a container runs."""
 
     pulled_as = _tags_pulled_as()
+    # An image built on its host is in no registry, so none is asked for it.
+    local = {(item.running.host, item.running.name) for item in containers() if item.standing.local}
     found: dict[str, set[str]] = {}
     for _snapshot, record in inventory_records(CONTAINER_KIND):
         reference = str(record.get("image", "") or "")
         image = ImageRef.parse(reference)
-        if image is None:
+        if image is None or (str(record.get("host", "")), str(record.get("name", ""))) in local:
             continue
         pulled = pulled_as.get((str(record.get("host", "")), str(record.get("name", ""))), ())
         found.setdefault(image.name, set()).update((reference, *_tags_of_untagged(image, pulled)))

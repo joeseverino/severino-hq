@@ -147,11 +147,12 @@ def every_container(found: Sequence[Any]) -> DataTable:
 def _image(standing: Any) -> Cell:
     """The image by its short name, then its tag, how it is pinned and when it was built."""
 
-    pinned = (
-        Cell("locked", tip="It runs the one image its digest names, wherever the tag moves.", dot=True)
-        if standing.pinned
-        else Cell("tag only", tip="It runs whatever the tag pointed at when it was pulled.", dot=True)
-    )
+    if standing.pinned:
+        pinned = Cell("locked", tip="It runs the one image its digest names, wherever the tag moves.", dot=True)
+    elif standing.local:
+        pinned = Cell("built on its host", dot=True)
+    else:
+        pinned = Cell("tag only", tip="It runs whatever the tag pointed at when it was pulled.", dot=True)
     built = (Cell(f"built {when(standing.built)}", dot=True),) if standing.built else ()
     return Cell(
         standing.image.short,

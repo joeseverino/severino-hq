@@ -217,6 +217,24 @@ def _managed() -> dict[str, Managed]:
     return found
 
 
+def builds(files: tuple[str, ...], service: str) -> bool:
+    """Whether a repository HQ reads declares ``service`` of the Compose files
+    ``files`` as one that builds its image on its host."""
+
+    with projection_scope():
+        built = read_once("app_updates.builds", _builds)
+    return any((_tail(path), service) in built for path in files)
+
+
+def _builds() -> frozenset[tuple[str, str]]:
+    return frozenset(
+        (_tail(str(each.get("path") or "")), str(each.get("service") or ""))
+        for repository in repositories().values()
+        for each in repository.compose_images or ()
+        if each.get("build")
+    )
+
+
 def _tail(path: str) -> str:
     """A Compose file as its app's directory and its name, ``<app>/<file>``:
     where a repository's path and a machine's meet."""

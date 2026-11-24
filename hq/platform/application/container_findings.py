@@ -96,7 +96,7 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
     if standing.state == VULNERABLE:
         if needs_you(standing, running):
             yield _advisory(running, subject, plan)
-    elif plan is not None and plan.recommended and not (state := update_state(_lead(running))).at_work:
+    elif _moves(standing, plan) and not (state := update_state(_lead(running))).at_work and _offered(standing, state):
         title = f"{_names(running)} has an update" + (f", {state.move}" if state.move else "")
         upgrade = _upgrade(running, plan, state)
         # What the title and its line say is not said again among its facts.
@@ -113,6 +113,21 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
         )
     if by_tag := [item for item in running if _unpinned(item.standing)]:
         yield _unpinned_finding(by_tag, subject)
+
+
+def _moves(standing: ImageStanding, plan: Plan | None) -> bool:
+    """Whether an update may be due: a move its plan recommends, or, for an
+    image built on its host, whatever its repository says."""
+
+    return standing.local or (plan is not None and plan.recommended)
+
+
+def _offered(standing: ImageStanding, state: UpdateState) -> bool:
+    """Whether ``state`` is an update to raise: any, for a pulled image a
+    plan recommends moving; for one built on its host, a pull request that
+    changes it or a merge its host has not built."""
+
+    return not standing.local or state.kind in (UpdateKind.OPEN, UpdateKind.MERGED)
 
 
 def needs_you(standing: ImageStanding, running: list[Container]) -> bool:
@@ -187,11 +202,11 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
     lead = _lead(running)
     # HQ plans only what it watches; the containers page stands in for any other.
     page = opens("Upgrade plan", f"{lead.url}#upgrade") if plan is not None and lead.running.watcher else _containers()
-    if plan is None or not plan.recommended:
+    if not _moves(lead.standing, plan):
         return {"primary": page, "steps": ()}
     state = state or update_state(lead)
-    evidence = (*(state.update.evidence if state.update else ()), *_risk(plan))
-    if state.kind == UpdateKind.BY_HAND:
+    evidence = (*(state.update.evidence if state.update else ()), *(_risk(plan) if plan else ()))
+    if state.kind == UpdateKind.BY_HAND and plan is not None:
         said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
         label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
         return {"primary": opens(label, page.url), "steps": _by_hand(running, plan), "evidence": evidence}

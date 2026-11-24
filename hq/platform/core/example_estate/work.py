@@ -19,6 +19,7 @@ from hq.platform.application.images import ImageRef
 from hq.platform.core.audit import stamped
 
 from .names import (
+    BUILT,
     CONTAINERS,
     GITHUB,
     HQ_DIGEST,
@@ -177,6 +178,7 @@ def repositories():
             record["pull_requests"] = [_app_update(name)]
             # Renovate's Dashboard lists the updates it has not opened yet.
             record["compose"] = [f"compose/{app}/compose.yaml" for app in sorted(HELD_APPS)]
+            record["compose_images"] = [_built()]
             record["dashboard"] = f"https://github.com/example/{name}/issues/12"
         return record
 
@@ -611,6 +613,13 @@ def update_states(newer: dict[str, str]) -> None:
     )
 
 
+def _built() -> dict:
+    """The service of the apps repository whose image its host builds."""
+
+    image = next(image for name, _port, image in CONTAINERS if name == BUILT)
+    return {"path": f"compose/{BUILT}/compose.yaml", "service": BUILT, "image": image, "build": True}
+
+
 def _states(record: dict, newer: dict[str, str]) -> dict:
     ref = ImageRef.parse(next(image for name, _port, image in CONTAINERS if name == MERGED_APP))
     kept = [path for path in record["compose"] if path.split("/")[1] not in (UNMATCHED_APP, UNHELD_APP)]
@@ -618,11 +627,12 @@ def _states(record: dict, newer: dict[str, str]) -> dict:
         **record,
         "compose": [*kept, f"compose/{UNMATCHED_APP}/docker-compose.yml"],
         "compose_images": [
+            _built(),
             {
                 "path": f"compose/{MERGED_APP}/compose.yaml",
                 "service": MERGED_APP,
                 "image": f"{ref.name}:{newer[MERGED_APP]}",
-            }
+            },
         ],
         "held_branches": [{"branch": f"renovate/{HELD_APP}", "marker": "unpend", "apps": [HELD_APP]}],
     }

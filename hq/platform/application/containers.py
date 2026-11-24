@@ -37,6 +37,7 @@ from .projection import projection_scope, read_once
 from .tone import Tone
 from .ui import counted
 lazy from . import connections
+lazy from .app_updates import builds
 lazy from .attestations import github_source
 lazy from .container_hardening import hardening_of
 lazy from .container_standard import posture_of, runtime_path
@@ -65,6 +66,8 @@ DECLARED = "declared"
 LABEL = "label"
 PROVENANCE = "provenance"
 REGISTRY = "registry"
+# What an image built on the machine that runs it reads as, wherever its standing is said.
+BUILT_HERE = "Built on its host"
 _KNOWN_BY = {
     DECLARED: "as set in HQ",
     LABEL: "by its label",
@@ -311,6 +314,10 @@ class ImageStanding(ImageStandingWords):
     # A repository HQ's GitHub App reads that builds this image: its own
     # word on the last production deploy stands in for the registry's.
     repository: Any = None
+    # Built on the machine that runs it, from Compose files a repository HQ
+    # reads: no registry holds it, so none is asked, and its update is that
+    # repository's (``app_updates``).
+    local: bool = False
 
     @property
     def upstream(self) -> str:
@@ -386,7 +393,7 @@ class ImageStanding(ImageStandingWords):
             return VULNERABLE
         if self.newer:
             return BEHIND
-        if self.build is not None and self.build.get("signed"):
+        if self.local or (self.build is not None and self.build.get("signed")):
             return CURRENT
         if self.repository is not None:
             return CURRENT if self.repository.deployed_cleanly else UNKNOWN
@@ -459,6 +466,8 @@ class ImageStanding(ImageStandingWords):
             return f"{self.latest} available"
         if state == CURRENT and self.repository is not None:
             return "Verified before deploying" if self.repository.production_verified else "Deployed"
+        if state == CURRENT and self.local:
+            return BUILT_HERE
         if state == CURRENT:
             return "Up to date"
         return "Update status unknown"
@@ -600,16 +609,18 @@ class Tally:
     vulnerable: int
     vulnerable_images: int
     # Counted per container and apart from vulnerabilities, so with the
-    # unknown they add up to the containers counted.
+    # unknown they add up to the containers a registry holds (``pulled``):
+    # a build on its host has no registry's version and no pin.
     update_available: int
     up_to_date: int
     pinned: int
+    pulled: int
     # Checked against its source's advisories or its packages against OSV.
     checkable: int
 
     @property
     def update_unknown(self) -> int:
-        return self.count.total - self.update_available - self.up_to_date
+        return self.pulled - self.update_available - self.up_to_date
 
     @property
     def unchecked(self) -> int:
@@ -625,11 +636,11 @@ class Tally:
 
         if self.update_available:
             return Tone.ATTENTION
-        return Tone.GOOD if self.up_to_date == self.count.total else ""
+        return Tone.GOOD if self.up_to_date == self.pulled else ""
 
     @property
     def pinned_tone(self) -> str:
-        return Tone.GOOD if self.pinned == self.count.total else ""
+        return Tone.GOOD if self.pinned == self.pulled else ""
 
     @property
     def tone(self) -> str:
@@ -652,6 +663,7 @@ def tally(found: list[Container]) -> Tally:
         update_available=updates.count(UPDATE_AVAILABLE),
         up_to_date=updates.count(UP_TO_DATE),
         pinned=sum(1 for item in found if item.standing.pinned),
+        pulled=sum(1 for item in found if not item.standing.local),
         checkable=sum(1 for item in found if item.standing.checkable),
     )
 
@@ -696,6 +708,15 @@ def _standing(reference: str, host: str, container: str) -> ImageStanding:
             unread="It runs an image by id only, so there is no name to look it up by.",
         )
     pulled = _pulled().get((host, container), {})
+    if _built_here(host, container, pulled):
+        return ImageStanding(
+            image=ImageRef("", image.short, image.tag),
+            tag=image.tag,
+            pinned=False,
+            image_id=str(pulled.get("id", "") or ""),
+            built=moment(str(pulled.get("created_at", "") or "")),
+            local=True,
+        )
     tag = image.tag or _pulled_as(image, pulled, "tags", "tag")
     published = _published().get(image.name)
     digest = image.digest or _pulled_as(image, pulled, "digests", "digest")
@@ -731,6 +752,30 @@ def _standing(reference: str, host: str, container: str) -> ImageStanding:
         upstream_read_at=moment(str((upstream or {}).get("read_at", "") or "")),
         build=build_of(reference),
         repository=repositories().get(image.github) if image.github else None,
+    )
+
+
+def _built_here(host: str, container: str, pulled: Mapping[str, Any]) -> bool:
+    """Whether ``container`` runs an image built on its machine: a copy no
+    registry digest names, of a service its Compose files build."""
+
+    if not pulled or pulled.get("digests"):
+        return False
+    user = next((each for each in pulled.get("containers") or () if each.get("container") == container), {})
+    stack = _stacks().get((host, container), "")
+    return builds(_compose_files().get((host, stack), ()), str(user.get("service", "") or ""))
+
+
+def _stacks() -> dict[tuple[str, str], str]:
+    """The Compose project each container belongs to, by ``(machine, container)``."""
+
+    def records():
+        for record in _on_machines(CONTAINER_KIND):
+            yield str(record.get("name", "")), record
+
+    return read_once(
+        "containers.stacks",
+        lambda: {key: str(record.get("stack", "")) for key, record in _by_container(records()).items()},
     )
 
 

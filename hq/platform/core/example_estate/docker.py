@@ -17,7 +17,20 @@ from hq.platform.application.docker_estate import release_pins
 from hq.platform.application.images import ImageRef
 from hq.platform.application.services import CONTAINER_KIND
 
-from .names import CONTAINERS, LAN, MACHINE, NEWER, PORTAINER, SOURCES, container_id, digest, hexed, iso, stamp
+from .names import (
+    BUILT,
+    CONTAINERS,
+    LAN,
+    MACHINE,
+    NEWER,
+    PORTAINER,
+    SOURCES,
+    container_id,
+    digest,
+    hexed,
+    iso,
+    stamp,
+)
 from .sweep import store
 
 UP_FOR = timedelta(days=12)
@@ -123,9 +136,10 @@ def pinned(image):
 
 
 def started_by(name, image):
-    """The reference a container was started by: pinned, but for the one started by tag alone."""
+    """The reference a container was started by: pinned, but for the one
+    started by tag alone and the one its host builds, which no digest names."""
 
-    return image if name == BY_TAG else pinned(image)
+    return image if name in (BY_TAG, BUILT) else pinned(image)
 
 
 def running_digest(image):
@@ -137,10 +151,12 @@ def running_digest(image):
 
 def _pulled(name, image):
     ref = _ref(image)
+    # Docker keeps a build's tag as written, and no registry digest for it.
+    built = name == BUILT
     return _on_machine(
         id=digest("image-id", name),
-        tags=[f"{ref.name}:{ref.tag}"],
-        digests=[f"{ref.name}@{running_digest(image)}"],
+        tags=[image if built else f"{ref.name}:{ref.tag}"],
+        digests=[] if built else [f"{ref.name}@{running_digest(image)}"],
         created_at=iso(UP_FOR + timedelta(days=2)),
         size=180_000_000 + len(name) * 9_000_000,
         containers=[{"container": name, "reference": started_by(name, image), "service": name}],
@@ -285,6 +301,8 @@ def _registries(newer=NEWER, advisories=None):
 
     published, upstreams, attested, checked = [], [], [], []
     for name, _port, image in CONTAINERS:
+        if name == BUILT:
+            continue
         ref = _ref(image)
         source = SOURCES[name]
         releases = {ref.tag: (running_digest(image), timedelta(days=20))}

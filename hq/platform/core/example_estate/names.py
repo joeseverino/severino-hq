@@ -147,7 +147,11 @@ SUPPORT = (
     ("portainer", 9443, "portainer/portainer-ce:2.24.0"),
     # Named the way Compose names a container: project, service, replica.
     ("portainer-agent-portainer-agent-1", 9001, "portainer/agent:2.24.0"),
+    # Built on the host from the apps repository's Compose files, under a tag no registry holds.
+    ("thumbnailer", 8086, "example-thumbnailer:local"),
 )
+# The one container whose image its host builds.
+BUILT = "thumbnailer"
 # Every container: name, port, image.
 CONTAINERS = (*((c, p, i) for _h, c, p, i in SERVICES), *SUPPORT)
 # Where each image's source lives, as its build labels say.

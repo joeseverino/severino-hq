@@ -13,7 +13,7 @@ of its repository instead: the production deploy, and the repository's alerts.
   {% fact "Version" icon="layers" cut=standing.image.short cut_whole=standing.image.exact %}
     {% if standing.tag %}<code>{{ standing.tag }}</code>{% else %}No version tag{% endif %}
   {% detail %}
-    <small>{% if standing.pinned %}Pinned by digest{% else %}Tag only{% endif %}{% if standing.built %}{% dot %}built {{ standing.built|when_text }}{% endif %}</small>
+    <small>{% if standing.pinned %}Pinned by digest{% elif standing.local %}Built on its host{% else %}Tag only{% endif %}{% if standing.built %}{% dot %}built {{ standing.built|when_text }}{% endif %}</small>
     {% if standing.moved_to %}<small>{% status "Its tag now names a newer build." tone="attention" pill=False %}</small>{% endif %}
   {% endfact %}
   {% if standing.repository %}{% with deploy=standing.repository.production %}
@@ -30,9 +30,10 @@ of its repository instead: the production deploy, and the repository's alerts.
     {% endfact %}
   {% endwith %}{% else %}
     {% fact "Update" icon="deploy" tone=standing.update_tone %}
-      {% if standing.newer %}{% entity standing.release.url|outside label=standing.latest code=True %}{% elif standing.update_state == "current" %}Up to date{% else %}Unknown{% endif %}
+      {% if standing.newer %}{% entity standing.release.url|outside label=standing.latest code=True %}{% elif standing.local %}{{ standing.update|capfirst }}{% elif standing.update_state == "current" %}Up to date{% else %}Unknown{% endif %}
     {% detail %}
-      {% if standing.newer %}
+      {% if standing.local %}
+      {% elif standing.newer %}
         <small>{{ standing.newer|length|counted:"newer release,newer releases" }} available{% if standing.release.published %}, the newest {{ standing.release.published|when_text }}{% endif %}</small>
       {% elif standing.update_state == "current" %}
         <small>No newer version.</small>
@@ -50,7 +51,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% elif standing.checked or standing.source %}
         <small>{% if standing.findings %}{{ standing.findings|length|measured:"lower" }}, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<span class="nowrap">{% entity standing.source|add:"/security/advisories"|outside label="the repository" %}</span>{% endif %}</small>
       {% else %}
-        <small>The image does not say where its source is.{% if edit %} <a href="{{ edit.url }}">Name the source</a>{% endif %}</small>
+        <small>{% if standing.local %}No package list{% else %}The image does not say where its source is.{% if edit %} <a href="{{ edit.url }}">Name the source</a>{% endif %}{% endif %}</small>
       {% endif %}
     {% endfact %}
   {% endif %}

@@ -1584,6 +1584,18 @@ older pin, the update asks nothing of anyone and raises no finding
 (`UpdateState.at_work`). A preview or an apply that ended badly names the step
 it stopped on and what it said.
 
+An image built on its host is classified once, where its standing is decided
+(`containers._built_here`): the machine's copy holds no registry digest, and
+the repository's Compose service that runs it declares `build:` (the record's
+`compose_images` entry with `build`). No registry is asked for it, the checks
+only a published image can meet (a pin, its source, its publisher's
+attestations, its tag) do not apply to it, and it reads as built on its host.
+Its update is its repository's: any change under `compose/<app>/` is that
+app's change, a Dockerfile or a lock file moving no image
+(`github_compose.go`'s `appChanges`), so an open pull request that changes
+what it is built from is Approve, and what it brings is never called clean,
+since no scan reads a build's inputs.
+
 Its security properties:
 
 - Nothing merges before the host shows it can apply. Only a preview that

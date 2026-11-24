@@ -13,7 +13,7 @@ from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.held_values import format_html
 from hq.platform.core.web_refusals import refused
 lazy from hq.platform.application.app_update_approval import PLAYBOOKS
-lazy from hq.platform.application.app_updates import UpdateKind, update_state
+lazy from hq.platform.application.app_updates import UpdateKind, managed_by, update_state
 lazy from hq.platform.application.container_findings import needs_you
 lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containers, standing_of, tally
 lazy from hq.platform.application.machines import container_context
@@ -44,6 +44,7 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
             "act": None,
             "held": "",
             "readiness": None,
+            "managed": None,
             "edit": None,
         }
     host = machine.name if machine is not None else resource.spec.get("host", "")
@@ -64,10 +65,17 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
         "state": state,
         "act": state.action.control(request.get_full_path()) if state is not None and state.action else None,
         "held": _held(state),
-        "readiness": readiness_of(item) if item is not None and item.standing.repository is None else None,
+        # A build on its host is released by its repository's merges, never by a registry's tags.
+        "readiness": readiness_of(item) if item is not None and _pulled(item.standing) else None,
+        # The repository whose Compose files build its image on its host.
+        "managed": managed_by(item) if item is not None and item.standing.local else None,
         # Where the operator names what its image is built from, when the image does not say.
         "edit": offered_changes([resource])[resource.key].edit(resource.key, next=request.get_full_path()),
     }
+
+
+def _pulled(standing: Any) -> bool:
+    return standing.repository is None and not standing.local
 
 
 def _held(state: Any) -> str:
