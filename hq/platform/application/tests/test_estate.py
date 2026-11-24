@@ -26,7 +26,7 @@ from .. import readings
 from ..attention import infrastructure
 from ..command_center import command_center
 from ..connection_lifecycle import Lifecycle
-from ..estate import Estate, cards, estate_reading, overview
+from ..estate import cards, estate_reading, overview
 from ..findings import finding_key
 from ..glance import dashboard_panels
 from ..inventory_testing import store
@@ -260,8 +260,8 @@ class EstateCardTests(TestCase):
     def test_every_figure_links_to_its_page_and_the_nearest_expiries_to_their_subject(self):
         found = self.cards()
 
-        self.assertEqual(found["hq.estate.machines"]["label"].count, 1)
-        self.assertIn("1", found["hq.estate.machines"]["detail"])
+        self.assertEqual(found["hq.estate.machines"]["label"].count, len(machine_catalog()))
+        self.assertIn("1 online", found["hq.estate.machines"]["detail"])
         self.assertEqual(found["hq.estate.machines"]["url"], reverse("control_plane:machines"))
         self.assertEqual(found["hq.estate.services"]["url"], reverse("control_plane:services"))
         self.assertEqual(found["hq.estate.domains"]["label"].count, 1)
@@ -721,7 +721,8 @@ class EstateQueryBudgetTests(TestCase):
                 return operating_snapshot(principal=cli_principal())
 
         def online(snapshot):
-            return int(next(card["value"] for card in snapshot["cards"] if card["id"] == "hq.estate.machines"))
+            detail = next(card["detail"] for card in snapshot["cards"] if card["id"] == "hq.estate.machines")
+            return int(detail.partition(" online")[0].rpartition(" ")[2])
 
         assert_cost_does_not_grow(self, sizes=(1, 6), arrange=arrange, draw=draw, rows=online)
 
@@ -734,20 +735,6 @@ class EstateQueryBudgetTests(TestCase):
             without = self.snapshot_queries()
 
         self.assertLessEqual(with_estate - without, 1)
-
-
-class WatchedTests(TestCase):
-    def test_online_is_out_of_what_hq_watches(self):
-        from types import SimpleNamespace as Row
-
-        from ..machines import MachineState
-
-        def machine(state, presence=None):
-            return Row(state=state, presence=presence)
-
-        estate = Estate(machines=(*(machine(state) for state in MachineState),))
-
-        self.assertEqual(len(estate.watched), 3)
 
 
 class ConnectionFigureTests(TestCase):

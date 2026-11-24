@@ -41,7 +41,7 @@ lazy from .credential_sight import credential_sight
 lazy from .estate_records import EstateFigure
 lazy from .facts import Subject, inventory_about, readings
 lazy from .infrastructure import enabled_resources
-lazy from .machines import MachineState
+lazy from .machines import MachineState, in_states
 lazy from .services import service_reading
 lazy from .zones import ZONE_KIND
 
@@ -123,18 +123,9 @@ class Estate:
     certificates: tuple[Expiry, ...] = ()
 
     @property
-    def online(self) -> tuple[Any, ...]:
-        return tuple(item for item in self.machines if item.state is MachineState.ONLINE)
-
-    @property
     def offline(self) -> tuple[Any, ...]:
         # A personal device that is off reads as away, never offline.
         return tuple(item for item in self.machines if item.state is MachineState.OFFLINE)
-
-    @property
-    def watched(self) -> tuple[Any, ...]:
-        # What "online" is out of.
-        return tuple(item for item in self.machines if item.state.watched)
 
     @property
     def empty(self) -> bool:
@@ -283,9 +274,9 @@ def cards(*, principal: Principal) -> tuple[dict[str, Any], ...]:
     found = [
         {
             "id": "hq.estate.machines",
-            "label": Counted(len(estate.online), "Machine online", "Machines online"),
+            "label": Counted(len(estate.machines), "Machine"),
             "url": reverse("control_plane:machines"),
-            "detail": (f"{len(estate.offline)} offline" if estate.offline else f"of {len(estate.watched)}"),
+            "detail": in_states(machine.state for machine in estate.machines),
             **({"status": Tone.ATTENTION} if estate.offline else {}),
         },
         {
@@ -381,7 +372,7 @@ def overview(*, principal: Principal):
                     tip=dotted(machine.name, _answers_at(machine), machine.state),
                     url=entity_link("machine", machine.name).url,
                 )
-                for machine in estate.watched
+                for machine in estate.machines
             )
         ),
         "hq.estate.services": Dots(
@@ -399,12 +390,8 @@ def overview(*, principal: Principal):
     }
     # One word each, so a label and its mark fit a narrow column; the note
     # carries the rest. For a date that runs out, the note is what and when.
-    labels = {
-        "hq.estate.machines": Counted(len(estate.online), "Machine"),
-        "hq.estate.registration": "Renewal",
-        "hq.estate.certificate": "Certificate",
-    }
-    notes = {"hq.estate.machines": "" if estate.offline else f"of {len(estate.watched)} online"}
+    labels = {"hq.estate.registration": "Renewal", "hq.estate.certificate": "Certificate"}
+    notes = {}
     if len(checked) < len(estate.services):
         notes["hq.estate.services"] = f"{len(checked)} health-checked"
     for card_id, expiries in (
@@ -443,7 +430,7 @@ def resources() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "estate",
             "Estate",
-            "Machines online, services, domains, next renewals and connections needing attention.",
+            "Machines and their states, services, domains, next renewals and connections needing attention.",
             Capability.READ,
             listing=ListRead(derived_reads.list_estate, EmptyQuery, EstateFigure),
             web_route="dashboard",

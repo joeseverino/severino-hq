@@ -17,7 +17,7 @@ from hq.platform.application.machine_context import (
     sections_for as machine_sections,
     serves_links,
 )
-from hq.platform.application.machines import Machine, machine
+from hq.platform.application.machines import Machine, in_states, machine
 from hq.platform.application.moments import moment
 from hq.platform.application.pages import PageAction, PageDialog, PageMixin, RecordListMixin, RecordPageMixin
 from hq.platform.application.resource_capabilities import (
@@ -91,9 +91,7 @@ class MachineListView(RecordListMixin, TemplateView):
             # What would fill it reads the database, so it is asked only of no machines.
             region={"empty": "No machines yet.", **({} if self.records else {"remedy": context["page"].remedy})},
         )
-        # How many are in each state, in the order the states first appear.
-        states = [item["state"] for item in self.records]
-        context["state_counts"] = [(states.count(state), state) for state in dict.fromkeys(states)]
+        context["machine_states"] = in_states(item["state"] for item in self.records)
         return context
 
 

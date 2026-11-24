@@ -162,11 +162,9 @@ def dashboard(_size: int) -> dict:
 
 
 def machines(snapshot: dict) -> int:
-    """How many machines the estate card counts: those online and those offline."""
+    """How many machines the estate card counts."""
 
-    card = next(card for card in snapshot["cards"] if card["id"] == "hq.estate.machines")
-    offline = card.get("detail", "").removesuffix(" offline")
-    return int(card["value"]) + (int(offline) if offline.isdigit() else 0)
+    return int(next(card["value"] for card in snapshot["cards"] if card["id"] == "hq.estate.machines"))
 
 
 def repopulate(size: int) -> None:

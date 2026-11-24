@@ -7,6 +7,6 @@ one by hand would create a row that means nothing until one of those is true
 anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
-{% if state_counts.1 %}{% muted element="p" %}{% for count, state in state_counts %}{{ count }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}{% endif %}
+{% if machine_states %}{% muted element="p" %}{{ machine_states }}{% endmuted %}{% endif %}
 {% data_table table %}
 {% endblock %}

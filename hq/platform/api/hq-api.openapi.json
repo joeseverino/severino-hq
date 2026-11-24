@@ -40127,7 +40127,7 @@
     },
     "/api/v2/resources/estate/": {
       "get": {
-        "description": "Machines online, services, domains, next renewals and connections needing attention.",
+        "description": "Machines and their states, services, domains, next renewals and connections needing attention.",
         "operationId": "listEstateV2",
         "parameters": [
           {
