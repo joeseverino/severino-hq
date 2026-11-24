@@ -85,7 +85,7 @@ def _facts(facts: Any) -> list[dict[str, Any]]:
     for fact in facts:
         label, text, url = fact["label"], fact["value"], fact["url"]
         link = EntityLink(text, url, external=bool(web_url(url)), kind_label=label) if url else None
-        grouped.setdefault(label, []).append({"text": text, "link": link})
+        grouped.setdefault(label, []).append({"text": text, "link": link, "code": fact["code"]})
     return [{"label": label, "values": values} for label, values in grouped.items()]
 
 

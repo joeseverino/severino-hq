@@ -15,6 +15,7 @@ lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource,
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
 lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.decisions import decision
+lazy from hq.platform.application.display_words import Code
 lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_model import CHECK_AGAIN, Finding, opens
@@ -761,6 +762,7 @@ def opened_problems():
         ("Pull request", pull),
         ("Waiting since", "Jan 3, 1:42 AM"),
         ("Packages", "example-kernel, example-libc"),
+        ("Flagged by", Code("/run/reboot-required")),
     )
     return list(
         finding_rows(
@@ -808,7 +810,7 @@ ORIGIN_PANEL = Example(
     lambda: {"item": decision(opened_problems()[0])},
 )
 # What was read: each label once, a record HQ has a page for and one outside it linked, then a value of
-# several words beside one of several names.
+# several words beside one of several names, and a path a machine wrote, in code.
 INSIGHT_FACTS = Example(context=_opened("facts"))
 # Two commands, the second with its note.
 OPERATOR_STEPS = Example(context=_opened("steps"))

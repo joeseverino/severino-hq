@@ -95,6 +95,7 @@
               "facts.label",
               "facts.value",
               "facts.url",
+              "facts.code",
               "links",
               "links.name",
               "links.label",
@@ -2592,6 +2593,7 @@
               "findings.evidence.label",
               "findings.evidence.value",
               "findings.evidence.url",
+              "findings.evidence.code",
               "findings.no_help_reason",
               "findings.since",
               "findings.steps",
@@ -15150,6 +15152,10 @@
         "additionalProperties": false,
         "description": "One line of what a finding rests on.",
         "properties": {
+          "code": {
+            "description": "Whether the value is what a machine wrote (a digest, a path), to read exactly.",
+            "type": "boolean"
+          },
           "label": {
             "description": "What this line of evidence is, as a problem card labels it.",
             "type": "string"
@@ -15166,7 +15172,8 @@
         "required": [
           "label",
           "value",
-          "url"
+          "url",
+          "code"
         ],
         "type": "object"
       },
@@ -15174,6 +15181,9 @@
         "additionalProperties": false,
         "description": "One line of what a finding rests on.",
         "properties": {
+          "code": {
+            "$ref": "#/components/schemas/FindingEvidence/properties/code"
+          },
           "label": {
             "$ref": "#/components/schemas/FindingEvidence/properties/label"
           },

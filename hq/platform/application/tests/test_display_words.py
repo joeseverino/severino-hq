@@ -9,7 +9,7 @@ import hq_sdk.ui
 
 from ..card_items import Kpi, ListRow
 from ..display_words import in_words
-from ..finding_model import Finding
+from ..finding_model import Finding, written_fact
 from ..finding_steps import Do, Run
 from ..service_context import Cell
 
@@ -61,9 +61,15 @@ class ConstructionTests(SimpleTestCase):
             with self.assertRaisesRegex(ValueError, "say it in words"):
                 build()
 
-    def test_a_steps_value_and_command_are_drawn_as_written(self):
+    def test_what_a_machine_wrote_is_drawn_as_written_in_its_own_place(self):
+        from ..display_words import Code
+
         self.assertEqual(Do("Pin its image by its digest", value=DIGEST).value, DIGEST)
         self.assertEqual(Run("Pin it", f"example-cli pin {DIGEST}").command, f"example-cli pin {DIGEST}")
+        pinned = Finding("example", "example", "Device", "good", "Body", evidence=(("Pin it as", Code(DIGEST)),))
+        self.assertEqual(written_fact(*pinned.evidence[0])["code"], True)
+        with self.assertRaisesRegex(ValueError, "say it in words"):
+            Finding("example", "example", "Device", "good", "Body", evidence=(("Pin it as", DIGEST),))
 
     def test_a_readout_is_shown_as_it_arrived(self):
         """A header, an address or an identifier is a record's own text, whatever it holds."""

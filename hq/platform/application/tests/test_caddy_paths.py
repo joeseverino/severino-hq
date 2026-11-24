@@ -239,10 +239,13 @@ class ServedCertificateExpiryTests(TestCase):
                 "label": "Held in",
                 "value": "example-edge",
                 "url": "/infrastructure/connections/#connection-example-edge",
+                "code": False,
             },
             finding["evidence"],
         )
-        self.assertIn({"label": "Serves", "value": "*.example.dev, example.dev", "url": ""}, finding["evidence"])
+        self.assertIn(
+            {"label": "Serves", "value": "*.example.dev, example.dev", "url": "", "code": False}, finding["evidence"]
+        )
 
     def test_a_distant_one_and_a_route_caddy_manages_say_nothing(self):
         self.routes(400, "example.dev")
