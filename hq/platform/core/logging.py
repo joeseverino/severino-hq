@@ -44,7 +44,7 @@ def _chain(exc: BaseException) -> list[BaseException]:
     return links
 
 
-def _logged_failure(exc: BaseException) -> BaseException:
+def logged_failure(exc: BaseException) -> BaseException:
     """``exc`` as a traceback in the log carries it, with each validation failure in its chain told by
     ``_validation_summary``; ``exc`` itself when its chain holds none, and is never changed."""
 
@@ -105,7 +105,7 @@ class JsonFormatter(logging.Formatter):
         exc = ei[1]
         if exc is None:
             return super().formatException(ei)
-        told = _logged_failure(exc)
+        told = logged_failure(exc)
         return super().formatException((type(told), told, told.__traceback__))
 
     @staticmethod

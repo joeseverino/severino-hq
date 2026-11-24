@@ -715,11 +715,20 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(resources=_provider("hq.platform.application.hq_context:resources")),
     ),
     DomainDescriptor(
+        id="hq.errors",
+        label="Errors",
+        description="The unhandled errors of the requests HQ failed, each by the request id its error page printed.",
+        # Beside HQ itself: what went wrong while it served.
+        navigation=(NavigationItem("Errors", "errors:list", "errors", HOST_ORDER_MACHINERY + 4, "System"),),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.error_reads:resources")),
+        mounts=(Mount("errors/", "hq.platform.core.error_log_urls"),),
+    ),
+    DomainDescriptor(
         id="hq.design",
         label="Design",
         description="Every shared part HQ draws its pages from, filled with example data.",
         # Last of HQ's own machinery: the parts every page above is drawn from.
-        navigation=(NavigationItem("Design", "design", "", HOST_ORDER_MACHINERY + 4, "System"),),
+        navigation=(NavigationItem("Design", "design", "", HOST_ORDER_MACHINERY + 5, "System"),),
     ),
     DomainDescriptor(
         id="hq.agents",

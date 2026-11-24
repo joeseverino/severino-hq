@@ -219,6 +219,12 @@ ERROR_PAGE_STATES = {
         {"request_id": "example-0123abcd.4567ef89.0123abcd4567"},
         heads_the_page=True,
     ),
+    "linked": Example(
+        '{% include "partials/_error_page.html" with code="500" title="Something broke" '
+        'body="The example error is in the log. Trying again is safe." request_id=request_id error_url=error_url %}',
+        {"request_id": "example-0123abcd.4567ef89.0123abcd4567", "error_url": "/errors/example-0123abcd/"},
+        heads_the_page=True,
+    ),
 }
 
 

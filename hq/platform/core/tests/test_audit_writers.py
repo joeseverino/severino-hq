@@ -207,6 +207,7 @@ UNWATCHED = {
     "core.IdempotencyRecord": "a retry key's first answer",
     "core.Pin": "a person's pins, written by hand with its act (NOT_A_ROW)",
     "core.Revision": "a table's write count, moved by a trigger",
+    "core.ServerError": "a failure HQ logged, kept beside the log line, never a person's act",
     "core.UpstreamReading": "a reading, recorded as observed when it changes",
     "jobs.Job": "a job's one row is its end (audit.work_ended)",
     "search_index.SearchDocument": "an index derived from the records",

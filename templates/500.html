@@ -1,5 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Something broke{% endblock %}
 {% block content %}
-{% include "partials/_error_page.html" with code="500" title="Something broke" body="The error is in the log. Trying again is safe." request_id=request_id only %}
+{% include "partials/_error_page.html" with code="500" title="Something broke" body="The error is in the log. Trying again is safe." request_id=request_id error_url=error_url only %}
 {% endblock %}

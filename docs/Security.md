@@ -259,6 +259,16 @@ is refused the audit log (`read_audit_log`) and the calendar
   the operation id of every audit row the request writes, and it is on every
   JSON log line, which records no query string or request body. With a trace
   endpoint set in development, it is also the request's trace id.
+- An error a request logs with its traceback is also kept in HQ under that
+  request's id (`hq/platform/core/server_errors.py`, a handler on the root
+  logger): its method and path without the query, who asked, the exception
+  and the traceback the log line carries, never a frame's values. The newest
+  `KEPT` are kept and each write deletes the rest. A failure to keep one is
+  logged and dropped, so the request's answer never changes, and a
+  speculative request keeps nothing. A traceback can carry configuration and
+  data, so System, Errors and the `server_errors` read take `read_audit_log`,
+  as the audit log does, and the 500 page links its request id to the error's
+  page only for a reader who may open it.
 - Anonymous liveness and readiness probes disclose only component state;
   readiness fails on database, migration, or writable-storage problems.
 - SQLite is opened with `journal_mode=WAL`, `foreign_keys=ON`,
