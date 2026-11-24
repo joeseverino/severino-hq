@@ -315,7 +315,7 @@ def _compose_steps(running: list[Container], image: Callable[[Container], str]) 
         )
         if command:
             steps.append(
-                Do(f"On {machine}, set the image of {names} in {_sets_image(files)}.", value=f"image: {wanted}")
+                Do(ended(f"On {machine}, set the image of {names} in {_sets_image(files)}"), value=f"image: {wanted}")
             )
             steps.append(Run("Then start it again", command))
         else:

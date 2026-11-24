@@ -95,9 +95,10 @@ FACTS = Part(
     stands on its label's line in every engine; the value keeps a chip's end padding free at its end,
     so a wrapped line's chip stays inside its column in any face. A list opened to read more (in a disclosure, a
     popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and
-    ends with what holds it. A table row's small print keeps one pair to a row too. Where it stands
-    decides this, never an option, so the same summary drawn on a page and in a dialog takes each
-    one's spacing.
+    ends with what holds it. A table row's small print keeps one pair to a row too, its labels the
+    page's one width in every row, so the values of a table's opened rows stand in one column. Where
+    it stands decides this, never an option, so the same summary drawn on a page and in a dialog
+    takes each one's spacing.
 
     A line (`layout="inline"`) is a card's summary, the counts across a domain or the whole of HQ:
     each fact one phrase, its bold value then its words ("3 rules"), agreeing with it, then a dot

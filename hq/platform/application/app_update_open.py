@@ -94,8 +94,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
             OPEN,
-            "Have Renovate open the pull request of an app's newer release: tick the box it holds the app's "
-            "branch under on the Dependency Dashboard, then ask a dependency run.",
+            "Have Renovate open an app's update: tick its branch's box on the Dependency Dashboard, then ask a run.",
             Effect.INFRASTRUCTURE_CHANGE,
             Capability.MANAGE_INFRASTRUCTURE,
             OpenUpdateCommand,

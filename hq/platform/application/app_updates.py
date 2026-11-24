@@ -26,7 +26,6 @@ lazy from .app_update_approval import (
     APPLY,
     APPROVE,
     Approval,
-    MergeStanding,
     apply_of,
     apply_target,
     approval_of,
@@ -343,6 +342,28 @@ class UpdateAction:
 
     def control(self, back: str) -> PageAction | None:
         return PageAction.command(self.capability, self.target, primary=True, query={"next": back})
+
+
+@dataclass(frozen=True, slots=True)
+class MergeStanding:
+    """How an approved update stands: its preview, its merge, and the run
+    that applies it."""
+
+    words: str
+    tone: str
+    # The page of the run it stands on: the preview, or the apply.
+    run_url: str = ""
+    # Whether it previews, merges, applies or merged, so no second approval is offered.
+    taken: bool = False
+    # Of a preview or an apply that ended badly: the step it stopped on, and what it said.
+    step: str = ""
+    said: str = ""
+
+    @property
+    def lines(self) -> tuple[str, ...]:
+        """Its fact's detail: the step it stopped on, then what it said."""
+
+        return tuple(line for line in (self.step, self.said) if line)
 
 
 @dataclass(frozen=True, slots=True)

@@ -682,7 +682,7 @@ class DemoSiteTests(unittest.TestCase):
                             asked.append(request.url)
 
                     page.on("request", note)
-                    page.locator('main a[href*="/?"]').first.click()
+                    page.locator('main a[href*="/?"]:visible').first.click()
                     page.wait_for_function("() => document.querySelector('meta[name=hq-demo-address]')")
                     page.remove_listener("request", note)
                     self.assertEqual(len(opened), 2, "the address, then its copy")

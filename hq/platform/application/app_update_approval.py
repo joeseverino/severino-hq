@@ -22,6 +22,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMMIT, PULL_REQUEST_KIND, REPOSITORY
 lazy from hq.domains.control_plane.names import normalized_hostname
 
+from .app_updates import MergeStanding
 from .command_fields import Describe
 from .contracts import Effect
 from .integration_specs import CapabilitySpec
@@ -440,8 +441,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         ),
         CapabilitySpec(
             APPLY,
-            "Apply an app its repository's default branch pins newer than what runs: run the adopted playbook that "
-            "applies app updates at that branch's head, on its machines.",
+            "Apply the release an app's default branch pins where it runs something older.",
             Effect.INFRASTRUCTURE_CHANGE,
             Capability.MANAGE_INFRASTRUCTURE,
             ApplyUpdateCommand,
@@ -478,28 +478,6 @@ REFUSED = {
     "checks_failing": "GitHub refused the merge: its checks fail.",
     "not_installed": "GitHub refused the merge: HQ's GitHub App is not installed on its repository.",
 }
-
-
-@dataclass(frozen=True, slots=True)
-class MergeStanding:
-    """How an approved update stands: its preview, its merge, and the run
-    that applies it."""
-
-    words: str
-    tone: str
-    # The page of the run it stands on: the preview, or the apply.
-    run_url: str = ""
-    # Whether it previews, merges, applies or merged, so no second approval is offered.
-    taken: bool = False
-    # Of a preview or an apply that ended badly: the step it stopped on, and what it said.
-    step: str = ""
-    said: str = ""
-
-    @property
-    def lines(self) -> tuple[str, ...]:
-        """Its fact's detail: the step it stopped on, then what it said."""
-
-        return tuple(line for line in (self.step, self.said) if line)
 
 
 def merge_standing(update: AppUpdate) -> MergeStanding | None:

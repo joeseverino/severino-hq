@@ -32612,7 +32612,7 @@
     },
     "/api/v2/capabilities/app_update.apply/": {
       "post": {
-        "description": "Apply an app its repository's default branch pins newer than what runs: run the adopted playbook that applies app updates at that branch's head, on its machines.",
+        "description": "Apply the release an app's default branch pins where it runs something older.",
         "operationId": "appUpdateApplyV2",
         "parameters": [
           {
@@ -32762,7 +32762,7 @@
     },
     "/api/v2/capabilities/app_update.open/": {
       "post": {
-        "description": "Have Renovate open the pull request of an app's newer release: tick the box it holds the app's branch under on the Dependency Dashboard, then ask a dependency run.",
+        "description": "Have Renovate open an app's update: tick its branch's box on the Dependency Dashboard, then ask a run.",
         "operationId": "appUpdateOpenV2",
         "parameters": [
           {
