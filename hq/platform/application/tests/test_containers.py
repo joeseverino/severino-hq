@@ -178,6 +178,33 @@ class StandingTests(TestCase):
         self.assertEqual(update.primary.url, reverse("control_plane:containers"))
         self.assertEqual(update.no_help_reason, BY_HAND)
 
+    def test_a_container_its_repository_holds_waits_on_renovate_with_no_step_by_hand(self):
+        from .test_github_estate import store
+
+        estate()
+        inventory(
+            "portainer.compose_project",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "name": "kuma",
+                    "config_files": ["/opt/apps/kuma/compose.yaml"],
+                }
+            ],
+        )
+        dashboard = "https://github.com/example/alpha/issues/1"
+        for held, url in ((dashboard, dashboard), ("", "https://github.com/example/alpha")):
+            with self.subTest(dashboard=held):
+                store(compose=["compose/kuma/compose.yaml"], dashboard=held)
+
+                (update,) = [item for item in queued(UPDATE) if item.part == "example/kuma:1"]
+
+                self.assertEqual(
+                    (update.no_help_reason, update.primary.url), ("Renovate has not opened its update yet.", url)
+                )
+                self.assertFalse([step for step in update.steps if isinstance(step, Run)])
+
     def test_an_update_names_the_command_when_its_compose_project_was_read(self):
         estate()
         inventory(

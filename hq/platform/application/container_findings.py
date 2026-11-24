@@ -40,7 +40,8 @@ from .tone import Tone
 from .ui import agreed, ended
 from .workflow_contracts import ActionLink
 lazy from .app_update_approval import approval_of, approve_remedy
-lazy from .app_updates import update_of
+lazy from .app_updates import managed_by, update_of
+lazy from .entity_links import web_url
 lazy from .labels import lower_first
 lazy from .topology_estate import machine_nodes
 lazy from .upgrades import HIGH, MAJOR, Plan, plan_for
@@ -52,8 +53,11 @@ OVERRIDES = (
     "docker-compose.override.yaml",
     "docker-compose.override.yml",
 )
-# Why an update is a person's to apply: an open pull request's is approved.
-BY_HAND = "No open pull request moves it."
+# Why an update is a person's to apply: no repository holds the container's
+# Compose files, so no pull request will move it.
+BY_HAND = "No repository HQ reads holds its Compose files."
+# Why a repository's container waits: HQ approves the update Renovate opens.
+NOT_OPENED = "Renovate has not opened its update yet."
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 ADVISORY = "container-image-advisory"
 UPDATE = "container-image-update"
@@ -202,6 +206,15 @@ def _upgrade(running: list[Container], plan: Plan | None) -> dict[str, Any]:
             "remedies": () if held else (approve_remedy(update),),
             "no_help_reason": held,
         }
+    if (managed := managed_by(lead)) is not None:
+        # Its repository moves it: the Dashboard lists the update Renovate holds.
+        where = web_url(managed.dashboard)
+        found = (
+            opens("Dependency Dashboard", where)
+            if where
+            else opens(managed.repository, web_url(managed.url) or page.url)
+        )
+        return {"primary": found, "steps": (), "no_help_reason": NOT_OPENED}
     said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
     label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
     return {"primary": opens(label, page.url), "steps": _by_hand(running, plan)}
@@ -281,7 +294,7 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
 
 def _by_hand(running: list[Container], plan: Plan) -> tuple[Run | Do, ...]:
     """How the image is moved to the plan's target on its machine where no
-    open pull request moves it: one step for each compose project that runs it."""
+    repository holds its Compose files: one step for each compose project that runs it."""
 
     standing = running[0].standing
     if standing.repository is not None:
