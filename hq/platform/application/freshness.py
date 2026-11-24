@@ -23,7 +23,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.platform.core.included_parts import READING_AGE
 
 from .derivations import reached
-from .moments import when
+from .moments import duration, when
 from .process_caches import kept
 lazy from . import plugins, readings
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
@@ -52,7 +52,7 @@ def reading_age(reading: Freshness | None = None, *, at: datetime | None = None,
 
     if reading is not None:
         words = reading.last_read
-        words += f" · {reading.label.lower()}" if reading.observed_at and reading.stale else ""
+        words += f" · {reading.label.lower()}{reading.cadence}" if reading.observed_at and reading.stale else ""
     else:
         words = last_read(at) if at else unread or "No reading yet"
     return Piece(READING_AGE, {"reading": reading, "at": at, "unread": unread}, words)
@@ -227,7 +227,8 @@ def stale_after(kind: str = "") -> timedelta:
 class Freshness:
     state: str
     observed_at: datetime | None
-    stale_after: timedelta
+    # How often its kind is read.
+    every: timedelta
     # An ask for a reading taken on open went unanswered, so asking again is due.
     unanswered: bool = False
 
@@ -245,6 +246,13 @@ class Freshness:
         """When the reading was taken, as a sentence; its label when none was."""
 
         return last_read(self.observed_at) if self.observed_at else self.label
+
+    @property
+    def cadence(self) -> str:
+        """How often its kind is read, as the words an out-of-date age ends with."""
+
+        # One of a unit is said as the unit alone; the count and its unit hold on a non-breaking space.
+        return f"; read every {duration(self.every).removeprefix('1\xa0')}"
 
     @property
     def label(self) -> str:
@@ -274,14 +282,14 @@ def freshness(
     found = cadence(kind)
     unanswered = found.on_open and asked_at is not None and reached(asked_at + found.stale_after, now=now)
     if observed_at is None:
-        return Freshness(NEVER, None, found.stale_after, unanswered)
+        return Freshness(NEVER, None, found.every, unanswered)
     if (failed or unanswered) if found.on_open else reached(observed_at + found.stale_after, now=now):
         state = STALE
     elif reached(observed_at + found.every, now=now):
         state = DUE
     else:
         state = CURRENT
-    return Freshness(state, observed_at, found.stale_after, unanswered)
+    return Freshness(state, observed_at, found.every, unanswered)
 
 
 # How far behind its own kind's newest reading a record may fall before the

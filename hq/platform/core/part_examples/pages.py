@@ -408,7 +408,7 @@ READING_AGE_STATES = {
         lambda: {
             "unread": "the registry refused an anonymous read (HTTP 401); the image may be private.",
             "current": Freshness(CURRENT, DRAWN_AT - timedelta(minutes=4), timedelta(hours=1)),
-            "due": Freshness(DUE, DRAWN_AT - timedelta(minutes=22), timedelta(minutes=1)),
+            "due": Freshness(DUE, DRAWN_AT - timedelta(minutes=22), timedelta(minutes=2)),
             "stale": Freshness(STALE, DRAWN_AT - timedelta(days=3), timedelta(hours=1)),
             "at": DRAWN_AT - timedelta(hours=2),
         },

@@ -151,7 +151,7 @@ class DashboardQueueTests(SignedInTestCase):
             whole = self.client.get(page)
 
         self.assertContains(dashboard, "data-reading-age")
-        self.assertContains(dashboard, "Read every")
+        self.assertContains(dashboard, "read every")
         self.assertContains(dashboard, "runs --failing")
         path, _, anchor = page.partition("#")
         self.assertEqual(path, "/action-items/")

@@ -109,7 +109,7 @@ class DecisionTests(SimpleTestCase):
                 html = card(self.item(key="example:read", reads=kind, observed_at=at.isoformat()))
 
                 self.assertEqual(bool(select(html, "data-reading-age")), shown)
-                self.assertEqual("Read every" in text(html), shown)
+                self.assertEqual("read every" in text(html), shown)
         unknown = card(self.item(key="example:read", observed_at=late.isoformat()))
         self.assertFalse(select(unknown, "data-reading-age"))
 

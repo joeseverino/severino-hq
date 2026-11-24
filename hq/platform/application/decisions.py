@@ -13,8 +13,8 @@ from typing import Any
 from .tone import Tone
 lazy from .entity_links import web_url
 lazy from .findings import rule_origin
-lazy from .freshness import cadence, freshness
-lazy from .moments import duration, moment
+lazy from .freshness import Freshness, freshness
+lazy from .moments import moment
 lazy from .routes import reverse
 lazy from .ui import ended
 
@@ -56,15 +56,13 @@ def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[
     return [link], ""
 
 
-def _late(item: dict[str, Any]) -> dict[str, Any] | None:
+def _late(item: dict[str, Any]) -> Freshness | None:
     """The reading a row is drawn from, said on the row only once it is out
-    of date for its kind, with how often that kind is read."""
+    of date for its kind."""
 
     kind = item.get("reads", "")
     reading = freshness(kind, moment(item.get("observed_at", ""))) if kind else None
-    if reading is None or not reading.stale:
-        return None
-    return {"reading": reading, "every": f"Read every {duration(cadence(kind).every).removeprefix('1 ')}"}
+    return reading if reading is not None and reading.stale else None
 
 
 def _one_primary(actions: list[dict[str, Any]], named: list[dict[str, Any]]) -> list[dict[str, Any]]:

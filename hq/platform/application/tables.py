@@ -14,12 +14,12 @@ from django.db import models
 from django.db.models import Model
 
 from hq.platform.core.table_layout import SAYS_NOTHING, TRACKS
-lazy from hq.platform.core.included_parts import METER, READING_AGE
+lazy from hq.platform.core.included_parts import METER
 lazy from hq.platform.core.templatetags import status_tags
 
 from .describe import Describe
 from .display_words import QUOTED, display, quoted_when
-lazy from .freshness import last_read
+lazy from .freshness import reading_age
 
 if TYPE_CHECKING:
     from hq.platform.core.template_parts import Part
@@ -280,10 +280,7 @@ class Cell:
         """A reading's age as every page words it (``partials/_reading_age.html``):
         of its ``Freshness``, of the moment ``at`` it was taken, else why there is none."""
 
-        taken = reading.observed_at if reading is not None else at
-        words = last_read(taken) if taken else (reading.label if reading is not None else unread or "No reading yet")
-        context = {"reading": reading, "at": at, "unread": unread}
-        return cls(piece=Piece(READING_AGE, context, words=words), muted=muted)
+        return cls(piece=reading_age(reading, at=at, unread=unread), muted=muted)
 
     @classmethod
     def meter(cls, marks: Iterable[Any], label: str) -> Cell:

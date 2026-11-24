@@ -285,13 +285,22 @@ class ReadingAgeTests(TestCase):
         self.assertTrue(select(html, "data-reading-age", CURRENT))
         self.assertTrue(elements(html, "time"))
 
-    def test_an_out_of_date_reading_says_so_beside_its_age(self):
+    def test_an_out_of_date_reading_says_so_beside_its_age_with_how_often_it_is_read(self):
         reading = freshness(SWEPT, timezone.now() - stale_after(SWEPT) - timedelta(hours=1))
 
         html = self.render(reading=reading)
 
         self.assertIn(f'data-reading-age="{STALE}"', html)
         self.assertIn(reading.label.lower(), html)
+        self.assertIn("read every", text(html))
+        self.assertNotIn("read every", text(self.render(reading=freshness(SWEPT, timezone.now()))))
+
+    def test_a_cadence_of_one_unit_says_the_unit_alone(self):
+        from ..freshness import Freshness
+
+        reading = Freshness(STALE, timezone.now() - timedelta(days=3), timedelta(hours=1))
+
+        self.assertTrue(reading.cadence.endswith("every hour"))
 
     def test_no_reading_says_there_is_none(self):
         html = self.render(reading=freshness(SWEPT, None))

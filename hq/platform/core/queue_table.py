@@ -138,7 +138,7 @@ def _said(item: Mapping[str, Any], title: Cell, where: Where) -> Cell:
         line.insert(1, Cell(item["detail"], shows="gist", data={"attention-detail": ""}))
     said = [] if where.grouped else [Cell(item["source"])]
     if late := item.get("late"):
-        said += [Cell.reading(reading=late["reading"]), Cell(late["every"])]
+        said.append(Cell.reading(reading=late))
     lines = ()
     if said:
         first, *rest = said
