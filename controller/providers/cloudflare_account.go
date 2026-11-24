@@ -271,10 +271,13 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 			return nil, err
 		}
 		named := namedZones(zones)
+		client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
 		var refused []error
 		for _, zone := range named {
 			name := hostname(zone.Name)
-			packs, err := r.cloudflareCertificatePacks(ctx, zone.ID, ref)
+			packs, err := cloudflarePages[cfapi.TLSCertificatesAndHostnamesCertificatePack]("certificate pack", cloudflareAccountPerPage, func(page int) (vendorReply, error) {
+				return client.CertificatePacksListCertificatePacksWithResponse(ctx, zone.ID, &cfapi.CertificatePacksListCertificatePacksParams{Page: new(float32(page)), PerPage: new(float32(cloudflareAccountPerPage)), Status: new(cfapi.CertificatePacksListCertificatePacksParamsStatusAll)})
+			})
 			if err != nil {
 				refused = append(refused, err)
 				refuse(ctx, runtime.PartWhole, ref, name, err)
@@ -296,13 +299,6 @@ func (r *Registry) cloudflareEdgeCertificates(ctx context.Context) ([]any, error
 		}
 	}
 	return found, nil
-}
-
-func (r *Registry) cloudflareCertificatePacks(ctx context.Context, zoneID, ref string) ([]cfapi.TLSCertificatesAndHostnamesCertificatePack, error) {
-	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
-	return cloudflarePages[cfapi.TLSCertificatesAndHostnamesCertificatePack]("certificate pack", cloudflareAccountPerPage, func(page int) (vendorReply, error) {
-		return client.CertificatePacksListCertificatePacksWithResponse(ctx, zoneID, &cfapi.CertificatePacksListCertificatePacksParams{Page: new(float32(page)), PerPage: new(float32(cloudflareAccountPerPage)), Status: new(cfapi.CertificatePacksListCertificatePacksParamsStatusAll)})
-	})
 }
 
 // cloudflareOptional decodes a result that may be absent or null, which reads
