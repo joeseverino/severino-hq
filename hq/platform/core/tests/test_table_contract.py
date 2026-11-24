@@ -1,6 +1,7 @@
 """A data table is declared (``tables.DataTable``), so its shape is in the HTML on first paint."""
 
 import re
+from datetime import date
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -528,21 +529,30 @@ class TableColumnTests(SimpleTestCase):
     def _ranks(self, *columns):
         return {column.label: column.drop for column in ranked(columns)}
 
-    def test_a_list_ranks_its_columns_optional_first_then_from_the_far_end(self):
+    def test_a_list_ranks_its_columns_optional_first_then_from_the_far_end_never_a_date(self):
         ranks = self._ranks(
             TableColumn("Name"),
             TableColumn("Who", css="optional-col"),
             TableColumn("Action"),
+            TableColumn("When", css="date-col"),
+            TableColumn("State", kind="status"),
             TableColumn("What", css="key-col"),
             TableColumn("Message"),
         )
-        self.assertEqual(ranks, {"Name": 0, "Who": 1, "Message": 2, "Action": 3, "What": 0})
+        self.assertEqual(
+            ranks, {"Name": 0, "Who": 1, "Message": 2, "State": 3, "Action": 4, "When": 0, "What": 0}
+        )
 
     def test_the_closing_figure_of_a_table_with_no_key_stays(self):
         figures = (TableColumn("Name"), TableColumn("Note"), TableColumn("Cost", kind="numeric"))
         self.assertEqual(self._ranks(*figures), {"Name": 0, "Note": 1, "Cost": 0})
         keyed = (TableColumn("Name"), TableColumn("State", css="key-col"), TableColumn("Cost", kind="numeric"))
         self.assertEqual(self._ranks(*keyed), {"Name": 0, "State": 0, "Cost": 1})
+
+    def test_a_column_of_moments_is_a_date_its_rows_keep(self):
+        rows = (Row((Cell("a"), Cell(moment=date(2026, 3, 1)), Cell("x"))), Row((Cell("b"), Cell(), Cell("y"))))
+        _, day, note = DataTable("Things", (TableColumn("Name"), TableColumn("Day"), TableColumn("Note")), rows).columns
+        self.assertEqual((day.css, day.drop, note.drop), ("date-col", 0, 1))
 
     def test_a_declared_rank_stands(self):
         ranks = self._ranks(TableColumn("Name"), TableColumn("Note", drop=2), TableColumn("When", drop=1))

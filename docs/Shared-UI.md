@@ -509,8 +509,13 @@ one of its entries is, so a row with nothing gone opens to its controls alone an
 **A narrow box keeps its rows under their headings.** Below 36rem of its region (the
 `table-region` container query in tables.css) every column a row can spare has left for the row's
 open line, and what stands is the naming column, each `key-col` (or the closing figure), a row's
-state (its pills, or any column under a heading of kind `status` that declares no rank), a field
-it fills in and its controls, each under its heading. A heading of kind `status` that declares a
+state (its pills, a date, or any column under a heading of kind `status` that declares no rank
+in a table that ranks its others) and its controls, each under its heading. A column whose rows
+each say a moment is a date (`date-col`, which `DataTable` writes), never ranked to leave unless
+declared. A column of a row's choices (a field it fills in in each row, or the words standing
+where one cannot be, as the agent rules draw a column per agent) stands each choice on a line of
+its own beneath the row's name, named by its column (`data-field`), so the row keeps every one
+however many columns there are. A heading of kind `status` that declares a
 rank is one of a row's secondary checks: it leaves at that rank, whatever its cells hold, and no
 later than the table's last ranked column, so a row's own state is declared with no rank and its
 checks with one. In a narrow box a pill is as wide as its words up to its column's share, wraps
@@ -527,7 +532,7 @@ wrapping only between whole controls. A row of icon controls (a star, the order 
 at its end on its first line. *Gates:* the survey's `tables` (each cell a row shows stands under
 its column's heading, and no row draws a column's label), `rows unruled` (a row's bottom edge is
 ruled, whichever cell draws it), `overlaps` (what two boxes draw never crosses) and `row state
-kept` (a key, a state or a field never leaves early).
+kept` (a key or a state never leaves early, and a field its row fills in is never hidden).
 
 **Opening a row moves no column.** An open row keeps its cells as they were, but for a clamp,
 which it releases in place, and, in a narrow box, its `narrow-more` parts, which it shows in

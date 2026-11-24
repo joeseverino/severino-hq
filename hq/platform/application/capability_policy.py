@@ -275,10 +275,8 @@ def split_by_default(groups: tuple[Group, ...]) -> tuple[tuple[Group, ...], tupl
 def table(label: str, columns: tuple[Column, ...], groups: tuple[Group, ...], *, settable: bool) -> tables.DataTable:
     """The rules as one table, a group per resource, headed once since the
     columns are the same for every resource. A column per agent, so a rule is
-    read and changed where it sits, each a setting a row's open line cannot
-    copy, so a narrow box keeps only the action and its default
-    (``wide-only``). Each setting is a select where ``settable``, else its
-    words."""
+    read and changed where it sits. Each setting is a select where
+    ``settable``, else its words."""
 
     def action(row: Row) -> tables.Cell:
         does = tables.StatusMark(row.effect_label, tone=row.effect_tone, pill=False)
@@ -295,7 +293,7 @@ def table(label: str, columns: tuple[Column, ...], groups: tuple[Group, ...], *,
     heads = (
         tables.TableColumn("Action"),
         tables.TableColumn("Default", css="key-col"),
-        *(tables.TableColumn(each.label, kind="control", css="wide-only", title=each.detail) for each in columns),
+        *(tables.TableColumn(each.label, kind="control", title=each.detail) for each in columns),
     )
     rows = (
         tables.Group(

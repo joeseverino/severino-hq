@@ -204,7 +204,10 @@ def _headings(table: DataTable) -> list[tuple[dict[str, Any], CellFacts]]:
                     "title": column.title,
                 },
                 CellFacts(
-                    classes=tuple(column.css.split()), kind=column_kind(column.kind, column.css), drop=column.drop
+                    classes=tuple(column.css.split()),
+                    kind=column_kind(column.kind, column.css),
+                    drop=column.drop,
+                    label=label,
                 ),
             )
         )

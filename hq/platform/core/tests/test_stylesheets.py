@@ -25,7 +25,7 @@ WRAPS = re.compile(r"white-space\s*:\s*(?:normal|pre-wrap|pre-line|break-spaces)
 BUTTON = re.compile(r"(?:\.btn\b|(?<![\w.#-])button\b)[^\s>+~,]*\)?\s*(?:,|$)")
 CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
 # A table's tracks after its row's tick-box: the one that names the rows, then the rest.
-TABLE_TRACKS = re.compile(r"grid-template-columns:\s*var\(--lead,\)\s*auto\s+repeat\((\d+),")
+TABLE_TRACKS = re.compile(r"grid-template-columns:\s*var\(--lead,\)\s*\[name\]\s*auto\s+repeat\((\d+),")
 # The push button's rule (page.css).
 PUSH_BUTTON = ".btn, :where(button:not([class]))"
 

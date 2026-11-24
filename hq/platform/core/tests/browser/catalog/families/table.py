@@ -1,5 +1,9 @@
 """The catalog's tables: a data table in each option and state its parts give it."""
 
+from datetime import date
+
+from django import forms
+
 from hq.platform.application.pages import PageAction
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, TableColumn
 from hq.platform.core import included_parts
@@ -198,6 +202,44 @@ def _crowded() -> DataTable:
     )
 
 
+def _choices() -> DataTable:
+    """A column of choices per agent, as the agent rules draw: a select in
+    each row of one, the words that stand where an agent holds no grant in
+    the other, beside a day each row keeps, a note it can spare and a row's
+    own control."""
+
+    form = forms.Form()
+    rows = []
+    for at, (name, day) in enumerate((("Edit an example record", 3), ("Stop an example container", 12)), 1):
+        form.fields[f"rule-{at}"] = forms.ChoiceField(
+            label=f"{name}, for example-agent",
+            choices=[("", "Default"), ("approve", "Ask me first"), ("deny", "Off")],
+            required=False,
+        )
+        rows.append(
+            Row(
+                (
+                    Cell(name),
+                    Cell("Ask me first", muted=True),
+                    Cell(moment=date(2026, 3, day)),
+                    Cell("A note a narrow box lets go to the row's open line."),
+                    Cell(field=form[f"rule-{at}"]),
+                    Cell("Not granted", muted=True),
+                ),
+                actions=(PageAction("Open", f"/example/{at}/"),) if at == 1 else (),
+            )
+        )
+    columns = (
+        TableColumn("Action"),
+        TableColumn("Default", css="key-col"),
+        TableColumn("Changed"),
+        TableColumn("Note"),
+        TableColumn("example-agent", kind="control"),
+        TableColumn("example-reader", kind="control"),
+    )
+    return DataTable("Example rules", columns, tuple(rows))
+
+
 def _blank_column() -> DataTable:
     def ran() -> Cell:
         return Cell(piece=Piece(included_parts.DOTS, {"dots": runs()}, words=""))
@@ -327,6 +369,10 @@ ENTRIES = {
     # certificate's name) beside a long host name and a sentence: each short
     # one is whole while a long one or the sentence still has room to give.
     "table/crowded": Example(_sectioned(services="Example services"), lambda: {"services": _crowded()}),
+    # A column of choices per agent: in a narrow box each row's choices stand
+    # each on a line of its own beneath its name, named by its column, and
+    # its day stands while its note leaves.
+    "table/choices": Example(_sectioned(rules="Example rules"), lambda: {"rules": _choices()}),
     # A column of dashes beside a column of marks with no words and a column
     # of short words: the server marks the dashes' column blank and it is not
     # drawn, the marks are, and no short word is split however its column's

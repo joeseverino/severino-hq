@@ -55,7 +55,7 @@ class JobListView(ListPageMixin, TemplateView):
         TableColumn(
             "State", css="key-col", kind="status", cell=lambda row: Cell(row["state_label"], tone=str(row["tone"]))
         ),
-        TableColumn("Started", css="date-col", cell=lambda row: Cell(moment=moment(row["created_at"]))),
+        TableColumn("Started", cell=lambda row: Cell(moment=moment(row["created_at"]))),
         TableColumn("Duration", kind="numeric", cell=lambda row: Cell(_ran_for(row["duration_seconds"]))),
         TableColumn("Result", kind="prose", cell=lambda row: Cell(row["headline"] or "")),
         TableColumn("Requested by", kind="prose", cell=lambda row: Cell(row["by"], cut=bool(row["by"]))),

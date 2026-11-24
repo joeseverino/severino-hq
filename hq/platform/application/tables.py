@@ -96,8 +96,8 @@ def ranked(columns: tuple[TableColumn, ...]) -> tuple[TableColumn, ...]:
     Ranks a list declares stand as declared. Otherwise they follow one rule:
     ``optional-col`` columns first, then the rest, each from the far end; never
     the column that names the row, a key column, a column of the row's
-    controls, which stand beneath its words in a narrow box instead, or the
-    closing figure of a table that marks no key.
+    controls, which stand beneath its words in a narrow box instead, a date
+    (``date-col``), or the closing figure of a table that marks no key.
     """
 
     if columns and columns[0].drop:
@@ -511,7 +511,7 @@ class DataTable:
         # A column past its grid's last track would be drawn over that one.
         if (drawn := len(self.columns) + self.has_actions) > TRACKS:
             raise ValueError(f"{self.label!r} draws {drawn} columns; a table holds {TRACKS}, its controls among them.")
-        object.__setattr__(self, "columns", ranked(self.columns))
+        object.__setattr__(self, "columns", ranked(self._dated()))
         bound = REGION.bind(self.label, **self.region)
         bound.apply_defaults()
         object.__setattr__(self, "region", {name: value for name, value in bound.arguments.items() if name != "label"})
@@ -527,6 +527,23 @@ class DataTable:
         """Its groups, or its rows as one group with no heading."""
 
         return self.groups or (Group("", self.rows),)
+
+    def _dated(self) -> tuple[TableColumn, ...]:
+        """Its columns, each whose rows each say a moment or nothing marked a
+        date (``date-col``), which a row keeps as it keeps its state."""
+
+        rows = [row for group in self.bodies for row in group.rows if not row.across]
+
+        def dated(at: int) -> bool:
+            cells = [row.cells[at] for row in rows if at < len(row.cells)]
+            return any(cell.moment for cell in cells) and all(cell.moment or cell.says_nothing for cell in cells)
+
+        return tuple(
+            column
+            if "date-col" in column.css.split() or not dated(at)
+            else replace(column, css=f"{column.css} date-col".strip())
+            for at, column in enumerate(self.columns)
+        )
 
     @property
     def has_actions(self) -> bool:

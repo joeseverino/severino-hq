@@ -38,7 +38,7 @@ class ExpenseListView(ListPageMixin, TemplateView):
             "vendor",
             cell=lambda row: Cell.of(entity_link("expense", row["id"], label=row["vendor"]), name=True),
         ),
-        TableColumn("Date", "date", css="date-col", cell=lambda row: Cell(moment=stamp_day(row["date"]))),
+        TableColumn("Date", "date", cell=lambda row: Cell(moment=stamp_day(row["date"]))),
         TableColumn("Item", "item", cell=lambda row: Cell(row["item"] or "")),
         TableColumn("Category", "category", cell=lambda row: Cell(row["category_label"])),
         TableColumn("Cost", "total_cost", css="key-col", cell=lambda row: Cell(amount=row["total_cost"])),

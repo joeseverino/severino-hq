@@ -604,8 +604,11 @@ STATE_LEFT = (
     const pills = [...cell.querySelectorAll('.pill')];
     const stated = pills.length && cell.dataset.kind !== 'status' && pills.map((pill) => pill.textContent).join('').replace(/\\s+/g, '') === cell.textContent.replace(/\\s+/g, '');
     const spared = [...cell.parentElement.children].some((other) => other.matches('[data-drop]') && other.checkVisibility());
-    const held = cell.querySelector('select, textarea, input:not([type="hidden"])') || (stated && spared ? pills[0] : null);
-    if (held) found.push(`${describe(cell)} "${(cell.dataset.label || '').slice(0, 30)}" leaves with its column, holding ${describe(held)}`);
+    if (stated && spared) found.push(`${describe(cell)} leaves with its column, holding ${describe(pills[0])}`);
+  }
+  // A field a row fills in stands wherever its row does, at every width.
+  for (const field of document.querySelectorAll('main table.data-table > tbody > tr:not(.row-detail) > td :is(select, textarea, input:not([type="hidden"]))')) {
+    if (field.closest('tr').checkVisibility() && !field.checkVisibility()) found.push(`${describe(field.closest('td'))} "${(field.closest('td').dataset.label || '').slice(0, 30)}" hides ${describe(field)}, which its row fills in`);
   }
   for (const head of document.querySelectorAll('main table.data-table > thead > tr:last-child')) {
     if (!head.closest('table').checkVisibility()) continue;

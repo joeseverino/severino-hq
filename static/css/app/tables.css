@@ -46,8 +46,8 @@
   /* Whether its box is narrow enough that a held value wraps (below), its own and never a table's around it. */
   --held-wraps: 0;
   --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-wide, 0) + 1) - 2 * var(--cell-pad));
-  /* The column that names the rows is `auto`, the one track the room left past every column's values goes to; every other is `fit-content(100%)`, which grows as `auto` does and takes none of that room. A row's tick-box leads (`--lead`). Sixteen tracks hold any table's columns (`table_layout.TRACKS`), and a track no cell stands in is no width. */
-  display: grid; grid-template-columns: var(--lead,) auto repeat(15, fit-content(100%));
+  /* The column that names the rows is `auto`, the one track the room left past every column's values goes to; every other is `fit-content(100%)`, which grows as `auto` does and takes none of that room. A row's tick-box leads (`--lead`), and what stands beneath a row's name starts at `name`. Sixteen tracks hold any table's columns (`table_layout.TRACKS`), and a track no cell stands in is no width. */
+  display: grid; grid-template-columns: var(--lead,) [name] auto repeat(15, fit-content(100%));
   inline-size: 100%;
   & > :is(thead, tbody, tfoot) { display: contents; }
   & > * > tr { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; }
@@ -360,6 +360,16 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   .data-table[data-wide-columns="7"] { --gone-wide: 7; }
   .data-table[data-wide-columns="8"] { --gone-wide: 8; }
   .data-table[data-wide-columns="9"] { --gone-wide: 9; }
+  /* A field a row fills in (`data-field`, table_layout) stands on a line of its own beneath the row's name, named by its column, so a table of a column per choice stands whole; its heading's track holds nothing. */
+  .data-table > thead > tr > [data-field] { display: none; }
+  .data-table > tbody > tr:has(> [data-field]) {
+    & > * { border-bottom-width: 0; }
+    & > :not([data-field]) { grid-row: 1; }
+    & > [data-field] { grid-column: name / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); }
+    & > td[data-field] > * { inline-size: auto; min-inline-size: auto; max-inline-size: 100%; }
+    & > [data-field]::before { content: attr(data-label) / ""; color: var(--muted); }
+    & > [data-field]:not(:has(~ [data-field])) { border-bottom-width: 1px; }
+  }
   .data-table > tbody > tr:has(> [data-kind] .narrow-more) .row-expand { display: grid; }
   .data-table > tbody > tr.is-expanded [data-kind] .narrow-more { display: block; contain: inline-size; white-space: normal; }
   /* A value its clamp holds here (`cell-clamp`, cuts.css) opens its row, which releases it in place. The toggle shows whether or not the value overran its clamp, since no CSS every engine has can tell. */
@@ -379,7 +389,16 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
       grid-template-rows: repeat(4, auto);
       & > * { grid-row: 1 / -2; border-bottom-width: 0; }
       & > .select-column { grid-row: 1 / -1; border-bottom-width: 1px; }
-      & > [data-kind="control"]:not(.select-column) { --control-rise: 0px; grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; display: flex; flex-wrap: wrap; align-content: start; gap: var(--space-3) var(--space-4); & > * + * { margin-inline-start: 0; } }
+      & > [data-kind="control"]:not(.select-column, [data-field]) { --control-rise: 0px; grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; display: flex; flex-wrap: wrap; align-content: start; gap: var(--space-3) var(--space-4); & > * + * { margin-inline-start: 0; } }
+      /* Where a row's fields stand apart (above), they stand between its words and its controls. */
+      @container table-region (width < 36rem) {
+        &:has(> [data-field]) {
+          grid-template-rows: none;
+          & > :not([data-field]) { grid-row: 1; }
+          & > [data-field] { grid-row: auto; border-bottom-width: 0; }
+          & > [data-kind="control"]:not(.select-column, [data-field]) { grid-row: auto; order: 1; }
+        }
+      }
     }
   }
 }
