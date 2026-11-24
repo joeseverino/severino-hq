@@ -39,7 +39,7 @@ after it is seeded and before a page is saved, through the capabilities and
 controller reports HQ's own pages use. It:
 
 - adopts the commit a later Refresh reads;
-- approves the agent's held requests except its DNS change, and finishes the runs they ask for;
+- declines the agent's held requests except its DNS change;
 - lets the worker finish what waits, and runs again each playbook whose newest
   run did not finish;
 - has the controller's next sweep find the machine restarted, room on its
