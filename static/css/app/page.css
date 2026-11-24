@@ -473,6 +473,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   max-height: calc(100dvh - var(--site-header-height) - 12px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  anchor-name: --primary-nav;
 }
 .primary-nav:popover-open > a,
 .primary-nav:popover-open .nav-group-button {
@@ -481,24 +482,24 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
   font-size: var(--text-md);
 }
 .primary-nav:popover-open .nav-group-button { display: flex; inline-size: 100%; }
-/* A section's own links fly out beside the list, level with its row: a
-   popover is drawn over the page, never in the list's flow. The list is
-   anchored to the right edge, so the room is to its left; a screen with
-   none there takes them below the row. They hang from the row down or up
-   from it, on the side with more height, and a section taller than that
-   side is held to it and scrolls, so every link of a long section low on a
-   short screen can be reached: the pattern of the spec's own example for
-   `position-try-order`. */
+/* A section opened in the list opens in place. A popover is drawn in the
+   top layer, never in the list's flow, so the list gives way to it: the
+   other rows go, the section's own row stays at the top to close it, and
+   its links run on beneath at the list's width, one box with it, scrolling
+   where the screen runs out. */
+.primary-nav:popover-open:has(.nav-group-panel:popover-open) > :not(:has(> .nav-group-panel:popover-open)) { display: none; }
+.primary-nav:popover-open:has(.nav-group-panel:popover-open) { border-end-start-radius: 0; border-end-end-radius: 0; }
 .primary-nav:popover-open .nav-group-panel {
-  position-area: inline-start span-block-end;
-  position-try-fallbacks: --nav-panel-down-scrolling, inline-start span-block-start, --nav-panel-up-scrolling, block-end span-inline-start;
-  position-try-order: most-block-size;
+  position-anchor: --primary-nav;
+  position-area: block-end;
+  inline-size: anchor-size(inline);
+  max-block-size: 100%;
+  margin: -1px 0 0;
+  border-block-start: 0;
+  border-start-start-radius: 0;
+  border-start-end-radius: 0;
   overflow-y: auto;
-  margin: 0 var(--space-3) 0 0;
-  min-width: 168px;
 }
-@position-try --nav-panel-down-scrolling { position-area: inline-start span-block-end; max-block-size: 100%; }
-@position-try --nav-panel-up-scrolling { position-area: inline-start span-block-start; max-block-size: 100%; }
 .primary-nav:popover-open .nav-group-panel a {
   min-height: 44px;
   display: flex;

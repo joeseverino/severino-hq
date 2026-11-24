@@ -734,6 +734,10 @@ PARTS = (
         person's control shows their name beside the mark at any width whose bar has room for it, cut
         past four controls, and only the mark where there is none.
 
+        **A section opens in place.** On the bar, a section's links hang beneath its button. In the
+        toggle's menu, the menu gives way to the section: its row stays at the top to close it, and its
+        links run on beneath at the menu's width, one box with it, never a panel beside the menu.
+
         **The user menu says whose session it is first.** It shows the person's picture, kept by HQ from
         sign-on and never loaded from the provider by a page. Then come their name, what the account may
         do, and how long ago they signed in, in hours or days. Then what can be set: the two switches
