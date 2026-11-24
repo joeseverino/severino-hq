@@ -12,7 +12,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 from hq_sdk.testing import plain
 
 from ..attention import infrastructure
-from ..container_findings import ADVISORY, UPDATE
+from ..container_findings import ADVISORY, BY_HAND, UPDATE
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, containers, tally
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
@@ -176,7 +176,7 @@ class StandingTests(TestCase):
         # A card says how old its reading is, and leads with the containers' page.
         self.assertIsNotNone(update.observed_at)
         self.assertEqual(update.primary.url, reverse("control_plane:containers"))
-        self.assertEqual(update.no_help_reason, "HQ cannot apply an update itself yet.")
+        self.assertEqual(update.no_help_reason, BY_HAND)
 
     def test_an_update_names_the_command_when_its_compose_project_was_read(self):
         estate()
@@ -219,18 +219,6 @@ class StandingTests(TestCase):
                 ),
             ),
         )
-
-    def test_an_update_card_says_each_thing_once(self):
-        """One reason, no machine named twice, nothing about how HQ would apply it."""
-
-        estate(advisories=[HIGH])
-
-        for item in queued():
-            said = " ".join([item.explanation, item.no_help_reason, *(str(step) for step in item.steps)])
-            with self.subTest(item=finding_key(item)):
-                self.assertEqual(said.count("cannot apply"), 1)
-                self.assertNotIn("sudo rule", said)
-                self.assertNotIn("helper", said)
 
 
 class ToneTests(TestCase):

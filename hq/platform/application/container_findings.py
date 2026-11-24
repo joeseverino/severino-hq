@@ -52,8 +52,8 @@ OVERRIDES = (
     "docker-compose.override.yaml",
     "docker-compose.override.yml",
 )
-# Why an update is a person's to apply.
-BY_HAND = "HQ cannot apply an update itself yet."
+# Why an update is a person's to apply: an open pull request's is approved.
+BY_HAND = "No open pull request moves it."
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 ADVISORY = "container-image-advisory"
 UPDATE = "container-image-update"
@@ -280,8 +280,8 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
 
 
 def _by_hand(running: list[Container], plan: Plan) -> tuple[Run | Do, ...]:
-    """How the image is moved to the plan's target today, on its machine: one
-    step for each compose project that runs it."""
+    """How the image is moved to the plan's target on its machine where no
+    open pull request moves it: one step for each compose project that runs it."""
 
     standing = running[0].standing
     if standing.repository is not None:
