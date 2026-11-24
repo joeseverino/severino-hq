@@ -11,9 +11,12 @@ from hq.domains.content.content_sync import (
 )
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
+from hq.platform.application.host_work import NO_CONTENT_INDEX
 from hq.platform.application.http_read import USER_AGENT
 from hq.platform.application.labels import adding
 from hq.platform.application.markup_testing import elements, links, select, text
+from hq.platform.application.outbound_work import run_now
+from hq.platform.application.security import cli_principal
 from hq.platform.application.tests import network
 from hq.platform.core.testing import SignedInTestCase
 
@@ -216,6 +219,14 @@ class ContentSyncTests(TestCase):
         self.assertEqual(request.headers["CF-Access-Client-Id"], "client-id")
         self.assertEqual(request.headers["CF-Access-Client-Secret"], "client-secret")
         self.assertEqual(payload["count"], 2)
+
+    @override_settings(CONTENT_INDEX_URL="")
+    def test_a_host_with_no_content_index_syncs_nothing_and_succeeds(self):
+        with network.answering(lambda request: self.fail(f"fetched {request.url}")):
+            job = run_now("content.sync", principal=cli_principal())
+
+        self.assertEqual((job.state, job.note), (job.State.SUCCEEDED, NO_CONTENT_INDEX))
+        self.assertFalse(ContentItem.objects.exists())
 
 
 class ContentPageTests(SignedInTestCase):

@@ -63,8 +63,18 @@ def _clear_sessions(_progress: Any, *, subject: str, principal: Any) -> dict[str
     return {"deleted": before - Session.objects.count()}
 
 
-def _content_index(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
+# What a content sync says on a host that names no index.
+NO_CONTENT_INDEX = "No content index set."
+
+
+def _content_index(progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
+    """The site's content index, synced: a host that names none has no
+    content source, which is no failure (settings.CONTENT_INDEX_URL)."""
+
     del subject, principal
+    if not settings.CONTENT_INDEX_URL:
+        progress(NO_CONTENT_INDEX)
+        return {}
     try:
         return sync_content_index()
     except ContentSyncError as exc:
