@@ -21,11 +21,11 @@ from hq.domains.control_plane.provider_adapters.github import COMMIT, PULL_REQUE
 from .command_fields import Describe
 from .contracts import Effect
 from .integration_specs import CapabilitySpec
-from .record_errors import PolicyError, RecordNotFound
+from .record_errors import PolicyError, RecordNotFound, Sentence
 from .record_fields import RecordId
 from .security import Capability, PolicyDenied
 from .tone import Tone
-from .ui import ended
+from .ui import counted, ended
 lazy from .app_updates import AppUpdate, app_updates
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
@@ -89,8 +89,9 @@ def applier() -> OperationManifest:
             f"No adopted playbook applies an app update. On {PLAYBOOKS}, Refresh and adopt the one that does."
         )
     if len(found) > 1:
-        names = get_text_list(sorted(manifest.id for manifest in found), "and")
-        raise PolicyError(f"More than one adopted playbook applies an app update: {names}. Adopt only one.")
+        raise PolicyError(
+            f"{counted(len(found), 'adopted playbook applies', 'adopted playbooks apply')} an app update. Adopt only one."
+        )
     return found[0]
 
 
@@ -206,11 +207,13 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
         raise RecordNotFound("No open app update is that pull request.")
     if updates[0].head != command.head_sha:
         raise PolicyError("The update has a new head commit since you reviewed it. Review it again.")
-    if unapprovable := next(filter(None, map(_unapprovable, updates)), ""):
-        raise PolicyError(unapprovable)
+    for update in updates:
+        reason = _unapprovable(update)
+        if reason:
+            raise PolicyError(reason)
     hosts = resolved_hosts(manifest, manifest.hosts)
     if not hosts:
-        raise PolicyError(f"{manifest.id} names no machine to apply an update on.")
+        raise PolicyError("The playbook that applies an app update names no machine to apply it on.")
     reached(manifest, hosts)
     # The run's record as approved: the follow-up runs only while it still is.
     record_of(manifest, consented=consented)
@@ -298,7 +301,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
     )
 
 
-def _unapprovable(update: AppUpdate) -> str:
+def _unapprovable(update: AppUpdate) -> Sentence:
     """Why ``update`` cannot be approved as it stands, or ""."""
 
     if not update.readable:
@@ -391,7 +394,7 @@ def approval_of(update: AppUpdate) -> Approval:
         return Approval(standing, reason)
     hosts = resolved_hosts(manifest, manifest.hosts)
     where = f" on {get_text_list(list(hosts), 'and')}" if hosts else ""
-    return Approval(standing, said=f"Merges {update.label}, then applies it{where}.")
+    return Approval(standing, said=ended(f"Merges {update.label}, then applies it{where}"))
 
 
 def approve_remedy(update: AppUpdate) -> FindingRemedy:

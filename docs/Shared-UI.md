@@ -119,6 +119,8 @@ and those that hold across parts in [Design](Design.md).
 | `entity` | `label` |  |  | The words it is named by, in place of its own. |
 | `entity` | `mark` |  |  | The punctuation after the name, held to it, or a list's `forloop`. |
 | `fact` | `label`, first and unnamed | required |  | Its label. |
+| `fact` | `cut` |  |  | A line longer than its cell, the detail's first, cut at its end and read whole from its tip. |
+| `fact` | `cut_whole` |  |  | What the cut line's tip reads, where that is more than the line; the line by default. |
 | `fact` | `detail` |  |  | The words under the value, or a list of them, a line each. |
 | `fact` | `detail_tone` |  |  | A status tone the words under the value are colored by. |
 | `fact` | `detail_url` |  |  | The page the words under the value lead to. |
@@ -701,9 +703,9 @@ band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).
 A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
 or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure
 of what runs now) follows them in the detail, so a page's summary cards are a band of facts too,
-never a grid of its own. A line naming something longer than its cell (an image's path) is held to
-one line and cut at its end, `{% muted css="fact-cut" tip=value %}value{% endmuted %}` in its
-`<small>`, so its cell is no taller than its neighbors and its tip reads it whole. A fact drawn by hand (a page's own band) writes the part's classes, which
+never a grid of its own. A line naming something longer than its cell (an image's path) is its
+`cut`, the detail's first line, held to one line and cut at its end, so its cell is no taller than
+its neighbors, and its tip reads it whole (`cut_whole`, where that is more than the line). A fact drawn by hand (a page's own band) writes the part's classes, which
 no page may, and a figure set bold apart from the words that count it is refused by the
 `split-count` shape of `hand_drawn.SHAPES`.
 

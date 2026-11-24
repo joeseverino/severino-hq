@@ -109,9 +109,8 @@ FACTS_STATES = {
     # one line and read whole from its tip, over a line opening a tip of its
     # own in a cell four share, so each must be a target clear of the other.
     "detail-cut": Example(
-        '{% card element="div" %}{% facts layout="band" %}{% fact "Example version" icon="layers" %}<code>1.2.3</code>'
-        '{% detail %}<small>{% muted css="fact-cut" tip="registry.example.net/example-builds/example-app-server" %}'
-        "registry.example.net/example-builds/example-app-server{% endmuted %}</small>"
+        '{% card element="div" %}{% facts layout="band" %}{% fact "Example version" icon="layers" '
+        'cut="registry.example.net/example-builds/example-app-server" %}<code>1.2.3</code>{% detail %}'
         '<small>{% muted tip="sha256:0123abcd" %}Pinned by digest{% endmuted %}{% dot %}built an example week ago</small>'
         '{% endfact %}{% fact "Example update" icon="deploy" %}Up to date{% detail %}<small>No newer version.</small>'
         "<small>Last read an example hour ago</small>{% endfact %}"
