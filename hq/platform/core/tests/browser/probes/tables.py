@@ -539,7 +539,7 @@ EMPTY_PANELS = (
   return [...document.querySelectorAll('main table.data-table *')]
     .filter((el) => {
       const r = el.getBoundingClientRect();
-      return r.width >= 40 && r.height >= 16 && el.checkVisibility() && filled(getComputedStyle(el))
+      return r.width >= 40 && r.height >= 16 && el.checkVisibility({visibilityProperty: true}) && filled(getComputedStyle(el))
         && !el.matches(held) && !el.matches(table) && !el.querySelector(held) && !el.innerText.trim();
     })
     .map((el) => `${describe(el)} draws a ${Math.round(el.getBoundingClientRect().width)}px panel with nothing in it`);
@@ -551,7 +551,7 @@ EMPTY_PANELS = (
 # table, as one reads where a row ends: a rule along the row's bottom edge,
 # drawn by the row or by whichever of its cells stand on that edge. A row's
 # own open line joins it with no rule, and a group's heading row is set apart
-# by its fill.
+# by its fill. A closed fold's rows are hidden, so no reader reads them.
 ROWS_UNRULED = (
     "() => {"
     + DESCRIBE
@@ -560,7 +560,7 @@ ROWS_UNRULED = (
   const ruled = (el) => parseFloat(getComputedStyle(el).borderBottomWidth) >= 1;
   for (const table of document.querySelectorAll('main table.data-table')) {
     if (!table.checkVisibility()) continue;
-    const rows = [...table.querySelectorAll(':scope > tbody > tr')].filter((row) => row.checkVisibility());
+    const rows = [...table.querySelectorAll(':scope > tbody > tr')].filter((row) => row.checkVisibility({visibilityProperty: true}));
     rows.forEach((row, at) => {
       const next = rows[at + 1];
       if (!next || next.matches('.row-group') || next.matches('[data-row-detail]') && next.previousElementSibling === row) return;
@@ -807,8 +807,8 @@ WHOLE_PARTS_MOVED_BY_OPENING = (
 )
 
 # A row folded under its family (`data-folded`) is drawn only once its family
-# is opened (`data-open`), at every width: a rule that sets a row's display (a
-# row stacked in a narrow box) must leave a folded row folded. With no script
+# is opened (`data-open`), at every width: a rule that sets a row's look (a row
+# stacked in a narrow box) must leave a folded row hidden. With no script
 # every row shows, so it holds once script runs.
 FOLDED_ROWS_SHOWN = (
     "() => {"
@@ -816,7 +816,7 @@ FOLDED_ROWS_SHOWN = (
     + """
   if (!matchMedia('(scripting: enabled)').matches) return [];
   return [...document.querySelectorAll('.data-table tr[data-folded]:not([data-open])')]
-    .filter((row) => row.checkVisibility())
+    .filter((row) => row.checkVisibility({visibilityProperty: true}))
     .map((row) => `${describe(row)} is drawn while its family is folded: ${row.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
 }"""
 )

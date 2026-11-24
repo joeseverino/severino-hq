@@ -543,9 +543,10 @@ the server moves there, then an entry for each cell that holds something back, u
 name. So every column keeps its edges and every other row its height. *Gate:*
 `test_opening_a_row_moves_no_column_and_no_other_row`.
 
-A fold that opens adds rows, whose controls a column shared down the table would widen for every
-row. So a table of one column with no headings, whose rows each say one thing (the queue), may
-size each row's controls apart (`DataTable(controls_per_row=True)`): in a box of 48rem or more
+A closed fold's rows are hidden and no height, and still size their columns, so opening it moves
+no column (*Gate:* the layout gate's `opens_every_fold`). So their controls would widen a column
+shared down the table for every row, and a table of one column with no headings, whose rows each
+say one thing (the queue), may size each row's controls apart (`DataTable(controls_per_row=True)`): in a box of 48rem or more
 each row is a grid of its words and its own controls at its end, and opening a fold moves no other
 row's words or controls. *Gate:* `test_opening_a_fold_moves_no_other_rows_controls`.
 

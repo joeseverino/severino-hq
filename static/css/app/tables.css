@@ -461,9 +461,10 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table[data-line="flat"] .row-detail .row-columns { padding: 0; background: none; }
 .data-table[data-line="flat"] .row-detail .row-columns :is(dt, dd) { grid-column: 1 / -1; }
 
-/* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. */
+/* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. A closed one is hidden and no height, its open line with it, and still sizes its columns, so opening it moves no column: WebKit keeps a row's height from before its columns moved, and the row above would be drawn over the one opened. */
 @media (scripting: enabled) {
-  .data-table tr[data-folded]:not([data-open]) { display: none; }
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a closed fold's row is hidden whole, its cells kept from reaching past the table's end */
+  .data-table tr[data-folded]:not([data-open]), .data-table tr[data-folded]:not([data-open]) + .row-detail { visibility: hidden; block-size: 0; overflow: clip; }
   /* The last row showing ends the table, as the last row does. */
   .data-table > tbody:last-of-type > tr:has(~ tr[data-folded]):not(:has(~ tr:not([data-folded]:not([data-open])))) > * { border-bottom: 0; }
 }
