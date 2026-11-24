@@ -3971,6 +3971,12 @@
       "example": "Widget creation fails in Safari on OS X 10.8",
       "type": "string"
      },
+     "body": {
+      "description": "Contents of the issue",
+      "example": "It looks like the new widget form is broken on Safari. When I try and create the widget, Safari crashes. This is reproducible on 10.8, but not 10.9. Maybe a browser bug?",
+      "type": "string",
+      "nullable": true
+     },
      "pull_request": {
       "type": "object",
       "properties": {

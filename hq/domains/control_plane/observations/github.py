@@ -183,6 +183,14 @@ class RepositoryRecord(ObservationRecord):
     # updates: empty for any other, or where the Compose part was refused.
     compose: list[str] = Field(default=[], max_length=COMPOSE_KEPT)
     dashboard: str = ""
+    # ``{path, service, image}`` per service of those files as compose-go
+    # loads them at the default branch's head (``head``): what a merge pins.
+    compose_images: list[dict[str, Any]] = []
+    # ``{branch, marker, apps}`` per branch the Dependency Dashboard lists
+    # with a box to tick and no pull request, the marker's word (``unpend``,
+    # ``approve``, ``unschedule``, ``unlimit``) and the apps whose image its
+    # line names.
+    held_branches: list[dict[str, Any]] = []
     # What GitHub's change query answered when this record was read, hashed,
     # and when it was read in full: the plan HQ sends the controller.
     fingerprint: str = ""

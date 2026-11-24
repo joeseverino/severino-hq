@@ -4068,6 +4068,20 @@
             "default": "",
             "type": "string"
           },
+          "compose_images": {
+            "default": [],
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "held_branches": {
+            "default": [],
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "fingerprint": {
             "default": "",
             "type": "string"

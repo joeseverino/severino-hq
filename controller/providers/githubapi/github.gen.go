@@ -1669,6 +1669,8 @@ type Integration struct {
 
 // Issue Issues are a great way to keep track of tasks, enhancements, and bugs for your projects.
 type Issue struct {
+	// Body Contents of the issue
+	Body        string `json:"body,omitempty"`
 	HTMLURL     string `json:"html_url"`
 	PullRequest struct {
 		DiffURL  string `json:"diff_url"`

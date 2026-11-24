@@ -1724,6 +1724,7 @@ type GitHubRepositoryRecord struct {
 	Carried           bool                             `json:"carried,omitempty"`
 	Checks            map[string]any                   `json:"checks,omitempty"`
 	Compose           []string                         `json:"compose,omitempty"`
+	ComposeImages     []map[string]any                 `json:"compose_images,omitempty"`
 	ConnectionRef     string                           `json:"connection_ref"`
 	Dashboard         string                           `json:"dashboard,omitempty"`
 	DefaultBranch     string                           `json:"default_branch,omitempty"`
@@ -1732,6 +1733,7 @@ type GitHubRepositoryRecord struct {
 	Environments      []map[string]any                 `json:"environments,omitempty"`
 	Fingerprint       string                           `json:"fingerprint,omitempty"`
 	Head              map[string]any                   `json:"head,omitempty"`
+	HeldBranches      []map[string]any                 `json:"held_branches,omitempty"`
 	Images            []map[string]any                 `json:"images,omitempty"`
 	Pins              []map[string]any                 `json:"pins,omitempty"`
 	Private           bool                             `json:"private,omitempty"`
