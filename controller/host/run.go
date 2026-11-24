@@ -164,7 +164,7 @@ func (r *WebRunner) stop(ctx context.Context, exited <-chan error) error {
 	// before docker has answered.
 	go func() { _ = r.Docker(ctx, stopping...).Run() }()
 	select {
-	case <-exited: // stopped on purpose, so how it exited says nothing
+	case <-exited: //nolint:errcheck // stopped on purpose, so how it exited says nothing
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("HQ was still running %s after it was asked to stop", r.Stop)
