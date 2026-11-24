@@ -504,6 +504,39 @@ func (e DeploymentStatusState) Valid() bool {
 	}
 }
 
+// Defines values for DiffEntryStatus.
+const (
+	Added     DiffEntryStatus = "added"
+	Changed   DiffEntryStatus = "changed"
+	Copied    DiffEntryStatus = "copied"
+	Modified  DiffEntryStatus = "modified"
+	Removed   DiffEntryStatus = "removed"
+	Renamed   DiffEntryStatus = "renamed"
+	Unchanged DiffEntryStatus = "unchanged"
+)
+
+// Valid indicates whether the value is a known member of the DiffEntryStatus enum.
+func (e DiffEntryStatus) Valid() bool {
+	switch e {
+	case Added:
+		return true
+	case Changed:
+		return true
+	case Copied:
+		return true
+	case Modified:
+		return true
+	case Removed:
+		return true
+	case Renamed:
+		return true
+	case Unchanged:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for JobStepsStatus.
 const (
 	JobStepsStatusCompleted  JobStepsStatus = "completed"
@@ -1276,6 +1309,27 @@ type DeploymentStatus struct {
 //
 // Example: success
 type DeploymentStatusState string
+
+// DiffEntry Diff Entry
+type DiffEntry struct {
+	// Additions Example: 103
+	Additions int `json:"additions"`
+
+	// Deletions Example: 21
+	Deletions int `json:"deletions"`
+
+	// Filename Example: file1.txt
+	Filename string `json:"filename"`
+
+	// Patch Example: @@ -132,7 +132,7 @@ module Test @@ -1000,7 +1000,7 @@ module Test
+	Patch string `json:"patch,omitempty"`
+
+	// Status Example: added
+	Status DiffEntryStatus `json:"status"`
+}
+
+// DiffEntryStatus Example: added
+type DiffEntryStatus string
 
 // EmptyObject An object without any properties.
 type EmptyObject = map[string]interface{}

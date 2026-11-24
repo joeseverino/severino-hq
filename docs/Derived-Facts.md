@@ -781,8 +781,9 @@ is in [Deployment](Deployment.md#container-upgrades).
 
 The controller reads `github.repository` through HQ's GitHub App: one
 installation token per repository, read-only permissions only, minted for each
-read. A record is a repository's head and its checks, open pull requests,
-workflows waiting on an approval, and deployments with the steps each ran
+read. A record is a repository's head and its checks, open pull requests
+(for each Renovate opened, its head's checks and the files it changes, with
+the diff of each Compose file), workflows waiting on an approval, and deployments with the steps each ran
 before deploying whose names begin "Verify". It also holds branch rules,
 environments, runners,
 alert counts by severity, admission artifacts, who has access (collaborators,

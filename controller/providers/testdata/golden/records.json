@@ -403,7 +403,16 @@
             "names": [
               "example"
             ]
-          }
+          },
+          "files": [
+            {
+              "path": "example",
+              "status": "example",
+              "additions": 1,
+              "deletions": 1,
+              "patch": "example"
+            }
+          ]
         }
       ],
       "pull_request_checks": [

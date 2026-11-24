@@ -132,9 +132,12 @@ class RepositoryRecord(ObservationRecord):
     head: dict[str, Any] = {}
     checks: dict[str, Any] = {}
     # ``{number, title, url, author, draft, created_at, updated_at, head, branch,
-    # labels, checks}`` per open pull request, newest first; ``checks`` is the
-    # head's ``{state, total, failing, running, names}`` for a pull request
-    # Renovate opened (its branch under ``renovate/``) and None for any other.
+    # labels, checks, files}`` per open pull request, newest first. For a pull
+    # request Renovate opened (its branch under ``renovate/``), ``checks`` is
+    # the head's ``{state, total, failing, running, names}`` and ``files`` is
+    # ``{path, status, additions, deletions, patch?}`` per file it changes,
+    # ``patch`` only under ``compose/`` and only when short enough
+    # (``github_readings.go``); both are None for any other.
     pull_requests: list[dict[str, Any]] = []
     # The check names the newest pull request runs.
     pull_request_checks: list[str] = []

@@ -1413,6 +1413,42 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/pulls/{pull_number}/files": {
+   "get": {
+    "operationId": "pulls/list-files",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "pull_number",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response"
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/releases": {
    "get": {
     "operationId": "repos/list-releases",
@@ -2362,6 +2398,48 @@
      "state",
      "description",
      "target_url"
+    ]
+   },
+   "diff-entry": {
+    "title": "Diff Entry",
+    "description": "Diff Entry",
+    "type": "object",
+    "properties": {
+     "filename": {
+      "type": "string",
+      "example": "file1.txt"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "added",
+       "removed",
+       "modified",
+       "renamed",
+       "copied",
+       "changed",
+       "unchanged"
+      ],
+      "example": "added"
+     },
+     "additions": {
+      "type": "integer",
+      "example": 103
+     },
+     "deletions": {
+      "type": "integer",
+      "example": 21
+     },
+     "patch": {
+      "type": "string",
+      "example": "@@ -132,7 +132,7 @@ module Test @@ -1000,7 +1000,7 @@ module Test"
+     }
+    },
+    "required": [
+     "additions",
+     "deletions",
+     "filename",
+     "status"
     ]
    },
    "empty-object": {

@@ -35,6 +35,7 @@ output-options:
     - issues/create-comment
     - issues/list-comments
     - pulls/list
+    - pulls/list-files
     - rate-limit/get
     - repos/check-vulnerability-alerts
     - repos/get

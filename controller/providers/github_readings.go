@@ -125,14 +125,36 @@ type GitHubPull struct {
 	Head      string   `json:"head"`
 	Branch    string   `json:"branch"`
 	Labels    []string `json:"labels"`
-	// Checks is the head commit's checks, read for an update's pull request
-	// (its branch under githubUpdateBranch) and nil for any other.
-	Checks *GitHubChecks `json:"checks"`
+	// Checks is the head commit's checks, and Files what it changes, read for
+	// an update's pull request (its branch under githubUpdateBranch) and nil
+	// for any other.
+	Checks *GitHubChecks    `json:"checks"`
+	Files  []GitHubPullFile `json:"files"`
+}
+
+// GitHubPullFile is one file a pull request changes. Patch is its diff, kept
+// only for a path under githubPatchedPaths and at most githubPatchBytes long;
+// GitHub itself leaves out the patch of a diff too large to show.
+type GitHubPullFile struct {
+	Path      string `json:"path"`
+	Status    string `json:"status"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Patch     string `json:"patch,omitempty"`
 }
 
 // githubUpdateBranch is the prefix of the branches Renovate opens its pull
 // requests from.
 const githubUpdateBranch = "renovate/"
+
+// What an update's files read keeps: one page of files, and the diff of a
+// Compose file only, each bounded, so a large update cannot grow the record
+// past what a page shows.
+const (
+	githubPullFilesPage = 100
+	githubPatchedPaths  = "compose/"
+	githubPatchBytes    = 16 << 10
+)
 
 type GitHubRun struct {
 	ID         int    `json:"id"`
@@ -538,6 +560,11 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, g
 			return nil, err
 		}
 		pulls[i].Checks = &checks
+		files, err := repoGet[[]githubapi.DiffEntry](ctx, g, "/pulls/"+strconv.Itoa(pulls[i].Number)+"/files?per_page="+strconv.Itoa(githubPullFilesPage))
+		if err != nil {
+			return nil, err
+		}
+		pulls[i].Files = pullFiles(files)
 	}
 	if len(pulls) == 0 || pulls[0].Head == "" {
 		return []string{}, nil
@@ -547,6 +574,18 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, g
 	}
 	checks, err := g.checks(ctx, pulls[0].Head, githubs)
 	return checks.Names, err
+}
+
+func pullFiles(entries []githubapi.DiffEntry) []GitHubPullFile {
+	found := []GitHubPullFile{}
+	for _, entry := range entries {
+		file := GitHubPullFile{Path: entry.Filename, Status: string(entry.Status), Additions: entry.Additions, Deletions: entry.Deletions}
+		if strings.HasPrefix(entry.Filename, githubPatchedPaths) && len(entry.Patch) <= githubPatchBytes {
+			file.Patch = entry.Patch
+		}
+		found = append(found, file)
+	}
+	return found
 }
 
 func githubRunOf(run githubapi.WorkflowRun) GitHubRun {
