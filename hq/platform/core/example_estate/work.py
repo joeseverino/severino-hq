@@ -201,15 +201,16 @@ def repositories():
 
 
 # The projects the estate runs, starred on GitHub to follow their releases:
-# image, what it is, its language, its stars, and how long ago it was starred.
+# image, what it is, its language, its stars, and how long ago it was
+# starred; newest first, as GitHub lists an account's stars.
 STARRED = (
+    ("home-automation", "Home automation server images, rebuilt weekly.", "Shell", 410, 260),
+    ("forgejo", "A self-hosted lightweight software forge.", "Go", 1_900, 290),
     ("immich", "Self-hosted photo and video management.", "TypeScript", 58_400, 300),
     ("jellyfin", "The free software media system.", "C#", 39_200, 330),
-    ("forgejo", "A self-hosted lightweight software forge.", "Go", 1_900, 290),
-    ("home-automation", "Home automation server images, rebuilt weekly.", "Shell", 410, 260),
     ("adguard", "Network-wide ads and trackers blocking DNS server.", "Go", 27_600, 380),
-    ("nginx-proxy-manager", "Expose your services easily and securely.", "TypeScript", 25_100, 380),
-    ("portainer", "Making Docker and Kubernetes management easy.", "TypeScript", 32_300, 380),
+    ("nginx-proxy-manager", "Expose your services easily and securely.", "TypeScript", 25_100, 395),
+    ("portainer", "Making Docker and Kubernetes management easy.", "TypeScript", 32_300, 410),
 )
 
 

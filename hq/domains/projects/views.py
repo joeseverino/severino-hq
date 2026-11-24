@@ -390,7 +390,7 @@ class WatchingView(PageMixin, TemplateView):
             )
         context["profile"] = profile(self.login)
         if context["profile"]:
-            context["starred"] = DataTable.of("Starred", _STARRED_COLUMNS, context["profile"]["watched"])
+            context["starred"] = DataTable.of("Newest starred", _STARRED_COLUMNS, context["profile"]["watched"])
         context["app_repositories"] = self.app_repositories
         # Why the account is yours, on hover beside its name: the sign-in
         # names it, and the App installed on it says so from GitHub's side.
