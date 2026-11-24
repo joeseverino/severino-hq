@@ -273,9 +273,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     ),
     DomainDescriptor(
         id="hq.posture",
-        label="Repo checks",
+        label="Repo rules",
         description="Each repository's settings, checked against the standard HQ holds them to.",
-        navigation=(NavigationItem("Repo checks", "posture", "", 103, "Projects"),),
+        navigation=(NavigationItem("Repo rules", "posture", "", 103, "Projects"),),
     ),
     DomainDescriptor(
         id="hq.docs",

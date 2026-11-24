@@ -159,7 +159,7 @@ Store it as a Login item:
 
 ## GitHub App
 
-Repo checks on your repositories, and HQ's deploys waiting for your approval.
+Repo rules on your repositories, and HQ's deploys waiting for your approval.
 
 A GitHub App on your account; mise run wire-github-app records its ID and stores its key. [Setup page](https://github.com/settings/apps/new)
 

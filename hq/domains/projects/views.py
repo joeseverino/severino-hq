@@ -516,7 +516,7 @@ class PostureView(PageMixin, TemplateView):
     """
 
     template_name = "projects/posture.html"
-    page_title = "Repo checks"
+    page_title = "Repo rules"
     page_reads = ("github.repository",)
 
     @override
