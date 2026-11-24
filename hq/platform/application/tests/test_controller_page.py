@@ -41,7 +41,7 @@ class ControllerPageTests(TestCase):
         self.assertIsNone(page.swept_at)
         self.assertEqual(page.readings, ())
         self.assertEqual(page.queue, ())
-        self.assertEqual((page.failing_tone, page.overdue_tone, page.queue_tone), ("",) * 3)
+        self.assertEqual((page.overdue_tone, page.queue_tone), ("",) * 2)
 
     def test_late_sweeps_are_serious(self):
         self.assertEqual(replace(controller_page(), overdue=True).overdue_tone, "serious")
@@ -68,7 +68,6 @@ class ControllerPageTests(TestCase):
         page = controller_page()
 
         self.assertEqual(next(reading.kind for reading in page.readings), "tailscale.device")
-        self.assertEqual((page.failing, page.failing_tone), (1, "attention"))
         results = {reading.kind: (reading.ok, reading.result) for reading in page.readings}
         self.assertEqual(results["adguard.rewrite"], (True, "Read"))
         self.assertEqual(results["npm.proxy_host"], (True, "Not connected"))

@@ -1,14 +1,16 @@
-"""What HQ can see: every registered reading kind, by the connection provider
-that takes it, and how current each is."""
+"""What HQ can see: every kind the controller reads, by the connection
+provider that takes it, and how current each is."""
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from ..labels import dotted
+from ..labels import dotted, human_label
 from ..projection import iso, read_once
 from ..tables import Cell, DataTable, Group, TableColumn
 from ..tone import Tone
@@ -87,6 +89,23 @@ class HqSight:
         return sum(row.state in (REFUSED, UNREADABLE) for row in self.rows)
 
     @property
+    def said(self) -> str:
+        """How current the readings are, in the one wording HQ's page and the Controller's say it."""
+
+        return (
+            dotted(
+                f"{self.stale} out of date" if self.stale else "",
+                f"{self.failing} could not be read" if self.failing else "",
+                f"{self.never} never read" if self.never else "",
+            )
+            or "All current"
+        )
+
+    @property
+    def tone(self) -> Tone:
+        return Tone.ATTENTION if self.stale or self.failing or self.never else Tone.GOOD
+
+    @property
     def table(self) -> DataTable:
         """Every reading kind under the provider that takes it."""
 
@@ -132,18 +151,30 @@ _SEES_COLUMNS = (
 
 
 def sight() -> HqSight:
-    """Every registered reading kind, by provider, as last read."""
+    """Every kind the controller reads, by provider, as last read: what the
+    Controller page lists and HQ's page counts."""
 
     return read_once("hq_context.sight", _sight)
+
+
+def _read_kinds() -> Iterator[tuple[str, str, str, tuple[str, ...], str]]:
+    """Each kind the sweep reads, as (kind, label, provider, permissions,
+    source): every reading, then every resource kind whose records it reads."""
+
+    for kind, spec in OBSERVATIONS.items():
+        yield kind, spec.label, spec.provider, tuple(spec.requires), "reading"
+    for kind, spec in PROVIDERS.items():
+        if spec.connection_providers and not spec.unobserved_reason:
+            yield kind, spec.label or human_label(kind), spec.connection_providers[0], (), "resource"
 
 
 def _sight() -> HqSight:
     stored = {kind: rows[0] for kind, rows in stored_snapshots().items() if rows}
     reported = {CONNECTION_LABELS.get(row.provider) for row in connection_rows()}
     groups: dict[str, list[Sees]] = {}
-    for kind, spec in OBSERVATIONS.items():
-        row = _sees(kind, spec, stored.get(kind))
-        groups.setdefault(CONNECTION_LABELS.get(spec.provider, KEYLESS), []).append(row)
+    for kind, label, provider, permissions, source in _read_kinds():
+        row = _sees(kind, label, provider, sight_of(kind, label, source, stored.get(kind), permissions=permissions))
+        groups.setdefault(CONNECTION_LABELS.get(provider, KEYLESS), []).append(row)
     # A provider that takes a connection and has none is said in one line; a
     # reading that needs no connection is always listed, read or not, and so is
     # every reading of a connection the controller has reported, read yet or not.
@@ -158,12 +189,11 @@ def _sight() -> HqSight:
     )
 
 
-def _sees(kind: str, spec: Any, row: Any) -> Sees:
-    seen = sight_of(kind, spec.label, "reading", row, permissions=tuple(spec.requires))
+def _sees(kind: str, label: str, provider: str, seen: Any) -> Sees:
     return Sees(
         kind=kind,
-        label=spec.label,
-        provider=spec.provider,
+        label=label,
+        provider=provider,
         state=seen.state,
         state_label=seen.state_label,
         records=seen.records,
@@ -177,18 +207,8 @@ def _sees(kind: str, spec: Any, row: Any) -> Sees:
 
 
 def sight_tile(seen: HqSight) -> Tile:
-    detail = dotted(
-        f"{seen.stale} out of date" if seen.stale else "",
-        f"{seen.failing} could not be read" if seen.failing else "",
-        f"{seen.never} never read" if seen.never else "",
-    )
     return Tile(
-        "Sees",
-        counted(seen.read, "reading"),
-        detail or "All current",
-        reverse("control_plane:connections"),
-        Tone.ATTENTION if seen.stale or seen.failing or seen.never else Tone.GOOD,
-        "eye",
+        "Sees", counted(seen.read, "reading"), seen.said, reverse("control_plane:connections"), seen.tone, "eye"
     )
 
 
