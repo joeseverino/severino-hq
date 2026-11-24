@@ -285,6 +285,9 @@
    a control beside it (a button, a month's arrows) adds no height, and heads
    that share a row are one height and start their frames together. */
 .section > .section-head > :is(h2, h3, h4, h5, h6) { min-block-size: var(--control-size); align-content: center; }
+/* A control after the words beside the heading stands as far from them as a
+   row's controls stand apart. */
+.section-aside > * + :is(.btn, .ask) { margin-inline-start: var(--space-4); }
 .section > .section-body {
   --section-start: var(--section-inset, var(--space-8));
   --section-end: var(--space-8);
