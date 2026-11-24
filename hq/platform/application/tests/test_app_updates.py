@@ -8,6 +8,7 @@ from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..app_updates import app_updates
+from ..finding_steps import Do
 from .test_container_standard import runtime
 from .test_containers import HIGH, estate, inventory, named, queued
 from .test_github_estate import store
@@ -172,4 +173,9 @@ class OneStateTests(TestCase):
                 transaction.set_rollback(True)
                 act, state = page["container"]["act"], page["container"]["state"]
                 self.assertEqual([press.url for press in card.presses], [act.url.partition("?")[0]] if act else [])
-                self.assertEqual((card.explanation, card.no_help_reason), (state.words, state.reason))
+                # What holds it back is said once, as its one step.
+                told = [step.text for step in card.steps if isinstance(step, Do)]
+                self.assertEqual(
+                    (card.explanation, told, card.no_help_reason),
+                    (state.words, [state.reason] if state.reason else [], ""),
+                )

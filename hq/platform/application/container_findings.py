@@ -26,7 +26,6 @@ from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     CONTAINERS_CARD,
-    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -196,12 +195,10 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
         said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
         label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
         return {"primary": opens(label, page.url), "steps": _by_hand(running, plan), "evidence": evidence}
-    return {
-        "steps": (),
-        "evidence": evidence,
-        "remedies": (state.action.remedy,) if state.action else (),
-        "no_help_reason": state.reason,
-    }
+    if state.action is None:
+        # What holds it back is what to clear, so it is the one step, said once.
+        return {"steps": (Do(state.reason),), "evidence": evidence, "no_help_reason": state.reason}
+    return {"steps": (), "evidence": evidence, "remedies": (state.action.remedy,)}
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:
@@ -472,7 +469,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _images(UPDATE),
         gathered=True,
-        operator_action=f"Clear what holds it back. {THEN_CHECK_AGAIN}",
+        operator_action="Move it to the newer release.",
         no_help_reason=BY_HAND,
         card=CONTAINERS_CARD,
         bars={

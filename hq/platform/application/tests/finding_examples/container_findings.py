@@ -127,6 +127,16 @@ def update(*pulls, on: tuple[str, ...] | None = (BOX,), raises, scanned=(TARGET,
     return Example(given=given, raises=(*raises, KUMA))
 
 
+# What holds an update back where no adopted playbook applies it, as the approval refuses it.
+NO_PLAYBOOK = "No adopted playbook applies an app update. On Playbooks, Refresh and adopt the one that does."
+
+
+def held_by(why: str) -> Raised:
+    """The update, held back by ``why``, which is all it says to do."""
+
+    return Raised(title=MOVED, steps=(Do(why),))
+
+
 def facts(pulled, brings) -> tuple[tuple[str, str], ...]:
     return (("Container", "app"), ("Machine", BOX), *pulled, brings)
 
@@ -174,9 +184,12 @@ STATES = (
             ),
         ),
     ),
-    # No press where no playbook applies it, or where the one that does never runs where it runs.
-    update(pull(moves=[moved()]), on=None, raises=(MOVED,)),
-    update(pull(moves=[moved()]), on=(EDGE,), raises=(MOVED,)),
+    # No press where no playbook applies it, or where the one that does never runs where it runs:
+    # what holds it back is its one step.
+    update(pull(moves=[moved()]), on=None, raises=(held_by(NO_PLAYBOOK),)),
+    update(
+        pull(moves=[moved()]), on=(EDGE,), raises=(held_by(f"The playbook that applies it does not run on {BOX}."),)
+    ),
     # Merged on the default branch and not applied: one press applies it at that head.
     update(
         compose_images=[{"path": "compose/app/compose.yaml", "service": "app", "image": PINNED}],
@@ -189,7 +202,12 @@ STATES = (
         raises=(Raised(title=MOVED, presses=(OPEN_PR,)),),
     ),
     update(compose=["compose/app/compose.yaml"], raises=(Raised(title=MOVED, presses=(OPEN_PR,)),)),
-    update(compose=["compose/app/docker-compose.yml"], raises=(MOVED,)),
+    update(
+        compose=["compose/app/docker-compose.yml"],
+        raises=(
+            held_by(f"It holds compose/app/docker-compose.yml, and {BOX} runs it from /srv/apps/app/compose.yaml."),
+        ),
+    ),
 )
 
 

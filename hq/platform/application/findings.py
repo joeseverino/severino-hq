@@ -481,7 +481,9 @@ def _no_help_reason(finding: Finding) -> str:
     ):
         return ""
     found = _RULE_BY_NAME.get(finding.rule)
-    return finding.no_help_reason or (found.no_help_reason if found else "")
+    reason = finding.no_help_reason or (found.no_help_reason if found else "")
+    # A reason its step already says is said once, as the step.
+    return "" if any(isinstance(step, Do) and step.text == reason for step in finding.steps) else reason
 
 
 def _read_subject(finding: Finding, subject: TopologyNode | None) -> cadence.ControllerSweepCommand | None:
