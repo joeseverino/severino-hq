@@ -10,6 +10,7 @@ from hq.domains.control_plane.observations.adguard import CLIENT_KIND, DNS_KIND,
 from hq.platform.core.testing import READER, declare, operator
 from hq_sdk.testing import plain
 
+from ..entity_links import entity_link
 from ..facts import Subject, inventory_about
 from ..relationships import relationships_for
 from ..tailnet import TAILNET_KIND
@@ -110,7 +111,7 @@ class AdGuardJoinTests(TestCase):
         relation = OBSERVATIONS[CLIENT_KIND].relation_to(by_address=True)
         self.assertEqual(found.labels(relation), ("laptop",))
         (item,) = found.group(relation).items
-        self.assertEqual(item.source.label, ADGUARD)
+        self.assertEqual(item.source.label, entity_link("connection", ADGUARD).label)
 
     def test_a_declared_tailnet_device_shows_its_dns_client_identity(self):
         store(TAILNET_KIND, {"name": "laptop-1", "addresses": ["100.64.0.2"], "online": True})

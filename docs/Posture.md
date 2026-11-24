@@ -6,8 +6,8 @@ page, each with what it stops. Written by `manage.py posture_reference` from
 each check's declaration, a `standards.Check`; a test fails when this file
 falls behind.
 
-**Advanced HQ Posture** lists each unmet check of the standard in Needs you,
-with the step that meets it. The panel then reads **Advanced HQ Posture
+**Advanced HQ posture** lists each unmet check of the standard in Needs you,
+with the step that meets it. The panel then reads **Advanced HQ posture
 enabled**, with a lock.
 
 ## Turning it on

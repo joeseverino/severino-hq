@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from django.db import transaction
 from django.db.models import Max, Sum
 from django.utils import timezone
+from django.utils.text import capfirst
 
 from hq.domains.analytics.contracts import (
     BACKFILL_DAYS,
@@ -553,7 +554,7 @@ OVERVIEW_DIMENSIONS = (
 )
 
 
-def _with_share(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _with_share(rows: list[dict[str, Any]], dimension: str = "") -> list[dict[str, Any]]:
     """Each row as ``partials/_share_list.html`` draws it: its label, its
     figure and its size relative to the largest.
 
@@ -565,7 +566,8 @@ def _with_share(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     largest = max((row["pageviews"] for row in rows), default=0)
     return [
         {
-            "label": row["value"],
+            # Cloudflare names a device type in lowercase, beside browsers it names as their makers do.
+            "label": capfirst(row["value"]) if dimension == RumDaily.Dimension.DEVICE else row["value"],
             "figure": f"{row['pageviews']:,}",
             "share": round(row["pageviews"] * 100 / largest, 1) if largest else 0,
         }
@@ -619,7 +621,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
             {
                 "dimension": dimension,
                 "label": RumDaily.Dimension(dimension).label,
-                "rows": _with_share(breakdown(dimension, days=days, limit=limit)),
+                "rows": _with_share(breakdown(dimension, days=days, limit=limit), dimension),
             }
             for dimension in OVERVIEW_DIMENSIONS
         ],

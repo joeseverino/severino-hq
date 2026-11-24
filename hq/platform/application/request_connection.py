@@ -154,7 +154,7 @@ class Connection:
     @property
     def failing(self) -> tuple[CheckResult, ...]:
         """The checks not met that count against the request: a check of HQ's
-        standard is an open item, shown quietly, unless Advanced HQ Posture is on."""
+        standard is an open item, shown quietly, unless Advanced HQ posture is on."""
 
         return tuple(result for result in self.checks.unmet if result.enforced)
 

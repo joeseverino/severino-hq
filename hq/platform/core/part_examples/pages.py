@@ -105,7 +105,7 @@ def _palette():
             }
         ],
         "palette_count": 4,
-        "palette_total": 9,
+        "match_total": 9,
     }
 
 

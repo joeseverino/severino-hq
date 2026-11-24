@@ -108,7 +108,7 @@ IDENTITY_STATES = {
 
 
 # You, the link and HQ: over the tailnet with every check confirmed and
-# both ends leading to their machines, under Advanced HQ Posture.
+# both ends leading to their machines, under Advanced HQ posture.
 CONNECTION_PEERING = Example(
     context=lambda: {"connection": _connection(), "posture": _posture((True, True))},
 )

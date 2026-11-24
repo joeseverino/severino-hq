@@ -619,7 +619,6 @@ class SearchView(PageMixin, TemplateView):
             q=q,
             search_query=q,
             groups=groups,
-            total=total,
             result_sections=sections,
             # A way to each group of results, over them, once there are two.
             result_navigation=(
@@ -631,13 +630,13 @@ class SearchView(PageMixin, TemplateView):
                 else None
             ),
             discovery_sections=[] if palette_request else self._discovery_sections(discovery),
-            discovery_total=discovery_total,
             # The estate leads, above records and the audit log.
             palette_estate=[group for group in palette_groups if group["key"] == "estate"],
             palette_groups=[group for group in palette_groups if group["key"] != "estate"],
             palette_search_groups=palette_search_groups,
             palette_count=(sum(len(group["items"]) for group in palette_groups) + palette_search_count),
-            palette_total=discovery_total + total,
+            # Every match the page or the palette shows a part of, counted once.
+            match_total=discovery_total + total,
             palette_result_limit=self.palette_result_limit,
         )
         return ctx

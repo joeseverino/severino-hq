@@ -205,6 +205,16 @@ class ListRow:
             raise ValueError("A ListRow names its record once: by its title and url, or by its link.")
         if self.status and not self.badge:
             raise ValueError("ListRow status needs a badge: state is never carried by color alone.")
+        # A line that repeats what the row already says says nothing.
+        said = {self.title.casefold()}
+        if self.detail.casefold() in said:
+            object.__setattr__(self, "detail", "")
+        said.add(self.detail.casefold())
+        if (
+            not any(matched for _, matched in self.snippet)
+            and "".join(text for text, _ in self.snippet).casefold() in said
+        ):
+            object.__setattr__(self, "snippet", ())
 
 
 @display

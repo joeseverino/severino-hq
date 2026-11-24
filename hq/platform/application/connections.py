@@ -38,7 +38,7 @@ from .connection_lifecycle import Lifecycle, probed, standing
 from .connection_setup import guide_url
 from .contracts import Effect
 from .describe import Describe, listed
-from .entity_links import entity_link
+from .entity_links import entity_link, record_names
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
@@ -183,7 +183,9 @@ def _depends(reading: ConnectionReading) -> tuple[tuple[ConnectionLink, ...], tu
         folded.add(key)
         merged.append(ConnectionLink(link.label, link.url or home, resource_key=key))
     dependencies = tuple(
-        ConnectionLink(key, url, resource_key=key) for key, url in reading.resources if key not in folded
+        ConnectionLink(record_names().get(key, key), url, resource_key=key)
+        for key, url in reading.resources
+        if key not in folded
     )
     return tuple(merged), dependencies
 

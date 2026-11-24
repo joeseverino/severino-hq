@@ -312,10 +312,13 @@ def _declared_ability_nodes(group, nodes, principal) -> None:
 
 
 def _connection_node(group, instance, spec_actions, connection_url) -> TopologyNode:
+    link = entity_link("connection", instance.label)
     return TopologyNode(
         id=Kind.CONNECTION.of(f"{group.spec.name}:{instance.id}"),
         kind="connection",
         label=instance.label,
+        # Called by the service it reaches, as every other mention of it is.
+        name=link.label if link.label != instance.label else "",
         subtitle=CONNECTION_LABELS.get(instance.kind, group.spec.label),
         provider=instance.kind,
         connection_ref=instance.connection_ref,
@@ -325,11 +328,7 @@ def _connection_node(group, instance, spec_actions, connection_url) -> TopologyN
         detail=instance.detail,
         # The connection's row on the connections page, unless its
         # spec routes it to a page of its own.
-        url=(
-            entity_link("connection", instance.label).url
-            if connection_url == reverse("control_plane:connections")
-            else connection_url
-        ),
+        url=(link.url if connection_url == reverse("control_plane:connections") else connection_url),
         kind_key=group.spec.name,
         observed_at=iso(instance.observed_at) or "",
         actions=spec_actions,

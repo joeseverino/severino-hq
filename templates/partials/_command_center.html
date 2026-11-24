@@ -57,8 +57,8 @@ the fragment `group`. Scripts and tests find each piece by its
       {% endfor %}
       {% for group in palette_groups %}{% partial group %}{% endfor %}
     </div>
-    {% if palette_total > palette_count %}
-      {% muted element="p" css="command-center-more" %}Showing {{ palette_count }} of {{ palette_total|counted:"match" }}. Press Enter to search all of HQ.{% endmuted %}
+    {% if match_total > palette_count %}
+      {% muted element="p" css="command-center-more" %}Showing {{ palette_count }} of {{ match_total|counted:"match" }}. Press Enter to search all of HQ.{% endmuted %}
     {% endif %}
   {% elif q %}
     <div class="command-center-empty" data-command-center-empty>

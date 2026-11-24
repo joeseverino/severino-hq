@@ -262,17 +262,19 @@ def _live_connection_url(group, connection) -> str:
 def _live_connection_item(group, connection) -> DiscoveryItem:
     instance = connection.instance
     abilities = tuple(state.ability for state in connection.abilities)
+    named = entity_link("connection", instance.label).label
     return DiscoveryItem(
         kind="connection",
         name=instance.id,
-        label=instance.label,
+        label=named,
         # What kind of connection it is. Its address and its identifiers are
         # searched, and shown on its own page.
-        summary=group.spec.label if group.spec.label != instance.label else "",
+        summary=group.spec.label if group.spec.label != named else "",
         url=_live_connection_url(group, connection),
         destination_label="",
         badges=(instance.status_label,),
         search_terms=(
+            instance.label,
             group.spec.label,
             group.spec.summary,
             instance.kind,
