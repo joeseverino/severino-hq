@@ -1067,8 +1067,8 @@ every such folder.
 
 A layout defect fails once, however many classes, engines, widths and
 shares found it (`hq/platform/core/verdicts.py`). A subtest whose check finds
-something records each finding with where it was found (the engine, the
-class, the page, the width and the state) and the Part that draws what it
+something records each finding with where it was found (the engine and the
+system it drew on, the class, the page, the width and the state) and the Part that draws what it
 names: the Part the check measures, else the Part owning the first class the
 finding names. The run then fails once for each defect, a rule broken where
 one Part draws (or, where no Part does, findings alike but for their
@@ -1160,8 +1160,15 @@ run browser` leaves to CI: the catalog of shared parts, the example estate at
 a phone and a laptop, and the layout shifts only Chromium records. Every
 test it runs is also run in WebKit.
 
-CI splits each of the two into shares that run side by side, `i/n` in the
-browser job's matrix. A sweep marked `@sweep` runs in every share and reads
+An engine draws in its system's fonts, and macOS's monospace face is wider
+than Linux's, so a part can fit in CI's Linux legs and wrap in Safari.
+`browser:catalog` runs the catalog's layout tests in the engine
+`HQ_BROWSER_ENGINE` names, and CI runs it on a macOS runner in both engines,
+its findings joining the other legs' in Browser verdict. `mise run browser`
+leaves it out: on a Mac, `browser:webkit` already runs those tests.
+
+CI splits each engine's gate into shares that run side by side, `i/n` in
+the browser jobs' matrices. A sweep marked `@sweep` runs in every share and reads
 its share of the pages (`BrowserGate.mine`); any other test runs in the one
 share its id picks (`hq/platform/core/tests/browser/shards.py`). The shares
 together run the whole gate, which GateReferenceTests holds.
@@ -1184,7 +1191,7 @@ What the browser gates read from the environment:
 | `HQ_BROWSER_ENGINE` | development | the browser gates' engine: `webkit` by default, `chromium` or `firefox` |
 | `HQ_BROWSER_CHANNEL` | development | a Playwright browser channel for that engine |
 | `HQ_BROWSER_FACE` | development | `fallback` draws the browser gates with Inter withheld, in the stack's next face (`--fallback-face`) |
-| `HQ_BROWSER_SHARD` | CI's browser matrix | `i/n` runs one share of a browser gate; unset, the whole gate |
+| `HQ_BROWSER_SHARD` | CI's browser matrices | `i/n` runs one share of a browser gate; unset, the whole gate |
 
 #### Policy, fonts and stalls
 

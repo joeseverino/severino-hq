@@ -265,18 +265,20 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .link-chips .external-link::after { content: "\2197" / ""; color: var(--muted-2); font-size: var(--text-xs); }
 .link-chips .external-link:is(:hover, :focus-visible)::after { color: var(--accent-2); }
 /* A value and the one it leads to (partials/_change.html). A narrow line
-   breaks only between the two, the arrow going with the second. The parts
+   breaks only between the two, the arrow going with the second; where the
+   second does not fit beside its arrow, the arrow takes the line before it,
+   so a value breaks only where it is wider than its line alone. The parts
    share their first baseline, whatever face and size a page sets its chips in
    and whatever wraps after it; beside chips the arrow is set in their face. */
 .change { --change-gap: .35em; display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--change-gap); max-width: 100%; }
-.change-to { display: flex; align-items: baseline; column-gap: var(--change-gap); }
+.change-to { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--change-gap); }
 .change > *, .change-to > * { min-width: 0; }
 .change-arrow { flex: none; color: var(--muted-2); font-weight: 400; }
 .change:has(> code) .change-arrow { font-family: var(--font-mono); font-size: .88em; }
 /* Held in a cell's clamp (cuts.css), on its row or its open line, the value before it is laid in the clamp's own lines, whose count a flex box and its blocks would escape; what it changes to stays one box of one line, set apart from the words before it by the part's own gap, which ends the value's last line so a wrapped one starts flush. Opening the row keeps these boxes, so it moves no column. */
 .cell-clamp :is(.change, .change > :not(.change-to)) { display: inline; }
 .cell-clamp .change > :not(.change-to) { margin-inline-end: var(--change-gap); }
-.cell-clamp .change-to { display: inline-flex; vertical-align: top; max-inline-size: 100%; }
+.cell-clamp .change-to { display: inline-flex; flex-wrap: nowrap; vertical-align: top; max-inline-size: 100%; }
 /* A chip in a cell is a box of its own, which would leave a break after it, so its link lays chip and arrow out as one row: the chip gives way, the arrow stays. */
 td .external-link:has(> code:only-child) { display: inline-flex; align-items: baseline; max-width: 100%; }
 td .external-link:has(> code:only-child) > * { min-width: 0; }
@@ -403,6 +405,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .fact-panel-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); line-height: var(--target-min); }
 .fact-panel-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
 :is(.facts-band, .facts-list) .fact-value :is(code, kbd, samp, .token, .whole):is(:not(td *), [popover] *, dialog *) { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+/* Chromium fits a line without the padding a cloned chip draws again at the line's end, so the value keeps that padding's width (code's own, base.css) free at its end, and a chip's wrapped line stays inside its column in any face. */
+:is(.facts-band, .facts-list) .fact-value:has(code):is(:not(td *), [popover] *, dialog *) { padding-inline-end: var(--space-2); }
 /* A value holding a pill's link or a panel's button sets its lines a target tall (`--target-min`), so the area it is hit through (page.css) stays in its own line, clear of a link on the line above; the button is then as tall as its lines, never a control's height spilling onto the fact under it. */
 .facts-list .fact-value:has(.pill[href], .fact-open) { line-height: var(--target-min); }
 .facts-list .fact-open { min-height: 0; }

@@ -15,8 +15,8 @@ from django.utils.text import Truncator
 from hq.platform.application.payload_words import STEP, ChangeRow, path_words, value_words
 from hq.platform.application.ui import counted
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
+lazy from hq.platform.application import capabilities
 lazy from hq.platform.application.approvals import LAPSE, REQUEST
-lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.outbound_work import job_names
 lazy from hq.platform.application.reports import EXPORT
 lazy from hq.platform.application.security import MCP_OPERATION
@@ -112,7 +112,7 @@ def title_of(operation: str) -> str | None:
 
     if not operation:
         return None
-    spec = capability_spec(operation)
+    spec = capabilities.capability_spec(operation)
     if spec is not None:
         return spec.title
     if title := job_names().get(operation) or _titled().get(operation):

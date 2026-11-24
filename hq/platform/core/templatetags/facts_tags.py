@@ -66,8 +66,9 @@ FACTS = Part(
     forecast's hours are, a note under one marked; `regular`, status facts; `large`, the headline
     figures a page is read for; `lead`, headline figures led by the first, which stands larger and on
     a row of its own where the band has no room for it beside them. Given `items` (each a `Kpi`), the
-    band draws each as its fact. Under 24rem a band reads as a list, each fact a row of its own; small
-    figures keep their grid, and headline figures (`large`, `lead`) and a band beside a page's title
+    band draws each as its fact. Under 24rem a band reads as a list, each fact a row of its own, its
+    value beside its label; a value holding an identifier stays there only while it fits whole, and
+    takes a line of its own under the label where it does not. Small figures keep their grid, and headline figures (`large`, `lead`) and a band beside a page's title
     their counted rows, two to a row (a phone's head: label beside value, over a note whose run wraps
     whole parts to the lines it needs). Headline figures stand on a wider floor, so three take a row
     only once the band is about 360px wide, each value sized to its cell, never under the band's.
@@ -91,7 +92,8 @@ FACTS = Part(
     it is one pair to a row. A
     label with several values holds them as a list inside one fact. An identifier in a value (code,
     a `|breakable` name) runs inline, code a chip on each line it wraps to, so a value's first line
-    stands on its label's line in every engine. A list opened to read more (in a disclosure, a
+    stands on its label's line in every engine; the value keeps a chip's end padding free at its end,
+    so a wrapped line's chip stays inside its column in any face. A list opened to read more (in a disclosure, a
     popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and
     ends with what holds it. A table row's small print keeps one pair to a row too. Where it stands
     decides this, never an option, so the same summary drawn on a page and in a dialog takes each

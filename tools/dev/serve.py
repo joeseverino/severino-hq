@@ -16,6 +16,7 @@ from uvicorn import Config, Server
 from uvicorn.supervisors import ChangeReload
 
 from hq.config.networks import is_loopback
+from hq.config.serve import GRACEFUL_SHUTDOWN_SECONDS
 
 APPLICATION = "hq.config.dev_asgi:migrated_application"
 LOOPBACK = ("127.0.0.1", "::1")
@@ -60,6 +61,8 @@ def main() -> None:
         reload_includes=["*.html"] if asked.reload else None,
         reload_dirs=asked.reload_dir or None,
         reload_excludes=asked.reload_exclude or None,
+        # A reload stops the server as a deploy stops the image's.
+        timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS,
     )
     sockets = listeners(asked.host, asked.port)
     port = sockets[0].getsockname()[1]

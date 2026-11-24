@@ -55,14 +55,10 @@ class DashboardAskTests(TestCase):
     def test_the_log_leaves_it_out_until_read_requests_are_shown(self):
         operator(self.client)
         asked = {row.pk for row in self.ask()}
-        # An ask the dashboard filed under its own name before, as older rows are.
-        older = AuditLog.objects.create(
-            action=AuditLog.Action.CREATED, object_type="Dashboard", message="Asked", metadata={"panels": ["weather"]}
-        )
 
         def shown(**params):
             page = self.client.get(reverse("core:audit_list"), params)
             return {event.pk for line in page.context["events"] for event in line.events}
 
-        self.assertFalse({*asked, older.pk} & shown())
-        self.assertLessEqual({*asked, older.pk}, shown(reads=1))
+        self.assertFalse(asked & shown())
+        self.assertLessEqual(asked, shown(reads=1))

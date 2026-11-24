@@ -229,14 +229,16 @@ class BrowserInstallTests(SimpleTestCase):
         fails here rather than downloading at run time. Pinned by digest, which
         Renovate moves with the tag. The image is built on the runner's own Ubuntu
         release, since setup-python takes the runner's tool cache, whose Python
-        links against that release's libraries."""
+        links against that release's libraries. Only an Ubuntu runner takes a
+        container, so a job on macOS, whose browsers draw in its own fonts,
+        downloads them at the release the lock pins (setup:browser)."""
         tasks = mise_tasks()
         gates = {name for name, task in tasks.items() if name != BROWSER_SETUP and needs_a_browser(task)}
         codenames = {"ubuntu-24.04": "noble", "ubuntu-26.04": "resolute"}
         checked = 0
         for path, name, job in all_jobs():
             ran = {task for step in steps(job) for task in tasks if any(p.fullmatch(task) for p in step_tasks(step))}
-            if not gates & ran:
+            if not gates & ran or str(job.get("runs-on")).startswith("macos-"):
                 continue
             checked += 1
             with self.subTest(workflow=path, job=name):
@@ -750,20 +752,29 @@ class WorkflowSecrecyTests(SimpleTestCase):
 @tag("source")
 class GateReferenceTests(SimpleTestCase):
     def test_every_browser_gate_has_a_leg_and_every_leg_a_gate(self):
-        """The Browser job runs each ``browser:*`` gate, whole or in shares;
-        a gate with no leg never runs in CI, and a split gate runs each of its
-        shares, 1/n through n/n, once (``shards``)."""
-        browser = jobs(workflow("ci.yml"))["browser"]
-        legs = browser["strategy"]["matrix"]["include"]
-        (gate,) = [step for step in browser["steps"] if "GATE" in step.get("env", {})]
-        self.assertEqual(gate["env"].get("HQ_BROWSER_SHARD"), "${{ matrix.shard }}")
+        """The Browser job and its macOS legs run each ``browser:*`` gate,
+        whole or in shares; a gate with no leg never runs in CI, and a split
+        gate runs each of its shares in each engine, 1/n through n/n, once
+        (``shards``)."""
+        ci = jobs(workflow("ci.yml"))
+        every = []
+        for job in ("browser", "browser-macos"):
+            legs = ci[job]["strategy"]["matrix"]["include"]
+            every += legs
+            (gate,) = [step for step in ci[job]["steps"] if "GATE" in step.get("env", {})]
+            self.assertEqual(gate["env"].get("HQ_BROWSER_SHARD"), "${{ matrix.shard }}", job)
+            # A split run is a gate in one engine: every key of its legs but the share.
+            shares: dict[tuple, list] = {}
+            for leg in legs:
+                run = tuple(sorted((key, value) for key, value in leg.items() if key != "shard"))
+                shares.setdefault(run, []).append(leg.get("shard"))
+            for run, said in shares.items():
+                whole = [None] if said == [None] else [f"{index}/{len(said)}" for index in range(1, len(said) + 1)]
+                self.assertCountEqual(said, whole, (job, run))
         self.assertEqual(
-            {f"browser:{leg['gate']}" for leg in legs}, {name for name in mise_tasks() if name.startswith("browser:")}
+            {f"browser:{leg['gate']}" for leg in every},
+            {name for name in mise_tasks() if name.startswith("browser:")},
         )
-        for name in {leg["gate"] for leg in legs}:
-            said = [leg.get("shard") for leg in legs if leg["gate"] == name]
-            whole = [None] if said == [None] else [f"{index}/{len(said)}" for index in range(1, len(said) + 1)]
-            self.assertCountEqual(said, whole, name)
 
     def test_a_task_that_takes_arguments_says_what_they_are(self):
         """``mise run <task> --help`` prints a task's ``usage``. Once one is

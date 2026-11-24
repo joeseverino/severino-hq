@@ -55,13 +55,16 @@ class BreakableTests(SimpleTestCase):
 
     def test_a_dot_stays_on_the_line_of_the_name_before_it(self):
         """A name as wide as its line leaves a dot after its box no room
-        there, so the dot is inside the box and the line breaks after it."""
+        there, so the dot is inside the box and the line breaks after it,
+        as labels.dotted joins it or typed between two spaces."""
 
-        html = str(breakable("wildcard-example-com\xa0· Dec 4"))
-        (name,) = with_class(html, "token")
-        self.assertTrue(name.text.rstrip().endswith("·"), html)
-        self.assertEqual(text(html), "wildcard-example-com · Dec 4")
-        self.assertIn('aria-hidden="true">·</span>', html)
+        for typed in ("wildcard-example-com\xa0· Dec 4", "wildcard-example-com · Dec 4"):
+            with self.subTest(typed=typed):
+                html = str(breakable(typed))
+                (name,) = with_class(html, "token")
+                self.assertTrue(name.text.rstrip().endswith("·"), html)
+                self.assertEqual(text(html), "wildcard-example-com · Dec 4")
+                self.assertIn('aria-hidden="true">·</span>', html)
 
     def test_a_rate_is_one_figure(self):
         html = str(breakable("faster than 10:36/mi"))
@@ -336,12 +339,12 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(or_empty(mark_safe("<b>x-y</b>")), "<b>x-y</b>")
 
     def test_a_cell_line_holds_each_name_in_it(self):
-        """Each hyphenated name in the line is a part kept whole; the words
-        between them stay text."""
+        """Each hyphenated name in the line is a part kept whole, the dot
+        between them held to the name before it."""
 
         line = "example-docker-host · example-web-frontend"
         html = str(cell_line(line, "/containers/x/"))
-        self.assertEqual(wholes(html), line.split(" · "))
+        self.assertEqual(wholes(html), ["example-docker-host ·", "example-web-frontend"])
         self.assertIn('href="/containers/x/"', html)
         self.assertNotIn("<a", str(cell_line(line)))
 

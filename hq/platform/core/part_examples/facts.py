@@ -8,6 +8,7 @@ from hq.platform.core.template_parts import Example
 lazy from hq.platform.application.card_items import Counted, Kpi
 lazy from hq.platform.application.drawings import AllocationBar, Dots, Share, Trend
 lazy from hq.platform.application.entity_links import EntityLink
+lazy from hq.platform.application.labels import dotted
 lazy from hq.platform.application.pages import Page, PageVisit
 lazy from hq.platform.application.plugins import checked_cards
 lazy from hq.platform.application.tone import Tone
@@ -47,7 +48,7 @@ _GLANCE = (
     '<a href="/example/settings/">Settings</a></span>{% endfact %}'
     '{% fact "Example weather" icon="cloud" id="example-weather" data_fragment_part="example-weather" %}71°'
     '{% detail %}{% list kind="dots" %}<li>Example Mostly Cloudy</li><li>71–86°</li>{% endlist %}'
-    "<small>Last read an example 3 days ago · out of date</small>"
+    "<small>Last read an example 3 days ago{% dot %}out of date</small>"
     "{% heading %}<strong>Example weather</strong>"
     "{% panel %}<p>The last reading failed (ExampleError). This is the one before it.</p>"
     '{% facts layout="band" size="small" items=hours label="Example hours ahead" %}'
@@ -253,16 +254,16 @@ FACTS_STATES = {
         '{% card element="div" %}{% facts layout="band" size="large" label="Example estate" %}'
         '{% fact "Example hosts online" icon="server" value="3 of 5" detail="2 example hosts offline" drawing=hosts %}'
         '{% fact "Example runs" icon="activity" value="4 of 6" detail="The last six example runs" drawing=runs %}'
-        '{% fact "Example certificate" icon="lock" value="24 days" detail="example-com · Dec 11" %}'
+        '{% fact "Example certificate" icon="lock" value="24 days" detail=expiry %}'
         '{% fact "Example connections" icon="network" value=12 url="/example/" %}'
         "{% endfacts %}{% endcard %}"
         '{% section "Example estate" %}{% facts layout="band" size="large" %}'
         '{% fact "Example hosts online" icon="server" value="3 of 5" detail="2 example hosts offline" drawing=hosts %}'
         '{% fact "Example runs" icon="activity" value="4 of 6" detail="The last six example runs" drawing=runs %}'
-        '{% fact "Example certificate" icon="lock" value="24 days" detail="example-com · Dec 11" %}'
+        '{% fact "Example certificate" icon="lock" value="24 days" detail=expiry %}'
         '{% fact "Example connections" icon="network" value=12 url="/example/" %}'
         "{% endfacts %}{% endsection %}",
-        lambda: {"hosts": Dots.of(3, 5), "runs": runs()},
+        lambda: {"hosts": Dots.of(3, 5), "runs": runs(), "expiry": dotted("example-com", "Dec 11")},
     ),
     # A range beside its unit, and a phrase, in a cell held narrow, as the
     # three under a lead hold it on a phone: each wraps, its lines clear of each other.
@@ -454,7 +455,7 @@ FACTS_STATES = {
             "page": Page(title="Example glance", lede="An example lede long enough to take the head's line."),
             "page_dateline": date(2026, 11, 18),
             "page_visit": PageVisit("page", "dashboard"),
-            "page_facts": "An example fact · another example fact",
+            "page_facts": dotted("An example fact", "another example fact"),
             "page_aside": _Drawn(_GLANCE_EMPTY),
         },
         heads_the_page=True,
