@@ -18,10 +18,11 @@ from hq.config import urls
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.testing import operator
 
-from .. import domains
+from .. import domains, host_sections
 from ..capabilities import execute_capability
 from ..compiled_graph import compiled
-from ..domains import DomainDescriptor, Mount, domain_navigation, load
+from ..domains import domain_navigation
+from ..host_sections import DomainDescriptor, Mount, load
 from ..integrations import held_graph
 from ..plugins import NavigationItem, PluginIntegration
 from ..record_declaration import Records
@@ -58,7 +59,7 @@ def _forget() -> None:
 
 class NewDomainDeclarationTests(TransactionTestCase):
     def setUp(self):
-        declared = patch.object(domains, "HOST_DOMAINS", (*domains.HOST_DOMAINS, WIDGETS))
+        declared = patch.object(host_sections, "HOST_DOMAINS", (*host_sections.HOST_DOMAINS, WIDGETS))
         declared.start()
         self.addCleanup(declared.stop)
         self.addCleanup(_forget)

@@ -478,6 +478,7 @@ files = [
     "hq/platform/application/*_specs.py",
     "hq/platform/application/sensitivity.py",
     "hq/platform/application/domains.py",
+    "hq/platform/application/host_sections.py",
     "hq/platform/application/records.py",
     "hq/domains/control_plane/bridge_actions.py",
     "hq/domains/control_plane/bridge_application.py",

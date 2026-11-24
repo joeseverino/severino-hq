@@ -42,7 +42,8 @@ from pydantic_core import CoreSchema
 from hq.platform.core.rules import Rule
 
 from .command_fields import STORED_IN, Checked, Choices, NonEmpty
-from .domains import host_records, load
+from .domains import host_records
+from .host_sections import load
 from .json_schemas import json_schema
 from .reasons import declared_only
 

@@ -11,7 +11,7 @@ lazy from debug_toolbar.toolbar import debug_toolbar_urls
 
 from hq.domains.projects.views import PostureView, WatchingRefreshView, WatchingView
 from hq.platform.application.denials import REFUSED_CREDENTIALS
-from hq.platform.application.domains import HOST_DOMAINS
+from hq.platform.application.host_sections import HOST_DOMAINS
 from hq.platform.application.plugins import installed_plugins
 from hq.platform.core.action_item_views import (
     ActionItemAsideView,

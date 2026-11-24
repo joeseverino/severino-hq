@@ -21,7 +21,8 @@ from .answer_fields import RecordSlug
 from .assets import AssetCommand
 from .command_fields import Describe
 from .describe import listed
-from .domains import load, records_of
+from .domains import records_of
+from .host_sections import load
 from .integration_specs import command_adapter
 from .projects import ProjectCommand
 from .record_declaration import Records

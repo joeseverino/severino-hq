@@ -14,7 +14,8 @@ from django.utils.text import capfirst
 
 from .contracts import Effect
 from .deletion import DeleteCommand, RecordDeleted, delete_record
-from .domains import host_records, load, records_of
+from .domains import host_records, records_of
+from .host_sections import load
 from .integration_specs import TARGET_KINDS, CapabilitySpec
 from .labels import adding, lower_first, one
 from .record_declaration import Records
