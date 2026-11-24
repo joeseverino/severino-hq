@@ -774,8 +774,7 @@ something newer published, and changes nothing. A plan holds:
 
 A separate list says what keeps it from applying without a person: what is not
 known about the target (`target-unread`, `no-provenance`, `no-package-list`,
-`not-scanned`). Anything but a vetted patch waits. The program an upgrade runs
-is in [Deployment](Deployment.md#container-upgrades).
+`not-scanned`). Anything but a vetted patch waits.
 
 `hq.platform.application.app_updates` reads each open Renovate pull request
 that changes a file under `compose/<app>/`. The app is that directory, never

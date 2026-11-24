@@ -99,9 +99,8 @@ func TestAHostWhereHQIsNotRunningCannotBeVerified(t *testing.T) {
 
 func TestTheRunnersRenderedRulesAreNoDrift(t *testing.T) {
 	f := synced(t)
-	// The upgrade rule HQ's container-upgrade plan renders is HQ's too.
 	program := filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")
-	f.sudoRules = fmt.Sprintf(sudoListing, f.runnerUser, "    (root) NOPASSWD: "+program+" deploy *, "+program+" upgrade *\n")
+	f.sudoRules = fmt.Sprintf(sudoListing, f.runnerUser, "    (root) NOPASSWD: "+program+" deploy *\n")
 
 	if drift := f.verify(t); len(drift) != 0 {
 		t.Errorf("drift on a runner with HQ's rules: %v", drift)
@@ -123,7 +122,7 @@ func TestEachRunnerSudoFaultIsDrift(t *testing.T) {
 			f.sudoRules = fmt.Sprintf(sudoListing, f.runnerUser, "    (root) "+program+" deploy *\n")
 		}, "deployer has no NOPASSWD sudo rule"},
 		"a runner whose rule runs another subcommand": {func(f *fakeHost, program string) {
-			f.sudoRules = fmt.Sprintf(sudoListing, f.runnerUser, "    (root) NOPASSWD: "+program+" deployed, "+program+" upgrade *\n")
+			f.sudoRules = fmt.Sprintf(sudoListing, f.runnerUser, "    (root) NOPASSWD: "+program+" deployed\n")
 		}, "deployer has no NOPASSWD sudo rule"},
 		"a runner granted a command HQ does not render": {func(f *fakeHost, _ string) {
 			f.sudoRules += "    (root) NOPASSWD: /usr/local/lib/example/retired *\n"

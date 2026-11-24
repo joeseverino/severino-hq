@@ -315,7 +315,6 @@ from the tree, and every unit and the deploy call it.
 | `verify` | reports where the host differs from its release: tree, units, anything retired, and the Actions runner's sudo rules. It holds them to one runner unit, not root, with its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render. A failure names the command and the grep that finds its file. Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
 | `bootstrap` | renders the drop-ins and sudo rule `host.json` decides, then, when `host.json` has an `automation` entry and a deploy has installed the worker's unit, starts `severino-hq-automation.service` without waiting on it, so a run or scan queued while the host had no entry is taken then |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
-| `upgrade ARGS` | moves one compose service to a pinned image, through its own sudo rule ([Container upgrades](#container-upgrades)) |
 | `unit --serve` | answers one request on the unit socket: stops, starts or restarts the systemd unit a container names in its `severino-hq.unit` label, once that unit's own start commands are found to run the container ([Architecture](Architecture.md#a-container-its-unit-runs)) |
 | `edge-receiver` | as any account, writes to a pipe a tar of the tree's `hq-edge` and its `SHA256SUMS` line, for an administrator to install on an edge, once the tree is proven to be the release ([Remote targets](#remote-targets)) |
 | `check` | the host's half of `mise run check --release`, as any account and read-only. It runs `verify`, and with it the runner's sudo rules (or, where sudo asks for a password, the drift unit's run since the release was installed). It checks the established units, free disk, and that every program a sudo rule names, and the edge receiver, is root's alone. Where sudo lets it read nftables, it checks that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
@@ -654,41 +653,6 @@ What the edge trusts, and what proves the binary is the image's:
   directory above it, so the bytes `edge-receiver` reads are the bytes verify
   compared. The `SHA256SUMS` line is their digest, and the edge installs only
   bytes that match it, from a directory only the administrator can write.
-
-## Container upgrades
-
-`hq-host upgrade` ([`controller/host/upgrade`](../controller/host/upgrade))
-is the program an upgrade plan in HQ describes. It runs as root for another
-account, so it trusts nothing that account passes beyond naming the upgrade:
-
-- The stack is a directory directly under `/opt/apps`, not a symlink. The
-  directory, its compose file, any override and any `.env` are owned by root
-  or by the owner of `/opt/apps`, and writable by no one else.
-- `--from` is the image `docker compose config` resolves for the service and
-  what its one running container runs. `--to` is the same repository, pinned
-  by digest.
-- The data is the running container's writable mounts, read from Docker. A
-  writable directory mount outside the stack is refused.
-
-For one compose service it pulls the target, stops the service and snapshots
-its data, and proves the target against a copy of the data with no network. It
-then pins the digest in the stack's compose override, recreates the service
-and verifies it stays up for a settle window. Any failure restores the override
-and the data. It is idempotent by operation id and prints one JSON result:
-exit 0 kept, 3 rolled back, 2 refused or unchanged, 1 failed and not put back.
-It needs Docker Compose 2.24.4 or later, `tar`, and Linux.
-
-The boundary is one sudo rule, `hq-host upgrade *`, for that one program.
-sudo-rs matches no pattern inside an argument, so the helper's parser, run as
-root, holds the line: each flag once, every value whole by its pattern, the
-stack directly under `/opt/apps`. The rule is only worth having if that
-account cannot already reach Docker.
-
-HQ's own host has `hq-host` in its tree. HQ queues no upgrade to another
-machine: there the helper is installed and run by hand, with the plan's
-values. The plan's fetch step takes `hq-host` from the composed image HQ
-runs, by digest, after `cosign` verifies the compose workflow's signature,
-and stops if the image's platform is not the machine's.
 
 ## Verifying
 
