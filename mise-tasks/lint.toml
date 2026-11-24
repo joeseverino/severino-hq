@@ -135,13 +135,14 @@ outputs = []
 run = "uv lock --check || { echo 'lint:lockfile: write the lock with UV_LOCKED=0 uv lock, then commit uv.lock (docs/Development.md).' >&2; exit 1; }"
 
 ["lint:toolchain"]
-description = "mise.lock checksums every pinned tool for each gate platform, mise renders Go from go.mod's toolchain line, no image borrows a build tool"
+description = "mise.lock checksums every pinned tool for each gate platform, mise renders Go from go.mod's toolchain line, hk.pkl amends the hk mise.toml pins, no image borrows a build tool"
 hide = true
 tags = ["fast"]
 sources = [
   "controller/go.mod",
   "Dockerfile",
   "composition/Dockerfile",
+  "hk.pkl",
   "tools/pipeline/toolchain_lock.py",
   "pyproject.toml",
   "uv.lock",

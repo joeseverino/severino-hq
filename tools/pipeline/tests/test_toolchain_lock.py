@@ -31,6 +31,18 @@ class ImageTests(SimpleTestCase):
                 self.assertTrue(self.foreign(text))
 
 
+class HkSchemaTests(SimpleTestCase):
+    def test_a_schema_of_another_hk_release_fails(self):
+        url = "package://github.com/jdx/hk/releases/download/v{}/hk@{}#/Config.pkl"
+        for text, drifts in (
+            (f'amends "{url.format("2.14.0", "2.14.0")}"', False),
+            (f'amends "{url.format("2.13.0", "2.13.0")}"', True),
+            (f'amends "{url.format("2.14.0", "2.13.0")}"', True),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(bool(toolchain.schema_drift(text, "2.14.0")), drifts)
+
+
 @tag("source")
 class PinnedTests(SimpleTestCase):
     def test_mise_renders_go_from_the_go_mod_toolchain_line(self):
