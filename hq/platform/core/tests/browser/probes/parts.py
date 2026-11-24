@@ -374,17 +374,26 @@ _SHORT_MONTH = (
 # An identifier in a band (a version, a tag) short enough for a cell of the
 # band's identifier floor stands whole on its line (figures.css): one that
 # wraps where a cell that wide would hold it was given too narrow a cell.
+# Its lines and its width are read off its text as laid out, in the face the
+# engine drew: a box's height against its font size counts lines only for the
+# faces whose ascent and descent it was tuned to, and WebKit serializes no
+# `font` shorthand for a canvas to measure in.
 SPLIT_IDENTIFIERS = """(codes) => {
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-  const ink = document.createElement('canvas').getContext('2d');
+  const range = document.createRange();
   const read = [...document.querySelectorAll(codes)].filter((code) => code.checkVisibility());
-  const found = read.filter((code) => {
+  return read.filter((code) => {
+    const runs = [];
+    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      range.selectNodeContents(node);
+      runs.push(...[...range.getClientRects()].filter((r) => r.width > 0));
+    }
     const style = getComputedStyle(code);
-    ink.font = style.font;
-    const whole = ink.measureText(code.textContent.trim()).width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-    return whole <= 11 * rem && code.getBoundingClientRect().height > 1.9 * parseFloat(style.fontSize);
+    const whole = runs.reduce((sum, r) => sum + r.width, 0) + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const lines = new Set(runs.map((r) => Math.round(r.bottom))).size;
+    return whole <= 11 * rem && lines > 1;
   }).map((code) => `${code.textContent.trim()} breaks across lines`);
-  return found;
 }"""
 
 # Readings beside a page's title stand together (figures.css): two
