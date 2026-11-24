@@ -12,8 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.platform.application.contracts import DOTTED_NAME, Closed, Effect
-from hq.platform.application.quoted import Quoted
 from hq.platform.application.non_empty import NonEmpty, RequiredText
+from hq.platform.application.quoted import Quoted
 from hq.platform.application.reasons import Checked, Reason, checked
 
 # An hour: a procedure that needs longer is more than one procedure, and a

@@ -45,9 +45,9 @@ from .automation_manifest import AUTHORED, PLAYBOOK, REVISION, OperationManifest
 from .automation_sources import InputBound, ProcedureDeclaration
 from .command_fields import Describe, RequiredText
 from .contracts import Closed, Effect
-from .quoted import Quoted
 from .integration_specs import CapabilitySpec
 from .projection import read_once
+from .quoted import Quoted
 from .record_errors import PolicyError, RecordNotFound
 from .record_fields import RecordId
 from .security import Capability, Principal

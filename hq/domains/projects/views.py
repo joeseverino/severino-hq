@@ -18,7 +18,6 @@ from hq.domains.projects.github import github_repository
 from hq.platform.application import related
 from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.capabilities import capability_words
-from hq.platform.application.quoted import Quoted
 from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import entity_link, page_url, record_link, web_url
 from hq.platform.application.list_pages import ListPageMixin
@@ -31,6 +30,7 @@ from hq.platform.application.projects import (
     projects_by_repository,
     repository_key,
 )
+from hq.platform.application.quoted import Quoted
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.references import Kind
 from hq.platform.application.security import web_principal
