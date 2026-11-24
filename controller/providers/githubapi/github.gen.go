@@ -2401,6 +2401,9 @@ type ActionsListArtifactsForRepoParams struct {
 
 // ActionsListWorkflowRunsForRepoParams defines parameters for ActionsListWorkflowRunsForRepo.
 type ActionsListWorkflowRunsForRepoParams struct {
+	// Branch Returns workflow runs associated with a branch. Use the name of the branch of the `push`.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty"`
+
 	// HeadSha Only returns workflow runs that are associated with the specified `head_sha`.
 	HeadSha *string `form:"head_sha,omitempty" json:"head_sha,omitempty"`
 
@@ -2637,6 +2640,12 @@ type ChecksUpdateJSONBodyOutputAnnotationsAnnotationLevel string
 
 // ChecksUpdateJSONBodyStatus defines model for ChecksUpdateJSONBody.Status.
 type ChecksUpdateJSONBodyStatus string
+
+// ChecksListForSuiteParams defines parameters for ChecksListForSuite.
+type ChecksListForSuiteParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
 
 // CodeScanningListAlertsForRepoParams defines parameters for CodeScanningListAlertsForRepo.
 type CodeScanningListAlertsForRepoParams struct {
@@ -3459,6 +3468,9 @@ type ClientInterface interface {
 	// Takes a body of the `application/json` content type.
 	ChecksUpdate(ctx context.Context, owner string, repo string, checkRunID string, body ChecksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ChecksListForSuite performs a GET /repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs (the `ChecksListForSuite` operationId) request.
+	ChecksListForSuite(ctx context.Context, owner string, repo string, checkSuiteID string, params *ChecksListForSuiteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CodeScanningListAlertsForRepo performs a GET /repos/{owner}/{repo}/code-scanning/alerts (the `CodeScanningListAlertsForRepo` operationId) request.
 	CodeScanningListAlertsForRepo(ctx context.Context, owner string, repo string, params *CodeScanningListAlertsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -3828,6 +3840,19 @@ func (c *Client) ChecksUpdateWithBody(ctx context.Context, owner string, repo st
 // Takes a body of the `application/json` content type.
 func (c *Client) ChecksUpdate(ctx context.Context, owner string, repo string, checkRunID string, body ChecksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewChecksUpdateRequest(c.Server, owner, repo, checkRunID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ChecksListForSuite performs a GET /repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs (the `ChecksListForSuite` operationId) request.
+func (c *Client) ChecksListForSuite(ctx context.Context, owner string, repo string, checkSuiteID string, params *ChecksListForSuiteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewChecksListForSuiteRequest(c.Server, owner, repo, checkSuiteID, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4802,6 +4827,18 @@ func NewActionsListWorkflowRunsForRepoRequest(server string, owner string, repo 
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
 
+		if params.Branch != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "branch", *params.Branch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if params.HeadSha != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "head_sha", *params.HeadSha, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
@@ -5234,6 +5271,81 @@ func NewChecksUpdateRequestWithBody(server string, owner string, repo string, ch
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewChecksListForSuiteRequest constructs an http.Request for the ChecksListForSuite method
+func NewChecksListForSuiteRequest(server string, owner string, repo string, checkSuiteID string, params *ChecksListForSuiteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "check_suite_id", checkSuiteID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/check-suites/" + pathParam2 + "/check-runs"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -7247,6 +7359,11 @@ type ClientWithResponsesInterface interface {
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	ChecksUpdateWithResponse(ctx context.Context, owner string, repo string, checkRunID string, body ChecksUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*ChecksUpdateReply, error)
 
+	// ChecksListForSuiteWithResponse performs a GET /repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs (the `ChecksListForSuite` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ChecksListForSuiteWithResponse(ctx context.Context, owner string, repo string, checkSuiteID string, params *ChecksListForSuiteParams, reqEditors ...RequestEditorFn) (*ChecksListForSuiteReply, error)
+
 	// CodeScanningListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/code-scanning/alerts (the `CodeScanningListAlertsForRepo` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -8195,6 +8312,53 @@ func (r ChecksUpdateReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ChecksUpdateReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ChecksListForSuiteReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		CheckRuns  []CheckRun `json:"check_runs"`
+		TotalCount int        `json:"total_count"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ChecksListForSuiteReply) GetJSON200() *struct {
+	CheckRuns  []CheckRun `json:"check_runs"`
+	TotalCount int        `json:"total_count"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ChecksListForSuiteReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ChecksListForSuiteReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ChecksListForSuiteReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ChecksListForSuiteReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -9727,6 +9891,17 @@ func (c *ClientWithResponses) ChecksUpdateWithResponse(ctx context.Context, owne
 	return ParseChecksUpdateReply(rsp)
 }
 
+// ChecksListForSuiteWithResponse performs a GET /repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs (the `ChecksListForSuite` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ChecksListForSuiteWithResponse(ctx context.Context, owner string, repo string, checkSuiteID string, params *ChecksListForSuiteParams, reqEditors ...RequestEditorFn) (*ChecksListForSuiteReply, error) {
+	rsp, err := c.ChecksListForSuite(ctx, owner, repo, checkSuiteID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChecksListForSuiteReply(rsp)
+}
+
 // CodeScanningListAlertsForRepoWithResponse performs a GET /repos/{owner}/{repo}/code-scanning/alerts (the `CodeScanningListAlertsForRepo` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10556,6 +10731,35 @@ func ParseChecksUpdateReply(rsp *http.Response) (*ChecksUpdateReply, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest CheckRun
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseChecksListForSuiteReply parses an HTTP response from a ChecksListForSuiteWithResponse call
+func ParseChecksListForSuiteReply(rsp *http.Response) (*ChecksListForSuiteReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ChecksListForSuiteReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			CheckRuns  []CheckRun `json:"check_runs"`
+			TotalCount int        `json:"total_count"`
+		}
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

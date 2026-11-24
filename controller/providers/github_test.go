@@ -493,6 +493,8 @@ func githubRepositoryRoutes() map[string]string {
 			{"id":2,"name":"CI","workflow_id":11,"status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"aaaa","created_at":"2030-01-02T00:00:00Z"},
 			{"id":1,"name":"Gone","workflow_id":99,"status":"completed","conclusion":"success","event":"push","created_at":"2030-01-01T00:00:00Z"},
 			{"id":4,"name":"Dependency graph","workflow_id":12,"status":"completed","event":"dynamic","created_at":"2030-01-04T00:00:00Z"}]}`,
+		api("/actions/runs?branch=main&per_page=100"): `{"workflow_runs":[
+			{"id":3,"name":"CI renamed","workflow_id":11,"status":"waiting","conclusion":null,"event":"push","head_branch":"main","head_sha":"aaaa000000000000000000000000000000000000","created_at":"2030-01-03T00:00:00Z"}]}`,
 		api("/commits/aaaa000000000000000000000000000000000000/check-runs?per_page=100"): `{"check_runs":[
 			{"id":1,"name":"test","status":"completed","conclusion":"failure","started_at":"2030-01-01T00:00:00Z"},
 			{"id":2,"name":"test","status":"completed","conclusion":"success","started_at":"2030-01-01T01:00:00Z"},
@@ -669,6 +671,61 @@ func TestGitHubsOwnRunsFailNoCommit(t *testing.T) {
 	pull := record.PullRequests[0].Checks
 	if pull == nil || pull.State != "success" || slices.Contains(record.PullRequestChecks, "update-uv-graph") {
 		t.Errorf("pull request checks %+v, names %v", pull, record.PullRequestChecks)
+	}
+}
+
+// A workflow that does not run on every push fails the default branch from
+// its newest run there, at an older commit, whatever passed on the head since,
+// until a run of it passes: a rerun included. A pull request's run from a
+// branch of the same name is not the branch's, and a weekly run behind a full
+// page of the branch's runs is read from its workflow.
+func TestABranchFailsUntilEachWorkflowsNewestRunPasses(t *testing.T) {
+	api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
+	const head, older = "aaaa000000000000000000000000000000000000", "9999000000000000000000000000000000000000"
+	scorecard := func(conclusion string) string {
+		return `{"id":45,"name":"Scorecard supply-chain security","workflow_id":13,"check_suite_id":70,"status":"completed","conclusion":"` + conclusion +
+			`","event":"schedule","head_branch":"main","head_sha":"` + older + `","html_url":"https://github.com/example/app/actions/runs/45","created_at":"2030-01-01T00:00:00Z"}`
+	}
+	ci := `{"id":50,"name":"CI","workflow_id":11,"check_suite_id":80,"status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"` + head + `","created_at":"2030-01-03T00:00:00Z"}`
+	forked := `{"id":51,"name":"Scorecard","workflow_id":13,"status":"completed","conclusion":"success","event":"pull_request","head_branch":"main","head_sha":"bbbb","created_at":"2030-01-04T00:00:00Z"}`
+	for _, test := range []struct {
+		name, conclusion string
+		full             bool
+		state            string
+		failing          []string
+		runs             []string
+	}{
+		{"a scheduled run that failed on an older commit fails the branch", "failure", false, "failure", []string{"Publish"}, []string{"https://github.com/example/app/actions/runs/45"}},
+		{"read from its workflow behind a full page", "failure", true, "failure", []string{"Publish"}, []string{"https://github.com/example/app/actions/runs/45"}},
+		{"a rerun that passed clears it", "success", false, "success", []string{}, []string{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			routes := githubRepositoryRoutes()
+			routes[api("/actions/workflows?per_page=100")] = `{"workflows":[{"id":11,"name":"CI","state":"active"},{"id":13,"name":"Scorecard","state":"active"}]}`
+			routes[api("/commits/"+head+"/check-runs?per_page=100")] = `{"check_runs":[{"id":1,"name":"test","status":"completed","conclusion":"success","check_suite":{"id":80}}]}`
+			routes[api("/check-suites/70/check-runs?per_page=100")] = `{"check_runs":[
+				{"id":71,"name":"Analysis","status":"completed","conclusion":"success","check_suite":{"id":70}},
+				{"id":72,"name":"Publish","status":"completed","conclusion":"failure","check_suite":{"id":70}}]}`
+			page := []string{forked, ci}
+			if test.full {
+				for len(page) < githubListPage {
+					page = append(page, ci)
+				}
+				routes[api("/actions/workflows/13/runs?branch=main&per_page=50")] = `{"workflow_runs":[` + forked + `,` + scorecard(test.conclusion) + `]}`
+			} else {
+				page = append(page, scorecard(test.conclusion))
+			}
+			routes[api("/actions/runs?branch=main&per_page=100")] = `{"workflow_runs":[` + strings.Join(page, ",") + `]}`
+			record, _ := readRepository(t, newGitHubHarness(t, routes, runtime.Environment{}))
+
+			urls := []string{}
+			for _, run := range record.FailingRuns {
+				urls = append(urls, run.URL)
+			}
+			if record.Checks.State != test.state || !slices.Equal(record.Checks.Failing, test.failing) || !slices.Equal(urls, test.runs) {
+				t.Errorf("checks %+v, failing runs %v", record.Checks, urls)
+			}
+		})
 	}
 }
 

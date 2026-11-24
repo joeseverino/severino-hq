@@ -18,6 +18,7 @@ from .finding_steps import Do, Run
 from .github_estate import (
     ARTIFACT_ATTENTION_DAYS,
     ARTIFACT_SERIOUS_DAYS,
+    FAILED,
     REPOSITORY_KIND,
     SERIOUS_ALERTS,
     WAITING_SERIOUS_AFTER,
@@ -118,12 +119,19 @@ def _failing(repo: Repository) -> Iterator[Said]:
         evidence=(("Failing", str(len(failing) or 1)),),
         primary=opens("Open run", one.url) if one else opens("Open checks", f"{repo.url}/commit/{sha}"),
         offers=() if one else runs,
-        # Where the reading does not hold the failing runs, the command that lists them.
-        steps=()
-        if runs or not sha
-        else (Run("See the failing runs", f"gh run list -R {repo.name} --commit {sha} --status failure"),),
+        # With no failing workflow run, what fails is a check on the head
+        # commit that no workflow owns, and this lists it.
+        steps=() if runs or not sha else (Run("See the failing checks", _failing_checks(repo.name, sha)),),
     )
     yield finding, f"{repo.short} was failing on {repo.default_branch}"
+
+
+def _failing_checks(name: str, sha: str) -> str:
+    """The command that names each check failing on a commit, by the conclusions the reading counts."""
+
+    failed = ", ".join(f'"{conclusion}"' for conclusion in sorted(FAILED))
+    query = f".check_runs[] | select(.conclusion | IN({failed})) | .name"
+    return f"gh api --paginate repos/{name}/commits/{sha}/check-runs --jq '{query}'"
 
 
 def _unverified(repo: Repository) -> Iterator[Said]:
@@ -281,7 +289,7 @@ RULES: tuple[FindingRule, ...] = (
         _each(_failing),
         operator_action="Read the failing run's log on GitHub, then fix what it names.",
         no_help_reason="HQ reads which checks fail, not their logs.",
-        bars={Tone.SERIOUS: "a check fails on the newest commit to the default branch"},
+        bars={Tone.SERIOUS: "a workflow's latest run on the default branch fails, or a check on its newest commit"},
         domain=PROJECTS,
         gathered=True,
     ),

@@ -1779,6 +1779,7 @@ type GitHubRepositoryRecord struct {
 	DependabotAlerts  []map[string]any                 `json:"dependabot_alerts,omitempty"`
 	Deployments       []map[string]any                 `json:"deployments,omitempty"`
 	Environments      []map[string]any                 `json:"environments,omitempty"`
+	FailingRuns       []map[string]any                 `json:"failing_runs,omitempty"`
 	Fingerprint       string                           `json:"fingerprint,omitempty"`
 	Head              map[string]any                   `json:"head,omitempty"`
 	HeldBranches      []map[string]any                 `json:"held_branches,omitempty"`

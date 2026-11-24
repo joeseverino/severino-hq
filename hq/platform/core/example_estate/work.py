@@ -159,7 +159,20 @@ def repositories():
         if name == UPDATED:
             record.update(_updates(name))
         if name == FAILING:
+            # Its weekly scan failed on an older commit, and no run of it has
+            # passed since.
+            scan = {
+                "name": "Scan",
+                "url": f"https://github.com/example/{name}/actions/runs/201",
+                "status": "completed",
+                "conclusion": "failure",
+                "event": "schedule",
+                "branch": "main",
+                "sha": hexed("older", name, length=40),
+                "created_at": iso(timedelta(days=2)),
+            }
             record["checks"] = {"state": "failure", "total": 4, "failing": ["Scan"], "running": 0}
+            record["runs"], record["failing_runs"] = [scan], [scan]
         if name == APPS:
             record["pull_requests"] = [_app_update(name)]
             # Renovate's Dashboard lists the updates it has not opened yet.
@@ -340,7 +353,7 @@ def _updates(name):
             },
         ],
         # Each workflow's newest run: the default branch's build passing, a
-        # release still going, and a nightly check that failed on an older commit.
+        # release still going, and a nightly check that passed on an older commit.
         "runs": [
             {
                 "name": "CI",
@@ -364,7 +377,7 @@ def _updates(name):
                 "name": "Nightly checks",
                 "url": f"{url}/actions/runs/99",
                 "status": "completed",
-                "conclusion": "failure",
+                "conclusion": "success",
                 "branch": "main",
                 "sha": hexed("older", name, length=40),
                 "created_at": iso(timedelta(days=5)),

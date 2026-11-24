@@ -37,6 +37,7 @@ output-options:
     - apps/list-repos-accessible-to-installation
     - checks/create
     - checks/list-for-ref
+    - checks/list-for-suite
     - checks/update
     - code-scanning/list-alerts-for-repo
     - dependabot/list-alerts-for-repo

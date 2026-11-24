@@ -379,6 +379,19 @@
           "example"
         ]
       },
+      "failing_runs": [
+        {
+          "id": 1,
+          "name": "example",
+          "status": "example",
+          "conclusion": "example",
+          "event": "example",
+          "branch": "example",
+          "sha": "example",
+          "url": "example",
+          "created_at": "example"
+        }
+      ],
       "pull_requests": [
         {
           "number": 1,

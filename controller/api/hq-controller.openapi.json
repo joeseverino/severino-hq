@@ -3949,6 +3949,13 @@
             "default": {},
             "type": "object"
           },
+          "failing_runs": {
+            "default": [],
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "pull_requests": {
             "default": [],
             "items": {

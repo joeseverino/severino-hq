@@ -138,6 +138,9 @@ class RepositoryRecord(ObservationRecord):
     pushed_at: Stamp = None
     head: dict[str, Any] = {}
     checks: dict[str, Any] = {}
+    # Each workflow's newest run on the default branch where it failed, at
+    # whatever commit, shaped as ``runs``' entries.
+    failing_runs: list[dict[str, Any]] = []
     # ``{number, title, url, author, draft, created_at, updated_at, head, base,
     # branch, labels, checks, files, apps}`` per open pull request, newest
     # first. For a pull request Renovate opened (its branch under
