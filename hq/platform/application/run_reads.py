@@ -303,7 +303,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 WorkQuery,
                 WorkItem,
                 sorts=(
-                    ListSort("failed", "Failed first", ("lead", "-created_at", "-id"), _failed_first),
+                    ListSort("failed", "Failing first", ("lead", "-created_at", "-id"), _failed_first),
                     ListSort("-created_at", "Newest first", ("-created_at", "-id")),
                     ListSort("created_at", "Oldest first", ("created_at", "id")),
                     ListSort("title", "Job A–Z", ("title", "-created_at", "-id"), _a_to_z),

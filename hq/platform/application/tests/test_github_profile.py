@@ -208,6 +208,18 @@ class IngestTests(TestCase):
         self.assertNotIn(SENTINEL, json.dumps(found, default=str))
         self.assertEqual(found["watched"][0]["release"]["tag"], "v1.2.0")
 
+    def test_the_newest_star_leads_whatever_order_the_reading_held(self):
+        (repo,) = PROFILE["watched"]
+        stars = [
+            {**repo, "name": name, "starred_at": at}
+            for name, at in (("older", "2026-01-02T00:00:00Z"), ("newer", "2026-03-04T00:00:00Z"))
+        ]
+        hold({**PROFILE, "watched": stars})
+
+        self.assertEqual(
+            [each["name"] for each in github_profile.profile("example-user")["watched"]], ["newer", "older"]
+        )
+
     def test_a_record_over_the_contracts_bounds_is_refused(self):
         self.record({"ok": True, "records": [{**PROFILE, "watched": PROFILE["watched"] * 16}]})
 

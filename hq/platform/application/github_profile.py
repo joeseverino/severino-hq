@@ -8,7 +8,7 @@ GitHub rations calls by the hour (its ``every``, ``observations.github``).
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from django.utils import timezone
@@ -79,6 +79,8 @@ def profile(login: str) -> dict[str, Any] | None:
         }
         for repo in value.get("watched", [])
     ]
+    # The page lists the newest stars, so the newest leads whatever order a reading held.
+    watched.sort(key=lambda repo: repo["starred"] or datetime.min.replace(tzinfo=UTC), reverse=True)
     since = moment(value["created_at"]) if value.get("created_at") else None
     return {**value, "watched": watched, "since": since, "observed_at": snapshot.observed_at}
 
