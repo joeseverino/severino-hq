@@ -966,8 +966,6 @@ type ActionsRepositoryPermissions struct {
 // ActionsVariable defines model for actions-variable.
 type ActionsVariable struct {
 	// Name The name of the variable.
-	//
-	// Example: USERNAME
 	Name string `json:"name"`
 }
 
@@ -981,8 +979,6 @@ type AlertNumber = int
 type AllowedActions string
 
 // AppPermissions The permissions granted to the fine-grained access token.
-//
-// Example: {"contents":"read","deployments":"write","issues":"read","single_file":"read"}
 type AppPermissions struct {
 	// Actions The level of permission to grant the access token for GitHub Actions workflows, workflow runs, and artifacts.
 	Actions AppPermissionsActions `json:"actions,omitempty"`
@@ -1082,24 +1078,13 @@ type Artifact struct {
 	ExpiresAt string `json:"expires_at"`
 
 	// Name The name of the artifact.
-	//
-	// Example: AdventureWorks.Framework
 	Name        string `json:"name"`
 	WorkflowRun struct {
-		// HeadBranch Example: main
-		HeadBranch string `json:"head_branch,omitempty"`
-
-		// HeadRepositoryID Example: 42
-		HeadRepositoryID int `json:"head_repository_id,omitempty"`
-
-		// HeadSha Example: 009b8a3a9ccbb128af87f9b1c0f4c62e8a304f6d
-		HeadSha string `json:"head_sha,omitempty"`
-
-		// ID Example: 10
-		ID int `json:"id,omitempty"`
-
-		// RepositoryID Example: 42
-		RepositoryID int `json:"repository_id,omitempty"`
+		HeadBranch       string `json:"head_branch,omitempty"`
+		HeadRepositoryID int    `json:"head_repository_id,omitempty"`
+		HeadSha          string `json:"head_sha,omitempty"`
+		ID               int    `json:"id,omitempty"`
+		RepositoryID     int    `json:"repository_id,omitempty"`
 	} `json:"workflow_run,omitempty"`
 }
 
@@ -1108,35 +1093,23 @@ type CheckRun struct {
 	CheckSuite struct {
 		ID int `json:"id"`
 	} `json:"check_suite"`
-
-	// Conclusion Example: neutral
 	Conclusion CheckRunConclusion `json:"conclusion"`
 
 	// ID The id of the check.
-	//
-	// Example: 21
 	ID int `json:"id"`
 
 	// Name The name of the check.
-	//
-	// Example: test-coverage
-	Name string `json:"name"`
-
-	// StartedAt Example: 2018-05-04T01:14:52Z
+	Name      string `json:"name"`
 	StartedAt string `json:"started_at"`
 
 	// Status The phase of the lifecycle that the check is currently in. Statuses of waiting, requested, and pending are reserved for GitHub Actions check runs.
-	//
-	// Example: queued
 	Status CheckRunStatus `json:"status"`
 }
 
-// CheckRunConclusion Example: neutral
+// CheckRunConclusion defines model for CheckRun.Conclusion.
 type CheckRunConclusion string
 
 // CheckRunStatus The phase of the lifecycle that the check is currently in. Statuses of waiting, requested, and pending are reserved for GitHub Actions check runs.
-//
-// Example: queued
 type CheckRunStatus string
 
 // CodeScanningAlertItems defines model for code-scanning-alert-items.
@@ -1161,10 +1134,7 @@ type CodeScanningAlertRuleSummarySeverity string
 
 // Collaborator Collaborator
 type Collaborator struct {
-	// Login Example: octocat
-	Login string `json:"login"`
-
-	// RoleName Example: admin
+	Login    string `json:"login"`
 	RoleName string `json:"role_name"`
 }
 
@@ -1173,34 +1143,21 @@ type Commit struct {
 	Author Commit_Author `json:"author"`
 	Commit struct {
 		// Author Metaproperties for Git author/committer information.
-		Author NullableGitUser `json:"author"`
-
-		// CommentCount Example: 0
-		CommentCount int `json:"comment_count"`
+		Author       NullableGitUser `json:"author"`
+		CommentCount int             `json:"comment_count"`
 
 		// Committer Metaproperties for Git author/committer information.
 		Committer NullableGitUser `json:"committer"`
-
-		// Message Example: Fix all the bugs
-		Message string `json:"message"`
-		Tree    struct {
-			// Sha Example: 827efc6d56897b048c772eb4087f854f46256132
+		Message   string          `json:"message"`
+		Tree      struct {
 			Sha string `json:"sha"`
-
-			// URL Example: https://api.github.com/repos/octocat/Hello-World/tree/827efc6d56897b048c772eb4087f854f46256132
 			URL string `json:"url"`
 		} `json:"tree"`
-
-		// URL Example: https://api.github.com/repos/octocat/Hello-World/commits/6dcb09b5b57875f334f61aebed695e2e4193db5e
 		URL          string       `json:"url"`
 		Verification Verification `json:"verification,omitempty"`
 	} `json:"commit"`
-
-	// HTMLURL Example: https://github.com/octocat/Hello-World/commit/6dcb09b5b57875f334f61aebed695e2e4193db5e
 	HTMLURL string `json:"html_url"`
-
-	// Sha Example: 6dcb09b5b57875f334f61aebed695e2e4193db5e
-	Sha string `json:"sha"`
+	Sha     string `json:"sha"`
 }
 
 // Commit_Author defines model for Commit.Author.
@@ -1272,20 +1229,13 @@ type DeployKey struct {
 
 // Deployment A request for a specific ref(branch,sha,tag) to be deployed
 type Deployment struct {
-	// CreatedAt Example: 2012-07-20T01:19:13Z
 	CreatedAt string `json:"created_at"`
 
 	// Environment Name for the target deployment environment.
-	//
-	// Example: production
 	Environment string `json:"environment"`
 
 	// ID Unique identifier of the deployment
-	//
-	// Example: 42
-	ID int `json:"id"`
-
-	// Sha Example: a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d
+	ID  int    `json:"id"`
 	Sha string `json:"sha"`
 }
 
@@ -1299,57 +1249,36 @@ type DeploymentBranchPolicySettings struct {
 }
 
 // DeploymentReviewerType The type of reviewer.
-//
-// Example: User
 type DeploymentReviewerType string
 
 // DeploymentStatus The status of a deployment.
 type DeploymentStatus struct {
 	// Description A short description of the status.
-	//
-	// Example: Deployment finished successfully.
 	Description string `json:"description"`
 
 	// LogURL The URL to associate with this status.
-	//
-	// Example: https://example.com/deployment/42/output
 	LogURL string `json:"log_url,omitempty"`
 
 	// State The state of the status.
-	//
-	// Example: success
 	State DeploymentStatusState `json:"state"`
 
 	// TargetURL Closing down notice: the URL to associate with this status.
-	//
-	// Example: https://example.com/deployment/42/output
 	TargetURL string `json:"target_url"`
 }
 
 // DeploymentStatusState The state of the status.
-//
-// Example: success
 type DeploymentStatusState string
 
 // DiffEntry Diff Entry
 type DiffEntry struct {
-	// Additions Example: 103
-	Additions int `json:"additions"`
-
-	// Deletions Example: 21
-	Deletions int `json:"deletions"`
-
-	// Filename Example: file1.txt
-	Filename string `json:"filename"`
-
-	// Patch Example: @@ -132,7 +132,7 @@ module Test @@ -1000,7 +1000,7 @@ module Test
-	Patch string `json:"patch,omitempty"`
-
-	// Status Example: added
-	Status DiffEntryStatus `json:"status"`
+	Additions int             `json:"additions"`
+	Deletions int             `json:"deletions"`
+	Filename  string          `json:"filename"`
+	Patch     string          `json:"patch,omitempty"`
+	Status    DiffEntryStatus `json:"status"`
 }
 
-// DiffEntryStatus Example: added
+// DiffEntryStatus defines model for DiffEntry.Status.
 type DiffEntryStatus string
 
 // EmptyObject An object without any properties.
@@ -1358,35 +1287,21 @@ type EmptyObject = map[string]any
 // Enterprise An enterprise on GitHub.
 type Enterprise struct {
 	AvatarURL string `json:"avatar_url"`
-
-	// CreatedAt Example: 2019-01-26T19:01:12Z
 	CreatedAt string `json:"created_at"`
 
 	// Description A short description of the enterprise.
 	Description string `json:"description,omitempty"`
-
-	// HTMLURL Example: https://github.com/enterprises/octo-business
-	HTMLURL string `json:"html_url"`
+	HTMLURL     string `json:"html_url"`
 
 	// ID Unique identifier of the enterprise
-	//
-	// Example: 42
 	ID int `json:"id"`
 
 	// Name The name of the enterprise.
-	//
-	// Example: Octo Business
-	Name string `json:"name"`
-
-	// NodeID Example: MDEwOlJlcG9zaXRvcnkxMjk2MjY5
+	Name   string `json:"name"`
 	NodeID string `json:"node_id"`
 
 	// Slug The slug url identifier for the enterprise.
-	//
-	// Example: octo-business
-	Slug string `json:"slug"`
-
-	// UpdatedAt Example: 2019-01-26T19:14:43Z
+	Slug      string `json:"slug"`
 	UpdatedAt string `json:"updated_at"`
 
 	// WebsiteURL The enterprise's website URL.
@@ -1399,8 +1314,6 @@ type Environment struct {
 	DeploymentBranchPolicy DeploymentBranchPolicySettings `json:"deployment_branch_policy,omitempty"`
 
 	// Name The name of the environment.
-	//
-	// Example: staging
 	Name string `json:"name"`
 
 	// ProtectionRules Built-in deployment protection rules for the environment.
@@ -1409,32 +1322,20 @@ type Environment struct {
 
 // EnvironmentProtectionRules0 defines model for Environment.ProtectionRules.0.
 type EnvironmentProtectionRules0 struct {
-	// ID Example: 3515
-	ID int `json:"id"`
-
-	// NodeID Example: MDQ6R2F0ZTM1MTU=
+	ID     int    `json:"id"`
 	NodeID string `json:"node_id"`
-
-	// Type Example: wait_timer
-	Type string `json:"type"`
+	Type   string `json:"type"`
 
 	// WaitTimer The amount of time to delay a job after the job is initially triggered. The time (in minutes) must be an integer between 0 and 43,200 (30 days).
-	//
-	// Example: 30
 	WaitTimer WaitTimer `json:"wait_timer,omitempty"`
 }
 
 // EnvironmentProtectionRules1 defines model for Environment.ProtectionRules.1.
 type EnvironmentProtectionRules1 struct {
-	// ID Example: 3755
-	ID int `json:"id"`
-
-	// NodeID Example: MDQ6R2F0ZTM3NTU=
+	ID     int    `json:"id"`
 	NodeID string `json:"node_id"`
 
 	// PreventSelfReview Whether deployments to this environment can be approved by the user who created the deployment.
-	//
-	// Example: false
 	PreventSelfReview bool `json:"prevent_self_review,omitempty"`
 
 	// Reviewers The people or teams that may approve jobs that reference the environment. You can list up to six users or teams as reviewers. The reviewers must have at least read access to the repository. Only one of the required reviewers needs to approve the job for it to proceed.
@@ -1442,12 +1343,8 @@ type EnvironmentProtectionRules1 struct {
 		Reviewer Environment_ProtectionRules_1_Reviewers_Reviewer `json:"reviewer,omitempty"`
 
 		// Type The type of reviewer.
-		//
-		// Example: User
 		Type DeploymentReviewerType `json:"type,omitempty"`
 	} `json:"reviewers,omitempty"`
-
-	// Type Example: required_reviewers
 	Type string `json:"type"`
 }
 
@@ -1458,14 +1355,9 @@ type Environment_ProtectionRules_1_Reviewers_Reviewer struct {
 
 // EnvironmentProtectionRules2 defines model for Environment.ProtectionRules.2.
 type EnvironmentProtectionRules2 struct {
-	// ID Example: 3515
-	ID int `json:"id"`
-
-	// NodeID Example: MDQ6R2F0ZTM1MTU=
+	ID     int    `json:"id"`
 	NodeID string `json:"node_id"`
-
-	// Type Example: branch_policy
-	Type string `json:"type"`
+	Type   string `json:"type"`
 }
 
 // Environment_ProtectionRules_Item defines model for environment.protection_rules.Item.
@@ -1475,21 +1367,13 @@ type Environment_ProtectionRules_Item struct {
 
 // FullRepository Full Repository
 type FullRepository struct {
-	Archived bool `json:"archived"`
-
-	// DefaultBranch Example: master
+	Archived      bool   `json:"archived"`
 	DefaultBranch string `json:"default_branch"`
-
-	// HTMLURL Example: https://github.com/octocat/Hello-World
-	HTMLURL string `json:"html_url"`
-	Private bool   `json:"private"`
-
-	// PushedAt Example: 2011-01-26T19:06:43Z
-	PushedAt string `json:"pushed_at"`
+	HTMLURL       string `json:"html_url"`
+	Private       bool   `json:"private"`
+	PushedAt      string `json:"pushed_at"`
 
 	// Visibility The repository visibility: public, private, or internal.
-	//
-	// Example: public
 	Visibility string `json:"visibility,omitempty"`
 }
 
@@ -1498,8 +1382,6 @@ type Installation struct {
 	Account Installation_Account `json:"account"`
 
 	// ID The ID of the installation.
-	//
-	// Example: 1
 	ID int `json:"id"`
 }
 
@@ -1517,16 +1399,12 @@ type InstallationToken struct {
 // Integration GitHub apps are a new way to extend GitHub. They can be installed directly on organizations and user accounts and granted access to specific repositories. They come with granular permissions and built-in webhooks. GitHub apps are first class actors within GitHub.
 type Integration struct {
 	// Slug The slug name of the GitHub app
-	//
-	// Example: probot-owners
 	Slug string `json:"slug,omitempty"`
 }
 
 // IssueComment Comments provide a way for people to collaborate on an issue.
 type IssueComment struct {
 	// Body Contents of the issue comment
-	//
-	// Example: What version of Safari were you using when you observed this bug?
 	Body string `json:"body,omitempty"`
 }
 
@@ -1535,76 +1413,49 @@ type Job struct {
 	// Steps Steps in this job.
 	Steps []struct {
 		// CompletedAt The time that the job finished, in ISO 8601 format.
-		//
-		// Example: 2019-08-08T08:00:00-07:00
 		CompletedAt string `json:"completed_at,omitempty"`
 
 		// Conclusion The outcome of the job.
-		//
-		// Example: success
 		Conclusion string `json:"conclusion"`
 
 		// Name The name of the job.
-		//
-		// Example: test-coverage
-		Name string `json:"name"`
-
-		// Number Example: 1
-		Number int `json:"number"`
+		Name   string `json:"name"`
+		Number int    `json:"number"`
 
 		// StartedAt The time that the step started, in ISO 8601 format.
-		//
-		// Example: 2019-08-08T08:00:00-07:00
 		StartedAt string `json:"started_at,omitempty"`
 
 		// Status The phase of the lifecycle that the job is currently in.
-		//
-		// Example: queued
 		Status JobStepsStatus `json:"status"`
 	} `json:"steps,omitempty"`
 }
 
 // JobStepsStatus The phase of the lifecycle that the job is currently in.
-//
-// Example: queued
 type JobStepsStatus string
 
 // NullableGitUser Metaproperties for Git author/committer information.
 type NullableGitUser struct {
-	// Date Example: "2007-10-29T02:42:39.000-07:00"
 	Date string `json:"date,omitempty"`
-
-	// Name Example: "Chris Wanstrath"
 	Name string `json:"name,omitempty"`
 }
 
 // NullableSimpleUser A GitHub user.
 type NullableSimpleUser struct {
-	// Login Example: octocat
 	Login string `json:"login"`
 }
 
 // PendingDeployment Details of a deployment that is waiting for protection rules to pass
 type PendingDeployment struct {
 	Environment struct {
-		// HTMLURL Example: https://github.com/github/hello-world/deployments/activity_log?environments_filter=staging
 		HTMLURL string `json:"html_url,omitempty"`
 
 		// ID The id of the environment.
-		//
-		// Example: 56780428
 		ID int `json:"id,omitempty"`
 
 		// Name The name of the environment.
-		//
-		// Example: staging
-		Name string `json:"name,omitempty"`
-
-		// NodeID Example: MDExOkVudmlyb25tZW50NTY3ODA0Mjg=
+		Name   string `json:"name,omitempty"`
 		NodeID string `json:"node_id,omitempty"`
-
-		// URL Example: https://api.github.com/repos/github/hello-world/environments/staging
-		URL string `json:"url,omitempty"`
+		URL    string `json:"url,omitempty"`
 	} `json:"environment"`
 }
 
@@ -1636,12 +1487,9 @@ type PullRequestMergeResult struct {
 
 // PullRequestSimple Pull Request Simple
 type PullRequestSimple struct {
-	// CreatedAt Example: 2011-01-26T19:01:12Z
 	CreatedAt string `json:"created_at"`
 
 	// Draft Indicates whether or not the pull request is a draft.
-	//
-	// Example: false
 	Draft bool `json:"draft,omitempty"`
 	Head  struct {
 		Label string `json:"label"`
@@ -1654,8 +1502,6 @@ type PullRequestSimple struct {
 		// User A GitHub user.
 		User NullableSimpleUser `json:"user"`
 	} `json:"head"`
-
-	// HTMLURL Example: https://github.com/octocat/Hello-World/pull/1347
 	HTMLURL string `json:"html_url"`
 	Labels  []struct {
 		// ArchivedBy The user who archived the label, or `null` if it has not been archived.
@@ -1668,17 +1514,9 @@ type PullRequestSimple struct {
 		NodeID      string     `json:"node_id"`
 		URL         string     `json:"url"`
 	} `json:"labels"`
-
-	// MergedAt Example: 2011-01-26T19:01:12Z
-	MergedAt string `json:"merged_at"`
-
-	// Number Example: 1347
-	Number int `json:"number"`
-
-	// Title Example: new-feature
-	Title string `json:"title"`
-
-	// UpdatedAt Example: 2011-01-26T19:01:12Z
+	MergedAt  string `json:"merged_at"`
+	Number    int    `json:"number"`
+	Title     string `json:"title"`
 	UpdatedAt string `json:"updated_at"`
 
 	// User A GitHub user.
@@ -1717,25 +1555,16 @@ type Release struct {
 	PublishedAt string `json:"published_at"`
 
 	// TagName The name of the tag.
-	//
-	// Example: v1.0.0
 	TagName string `json:"tag_name"`
 }
 
 // Repository A repository on GitHub.
 type Repository struct {
-	// Description Example: This your first repo!
-	Description string `json:"description"`
-
-	// FullName Example: octocat/Hello-World
-	FullName string `json:"full_name"`
-
-	// HTMLURL Example: https://github.com/octocat/Hello-World
-	HTMLURL  string `json:"html_url"`
-	Language string `json:"language"`
-
-	// StargazersCount Example: 80
-	StargazersCount int `json:"stargazers_count"`
+	Description     string `json:"description"`
+	FullName        string `json:"full_name"`
+	HTMLURL         string `json:"html_url"`
+	Language        string `json:"language"`
+	StargazersCount int    `json:"stargazers_count"`
 }
 
 // RepositoryAdvisory A repository security advisory.
@@ -1961,13 +1790,9 @@ type Runner struct {
 	Labels []RunnerLabel `json:"labels"`
 
 	// Name The name of the runner.
-	//
-	// Example: iMac
 	Name string `json:"name"`
 
 	// Status The status of the runner.
-	//
-	// Example: online
 	Status string `json:"status"`
 }
 
@@ -1985,7 +1810,6 @@ type ShaPinningRequired = bool
 
 // SimpleUser A GitHub user.
 type SimpleUser struct {
-	// Login Example: octocat
 	Login string `json:"login"`
 }
 
@@ -2011,83 +1835,52 @@ type Verification struct {
 }
 
 // WaitTimer The amount of time to delay a job after the job is initially triggered. The time (in minutes) must be an integer between 0 and 43,200 (30 days).
-//
-// Example: 30
 type WaitTimer = int
 
 // Workflow A GitHub Actions workflow
 type Workflow struct {
-	// ID Example: 5
-	ID int `json:"id"`
-
-	// Name Example: CI
-	Name string `json:"name"`
-
-	// State Example: active
+	ID    int           `json:"id"`
+	Name  string        `json:"name"`
 	State WorkflowState `json:"state"`
 }
 
-// WorkflowState Example: active
+// WorkflowState defines model for Workflow.State.
 type WorkflowState string
 
 // WorkflowRun An invocation of a workflow
 type WorkflowRun struct {
 	// CheckSuiteID The ID of the associated check suite.
-	//
-	// Example: 42
-	CheckSuiteID int `json:"check_suite_id,omitempty"`
-
-	// Conclusion Example: neutral
-	Conclusion string `json:"conclusion"`
-	CreatedAt  string `json:"created_at"`
-
-	// Event Example: push
-	Event string `json:"event"`
-
-	// HeadBranch Example: master
-	HeadBranch string `json:"head_branch"`
+	CheckSuiteID int    `json:"check_suite_id,omitempty"`
+	Conclusion   string `json:"conclusion"`
+	CreatedAt    string `json:"created_at"`
+	Event        string `json:"event"`
+	HeadBranch   string `json:"head_branch"`
 
 	// HeadSha The SHA of the head commit that points to the version of the workflow being run.
-	//
-	// Example: 009b8a3a9ccbb128af87f9b1c0f4c62e8a304f6d
 	HeadSha string `json:"head_sha"`
-
-	// HTMLURL Example: https://github.com/github/hello-world/suites/4
 	HTMLURL string `json:"html_url"`
 
 	// ID The ID of the workflow run.
-	//
-	// Example: 5
 	ID int `json:"id"`
 
 	// Name The name of the workflow run.
-	//
-	// Example: Build
-	Name string `json:"name,omitempty"`
-
-	// Status Example: completed
+	Name      string `json:"name,omitempty"`
 	Status    string `json:"status"`
 	UpdatedAt string `json:"updated_at"`
 
 	// WorkflowID The ID of the parent workflow.
-	//
-	// Example: 5
 	WorkflowID int `json:"workflow_id"`
 }
 
 // AppsCreateInstallationAccessTokenJSONBody defines body for AppsCreateInstallationAccessToken for application/json ContentType.
 type AppsCreateInstallationAccessTokenJSONBody struct {
 	// Permissions The permissions granted to the fine-grained access token.
-	//
-	// Example: {"contents":"read","deployments":"write","issues":"read","single_file":"read"}
 	Permissions AppPermissions `json:"permissions,omitempty"`
 
 	// Repositories List of repository names that the token should have access to
 	Repositories []string `json:"repositories,omitempty"`
 
 	// RepositoryIds List of repository IDs that the token should have access to
-	//
-	// Example: [1]
 	RepositoryIds []int `json:"repository_ids,omitempty"`
 }
 

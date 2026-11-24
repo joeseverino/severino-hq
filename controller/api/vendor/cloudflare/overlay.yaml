@@ -1,0 +1,9 @@
+overlay: 1.0.0
+info:
+  title: Cloudflare types the controller decodes
+  version: 1.0.0
+actions:
+  # oapi-codegen writes a schema's examples into the generated doc comments,
+  # and the vendors' examples are addresses and hostnames HQ never sends.
+  - target: $..example
+    remove: true

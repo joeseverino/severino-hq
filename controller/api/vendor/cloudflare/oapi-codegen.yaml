@@ -11,6 +11,8 @@ output-options:
     tags:
       - name: json
         template: '{{.FieldName}}{{if or .OmitEmpty .IsOptional}},omitempty{{end}}{{if .OmitZero}},omitzero{{end}}'
+  overlay:
+    path: ../../api/vendor/cloudflare/overlay.yaml
   skip-prune: true
   prefer-skip-optional-pointer: true
   name-normalizer: ToCamelCaseWithInitialisms

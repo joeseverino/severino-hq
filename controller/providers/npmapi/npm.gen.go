@@ -255,80 +255,51 @@ func (e RequestTokenJSONBodyScope) Valid() bool {
 // AccessListObject Access List object
 type AccessListObject struct {
 	// CreatedOn Date and time of creation
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// Id Unique identifier
-	//
-	// Example: 11
-	Id *Id `json:"id,omitempty"`
-
-	// Meta Example: {}
+	Id   *Id             `json:"id,omitempty"`
 	Meta json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
-
-	// Name Example: My Access List
-	Name string `json:"name"`
+	Name       string      `json:"name"`
 
 	// OwnerUserId User ID
-	//
-	// Example: 2
-	OwnerUserId UserId `json:"owner_user_id"`
-
-	// PassAuth Example: false
-	PassAuth Flag `json:"pass_auth"`
-
-	// ProxyHostCount Example: 3
-	ProxyHostCount int `json:"proxy_host_count"`
-
-	// SatisfyAny Example: true
-	SatisfyAny Flag `json:"satisfy_any"`
+	OwnerUserId    UserId `json:"owner_user_id"`
+	PassAuth       Flag   `json:"pass_auth"`
+	ProxyHostCount int    `json:"proxy_host_count"`
+	SatisfyAny     Flag   `json:"satisfy_any"`
 }
 
-// AccessClients Example: [{"address":"192.168.0.0/24","directive":"allow"}]
+// AccessClients defines model for access_clients.
 type AccessClients = []struct {
-	// Address Example: 192.168.0.11
-	Address *Address `json:"address,omitempty"`
-
-	// Directive Example: allow
+	Address   *Address   `json:"address,omitempty"`
 	Directive *Directive `json:"directive,omitempty"`
 }
 
-// AccessItems Example: [{"password":"pass","username":"admin"}]
+// AccessItems defines model for access_items.
 type AccessItems = []struct {
 	Password *string `json:"password,omitempty"`
 	Username *string `json:"username,omitempty"`
 }
 
 // AccessListId Access List ID
-//
-// Example: 3
 type AccessListId = ID
 
-// Address Example: 192.168.0.11
+// Address defines model for address.
 type Address = string
 
-// AdvancedConfig Example:
+// AdvancedConfig defines model for advanced_config.
 type AdvancedConfig = string
 
 // AllowWebsocketUpgrade Allow Websocket Upgrade for all paths
-//
-// Example: true
 type AllowWebsocketUpgrade = Flag
 
 // BlockExploits Should we block common exploits
-//
-// Example: false
 type BlockExploits = Flag
 
 // CachingEnabled Should we cache assets
-//
-// Example: true
 type CachingEnabled = Flag
 
 // CertificateList Certificates list
@@ -337,58 +308,36 @@ type CertificateList = []CertificateObject
 // CertificateObject Certificate object
 type CertificateObject struct {
 	// CreatedOn Date and time of creation
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames []string `json:"domain_names"`
 
 	// ExpiresOn Date and time of expiration
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	ExpiresOn *string `json:"expires_on,omitempty"`
 
 	// Id Unique identifier
-	//
-	// Example: 11
-	Id *Id `json:"id,omitempty"`
-
-	// Meta Example: {"dns_challenge":false}
+	Id   *Id             `json:"id,omitempty"`
 	Meta json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
 
 	// NiceName Nice Name for the custom certificate
-	//
-	// Example: My Custom Cert
 	NiceName string `json:"nice_name"`
 
 	// Owner User object
 	Owner *UserObject `json:"owner,omitempty"`
 
 	// OwnerUserId User ID
-	//
-	// Example: 2
-	OwnerUserId UserId `json:"owner_user_id"`
-
-	// Provider Example: letsencrypt
-	Provider SslProvider `json:"provider"`
+	OwnerUserId UserId      `json:"owner_user_id"`
+	Provider    SslProvider `json:"provider"`
 }
 
 // CertificateId Certificate ID
-//
-// Example: 5
 type CertificateId = ID
 
 // CreatedOn Date and time of creation
-//
-// Example: 2025-10-28T04:17:54.000Z
 type CreatedOn = string
 
 // DeadHostList 404 Hosts list
@@ -396,73 +345,48 @@ type DeadHostList = []DeadHostObject
 
 // DeadHostObject 404 Host object
 type DeadHostObject struct {
-	// AdvancedConfig Example:
 	AdvancedConfig string             `json:"advanced_config"`
 	Certificate    *CertificateObject `json:"certificate,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId CertificateId `json:"certificate_id"`
 
 	// CreatedOn Date and time of creation
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames DomainNames2 `json:"domain_names"`
 
 	// Enabled Is Enabled
-	//
-	// Example: false
 	Enabled Enabled `json:"enabled"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled HstsEnabled `json:"hsts_enabled"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains HstsSubdomains `json:"hsts_subdomains"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
 	Http2Support Http2Support `json:"http2_support"`
 
 	// Id Unique identifier
-	//
-	// Example: 11
-	Id *Id `json:"id,omitempty"`
-
-	// Meta Example: {}
+	Id   *Id             `json:"id,omitempty"`
 	Meta json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
 
 	// Owner User object
 	Owner *UserObject `json:"owner,omitempty"`
 
 	// OwnerUserId User ID
-	//
-	// Example: 2
 	OwnerUserId UserId `json:"owner_user_id"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced SslForced `json:"ssl_forced"`
 }
 
-// Directive Example: allow
+// Directive defines model for directive.
 type Directive string
 
 // DnsProvidersList DNS Providers list
@@ -478,18 +402,12 @@ type DnsProvidersList = []struct {
 }
 
 // DomainNames Domain Names separated by a comma
-//
-// Example: ["example.com","www.example.com"]
 type DomainNames = []string
 
 // DomainNames2 Domain Names separated by a comma
-//
-// Example: ["example.com","www.example.com"]
 type DomainNames2 = []string
 
 // Enabled Is Enabled
-//
-// Example: false
 type Enabled = Flag
 
 // Error Error
@@ -500,86 +418,63 @@ type Error struct {
 
 // ErrorObject Error object
 type ErrorObject struct {
-	// Code Example: 400
-	Code int `json:"code"`
-
-	// Message Example: Bad Request
+	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
 // ForwardDomainName Domain Name
-//
-// Example: jc21.com
 type ForwardDomainName = string
 
-// ForwardHost Example: 127.0.0.1
+// ForwardHost defines model for forward_host.
 type ForwardHost = string
 
 // ForwardHttpCode Redirect HTTP Status Code
-//
-// Example: 302
 type ForwardHttpCode = int
 
-// ForwardPort Example: 8080
+// ForwardPort defines model for forward_port.
 type ForwardPort = int
 
-// ForwardScheme Example: http
+// ForwardScheme defines model for forward_scheme.
 type ForwardScheme string
 
-// ForwardScheme2 Example: http
+// ForwardScheme2 defines model for forward_scheme-2.
 type ForwardScheme2 string
 
-// ForwardingHost Example: example.com
+// ForwardingHost defines model for forwarding_host.
 type ForwardingHost = string
 
-// ForwardingPort Example: 80
+// ForwardingPort defines model for forwarding_port.
 type ForwardingPort = int
 
 // HstsEnabled Is HSTS Enabled
-//
-// Example: true
 type HstsEnabled = Flag
 
 // HstsSubdomains Is HSTS applicable to all subdomains
-//
-// Example: true
 type HstsSubdomains = Flag
 
 // Http2Support HTTP2 Protocol Support
-//
-// Example: true
 type Http2Support = Flag
 
 // Id Unique identifier
-//
-// Example: 11
 type Id = ID
 
-// IncomingPort Example: 9090
+// IncomingPort defines model for incoming_port.
 type IncomingPort = int
 
-// Locations Example: [{"access_list_id":0,"forward_host":"example.com","forward_port":80,"forward_scheme":"http","path":"/app"}]
+// Locations defines model for locations.
 type Locations = []struct {
 	// AccessListId Access List ID
-	//
-	// Example: 3
 	AccessListId   *AccessListId `json:"access_list_id,omitempty"`
 	AdvancedConfig *string       `json:"advanced_config,omitempty"`
-
-	// ForwardHost Example: 127.0.0.1
-	ForwardHost ForwardHost `json:"forward_host"`
-	ForwardPath *string     `json:"forward_path,omitempty"`
-
-	// ForwardPort Example: 8080
-	ForwardPort ForwardPort `json:"forward_port"`
-
-	// ForwardScheme Example: http
-	ForwardScheme ForwardScheme `json:"forward_scheme"`
-	Id            *int          `json:"id,omitempty"`
-	Path          string        `json:"path"`
+	ForwardHost    ForwardHost   `json:"forward_host"`
+	ForwardPath    *string       `json:"forward_path,omitempty"`
+	ForwardPort    ForwardPort   `json:"forward_port"`
+	ForwardScheme  ForwardScheme `json:"forward_scheme"`
+	Id             *int          `json:"id,omitempty"`
+	Path           string        `json:"path"`
 }
 
-// Meta Example: {"dns_challenge":false}
+// Meta defines model for meta.
 type Meta struct {
 	Certificate            *string         `json:"certificate,omitempty"`
 	CertificateKey         *string         `json:"certificate_key,omitempty"`
@@ -594,31 +489,25 @@ type Meta struct {
 // MetaKeyType defines model for Meta.KeyType.
 type MetaKeyType string
 
-// Meta2 Example: {"nginx_err":null,"nginx_online":true}
+// Meta2 defines model for meta-2.
 type Meta2 = map[string]any
 
-// Meta3 Example: {}
+// Meta3 defines model for meta-3.
 type Meta3 = map[string]any
 
 // ModifiedOn Date and time of last update
-//
-// Example: 2025-10-28T04:17:54.000Z
 type ModifiedOn = string
 
-// Name Example: My Access List
+// Name defines model for name.
 type Name = string
 
 // NiceName Nice Name for the custom certificate
-//
-// Example: My Custom Cert
 type NiceName = string
 
-// PassAuth Example: false
+// PassAuth defines model for pass_auth.
 type PassAuth = Flag
 
 // PreservePath Should the path be preserved
-//
-// Example: true
 type PreservePath = Flag
 
 // ProxyHostList Proxy Hosts list
@@ -629,109 +518,65 @@ type ProxyHostObject struct {
 	AccessList *AccessListObject `json:"access_list,omitempty"`
 
 	// AccessListId Access List ID
-	//
-	// Example: 3
-	AccessListId AccessListId `json:"access_list_id"`
-
-	// AdvancedConfig Example:
-	AdvancedConfig string `json:"advanced_config"`
+	AccessListId   AccessListId `json:"access_list_id"`
+	AdvancedConfig string       `json:"advanced_config"`
 
 	// AllowWebsocketUpgrade Allow Websocket Upgrade for all paths
-	//
-	// Example: true
 	AllowWebsocketUpgrade Flag `json:"allow_websocket_upgrade"`
 
 	// BlockExploits Should we block common exploits
-	//
-	// Example: false
 	BlockExploits BlockExploits `json:"block_exploits"`
 
 	// CachingEnabled Should we cache assets
-	//
-	// Example: true
 	CachingEnabled CachingEnabled     `json:"caching_enabled"`
 	Certificate    *CertificateObject `json:"certificate,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId CertificateId `json:"certificate_id"`
 
 	// CreatedOn Date and time of creation
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames DomainNames2 `json:"domain_names"`
 
 	// Enabled Is Enabled
-	//
-	// Example: false
-	Enabled Enabled `json:"enabled"`
-
-	// ForwardHost Example: 127.0.0.1
-	ForwardHost string `json:"forward_host"`
-
-	// ForwardPort Example: 8080
-	ForwardPort int `json:"forward_port"`
-
-	// ForwardScheme Example: http
+	Enabled       Enabled                      `json:"enabled"`
+	ForwardHost   string                       `json:"forward_host"`
+	ForwardPort   int                          `json:"forward_port"`
 	ForwardScheme ProxyHostObjectForwardScheme `json:"forward_scheme"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled HstsEnabled `json:"hsts_enabled"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains HstsSubdomains `json:"hsts_subdomains"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
 	Http2Support Http2Support `json:"http2_support"`
 
 	// Id Unique identifier
-	//
-	// Example: 11
-	Id *Id `json:"id,omitempty"`
-
-	// Locations Example: [{"access_list_id":0,"forward_host":"example.com","forward_port":80,"forward_scheme":"http","path":"/app"}]
+	Id        *Id             `json:"id,omitempty"`
 	Locations json.RawMessage `json:"locations"`
-
-	// Meta Example: {"nginx_err":null,"nginx_online":true}
-	Meta json.RawMessage `json:"meta"`
+	Meta      json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
 
 	// Owner User object
 	Owner *UserObject `json:"owner,omitempty"`
 
 	// OwnerUserId User ID
-	//
-	// Example: 2
 	OwnerUserId UserId `json:"owner_user_id"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced SslForced `json:"ssl_forced"`
 
 	// TrustForwardedProto Trust the forwarded headers
-	//
-	// Example: false
 	TrustForwardedProto Flag `json:"trust_forwarded_proto"`
 }
 
-// ProxyHostObjectForwardScheme Example: http
+// ProxyHostObjectForwardScheme defines model for ProxyHostObject.ForwardScheme.
 type ProxyHostObjectForwardScheme string
 
 // RedirectionHostList Redirection Hosts list
@@ -739,107 +584,70 @@ type RedirectionHostList = []RedirectionHostObject
 
 // RedirectionHostObject Redirection Host object
 type RedirectionHostObject struct {
-	// AdvancedConfig Example:
 	AdvancedConfig string `json:"advanced_config"`
 
 	// BlockExploits Should we block common exploits
-	//
-	// Example: false
 	BlockExploits BlockExploits      `json:"block_exploits"`
 	Certificate   *CertificateObject `json:"certificate,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId CertificateId `json:"certificate_id"`
 
 	// CreatedOn Date and time of creation
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames DomainNames2 `json:"domain_names"`
 
 	// Enabled Is Enabled
-	//
-	// Example: false
 	Enabled Enabled `json:"enabled"`
 
 	// ForwardDomainName Domain Name
-	//
-	// Example: jc21.com
 	ForwardDomainName string `json:"forward_domain_name"`
 
 	// ForwardHttpCode Redirect HTTP Status Code
-	//
-	// Example: 302
-	ForwardHttpCode int `json:"forward_http_code"`
-
-	// ForwardScheme Example: http
-	ForwardScheme RedirectionHostObjectForwardScheme `json:"forward_scheme"`
+	ForwardHttpCode int                                `json:"forward_http_code"`
+	ForwardScheme   RedirectionHostObjectForwardScheme `json:"forward_scheme"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled HstsEnabled `json:"hsts_enabled"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains HstsSubdomains `json:"hsts_subdomains"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
 	Http2Support Http2Support `json:"http2_support"`
 
 	// Id Unique identifier
-	//
-	// Example: 11
-	Id *Id `json:"id,omitempty"`
-
-	// Meta Example: {"nginx_err":null,"nginx_online":true}
+	Id   *Id             `json:"id,omitempty"`
 	Meta json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
 
 	// Owner User object
 	Owner *UserObject `json:"owner,omitempty"`
 
 	// OwnerUserId User ID
-	//
-	// Example: 2
 	OwnerUserId UserId `json:"owner_user_id"`
 
 	// PreservePath Should the path be preserved
-	//
-	// Example: true
 	PreservePath Flag `json:"preserve_path"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced SslForced `json:"ssl_forced"`
 }
 
-// RedirectionHostObjectForwardScheme Example: http
+// RedirectionHostObjectForwardScheme defines model for RedirectionHostObject.ForwardScheme.
 type RedirectionHostObjectForwardScheme string
 
-// SatisfyAny Example: true
+// SatisfyAny defines model for satisfy_any.
 type SatisfyAny = Flag
 
 // SslForced Is SSL Forced
-//
-// Example: true
 type SslForced = Flag
 
-// SslProvider Example: letsencrypt
+// SslProvider defines model for ssl_provider.
 type SslProvider = string
 
 // StreamList Streams list
@@ -850,183 +658,115 @@ type StreamObject struct {
 	Certificate *CertificateObject `json:"certificate,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// CreatedOn Date and time of creation
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	CreatedOn *CreatedOn `json:"created_on,omitempty"`
 
 	// Enabled Is Enabled
-	//
-	// Example: false
-	Enabled Enabled `json:"enabled"`
-
-	// ForwardingHost Example: example.com
-	ForwardingHost string `json:"forwarding_host"`
-
-	// ForwardingPort Example: 80
-	ForwardingPort int `json:"forwarding_port"`
+	Enabled        Enabled `json:"enabled"`
+	ForwardingHost string  `json:"forwarding_host"`
+	ForwardingPort int     `json:"forwarding_port"`
 
 	// Id Unique identifier
-	//
-	// Example: 11
-	Id *Id `json:"id,omitempty"`
-
-	// IncomingPort Example: 9090
-	IncomingPort int `json:"incoming_port"`
-
-	// Meta Example: {}
-	Meta json.RawMessage `json:"meta"`
+	Id           *Id             `json:"id,omitempty"`
+	IncomingPort int             `json:"incoming_port"`
+	Meta         json.RawMessage `json:"meta"`
 
 	// ModifiedOn Date and time of last update
-	//
-	// Example: 2025-10-28T04:17:54.000Z
 	ModifiedOn *ModifiedOn `json:"modified_on,omitempty"`
 
 	// Owner User object
 	Owner *UserObject `json:"owner,omitempty"`
 
 	// OwnerUserId User ID
-	//
-	// Example: 2
-	OwnerUserId UserId `json:"owner_user_id"`
-
-	// TcpForwarding Example: true
-	TcpForwarding Flag `json:"tcp_forwarding"`
-
-	// UdpForwarding Example: false
-	UdpForwarding Flag `json:"udp_forwarding"`
+	OwnerUserId   UserId `json:"owner_user_id"`
+	TcpForwarding Flag   `json:"tcp_forwarding"`
+	UdpForwarding Flag   `json:"udp_forwarding"`
 }
 
-// TcpForwarding Example: true
+// TcpForwarding defines model for tcp_forwarding.
 type TcpForwarding = Flag
 
 // TokenChallenge Token object
 type TokenChallenge struct {
 	// ChallengeToken Challenge Token used in subsequent 2FA verification
-	//
-	// Example: eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.ey...xaHKYr3Kk6MvkUjcC4
 	ChallengeToken string `json:"challenge_token"`
 
 	// Requires2fa Whether this token request requires two-factor authentication
-	//
-	// Example: true
 	Requires2fa Flag `json:"requires_2fa"`
 }
 
 // TokenObject Token object
 type TokenObject struct {
 	// Expires Token Expiry ISO Time String
-	//
-	// Example: 2025-02-04T20:40:46.340Z
 	Expires string `json:"expires"`
 
 	// Token JWT Token
-	//
-	// Example: eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.ey...xaHKYr3Kk6MvkUjcC4
 	Token string `json:"token"`
 }
 
 // TrustForwardedProto Trust the forwarded headers
-//
-// Example: false
 type TrustForwardedProto = Flag
 
-// UdpForwarding Example: false
+// UdpForwarding defines model for udp_forwarding.
 type UdpForwarding = Flag
 
 // UserObject User object
 type UserObject struct {
 	// Avatar Gravatar URL based on email, without scheme
-	//
-	// Example: //www.gravatar.com/avatar/6193176330f8d38747f038c170ddb193?default=mm
 	Avatar string `json:"avatar"`
 
 	// CreatedOn Created Date
-	//
-	// Example: 2020-01-30T09:36:08.000Z
 	CreatedOn string `json:"created_on"`
 
 	// Email Email
-	//
-	// Example: jc@jc21.com
 	Email string `json:"email"`
 
 	// Id User ID
-	//
-	// Example: 1
 	Id int `json:"id"`
 
 	// IsDisabled Is user Disabled
-	//
-	// Example: true
 	IsDisabled Flag `json:"is_disabled"`
 
 	// ModifiedOn Modified Date
-	//
-	// Example: 2020-01-30T09:41:04.000Z
 	ModifiedOn string `json:"modified_on"`
 
 	// Name Name
-	//
-	// Example: Jamie Curnow
 	Name string `json:"name"`
 
 	// Nickname Nickname
-	//
-	// Example: James
 	Nickname string `json:"nickname"`
 
 	// Permissions Permissions if expanded in request
 	Permissions *struct {
 		// AccessLists Access Lists access level
-		//
-		// Example: hidden
 		AccessLists string `json:"access_lists"`
 
 		// Certificates Certificates access level
-		//
-		// Example: view
 		Certificates string `json:"certificates"`
 
 		// DeadHosts Dead Hosts access level
-		//
-		// Example: manage
 		DeadHosts string `json:"dead_hosts"`
 
 		// ProxyHosts Proxy Hosts access level
-		//
-		// Example: manage
 		ProxyHosts string `json:"proxy_hosts"`
 
 		// RedirectionHosts Redirection Hosts access level
-		//
-		// Example: manage
 		RedirectionHosts string `json:"redirection_hosts"`
 
 		// Streams Streams access level
-		//
-		// Example: manage
 		Streams string `json:"streams"`
 
 		// Visibility Visibility level
-		//
-		// Example: all
 		Visibility string `json:"visibility"`
 	} `json:"permissions,omitempty"`
 
 	// Roles Roles applied
-	//
-	// Example: ["admin"]
 	Roles []string `json:"roles"`
 }
 
 // UserId User ID
-//
-// Example: 2
 type UserId = int
 
 // GetAccessListsParams defines parameters for GetAccessLists.
@@ -1040,38 +780,20 @@ type GetAccessListsParamsExpand string
 
 // CreateAccessListJSONBody defines body for CreateAccessList for application/json ContentType.
 type CreateAccessListJSONBody struct {
-	// Clients Example: [{"address":"192.168.0.0/24","directive":"allow"}]
-	Clients *AccessClients `json:"clients,omitempty"`
-
-	// Items Example: [{"password":"pass","username":"admin"}]
-	Items *AccessItems `json:"items,omitempty"`
-
-	// Name Example: My Access List
-	Name Name `json:"name"`
-
-	// PassAuth Example: false
-	PassAuth *PassAuth `json:"pass_auth,omitempty"`
-
-	// SatisfyAny Example: true
-	SatisfyAny *SatisfyAny `json:"satisfy_any,omitempty"`
+	Clients    *AccessClients `json:"clients,omitempty"`
+	Items      *AccessItems   `json:"items,omitempty"`
+	Name       Name           `json:"name"`
+	PassAuth   *PassAuth      `json:"pass_auth,omitempty"`
+	SatisfyAny *SatisfyAny    `json:"satisfy_any,omitempty"`
 }
 
 // UpdateAccessListJSONBody defines body for UpdateAccessList for application/json ContentType.
 type UpdateAccessListJSONBody struct {
-	// Clients Example: [{"address":"192.168.0.0/24","directive":"allow"}]
-	Clients *AccessClients `json:"clients,omitempty"`
-
-	// Items Example: [{"password":"pass","username":"admin"}]
-	Items *AccessItems `json:"items,omitempty"`
-
-	// Name Example: My Access List
-	Name *Name `json:"name,omitempty"`
-
-	// PassAuth Example: false
-	PassAuth *PassAuth `json:"pass_auth,omitempty"`
-
-	// SatisfyAny Example: true
-	SatisfyAny *SatisfyAny `json:"satisfy_any,omitempty"`
+	Clients    *AccessClients `json:"clients,omitempty"`
+	Items      *AccessItems   `json:"items,omitempty"`
+	Name       *Name          `json:"name,omitempty"`
+	PassAuth   *PassAuth      `json:"pass_auth,omitempty"`
+	SatisfyAny *SatisfyAny    `json:"satisfy_any,omitempty"`
 }
 
 // GetCertificatesParams defines parameters for GetCertificates.
@@ -1086,57 +808,31 @@ type GetCertificatesParamsExpand string
 // CreateCertificateJSONBody defines body for CreateCertificate for application/json ContentType.
 type CreateCertificateJSONBody struct {
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
-	DomainNames *DomainNames `json:"domain_names,omitempty"`
-
-	// Meta Example: {"dns_challenge":false}
-	Meta *json.RawMessage `json:"meta,omitempty"`
+	DomainNames *DomainNames     `json:"domain_names,omitempty"`
+	Meta        *json.RawMessage `json:"meta,omitempty"`
 
 	// NiceName Nice Name for the custom certificate
-	//
-	// Example: My Custom Cert
-	NiceName *NiceName `json:"nice_name,omitempty"`
-
-	// Provider Example: letsencrypt
+	NiceName *NiceName   `json:"nice_name,omitempty"`
 	Provider SslProvider `json:"provider"`
 }
 
 // TestHttpReachJSONBody defines body for TestHttpReach for application/json ContentType.
 type TestHttpReachJSONBody struct {
 	// Domains Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	Domains DomainNames2 `json:"domains"`
 }
 
 // ValidateCertificatesMultipartBody defines body for ValidateCertificates for multipart/form-data ContentType.
 type ValidateCertificatesMultipartBody struct {
-	// Certificate Example: -----BEGIN CERTIFICATE-----
-	// MIID...-----END CERTIFICATE-----
-	Certificate string `json:"certificate"`
-
-	// CertificateKey Example: -----BEGIN CERTIFICATE-----
-	// MIID...-----END CERTIFICATE-----
-	CertificateKey string `json:"certificate_key"`
-
-	// IntermediateCertificate Example: -----BEGIN CERTIFICATE-----
-	// MIID...-----END CERTIFICATE-----
+	Certificate             string  `json:"certificate"`
+	CertificateKey          string  `json:"certificate_key"`
 	IntermediateCertificate *string `json:"intermediate_certificate,omitempty"`
 }
 
 // UploadCertificateMultipartBody defines body for UploadCertificate for multipart/form-data ContentType.
 type UploadCertificateMultipartBody struct {
-	// Certificate Example: -----BEGIN CERTIFICATE-----
-	// MIID...-----END CERTIFICATE-----
-	Certificate string `json:"certificate"`
-
-	// CertificateKey Example: -----BEGIN CERTIFICATE-----
-	// MIID...-----END CERTIFICATE-----
-	CertificateKey string `json:"certificate_key"`
-
-	// IntermediateCertificate Example: -----BEGIN CERTIFICATE-----
-	// MIID...-----END CERTIFICATE-----
+	Certificate             string  `json:"certificate"`
+	CertificateKey          string  `json:"certificate_key"`
 	IntermediateCertificate *string `json:"intermediate_certificate,omitempty"`
 }
 
@@ -1151,79 +847,49 @@ type GetDeadHostsParamsExpand string
 
 // Create404HostJSONBody defines body for Create404Host for application/json ContentType.
 type Create404HostJSONBody struct {
-	// AdvancedConfig Example:
 	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames DomainNames2 `json:"domain_names"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-
-	// Meta Example: {}
-	Meta *json.RawMessage `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
 }
 
 // UpdateDeadHostJSONBody defines body for UpdateDeadHost for application/json ContentType.
 type UpdateDeadHostJSONBody struct {
-	// AdvancedConfig Example:
 	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames *DomainNames2 `json:"domain_names,omitempty"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-
-	// Meta Example: {}
-	Meta *json.RawMessage `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
 }
 
@@ -1239,162 +905,90 @@ type GetProxyHostsParamsExpand string
 // CreateProxyHostJSONBody defines body for CreateProxyHost for application/json ContentType.
 type CreateProxyHostJSONBody struct {
 	// AccessListId Access List ID
-	//
-	// Example: 3
-	AccessListId *AccessListId `json:"access_list_id,omitempty"`
-
-	// AdvancedConfig Example:
+	AccessListId   *AccessListId   `json:"access_list_id,omitempty"`
 	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
 
 	// AllowWebsocketUpgrade Allow Websocket Upgrade for all paths
-	//
-	// Example: true
 	AllowWebsocketUpgrade *AllowWebsocketUpgrade `json:"allow_websocket_upgrade,omitempty"`
 
 	// BlockExploits Should we block common exploits
-	//
-	// Example: false
 	BlockExploits *BlockExploits `json:"block_exploits,omitempty"`
 
 	// CachingEnabled Should we cache assets
-	//
-	// Example: true
 	CachingEnabled *CachingEnabled `json:"caching_enabled,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames DomainNames2 `json:"domain_names"`
 
 	// Enabled Is Enabled
-	//
-	// Example: false
-	Enabled *Enabled `json:"enabled,omitempty"`
-
-	// ForwardHost Example: 127.0.0.1
-	ForwardHost ForwardHost `json:"forward_host"`
-
-	// ForwardPort Example: 8080
-	ForwardPort ForwardPort `json:"forward_port"`
-
-	// ForwardScheme Example: http
+	Enabled       *Enabled      `json:"enabled,omitempty"`
+	ForwardHost   ForwardHost   `json:"forward_host"`
+	ForwardPort   ForwardPort   `json:"forward_port"`
 	ForwardScheme ForwardScheme `json:"forward_scheme"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-
-	// Locations Example: [{"access_list_id":0,"forward_host":"example.com","forward_port":80,"forward_scheme":"http","path":"/app"}]
-	Locations *Locations `json:"locations,omitempty"`
-
-	// Meta Example: {"nginx_err":null,"nginx_online":true}
-	Meta *json.RawMessage `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Locations    *Locations       `json:"locations,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
 
 	// TrustForwardedProto Trust the forwarded headers
-	//
-	// Example: false
 	TrustForwardedProto *TrustForwardedProto `json:"trust_forwarded_proto,omitempty"`
 }
 
 // UpdateProxyHostJSONBody defines body for UpdateProxyHost for application/json ContentType.
 type UpdateProxyHostJSONBody struct {
 	// AccessListId Access List ID
-	//
-	// Example: 3
-	AccessListId *AccessListId `json:"access_list_id,omitempty"`
-
-	// AdvancedConfig Example:
+	AccessListId   *AccessListId   `json:"access_list_id,omitempty"`
 	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
 
 	// AllowWebsocketUpgrade Allow Websocket Upgrade for all paths
-	//
-	// Example: true
 	AllowWebsocketUpgrade *AllowWebsocketUpgrade `json:"allow_websocket_upgrade,omitempty"`
 
 	// BlockExploits Should we block common exploits
-	//
-	// Example: false
 	BlockExploits *BlockExploits `json:"block_exploits,omitempty"`
 
 	// CachingEnabled Should we cache assets
-	//
-	// Example: true
 	CachingEnabled *CachingEnabled `json:"caching_enabled,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames *DomainNames2 `json:"domain_names,omitempty"`
 
 	// Enabled Is Enabled
-	//
-	// Example: false
-	Enabled *Enabled `json:"enabled,omitempty"`
-
-	// ForwardHost Example: 127.0.0.1
-	ForwardHost *ForwardHost `json:"forward_host,omitempty"`
-
-	// ForwardPort Example: 8080
-	ForwardPort *ForwardPort `json:"forward_port,omitempty"`
-
-	// ForwardScheme Example: http
+	Enabled       *Enabled       `json:"enabled,omitempty"`
+	ForwardHost   *ForwardHost   `json:"forward_host,omitempty"`
+	ForwardPort   *ForwardPort   `json:"forward_port,omitempty"`
 	ForwardScheme *ForwardScheme `json:"forward_scheme,omitempty"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-
-	// Locations Example: [{"access_list_id":0,"forward_host":"example.com","forward_port":80,"forward_scheme":"http","path":"/app"}]
-	Locations *Locations `json:"locations,omitempty"`
-
-	// Meta Example: {"nginx_err":null,"nginx_online":true}
-	Meta *json.RawMessage `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Locations    *Locations       `json:"locations,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
 
 	// TrustForwardedProto Trust the forwarded headers
-	//
-	// Example: false
 	TrustForwardedProto *TrustForwardedProto `json:"trust_forwarded_proto,omitempty"`
 }
 
@@ -1409,125 +1003,75 @@ type GetRedirectionHostsParamsExpand string
 
 // CreateRedirectionHostJSONBody defines body for CreateRedirectionHost for application/json ContentType.
 type CreateRedirectionHostJSONBody struct {
-	// AdvancedConfig Example:
 	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
 
 	// BlockExploits Should we block common exploits
-	//
-	// Example: false
 	BlockExploits *BlockExploits `json:"block_exploits,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames DomainNames2 `json:"domain_names"`
 
 	// ForwardDomainName Domain Name
-	//
-	// Example: jc21.com
 	ForwardDomainName ForwardDomainName `json:"forward_domain_name"`
 
 	// ForwardHttpCode Redirect HTTP Status Code
-	//
-	// Example: 302
 	ForwardHttpCode ForwardHttpCode `json:"forward_http_code"`
-
-	// ForwardScheme Example: http
-	ForwardScheme ForwardScheme2 `json:"forward_scheme"`
+	ForwardScheme   ForwardScheme2  `json:"forward_scheme"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-
-	// Meta Example: {"nginx_err":null,"nginx_online":true}
-	Meta *json.RawMessage `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// PreservePath Should the path be preserved
-	//
-	// Example: true
 	PreservePath *PreservePath `json:"preserve_path,omitempty"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
 }
 
 // UpdateRedirectionHostJSONBody defines body for UpdateRedirectionHost for application/json ContentType.
 type UpdateRedirectionHostJSONBody struct {
-	// AdvancedConfig Example:
 	AdvancedConfig *AdvancedConfig `json:"advanced_config,omitempty"`
 
 	// BlockExploits Should we block common exploits
-	//
-	// Example: false
 	BlockExploits *BlockExploits `json:"block_exploits,omitempty"`
 
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
 	DomainNames *DomainNames2 `json:"domain_names,omitempty"`
 
 	// ForwardDomainName Domain Name
-	//
-	// Example: jc21.com
 	ForwardDomainName *ForwardDomainName `json:"forward_domain_name,omitempty"`
 
 	// ForwardHttpCode Redirect HTTP Status Code
-	//
-	// Example: 302
 	ForwardHttpCode *ForwardHttpCode `json:"forward_http_code,omitempty"`
-
-	// ForwardScheme Example: http
-	ForwardScheme *ForwardScheme2 `json:"forward_scheme,omitempty"`
+	ForwardScheme   *ForwardScheme2  `json:"forward_scheme,omitempty"`
 
 	// HstsEnabled Is HSTS Enabled
-	//
-	// Example: true
 	HstsEnabled *HstsEnabled `json:"hsts_enabled,omitempty"`
 
 	// HstsSubdomains Is HSTS applicable to all subdomains
-	//
-	// Example: true
 	HstsSubdomains *HstsSubdomains `json:"hsts_subdomains,omitempty"`
 
 	// Http2Support HTTP2 Protocol Support
-	//
-	// Example: true
-	Http2Support *Http2Support `json:"http2_support,omitempty"`
-
-	// Meta Example: {"nginx_err":null,"nginx_online":true}
-	Meta *json.RawMessage `json:"meta,omitempty"`
+	Http2Support *Http2Support    `json:"http2_support,omitempty"`
+	Meta         *json.RawMessage `json:"meta,omitempty"`
 
 	// PreservePath Should the path be preserved
-	//
-	// Example: true
 	PreservePath *PreservePath `json:"preserve_path,omitempty"`
 
 	// SslForced Is SSL Forced
-	//
-	// Example: true
 	SslForced *SslForced `json:"ssl_forced,omitempty"`
 }
 
@@ -1543,70 +1087,35 @@ type GetStreamsParamsExpand string
 // CreateStreamJSONBody defines body for CreateStream for application/json ContentType.
 type CreateStreamJSONBody struct {
 	// CertificateId Certificate ID
-	//
-	// Example: 5
 	CertificateId *CertificateId `json:"certificate_id,omitempty"`
 
 	// DomainNames Domain Names separated by a comma
-	//
-	// Example: ["example.com","www.example.com"]
-	DomainNames *DomainNames2 `json:"domain_names,omitempty"`
-
-	// ForwardingHost Example: example.com
-	ForwardingHost ForwardingHost `json:"forwarding_host"`
-
-	// ForwardingPort Example: 80
-	ForwardingPort ForwardingPort `json:"forwarding_port"`
-
-	// IncomingPort Example: 9090
-	IncomingPort IncomingPort `json:"incoming_port"`
-
-	// Meta Example: {}
-	Meta *json.RawMessage `json:"meta,omitempty"`
-
-	// TcpForwarding Example: true
-	TcpForwarding *TcpForwarding `json:"tcp_forwarding,omitempty"`
-
-	// UdpForwarding Example: false
-	UdpForwarding *UdpForwarding `json:"udp_forwarding,omitempty"`
+	DomainNames    *DomainNames2    `json:"domain_names,omitempty"`
+	ForwardingHost ForwardingHost   `json:"forwarding_host"`
+	ForwardingPort ForwardingPort   `json:"forwarding_port"`
+	IncomingPort   IncomingPort     `json:"incoming_port"`
+	Meta           *json.RawMessage `json:"meta,omitempty"`
+	TcpForwarding  *TcpForwarding   `json:"tcp_forwarding,omitempty"`
+	UdpForwarding  *UdpForwarding   `json:"udp_forwarding,omitempty"`
 }
 
 // UpdateStreamJSONBody defines body for UpdateStream for application/json ContentType.
 type UpdateStreamJSONBody struct {
 	// CertificateId Certificate ID
-	//
-	// Example: 5
-	CertificateId *CertificateId `json:"certificate_id,omitempty"`
-
-	// ForwardingHost Example: example.com
-	ForwardingHost *ForwardingHost `json:"forwarding_host,omitempty"`
-
-	// ForwardingPort Example: 80
-	ForwardingPort *ForwardingPort `json:"forwarding_port,omitempty"`
-
-	// IncomingPort Example: 9090
-	IncomingPort *IncomingPort `json:"incoming_port,omitempty"`
-
-	// Meta Example: {}
-	Meta *json.RawMessage `json:"meta,omitempty"`
-
-	// TcpForwarding Example: true
-	TcpForwarding *TcpForwarding `json:"tcp_forwarding,omitempty"`
-
-	// UdpForwarding Example: false
-	UdpForwarding *UdpForwarding `json:"udp_forwarding,omitempty"`
+	CertificateId  *CertificateId   `json:"certificate_id,omitempty"`
+	ForwardingHost *ForwardingHost  `json:"forwarding_host,omitempty"`
+	ForwardingPort *ForwardingPort  `json:"forwarding_port,omitempty"`
+	IncomingPort   *IncomingPort    `json:"incoming_port,omitempty"`
+	Meta           *json.RawMessage `json:"meta,omitempty"`
+	TcpForwarding  *TcpForwarding   `json:"tcp_forwarding,omitempty"`
+	UdpForwarding  *UdpForwarding   `json:"udp_forwarding,omitempty"`
 }
 
 // RequestTokenJSONBody defines body for RequestToken for application/json ContentType.
 type RequestTokenJSONBody struct {
-	// Identity Example: me@example.com
-	Identity string `json:"identity"`
-
-	// Scope Example: user
-	Scope *RequestTokenJSONBodyScope `json:"scope,omitempty"`
-
-	// Secret Example: bigredhorsebanana
-	Secret string `json:"secret"`
+	Identity string                     `json:"identity"`
+	Scope    *RequestTokenJSONBodyScope `json:"scope,omitempty"`
+	Secret   string                     `json:"secret"`
 }
 
 // RequestTokenJSONBodyScope defines model for RequestTokenJSONBody.Scope.
@@ -1619,11 +1128,8 @@ type RequestToken200JSONResponseBody struct {
 
 // LoginWith2FAJSONBody defines body for LoginWith2FA for application/json ContentType.
 type LoginWith2FAJSONBody struct {
-	// ChallengeToken Example: eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.ey...xaHKYr3Kk6MvkUjcC4
 	ChallengeToken string `json:"challenge_token"`
-
-	// Code Example: 012345
-	Code string `json:"code"`
+	Code           string `json:"code"`
 }
 
 // CreateAccessListJSONRequestBody defines body for CreateAccessList for application/json ContentType.

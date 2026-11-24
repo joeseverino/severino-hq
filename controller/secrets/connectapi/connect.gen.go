@@ -337,7 +337,7 @@ type FieldPurpose string
 // FieldType defines model for Field.Type.
 type FieldType string
 
-// File Example: {"content":"VGhlIGZ1dHVyZSBiZWxvbmdzIHRvIHRoZSBjdXJpb3VzLgo=","content_path":"v1/vaults/ionaiwtdvgclrixbt6ztpqcxnq/items/p7eflcy7f5mk7vg6zrzf5rjjyu/files/6r65pjq33banznomn7q22sj44e/content","id":"6r65pjq33banznomn7q22sj44e","name":"foo.txt","size":35}
+// File defines model for File.
 type File struct {
 	// Content Base64-encoded contents of the file. Only set if size <= OP_MAX_INLINE_FILE_SIZE_KB kb and `inline_files` is set to `true`.
 	Content *[]byte `json:"content,omitempty"`
@@ -377,9 +377,7 @@ type FullItem struct {
 	Tags      *[]string      `json:"tags,omitempty"`
 	Title     *string        `json:"title,omitempty"`
 	UpdatedAt *string        `json:"updatedAt,omitempty"`
-
-	// Urls Example: [{"href":"https://example.com","primary":true},{"href":"https://example.org"}]
-	Urls *[]struct {
+	Urls      *[]struct {
 		Href    string  `json:"href"`
 		Label   *string `json:"label,omitempty"`
 		Primary *bool   `json:"primary,omitempty"`
@@ -401,8 +399,6 @@ type GeneratorRecipe struct {
 	CharacterSets *[]GeneratorRecipeCharacterSets `json:"characterSets,omitempty"`
 
 	// ExcludeCharacters List of all characters that should be excluded from generated passwords.
-	//
-	// Example: abc1
 	ExcludeCharacters *string `json:"excludeCharacters,omitempty"`
 
 	// Length Length of the generated value
@@ -423,9 +419,7 @@ type Item struct {
 	Tags         *[]string    `json:"tags,omitempty"`
 	Title        *string      `json:"title,omitempty"`
 	UpdatedAt    *string      `json:"updatedAt,omitempty"`
-
-	// Urls Example: [{"href":"https://example.com","primary":true},{"href":"https://example.org"}]
-	Urls *[]struct {
+	Urls         *[]struct {
 		Href    string  `json:"href"`
 		Label   *string `json:"label,omitempty"`
 		Primary *bool   `json:"primary,omitempty"`
