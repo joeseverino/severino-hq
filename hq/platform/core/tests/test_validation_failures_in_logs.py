@@ -14,7 +14,7 @@ from django.test import SimpleTestCase
 from pydantic import BaseModel, ValidationError
 
 from hq.platform.application import refusal_status
-from hq.platform.core.logging import JsonFormatter
+from hq.platform.core.log_lines import LineFormatter
 
 PLANTED = "-----BEGIN PRIVATE KEY----- example-planted-7f3a"
 LOGGER = "example.worker"
@@ -81,7 +81,7 @@ class ValidationFailureLogTests(SimpleTestCase):
             target.removeHandler(handler)
             target.setLevel(old_level)
             target.propagate = old_propagate
-        return [JsonFormatter().format(record) for record in kept]
+        return [LineFormatter().format(record) for record in kept]
 
     def test_a_failure_logged_by_any_logger_carries_no_value_the_caller_sent(self):
         for case, exc in _failures().items():

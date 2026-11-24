@@ -880,9 +880,7 @@ _LOGGED_LEVEL = "ERROR" if SEVERINO_LOG_LEVEL == "CRITICAL" else SEVERINO_LOG_LE
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "formatters": {
-        "json": {"()": "hq.platform.core.logging.JsonFormatter"},
-    },
+    "formatters": {"json": {"()": "hq.platform.core.log_lines.LineFormatter"}},
     "handlers": {
         # The level is the handler's as well as the root's, so a logger that
         # keeps a level of its own below it still prints nothing quieter.

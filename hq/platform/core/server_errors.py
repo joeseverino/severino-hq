@@ -3,7 +3,7 @@
 A handler on the root logger, as Django's ``AdminEmailHandler`` is on
 ``django.request``: an error record with a traceback, logged inside a request,
 becomes one ``ServerError`` row keyed by that request's id. The traceback is
-the text the log line carries (``JsonFormatter``, which tells a validation
+the text the log line carries (``LineFormatter``, which tells a validation
 failure without the value sent), never a frame's locals. Writing it never
 raises into the request and never changes its answer: a failure to record is
 logged without a traceback, which this handler does not take, and dropped. A
@@ -17,11 +17,11 @@ from typing import override
 from django.db import transaction
 from django.utils.text import Truncator
 
-from hq.platform.core.logging import JsonFormatter, logged_failure
 lazy from hq.platform.application import request_context
 lazy from hq.platform.application.request_identity import signed_in
 
-from .tracing import NO_TRACE, trace_id
+from . import log_lines
+from .tracing import NO_TRACE
 lazy from . import speculation
 lazy from .attribution import bound
 lazy from .models import ServerError
@@ -34,7 +34,7 @@ KEPT = 200
 TRACEBACK_CHARS = 64 * 1024
 MESSAGE_CHARS = 2000
 
-_formatter = JsonFormatter()
+_formatter = log_lines.LineFormatter()
 
 
 class ServerErrorHandler(logging.Handler):
@@ -61,8 +61,8 @@ def keep(record: logging.LogRecord, exc: BaseException) -> None:
     """Write ``exc`` as its request's error, unless it was served outside a request or on a guess."""
 
     request = getattr(record, "request", None) or request_context.current()
-    request_id = str(getattr(request, "request_id", "") or "") or (trace_id() if trace_id() != NO_TRACE else "")
-    if not request_id or (request is not None and speculation.purpose(request)):
+    request_id = log_lines.request_id(record)
+    if request_id == NO_TRACE or (request is not None and speculation.purpose(request)):
         return
     door = bound()
     user = signed_in(request) if request is not None else None
@@ -83,7 +83,7 @@ def keep(record: logging.LogRecord, exc: BaseException) -> None:
                 "actor": door.actor if door is not None else "",
                 "interface": door.interface if door is not None else "",
                 "exception": _named(type(exc))[-field("exception").max_length :],
-                "message": Truncator(str(logged_failure(exc))).chars(MESSAGE_CHARS),
+                "message": Truncator(str(log_lines.logged_failure(exc))).chars(MESSAGE_CHARS),
                 "traceback": traceback,
             },
         )

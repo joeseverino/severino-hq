@@ -1,4 +1,4 @@
-"""Structured production logging primitives."""
+"""HQ's log line: one JSON object per record."""
 
 import json
 import logging
@@ -28,6 +28,10 @@ def _validation_summary(exc: PydanticValidationError) -> str:
     return f"{exc.title} failed validation at {where}"
 
 
+def _told(value: object) -> object:
+    return _validation_summary(value) if _invalid(value) else value
+
+
 @cache
 def _stand_in(kind: type[BaseException]) -> type[Exception]:
     """An exception class a traceback names as ``kind``, to carry a link's safe text in its place."""
@@ -53,8 +57,7 @@ def logged_failure(exc: BaseException) -> BaseException:
         return exc
     told: BaseException | None = None
     for link in reversed(links):
-        text = _validation_summary(link) if _invalid(link) else str(link)
-        stand_in = _stand_in(type(link))(text).with_traceback(link.__traceback__)
+        stand_in = _stand_in(type(link))(str(_told(link))).with_traceback(link.__traceback__)
         if link.__cause__ is not None:
             stand_in.__cause__ = told
         else:
@@ -66,7 +69,16 @@ def logged_failure(exc: BaseException) -> BaseException:
 type _ExcInfo = tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None]
 
 
-class JsonFormatter(logging.Formatter):
+def request_id(record: logging.LogRecord) -> str:
+    """The id of the request ``record`` was logged in, or ``NO_TRACE``."""
+
+    # Django logs a response a view returned once every middleware has
+    # finished with it, past the trace, and hands the request beside it.
+    traced = trace_id()
+    return traced if traced != NO_TRACE else getattr(getattr(record, "request", None), "request_id", NO_TRACE)
+
+
+class LineFormatter(logging.Formatter):
     """Emit stable JSON records that remain useful in plain container logs.
 
     Every line HQ logs passes through it, so it is where a validation failure
@@ -79,43 +91,26 @@ class JsonFormatter(logging.Formatter):
 
     @override
     def format(self, record: logging.LogRecord) -> str:
-        request_id = trace_id()
-        request = getattr(record, "request", None)
-        # Django logs a response a view returned once every middleware has
-        # finished with it, past the trace, and hands the request beside it.
-        if request_id == NO_TRACE and request is not None:
-            request_id = getattr(request, "request_id", NO_TRACE)
-        payload = {
+        line = {
             "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname.lower(),
             "logger": record.name,
             "message": self._message(record),
-            "request_id": request_id,
-        }
-        for field in self.fields:
-            value = getattr(record, field, None)
-            if value is not None:
-                payload[field] = value
+            "request_id": request_id(record),
+        } | {field: value for field in self.fields if (value := getattr(record, field, None)) is not None}
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
-        return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+            line["exception"] = self.formatException(record.exc_info)
+        return json.dumps(line, separators=(",", ":"), ensure_ascii=False)
 
     @override
     def formatException(self, ei: _ExcInfo) -> str:
-        exc = ei[1]
-        if exc is None:
-            return super().formatException(ei)
-        told = logged_failure(exc)
-        return super().formatException((type(told), told, told.__traceback__))
+        told = ei if ei[1] is None else (type(exc := logged_failure(ei[1])), exc, exc.__traceback__)
+        return super().formatException(told)
 
     @staticmethod
     def _message(record: logging.LogRecord) -> str:
         args = record.args
-        values = args.values() if isinstance(args, Mapping) else args or ()
-        if not any(map(_invalid, values)):
-            return record.getMessage()
-        if isinstance(args, Mapping):
-            told: object = {key: _validation_summary(v) if _invalid(v) else v for key, v in args.items()}
-        else:
-            told = tuple(_validation_summary(v) if _invalid(v) else v for v in values)
-        return str(record.msg) % told
+        told = (
+            {key: _told(v) for key, v in args.items()} if isinstance(args, Mapping) else tuple(map(_told, args or ()))
+        )
+        return str(record.msg) % told if told else str(record.msg)
