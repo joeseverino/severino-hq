@@ -289,33 +289,42 @@ class PlaybooksPageTests(TestCase):
         response = self.client.post(_reject(newest.pk), {**_sent(), "playbook": key, "next": url})
         self.assertRedirects(response, url, fetch_redirect_response=False)
 
-    def test_a_commit_hq_cannot_adopt_offers_reject_all_and_says_each_problem_on_its_playbook_s_row(self):
+    def test_a_commit_hq_cannot_adopt_offers_reject_all_and_says_why_before_its_rows_and_on_each_playbook_s_row(self):
         from hq.platform.application.automation_adoption import judged
 
         # The commit before the newest is the one HQ can't adopt.
         self.newest().delete()
         newest = self.newest()
         planned = judged(newest.pk)
-        self.assertTrue(planned.unadoptable)
+        refused = {change.title: change for change in planned.changes if change.problems}
+        self.assertEqual(set(refused), set(planned.unadoptable))
+        self.assertEqual({change.change for change in refused.values()}, {"added", "changed"}, "it holds each kind")
+        self.assertTrue(planned.unplaced, "it holds a reason of the commit's own")
         html = self.page()
         self.assertIn(_reject(newest.pk), _posts(html))
         self.assertNotIn(_adopt(newest.pk), _posts(html))
         self.assertFalse([key for key, offered in _decisions(html).items() if "Adopt" in offered])
         scan = self.page(_scan_page(newest))
         self.assertNotIn(_adopt(newest.pk), _posts(scan))
-        problems = {
-            shown["_summary"]["label"]: shown["problems"]
-            for shown in planned.compared["after"]["procedures"].values()
-            if "problems" in shown
-        }
-        self.assertEqual(set(problems), set(planned.unadoptable))
-        for named, said in problems.items():
-            (head,) = [row for row in select(scan, "data-folds") if named in row.words]
-            group = next(up for up in head.ancestors if up.tag == "tbody")
-            with self.subTest(playbook=named):
-                self.assertTrue(said)
-                for problem in said:
-                    self.assertIn(problem, group.words)
+        for page, shown in (("playbooks", html), ("scan", scan)):
+            # The commit's own reasons, said before any playbook's row.
+            said = text(shown)
+            table = said.index(next(iter(refused)))
+            self.assertLess(said.find("HQ can't adopt this commit"), table)
+            self.assertGreaterEqual(said.find("HQ can't adopt this commit"), 0)
+            for reason in planned.unplaced:
+                with self.subTest(page=page, reason=reason):
+                    self.assertLess(said.find(reason), table)
+                    self.assertGreaterEqual(said.find(reason), 0)
+            # Each playbook's own, on the row a person decides it on.
+            rows = [row for row in select(shown, "data-change") if row.tag == "tr"]
+            for named, change in refused.items():
+                (row,) = [row for row in rows if named in row.words]
+                with self.subTest(page=page, playbook=named):
+                    self.assertEqual(row.attrs["data-change"], change.change)
+                    for problem in change.problems:
+                        self.assertIn(problem, row.words)
+                    self.assertNotIn("–", row.words, "its problems stand in for facts HQ never read")
 
     def test_reject_all_leaves_nothing_waiting_and_the_scan_s_page_says_who_rejected_it(self):
         newest = self.newest()

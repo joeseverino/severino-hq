@@ -146,6 +146,14 @@ def _rescanned(owner) -> None:
     example_estate.automation.rescanned(owner)
 
 
+def _unadoptable(owner) -> None:
+    """The example estate once a later Refresh read a commit HQ can't adopt,
+    so the Playbooks page says why for the commit and each playbook."""
+
+    _estate(owner)
+    example_estate.automation.unadoptable(owner)
+
+
 def _scanning(owner) -> None:
     """The example estate while a Refresh is under way, so the procedures
     page follows a scan."""
@@ -229,6 +237,7 @@ SEEDS: dict[str, Seed] = {
     "advised": Seed(_advised, _SET_UP),
     "images-left": Seed(_images_left, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
+    "unadoptable": Seed(_unadoptable, _SET_UP),
     "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
     "policy-change": Seed(_policy_change, _SET_UP),
