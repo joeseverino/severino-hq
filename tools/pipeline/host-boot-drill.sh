@@ -74,13 +74,15 @@ await() {
 }
 
 # What a render installs: a root-only directory holding the web account's
-# file, and a connections document with none. The setup below runs it as the
-# renderer's ExecStart, so it is a file of the drill's own.
+# file, and a connections document with none, root's alone at 0400 as the
+# controller's preflight requires. The setup below runs it as the renderer's
+# ExecStart, so it is a file of the drill's own.
+connections=/run/severino-hq-secrets/controller-connections.json
 sudo install -d -m 0755 "$drill"
 printf '%s\n' 'set -eu' "mkdir -p -m 0700 $secrets" \
   "printf '%s\\n' DJANGO_SECRET_KEY=ci-only-drill-key-0123456789abcdef0123456789abcdef DJANGO_ALLOWED_HOSTS=127.0.0.1 SEVERINO_LOG_LEVEL=WARNING > $env_file" \
   "chown 10001:10001 $env_file" "chmod 0400 $env_file" \
-  "printf '%s\\n' '{\"schema_version\": 2, \"connections\": []}' > /run/severino-hq-secrets/controller-connections.json" |
+  "printf '%s\\n' '{\"schema_version\": 2, \"connections\": []}' > $connections" "chmod 0400 $connections" |
   sudo tee "$drill/render" >/dev/null
 render() { sudo sh "$drill/render"; }
 
