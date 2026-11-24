@@ -6,6 +6,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,16 +44,35 @@ func unitSetting(t *testing.T, unit, key string) time.Duration {
 	return 0
 }
 
+// graceful is how long HQ's servers let a request in flight finish once asked
+// to stop, as hq/config/serve.py declares it.
+func graceful(t *testing.T) time.Duration {
+	t.Helper()
+	source, err := os.ReadFile(filepath.Join("..", "..", "hq", "config", "serve.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := regexp.MustCompile(`(?m)^GRACEFUL_SHUTDOWN_SECONDS = (\d+)$`).FindSubmatch(source)
+	if found == nil {
+		t.Fatal("hq/config/serve.py declares no GRACEFUL_SHUTDOWN_SECONDS")
+	}
+	seconds, _ := strconv.Atoi(string(found[1]))
+	return time.Duration(seconds) * time.Second
+}
+
 func TestTheUnitsKeepTheBoundsABootNests(t *testing.T) {
-	stop, _ := strconv.Atoi(StopSeconds)
 	for _, check := range []struct {
 		what      string
 		got, want time.Duration
 		exact     bool
 	}{
 		{"the secrets unit's start timeout is one render", unitSetting(t, SecretsUnit, "TimeoutStartSec"), RenderBound, true},
-		{"the web unit waits out a render and HQ's start", unitSetting(t, hostcore.WebUnit, "TimeoutStartSec"), RenderBound + HealthStartPeriod, false},
-		{"the web unit lets HQ's own stop finish", unitSetting(t, hostcore.WebUnit, "TimeoutStopSec"), time.Duration(stop) * time.Second, false},
+		// A start first stops a container a killed run left behind.
+		{"the web unit waits out a stop, a render and HQ's start", unitSetting(t, hostcore.WebUnit, "TimeoutStartSec"), StopBound + RenderBound + HealthStartPeriod, false},
+		{"the web unit lets hq-host's own stop finish", unitSetting(t, hostcore.WebUnit, "TimeoutStopSec"), StopBound, false},
+		// Its server's bound, then the bridge's within the lifespan, then a
+		// request cut on a thread as the process exits.
+		{"HQ is given its three graceful bounds before docker kills it", StopGrace, 3 * graceful(t), true},
 	} {
 		if check.exact && check.got != check.want || !check.exact && check.got <= check.want {
 			t.Errorf("%s: unit says %s, the bound is %s", check.what, check.got, check.want)

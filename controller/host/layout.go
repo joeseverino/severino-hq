@@ -23,6 +23,18 @@ const (
 	// StartPeriodEnv shortens HealthStartPeriod for one host, so a release
 	// that cannot serve fails its start sooner. Only the boot drill sets it.
 	StartPeriodEnv = "SEVERINO_HQ_HEALTH_START_PERIOD"
+	// StopGrace is how long HQ is given to exit on its own before docker
+	// kills it. Its server lets a request in flight run for its graceful
+	// bound (hq/config/serve.py GRACEFUL_SHUTDOWN_SECONDS), then its lifespan
+	// gives the bridge's server the same, and a request cut while it ran on
+	// a thread, which the process waits for as it exits, has one more: three
+	// bounds, which a test holds it to.
+	StopGrace = 15 * time.Second
+	// StopBound is the whole stop: StopGrace, then docker's kill and the
+	// removal of the stopped container, which take a second or two and are
+	// given ten. The web unit's TimeoutStopSec is longer, so systemd never
+	// kills the stop and leaves the container running.
+	StopBound = StopGrace + 10*time.Second
 )
 
 // StartPeriod is the health start period StartPeriodEnv asks for:
@@ -50,9 +62,6 @@ const (
 	BackupUnit = "severino-hq-backup.service"
 	// DeployFreeBytes is the free space on / a deploy needs before it pulls.
 	DeployFreeBytes = 512 << 20
-	// StopSeconds is how long HQ is given to stop before it is killed; the
-	// web unit's TimeoutStopSec allows more, so systemd never kills the stop.
-	StopSeconds = "30"
 
 	// Lib is the root-owned tree a release installs and every unit runs from.
 	Lib = "/usr/local/lib/severino-hq"

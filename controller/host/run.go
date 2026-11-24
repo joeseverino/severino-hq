@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -35,6 +36,9 @@ type WebRunner struct {
 	Poll, Await time.Duration
 	// StartPeriod is the container's health start period (Web.StartPeriod).
 	StartPeriod time.Duration
+	// Stop bounds a stop, from the ask to the container's exit (StopBound on
+	// a host).
+	Stop time.Duration
 	// SealPublic is where a controller pass writes the public sealing key
 	// (SealPublicKey on a host), given to HQ when it is there.
 	SealPublic string
@@ -56,6 +60,9 @@ type WebRunner struct {
 // WatchdogSec=, the pace sd_watchdog_enabled(3) asks for.
 const WebPoll = 2 * time.Second
 
+// stopping asks docker to stop HQ, killing it once StopGrace has passed.
+var stopping = []string{"stop", "--time", strconv.Itoa(int(StopGrace / time.Second)), hostcore.Container}
+
 // ErrNotRendered is a start that found no environment to run on.
 var ErrNotRendered = errors.New("the application environment was not rendered")
 
@@ -76,7 +83,7 @@ func (r *WebRunner) Run(ctx context.Context) error {
 	// A container left by a crash, or by the compose deployment this
 	// replaces, holds the name. It is stopped as a deploy would stop it,
 	// then removed. Nothing else may run as HQ.
-	_ = r.Docker(ctx, "stop", "--time", StopSeconds, hostcore.Container).Run()
+	_ = r.Docker(ctx, stopping...).Run()
 	_ = r.Docker(ctx, "rm", "--force", hostcore.Container).Run()
 
 	// Not ctx: cancelling it would kill the client; the stop below ends HQ.
@@ -117,8 +124,7 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 			return fmt.Errorf("the container stopped on its own: %w", err)
 		case <-ctx.Done():
 			_ = r.Notify("STOPPING=1")
-			r.stop(ctx, exited)
-			return nil
+			return r.stop(ctx, exited)
 		case <-ticker.C:
 			switch r.health(ctx) {
 			case "healthy":
@@ -135,23 +141,34 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 				r.Log.Info("HQ is healthy.", slog.String("event", "host.web.ready"))
 			case "unhealthy":
 				_ = r.Notify("STATUS=HQ is unhealthy.")
-				r.stop(ctx, exited)
+				stopped := r.stop(ctx, exited)
 				if ready {
-					return errors.New("HQ turned unhealthy")
+					return errors.Join(errors.New("HQ turned unhealthy"), stopped)
 				}
 				// Past its start period and failing: the start fails now,
 				// so a deploy of an image that cannot serve rolls back.
-				return errors.New("HQ did not become healthy")
+				return errors.Join(errors.New("HQ did not become healthy"), stopped)
 			}
 		}
 	}
 }
 
-// stop stops the container and waits for it to exit. Not ctx, which may be
+// stop stops the container and waits for it to exit, for no longer than
+// r.Stop: a container still running then fails the run, which returns before
+// the service manager's own stop timeout would kill it. Not ctx, which may be
 // cancelled: the stop is what ends HQ.
-func (r *WebRunner) stop(ctx context.Context, exited <-chan error) {
-	_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, hostcore.Container).Run()
-	<-exited //nolint:errcheck // stopped on purpose, so how it exited says nothing
+func (r *WebRunner) stop(ctx context.Context, exited <-chan error) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.Stop)
+	defer cancel()
+	// Its outcome is the container's exit, waited for below, which may come
+	// before docker has answered.
+	go func() { _ = r.Docker(ctx, stopping...).Run() }()
+	select {
+	case <-exited: // stopped on purpose, so how it exited says nothing
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("HQ was still running %s after it was asked to stop", r.Stop)
+	}
 }
 
 // sealPublic is whether HQ is given the public sealing key: only root's file,

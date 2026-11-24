@@ -22,8 +22,10 @@ User=root
 ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host run-web
 # The wait for the environment (four minutes) and the image's start period.
 TimeoutStartSec=6min
-# HQ is given 30 seconds to stop before docker kills it.
-TimeoutStopSec=60s
+# Past hq-host's own bound on a stop (StopBound in controller/host/layout.go),
+# so hq-host ends the stop, never systemd's kill, which would leave the
+# container running for the next start to wait on.
+TimeoutStopSec=30s
 Restart=always
 RestartSec=5s
 # Once HQ is ready, hq-host pings the watchdog on every health poll that reads
