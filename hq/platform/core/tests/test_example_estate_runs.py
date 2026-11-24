@@ -49,7 +49,7 @@ class EstateRunTests(TestCase):
         for run in self.runs():
             with self.subTest(run=run.pk):
                 self.assertEqual(sorted(run.hosts.values_list("host", flat=True)), sorted(run.input["hosts"]))
-        self.assertEqual(set(OperationHost.objects.values_list("host", flat=True)), {MACHINE, LAPTOP_NAME, PHONE_NAME})
+        self.assertEqual(set(OperationHost.objects.values_list("host", flat=True)), {MACHINE, LAPTOP_NAME})
 
     def test_runs_are_dated_over_weeks_and_none_ahead_of_now(self):
         times = list(self.runs().values_list("created_at", flat=True))

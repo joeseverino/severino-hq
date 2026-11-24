@@ -6,10 +6,9 @@ read as a single run by the system.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, time, timedelta
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.utils import timezone
 
 from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import DashboardConfiguration, DashboardMachine, ManagedResource
@@ -26,7 +25,7 @@ lazy from hq.domains.expenses.models import Expense
 
 from . import doors
 from .agents import AGENT
-from .names import CONTAINERS, MACHINE, hexed
+from .names import CONTAINERS, MACHINE, days_back, hexed, on
 from .records import RUNBOOKS
 
 # Each project: how many days ago it was started, and last edited.
@@ -48,18 +47,6 @@ MIRRORED = {doc_id: written for doc_id, *_rest, written, _changed in RUNBOOKS}
 SYNC = {"interface": MCP_INTERFACE, "actor": AGENT, "operation": DOCUMENTATION_SYNC}
 # HQ's own scheduled work, which nobody asked for in the moment.
 OWN = {"interface": JOB_INTERFACE, "actor": "system"}
-
-
-def _on(day, *key) -> datetime:
-    """A moment on ``day`` during waking hours, the same in every build, never ahead of now."""
-
-    minutes = 8 * 60 + int(hexed("at", day, *key), 16) % (13 * 60)
-    at = timezone.make_aware(datetime.combine(day, time(minutes // 60, minutes % 60)))
-    return min(at, timezone.now() - timedelta(minutes=1))
-
-
-def _days_back(days, *key) -> datetime:
-    return _on(timezone.localdate() - timedelta(days=days), *key)
 
 
 def _resource_days(key: str) -> int:
@@ -106,47 +93,47 @@ KINDS = (
     (
         Project,
         _by_hand("projects:create", "projects:edit", "slug"),
-        lambda p: (_days_back(PROJECTS[p.slug][0], p.slug), _days_back(PROJECTS[p.slug][1], p.slug)),
+        lambda p: (days_back(PROJECTS[p.slug][0], p.slug), days_back(PROJECTS[p.slug][1], p.slug)),
     ),
     (
         ManagedResource,
         _by_hand("control_plane:create", "control_plane:edit", "key"),
-        lambda r: (_days_back(_resource_days(r.key), r.key),) * 2,
+        lambda r: (days_back(_resource_days(r.key), r.key),) * 2,
     ),
     (
         ContentItem,
         _by_hand("content:create", "content:edit", "slug"),
-        lambda c: (_on(c.published_at - timedelta(days=3), c.slug), _on(c.published_at, c.slug)),
+        lambda c: (on(c.published_at - timedelta(days=3), c.slug), on(c.published_at, c.slug)),
     ),
-    (Expense, _by_hand("expenses:create", "expenses:edit", "pk"), lambda e: (_on(e.date, "expense", e.pk),) * 2),
-    (Receipt, _by_hand("receipts:create", "receipts:edit", "pk"), lambda r: (_on(r.date, "receipt", r.pk),) * 2),
-    (Asset, _by_hand("assets:create", "assets:edit", "slug"), lambda a: (_on(a.purchase_date, a.slug),) * 2),
+    (Expense, _by_hand("expenses:create", "expenses:edit", "pk"), lambda e: (on(e.date, "expense", e.pk),) * 2),
+    (Receipt, _by_hand("receipts:create", "receipts:edit", "pk"), lambda r: (on(r.date, "receipt", r.pk),) * 2),
+    (Asset, _by_hand("assets:create", "assets:edit", "slug"), lambda a: (on(a.purchase_date, a.slug),) * 2),
     (
         Entry,
         _by_hand("calendar:entry_new", "calendar:entry_edit", "uid"),
-        lambda e: (_days_back(20 + int(hexed(e.title), 16) % 180, e.title),) * 2,
+        lambda e: (days_back(20 + int(hexed(e.title), 16) % 180, e.title),) * 2,
     ),
     # The dashboard's machine, shown from its edit page, and its settings page.
     (
         DashboardMachine,
         lambda placement, _action: doors.stamp(doors.page("control_plane:edit", key=placement.machine.key)),
-        lambda p: (_days_back(MACHINE_DAYS - 1, "dashboard"),) * 2,
+        lambda p: (days_back(MACHINE_DAYS - 1, "dashboard"),) * 2,
     ),
     (
         DashboardConfiguration,
         lambda _configuration, _action: doors.stamp(doors.page("dashboard_glance_settings")),
-        lambda c: (_days_back(MACHINE_DAYS - 1, "dashboard settings"),) * 2,
+        lambda c: (days_back(MACHINE_DAYS - 1, "dashboard settings"),) * 2,
     ),
-    (LinkedAccount, _signed_in, lambda a: (_days_back(MACHINE_DAYS, a.provider),) * 2),
+    (LinkedAccount, _signed_in, lambda a: (days_back(MACHINE_DAYS, a.provider),) * 2),
     (
         DocumentationRecord,
         _mirrored,
-        lambda d: (_days_back(MIRRORED[d.doc_id], d.doc_id), _on(d.last_reviewed, d.doc_id)),
+        lambda d: (days_back(MIRRORED[d.doc_id], d.doc_id), on(d.last_reviewed, d.doc_id)),
     ),
     # Its first call names the door it was first seen through (``agents.seen``).
-    (AgentIdentity, None, lambda a: (_days_back(AGENT_DAYS, a.client_id),) * 2),
+    (AgentIdentity, None, lambda a: (days_back(AGENT_DAYS, a.client_id),) * 2),
     # Its device, seen at its first call and approved the same day.
-    (AgentDevice, None, lambda d: (_days_back(AGENT_DAYS, d.identity.client_id),) * 2),
+    (AgentDevice, None, lambda d: (days_back(AGENT_DAYS, d.identity.client_id),) * 2),
 )
 
 
@@ -204,7 +191,12 @@ def _date(model, records, made):
         created, changed = made(record)
         stamped = {
             name: value
-            for name, value in (("created_at", created), ("updated_at", changed), ("first_seen", created))
+            for name, value in (
+                ("created_at", created),
+                ("updated_at", changed),
+                ("first_seen", created),
+                ("uploaded_at", created),
+            )
             if name in fields
         }
         if stamped:

@@ -26,9 +26,11 @@ from .names import (
     NEWER,
     OWNER_NAME,
     SOURCES,
+    back,
     digest,
     hexed,
     iso,
+    share,
     stamp,
 )
 from .sweep import store
@@ -96,7 +98,6 @@ def repositories():
     at = timezone.now()
     access = {
         "collaborators": [{"login": "example", "role": "admin"}],
-        "deploy_keys": [{"title": "deploy", "read_only": True, "last_used": at.isoformat()}],
         "token": "read",
         "token_approves_reviews": False,
         "pinning_required": True,
@@ -116,7 +117,17 @@ def repositories():
             "checks": {"state": "success", "total": 4, "failing": [], "running": 0},
             "alerts": {"dependabot": {}},
             "private": True,
-            "access": access,
+            # Each repository's deploy key last used when its machine last pulled it.
+            "access": {
+                **access,
+                "deploy_keys": [
+                    {
+                        "title": "deploy",
+                        "read_only": True,
+                        "last_used": back(share(timedelta(days=6), name), name).isoformat(),
+                    }
+                ],
+            },
             "variables": [],
             "pins": [],
         }
@@ -434,9 +445,10 @@ def _ran(declared, ago, work):
             actor=runner.SCHEDULER,
             request={outbound_work.SUBJECT_FIELD: ""},
         )
+    took = timedelta(seconds=2) + share(timedelta(seconds=40), declared.name, ago)
     Job.objects.filter(pk=job.pk).update(
-        created_at=finished - timedelta(seconds=5),
-        started_at=finished - timedelta(seconds=4),
+        created_at=finished - took - timedelta(seconds=1),
+        started_at=finished - took,
         finished_at=finished,
         heartbeat_at=finished,
     )

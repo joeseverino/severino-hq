@@ -45,7 +45,7 @@ from hq.platform.core.models import UpstreamReading
 
 from . import doors
 from .agents import CLAIMS, ruled
-from .names import LAPTOP_NAME, MACHINE, PHONE_NAME
+from .names import LAPTOP_NAME, MACHINE, back, hexed, share
 
 # The automation worker, as it names itself when it claims.
 WORKER = "example-automation-worker"
@@ -58,7 +58,7 @@ CACHE_FLUSH = "example.cache_flush"
 DISK_REPORT = "example.disk_report"
 PACKAGE_UPGRADE = "example.package_upgrade"
 # The commit the example repository's scan reads.
-REVISION = "0123456789abcdef0123456789abcdef01234567"
+REVISION = hexed("playbooks", "revision", length=40)
 
 
 def _procedure(name: str, role: str, declaration: dict[str, Any], **found: Any) -> dict[str, Any]:
@@ -255,7 +255,7 @@ def _scanned(
     Asked ``ago``, with every row it writes dated so, or now when not given,
     so the estate's scans read on Jobs in the order they tell."""
 
-    at = timezone.now() - ago if ago is not None else None
+    at = back(ago, key) if ago is not None else None
     # Its worker reached HQ a moment ago, so what is asked of it is taken.
     note_automation()
     with stamped(lambda *_: {"created_at": at} if at is not None else None):
@@ -341,8 +341,9 @@ def unattended() -> None:
 
 # The id the agent's runs are found by, as an investigation's would be.
 CORRELATION = "example-investigation-7"
-# Where the run that waits acts, and where the read last ran, which a person can run it on again.
-WAITING_ON, READ_ON = LAPTOP_NAME, PHONE_NAME
+# Where the run that waits acts, and where the read last ran, which a
+# person can run it on again: the laptop, since a phone runs no playbook.
+WAITING_ON = READ_ON = LAPTOP_NAME
 # How long the working run's worker holds it from the moment the estate is
 # built: as long as anyone browses it, so the run reads as working throughout.
 WORKING_LEASE = timedelta(hours=8)
@@ -473,7 +474,7 @@ def _asked(manifest, host, principal, ago, carried_out, *, approver: Principal |
     one), then carried out, with every audit row it writes dated to the
     moment it was asked."""
 
-    at = timezone.now() - ago
+    at = back(ago, manifest.id, host)
     name = capability_name(manifest.id)
     # Each ask through its asker's own door, as the command page or the MCP server binds one.
     door = doors.mcp() if principal.interface == MCP_INTERFACE else doors.request(f"/commands/{name}/")
@@ -593,8 +594,8 @@ def _dated(pk, at) -> None:
     """The run's own times, as long after its ask as a worker would take."""
 
     run = OperationRequest.objects.get(pk=pk)
-    claimed = at + timedelta(seconds=20) if run.claimed_at else None
+    claimed = at + timedelta(seconds=5) + share(timedelta(seconds=40), pk, "claimed") if run.claimed_at else None
     dates: dict[str, Any] = {"claimed_at": claimed}
     if run.completed_at:
-        dates["completed_at"] = (claimed or at) + timedelta(seconds=95)
+        dates["completed_at"] = (claimed or at) + timedelta(seconds=30) + share(timedelta(minutes=4), pk, "took")
     OperationRequest.objects.filter(pk=pk).update(updated_at=dates.get("completed_at") or claimed or at, **dates)

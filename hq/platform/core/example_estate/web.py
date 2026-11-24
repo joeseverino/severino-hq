@@ -1,7 +1,7 @@
 """The public site at the zone's apex: its pages, a quarter of the visits
 Cloudflare counted, and what people sent through its contact form."""
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -13,7 +13,7 @@ from hq.platform.application.report_testing import bridged
 lazy from hq.domains.content.models import ContentItem
 lazy from hq.domains.docs_index.models import DocumentationRecord
 
-from .names import CLOUDFLARE, ZONE, hexed, iso
+from .names import CLOUDFLARE, ZONE, back, hexed, iso
 from .records import WRITEUPS
 from .sweep import store
 
@@ -222,7 +222,7 @@ def contact():
 
     def message(number, sender, email, country, client, age, status, text):
         browser, device = client
-        at = (timezone.now() - age).strftime("%Y-%m-%d %H:%M:%S")
+        at = back(age, "message", number).astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
         return {
             "connection_ref": CLOUDFLARE,
             "account_id": ACCOUNT,

@@ -1,7 +1,7 @@
 """The showcase's names, addresses and the stable values derived from them."""
 
 import hashlib
-from datetime import UTC, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from django.utils import timezone
 
@@ -46,6 +46,32 @@ def hexed(*parts, length=64):
     """A stable hex string for ``parts``: the same build gives the same values."""
 
     return hashlib.sha256(":".join(map(str, parts)).encode()).hexdigest()[:length]
+
+
+def share(within: timedelta, *key) -> timedelta:
+    """A stable part of ``within`` for ``key``: how the estate spreads a
+    duration or a moment, so no two of its records fall alike."""
+
+    return within * (int(hexed("share", *key), 16) % 1000) / 1000
+
+
+def on(day: date, *key) -> datetime:
+    """A moment on ``day`` during waking hours, the same in every build, never ahead of now."""
+
+    minutes = 8 * 60 + int(hexed("at", day, *key), 16) % (13 * 60)
+    at = timezone.make_aware(datetime.combine(day, time(minutes // 60, minutes % 60)))
+    return min(at, timezone.now() - timedelta(minutes=1))
+
+
+def days_back(days: int, *key) -> datetime:
+    return on(timezone.localdate() - timedelta(days=days), *key)
+
+
+def back(age: timedelta, *key) -> datetime:
+    """``age`` ago: within the day it says, at a waking moment of its own
+    once it is a day or more, so a record's time is never the build's."""
+
+    return days_back(age.days, *key) if age.days else timezone.now() - age
 
 
 # The ranges only Tailscale issues, as HQ declares them, and a MagicDNS domain
