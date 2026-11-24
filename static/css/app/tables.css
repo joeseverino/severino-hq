@@ -232,8 +232,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* A row's words fill each line they are given, as its title does: WebKit's `pretty` evens the rag of a whole paragraph, which in a cell's measure ends every line short of the room beside it. */
 .data-table > tbody > tr > * :is(p, li, dd) { text-wrap: wrap; }
 
-/* A pill fits the cell's line and keeps it, so a row holding one is no taller than one without. */
-.data-table td .pill { vertical-align: top; line-height: 1.4; }
+/* A pill sits at the top of the cell's line, so a row holding one is no taller than one without. */
+.data-table td .pill { vertical-align: top; }
 /* A state told by an icon and a value holds both on one line, so its column is as wide as the two and the icon never stands alone above what it marks. */
 .data-table > tbody > tr > [data-kind="status"] .toned:has(> .icon) { white-space: nowrap; }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line. */
