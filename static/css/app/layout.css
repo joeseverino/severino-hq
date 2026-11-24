@@ -48,6 +48,15 @@
   & :is(.chart-scroll, .chart-frame) { display: flex; flex-direction: column; }
   & > .section-body > .section-foot { margin-block-start: auto; padding-block-start: var(--space-6); }
 }
+/* Each member of a pair takes two of its rows, a section its head on the
+   first and its body on the second (subgrid), so the heads of a row are one
+   height and the bodies beside them, a chart's plot with its gridlines, start
+   on one line however many lines a head's words take (`grid-row`, below). */
+.two-col > .section:not(details) {
+  display: grid; grid-template-rows: subgrid; row-gap: 0;
+  & > .section-head { grid-row: 1; }
+  & > .section-body { grid-row: 2; }
+}
 
 /* What is not a section or a card (a fold, a paragraph) and a section holding
    a table of four columns or more (a month is seven days, not columns) take
@@ -73,7 +82,7 @@
    stacking margin is dead space, and a member is as narrow as its track.
    Declared after the section rules above so it wins on source order at
    equal specificity. */
-.two-col > * { min-width: 0; margin-bottom: 0; }
+.two-col > * { grid-row: span 2; min-width: 0; margin-bottom: 0; }
 
 /* What sits beside the heading takes the next line when the two do not fit.
    The row starts at the heading: a folded section's toggle mark is an item
