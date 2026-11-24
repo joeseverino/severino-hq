@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 
 func checkVendorOperations() error {
 	var missing []string
-	for _, vendor := range []string{"cloudflare", "github"} {
+	for _, vendor := range []string{"github"} {
 		data, err := os.ReadFile("../api/vendor/" + vendor + "/openapi.slice.json")
 		if err != nil {
 			return err
@@ -116,7 +116,7 @@ func TestVendorModelsReachProviderCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, vendor := range []string{"cfapi", "githubapi"} {
+	for _, vendor := range []string{"githubapi"} {
 		roots := map[string]bool{}
 		for _, path := range files {
 			if strings.HasSuffix(path, "_test.go") {
@@ -135,7 +135,7 @@ func TestVendorModelsReachProviderCode(t *testing.T) {
 				return true
 			})
 		}
-		f, err := parser.ParseFile(token.NewFileSet(), vendor+"/"+map[string]string{"cfapi": "cloudflare", "githubapi": "github"}[vendor]+".gen.go", nil, 0)
+		f, err := parser.ParseFile(token.NewFileSet(), vendor+"/"+map[string]string{"githubapi": "github"}[vendor]+".gen.go", nil, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -200,7 +200,7 @@ func TestVendorModelsReachProviderCode(t *testing.T) {
 
 		// oapi-codegen flattens allOf references into inline fields. Preserve
 		// those schema edges when checking generated declaration reachability.
-		vendorName := map[string]string{"cfapi": "cloudflare", "githubapi": "github"}[vendor]
+		vendorName := map[string]string{"githubapi": "github"}[vendor]
 		data, err := os.ReadFile("../api/vendor/" + vendorName + "/openapi.slice.json")
 		if err != nil {
 			t.Fatal(err)

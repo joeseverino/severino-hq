@@ -51,7 +51,11 @@ class SliceTests(unittest.TestCase):
                         "parameters": [
                             {"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}},
                             {"name": "unused", "in": "query", "schema": {"type": "string"}},
+                            {"name": "page", "in": "query", "schema": {"type": "integer"}},
                         ],
+                        "requestBody": {
+                            "content": {"application/json": {"schema": {"$ref": slicer.SCHEMAS + "unrelated"}}}
+                        },
                         "responses": {
                             "200": {
                                 "description": "ok",
@@ -91,6 +95,20 @@ class SliceTests(unittest.TestCase):
         )
         self.assertEqual(operation["responses"], {"200": {"description": "ok"}})
         self.assertEqual(set(result["components"]["schemas"]), {"answer"})
+
+    def test_an_operation_keeps_the_query_it_sends_in_its_order_unset_unsent(self):
+        result = self.run_slice('[queries]\nread = ["page", "unused"]\n')
+        parameters = result["paths"]["/example/{id}"]["get"]["parameters"]
+        self.assertEqual([parameter["name"] for parameter in parameters], ["id", "page", "unused"])
+        self.assertIs(parameters[1]["schema"]["x-go-type-skip-optional-pointer"], False)
+        with self.assertRaisesRegex(SystemExit, "takes no query"):
+            self.run_slice('[queries]\nread = ["absent"]\n')
+
+    def test_a_body_the_provider_encodes_is_any_json(self):
+        result = self.run_slice('encodes = ["read"]\n')
+        body = result["paths"]["/example/{id}"]["get"]["requestBody"]
+        self.assertEqual(body["content"], {"application/json": {"schema": {}}})
+        self.assertNotIn("schemas", result["components"])
 
     def test_the_slice_keeps_the_servers_and_refuses_a_spec_without_any(self):
         result = self.run_slice('[decodes]\nread = ["answer"]\n')

@@ -4,8 +4,14 @@
 package cfapi
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/oapi-codegen/runtime"
 )
@@ -354,19 +360,19 @@ func (e PagesSecretTextEnvVarType) Valid() bool {
 
 // Defines values for PagesSourceConfigPreviewDeploymentSetting.
 const (
-	All    PagesSourceConfigPreviewDeploymentSetting = "all"
-	Custom PagesSourceConfigPreviewDeploymentSetting = "custom"
-	None   PagesSourceConfigPreviewDeploymentSetting = "none"
+	PagesSourceConfigPreviewDeploymentSettingAll    PagesSourceConfigPreviewDeploymentSetting = "all"
+	PagesSourceConfigPreviewDeploymentSettingCustom PagesSourceConfigPreviewDeploymentSetting = "custom"
+	PagesSourceConfigPreviewDeploymentSettingNone   PagesSourceConfigPreviewDeploymentSetting = "none"
 )
 
 // Valid indicates whether the value is a known member of the PagesSourceConfigPreviewDeploymentSetting enum.
 func (e PagesSourceConfigPreviewDeploymentSetting) Valid() bool {
 	switch e {
-	case All:
+	case PagesSourceConfigPreviewDeploymentSettingAll:
 		return true
-	case Custom:
+	case PagesSourceConfigPreviewDeploymentSettingCustom:
 		return true
-	case None:
+	case PagesSourceConfigPreviewDeploymentSettingNone:
 		return true
 	default:
 		return false
@@ -859,6 +865,21 @@ func (e ZonesZoneStatus) Valid() bool {
 	case ZonesZoneStatusMoved:
 		return true
 	case ZonesZoneStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CertificatePacksListCertificatePacksParamsStatus.
+const (
+	CertificatePacksListCertificatePacksParamsStatusAll CertificatePacksListCertificatePacksParamsStatus = "all"
+)
+
+// Valid indicates whether the value is a known member of the CertificatePacksListCertificatePacksParamsStatus enum.
+func (e CertificatePacksListCertificatePacksParamsStatus) Valid() bool {
+	switch e {
+	case CertificatePacksListCertificatePacksParamsStatusAll:
 		return true
 	default:
 		return false
@@ -2351,6 +2372,106 @@ type ZonesZone struct {
 // ZonesZoneStatus The zone status on Cloudflare.
 type ZonesZoneStatus string
 
+// AccountsListAccountsParams defines parameters for AccountsListAccounts.
+type AccountsListAccountsParams struct {
+	Page    *float32 `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *float32 `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// AccessApplicationsListAccessApplicationsParams defines parameters for AccessApplicationsListAccessApplications.
+type AccessApplicationsListAccessApplicationsParams struct {
+	Page    *int `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// AccessServiceTokensListServiceTokensParams defines parameters for AccessServiceTokensListServiceTokens.
+type AccessServiceTokensListServiceTokensParams struct {
+	Page    *int `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// CloudflareTunnelListCloudflareTunnelsParams defines parameters for CloudflareTunnelListCloudflareTunnels.
+type CloudflareTunnelListCloudflareTunnelsParams struct {
+	Page      *float32 `form:"page,omitempty" json:"page,omitempty"`
+	PerPage   *float32 `form:"per_page,omitempty" json:"per_page,omitempty"`
+	IsDeleted *bool    `form:"is_deleted,omitempty" json:"is_deleted,omitempty"`
+}
+
+// D1ListDatabasesParams defines parameters for D1ListDatabases.
+type D1ListDatabasesParams struct {
+	Page    *float32 `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *float32 `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// D1QueryDatabaseJSONBody defines body for D1QueryDatabase for application/json ContentType.
+type D1QueryDatabaseJSONBody = any
+
+// PagesProjectGetProjectsParams defines parameters for PagesProjectGetProjects.
+type PagesProjectGetProjectsParams struct {
+	Page    *int `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// RegistrarDomainRegistrationListParams defines parameters for RegistrarDomainRegistrationList.
+type RegistrarDomainRegistrationListParams struct {
+	// Cursor Opaque token from a previous response's `result_info.cursor`.
+	// Pass this value to fetch the next page of results. Omit (or
+	// pass an empty string) for the first page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// PerPage Number of items to return per page.
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// WebAnalyticsListSitesParams defines parameters for WebAnalyticsListSites.
+type WebAnalyticsListSitesParams struct {
+	Page    *float32 `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *float32 `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// ZonesGetParams defines parameters for ZonesGet.
+type ZonesGetParams struct {
+	Page    *float32 `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *float32 `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// DNSRecordsForAZoneListDNSRecordsParams defines parameters for DNSRecordsForAZoneListDNSRecords.
+type DNSRecordsForAZoneListDNSRecordsParams struct {
+	Page    *float32 `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *float32 `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// DNSRecordsForAZoneCreateDNSRecordJSONBody defines body for DNSRecordsForAZoneCreateDNSRecord for application/json ContentType.
+type DNSRecordsForAZoneCreateDNSRecordJSONBody = any
+
+// DNSRecordsForAZoneUpdateDNSRecordJSONBody defines body for DNSRecordsForAZoneUpdateDNSRecord for application/json ContentType.
+type DNSRecordsForAZoneUpdateDNSRecordJSONBody = any
+
+// ListZoneRulesetsParams defines parameters for ListZoneRulesets.
+type ListZoneRulesetsParams struct {
+	Cursor  *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	PerPage *int    `form:"per_page,omitempty" json:"per_page,omitempty"`
+}
+
+// CertificatePacksListCertificatePacksParams defines parameters for CertificatePacksListCertificatePacks.
+type CertificatePacksListCertificatePacksParams struct {
+	Page    *float32                                          `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *float32                                          `form:"per_page,omitempty" json:"per_page,omitempty"`
+	Status  *CertificatePacksListCertificatePacksParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// CertificatePacksListCertificatePacksParamsStatus defines parameters for CertificatePacksListCertificatePacks.
+type CertificatePacksListCertificatePacksParamsStatus string
+
+// D1QueryDatabaseJSONRequestBody defines body for D1QueryDatabase for application/json ContentType.
+type D1QueryDatabaseJSONRequestBody = D1QueryDatabaseJSONBody
+
+// DNSRecordsForAZoneCreateDNSRecordJSONRequestBody defines body for DNSRecordsForAZoneCreateDNSRecord for application/json ContentType.
+type DNSRecordsForAZoneCreateDNSRecordJSONRequestBody = DNSRecordsForAZoneCreateDNSRecordJSONBody
+
+// DNSRecordsForAZoneUpdateDNSRecordJSONRequestBody defines body for DNSRecordsForAZoneUpdateDNSRecord for application/json ContentType.
+type DNSRecordsForAZoneUpdateDNSRecordJSONRequestBody = DNSRecordsForAZoneUpdateDNSRecordJSONBody
+
 // AsPagesPlainTextEnvVar returns the union data inside the PagesEnvVars_AdditionalProperties as a PagesPlainTextEnvVar
 func (t PagesEnvVars_AdditionalProperties) AsPagesPlainTextEnvVar() (PagesPlainTextEnvVar, error) {
 	var body PagesPlainTextEnvVar
@@ -2450,4 +2571,3466 @@ func (t PagesEnvVars_AdditionalProperties) MarshalJSON() ([]byte, error) {
 func (t *PagesEnvVars_AdditionalProperties) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
+}
+
+// RequestEditorFn is the function signature for the RequestEditor callback function
+type RequestEditorFn func(ctx context.Context, req *http.Request) error
+
+// Doer performs HTTP requests.
+//
+// The standard http.Client implements this interface.
+type HttpRequestDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// API which conforms to the OpenAPI3 specification for this service.
+type API struct {
+	// The endpoint of the server conforming to this interface, with scheme,
+	// https://api.deepmap.com for example. This can contain a path relative
+	// to the server, such as https://api.deepmap.com/dev-test, and all the
+	// paths in the swagger spec will be appended to the server.
+	Server string
+
+	// Doer for performing requests, typically a *http.Client with any
+	// customized settings, such as certificate chains.
+	Client HttpRequestDoer
+
+	// A list of callbacks for modifying requests which are generated before sending over
+	// the network.
+	RequestEditors []RequestEditorFn
+}
+
+// ClientOption allows setting custom parameters during construction
+type ClientOption func(*API) error
+
+// Creates a new API, with reasonable defaults
+func NewClient(server string, opts ...ClientOption) (*API, error) {
+	// create a client with sane default values
+	client := API{
+		Server: server,
+	}
+	// mutate client and add all optional params
+	for _, o := range opts {
+		if err := o(&client); err != nil {
+			return nil, err
+		}
+	}
+	// ensure the server URL always has a trailing slash
+	if !strings.HasSuffix(client.Server, "/") {
+		client.Server += "/"
+	}
+	// create httpClient, if not already present
+	if client.Client == nil {
+		client.Client = &http.Client{}
+	}
+	return &client, nil
+}
+
+// WithHTTPClient allows overriding the default Doer, which is
+// automatically created using http.Client. This is useful for tests.
+func WithHTTPClient(doer HttpRequestDoer) ClientOption {
+	return func(c *API) error {
+		c.Client = doer
+		return nil
+	}
+}
+
+// WithRequestEditorFn allows setting up a callback function, which will be
+// called right before sending the request. This can be used to mutate the request.
+func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
+	return func(c *API) error {
+		c.RequestEditors = append(c.RequestEditors, fn)
+		return nil
+	}
+}
+
+// The interface specification for the client above.
+type ClientInterface interface {
+
+	// AccountsListAccounts performs a GET /accounts (the `AccountsListAccounts` operationId) request.
+	AccountsListAccounts(ctx context.Context, params *AccountsListAccountsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AccessApplicationsListAccessApplications performs a GET /accounts/{account_id}/access/apps (the `AccessApplicationsListAccessApplications` operationId) request.
+	AccessApplicationsListAccessApplications(ctx context.Context, accountID string, params *AccessApplicationsListAccessApplicationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AccessServiceTokensListServiceTokens performs a GET /accounts/{account_id}/access/service_tokens (the `AccessServiceTokensListServiceTokens` operationId) request.
+	AccessServiceTokensListServiceTokens(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CloudflareTunnelListCloudflareTunnels performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
+	CloudflareTunnelListCloudflareTunnels(ctx context.Context, accountID string, params *CloudflareTunnelListCloudflareTunnelsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CloudflareTunnelConfigurationGetConfiguration performs a GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations (the `CloudflareTunnelConfigurationGetConfiguration` operationId) request.
+	CloudflareTunnelConfigurationGetConfiguration(ctx context.Context, accountID string, tunnelID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CloudflareTunnelListCloudflareTunnelConnections performs a GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/connections (the `CloudflareTunnelListCloudflareTunnelConnections` operationId) request.
+	CloudflareTunnelListCloudflareTunnelConnections(ctx context.Context, accountID string, tunnelID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// D1ListDatabases performs a GET /accounts/{account_id}/d1/database (the `D1ListDatabases` operationId) request.
+	D1ListDatabases(ctx context.Context, accountID string, params *D1ListDatabasesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// D1GetDatabase performs a GET /accounts/{account_id}/d1/database/{database_id} (the `D1GetDatabase` operationId) request.
+	D1GetDatabase(ctx context.Context, accountID string, databaseID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// D1QueryDatabaseWithBody performs a POST /accounts/{account_id}/d1/database/{database_id}/query (the `D1QueryDatabase` operationId) request,
+	// with any type of body and a specified content type.
+	D1QueryDatabaseWithBody(ctx context.Context, accountID string, databaseID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// D1QueryDatabase performs a POST /accounts/{account_id}/d1/database/{database_id}/query (the `D1QueryDatabase` operationId) request.
+	// Takes a body of the `application/json` content type.
+	D1QueryDatabase(ctx context.Context, accountID string, databaseID string, body D1QueryDatabaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PagesProjectGetProjects performs a GET /accounts/{account_id}/pages/projects (the `PagesProjectGetProjects` operationId) request.
+	PagesProjectGetProjects(ctx context.Context, accountID string, params *PagesProjectGetProjectsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RegistrarDomainRegistrationList performs a GET /accounts/{account_id}/registrar/registrations (the `RegistrarDomainRegistrationList` operationId) request.
+	RegistrarDomainRegistrationList(ctx context.Context, accountID string, params *RegistrarDomainRegistrationListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WebAnalyticsListSites performs a GET /accounts/{account_id}/rum/site_info/list (the `WebAnalyticsListSites` operationId) request.
+	WebAnalyticsListSites(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UserAPITokensVerifyToken performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
+	UserAPITokensVerifyToken(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZonesGet performs a GET /zones (the `ZonesGet` operationId) request.
+	ZonesGet(ctx context.Context, params *ZonesGetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DNSRecordsForAZoneListDNSRecords performs a GET /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneListDNSRecords` operationId) request.
+	DNSRecordsForAZoneListDNSRecords(ctx context.Context, zoneID string, params *DNSRecordsForAZoneListDNSRecordsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DNSRecordsForAZoneCreateDNSRecordWithBody performs a POST /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneCreateDNSRecord` operationId) request,
+	// with any type of body and a specified content type.
+	DNSRecordsForAZoneCreateDNSRecordWithBody(ctx context.Context, zoneID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DNSRecordsForAZoneCreateDNSRecord performs a POST /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneCreateDNSRecord` operationId) request.
+	// Takes a body of the `application/json` content type.
+	DNSRecordsForAZoneCreateDNSRecord(ctx context.Context, zoneID string, body DNSRecordsForAZoneCreateDNSRecordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DNSRecordsForAZoneDeleteDNSRecord performs a DELETE /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneDeleteDNSRecord` operationId) request.
+	DNSRecordsForAZoneDeleteDNSRecord(ctx context.Context, zoneID string, dnsRecordID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DNSRecordsForAZoneUpdateDNSRecordWithBody performs a PUT /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneUpdateDNSRecord` operationId) request,
+	// with any type of body and a specified content type.
+	DNSRecordsForAZoneUpdateDNSRecordWithBody(ctx context.Context, zoneID string, dnsRecordID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DNSRecordsForAZoneUpdateDNSRecord performs a PUT /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneUpdateDNSRecord` operationId) request.
+	// Takes a body of the `application/json` content type.
+	DNSRecordsForAZoneUpdateDNSRecord(ctx context.Context, zoneID string, dnsRecordID string, body DNSRecordsForAZoneUpdateDNSRecordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PageRulesListPageRules performs a GET /zones/{zone_id}/pagerules (the `PageRulesListPageRules` operationId) request.
+	PageRulesListPageRules(ctx context.Context, zoneID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListZoneRulesets performs a GET /zones/{zone_id}/rulesets (the `ListZoneRulesets` operationId) request.
+	ListZoneRulesets(ctx context.Context, zoneID string, params *ListZoneRulesetsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetZoneRuleset performs a GET /zones/{zone_id}/rulesets/{ruleset_id} (the `GetZoneRuleset` operationId) request.
+	GetZoneRuleset(ctx context.Context, zoneID string, rulesetID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ZoneSettingsGetSingleSetting performs a GET /zones/{zone_id}/settings/{setting_id} (the `ZoneSettingsGetSingleSetting` operationId) request.
+	ZoneSettingsGetSingleSetting(ctx context.Context, zoneID string, settingID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CertificatePacksListCertificatePacks performs a GET /zones/{zone_id}/ssl/certificate_packs (the `CertificatePacksListCertificatePacks` operationId) request.
+	CertificatePacksListCertificatePacks(ctx context.Context, zoneID string, params *CertificatePacksListCertificatePacksParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+// AccountsListAccounts performs a GET /accounts (the `AccountsListAccounts` operationId) request.
+func (c *API) AccountsListAccounts(ctx context.Context, params *AccountsListAccountsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAccountsListAccountsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AccessApplicationsListAccessApplications performs a GET /accounts/{account_id}/access/apps (the `AccessApplicationsListAccessApplications` operationId) request.
+func (c *API) AccessApplicationsListAccessApplications(ctx context.Context, accountID string, params *AccessApplicationsListAccessApplicationsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAccessApplicationsListAccessApplicationsRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AccessServiceTokensListServiceTokens performs a GET /accounts/{account_id}/access/service_tokens (the `AccessServiceTokensListServiceTokens` operationId) request.
+func (c *API) AccessServiceTokensListServiceTokens(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAccessServiceTokensListServiceTokensRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CloudflareTunnelListCloudflareTunnels performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
+func (c *API) CloudflareTunnelListCloudflareTunnels(ctx context.Context, accountID string, params *CloudflareTunnelListCloudflareTunnelsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCloudflareTunnelListCloudflareTunnelsRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CloudflareTunnelConfigurationGetConfiguration performs a GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations (the `CloudflareTunnelConfigurationGetConfiguration` operationId) request.
+func (c *API) CloudflareTunnelConfigurationGetConfiguration(ctx context.Context, accountID string, tunnelID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCloudflareTunnelConfigurationGetConfigurationRequest(c.Server, accountID, tunnelID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CloudflareTunnelListCloudflareTunnelConnections performs a GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/connections (the `CloudflareTunnelListCloudflareTunnelConnections` operationId) request.
+func (c *API) CloudflareTunnelListCloudflareTunnelConnections(ctx context.Context, accountID string, tunnelID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCloudflareTunnelListCloudflareTunnelConnectionsRequest(c.Server, accountID, tunnelID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// D1ListDatabases performs a GET /accounts/{account_id}/d1/database (the `D1ListDatabases` operationId) request.
+func (c *API) D1ListDatabases(ctx context.Context, accountID string, params *D1ListDatabasesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewD1ListDatabasesRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// D1GetDatabase performs a GET /accounts/{account_id}/d1/database/{database_id} (the `D1GetDatabase` operationId) request.
+func (c *API) D1GetDatabase(ctx context.Context, accountID string, databaseID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewD1GetDatabaseRequest(c.Server, accountID, databaseID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// D1QueryDatabaseWithBody performs a POST /accounts/{account_id}/d1/database/{database_id}/query (the `D1QueryDatabase` operationId) request,
+// with any type of body and a specified content type.
+func (c *API) D1QueryDatabaseWithBody(ctx context.Context, accountID string, databaseID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewD1QueryDatabaseRequestWithBody(c.Server, accountID, databaseID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// D1QueryDatabase performs a POST /accounts/{account_id}/d1/database/{database_id}/query (the `D1QueryDatabase` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *API) D1QueryDatabase(ctx context.Context, accountID string, databaseID string, body D1QueryDatabaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewD1QueryDatabaseRequest(c.Server, accountID, databaseID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PagesProjectGetProjects performs a GET /accounts/{account_id}/pages/projects (the `PagesProjectGetProjects` operationId) request.
+func (c *API) PagesProjectGetProjects(ctx context.Context, accountID string, params *PagesProjectGetProjectsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPagesProjectGetProjectsRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RegistrarDomainRegistrationList performs a GET /accounts/{account_id}/registrar/registrations (the `RegistrarDomainRegistrationList` operationId) request.
+func (c *API) RegistrarDomainRegistrationList(ctx context.Context, accountID string, params *RegistrarDomainRegistrationListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRegistrarDomainRegistrationListRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WebAnalyticsListSites performs a GET /accounts/{account_id}/rum/site_info/list (the `WebAnalyticsListSites` operationId) request.
+func (c *API) WebAnalyticsListSites(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWebAnalyticsListSitesRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UserAPITokensVerifyToken performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
+func (c *API) UserAPITokensVerifyToken(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUserAPITokensVerifyTokenRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZonesGet performs a GET /zones (the `ZonesGet` operationId) request.
+func (c *API) ZonesGet(ctx context.Context, params *ZonesGetParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZonesGetRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DNSRecordsForAZoneListDNSRecords performs a GET /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneListDNSRecords` operationId) request.
+func (c *API) DNSRecordsForAZoneListDNSRecords(ctx context.Context, zoneID string, params *DNSRecordsForAZoneListDNSRecordsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDNSRecordsForAZoneListDNSRecordsRequest(c.Server, zoneID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DNSRecordsForAZoneCreateDNSRecordWithBody performs a POST /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneCreateDNSRecord` operationId) request,
+// with any type of body and a specified content type.
+func (c *API) DNSRecordsForAZoneCreateDNSRecordWithBody(ctx context.Context, zoneID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDNSRecordsForAZoneCreateDNSRecordRequestWithBody(c.Server, zoneID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DNSRecordsForAZoneCreateDNSRecord performs a POST /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneCreateDNSRecord` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *API) DNSRecordsForAZoneCreateDNSRecord(ctx context.Context, zoneID string, body DNSRecordsForAZoneCreateDNSRecordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDNSRecordsForAZoneCreateDNSRecordRequest(c.Server, zoneID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DNSRecordsForAZoneDeleteDNSRecord performs a DELETE /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneDeleteDNSRecord` operationId) request.
+func (c *API) DNSRecordsForAZoneDeleteDNSRecord(ctx context.Context, zoneID string, dnsRecordID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDNSRecordsForAZoneDeleteDNSRecordRequest(c.Server, zoneID, dnsRecordID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DNSRecordsForAZoneUpdateDNSRecordWithBody performs a PUT /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneUpdateDNSRecord` operationId) request,
+// with any type of body and a specified content type.
+func (c *API) DNSRecordsForAZoneUpdateDNSRecordWithBody(ctx context.Context, zoneID string, dnsRecordID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDNSRecordsForAZoneUpdateDNSRecordRequestWithBody(c.Server, zoneID, dnsRecordID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DNSRecordsForAZoneUpdateDNSRecord performs a PUT /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneUpdateDNSRecord` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *API) DNSRecordsForAZoneUpdateDNSRecord(ctx context.Context, zoneID string, dnsRecordID string, body DNSRecordsForAZoneUpdateDNSRecordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDNSRecordsForAZoneUpdateDNSRecordRequest(c.Server, zoneID, dnsRecordID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PageRulesListPageRules performs a GET /zones/{zone_id}/pagerules (the `PageRulesListPageRules` operationId) request.
+func (c *API) PageRulesListPageRules(ctx context.Context, zoneID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPageRulesListPageRulesRequest(c.Server, zoneID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListZoneRulesets performs a GET /zones/{zone_id}/rulesets (the `ListZoneRulesets` operationId) request.
+func (c *API) ListZoneRulesets(ctx context.Context, zoneID string, params *ListZoneRulesetsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListZoneRulesetsRequest(c.Server, zoneID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetZoneRuleset performs a GET /zones/{zone_id}/rulesets/{ruleset_id} (the `GetZoneRuleset` operationId) request.
+func (c *API) GetZoneRuleset(ctx context.Context, zoneID string, rulesetID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetZoneRulesetRequest(c.Server, zoneID, rulesetID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ZoneSettingsGetSingleSetting performs a GET /zones/{zone_id}/settings/{setting_id} (the `ZoneSettingsGetSingleSetting` operationId) request.
+func (c *API) ZoneSettingsGetSingleSetting(ctx context.Context, zoneID string, settingID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewZoneSettingsGetSingleSettingRequest(c.Server, zoneID, settingID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CertificatePacksListCertificatePacks performs a GET /zones/{zone_id}/ssl/certificate_packs (the `CertificatePacksListCertificatePacks` operationId) request.
+func (c *API) CertificatePacksListCertificatePacks(ctx context.Context, zoneID string, params *CertificatePacksListCertificatePacksParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCertificatePacksListCertificatePacksRequest(c.Server, zoneID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewAccountsListAccountsRequest constructs an http.Request for the AccountsListAccounts method
+func NewAccountsListAccountsRequest(server string, params *AccountsListAccountsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAccessApplicationsListAccessApplicationsRequest constructs an http.Request for the AccessApplicationsListAccessApplications method
+func NewAccessApplicationsListAccessApplicationsRequest(server string, accountID string, params *AccessApplicationsListAccessApplicationsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/access/apps"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAccessServiceTokensListServiceTokensRequest constructs an http.Request for the AccessServiceTokensListServiceTokens method
+func NewAccessServiceTokensListServiceTokensRequest(server string, accountID string, params *AccessServiceTokensListServiceTokensParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/access/service_tokens"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCloudflareTunnelListCloudflareTunnelsRequest constructs an http.Request for the CloudflareTunnelListCloudflareTunnels method
+func NewCloudflareTunnelListCloudflareTunnelsRequest(server string, accountID string, params *CloudflareTunnelListCloudflareTunnelsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/cfd_tunnel"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IsDeleted != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "is_deleted", *params.IsDeleted, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCloudflareTunnelConfigurationGetConfigurationRequest constructs an http.Request for the CloudflareTunnelConfigurationGetConfiguration method
+func NewCloudflareTunnelConfigurationGetConfigurationRequest(server string, accountID string, tunnelID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "tunnel_id", tunnelID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/cfd_tunnel/" + pathParam1 + "/configurations"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCloudflareTunnelListCloudflareTunnelConnectionsRequest constructs an http.Request for the CloudflareTunnelListCloudflareTunnelConnections method
+func NewCloudflareTunnelListCloudflareTunnelConnectionsRequest(server string, accountID string, tunnelID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "tunnel_id", tunnelID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/cfd_tunnel/" + pathParam1 + "/connections"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewD1ListDatabasesRequest constructs an http.Request for the D1ListDatabases method
+func NewD1ListDatabasesRequest(server string, accountID string, params *D1ListDatabasesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/d1/database"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewD1GetDatabaseRequest constructs an http.Request for the D1GetDatabase method
+func NewD1GetDatabaseRequest(server string, accountID string, databaseID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "database_id", databaseID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/d1/database/" + pathParam1
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewD1QueryDatabaseRequest calls the generic D1QueryDatabase builder with application/json body
+func NewD1QueryDatabaseRequest(server string, accountID string, databaseID string, body D1QueryDatabaseJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewD1QueryDatabaseRequestWithBody(server, accountID, databaseID, "application/json", bodyReader)
+}
+
+// NewD1QueryDatabaseRequestWithBody constructs an http.Request for the D1QueryDatabase method, with any body, and a specified content type
+func NewD1QueryDatabaseRequestWithBody(server string, accountID string, databaseID string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "database_id", databaseID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/d1/database/" + pathParam1 + "/query"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPagesProjectGetProjectsRequest constructs an http.Request for the PagesProjectGetProjects method
+func NewPagesProjectGetProjectsRequest(server string, accountID string, params *PagesProjectGetProjectsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/pages/projects"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRegistrarDomainRegistrationListRequest constructs an http.Request for the RegistrarDomainRegistrationList method
+func NewRegistrarDomainRegistrationListRequest(server string, accountID string, params *RegistrarDomainRegistrationListParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/registrar/registrations"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWebAnalyticsListSitesRequest constructs an http.Request for the WebAnalyticsListSites method
+func NewWebAnalyticsListSitesRequest(server string, accountID string, params *WebAnalyticsListSitesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/rum/site_info/list"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUserAPITokensVerifyTokenRequest constructs an http.Request for the UserAPITokensVerifyToken method
+func NewUserAPITokensVerifyTokenRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/user/tokens/verify"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewZonesGetRequest constructs an http.Request for the ZonesGet method
+func NewZonesGetRequest(server string, params *ZonesGetParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDNSRecordsForAZoneListDNSRecordsRequest constructs an http.Request for the DNSRecordsForAZoneListDNSRecords method
+func NewDNSRecordsForAZoneListDNSRecordsRequest(server string, zoneID string, params *DNSRecordsForAZoneListDNSRecordsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/dns_records"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDNSRecordsForAZoneCreateDNSRecordRequest calls the generic DNSRecordsForAZoneCreateDNSRecord builder with application/json body
+func NewDNSRecordsForAZoneCreateDNSRecordRequest(server string, zoneID string, body DNSRecordsForAZoneCreateDNSRecordJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDNSRecordsForAZoneCreateDNSRecordRequestWithBody(server, zoneID, "application/json", bodyReader)
+}
+
+// NewDNSRecordsForAZoneCreateDNSRecordRequestWithBody constructs an http.Request for the DNSRecordsForAZoneCreateDNSRecord method, with any body, and a specified content type
+func NewDNSRecordsForAZoneCreateDNSRecordRequestWithBody(server string, zoneID string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/dns_records"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDNSRecordsForAZoneDeleteDNSRecordRequest constructs an http.Request for the DNSRecordsForAZoneDeleteDNSRecord method
+func NewDNSRecordsForAZoneDeleteDNSRecordRequest(server string, zoneID string, dnsRecordID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "dns_record_id", dnsRecordID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/dns_records/" + pathParam1
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDNSRecordsForAZoneUpdateDNSRecordRequest calls the generic DNSRecordsForAZoneUpdateDNSRecord builder with application/json body
+func NewDNSRecordsForAZoneUpdateDNSRecordRequest(server string, zoneID string, dnsRecordID string, body DNSRecordsForAZoneUpdateDNSRecordJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDNSRecordsForAZoneUpdateDNSRecordRequestWithBody(server, zoneID, dnsRecordID, "application/json", bodyReader)
+}
+
+// NewDNSRecordsForAZoneUpdateDNSRecordRequestWithBody constructs an http.Request for the DNSRecordsForAZoneUpdateDNSRecord method, with any body, and a specified content type
+func NewDNSRecordsForAZoneUpdateDNSRecordRequestWithBody(server string, zoneID string, dnsRecordID string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "dns_record_id", dnsRecordID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/dns_records/" + pathParam1
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPageRulesListPageRulesRequest constructs an http.Request for the PageRulesListPageRules method
+func NewPageRulesListPageRulesRequest(server string, zoneID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/pagerules"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListZoneRulesetsRequest constructs an http.Request for the ListZoneRulesets method
+func NewListZoneRulesetsRequest(server string, zoneID string, params *ListZoneRulesetsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/rulesets"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetZoneRulesetRequest constructs an http.Request for the GetZoneRuleset method
+func NewGetZoneRulesetRequest(server string, zoneID string, rulesetID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "ruleset_id", rulesetID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/rulesets/" + pathParam1
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewZoneSettingsGetSingleSettingRequest constructs an http.Request for the ZoneSettingsGetSingleSetting method
+func NewZoneSettingsGetSingleSettingRequest(server string, zoneID string, settingID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "setting_id", settingID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/settings/" + pathParam1
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCertificatePacksListCertificatePacksRequest constructs an http.Request for the CertificatePacksListCertificatePacks method
+func NewCertificatePacksListCertificatePacksRequest(server string, zoneID string, params *CertificatePacksListCertificatePacksParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "zone_id", zoneID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/zones/" + pathParam0 + "/ssl/certificate_packs"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+func (c *API) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
+	for _, r := range c.RequestEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	for _, r := range additionalEditors {
+		if err := r(ctx, req); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ClientWithResponses builds on ClientInterface to offer response payloads
+type ClientWithResponses struct {
+	ClientInterface
+}
+
+// NewClientWithResponses creates a new ClientWithResponses, which wraps
+// Client with return type handling
+func NewClientWithResponses(server string, opts ...ClientOption) (*ClientWithResponses, error) {
+	client, err := NewClient(server, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &ClientWithResponses{client}, nil
+}
+
+// WithBaseURL overrides the baseURL.
+func WithBaseURL(baseURL string) ClientOption {
+	return func(c *API) error {
+		newBaseURL, err := url.Parse(baseURL)
+		if err != nil {
+			return err
+		}
+		c.Server = newBaseURL.String()
+		return nil
+	}
+}
+
+// ClientWithResponsesInterface is the interface specification for the client with responses above.
+type ClientWithResponsesInterface interface {
+
+	// AccountsListAccountsWithResponse performs a GET /accounts (the `AccountsListAccounts` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AccountsListAccountsWithResponse(ctx context.Context, params *AccountsListAccountsParams, reqEditors ...RequestEditorFn) (*AccountsListAccountsReply, error)
+
+	// AccessApplicationsListAccessApplicationsWithResponse performs a GET /accounts/{account_id}/access/apps (the `AccessApplicationsListAccessApplications` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AccessApplicationsListAccessApplicationsWithResponse(ctx context.Context, accountID string, params *AccessApplicationsListAccessApplicationsParams, reqEditors ...RequestEditorFn) (*AccessApplicationsListAccessApplicationsReply, error)
+
+	// AccessServiceTokensListServiceTokensWithResponse performs a GET /accounts/{account_id}/access/service_tokens (the `AccessServiceTokensListServiceTokens` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AccessServiceTokensListServiceTokensWithResponse(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*AccessServiceTokensListServiceTokensReply, error)
+
+	// CloudflareTunnelListCloudflareTunnelsWithResponse performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	CloudflareTunnelListCloudflareTunnelsWithResponse(ctx context.Context, accountID string, params *CloudflareTunnelListCloudflareTunnelsParams, reqEditors ...RequestEditorFn) (*CloudflareTunnelListCloudflareTunnelsReply, error)
+
+	// CloudflareTunnelConfigurationGetConfigurationWithResponse performs a GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations (the `CloudflareTunnelConfigurationGetConfiguration` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	CloudflareTunnelConfigurationGetConfigurationWithResponse(ctx context.Context, accountID string, tunnelID string, reqEditors ...RequestEditorFn) (*CloudflareTunnelConfigurationGetConfigurationReply, error)
+
+	// CloudflareTunnelListCloudflareTunnelConnectionsWithResponse performs a GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/connections (the `CloudflareTunnelListCloudflareTunnelConnections` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	CloudflareTunnelListCloudflareTunnelConnectionsWithResponse(ctx context.Context, accountID string, tunnelID string, reqEditors ...RequestEditorFn) (*CloudflareTunnelListCloudflareTunnelConnectionsReply, error)
+
+	// D1ListDatabasesWithResponse performs a GET /accounts/{account_id}/d1/database (the `D1ListDatabases` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	D1ListDatabasesWithResponse(ctx context.Context, accountID string, params *D1ListDatabasesParams, reqEditors ...RequestEditorFn) (*D1ListDatabasesReply, error)
+
+	// D1GetDatabaseWithResponse performs a GET /accounts/{account_id}/d1/database/{database_id} (the `D1GetDatabase` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	D1GetDatabaseWithResponse(ctx context.Context, accountID string, databaseID string, reqEditors ...RequestEditorFn) (*D1GetDatabaseReply, error)
+
+	// D1QueryDatabaseWithBodyWithResponse performs a POST /accounts/{account_id}/d1/database/{database_id}/query (the `D1QueryDatabase` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	D1QueryDatabaseWithBodyWithResponse(ctx context.Context, accountID string, databaseID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*D1QueryDatabaseReply, error)
+
+	// D1QueryDatabaseWithResponse performs a POST /accounts/{account_id}/d1/database/{database_id}/query (the `D1QueryDatabase` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	D1QueryDatabaseWithResponse(ctx context.Context, accountID string, databaseID string, body D1QueryDatabaseJSONRequestBody, reqEditors ...RequestEditorFn) (*D1QueryDatabaseReply, error)
+
+	// PagesProjectGetProjectsWithResponse performs a GET /accounts/{account_id}/pages/projects (the `PagesProjectGetProjects` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	PagesProjectGetProjectsWithResponse(ctx context.Context, accountID string, params *PagesProjectGetProjectsParams, reqEditors ...RequestEditorFn) (*PagesProjectGetProjectsReply, error)
+
+	// RegistrarDomainRegistrationListWithResponse performs a GET /accounts/{account_id}/registrar/registrations (the `RegistrarDomainRegistrationList` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	RegistrarDomainRegistrationListWithResponse(ctx context.Context, accountID string, params *RegistrarDomainRegistrationListParams, reqEditors ...RequestEditorFn) (*RegistrarDomainRegistrationListReply, error)
+
+	// WebAnalyticsListSitesWithResponse performs a GET /accounts/{account_id}/rum/site_info/list (the `WebAnalyticsListSites` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	WebAnalyticsListSitesWithResponse(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*WebAnalyticsListSitesReply, error)
+
+	// UserAPITokensVerifyTokenWithResponse performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	UserAPITokensVerifyTokenWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*UserAPITokensVerifyTokenReply, error)
+
+	// ZonesGetWithResponse performs a GET /zones (the `ZonesGet` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ZonesGetWithResponse(ctx context.Context, params *ZonesGetParams, reqEditors ...RequestEditorFn) (*ZonesGetReply, error)
+
+	// DNSRecordsForAZoneListDNSRecordsWithResponse performs a GET /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneListDNSRecords` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	DNSRecordsForAZoneListDNSRecordsWithResponse(ctx context.Context, zoneID string, params *DNSRecordsForAZoneListDNSRecordsParams, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneListDNSRecordsReply, error)
+
+	// DNSRecordsForAZoneCreateDNSRecordWithBodyWithResponse performs a POST /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneCreateDNSRecord` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	DNSRecordsForAZoneCreateDNSRecordWithBodyWithResponse(ctx context.Context, zoneID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneCreateDNSRecordReply, error)
+
+	// DNSRecordsForAZoneCreateDNSRecordWithResponse performs a POST /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneCreateDNSRecord` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	DNSRecordsForAZoneCreateDNSRecordWithResponse(ctx context.Context, zoneID string, body DNSRecordsForAZoneCreateDNSRecordJSONRequestBody, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneCreateDNSRecordReply, error)
+
+	// DNSRecordsForAZoneDeleteDNSRecordWithResponse performs a DELETE /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneDeleteDNSRecord` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	DNSRecordsForAZoneDeleteDNSRecordWithResponse(ctx context.Context, zoneID string, dnsRecordID string, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneDeleteDNSRecordReply, error)
+
+	// DNSRecordsForAZoneUpdateDNSRecordWithBodyWithResponse performs a PUT /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneUpdateDNSRecord` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	DNSRecordsForAZoneUpdateDNSRecordWithBodyWithResponse(ctx context.Context, zoneID string, dnsRecordID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneUpdateDNSRecordReply, error)
+
+	// DNSRecordsForAZoneUpdateDNSRecordWithResponse performs a PUT /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneUpdateDNSRecord` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	DNSRecordsForAZoneUpdateDNSRecordWithResponse(ctx context.Context, zoneID string, dnsRecordID string, body DNSRecordsForAZoneUpdateDNSRecordJSONRequestBody, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneUpdateDNSRecordReply, error)
+
+	// PageRulesListPageRulesWithResponse performs a GET /zones/{zone_id}/pagerules (the `PageRulesListPageRules` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	PageRulesListPageRulesWithResponse(ctx context.Context, zoneID string, reqEditors ...RequestEditorFn) (*PageRulesListPageRulesReply, error)
+
+	// ListZoneRulesetsWithResponse performs a GET /zones/{zone_id}/rulesets (the `ListZoneRulesets` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ListZoneRulesetsWithResponse(ctx context.Context, zoneID string, params *ListZoneRulesetsParams, reqEditors ...RequestEditorFn) (*ListZoneRulesetsReply, error)
+
+	// GetZoneRulesetWithResponse performs a GET /zones/{zone_id}/rulesets/{ruleset_id} (the `GetZoneRuleset` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	GetZoneRulesetWithResponse(ctx context.Context, zoneID string, rulesetID string, reqEditors ...RequestEditorFn) (*GetZoneRulesetReply, error)
+
+	// ZoneSettingsGetSingleSettingWithResponse performs a GET /zones/{zone_id}/settings/{setting_id} (the `ZoneSettingsGetSingleSetting` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ZoneSettingsGetSingleSettingWithResponse(ctx context.Context, zoneID string, settingID string, reqEditors ...RequestEditorFn) (*ZoneSettingsGetSingleSettingReply, error)
+
+	// CertificatePacksListCertificatePacksWithResponse performs a GET /zones/{zone_id}/ssl/certificate_packs (the `CertificatePacksListCertificatePacks` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	CertificatePacksListCertificatePacksWithResponse(ctx context.Context, zoneID string, params *CertificatePacksListCertificatePacksParams, reqEditors ...RequestEditorFn) (*CertificatePacksListCertificatePacksReply, error)
+}
+
+type AccountsListAccountsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r AccountsListAccountsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AccountsListAccountsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AccountsListAccountsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AccountsListAccountsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AccessApplicationsListAccessApplicationsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r AccessApplicationsListAccessApplicationsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AccessApplicationsListAccessApplicationsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AccessApplicationsListAccessApplicationsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AccessApplicationsListAccessApplicationsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AccessServiceTokensListServiceTokensReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r AccessServiceTokensListServiceTokensReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AccessServiceTokensListServiceTokensReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AccessServiceTokensListServiceTokensReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AccessServiceTokensListServiceTokensReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CloudflareTunnelListCloudflareTunnelsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r CloudflareTunnelListCloudflareTunnelsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CloudflareTunnelListCloudflareTunnelsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CloudflareTunnelListCloudflareTunnelsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CloudflareTunnelListCloudflareTunnelsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CloudflareTunnelConfigurationGetConfigurationReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r CloudflareTunnelConfigurationGetConfigurationReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CloudflareTunnelConfigurationGetConfigurationReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CloudflareTunnelConfigurationGetConfigurationReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CloudflareTunnelConfigurationGetConfigurationReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CloudflareTunnelListCloudflareTunnelConnectionsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r CloudflareTunnelListCloudflareTunnelConnectionsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CloudflareTunnelListCloudflareTunnelConnectionsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CloudflareTunnelListCloudflareTunnelConnectionsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CloudflareTunnelListCloudflareTunnelConnectionsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type D1ListDatabasesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r D1ListDatabasesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r D1ListDatabasesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r D1ListDatabasesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r D1ListDatabasesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type D1GetDatabaseReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r D1GetDatabaseReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r D1GetDatabaseReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r D1GetDatabaseReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r D1GetDatabaseReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type D1QueryDatabaseReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r D1QueryDatabaseReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r D1QueryDatabaseReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r D1QueryDatabaseReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r D1QueryDatabaseReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PagesProjectGetProjectsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r PagesProjectGetProjectsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PagesProjectGetProjectsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PagesProjectGetProjectsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PagesProjectGetProjectsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RegistrarDomainRegistrationListReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r RegistrarDomainRegistrationListReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RegistrarDomainRegistrationListReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RegistrarDomainRegistrationListReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RegistrarDomainRegistrationListReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WebAnalyticsListSitesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r WebAnalyticsListSitesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WebAnalyticsListSitesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WebAnalyticsListSitesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WebAnalyticsListSitesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UserAPITokensVerifyTokenReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r UserAPITokensVerifyTokenReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UserAPITokensVerifyTokenReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UserAPITokensVerifyTokenReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UserAPITokensVerifyTokenReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ZonesGetReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r ZonesGetReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ZonesGetReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ZonesGetReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ZonesGetReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DNSRecordsForAZoneListDNSRecordsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DNSRecordsForAZoneListDNSRecordsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DNSRecordsForAZoneListDNSRecordsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DNSRecordsForAZoneListDNSRecordsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DNSRecordsForAZoneListDNSRecordsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DNSRecordsForAZoneCreateDNSRecordReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DNSRecordsForAZoneCreateDNSRecordReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DNSRecordsForAZoneCreateDNSRecordReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DNSRecordsForAZoneCreateDNSRecordReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DNSRecordsForAZoneCreateDNSRecordReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DNSRecordsForAZoneDeleteDNSRecordReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DNSRecordsForAZoneDeleteDNSRecordReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DNSRecordsForAZoneDeleteDNSRecordReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DNSRecordsForAZoneDeleteDNSRecordReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DNSRecordsForAZoneDeleteDNSRecordReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DNSRecordsForAZoneUpdateDNSRecordReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r DNSRecordsForAZoneUpdateDNSRecordReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DNSRecordsForAZoneUpdateDNSRecordReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DNSRecordsForAZoneUpdateDNSRecordReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DNSRecordsForAZoneUpdateDNSRecordReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PageRulesListPageRulesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r PageRulesListPageRulesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PageRulesListPageRulesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PageRulesListPageRulesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PageRulesListPageRulesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListZoneRulesetsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r ListZoneRulesetsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListZoneRulesetsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListZoneRulesetsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListZoneRulesetsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetZoneRulesetReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r GetZoneRulesetReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetZoneRulesetReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetZoneRulesetReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetZoneRulesetReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ZoneSettingsGetSingleSettingReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r ZoneSettingsGetSingleSettingReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ZoneSettingsGetSingleSettingReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ZoneSettingsGetSingleSettingReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ZoneSettingsGetSingleSettingReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CertificatePacksListCertificatePacksReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r CertificatePacksListCertificatePacksReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CertificatePacksListCertificatePacksReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CertificatePacksListCertificatePacksReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CertificatePacksListCertificatePacksReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AccountsListAccountsWithResponse performs a GET /accounts (the `AccountsListAccounts` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AccountsListAccountsWithResponse(ctx context.Context, params *AccountsListAccountsParams, reqEditors ...RequestEditorFn) (*AccountsListAccountsReply, error) {
+	rsp, err := c.AccountsListAccounts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAccountsListAccountsReply(rsp)
+}
+
+// AccessApplicationsListAccessApplicationsWithResponse performs a GET /accounts/{account_id}/access/apps (the `AccessApplicationsListAccessApplications` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AccessApplicationsListAccessApplicationsWithResponse(ctx context.Context, accountID string, params *AccessApplicationsListAccessApplicationsParams, reqEditors ...RequestEditorFn) (*AccessApplicationsListAccessApplicationsReply, error) {
+	rsp, err := c.AccessApplicationsListAccessApplications(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAccessApplicationsListAccessApplicationsReply(rsp)
+}
+
+// AccessServiceTokensListServiceTokensWithResponse performs a GET /accounts/{account_id}/access/service_tokens (the `AccessServiceTokensListServiceTokens` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AccessServiceTokensListServiceTokensWithResponse(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*AccessServiceTokensListServiceTokensReply, error) {
+	rsp, err := c.AccessServiceTokensListServiceTokens(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAccessServiceTokensListServiceTokensReply(rsp)
+}
+
+// CloudflareTunnelListCloudflareTunnelsWithResponse performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) CloudflareTunnelListCloudflareTunnelsWithResponse(ctx context.Context, accountID string, params *CloudflareTunnelListCloudflareTunnelsParams, reqEditors ...RequestEditorFn) (*CloudflareTunnelListCloudflareTunnelsReply, error) {
+	rsp, err := c.CloudflareTunnelListCloudflareTunnels(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCloudflareTunnelListCloudflareTunnelsReply(rsp)
+}
+
+// CloudflareTunnelConfigurationGetConfigurationWithResponse performs a GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations (the `CloudflareTunnelConfigurationGetConfiguration` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) CloudflareTunnelConfigurationGetConfigurationWithResponse(ctx context.Context, accountID string, tunnelID string, reqEditors ...RequestEditorFn) (*CloudflareTunnelConfigurationGetConfigurationReply, error) {
+	rsp, err := c.CloudflareTunnelConfigurationGetConfiguration(ctx, accountID, tunnelID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCloudflareTunnelConfigurationGetConfigurationReply(rsp)
+}
+
+// CloudflareTunnelListCloudflareTunnelConnectionsWithResponse performs a GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/connections (the `CloudflareTunnelListCloudflareTunnelConnections` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) CloudflareTunnelListCloudflareTunnelConnectionsWithResponse(ctx context.Context, accountID string, tunnelID string, reqEditors ...RequestEditorFn) (*CloudflareTunnelListCloudflareTunnelConnectionsReply, error) {
+	rsp, err := c.CloudflareTunnelListCloudflareTunnelConnections(ctx, accountID, tunnelID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCloudflareTunnelListCloudflareTunnelConnectionsReply(rsp)
+}
+
+// D1ListDatabasesWithResponse performs a GET /accounts/{account_id}/d1/database (the `D1ListDatabases` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) D1ListDatabasesWithResponse(ctx context.Context, accountID string, params *D1ListDatabasesParams, reqEditors ...RequestEditorFn) (*D1ListDatabasesReply, error) {
+	rsp, err := c.D1ListDatabases(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseD1ListDatabasesReply(rsp)
+}
+
+// D1GetDatabaseWithResponse performs a GET /accounts/{account_id}/d1/database/{database_id} (the `D1GetDatabase` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) D1GetDatabaseWithResponse(ctx context.Context, accountID string, databaseID string, reqEditors ...RequestEditorFn) (*D1GetDatabaseReply, error) {
+	rsp, err := c.D1GetDatabase(ctx, accountID, databaseID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseD1GetDatabaseReply(rsp)
+}
+
+// D1QueryDatabaseWithBodyWithResponse performs a POST /accounts/{account_id}/d1/database/{database_id}/query (the `D1QueryDatabase` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) D1QueryDatabaseWithBodyWithResponse(ctx context.Context, accountID string, databaseID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*D1QueryDatabaseReply, error) {
+	rsp, err := c.D1QueryDatabaseWithBody(ctx, accountID, databaseID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseD1QueryDatabaseReply(rsp)
+}
+
+// D1QueryDatabaseWithResponse performs a POST /accounts/{account_id}/d1/database/{database_id}/query (the `D1QueryDatabase` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) D1QueryDatabaseWithResponse(ctx context.Context, accountID string, databaseID string, body D1QueryDatabaseJSONRequestBody, reqEditors ...RequestEditorFn) (*D1QueryDatabaseReply, error) {
+	rsp, err := c.D1QueryDatabase(ctx, accountID, databaseID, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseD1QueryDatabaseReply(rsp)
+}
+
+// PagesProjectGetProjectsWithResponse performs a GET /accounts/{account_id}/pages/projects (the `PagesProjectGetProjects` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PagesProjectGetProjectsWithResponse(ctx context.Context, accountID string, params *PagesProjectGetProjectsParams, reqEditors ...RequestEditorFn) (*PagesProjectGetProjectsReply, error) {
+	rsp, err := c.PagesProjectGetProjects(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePagesProjectGetProjectsReply(rsp)
+}
+
+// RegistrarDomainRegistrationListWithResponse performs a GET /accounts/{account_id}/registrar/registrations (the `RegistrarDomainRegistrationList` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) RegistrarDomainRegistrationListWithResponse(ctx context.Context, accountID string, params *RegistrarDomainRegistrationListParams, reqEditors ...RequestEditorFn) (*RegistrarDomainRegistrationListReply, error) {
+	rsp, err := c.RegistrarDomainRegistrationList(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRegistrarDomainRegistrationListReply(rsp)
+}
+
+// WebAnalyticsListSitesWithResponse performs a GET /accounts/{account_id}/rum/site_info/list (the `WebAnalyticsListSites` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) WebAnalyticsListSitesWithResponse(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*WebAnalyticsListSitesReply, error) {
+	rsp, err := c.WebAnalyticsListSites(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWebAnalyticsListSitesReply(rsp)
+}
+
+// UserAPITokensVerifyTokenWithResponse performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) UserAPITokensVerifyTokenWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*UserAPITokensVerifyTokenReply, error) {
+	rsp, err := c.UserAPITokensVerifyToken(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUserAPITokensVerifyTokenReply(rsp)
+}
+
+// ZonesGetWithResponse performs a GET /zones (the `ZonesGet` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ZonesGetWithResponse(ctx context.Context, params *ZonesGetParams, reqEditors ...RequestEditorFn) (*ZonesGetReply, error) {
+	rsp, err := c.ZonesGet(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZonesGetReply(rsp)
+}
+
+// DNSRecordsForAZoneListDNSRecordsWithResponse performs a GET /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneListDNSRecords` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DNSRecordsForAZoneListDNSRecordsWithResponse(ctx context.Context, zoneID string, params *DNSRecordsForAZoneListDNSRecordsParams, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneListDNSRecordsReply, error) {
+	rsp, err := c.DNSRecordsForAZoneListDNSRecords(ctx, zoneID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDNSRecordsForAZoneListDNSRecordsReply(rsp)
+}
+
+// DNSRecordsForAZoneCreateDNSRecordWithBodyWithResponse performs a POST /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneCreateDNSRecord` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DNSRecordsForAZoneCreateDNSRecordWithBodyWithResponse(ctx context.Context, zoneID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneCreateDNSRecordReply, error) {
+	rsp, err := c.DNSRecordsForAZoneCreateDNSRecordWithBody(ctx, zoneID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDNSRecordsForAZoneCreateDNSRecordReply(rsp)
+}
+
+// DNSRecordsForAZoneCreateDNSRecordWithResponse performs a POST /zones/{zone_id}/dns_records (the `DNSRecordsForAZoneCreateDNSRecord` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DNSRecordsForAZoneCreateDNSRecordWithResponse(ctx context.Context, zoneID string, body DNSRecordsForAZoneCreateDNSRecordJSONRequestBody, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneCreateDNSRecordReply, error) {
+	rsp, err := c.DNSRecordsForAZoneCreateDNSRecord(ctx, zoneID, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDNSRecordsForAZoneCreateDNSRecordReply(rsp)
+}
+
+// DNSRecordsForAZoneDeleteDNSRecordWithResponse performs a DELETE /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneDeleteDNSRecord` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DNSRecordsForAZoneDeleteDNSRecordWithResponse(ctx context.Context, zoneID string, dnsRecordID string, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneDeleteDNSRecordReply, error) {
+	rsp, err := c.DNSRecordsForAZoneDeleteDNSRecord(ctx, zoneID, dnsRecordID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDNSRecordsForAZoneDeleteDNSRecordReply(rsp)
+}
+
+// DNSRecordsForAZoneUpdateDNSRecordWithBodyWithResponse performs a PUT /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneUpdateDNSRecord` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DNSRecordsForAZoneUpdateDNSRecordWithBodyWithResponse(ctx context.Context, zoneID string, dnsRecordID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneUpdateDNSRecordReply, error) {
+	rsp, err := c.DNSRecordsForAZoneUpdateDNSRecordWithBody(ctx, zoneID, dnsRecordID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDNSRecordsForAZoneUpdateDNSRecordReply(rsp)
+}
+
+// DNSRecordsForAZoneUpdateDNSRecordWithResponse performs a PUT /zones/{zone_id}/dns_records/{dns_record_id} (the `DNSRecordsForAZoneUpdateDNSRecord` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) DNSRecordsForAZoneUpdateDNSRecordWithResponse(ctx context.Context, zoneID string, dnsRecordID string, body DNSRecordsForAZoneUpdateDNSRecordJSONRequestBody, reqEditors ...RequestEditorFn) (*DNSRecordsForAZoneUpdateDNSRecordReply, error) {
+	rsp, err := c.DNSRecordsForAZoneUpdateDNSRecord(ctx, zoneID, dnsRecordID, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDNSRecordsForAZoneUpdateDNSRecordReply(rsp)
+}
+
+// PageRulesListPageRulesWithResponse performs a GET /zones/{zone_id}/pagerules (the `PageRulesListPageRules` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PageRulesListPageRulesWithResponse(ctx context.Context, zoneID string, reqEditors ...RequestEditorFn) (*PageRulesListPageRulesReply, error) {
+	rsp, err := c.PageRulesListPageRules(ctx, zoneID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePageRulesListPageRulesReply(rsp)
+}
+
+// ListZoneRulesetsWithResponse performs a GET /zones/{zone_id}/rulesets (the `ListZoneRulesets` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ListZoneRulesetsWithResponse(ctx context.Context, zoneID string, params *ListZoneRulesetsParams, reqEditors ...RequestEditorFn) (*ListZoneRulesetsReply, error) {
+	rsp, err := c.ListZoneRulesets(ctx, zoneID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListZoneRulesetsReply(rsp)
+}
+
+// GetZoneRulesetWithResponse performs a GET /zones/{zone_id}/rulesets/{ruleset_id} (the `GetZoneRuleset` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) GetZoneRulesetWithResponse(ctx context.Context, zoneID string, rulesetID string, reqEditors ...RequestEditorFn) (*GetZoneRulesetReply, error) {
+	rsp, err := c.GetZoneRuleset(ctx, zoneID, rulesetID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetZoneRulesetReply(rsp)
+}
+
+// ZoneSettingsGetSingleSettingWithResponse performs a GET /zones/{zone_id}/settings/{setting_id} (the `ZoneSettingsGetSingleSetting` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ZoneSettingsGetSingleSettingWithResponse(ctx context.Context, zoneID string, settingID string, reqEditors ...RequestEditorFn) (*ZoneSettingsGetSingleSettingReply, error) {
+	rsp, err := c.ZoneSettingsGetSingleSetting(ctx, zoneID, settingID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseZoneSettingsGetSingleSettingReply(rsp)
+}
+
+// CertificatePacksListCertificatePacksWithResponse performs a GET /zones/{zone_id}/ssl/certificate_packs (the `CertificatePacksListCertificatePacks` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) CertificatePacksListCertificatePacksWithResponse(ctx context.Context, zoneID string, params *CertificatePacksListCertificatePacksParams, reqEditors ...RequestEditorFn) (*CertificatePacksListCertificatePacksReply, error) {
+	rsp, err := c.CertificatePacksListCertificatePacks(ctx, zoneID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCertificatePacksListCertificatePacksReply(rsp)
+}
+
+// ParseAccountsListAccountsReply parses an HTTP response from a AccountsListAccountsWithResponse call
+func ParseAccountsListAccountsReply(rsp *http.Response) (*AccountsListAccountsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AccountsListAccountsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseAccessApplicationsListAccessApplicationsReply parses an HTTP response from a AccessApplicationsListAccessApplicationsWithResponse call
+func ParseAccessApplicationsListAccessApplicationsReply(rsp *http.Response) (*AccessApplicationsListAccessApplicationsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AccessApplicationsListAccessApplicationsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseAccessServiceTokensListServiceTokensReply parses an HTTP response from a AccessServiceTokensListServiceTokensWithResponse call
+func ParseAccessServiceTokensListServiceTokensReply(rsp *http.Response) (*AccessServiceTokensListServiceTokensReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AccessServiceTokensListServiceTokensReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseCloudflareTunnelListCloudflareTunnelsReply parses an HTTP response from a CloudflareTunnelListCloudflareTunnelsWithResponse call
+func ParseCloudflareTunnelListCloudflareTunnelsReply(rsp *http.Response) (*CloudflareTunnelListCloudflareTunnelsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CloudflareTunnelListCloudflareTunnelsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseCloudflareTunnelConfigurationGetConfigurationReply parses an HTTP response from a CloudflareTunnelConfigurationGetConfigurationWithResponse call
+func ParseCloudflareTunnelConfigurationGetConfigurationReply(rsp *http.Response) (*CloudflareTunnelConfigurationGetConfigurationReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CloudflareTunnelConfigurationGetConfigurationReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseCloudflareTunnelListCloudflareTunnelConnectionsReply parses an HTTP response from a CloudflareTunnelListCloudflareTunnelConnectionsWithResponse call
+func ParseCloudflareTunnelListCloudflareTunnelConnectionsReply(rsp *http.Response) (*CloudflareTunnelListCloudflareTunnelConnectionsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CloudflareTunnelListCloudflareTunnelConnectionsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseD1ListDatabasesReply parses an HTTP response from a D1ListDatabasesWithResponse call
+func ParseD1ListDatabasesReply(rsp *http.Response) (*D1ListDatabasesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &D1ListDatabasesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseD1GetDatabaseReply parses an HTTP response from a D1GetDatabaseWithResponse call
+func ParseD1GetDatabaseReply(rsp *http.Response) (*D1GetDatabaseReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &D1GetDatabaseReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseD1QueryDatabaseReply parses an HTTP response from a D1QueryDatabaseWithResponse call
+func ParseD1QueryDatabaseReply(rsp *http.Response) (*D1QueryDatabaseReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &D1QueryDatabaseReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePagesProjectGetProjectsReply parses an HTTP response from a PagesProjectGetProjectsWithResponse call
+func ParsePagesProjectGetProjectsReply(rsp *http.Response) (*PagesProjectGetProjectsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PagesProjectGetProjectsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseRegistrarDomainRegistrationListReply parses an HTTP response from a RegistrarDomainRegistrationListWithResponse call
+func ParseRegistrarDomainRegistrationListReply(rsp *http.Response) (*RegistrarDomainRegistrationListReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RegistrarDomainRegistrationListReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseWebAnalyticsListSitesReply parses an HTTP response from a WebAnalyticsListSitesWithResponse call
+func ParseWebAnalyticsListSitesReply(rsp *http.Response) (*WebAnalyticsListSitesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WebAnalyticsListSitesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseUserAPITokensVerifyTokenReply parses an HTTP response from a UserAPITokensVerifyTokenWithResponse call
+func ParseUserAPITokensVerifyTokenReply(rsp *http.Response) (*UserAPITokensVerifyTokenReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UserAPITokensVerifyTokenReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseZonesGetReply parses an HTTP response from a ZonesGetWithResponse call
+func ParseZonesGetReply(rsp *http.Response) (*ZonesGetReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ZonesGetReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseDNSRecordsForAZoneListDNSRecordsReply parses an HTTP response from a DNSRecordsForAZoneListDNSRecordsWithResponse call
+func ParseDNSRecordsForAZoneListDNSRecordsReply(rsp *http.Response) (*DNSRecordsForAZoneListDNSRecordsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DNSRecordsForAZoneListDNSRecordsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseDNSRecordsForAZoneCreateDNSRecordReply parses an HTTP response from a DNSRecordsForAZoneCreateDNSRecordWithResponse call
+func ParseDNSRecordsForAZoneCreateDNSRecordReply(rsp *http.Response) (*DNSRecordsForAZoneCreateDNSRecordReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DNSRecordsForAZoneCreateDNSRecordReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseDNSRecordsForAZoneDeleteDNSRecordReply parses an HTTP response from a DNSRecordsForAZoneDeleteDNSRecordWithResponse call
+func ParseDNSRecordsForAZoneDeleteDNSRecordReply(rsp *http.Response) (*DNSRecordsForAZoneDeleteDNSRecordReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DNSRecordsForAZoneDeleteDNSRecordReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseDNSRecordsForAZoneUpdateDNSRecordReply parses an HTTP response from a DNSRecordsForAZoneUpdateDNSRecordWithResponse call
+func ParseDNSRecordsForAZoneUpdateDNSRecordReply(rsp *http.Response) (*DNSRecordsForAZoneUpdateDNSRecordReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DNSRecordsForAZoneUpdateDNSRecordReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParsePageRulesListPageRulesReply parses an HTTP response from a PageRulesListPageRulesWithResponse call
+func ParsePageRulesListPageRulesReply(rsp *http.Response) (*PageRulesListPageRulesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PageRulesListPageRulesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseListZoneRulesetsReply parses an HTTP response from a ListZoneRulesetsWithResponse call
+func ParseListZoneRulesetsReply(rsp *http.Response) (*ListZoneRulesetsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListZoneRulesetsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetZoneRulesetReply parses an HTTP response from a GetZoneRulesetWithResponse call
+func ParseGetZoneRulesetReply(rsp *http.Response) (*GetZoneRulesetReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetZoneRulesetReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseZoneSettingsGetSingleSettingReply parses an HTTP response from a ZoneSettingsGetSingleSettingWithResponse call
+func ParseZoneSettingsGetSingleSettingReply(rsp *http.Response) (*ZoneSettingsGetSingleSettingReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ZoneSettingsGetSingleSettingReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseCertificatePacksListCertificatePacksReply parses an HTTP response from a CertificatePacksListCertificatePacksWithResponse call
+func ParseCertificatePacksListCertificatePacksReply(rsp *http.Response) (*CertificatePacksListCertificatePacksReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CertificatePacksListCertificatePacksReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
 }

@@ -2,9 +2,11 @@ package providers
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"maps"
 	"net/http"
+	"reflect"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -23,6 +25,8 @@ type vendorDoer struct {
 	headers map[string]string
 	// cache scopes the sweep cache a GET is read once through; empty reads fresh.
 	cache string
+	// exchange is a vendor's own rules around the Transport's, when it has any.
+	exchange func(ctx context.Context, url, method string, headers map[string]string, payload any) (runtime.Answer, error)
 }
 
 func (d vendorDoer) Do(req *http.Request) (*http.Response, error) {
@@ -42,8 +46,12 @@ func (d vendorDoer) Do(req *http.Request) (*http.Response, error) {
 	for name := range req.Header {
 		headers[name] = req.Header.Get(name)
 	}
+	send := d.exchange
+	if send == nil {
+		send = d.r.HTTP.Exchange
+	}
 	exchange := func() (runtime.Answer, error) {
-		return d.r.HTTP.Exchange(req.Context(), req.URL.String(), req.Method, headers, payload)
+		return send(req.Context(), req.URL.String(), req.Method, headers, payload)
 	}
 	var answer runtime.Answer
 	var err error
@@ -63,6 +71,16 @@ func (d vendorDoer) Do(req *http.Request) (*http.Response, error) {
 		header.Set("Content-Type", "application/json")
 	}
 	return &http.Response{StatusCode: answer.Status, Status: http.StatusText(answer.Status), Header: header, Body: io.NopCloser(bytes.NewReader(answer.Body)), Request: req}, nil
+}
+
+// replyBody is a generated reply's body, which every reply type holds as its
+// Body field; the generated client has read and closed the answer. A reply
+// type has no method that returns it, and Go's generics cannot name a field.
+func replyBody(reply any, err error) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+	return reflect.ValueOf(reply).Elem().FieldByName("Body").Bytes(), nil
 }
 
 // json200 is a generated reply's 200 body, the zero value for an empty one.

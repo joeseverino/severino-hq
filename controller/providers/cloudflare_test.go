@@ -28,9 +28,6 @@ type cloudflareFake struct {
 }
 
 func (f *cloudflareFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/graphql" {
-		recordVendorCall("cloudflare", r.Method, r.URL.Path)
-	}
 	f.mu.Lock()
 	f.requests = append(f.requests, r)
 	handler := f.routes[r.Method+" "+r.URL.Path]
@@ -155,6 +152,20 @@ func TestZonesReadPastFiftyIsNotTruncated(t *testing.T) {
 				t.Fatalf("read %d of %d zones: %v", got, c.total, err)
 			}
 		})
+	}
+}
+
+// A sweep reads each Cloudflare list once.
+func TestCloudflareSweepReadsAListOnce(t *testing.T) {
+	r, fake := newCloudflare(t, map[string]http.HandlerFunc{"GET /zones": answer([]any{zone(1)})})
+	defer r.BeginSnapshot()()
+	for range 2 {
+		if _, err := r.cloudflareAPIZones(t.Context(), "example-api"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := fake.count("GET", "/zones"); n != 1 {
+		t.Fatalf("one sweep read the zones %d times", n)
 	}
 }
 

@@ -147,11 +147,10 @@ func pageRuleRecord(rule cfPageRule, zone string) (CloudflareRedirectRecord, boo
 
 // cloudflareRedirectRules is the redirect rules in the zone's dynamic redirect rulesets.
 func (r *Registry) cloudflareRedirectRules(ctx context.Context, zoneID, zone, ref string) ([]CloudflareRedirectRecord, error) {
-	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/zones/"+zoneID+"/rulesets", ref, cloudflareAccountPerPage)
-	if err != nil {
-		return nil, err
-	}
-	rulesets, err := cloudflareItems[cfRuleset](items, "ruleset")
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
+	rulesets, err := cloudflareCursorPages[cfRuleset]("ruleset", func(cursor *string) (any, error) {
+		return client.ListZoneRulesetsWithResponse(ctx, zoneID, &cfapi.ListZoneRulesetsParams{Cursor: cursor, PerPage: new(cloudflareAccountPerPage)})
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +159,7 @@ func (r *Registry) cloudflareRedirectRules(ctx context.Context, zoneID, zone, re
 		if listed.Phase != redirectPhase {
 			continue
 		}
-		ruleset, err := cloudflareOptional[cfRuleset](r.cloudflareAPIResult(ctx, "/zones/"+zoneID+"/rulesets/"+listed.ID, ref))
+		ruleset, err := cloudflareOptional[cfRuleset](cloudflareResult(client.GetZoneRulesetWithResponse(ctx, zoneID, listed.ID)))
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +178,7 @@ func (r *Registry) cloudflareRedirectRules(ctx context.Context, zoneID, zone, re
 
 // cloudflarePageRedirects is the zone's forwarding page rules.
 func (r *Registry) cloudflarePageRedirects(ctx context.Context, zoneID, zone, ref string) ([]CloudflareRedirectRecord, error) {
-	rules, err := cloudflareOptional[[]cfPageRule](r.cloudflareAPIResult(ctx, "/zones/"+zoneID+"/pagerules", ref))
+	rules, err := cloudflareOptional[[]cfPageRule](cloudflareResult(r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true).PageRulesListPageRulesWithResponse(ctx, zoneID)))
 	if err != nil {
 		return nil, err
 	}

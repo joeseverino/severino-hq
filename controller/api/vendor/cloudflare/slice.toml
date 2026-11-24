@@ -1,6 +1,14 @@
 # What ../slice.py keeps of Cloudflare's spec; the operations are oapi-codegen.yaml's.
 strip = ["readOnly", "writeOnly", "format", "default"]
 
+# A DNS record is a union the provider models itself, and a D1 query is one
+# statement of its own.
+encodes = [
+  "d1-query-database",
+  "dns-records-for-a-zone-create-dns-record",
+  "dns-records-for-a-zone-update-dns-record",
+]
+
 # What each call's envelope result is decoded as. Access applications, DNS
 # records, page rules, rulesets and zone settings are unions the provider
 # decodes into its own types (cloudflare_types.go).
@@ -18,5 +26,21 @@ registrar-domain-registration-list = ["registrar-api_registration"]
 user-api-tokens-verify-token = ["iam_token_verify_response_single_segment"]
 web-analytics-list-sites = ["rum_site"]
 zones-get = ["zones_zone"]
+
+# Every list is read page by page to its end; certificate packs of every
+# status, and tunnels still live.
+[queries]
+accounts-list-accounts = ["page", "per_page"]
+access-applications-list-access-applications = ["page", "per_page"]
+access-service-tokens-list-service-tokens = ["page", "per_page"]
+certificate-packs-list-certificate-packs = ["page", "per_page", "status"]
+cloudflare-tunnel-list-cloudflare-tunnels = ["page", "per_page", "is_deleted"]
+d1-list-databases = ["page", "per_page"]
+dns-records-for-a-zone-list-dns-records = ["page", "per_page"]
+listZoneRulesets = ["cursor", "per_page"]
+pages-project-get-projects = ["page", "per_page"]
+registrar-domain-registration-list = ["cursor", "per_page"]
+web-analytics-list-sites = ["page", "per_page"]
+zones-get = ["page", "per_page"]
 
 [go-names]

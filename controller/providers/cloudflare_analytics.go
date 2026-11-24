@@ -93,23 +93,15 @@ type analyticsAnswer struct {
 // cloudflareGraphQL answers 200 with an errors array rather than a status, so a
 // failed query must not read as a site nobody visited.
 func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variables any, ref string) (json.RawMessage, error) {
-	held, _, err := r.cloudflareCredential(runtime.ConnectionProviderCloudflareAPI, ref)
-	if err != nil {
-		return nil, err
+	held, base, doer := r.cloudflareDoer(runtime.ConnectionProviderCloudflareAPI, ref)
+	if doer.err != nil {
+		return nil, doer.err
 	}
 	if err := r.cloudflareBreaker(held); err != nil {
 		return nil, err
 	}
-	base, err := r.cloudflareURL(runtime.ConnectionProviderCloudflareAPI, ref)
-	if err != nil {
-		return nil, err
-	}
-	headers, err := r.cloudflareHeaders(runtime.ConnectionProviderCloudflareAPI, ref)
-	if err != nil {
-		return nil, err
-	}
-	delete(headers, "Accept")
-	raw, err := r.HTTP.Request(ctx, base+"/graphql", "POST", headers, struct {
+	delete(doer.headers, "Accept")
+	raw, err := r.HTTP.Request(ctx, base+"graphql", "POST", doer.headers, struct {
 		Query     string `json:"query"`
 		Variables any    `json:"variables"`
 	}{query, variables})
@@ -142,11 +134,10 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 // cloudflareAnalyticsAccount is the one account this credential reads,
 // discovered rather than configured.
 func (r *Registry) cloudflareAnalyticsAccount(ctx context.Context, ref string) (string, error) {
-	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/accounts", ref, cloudflareAccountPerPage)
-	if err != nil {
-		return "", err
-	}
-	accounts, err := cloudflareItems[cfapi.IamAccount](items, "account")
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
+	accounts, err := cloudflarePages[cfapi.IamAccount]("account", cloudflareAccountPerPage, func(page int) (any, error) {
+		return client.AccountsListAccountsWithResponse(ctx, &cfapi.AccountsListAccountsParams{Page: new(float32(page)), PerPage: new(float32(cloudflareAccountPerPage))})
+	})
 	if err != nil {
 		return "", err
 	}
@@ -159,11 +150,10 @@ func (r *Registry) cloudflareAnalyticsAccount(ctx context.Context, ref string) (
 // cloudflareAccountSites are Web Analytics sites that still describe something:
 // a site whose ruleset names no hostname measures nothing.
 func (r *Registry) cloudflareAccountSites(ctx context.Context, account, ref string) ([]CloudflareAnalyticsSite, error) {
-	items, err := r.cloudflareList(ctx, runtime.ConnectionProviderCloudflareAPI, "/accounts/"+account+"/rum/site_info/list", ref, cloudflarePerPage)
-	if err != nil {
-		return nil, err
-	}
-	listed, err := cloudflareItems[cfapi.RumSite](items, "analytics site")
+	client := r.cloudflare(runtime.ConnectionProviderCloudflareAPI, ref, true)
+	listed, err := cloudflarePages[cfapi.RumSite]("analytics site", cloudflarePerPage, func(page int) (any, error) {
+		return client.WebAnalyticsListSitesWithResponse(ctx, account, &cfapi.WebAnalyticsListSitesParams{Page: new(float32(page)), PerPage: new(float32(cloudflarePerPage))})
+	})
 	if err != nil {
 		return nil, err
 	}
