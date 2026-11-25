@@ -68,7 +68,7 @@ def following(live: bool) -> dict[str, str]:
     return {"fragment": "", "fragment-poll": str(FOLLOW_SECONDS)} if live else {}
 
 
-_WATCH_SALT ="hq.platform.application.asks.watch"
+_WATCH_SALT = "hq.platform.application.asks.watch"
 # Longer than any read request lives, so a page left open can still learn that
 # its request went unanswered.
 WATCH_SECONDS = 60 * 60

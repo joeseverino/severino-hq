@@ -114,6 +114,7 @@ def _id(item: Mapping[str, Any], where: Where) -> str:
     # one that ends it included; a page holding several queues keeps them apart.
     return item["anchor"] if where.triage or not where.prefix else f"{where.prefix}-{item['anchor']}"
 
+
 def _title(item: Mapping[str, Any], where: Where) -> Cell:
     """What is wrong, linked to the thing it is about, or to the row's own
     page away from the queue; plain on that thing's own page."""
