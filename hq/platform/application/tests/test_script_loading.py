@@ -4,11 +4,14 @@ own script loads on its page alone; file_rules holds every script tag to its non
 import re
 
 from django.template.loader import render_to_string
+from django.templatetags.static import static
 from django.test import SimpleTestCase
 
 from ..file_rules import BEFORE_DRAWING, PAGE_SCRIPTS
 
 SCRIPT = re.compile(r"<script\b[^>]*\bsrc=[^>]*>")
+# A page names a script by the URL static() gives it, which the image's
+# manifest storage hashes, so a match on the bare path finds nothing there.
 
 
 class ScriptLoadingTests(SimpleTestCase):
@@ -17,11 +20,11 @@ class ScriptLoadingTests(SimpleTestCase):
         head = base[: base.index("</head>")]
         for name in BEFORE_DRAWING:
             with self.subTest(script=name):
-                (found,) = [tag_ for tag_ in SCRIPT.findall(head) if name in tag_]
+                (found,) = [tag_ for tag_ in SCRIPT.findall(head) if static(name) in tag_]
                 self.assertNotRegex(found, r"\b(defer|async)\b")
 
     def test_a_page_script_loads_on_its_page_alone(self):
         base = render_to_string("base.html")
         for script in PAGE_SCRIPTS:
             with self.subTest(script=script):
-                self.assertNotIn(script, base)
+                self.assertNotIn(static(script), base)
