@@ -234,6 +234,59 @@ func TestAReleaseWhoseWorkerIsNotTheSourcesSignedImageIsRefused(t *testing.T) {
 	}
 }
 
+// A deploy that fails after its prune leaves the standing release's images on
+// the host, its worker's among them, which no container holds between runs
+// and which the worker never pulls; an image no standing release names goes.
+func TestADeployThatFailsKeepsTheStandingReleasesImages(t *testing.T) {
+	standingRunner := strings.Replace(runnerImage, "abcdef", "012345", 1)
+	olderRunner := strings.Replace(runnerImage, "abcdef", "6789ab", 1)
+	for name, fail := range map[string]func(f *fakeHost){
+		"in the rehearsal": func(f *fakeHost) { f.rehearses(&rehearsal{notReady: true}) },
+		"in a rollback": func(f *fakeHost) {
+			f.fail = []string{filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host") + " install"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeHost(t)
+			if err := f.machine.Record(running); err != nil {
+				t.Fatal(err)
+			}
+			pin := filepath.Join(f.machine.Lib, AutomationImage)
+			if err := os.MkdirAll(filepath.Dir(pin), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(pin, []byte(standingRunner+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			f.pinsRunner(runnerImage)
+			f.images = map[string]bool{running: true, standingRunner: true, olderRunner: true}
+			f.containers = map[string]string{}
+			f.files = map[string]map[string]string{running: {ExtensionLock: lockOf()}, next: {ExtensionLock: lockOf()}}
+			d, _ := newDeployer(f)
+			fail(f)
+
+			if err := d.Deploy(context.Background(), next, nil); err != nil {
+				t.Fatalf("%v\n%s", err, f.out.String())
+			}
+			if err := d.Release(context.Background(), next); err == nil {
+				t.Fatal("the release did not fail")
+			}
+
+			for _, image := range []string{running, standingRunner} {
+				if !f.images[image] {
+					t.Errorf("the standing release's %s is not on the host", image)
+				}
+			}
+			if f.images[olderRunner] {
+				t.Error("an image no standing release names outlived the prune")
+			}
+			if len(f.containers) != 0 {
+				t.Errorf("containers outlived the deploy: %v", f.containers)
+			}
+		})
+	}
+}
+
 func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	f := newFakeHost(t)
 	f.active = []string{"severino-hq-secrets.timer", "severino-hq-controller.path"}

@@ -409,9 +409,11 @@ nothing. `hq-host deploy`:
    identity).
 2. Reads the extensions the running release carries, from the lock in its
    image (pulled again by digest if the host no longer has it).
-3. Prunes unused images, checks free space, pulls, and refuses the image if it
-   drops an extension the running release carries that its composition does
-   not declare retired ([Extensions](Plugins.md#composition)). The public log
+3. Prunes every image no container uses except the running release's image
+   and the automation worker image its tree pins, so a deploy that fails
+   later leaves both to run on. Then it checks free space, pulls, and refuses
+   the image if it drops an extension the running release carries that its
+   composition does not declare retired ([Extensions](Plugins.md#composition)). The public log
    says how many; `/var/log/severino-hq/extensions.log` says which.
 4. Copies the image's own `hq-host` out, so every step after the pull is the
    new release's code.

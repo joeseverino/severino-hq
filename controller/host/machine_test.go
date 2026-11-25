@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,6 +42,11 @@ type fakeHost struct {
 	// it names has only those; one it does not holds any file asked for.
 	files   map[string]map[string]string
 	created string
+	// images is docker's image store, by reference, and containers the image
+	// each container uses, as docker's prune reads them. A host with no store
+	// holds every image asked for.
+	images     map[string]bool
+	containers map[string]string
 	// runners, runnerUser and sudoRules are the Actions runner units, the
 	// account the one runs as, and what root's `sudo -l -U` lists for it.
 	runners    []string
@@ -97,11 +103,33 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 		return answer(imageID+"\n", 0)
 	case strings.HasPrefix(call, "docker create"):
 		f.created = args[len(args)-2]
-		return answer("c0ffee\n", 0)
+		if f.images == nil {
+			return answer("c0ffee\n", 0)
+		}
+		if f.created != imageID && !f.images[f.created] {
+			return answer("", 1)
+		}
+		f.mu.Lock()
+		container := fmt.Sprintf("c%d", len(f.log))
+		f.mu.Unlock()
+		f.containers[container] = f.created
+		return answer(container+"\n", 0)
+	case f.images != nil && call == "docker image prune --all --force":
+		for image := range f.images {
+			if !slices.Contains(slices.Collect(maps.Values(f.containers)), image) {
+				delete(f.images, image)
+			}
+		}
+	case f.images != nil && strings.HasPrefix(call, "docker rm --force "):
+		delete(f.containers, args[len(args)-1])
+	case f.images != nil && strings.HasPrefix(call, "docker pull "):
+		f.images[args[len(args)-1]] = true
 	case strings.HasPrefix(call, "docker volume inspect"):
 		return answer(filepath.Join(f.root, "volumes", args[len(args)-1])+"\n", 0)
 	case name == "sqlite3":
 		return exec.CommandContext(ctx, "sqlite3", args...)
+	case f.images != nil && strings.HasPrefix(call, "docker image inspect") && args[len(args)-1] != imageID && !f.images[args[len(args)-1]]:
+		return answer("", 1)
 	case strings.HasPrefix(call, "docker image inspect"):
 		return answer(imageID+"\n", 0)
 	case strings.HasPrefix(call, "docker cp"):
