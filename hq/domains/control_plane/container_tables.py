@@ -149,7 +149,7 @@ def _image(standing: Any) -> Cell:
 
     if standing.pinned:
         pinned = Cell("locked", tip="It runs the one image its digest names, wherever the tag moves.", dot=True)
-    elif standing.local:
+    elif standing.built_here:
         pinned = Cell("built on its host", dot=True)
     else:
         pinned = Cell("tag only", tip="It runs whatever the tag pointed at when it was pulled.", dot=True)

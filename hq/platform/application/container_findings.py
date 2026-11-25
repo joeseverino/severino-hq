@@ -119,7 +119,7 @@ def _moves(standing: ImageStanding, plan: Plan | None) -> bool:
     """Whether an update may be due: a move its plan recommends, or, for an
     image built on its host, whatever its repository says."""
 
-    return standing.local or (plan is not None and plan.recommended)
+    return standing.built_here or (plan is not None and plan.recommended)
 
 
 def _offered(standing: ImageStanding, state: UpdateState) -> bool:
@@ -127,7 +127,7 @@ def _offered(standing: ImageStanding, state: UpdateState) -> bool:
     plan recommends moving; for one built on its host, a pull request that
     changes it or a merge its host has not built."""
 
-    return not standing.local or state.kind in (UpdateKind.OPEN, UpdateKind.MERGED)
+    return not standing.built_here or state.kind in (UpdateKind.OPEN, UpdateKind.MERGED)
 
 
 def needs_you(standing: ImageStanding, running: list[Container]) -> bool:

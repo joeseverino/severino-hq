@@ -68,14 +68,14 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
         # A build on its host is released by its repository's merges, never by a registry's tags.
         "readiness": readiness_of(item) if item is not None and _pulled(item.standing) else None,
         # The repository whose Compose files build its image on its host.
-        "managed": managed_by(item) if item is not None and item.standing.local else None,
+        "managed": managed_by(item) if item is not None and item.standing.built_here else None,
         # Where the operator names what its image is built from, when the image does not say.
         "edit": offered_changes([resource])[resource.key].edit(resource.key, next=request.get_full_path()),
     }
 
 
 def _pulled(standing: Any) -> bool:
-    return standing.repository is None and not standing.local
+    return standing.repository is None and not standing.built_here
 
 
 def _held(state: Any) -> str:

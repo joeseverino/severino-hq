@@ -66,7 +66,7 @@ class ImageStandingWords:
 
         if self.newer:
             return UPDATE_AVAILABLE
-        if self.local:
+        if self.built_here:
             # Its repository's open pull request or a merge its host has not
             # built says it is behind (``app_updates.update_state``), never a registry.
             return UPDATE_UNKNOWN
@@ -84,7 +84,7 @@ class ImageStandingWords:
     def update(self) -> str:
         """The update state in a few words."""
 
-        if self.local:
+        if self.built_here:
             return "from its repository"
         state = self.update_state
         if state == UPDATE_AVAILABLE and self.repository is not None and not self.newer:
@@ -97,7 +97,7 @@ class ImageStandingWords:
     def update_note(self) -> str:
         """Why the update state is unknown, or "" when it is known."""
 
-        if self.update_state != UPDATE_UNKNOWN or self.local:
+        if self.update_state != UPDATE_UNKNOWN or self.built_here:
             return ""
         if self.repository is not None:
             return "Its repository's head or its production deploy has not been read."

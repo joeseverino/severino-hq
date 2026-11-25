@@ -163,7 +163,7 @@ def wanted_images() -> dict[str, tuple[str, ...]]:
 
     pulled_as = _tags_pulled_as()
     # An image built on its host is in no registry, so none is asked for it.
-    local = {(item.running.host, item.running.name) for item in containers() if item.standing.local}
+    local = {(item.running.host, item.running.name) for item in containers() if item.standing.built_here}
     found: dict[str, set[str]] = {}
     for _snapshot, record in inventory_records(CONTAINER_KIND):
         reference = str(record.get("image", "") or "")

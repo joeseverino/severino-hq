@@ -257,7 +257,7 @@ class BuiltHereTests(TestCase):
 
         found = self.thumb()
 
-        self.assertTrue(found.standing.local)
+        self.assertTrue(found.standing.built_here)
         self.assertEqual((found.standing.state, found.standing.summary), (CURRENT, "Built on its host"))
         self.assertEqual(found.standing.label, "example-thumb:local")
         self.assertEqual(wanted_images(), {})
@@ -280,7 +280,7 @@ class BuiltHereTests(TestCase):
             with self.subTest(**case):
                 built(**case)
 
-                self.assertFalse(self.thumb().standing.local)
+                self.assertFalse(self.thumb().standing.built_here)
                 self.assertEqual(list(wanted_images()), ["docker.io/library/example-thumb"])
 
 

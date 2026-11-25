@@ -30,7 +30,7 @@ def _pulled(container: Any) -> bool:
     """Whether a registry holds what runs, so a pin, a source, a publisher's
     attestations and a tag apply to it: an image built on its host has none."""
 
-    return not container.standing.local
+    return not container.standing.built_here
 
 
 def _pinned(container: Any) -> Reading:

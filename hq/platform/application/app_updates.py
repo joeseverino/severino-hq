@@ -512,7 +512,7 @@ def _behind(item: Container, repository: Any, app: str) -> str | None:
     if (pinned := _pinned_at_head(item, repository)) is not None:
         return f"{item.standing.tag or item.standing.image.short} to {pinned.tag}"
     build = next((each for each in repository.builds or () if each.get("app") == app), None)
-    if not item.standing.local or build is None:
+    if not item.standing.built_here or build is None:
         return None
     applied = applied_at(item.machine.name, app)
     if not applied or applied in (build.get("commits") or ()):

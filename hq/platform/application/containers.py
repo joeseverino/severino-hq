@@ -317,7 +317,7 @@ class ImageStanding(ImageStandingWords):
     # Built on the machine that runs it, from Compose files a repository HQ
     # reads: no registry holds it, so none is asked, and its update is that
     # repository's (``app_updates``).
-    local: bool = False
+    built_here: bool = False
 
     @property
     def upstream(self) -> str:
@@ -393,7 +393,7 @@ class ImageStanding(ImageStandingWords):
             return VULNERABLE
         if self.newer:
             return BEHIND
-        if self.local or (self.build is not None and self.build.get("signed")):
+        if self.built_here or (self.build is not None and self.build.get("signed")):
             return CURRENT
         if self.repository is not None:
             return CURRENT if self.repository.deployed_cleanly else UNKNOWN
@@ -466,7 +466,7 @@ class ImageStanding(ImageStandingWords):
             return f"{self.latest} available"
         if state == CURRENT and self.repository is not None:
             return "Verified before deploying" if self.repository.production_verified else "Deployed"
-        if state == CURRENT and self.local:
+        if state == CURRENT and self.built_here:
             return BUILT_HERE
         if state == CURRENT:
             return "Up to date"
@@ -663,7 +663,7 @@ def tally(found: list[Container]) -> Tally:
         update_available=updates.count(UPDATE_AVAILABLE),
         up_to_date=updates.count(UP_TO_DATE),
         pinned=sum(1 for item in found if item.standing.pinned),
-        pulled=sum(1 for item in found if not item.standing.local),
+        pulled=sum(1 for item in found if not item.standing.built_here),
         checkable=sum(1 for item in found if item.standing.checkable),
     )
 
@@ -715,7 +715,7 @@ def _standing(reference: str, host: str, container: str) -> ImageStanding:
             pinned=False,
             image_id=str(pulled.get("id", "") or ""),
             built=moment(str(pulled.get("created_at", "") or "")),
-            local=True,
+            built_here=True,
         )
     tag = image.tag or _pulled_as(image, pulled, "tags", "tag")
     published = _published().get(image.name)
