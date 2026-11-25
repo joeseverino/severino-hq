@@ -630,9 +630,9 @@ STATE_LEFT = (
 # width, and either the cut draws no ellipsis, so nothing tells a reader there
 # is more to see, or nothing around it carries its whole text as a title or a
 # tip (`data-tip`, app.js), or its box is narrow (`--whole`: 0, tables.css),
-# where no pointer hovers. A chip in a row that links its record
-# (`data-record`, table_layout) is read whole on the record's page. Cut is
-# read as `CUTS` reads it, up to the cell.
+# where no pointer hovers. A chip (`data-chip`, table_layout) is read whole
+# on the record's page its row links. Cut is read as `CUTS` reads it, up to
+# the cell.
 CUT_AND_CLOSED = (
     "(unseen) => {"
     + DESCRIBE
@@ -658,7 +658,7 @@ CUT_AND_CLOSED = (
     for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
       for (const {node, boxes, marked} of cutsIn(cell, unseen)) {
         const by = boxes.at(-1);
-        if (marked && row.matches('[data-record]') && node.parentElement.closest('code')) continue;
+        if (marked && cell.matches('[data-chip]') && node.parentElement.closest('code')) continue;
         const why = !marked ? 'with no ellipsis' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
         if (why) found.push(`${describe(by)} "${by.textContent.trim().slice(0, 40)}" is cut ${why}, in a row that does not open`);
       }
@@ -669,25 +669,21 @@ CUT_AND_CLOSED = (
 )
 
 
-# A value cut short in a row that is open: the line beneath it, which is how
-# a narrow box shows a value whole, so nothing there may cut one, and a chip
-# in an open row that does not link its record (`data-record`, table_layout),
-# where opening is the one way to read it whole.
+# A value cut short in a row that is open: the row and the line beneath it,
+# which is how a narrow box shows a value whole, so nothing there may cut one.
 CUT_WHEN_OPEN = (
     "(unseen) => {"
     + DESCRIBE
     + CUTS
     + """
   const found = [];
-  // An open row keeps its other cells as they were, a clamp included; the
-  // line beneath it is where its values stand whole.
-  const rows = 'main table > tbody > tr.is-expanded + tr.row-detail, main table > tbody > tr.is-expanded:not([data-record])';
+  // An open row keeps its cells as they were, a clamp included; the line
+  // beneath it is where its values stand whole.
+  const rows = 'main table > tbody > tr.is-expanded + tr.row-detail';
   for (const row of document.querySelectorAll(rows)) {
     if (!row.checkVisibility() || row.closest('details:not([open])')) continue;
-    const chips = !row.matches('.row-detail');
     for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
-      for (const {node, boxes} of cutsIn(cell, unseen)) {
-        if (chips && !node.parentElement.closest('code')) continue;
+      for (const {boxes} of cutsIn(cell, unseen)) {
         found.push(`${describe(boxes.at(-1))} "${boxes.at(-1).textContent.trim().slice(0, 40)}" is cut in a row that is open`);
       }
     }
@@ -1255,14 +1251,6 @@ _OPEN_EVERY_ROW_AND_SAY_BELOW = """() => {
   document.querySelector('main tr[data-probe="plain"]').setAttribute('data-below', '');
 }"""
 
-# Every row opened, and an open row's chip held cut as its row's line holds it.
-_OPEN_EVERY_ROW_AND_CUT_ITS_CHIP = """() => {
-  document.querySelectorAll('main [data-row-toggle]').forEach((toggle) => toggle.click());
-  for (const chip of document.querySelectorAll('main tr.is-expanded code')) {
-    chip.style.cssText = 'display: inline-block; max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap';
-  }
-}"""
-
 # How many rows stand open, against how many should.
 _EXPANDED = """(open) => {
   const opened = document.querySelectorAll('main tr.is-expanded').length;
@@ -1341,8 +1329,7 @@ CHECKS = {
         # Touch has no hover, so in a narrow box only an opening row shows a
         # cut value whole, where a wide box also shows a titled one on hover;
         # a cut that draws no ellipsis is found at any width. A chip is read
-        # whole on the record's page of a row that links it, and in an open
-        # row of one that does not, which offers its toggle.
+        # whole on the record's page its row links.
         plants=(
             Plant(
                 _CUT_TABLE,
@@ -1369,23 +1356,7 @@ CHECKS = {
         ),
     ),
     "cut when open": Check(
-        (CUT_WHEN_OPEN, SELECTORS["unseen"]),
-        table=True,
-        reader_sees="a value still cut in its opened row",
-        # Opened, a row that does not link its record shows its chip whole,
-        # and one held cut there is found; a row that links its record keeps
-        # its chip cut.
-        plants=(
-            Plant(
-                _CUT_TABLE,
-                width=PHONE_SCREEN[0],
-                scripted=True,
-                values=_cut_values(),
-                setup=_OPEN_EVERY_ROW_AND_CUT_ITS_CHIP,
-                finds=('"chip-',),
-            ),
-        ),
-        clear=(Example(_CUT_TABLE, width=PHONE_SCREEN[0], scripted=True, values=_cut_values(), setup=_OPEN_EVERY_ROW),),
+        (CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True, reader_sees="a value still cut in its opened row"
     ),
     "opens nothing": Check(
         OPENS_NOTHING,
