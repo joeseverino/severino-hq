@@ -69,16 +69,12 @@ class FailingRunTests(TestCase):
     RUN = "https://github.com/example/alpha/actions/runs/7"
 
     def failing(self, *runs):
-        store(checks={"state": "failure", "failing": ["lint"]}, runs=list(runs))
+        store(checks={"state": "failure", "failing": ["lint"]}, failing_runs=list(runs))
         (item,) = raised_items()
         return item
 
-    def test_the_item_opens_the_run_that_failed_on_the_head(self):
-        item = self.failing(
-            {"id": 7, "name": "CI", "conclusion": "failure", "sha": "abc", "url": self.RUN},
-            {"id": 8, "name": "Docs", "conclusion": "success", "sha": "abc", "url": f"{self.RUN}8"},
-            {"id": 9, "name": "Nightly", "conclusion": "failure", "sha": "old", "url": f"{self.RUN}9"},
-        )
+    def test_the_item_opens_the_failing_run_whatever_commit_it_ran_on(self):
+        item = self.failing({"id": 7, "name": "Scorecard", "conclusion": "failure", "sha": "old", "url": self.RUN})
 
         self.assertEqual(item.primary.url, self.RUN)
         self.assertEqual(commands(item), [])
@@ -101,11 +97,11 @@ class FailingRunTests(TestCase):
 
         self.assertEqual(item.explanation, "Failing job: lint")
 
-    def test_without_the_run_in_the_reading_the_item_offers_the_command_that_lists_it(self):
+    def test_a_check_no_workflow_runs_is_listed_by_the_command_the_item_offers(self):
         item = self.failing()
 
         (command,) = commands(item)
-        self.assertIn("gh run list -R example/alpha --commit abc", command)
+        self.assertIn("repos/example/alpha/commits/abc/check-runs", command)
 
 
 class ProjectPushedTests(TestCase):

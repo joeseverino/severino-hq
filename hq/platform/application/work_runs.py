@@ -26,6 +26,7 @@ from .automation_runs import capability_name, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
+from .quoted import Quoted
 from .tone import Tone, Toned
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, capability_specs
@@ -485,7 +486,7 @@ def job_run(job: Job, title: str = "", by: Attribution = NOBODY) -> WorkRun:
         state=seen.value,
         word=seen.label,
         tone=seen.tone,
-        note=job.seen_error if seen in ENDED_BADLY else job.note,
+        note=Quoted(job.seen_error if seen in ENDED_BADLY else job.note),
         by=by,
         created_at=job.created_at,
         started=job.started_at,
@@ -605,8 +606,8 @@ def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:
     said = result.get("message") or operation.reason
     if operation.state == OperationState.FAILED:
         active = holding(result.get("conditions"))
-        return (active[0].get("message") if active else "") or said
-    return (problem.get("message") if problem else "") or said
+        return Quoted((active[0].get("message") if active else "") or said)
+    return Quoted((problem.get("message") if problem else "") or said)
 
 
 def stopped_at(operation: OperationRequest) -> tuple[str, str]:
@@ -618,7 +619,7 @@ def stopped_at(operation: OperationRequest) -> tuple[str, str]:
         (event for event in events if event.get("outcome") in (TaskOutcome.FAILED, TaskOutcome.UNREACHABLE)), None
     )
     if failed is not None:
-        return str(failed.get("task") or ""), str(failed.get("message") or "")
+        return str(failed.get("task") or ""), Quoted(str(failed.get("message") or ""))
     return "", _said(operation, None)
 
 

@@ -3,7 +3,7 @@
 from dataclasses import is_dataclass
 from datetime import date
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 import hq_sdk.ui
 
@@ -60,6 +60,15 @@ class ConstructionTests(SimpleTestCase):
         ):
             with self.assertRaisesRegex(ValueError, "say it in words"):
                 build()
+
+    @override_settings(SEVERINO_STRICT_PRINT=False)
+    def test_on_a_served_page_machine_text_is_shown_and_logged_by_where_never_what(self):
+        with self.assertLogs("severino.print", "ERROR") as logged:
+            cell = Cell(f"Moved {DIGEST}")
+
+        self.assertEqual(cell.text, f"Moved {DIGEST}")
+        self.assertIn("Cell.text carries an image digest", logged.output[0])
+        self.assertNotIn("0f0f", logged.output[0])
 
     def test_what_a_machine_wrote_is_drawn_as_written_in_its_own_place(self):
         from ..display_words import Code

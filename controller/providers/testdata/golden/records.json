@@ -379,6 +379,19 @@
           "example"
         ]
       },
+      "failing_runs": [
+        {
+          "id": 1,
+          "name": "example",
+          "status": "example",
+          "conclusion": "example",
+          "event": "example",
+          "branch": "example",
+          "sha": "example",
+          "url": "example",
+          "created_at": "example"
+        }
+      ],
       "pull_requests": [
         {
           "number": 1,
@@ -599,7 +612,8 @@
         {
           "path": "example",
           "service": "example",
-          "image": "example"
+          "image": "example",
+          "build": true
         }
       ],
       "held_branches": [
@@ -607,6 +621,14 @@
           "branch": "example",
           "marker": "example",
           "apps": [
+            "example"
+          ]
+        }
+      ],
+      "builds": [
+        {
+          "app": "example",
+          "commits": [
             "example"
           ]
         }

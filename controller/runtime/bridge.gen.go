@@ -1768,6 +1768,7 @@ type GitHubRepositoryRecord struct {
 	Alerts            map[string]map[string]int        `json:"alerts,omitempty"`
 	Archived          bool                             `json:"archived,omitempty"`
 	Artifacts         []map[string]any                 `json:"artifacts,omitempty"`
+	Builds            []map[string]any                 `json:"builds,omitempty"`
 	CalledWorkflows   []string                         `json:"called_workflows,omitempty"`
 	Carried           bool                             `json:"carried,omitempty"`
 	Checks            map[string]any                   `json:"checks,omitempty"`
@@ -1779,6 +1780,7 @@ type GitHubRepositoryRecord struct {
 	DependabotAlerts  []map[string]any                 `json:"dependabot_alerts,omitempty"`
 	Deployments       []map[string]any                 `json:"deployments,omitempty"`
 	Environments      []map[string]any                 `json:"environments,omitempty"`
+	FailingRuns       []map[string]any                 `json:"failing_runs,omitempty"`
 	Fingerprint       string                           `json:"fingerprint,omitempty"`
 	Head              map[string]any                   `json:"head,omitempty"`
 	HeldBranches      []map[string]any                 `json:"held_branches,omitempty"`

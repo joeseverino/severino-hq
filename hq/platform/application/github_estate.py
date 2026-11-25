@@ -176,16 +176,13 @@ class Repository:
 
     @property
     def failing_runs(self) -> tuple[ActionLink, ...]:
-        """A link to each workflow run that failed on the default branch's head,
-        as far as the reading holds them: its newest run of each workflow."""
+        """A link to each workflow whose newest run on the default branch failed."""
 
-        sha = (self.head or {}).get("sha", "")
         found = []
-        for run in self.record.get("runs") or ():
-            url = web_url(run.get("url"))
-            if sha and url and run.get("sha") == sha and run.get("conclusion") in FAILED:
+        for run in self.record.get("failing_runs") or ():
+            if url := web_url(run.get("url")):
                 name = run.get("name") or "Workflow"
-                found.append(read_link("failing-run", f"{name} run", url, reason=f"{name} failed on this commit."))
+                found.append(read_link("failing-run", f"{name} run", url, reason=f"{name} failed on this branch."))
         return tuple(found)
 
     @property

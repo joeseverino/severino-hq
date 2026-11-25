@@ -138,6 +138,9 @@ class RepositoryRecord(ObservationRecord):
     pushed_at: Stamp = None
     head: dict[str, Any] = {}
     checks: dict[str, Any] = {}
+    # Each workflow's newest run on the default branch where it failed, at
+    # whatever commit, shaped as ``runs``' entries.
+    failing_runs: list[dict[str, Any]] = []
     # ``{number, title, url, author, draft, created_at, updated_at, head, base,
     # branch, labels, checks, files, apps}`` per open pull request, newest
     # first. For a pull request Renovate opened (its branch under
@@ -191,6 +194,10 @@ class RepositoryRecord(ObservationRecord):
     # ``approve``, ``unschedule``, ``unlimit``) and the apps whose image its
     # line names.
     held_branches: list[dict[str, Any]] = []
+    # ``{app, commits}`` per app with a service built on its host: each commit
+    # from the newest that changed ``compose/<app>/`` to the head, newest
+    # first, the revisions that build what a merge does.
+    builds: list[dict[str, Any]] = []
     # What GitHub's change query answered when this record was read, hashed,
     # and when it was read in full: the plan HQ sends the controller.
     fingerprint: str = ""

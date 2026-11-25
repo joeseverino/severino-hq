@@ -62,12 +62,12 @@ class WorkRunsTestCase(TestCase):
         run.refresh_from_db()
         return run
 
-    def reported(self, run, *, success=True, events=()):
+    def reported(self, run, *, success=True, events=(), message="Done."):
         self.claimed(run)
         report_operation(
             str(run.pk),
             ControllerReport(
-                success=success, observed_generation=run.input["generation"], message="Done.", events=list(events)
+                success=success, observed_generation=run.input["generation"], message=message, events=list(events)
             ),
             controller_id=WORKER,
         )
@@ -114,6 +114,16 @@ class OneListTests(WorkRunsTestCase):
         self.assertEqual(row.kind, RESTART_RUN)
         self.assertIn(RESTART, row.title)
         self.assertEqual((row.started, row.finished), (run.claimed_at, run.completed_at))
+
+    def test_a_run_s_message_is_shown_as_it_was_written_whatever_it_holds(self):
+        from ..service_context import Cell
+
+        said = "example: registry.example.com/app:1@sha256:" + "0f" * 32 + " moved"
+        self.reported(self.run_of(APP), message=said)
+
+        (row,) = self.listed()
+
+        self.assertEqual(Cell(row.note).text, said)
 
     def test_who_started_each_job_and_asked_each_run_is_read_at_once(self):
 

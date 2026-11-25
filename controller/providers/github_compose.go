@@ -64,10 +64,13 @@ func (g *githubRepository) optedIn() bool {
 
 // GitHubComposeImage is one service's image in an app's Compose files at the
 // default branch's head: what a merge pins. Path is the app's first file.
+// Build is whether the service builds its image on its host, where Image,
+// when written, is the name the build tags and no registry holds.
 type GitHubComposeImage struct {
 	Path    string `json:"path"`
 	Service string `json:"service"`
 	Image   string `json:"image"`
+	Build   bool   `json:"build"`
 }
 
 // GitHubHeldBranch is a branch the Dependency Dashboard lists with a box to
@@ -84,11 +87,20 @@ type GitHubHeldBranch struct {
 // dependency-dashboard.ts writes them (getCheckbox, getListItem).
 var githubHeldLine = regexp.MustCompile(`(?m)^ - \[ \] <!-- (unpend|approve|unschedule|unlimit)-branch=(\S+) -->(.*)$`)
 
-// githubLayout is the apps part: the Compose files, the images they pin and
-// the Dashboard with the branches it holds.
+// GitHubBuild is an app with a service that builds its image on its host,
+// and each commit from the newest that changed its directory to the head,
+// newest first: a host that applied one of them builds what a merge does.
+type GitHubBuild struct {
+	App     string   `json:"app"`
+	Commits []string `json:"commits"`
+}
+
+// githubLayout is the apps part: the Compose files, the images they pin, the
+// apps built on their host and the Dashboard with the branches it holds.
 type githubLayout struct {
 	compose   []string
 	images    []GitHubComposeImage
+	builds    []GitHubBuild
 	dashboard string
 	held      []GitHubHeldBranch
 }
@@ -105,16 +117,26 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 	}
 	layout := githubLayout{compose: compose, images: []GitHubComposeImage{}, held: []GitHubHeldBranch{}}
 	named := map[string][]string{}
+	built := []string{}
 	for _, app := range sortedKeys(files) {
 		// An app that does not load pins nothing HQ can say.
-		images, err := g.composeImages(ctx, app, files[app], head)
+		services, err := g.composedServices(ctx, app, files[app], head)
 		if err != nil {
 			continue
 		}
-		for _, service := range sortedKeys(images) {
-			layout.images = append(layout.images, GitHubComposeImage{Path: files[app][0], Service: service, Image: images[service]})
-			named[app] = append(named[app], imageName(images[service]))
+		for _, name := range sortedKeys(services) {
+			service := services[name]
+			layout.images = append(layout.images, GitHubComposeImage{Path: files[app][0], Service: name, Image: service.image, Build: service.build})
+			if service.image != "" {
+				named[app] = append(named[app], imageName(service.image))
+			}
+			if service.build && !slices.Contains(built, app) {
+				built = append(built, app)
+			}
 		}
+	}
+	if layout.builds, err = g.builds(ctx, head, built); err != nil {
+		return githubLayout{}, err
 	}
 	issue, err := g.dashboard(ctx)
 	layout.dashboard = issue.HTMLURL
@@ -128,6 +150,39 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 		layout.held = append(layout.held, held)
 	}
 	return layout, err
+}
+
+// builds is each app of built with the commits from the newest that changed
+// its directory to head: the head's history, one page of it, cut at that
+// commit. The default branch takes squash merges alone, so its history is one
+// line and those commits are exactly the revisions that build what the head
+// builds. An app whose last change is past that page is left out, since HQ
+// could not say which revisions build it.
+func (g *githubRepository) builds(ctx context.Context, head string, built []string) ([]GitHubBuild, error) {
+	found := []GitHubBuild{}
+	if len(built) == 0 {
+		return found, nil
+	}
+	history, err := json200(g.api.ReposListCommitsWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListCommitsParams{Sha: &head, PerPage: new(githubListPage)}))
+	if err != nil {
+		return nil, err
+	}
+	for _, app := range built {
+		last, err := json200(g.api.ReposListCommitsWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListCommitsParams{Sha: &head, Path: new(githubApps + "/" + app), PerPage: new(1)}))
+		if err != nil {
+			return nil, err
+		}
+		at := slices.IndexFunc(history, func(commit githubapi.Commit) bool { return len(last) > 0 && commit.Sha == last[0].Sha })
+		if at < 0 {
+			continue
+		}
+		build := GitHubBuild{App: app, Commits: []string{}}
+		for _, commit := range history[:at+1] {
+			build.Commits = append(build.Commits, commit.Sha)
+		}
+		found = append(found, build)
+	}
+	return found, nil
 }
 
 // imageName is an image reference without its tag or digest, as Renovate
@@ -200,13 +255,24 @@ func (g *githubRepository) dashboard(ctx context.Context) (githubapi.Issue, erro
 	return githubapi.Issue{}, err
 }
 
-// appChanges is each app whose Compose files an update's pull request
-// changes, with every service whose image differs between its base and head.
-// layout is the default branch's Compose files, which name the files an app
-// keeps unchanged.
+// appDirectory is the app whose directory, compose/<app>/, holds a path at
+// any depth.
+func appDirectory(file string) (string, bool) {
+	app, rest, nested := strings.Cut(strings.TrimPrefix(file, githubApps+"/"), "/")
+	return app, strings.HasPrefix(file, githubApps+"/") && nested && app != "" && rest != ""
+}
+
+// appChanges is each app whose directory an update's pull request changes,
+// with every service whose image differs between its base and head: a change
+// to an app's build inputs alone (its Dockerfile, its lock file) moves no
+// image and is still that app's change. layout is the default branch's
+// Compose files, which name the files an app keeps unchanged.
 func (g *githubRepository) appChanges(ctx context.Context, pull GitHubPull, layout []string) []GitHubAppChange {
 	files := map[string][]string{}
 	for _, file := range pull.Files {
+		if app, ok := appDirectory(file.Path); ok && files[app] == nil {
+			files[app] = []string{}
+		}
 		if app, ok := composeApp(file.Path); ok {
 			files[app] = append(files[app], file.Path)
 		}
@@ -218,12 +284,12 @@ func (g *githubRepository) appChanges(ctx context.Context, pull GitHubPull, layo
 	}
 	found := []GitHubAppChange{}
 	for _, app := range sortedKeys(files) {
-		before, errBefore := g.composeImages(ctx, app, files[app], pull.Base)
-		after, errAfter := g.composeImages(ctx, app, files[app], pull.Head)
+		before, errBefore := g.composedServices(ctx, app, files[app], pull.Base)
+		after, errAfter := g.composedServices(ctx, app, files[app], pull.Head)
 		change := GitHubAppChange{App: app, Read: errBefore == nil && errAfter == nil, Images: []GitHubImageMove{}}
 		for _, service := range sortedKeys(after) {
-			if change.Read && after[service] != "" && after[service] != before[service] {
-				change.Images = append(change.Images, GitHubImageMove{Service: service, Before: before[service], After: after[service]})
+			if change.Read && after[service].image != "" && after[service].image != before[service].image {
+				change.Images = append(change.Images, GitHubImageMove{Service: service, Before: before[service].image, After: after[service].image})
 			}
 		}
 		found = append(found, change)
@@ -231,11 +297,18 @@ func (g *githubRepository) appChanges(ctx context.Context, pull GitHubPull, layo
 	return found
 }
 
-// composeImages is each service's image in an app's Compose files at a
-// commit, loaded as Docker Compose loads a directory: its first file of the
-// default names, then its first override. A file absent at the commit is
+// composedService is one service as an app's Compose files declare it: the
+// image it names, "" for none, and whether it builds that image.
+type composedService struct {
+	image string
+	build bool
+}
+
+// composedServices is each service that names an image or builds one in an
+// app's Compose files at a commit, loaded as Docker Compose loads a
+// directory: its first file of the default names, then its first override. A file absent at the commit is
 // left out, and an app with none there has no services.
-func (g *githubRepository) composeImages(ctx context.Context, app string, files []string, ref string) (map[string]string, error) {
+func (g *githubRepository) composedServices(ctx context.Context, app string, files []string, ref string) (map[string]composedService, error) {
 	present := map[string]types.ConfigFile{}
 	for _, file := range files {
 		answer, err := json200(g.api.ReposGetContentWithResponse(ctx, g.owner, g.repo, file, &githubapi.ReposGetContentParams{Ref: &ref}))
@@ -258,9 +331,9 @@ func (g *githubRepository) composeImages(ctx context.Context, app string, files 
 			chosen = append(chosen, present[names[at]])
 		}
 	}
-	images := map[string]string{}
+	found := map[string]composedService{}
 	if len(chosen) == 0 {
-		return images, nil
+		return found, nil
 	}
 	model, err := loader.LoadModelWithContext(ctx, types.ConfigDetails{WorkingDir: "/" + app, ConfigFiles: chosen, Environment: types.Mapping{}}, composeOptions(app))
 	if err != nil {
@@ -269,15 +342,20 @@ func (g *githubRepository) composeImages(ctx context.Context, app string, files 
 	services, _ := model["services"].(map[string]any)
 	for name, service := range services {
 		declared, _ := service.(map[string]any)
-		written, ok := declared["image"].(string)
-		if !ok {
+		written, named := declared["image"].(string)
+		_, build := declared["build"]
+		if !named && !build {
 			continue
 		}
-		if images[name], err = template.SubstituteWithOptions(written, composeUnset, template.WithoutLogging, template.WithReplacementFunction(composeResolved)); err != nil {
-			return nil, err
+		image := ""
+		if named {
+			if image, err = template.SubstituteWithOptions(written, composeUnset, template.WithoutLogging, template.WithReplacementFunction(composeResolved)); err != nil {
+				return nil, err
+			}
 		}
+		found[name] = composedService{image: image, build: build}
 	}
-	return images, nil
+	return found, nil
 }
 
 // composeOptions loads a repository's files merged as Compose merges them,

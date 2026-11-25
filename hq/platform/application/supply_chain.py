@@ -26,6 +26,13 @@ def _attested(test):
     return check
 
 
+def _pulled(container: Any) -> bool:
+    """Whether a registry holds what runs, so a pin, a source, a publisher's
+    attestations and a tag apply to it: an image built on its host has none."""
+
+    return not container.standing.built_here
+
+
 def _pinned(container: Any) -> Reading:
     return Reading.judged(container.standing.pinned)
 
@@ -65,6 +72,7 @@ STANDARD: tuple[Check, ...] = (
         _pinned,
         "A tag can later point at a different image. A digest always names the same build.",
         "Pin the image by digest in the compose file.",
+        applies=_pulled,
         unmet="Not pinned by digest",
         breaks=({"pinned": False},),
     ),
@@ -74,6 +82,7 @@ STANDARD: tuple[Check, ...] = (
         _source_known,
         "Without it, no release or advisory can be matched to what runs.",
         "Name the repository it is built from in its settings in HQ.",
+        applies=_pulled,
         unmet="Source repository unknown",
         breaks=({"source": ""},),
     ),
@@ -83,6 +92,7 @@ STANDARD: tuple[Check, ...] = (
         _attested(lambda attested: bool(attested.get("provenance"))),
         "Provenance says what it was built from and on, so a rebuild or a swapped base image shows.",
         "Only its publisher can attach it.",
+        applies=_pulled,
         unmet="No build provenance",
         breaks=({"attested": {"provenance": None}},),
     ),
@@ -92,6 +102,7 @@ STANDARD: tuple[Check, ...] = (
         _attested(lambda attested: bool(attested.get("packages"))),
         "A package list is what vulnerabilities are matched against.",
         "Only its publisher can attach it.",
+        applies=_pulled,
         unmet="No package list (SBOM)",
         breaks=({"attested": {"packages": []}},),
     ),
@@ -132,6 +143,7 @@ STANDARD: tuple[Check, ...] = (
         _tag_current,
         "The tag was rebuilt or moved since this was pulled, often for a fix.",
         "Pull it again, or pin the new digest.",
+        applies=_pulled,
         unmet="The tag has moved since this build was pulled",
         breaks=({"moved_to": "sha256:bbb"},),
     ),

@@ -12,7 +12,7 @@ from ...tone import Tone
 from ..test_app_update_approval import applies
 from ..test_app_updates import arranged, moved, pull
 from ..test_container_standard import KEPT, runtime
-from ..test_containers import HIGH, estate, exposed, inventory, running
+from ..test_containers import HIGH, built, estate, exposed, inventory, running
 from ..test_github_estate import store
 from ..test_upgrades import TARGET
 from . import Example, Examples, Raised
@@ -145,6 +145,29 @@ def facts(pulled, brings) -> tuple[tuple[str, str], ...]:
 PULLED = (("Pull request", "example/alpha#7"), ("Fixes", "None known"))
 
 
+def local(*pulls) -> Example:
+    """thumb, built on example-box from example/alpha's Compose files, with ``pulls`` open."""
+
+    def given():
+        built(pull_requests=list(pulls))
+        return applied_on(BOX)
+
+    return Example(given=given, raises=(*((LOCAL,) if pulls else ()),))
+
+
+# thumb's update: what moves is built on the host, so nothing scanned what it brings.
+LOCAL = Raised(
+    title="thumb has an update",
+    presses=(APPROVE,),
+    evidence=(
+        ("Container", "thumb"),
+        ("Machine", BOX),
+        *PULLED,
+        ("New vulnerabilities", "Not checked: it rebuilds on the host"),
+    ),
+)
+
+
 # An app a repository holds, in each state its update can stand in.
 STATES = (
     # An open pull request is approved in one press, which previews, merges and applies it.
@@ -181,6 +204,17 @@ STATES = (
                 evidence=facts(
                     PULLED, ("New vulnerabilities", "Can't be checked: example/app publishes no package list")
                 ),
+            ),
+        ),
+    ),
+    # Its build inputs alone change: it rebuilds on the host, from files no scan reads.
+    update(
+        pull(),
+        raises=(
+            Raised(
+                title=MOVED,
+                presses=(APPROVE,),
+                evidence=facts(PULLED, ("New vulnerabilities", "Not checked: it rebuilds on the host")),
             ),
         ),
     ),
@@ -266,8 +300,11 @@ EXAMPLES = (
             # A newer release that brings a vulnerability is no update to make.
             box(advisories=[BROUGHT], raises=(KUMA,)),
             *STATES,
+            # An image its host builds is moved by the pull request that changes what it is built from.
+            local(pull(app="thumb")),
         ),
-        quiet=(NEWEST,),
+        # With none open, it is current: no registry says otherwise.
+        quiet=(NEWEST, local()),
     ),
     Examples(
         "container-image-unpinned",

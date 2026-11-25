@@ -3949,6 +3949,13 @@
             "default": {},
             "type": "object"
           },
+          "failing_runs": {
+            "default": [],
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "pull_requests": {
             "default": [],
             "items": {
@@ -4115,6 +4122,13 @@
             "type": "array"
           },
           "held_branches": {
+            "default": [],
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "builds": {
             "default": [],
             "items": {
               "type": "object"

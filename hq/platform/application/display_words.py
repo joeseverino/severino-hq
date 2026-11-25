@@ -6,6 +6,7 @@ stamp, a dumped record or a field's name fails where it was built, with the
 builder in the traceback, and never reaches a page.
 """
 
+import logging
 import re
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, fields
@@ -14,9 +15,12 @@ from functools import cache
 from types import MappingProxyType, UnionType
 from typing import Any, Literal, Union, dataclass_transform, get_args, get_origin
 
+from django.conf import settings
 from django.db import models
 
 from .quoted import Quoted
+
+logger = logging.getLogger("severino.print")
 
 # What only a machine writes, by what it is.
 MACHINE_TEXT = {
@@ -147,7 +151,14 @@ def said_in_words(view: Any) -> None:
             continue
         for text, holder in _texts(value, value):
             if found := _machine_text(text, label=field.name.endswith("label")):
-                raise ValueError(f"{where} carries {found}: say it in words. Got {holder!r}.")
+                # Where a developer sees it, it fails where it was built; on a
+                # served page, text a record holds never takes the page down,
+                # so it is shown as it is and logged by where, never by what.
+                if settings.SEVERINO_STRICT_PRINT:
+                    raise ValueError(f"{where} carries {found}: say it in words. Got {holder!r}.")
+                logger.error(
+                    "%s carries %s: say it in words.", where, found.split(",")[0], extra={"event": "print.refused"}
+                )
 
 
 def _texts(value: Any, holder: Any) -> Iterator[tuple[str, Any]]:

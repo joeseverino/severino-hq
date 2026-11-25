@@ -62,15 +62,18 @@ var (
 // GitHubRepositoryRecord is one repository as the app's read-only token sees it.
 // A nil part is one refused; HQ's record says which.
 type GitHubRepositoryRecord struct {
-	ConnectionRef     string                                     `json:"connection_ref"`
-	Repository        string                                     `json:"repository"`
-	Private           bool                                       `json:"private"`
-	Archived          bool                                       `json:"archived"`
-	URL               string                                     `json:"url"`
-	DefaultBranch     string                                     `json:"default_branch"`
-	PushedAt          string                                     `json:"pushed_at"`
-	Head              GitHubHead                                 `json:"head"`
-	Checks            GitHubChecks                               `json:"checks"`
+	ConnectionRef string       `json:"connection_ref"`
+	Repository    string       `json:"repository"`
+	Private       bool         `json:"private"`
+	Archived      bool         `json:"archived"`
+	URL           string       `json:"url"`
+	DefaultBranch string       `json:"default_branch"`
+	PushedAt      string       `json:"pushed_at"`
+	Head          GitHubHead   `json:"head"`
+	Checks        GitHubChecks `json:"checks"`
+	// FailingRuns is each workflow's newest run on the default branch where
+	// it failed, at whatever commit (branchChecks).
+	FailingRuns       []GitHubRun                                `json:"failing_runs"`
 	PullRequests      []GitHubPull                               `json:"pull_requests"`
 	PullRequestChecks []string                                   `json:"pull_request_checks"`
 	Runs              []GitHubRun                                `json:"runs"`
@@ -97,6 +100,9 @@ type GitHubRepositoryRecord struct {
 	// HeldBranches each branch the Dashboard holds with no pull request.
 	ComposeImages []GitHubComposeImage `json:"compose_images"`
 	HeldBranches  []GitHubHeldBranch   `json:"held_branches"`
+	// Builds is each app built on its host and the revisions that build what
+	// the head does.
+	Builds []GitHubBuild `json:"builds"`
 	// Fingerprint is what GitHub's change query answered before the read,
 	// hashed, and ReadAt when the read was made: what HQ's plan sends back.
 	Fingerprint string `json:"fingerprint"`
@@ -358,7 +364,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	record := GitHubRepositoryRecord{
 		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, Archived: repo.Archived, URL: repo.HTMLURL,
 		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit), Compose: []string{},
-		ComposeImages: []GitHubComposeImage{}, HeldBranches: []GitHubHeldBranch{},
+		ComposeImages: []GitHubComposeImage{}, HeldBranches: []GitHubHeldBranch{}, Builds: []GitHubBuild{},
 	}
 	if uses, ok := part(ctx, g, runtime.PartWorkflowPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {
 		record.Pins, record.CalledWorkflows = uses.pins, uses.called
@@ -368,12 +374,26 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if g.optedIn() {
 		if apps, ok := part(ctx, g, runtime.PartCompose, func() (githubLayout, error) { return g.apps(ctx, branch, commit.Sha) }); ok {
 			record.Compose, record.Dashboard, layout = apps.compose, apps.dashboard, apps.compose
-			record.ComposeImages, record.HeldBranches = apps.images, apps.held
+			record.ComposeImages, record.HeldBranches, record.Builds = apps.images, apps.held, apps.builds
 		}
 	}
-	githubs := githubOwnSuites(runs.WorkflowRuns)
-	if record.Checks, err = g.checks(ctx, commit.Sha, githubs); err != nil {
+	workflows, err := json200(g.api.ActionsListRepoWorkflowsWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListRepoWorkflowsParams{PerPage: new(githubListPage)}))
+	if err != nil {
 		return record, err
+	}
+	onBranch, read, err := g.branchRuns(ctx, branch, workflows.Workflows)
+	if err != nil {
+		return record, err
+	}
+	githubs := githubOwnSuites(slices.Concat(runs.WorkflowRuns, read))
+	if record.Checks, err = g.branchChecks(ctx, commit.Sha, onBranch, githubs); err != nil {
+		return record, err
+	}
+	record.FailingRuns = []GitHubRun{}
+	for _, run := range onBranch {
+		if githubFailed[run.Conclusion] {
+			record.FailingRuns = append(record.FailingRuns, githubRunOf(run))
+		}
 	}
 	pulls, err := json200(g.api.PullsListWithResponse(ctx, g.owner, g.repo, &githubapi.PullsListParams{State: new(githubapi.PullsListParamsStateOpen), PerPage: new(githubPullsPage)}))
 	if err != nil {
@@ -381,10 +401,6 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	}
 	record.PullRequests = githubPulls(pulls)
 	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests, githubs, layout); err != nil {
-		return record, err
-	}
-	workflows, err := json200(g.api.ActionsListRepoWorkflowsWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListRepoWorkflowsParams{PerPage: new(githubListPage)}))
-	if err != nil {
 		return record, err
 	}
 	record.Runs = latestRuns(runs.WorkflowRuns, workflows.Workflows)
@@ -477,6 +493,90 @@ func githubOwnSuites(runs []githubapi.WorkflowRun) map[int]bool {
 		}
 	}
 	return suites
+}
+
+// githubPullRequestEvents are the events whose runs are a pull request's,
+// whatever its head branch is called.
+var githubPullRequestEvents = map[string]bool{"pull_request": true, "pull_request_target": true}
+
+// branchRuns is the newest run on branch of each active workflow, named as the
+// workflow is now, and the page of the branch's runs it read them from. A run
+// of a pull request or of GitHub's own is not the branch's. Where the page is
+// full, a workflow it misses (a weekly schedule behind a busy week) is read
+// alone.
+func (g *githubRepository) branchRuns(ctx context.Context, branch string, workflows []githubapi.Workflow) ([]githubapi.WorkflowRun, []githubapi.WorkflowRun, error) {
+	page, err := json200(g.api.ActionsListWorkflowRunsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListWorkflowRunsForRepoParams{Branch: &branch, PerPage: new(githubListPage)}))
+	if err != nil {
+		return nil, nil, err
+	}
+	newest := map[int]githubapi.WorkflowRun{}
+	take := func(runs []githubapi.WorkflowRun) {
+		for _, run := range runs {
+			if _, seen := newest[run.WorkflowID]; !seen && run.Event != "dynamic" && !githubPullRequestEvents[run.Event] {
+				newest[run.WorkflowID] = run
+			}
+		}
+	}
+	take(page.WorkflowRuns)
+	found := []githubapi.WorkflowRun{}
+	for _, workflow := range workflows {
+		if workflow.State != githubapi.WorkflowStateActive {
+			continue
+		}
+		run, seen := newest[workflow.ID]
+		if !seen && len(page.WorkflowRuns) == githubListPage {
+			alone, err := json200(g.api.ActionsListWorkflowRunsWithResponse(ctx, g.owner, g.repo, strconv.Itoa(workflow.ID), &githubapi.ActionsListWorkflowRunsParams{Branch: &branch, PerPage: new(githubRunsPage)}))
+			if err != nil {
+				return nil, nil, err
+			}
+			take(alone.WorkflowRuns)
+			run, seen = newest[workflow.ID]
+		}
+		if seen {
+			run.Name = workflow.Name
+			found = append(found, run)
+		}
+	}
+	return found, page.WorkflowRuns, nil
+}
+
+// branchChecks is the default branch's checks: its head commit's, and the
+// failing jobs of each workflow whose newest run on the branch, at an older
+// commit, failed. A workflow that runs on a schedule, by hand or for some
+// paths fails the branch until a run of it passes, whatever lands after it;
+// the count and the running are the head commit's.
+func (g *githubRepository) branchChecks(ctx context.Context, head string, newest []githubapi.WorkflowRun, githubs map[int]bool) (GitHubChecks, error) {
+	checks, err := g.checks(ctx, head, githubs)
+	if err != nil {
+		return checks, err
+	}
+	failing := map[string]bool{}
+	for _, name := range checks.Failing {
+		failing[name] = true
+	}
+	for _, run := range newest {
+		if run.HeadSha == head || !githubFailed[run.Conclusion] {
+			continue
+		}
+		jobs := []string{}
+		if run.CheckSuiteID != 0 {
+			found, err := json200(g.api.ChecksListForSuiteWithResponse(ctx, g.owner, g.repo, strconv.Itoa(run.CheckSuiteID), &githubapi.ChecksListForSuiteParams{PerPage: new(githubListPage)}))
+			if err != nil {
+				return checks, err
+			}
+			jobs = summarizeChecks(found.CheckRuns, githubs).Failing
+		}
+		if len(jobs) == 0 {
+			jobs = []string{run.Name}
+		}
+		for _, name := range jobs {
+			failing[name] = true
+		}
+	}
+	if len(failing) > 0 {
+		checks.State, checks.Failing = "failure", sortedKeys(failing)
+	}
+	return checks, nil
 }
 
 // checks is a commit's check runs, each standing as its last run did: a rerun

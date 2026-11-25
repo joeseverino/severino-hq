@@ -494,6 +494,16 @@
       }
      },
      {
+      "name": "branch",
+      "description": "Returns workflow runs associated with a branch. Use the name of the branch of the `push`.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
       "name": "head_sha",
       "description": "Only returns workflow runs that are associated with the specified `head_sha`.",
       "in": "query",
@@ -1340,6 +1350,73 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs": {
+   "get": {
+    "operationId": "checks/list-for-suite",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "check_suite_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "total_count",
+          "check_runs"
+         ],
+         "properties": {
+          "total_count": {
+           "type": "integer"
+          },
+          "check_runs": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/check-run"
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/code-scanning/alerts": {
    "get": {
     "operationId": "code-scanning/list-alerts-for-repo",
@@ -1443,6 +1520,73 @@
          "type": "array",
          "items": {
           "$ref": "#/components/schemas/collaborator"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/repos/{owner}/{repo}/commits": {
+   "get": {
+    "operationId": "repos/list-commits",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "sha",
+      "description": "SHA or branch to start listing commits from. Default: the repository\u2019s default branch (usually `main`).",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "path",
+      "description": "Only commits containing this file path will be returned.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/commit"
          }
         }
        }

@@ -26,6 +26,7 @@ lazy from .app_update_approval import (
     APPLY,
     APPROVE,
     Approval,
+    applied_at,
     apply_of,
     apply_target,
     approval_of,
@@ -39,6 +40,8 @@ lazy from .pages import PageAction, command_reach
 
 # What an update's new pins bring of their own, as every page labels it.
 BRINGS = "New vulnerabilities"
+# What an update that moves no image brings, as its fact says it.
+REBUILT = "Not checked: it rebuilds on the host"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,9 +106,10 @@ class AppUpdate:
     @property
     def scanned(self) -> bool:
         """Whether every new pin's packages were checked: until then, what it
-        brings is not known."""
+        brings is not known. An update that moves no pin rebuilds on the host,
+        from files no scan reads."""
 
-        return self.readable and all(pin.scanned for pin in self.pins)
+        return self.readable and bool(self.pins) and all(pin.scanned for pin in self.pins)
 
     @property
     def checks_said(self) -> tuple[str, str, str]:
@@ -145,6 +149,8 @@ class AppUpdate:
             return counted(len(self.brings), "serious vulnerability", "serious vulnerabilities")
         if self.scanned:
             return "Nothing serious"
+        if self.readable and not self.pins:
+            return REBUILT
         if any(pin.unlisted for pin in self.pins):
             return f"Can't be checked: {self.publisher or 'its publisher'} publishes no package list"
         return "Not checked yet"
@@ -210,6 +216,24 @@ def _managed() -> dict[str, Managed]:
         for path in repository.compose:
             found.setdefault(_tail(path), Managed(name, _app(path), str(repository.dashboard), str(repository.url)))
     return found
+
+
+def builds(files: tuple[str, ...], service: str) -> bool:
+    """Whether a repository HQ reads declares ``service`` of the Compose files
+    ``files`` as one that builds its image on its host."""
+
+    with projection_scope():
+        built = read_once("app_updates.builds", _builds)
+    return any((_tail(path), service) in built for path in files)
+
+
+def _builds() -> frozenset[tuple[str, str]]:
+    return frozenset(
+        (_tail(str(each.get("path") or "")), str(each.get("service") or ""))
+        for repository in repositories().values()
+        for each in repository.compose_images or ()
+        if each.get("build")
+    )
 
 
 def _tail(path: str) -> str:
@@ -431,11 +455,11 @@ def update_state(item: Container) -> UpdateState:
             return UpdateState(UpdateKind.UNMATCHED, latest, words, reason=why)
         return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND)
     repository = repositories()[managed.repository]
-    if (pinned := _pinned_at_head(item, repository)) is not None:
+    if (move := _behind(item, repository, managed.app)) is not None:
         head = str((repository.head or {}).get("sha") or "")
         return _decided(
             UpdateKind.MERGED,
-            f"{item.standing.tag or item.standing.image.short} to {pinned.tag}",
+            move,
             ended(f"Merged in {managed.repository}, not applied"),
             UpdateAction(APPLY, apply_target(managed, head)),
             apply_of(managed.repository, head, (item,)),
@@ -475,9 +499,25 @@ def of_app(repository: str, app: str) -> tuple[Container, ...]:
 def merged_of(repository: str, app: str) -> tuple[Container, ...]:
     """The containers of ``app`` that run a pin before the one its repository's default branch holds."""
 
-    return tuple(
-        item for item in of_app(repository, app) if _pinned_at_head(item, repositories()[repository]) is not None
-    )
+    return tuple(item for item in of_app(repository, app) if _behind(item, repositories()[repository], app) is not None)
+
+
+def _behind(item: Container, repository: Any, app: str) -> str | None:
+    """How ``item`` runs behind its repository's default branch, as its move
+    says it: to the pin the head holds, or, for an image built on its host,
+    from the revision its machine last released the app at to the head, when
+    a commit since changed the app's directory; None where it runs what a
+    merge brings."""
+
+    if (pinned := _pinned_at_head(item, repository)) is not None:
+        return f"{item.standing.tag or item.standing.image.short} to {pinned.tag}"
+    build = next((each for each in repository.builds or () if each.get("app") == app), None)
+    if not item.standing.built_here or build is None:
+        return None
+    applied = applied_at(item.machine.name, app)
+    if not applied or applied in (build.get("commits") or ()):
+        return None
+    return f"{applied[:7]} to {str((repository.head or {}).get('sha') or '')[:7]}"
 
 
 def _pinned_at_head(item: Container, repository: Any) -> ImageRef | None:
