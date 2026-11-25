@@ -690,6 +690,9 @@ const hqFragment = (() => {
     const controls = [...form.elements].filter((control) => control instanceof HTMLButtonElement);
     form.setAttribute("aria-busy", "true");
     controls.forEach((control) => control.setAttribute("aria-disabled", "true"));
+    // The button pressed says so at once, where it stands (page.css), until
+    // the answer replaces it.
+    submitter?.setAttribute("aria-busy", "true");
     if (status) status.textContent = form.dataset.fragmentBusy || "";
     // Asked before the swap: afterwards the region is another element.
     const box = form.closest("dialog");
@@ -727,6 +730,7 @@ const hqFragment = (() => {
       else explain(region, said.join(" "));
     } finally {
       form.removeAttribute("aria-busy");
+      submitter?.removeAttribute("aria-busy");
       controls.forEach((control) => control.removeAttribute("aria-disabled"));
     }
   };
