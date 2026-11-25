@@ -32,6 +32,7 @@ from pydantic import (
     StrictInt,
     StrictStr,
     StringConstraints,
+    TypeAdapter,
     ValidationError,
     create_model,
 )
@@ -124,6 +125,8 @@ class AdoptedProcedure(ProcedureTerms):
 
         return self.model_dump(exclude={"revision"}) == other.model_dump(exclude={"revision"})
 
+
+_ADOPTED = TypeAdapter(tuple[AdoptedProcedure, ...])
 
 # ---------------------------------------------------------------- the catalog
 
@@ -246,9 +249,15 @@ def _load(digest: str) -> _Known:
     catalog = AdoptedCatalog.objects.filter(digest=digest).first() if digest else None
     if catalog is None:
         return _Known(digest, (), ())
-    # As JSON, which the row is stored as: a list is a strict tuple there.
-    rows = tuple(AdoptedProcedure.model_validate_json(json.dumps(row)) for row in catalog.procedures)
+    rows = adopted_procedures(catalog)
     return _Known(digest, rows, tuple(manifest(row) for row in rows))
+
+
+def adopted_procedures(catalog: AdoptedCatalog) -> tuple[AdoptedProcedure, ...]:
+    """``catalog``'s procedures, read as JSON, which the row is stored as: a
+    list is a strict tuple there."""
+
+    return _ADOPTED.validate_json(json.dumps(catalog.procedures))
 
 
 def manifest(procedure: AdoptedProcedure) -> OperationManifest:

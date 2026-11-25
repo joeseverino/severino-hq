@@ -563,7 +563,7 @@ def _infrastructure(scale: float) -> list[ManagedResource]:
             _resource(
                 "tls.certificate",
                 f"certificate-{index}",
-                {"certificate_name": f"example-cert-{index}", "domains": [f"*.{zone}"]},
+                {"certificate_name": f"example-cert-{index}", "domains": [f"*.{zone}"], "install_on": ["example-npm"]},
                 now,
                 status={"not_after": (now + timedelta(days=20 + 30 * index)).isoformat()},
             )

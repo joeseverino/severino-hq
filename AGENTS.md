@@ -134,6 +134,11 @@ architecture test, a glob) fails when its path matches nothing.
   one on a table that holds rows first passes `manage.py constraint_preflight
   --path <database>` against production data, in a migration operation of its
   own.
+- A JSON column read through a declared shape (a pydantic model, a kind's
+  spec) is a `StoredJSONField` whose `load` is the one function its readers
+  call (`hq/platform/core/stored_json.py`). The release rehearsal loads every
+  stored value through it, so a shape that refuses what production holds
+  ships with the migration that rewrites those rows.
 - Every mutation is atomic and audit-attributed. Machine writes are safely
   retryable with durable idempotency.
 - Money computed in the database (a `GeneratedField`, an annotation) works

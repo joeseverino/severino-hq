@@ -223,14 +223,13 @@ def _updates(on: str = "") -> Callable[[Any], None]:
     def seed(owner) -> None:
         from hq.platform.application.security import web_principal
 
+        # Declared first, so every scan the estate reports reaches it.
+        if on:
+            apps.get_model("control_plane", "ManagedResource").objects.create(key=on, kind="machine", spec={"name": on})
         _estate(owner)
         example_estate.docker.updates_out()
         example_estate.work.update_states(example_estate.docker.UPDATES)
-        hosts = (example_estate.names.MACHINE,)
-        if on:
-            apps.get_model("control_plane", "ManagedResource").objects.create(key=on, kind="machine", spec={"name": on})
-            hosts = (on,)
-        example_estate.automation.applies_updates(web_principal(owner), hosts)
+        example_estate.automation.applies_updates(web_principal(owner), (on or example_estate.names.MACHINE,))
 
     return seed
 
