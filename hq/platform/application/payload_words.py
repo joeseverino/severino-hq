@@ -21,7 +21,7 @@ from .moments import moment
 from .printable import admitted
 from .quoted import Quoted
 from .ui import counted
-lazy from .moments import when
+lazy from .moments import when_exact
 
 # How many plain facts a record may carry and still be said whole. Past this it
 # is counted, because a sentence of twenty facts is not read.
@@ -132,15 +132,17 @@ def entry_names(items: list[Any]) -> list[str]:
 
 
 def _plain_words(value: Any) -> str:
-    """A value that is neither a record nor a list: a moment as HQ says one,
-    text and numbers as they are, and nothing a page would refuse to print."""
+    """A value that is neither a record nor a list: a moment in full, text and
+    numbers as they are, and nothing a page would refuse to print. A moment
+    is never an age or a day without its year, since these words are stored
+    (an audit row's message and changes) and read long after."""
 
     if isinstance(value, Quoted):
         return value
     if isinstance(value, str):
         value = _instant(value) or value
     if isinstance(value, date):
-        return when(value)
+        return when_exact(value)
     return str(admitted(value, "value_words"))
 
 

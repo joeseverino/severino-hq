@@ -503,6 +503,7 @@ def record_event(
         **({"subject": subject} if subject else {}),
         **({"cause": context.cause} if context.cause else {}),
         **({"approved_by": context.approved_by} if context.approved_by else {}),
+        **({"approval": context.approval} if context.approval else {}),
         **facet_metadata(facets),
         **(metadata or {}),
         **stamps.get("metadata", {}),

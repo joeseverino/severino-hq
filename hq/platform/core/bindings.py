@@ -39,6 +39,7 @@ def operation_context(
     device: str = "",
     cause: str = "",
     approved_by: str = "",
+    approval: str = "",
     person: Callable[[], Any] | None = None,
     trace: str = "",
 ) -> Iterator[None]:
@@ -70,7 +71,8 @@ def operation_context(
     # placed, and the consent the outer one carried.
     same_caller = outer is not None and outer.actor == actor
     device = device or (outer.device if same_caller else "")
-    approved_by = approved_by or (outer.approved_by if same_caller else "")
+    if not approved_by and same_caller:
+        approved_by, approval = outer.approved_by, outer.approval
     person = person or (outer.person if same_caller else None)
     with OPERATION.set(
         OperationContext(
@@ -81,6 +83,7 @@ def operation_context(
             device=device,
             cause=cause,
             approved_by=approved_by,
+            approval=approval if approved_by else "",
             person=person,
             trace=trace,
         )
@@ -115,6 +118,7 @@ def audit_operation(
         device=getattr(principal, "device", None) or "",
         cause=cause,
         approved_by=getattr(principal, "approved_by", None) or "",
+        approval=getattr(principal, "approval", None) or "",
         person=_acted_for(principal),
         trace=trace,
     ):

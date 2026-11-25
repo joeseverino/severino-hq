@@ -46,8 +46,9 @@ class OneRunReadsAlikeTests(TestCase):
         return response.content.decode()
 
     def test_jobs_its_run_its_audit_entry_and_the_run_read_say_who_asked_alike(self):
-        # Written out, so the test reads at a base without the one attribution.
-        who = f"example-agent, over MCP · approved by {APPROVER}"
+        # Written out, so the test reads at a base without the one attribution:
+        # who asked, and who approved it, a line or a dot apart.
+        asker, approved = "example-agent, over MCP", f"approved by {APPROVER}"
 
         jobs = self.page(reverse("jobs:list"))
         run = self.page(reverse("jobs:run", kwargs={"pk": self.operation_id}))
@@ -57,8 +58,9 @@ class OneRunReadsAlikeTests(TestCase):
 
         for where, html in (("jobs", jobs), ("run", run), ("audit entry", entry), ("audit log", log)):
             with self.subTest(page=where):
-                self.assertIn(_words(who), _said(html))
-        self.assertEqual((_words(read["by"]), read["approved_by"]), (_words(who), APPROVER))
+                self.assertIn(asker, _said(html))
+                self.assertIn(approved, _said(html))
+        self.assertEqual((_words(read["by"]), read["approved_by"]), (f"{asker} · {approved}", APPROVER))
 
 
 class OneEventRowTests(TestCase):
@@ -76,4 +78,4 @@ class OneEventRowTests(TestCase):
         html = self.client.get(reverse("core:audit_detail", args=[row.pk])).content.decode()
 
         others = _words(" ".join(element.words for element in within(html, "class", "data-table")))
-        self.assertIn("example-agent, over MCP · approved by example-owner", others)
+        self.assertIn("example-agent, over MCP approved by example-owner", others)

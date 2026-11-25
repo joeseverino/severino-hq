@@ -354,7 +354,7 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(self.standing().run_url, run_url(str(run.pk)))
         self.assertTrue(self.standing().live)
         operator(self.client)
-        (steps,) = self.client.get(run_url(str(run.pk))).context["steps"]
+        (steps,) = self.client.get(run_url(str(run.pk))).context["events"]
         merging = [step for step in steps.lines if step.page.operation_id == str(merge.pk)]
         self.assertEqual([step.url for step in merging], [merge.resource.get_absolute_url()])
 

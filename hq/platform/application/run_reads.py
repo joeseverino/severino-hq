@@ -103,6 +103,9 @@ class _Work(TypedDict):
     hosts: Annotated[list[str], Describe("The machines it acts on, each by its name in HQ.")]
     by: Annotated[str, Describe("Who asked for it, through which door, and who approved it, as Jobs names them.")]
     approved_by: Annotated[str, Describe("Who approved it; empty for work that needed no approval.")]
+    approval_url: Annotated[
+        str, Describe("The page of the approval `approved_by` decided; empty where no held request was decided.")
+    ]
     correlation: Annotated[str, Describe("The correlation id its asker sent; empty when it sent none.")]
     created_at: AskedAt
     started_at: Annotated[str | None, Describe("When a worker took it up; null while it waits.")]
@@ -173,6 +176,7 @@ def _work(run: WorkRun) -> dict[str, Any]:
         "hosts": list(run.evidence.hosts),
         "by": run.by.words,
         "approved_by": run.by.approved_by,
+        "approval_url": run.by.approval_url,
         "correlation": run.evidence.correlation,
         "created_at": iso(run.created_at),
         "started_at": iso(run.started),

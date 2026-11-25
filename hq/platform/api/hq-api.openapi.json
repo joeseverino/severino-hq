@@ -2174,6 +2174,7 @@
               "hosts",
               "by",
               "approved_by",
+              "approval_url",
               "correlation",
               "created_at",
               "started_at",
@@ -2853,6 +2854,7 @@
               "hosts",
               "by",
               "approved_by",
+              "approval_url",
               "correlation",
               "created_at",
               "started_at",
@@ -27470,6 +27472,9 @@
           "affected": {
             "$ref": "#/components/schemas/_Evidence/properties/affected"
           },
+          "approval_url": {
+            "$ref": "#/components/schemas/_Work/properties/approval_url"
+          },
           "approved_by": {
             "$ref": "#/components/schemas/_Work/properties/approved_by"
           },
@@ -27563,6 +27568,7 @@
           "hosts",
           "by",
           "approved_by",
+          "approval_url",
           "correlation",
           "created_at",
           "started_at",
@@ -27590,6 +27596,9 @@
         "properties": {
           "affected": {
             "$ref": "#/components/schemas/_EvidencePartial/properties/affected"
+          },
+          "approval_url": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/approval_url"
           },
           "approved_by": {
             "$ref": "#/components/schemas/_WorkPartial/properties/approved_by"
@@ -32048,6 +32057,9 @@
           "affected": {
             "$ref": "#/components/schemas/_Evidence/properties/affected"
           },
+          "approval_url": {
+            "$ref": "#/components/schemas/_Work/properties/approval_url"
+          },
           "approved_by": {
             "$ref": "#/components/schemas/_Work/properties/approved_by"
           },
@@ -32141,6 +32153,7 @@
           "hosts",
           "by",
           "approved_by",
+          "approval_url",
           "correlation",
           "created_at",
           "started_at",
@@ -32197,6 +32210,9 @@
         "properties": {
           "affected": {
             "$ref": "#/components/schemas/_EvidencePartial/properties/affected"
+          },
+          "approval_url": {
+            "$ref": "#/components/schemas/_WorkPartial/properties/approval_url"
           },
           "approved_by": {
             "$ref": "#/components/schemas/_WorkPartial/properties/approved_by"
@@ -32565,6 +32581,10 @@
         "additionalProperties": false,
         "description": "What a piece of work says of itself, a job or a run.",
         "properties": {
+          "approval_url": {
+            "description": "The page of the approval `approved_by` decided; empty where no held request was decided.",
+            "type": "string"
+          },
           "approved_by": {
             "description": "Who approved it; empty for work that needed no approval.",
             "type": "string"
@@ -32662,6 +32682,7 @@
           "hosts",
           "by",
           "approved_by",
+          "approval_url",
           "correlation",
           "created_at",
           "started_at",
@@ -32675,6 +32696,9 @@
         "additionalProperties": false,
         "description": "What a piece of work says of itself, a job or a run.",
         "properties": {
+          "approval_url": {
+            "$ref": "#/components/schemas/_Work/properties/approval_url"
+          },
           "approved_by": {
             "$ref": "#/components/schemas/_Work/properties/approved_by"
           },

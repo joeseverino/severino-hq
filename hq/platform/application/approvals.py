@@ -847,6 +847,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         held.requested_interface,
         principal.capabilities,
         approved_by=principal.actor,
+        approval=str(held.id),
         person_key=held.requested_person_key,
         device=held.requested_device,
     )

@@ -13,7 +13,8 @@ from .action_links import command_url
 from .automation_findings import worker_problems
 from .automation_runs import operation_registry
 from .capabilities import capability_spec
-from .history import STEPS, HistoryGroup, chain_made, chain_url
+from .doors import NOBODY
+from .history import EVENTS, HistoryGroup, asked_by, chain_made, chain_url
 from .moments import moment
 from .pages import offered
 from .playbook_about import reading_words
@@ -31,11 +32,14 @@ def run_context(record: dict[str, Any], *, user: Any) -> dict[str, Any]:
     problem that says how to set one up."""
 
     capability = record["capability"]
-    steps = chain_made(OperationRequest, record["operation_id"]) if offered(user, reverse("core:audit_list")) else ()
+    operation = record["operation_id"]
+    steps = chain_made(OperationRequest, operation) if offered(user, reverse("core:audit_list")) else ()
     return {
-        "steps": (HistoryGroup(steps),) if steps else (),
-        "steps_heading": STEPS,
-        "steps_url": chain_url(steps[0].events[0].trace) if steps else "",
+        # Who asked, its approval opening the approval's entry: read as the record's ``by`` was.
+        "asked_by": asked_by(OperationRequest, (OperationRequest(pk=operation),)).get(str(operation), NOBODY),
+        "events": (HistoryGroup(steps),) if steps else (),
+        "events_heading": EVENTS,
+        "events_url": chain_url(steps[0].events[0].trace) if steps else "",
         # A scan runs no playbook: what it ran is the command that asked for it.
         "ran_label": "Playbook" if record["playbook"] else "Command",
         # A playbook no longer adopted has no command to link to.

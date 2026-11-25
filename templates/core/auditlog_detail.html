@@ -7,7 +7,7 @@
 {% section event_heading %}
   {% facts label="Event" %}
     {% fact "When" %}{{ event.created_at|when }}{% endfact %}
-    {% fact "Who" value=event.who.words %}
+    {% fact "Who" value=event.who.asker detail=event.who.approved detail_url=event.who.approval_url %}
     {% if event.object_type %}{% fact "Object" %}{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} {% muted %}#{{ event.object_id }}{% endmuted %}{% endif %}{% endfact %}{% endif %}
     {% if about %}{% fact "About" %}<a href="{{ about.1 }}">{{ about.0 }}</a>{% endfact %}{% endif %}
     {% if operation or operation_id %}{% fact "Operation" %}{{ operation }}{% if operation and operation_id %} {% endif %}{% if operation_id %}<code>{{ operation_id }}</code>{% endif %}{% endfact %}{% endif %}

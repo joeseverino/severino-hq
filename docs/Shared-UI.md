@@ -860,14 +860,20 @@ so a dialog opened from inside a section still heads its own sections a level un
 ### history_table (host only)
 
 Every table of audit events is this part, its rows the ones the audit log draws (`history.table`,
-drawn by `{% data_table %}`): the audit log, an event's other events and a record's recent
-changes. On a phone only What and When stay, so What's second line says how it came out. Each
-group (`history.HistoryGroup`) is a `tbody` under
-its heading row where it has a label, and a group that starts folded away (`folds`) marks each of
-its rows as folded under its heading. An event that changed things heads them: its gutter holds the
-fold rather than the row's own toggle. A fold carries at most `history.SHOWN` of what the event
-changed, and a last row counts the others and links to the list of them all. Its headings are
-`history.COLUMNS`, without who did each where `hide_who` is set.
+drawn by `{% data_table %}`): the audit log, an event's other events, a record's recent
+changes and a run's chain. On a phone only What and When stay, so What's second line says how it
+came out. Each group (`history.HistoryGroup`) is a `tbody` under its heading row where it has a
+label, its count every row of history it draws (`HistoryGroup.count`, which a section heading
+the table reads too), and a group that starts folded away (`folds`) marks each of its rows as
+folded under its heading. An event that changed things heads them: its gutter holds the fold
+rather than the row's own toggle. A fold carries at most `history.SHOWN` of what the event
+changed, and a last row counts the others and links to the list of them all. Each row's User,
+Action and Message are one audit row's: the line's own row, else its newest, so a row names who
+did what it says, its "approved by" opening the approval's entry where one was decided. A chain's
+steps run oldest first, each later one's time how long after the first it came; each step and
+the rows beneath it open the one page that holds the whole step (a run's, an approval's entry,
+else its record's), and a title opening the page the table is drawn on is no link. Its headings
+are `history.COLUMNS`, without who did each where `hide_who` is set.
 
 ### layout
 

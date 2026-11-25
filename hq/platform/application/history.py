@@ -36,7 +36,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
-lazy from hq.domains.control_plane.models import OperationRequest, ReadRequest
+lazy from hq.domains.control_plane.models import ApprovalRequest, OperationRequest, ReadRequest
 lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
 lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
@@ -44,8 +44,9 @@ lazy from hq.platform.core.models import AuditLog, object_type_label, object_typ
 from .doors import Attribution
 from .entity_links import container_link, entity_link, web_url
 from .facts import inventory_records
+from .figured import Figure
 from .labels import lower_first, plural
-from .moments import moment
+from .moments import duration, epoch, moment
 from .projection import read_once
 from .quoted import Quoted
 from .references import Kind
@@ -71,8 +72,8 @@ SHOWN = 5
 # The audit list's filter to every row of one chain, by its id, and the ids it takes.
 CHAIN = "chain"
 CHAIN_PATTERN = r"^[\w.:-]{0,128}$"
-# What every page that draws a chain heads its operations.
-STEPS = "Steps"
+# What every page that draws a chain heads it: its rows are the audit log's events.
+EVENTS = "Events"
 
 # How far a run of like moments reaches back from its newest: a host's boot
 # or a `compose up` starts every container it holds within a few minutes, so
@@ -188,8 +189,10 @@ class HistoryLine:
     burst: tuple[Moment, ...] = ()
     # Each operation of a chain of several, oldest first, as a line of its own.
     steps: tuple[HistoryLine, ...] = ()
-    # Where a step's title opens: its run's page, else its record's.
+    # Where a step's title, and each row beneath it, opens (``_step_pages``).
     opens: str = ""
+    # A later step's: when its chain's first step was, so its time says how long after.
+    began: datetime | None = None
 
     @property
     def own(self) -> tuple[Any, ...]:
@@ -254,7 +257,7 @@ class HistoryLine:
             return tuple(HistoryLine(item.at, moment=item, under=fold) for item in self.burst[:SHOWN])
         if self.steps:
             return tuple(replace(step, under=fold) for step in self.steps)
-        return tuple(HistoryLine(item.created_at, events=(item,), under=fold) for item in self.items)
+        return tuple(HistoryLine(item.created_at, events=(item,), under=fold, opens=self.opens) for item in self.items)
 
     @property
     def more(self) -> int:
@@ -368,21 +371,16 @@ class HistoryLine:
 
     @property
     def who(self) -> Attribution:
-        """Whoever started it (its first row's), and who approved it where any row names someone else."""
+        """Who did what its line says: the row its action comes from (``page``).
+        Who started a chain and who approved it are said by its record's page."""
 
-        first = self.events[-1].who
-        approver = next((each.who.approved_by for each in self.events if each.who.approved_by), "")
-        return replace(first, approved_by=approver) if approver else first
+        return self.page.who
 
     @property
     def action(self) -> str:
-        """How it came out: its own row's action, else the one its items share, else the latest."""
+        """How it came out: its own row's action, else its newest row's."""
 
-        head = self.head
-        if head is not None:
-            return head.action
-        actions = {event.action for event in self.events}
-        return actions.pop() if len(actions) == 1 else self.events[0].action
+        return self.page.action
 
     @property
     def state(self) -> AuditLog.Action | str:
@@ -413,14 +411,19 @@ class HistoryLine:
 
 @dataclass(frozen=True, slots=True)
 class HistoryGroup:
-    """Lines of history under one heading of a table's rows, ``count`` of
-    them in all; ``folds`` is the row they start folded away under. A group
-    with no label is a table's only one."""
+    """Lines of history under one heading of a table's rows; ``folds`` is the
+    row they start folded away under. A group with no label is a table's only one."""
 
     lines: tuple[HistoryLine, ...]
     label: str = ""
-    count: int = 0
     folds: str = ""
+
+    @property
+    def count(self) -> int:
+        """How many rows of history its table draws: each line and those folded
+        beneath it, never the row counting what a fold leaves out."""
+
+        return sum(line.rest is None for event in self.lines for line in event.lines)
 
 
 def columns(*, hide_who: bool = False) -> tuple[TableColumn, ...]:
@@ -436,11 +439,13 @@ def table(
     *,
     selectable: bool = False,
     sorted_by: str | None = None,
+    here: str = "",
 ) -> DataTable:
     """The table of history ``{% data_table %}`` draws: each event's line, then
     the lines folded beneath it, under ``headings`` (``COLUMNS``, the Who column
     left out where the reader may not read the audit log). A group that starts
-    folded away folds each of its rows under its heading."""
+    folded away folds each of its rows under its heading. A title that opens
+    ``here``, the page the table is drawn on, is no link."""
 
     who = any(column.label == WHO for column in headings)
     return DataTable(
@@ -450,7 +455,13 @@ def table(
             Group(
                 group.label,
                 tuple(
-                    _row(line, who=who, folded=group.folds, key=line.pk if selectable and not line.rest else None)
+                    _row(
+                        line,
+                        who=who,
+                        folded=group.folds,
+                        key=line.pk if selectable and not line.rest else None,
+                        here=here,
+                    )
                     for event in group.lines
                     for line in event.lines
                 ),
@@ -464,7 +475,7 @@ def table(
     )
 
 
-def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
+def _row(line: HistoryLine, *, who: bool, folded: str, key: Any, here: str) -> Row:
     """One line as its row: what it was, when, who, how it came out and what it
     said; on a phone only What and When stay, so What's second line says how it
     came out, in the action's own word, which the Action column says wider."""
@@ -486,7 +497,7 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
         name, after = line.named
         title = Cell(
             name,
-            line.url,
+            "" if here and line.url.partition("#")[0] == here else line.url,
             readout=True,
             after=after,
             name=True,
@@ -494,12 +505,16 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any) -> Row:
             count=line.total if line.grouped and line.head is not None else None,
             lines=(Cell(line.type_label, muted=True, parts=(action,)) if line.type_label else action,),
         )
-        person = Cell(line.who.words, cut=True)
+        person = line.who.cell
         state = line.state
         outcome = Cell.state(state) if isinstance(state, AuditLog.Action) else Cell(state, tone="neutral")
         # The row's own text as stored, which an older release may have worded.
         said = Cell(Quoted(line.message), muted=True, role="data")
-    when = Cell(moment=line.at, muted=True)
+    when = (
+        Cell(Figure(f"+{duration(line.at - line.began, short=True)}", epoch(line.at)), muted=True)
+        if line.began is not None
+        else Cell(moment=line.at, muted=True)
+    )
     return Row((title, when, *((person,) if who else ()), outcome, said), key=key, **folding)
 
 
@@ -547,13 +562,15 @@ def heads(rows: QuerySet) -> QuerySet:
 
 
 def entries(
-    events: Sequence[Any], found: Iterable[Moment] = (), *, within: QuerySet | None = None
+    events: Sequence[Any], found: Iterable[Moment] = (), *, within: QuerySet | None = None, steps: bool = False
 ) -> list[HistoryLine]:
     """Events and moments on one line, newest first.
 
     ``events`` is one row per event (``heads``), newest first; each chain's
     other rows are read from ``within``, in one query, so it lists what the
-    event changed. Without ``within`` each row is a line of its own.
+    event changed. Without ``within`` each row is a line of its own. A chain
+    read as ``steps`` opens each step where a chain of several does, even
+    a chain of one.
     """
 
     chains: dict[str, dict[str, list[Any]]] = {}
@@ -564,9 +581,10 @@ def entries(
             chains.setdefault(row.trace, {}).setdefault(row.operation_id, []).append(row)
             if not row.own_row:
                 kinds.setdefault(row.operation_id, {}).setdefault(row.object_type, row.of_kind)
-    opens = _step_pages(chains.values())
+    opens = _step_pages(chains.values(), fewest=1 if steps else 2)
     lines: list[HistoryLine] = [
-        _chain(event, chains.get(event.trace) or {event.operation_id: [event]}, kinds, opens) for event in events
+        _chain(event, chains.get(event.trace) or {event.operation_id: [event]}, kinds, opens, steps_alone=steps)
+        for event in events
     ]
     lines += runs(found)
     lines.sort(key=lambda line: line.at, reverse=True)
@@ -574,7 +592,12 @@ def entries(
 
 
 def _chain(
-    event: Any, steps: dict[str, list[Any]], kinds: dict[str, dict[str, int]], opens: dict[str, str]
+    event: Any,
+    steps: dict[str, list[Any]],
+    kinds: dict[str, dict[str, int]],
+    opens: dict[str, str],
+    *,
+    steps_alone: bool = False,
 ) -> HistoryLine:
     """The line of ``event``'s chain: its one operation's, else each
     operation a step beneath it, oldest first."""
@@ -583,12 +606,15 @@ def _chain(
         HistoryLine(rows[0].created_at, events=tuple(rows), kinds=tuple(kinds.get(operation, {}).items()))
         for operation, rows in steps.items()
     ]
-    if len(lines) == 1:
+    if len(lines) == 1 and not steps_alone:
         return lines[0]
     ordered = tuple(
         replace(line, opens=opens.get(line.page.operation_id) or _record_page(line))
         for line in sorted(lines, key=lambda line: (line.events[-1].created_at, line.events[-1].pk))
     )
+    ordered = (ordered[0], *(replace(line, began=ordered[0].at) for line in ordered[1:]))
+    if len(ordered) == 1:
+        return ordered[0]
     every = tuple(sorted((row for line in lines for row in line.events), key=_newest))
     return HistoryLine(event.created_at, events=every, steps=ordered)
 
@@ -616,7 +642,7 @@ def _chain_of(rows: QuerySet) -> tuple[HistoryLine, ...]:
     head = list(heads(rows)[:1])
     if not head:
         return ()
-    (line,) = entries(head, within=rows)
+    (line,) = entries(head, within=rows, steps=True)
     return line.steps or (line,)
 
 
@@ -630,16 +656,29 @@ def _newest(row: Any) -> tuple[float, int]:
     return (-row.created_at.timestamp(), -row.pk)
 
 
-def _step_pages(chains: Iterable[dict[str, list[Any]]]) -> dict[str, str]:
-    """The page of each step of a chain of several that is a run or a scan,
-    by its operation, read in one query."""
+def _step_pages(chains: Iterable[dict[str, list[Any]]], *, fewest: int = 2) -> dict[str, str]:
+    """The one page that holds the whole of each step of a chain of ``fewest``
+    steps or more, by its operation: a run's or a scan's page, read in one query, or the
+    entry of the approval its rows ask for or decide. Any other step opens
+    its record (``_record_page``)."""
 
-    steps = {operation for steps in chains if len(steps) > 1 for operation in steps if operation}
-    if not steps:
-        return {}
+    several = [steps for steps in chains if len(steps) >= fewest]
+    approval = audited_labels()[ApprovalRequest]
+    # A step that asked for or decided a held change: its rows about it name it.
+    pages = {
+        operation: reverse("core:approval_entry", args=[held])
+        for steps in several
+        for operation, rows in steps.items()
+        if (held := next((row.object_id for row in rows if row.object_type == approval), ""))
+    }
+    steps = {operation for steps in several for operation in steps if operation and operation not in pages}
     listed = (OperationRequest.Action.RUN, OperationRequest.Action.SCAN)
-    found = OperationRequest.objects.filter(pk__in=_uuids(steps), action__in=listed).values_list("pk", flat=True)
-    return {str(pk): run_url(str(pk)) for pk in found}
+    found = (
+        OperationRequest.objects.filter(pk__in=_uuids(steps), action__in=listed).values_list("pk", flat=True)
+        if steps
+        else ()
+    )
+    return {**pages, **{str(pk): run_url(str(pk)) for pk in found}}
 
 
 def _uuids(operations: Iterable[str]) -> list[UUID]:

@@ -12,7 +12,7 @@ Its state is the badge beside its title. While it waits or runs, the region asks
 renews, and the duration counts up.
 While it has not started because no worker reports, the problem that says
 so, with how to set one up, stands above it (`problems`). Below it, folded,
-the chain of the audit log it ran in (`steps`, `history.chain_made`): the
+the chain of the audit log it ran in (`events`, `history.chain_made`): the
 press, approval and merge that set it going, linking the whole chain.
 {% endcomment %}
 {% block content %}
@@ -24,7 +24,7 @@ press, approval and merge that set it going, linking the whole chain.
 {% section "Run" %}
   {% facts label="Run" %}
     {% if playbook_url %}{% fact ran_label value=run.title url=playbook_url %}{% else %}{% fact ran_label value=run.title %}{% endif %}
-    {% fact "Asked by" value=run.by|or_empty %}
+    {% fact "Asked by" value=asked_by.asker|or_empty detail=asked_by.approved detail_url=asked_by.approval_url %}
     {% fact "Asked" %}{{ run.created_at|when }}{% endfact %}
     {% if run.reason %}{% fact "Reason" value=run.reason %}{% endif %}
     {% if run.started_at %}{% fact "Started" %}{{ run.started_at|when }}{% endfact %}{% endif %}
@@ -39,5 +39,5 @@ press, approval and merge that set it going, linking the whole chain.
 {% if evidence.raw_readings %}{% section "Raw data" fold=True %}<pre tabindex="0">{{ evidence.raw_readings }}</pre>{% endsection %}{% endif %}
 </div>
 {% endpartialdef %}
-{% if steps %}{% section steps_heading count=steps.0.lines|length fold=True %}{% history_table steps_heading steps %}{% foot %}Every row in the <a href="{{ steps_url }}">audit log</a>{% endsection %}{% endif %}
+{% if events %}{% section events_heading count=events.0.count fold=True %}{% history_table events_heading events %}{% foot %}Every row in the <a href="{{ events_url }}">audit log</a>{% endsection %}{% endif %}
 {% endblock %}

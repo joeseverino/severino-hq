@@ -11,7 +11,7 @@ import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from itertools import count
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import (
     AdoptedCatalog,
+    ApprovalRequest,
     CapabilityRule,
     ManagedResource,
     OperationHost,
@@ -48,6 +49,7 @@ from hq.platform.core.models import UpstreamReading
 from . import doors
 from .agents import CLAIMS, ruled
 from .names import LAPTOP_NAME, MACHINE, back, hexed, share
+from .testing import clock_at
 
 # The automation worker, as it names itself when it claims.
 WORKER = "example-automation-worker"
@@ -604,29 +606,42 @@ def _asked(
 ) -> None:
     """One run of ``manifest`` on ``host``, asked for ``ago``, approved by
     ``approver`` where the ask waits for a person (left waiting without
-    one), then carried out, with every audit row it writes dated to the
-    moment it was asked."""
+    one), then carried out, each audit row it writes dated to the moment
+    its step happened: the ask, the decision, the claim and the end."""
 
     at = back(ago, manifest.id, host)
     name = capability_name(manifest.id)
     # Each ask through its asker's own door, as the command page or the MCP server binds one.
     door = doors.mcp() if principal.interface == MCP_INTERFACE else doors.request(f"/commands/{name}/")
     key = f"example-run-{manifest.id}-{host}-{int(ago.total_seconds())}"
-    with stamped(lambda *_: {"created_at": at}):
-        with door:
-            asked = {"hosts": [host], "correlation": correlation, **({"parameters": parameters} if parameters else {})}
-            answer = _ran(name, asked, principal=principal, key=key)
-        if is_held(answer):
-            if approver is None:
-                # Nobody here may approve it, so it waits, as a real one would.
-                return
-            held = answer["approval"]["id"]
-            with doors.page("core:approval_entry", approval_id=held):
-                answer = _ran(APPROVE, {"approval_id": held}, principal=approver, key=f"{key}-approved")["result"]
-        run = OperationRequest.objects.get(pk=answer["operation"]["id"])
-        OperationRequest.objects.filter(pk=run.pk).update(created_at=at, updated_at=at)
+    with stamped(lambda *_: {"created_at": at}), door:
+        asked = {"hosts": [host], "correlation": correlation, **({"parameters": parameters} if parameters else {})}
+        answer = _ran(name, asked, principal=principal, key=key)
+    queued = at
+    if is_held(answer):
+        if approver is None:
+            # Nobody here may approve it, so it waits, as a real one would.
+            return
+        held = answer["approval"]["id"]
+        queued = at + timedelta(seconds=5) + share(timedelta(seconds=40), key, "decided")
+        # The decision's own time is the clock's when it is written, and its row says it.
+        with (
+            stamped(lambda *_: {"created_at": queued}),
+            clock_at(queued),
+            doors.page("core:approval_entry", approval_id=held),
+        ):
+            answer = _ran(APPROVE, {"approval_id": held}, principal=approver, key=f"{key}-approved")["result"]
+        ApprovalRequest.objects.filter(pk=held).update(created_at=at)
+    run = OperationRequest.objects.get(pk=answer["operation"]["id"])
+    OperationRequest.objects.filter(pk=run.pk).update(created_at=queued, updated_at=queued)
+    claimed, completed = _times(run.pk, queued)
+
+    def when(obj, *_: Any) -> dict[str, Any]:
+        return {"created_at": completed if getattr(obj, "completed_at", None) else claimed}
+
+    with stamped(when):
         carried_out(run)
-    _dated(run.pk, at)
+    _dated(run.pk, queued)
 
 
 def _ran(
@@ -733,12 +748,22 @@ def _lapse(run: OperationRequest) -> None:
     OperationRequest.objects.filter(pk=run.pk).update(lease_expires_at=timezone.now() - timedelta(minutes=10))
 
 
+def _times(pk, at) -> tuple[datetime, datetime]:
+    """When a worker claims a run queued ``at``, and when it ends."""
+
+    claimed = at + timedelta(seconds=5) + share(timedelta(seconds=40), pk, "claimed")
+    return claimed, claimed + timedelta(seconds=30) + share(timedelta(minutes=4), pk, "took")
+
+
 def _dated(pk, at) -> None:
-    """The run's own times, as long after its ask as a worker would take."""
+    """The run's own times, as long after it was queued as a worker would take,
+    the moments its audit rows were dated to (``_times``)."""
 
     run = OperationRequest.objects.get(pk=pk)
-    claimed = at + timedelta(seconds=5) + share(timedelta(seconds=40), pk, "claimed") if run.claimed_at else None
-    dates: dict[str, Any] = {"claimed_at": claimed}
+    claimed, completed = _times(pk, at)
+    dates: dict[str, Any] = {"claimed_at": claimed if run.claimed_at else None}
     if run.completed_at:
-        dates["completed_at"] = (claimed or at) + timedelta(seconds=30) + share(timedelta(minutes=4), pk, "took")
-    OperationRequest.objects.filter(pk=pk).update(updated_at=dates.get("completed_at") or claimed or at, **dates)
+        dates["completed_at"] = completed if run.claimed_at else at + (completed - claimed)
+    OperationRequest.objects.filter(pk=pk).update(
+        updated_at=dates.get("completed_at") or dates["claimed_at"] or at, **dates
+    )

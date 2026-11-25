@@ -8,6 +8,7 @@ lazy from hq.domains.control_plane.bridge_actions import CONTROLLER
 lazy from hq.domains.jobs.runner import SCHEDULER
 
 from .labels import dotted
+from .routes import reverse
 from .security import (
     API_INTERFACE,
     CLI_INTERFACE,
@@ -18,6 +19,7 @@ from .security import (
     MCP_INTERFACE,
     WEB_INTERFACE,
 )
+lazy from .tables import Cell
 
 # Each interface named on its own, as in a list of them: "MCP, API".
 LABELS = {
@@ -87,6 +89,9 @@ class Attribution:
     interface: str = ""
     through: str = ""
     approved_by: str = ""
+    # The held change whose decision ``approved_by`` took, by its id, where
+    # one did: its entry is where "approved by" opens.
+    approval: str = ""
 
     def __post_init__(self) -> None:
         for name in ("through", "approved_by"):
@@ -113,14 +118,31 @@ class Attribution:
         return f"{self.actor}, {self.door}" if self.door else self.actor
 
     @property
-    def approval(self) -> str:
-        return approved_words(self.approved_by)
+    def approval_url(self) -> str:
+        """The approval's own entry, or nothing where no held change was decided."""
+
+        return reverse("core:approval_entry", args=[self.approval]) if self.approval and self.approved_by else ""
 
     @property
     def words(self) -> str:
         """The whole of it on one line: "example-agent, over MCP · approved by joe"."""
 
-        return dotted(self.asker, self.approval)
+        return dotted(self.asker, self.approved)
+
+    @property
+    def approved(self) -> str:
+        """Who agreed to it, in words: "approved by joe"; nothing for nobody."""
+
+        return approved_words(self.approved_by)
+
+    @property
+    def cell(self) -> Cell:
+        """``words`` as a table's cell draws it: who acted, then on its own
+        line who approved it, opening the approval's entry."""
+
+        approved = self.approved
+        lines = (Cell(approved, self.approval_url),) if approved else ()
+        return Cell(self.asker, cut=True, lines=lines)
 
 
 # Who did something no audit row records.

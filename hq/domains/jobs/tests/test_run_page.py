@@ -154,14 +154,24 @@ class ApprovedRunPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
-        said, _ = facts(html)["Asked by"]
-        self.assertIn(f"approved by {APPROVER}", said)
-        # The approval is a step of the fold, which links the whole chain on the audit log.
+        entry = reverse("core:approval_entry", args=[held.pk])
+        _, opens = facts(html)["Asked by"]
+        self.assertIn(f"approved by {APPROVER}", " ".join(element.words for element in all_elements(html)))
+        # Who approved it opens the approval's own entry.
+        self.assertEqual(opens, entry)
+        # The approval is a step of the fold, opening its entry, which links the whole chain on the audit log.
         asked = AuditLog.objects.get(object_id=str(held.pk), action=AuditLog.Action.CREATED)
-        (steps,) = response.context["steps"]
-        (approving,) = [step for step in steps.lines if asked in step.events]
-        self.assertIn(approving.url, hrefs(html))
+        (events,) = response.context["events"]
+        (approving,) = [step for step in events.lines if asked in step.events]
+        self.assertEqual(approving.url, entry)
+        self.assertIn(entry, hrefs(html))
         self.assertIn(f"{reverse('core:audit_list')}?chain={asked.trace}", hrefs(html))
+        # The approval's line names the person who decided it, alone.
+        self.assertEqual((approving.who.actor, approving.who.approved_by), (APPROVER, ""))
+        # Its heading counts every row of history the table draws.
+        drawn = [line for event in events.lines for line in event.lines if line.rest is None]
+        self.assertEqual(events.count, len(drawn))
+        self.assertGreater(events.count, len(events.lines))
 
 
 class LiveRunPageTests(TestCase):

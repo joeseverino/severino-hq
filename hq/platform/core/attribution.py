@@ -42,6 +42,8 @@ class OperationContext:
     approved_by: str = ""
     person: Callable[[], Any] | None = None
     trace: str = ""
+    # The held change whose decision ``approved_by`` took, by its id (``Principal.approval``).
+    approval: str = ""
 
     @property
     def chain(self) -> str:

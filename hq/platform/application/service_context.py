@@ -105,7 +105,7 @@ class ServiceSection:
     def count(self) -> int:
         """How many rows it holds."""
 
-        return len(self.history) or len(self.records)
+        return self.groups[0].count if self.history else len(self.records)
 
     @property
     def groups(self) -> tuple[HistoryGroup, ...]:

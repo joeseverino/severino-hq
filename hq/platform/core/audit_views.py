@@ -184,7 +184,9 @@ class AuditLogListView(ListPageMixin, TemplateView):
 # The metadata an event's page says in rows of their own rather than under
 # "Metadata": who acted, through which door and who approved it are the Who row's.
 # What started it is the chain's, and the record it is about the About row's.
-_STATED_ABOVE = frozenset({"changes", "operation", "actor", "interface", "approved_by", "cause", "trace", "subject"})
+_STATED_ABOVE = frozenset(
+    {"changes", "operation", "actor", "interface", "approved_by", "approval", "cause", "trace", "subject"}
+)
 
 
 def operation_words(event: AuditLog) -> str:
@@ -315,7 +317,7 @@ class AuditLogDetailView(PageMixin, DetailView):
         groups = []
         if with_chain and event.trace:
             steps = history.chain(event.trace)
-            groups.append(history.HistoryGroup(steps, history.STEPS, len(steps)))
+            groups.append(history.HistoryGroup(steps, history.EVENTS))
             others = others.exclude(trace=event.trace)
         if event.object_type and event.object_id:
             to_object = list(others.filter(object_type=event.object_type, object_id=event.object_id)[:20])
@@ -324,7 +326,6 @@ class AuditLogDetailView(PageMixin, DetailView):
                     history.HistoryGroup(
                         tuple(history.entries(to_object)),
                         "Everything else to this object",
-                        len(to_object),
                         "audit-object-history" if groups else "",
                     )
                 )

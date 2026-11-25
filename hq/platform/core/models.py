@@ -264,6 +264,7 @@ class AuditLog(models.Model):
             str(metadata.get("interface") or ""),
             through=str(metadata.get("actor") or ""),
             approved_by=str(metadata.get("approved_by") or ""),
+            approval=str(metadata.get("approval") or ""),
         )
 
     @property

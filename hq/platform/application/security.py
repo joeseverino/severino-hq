@@ -276,6 +276,9 @@ class Principal:
     # as its admission placed it (``agent_devices.place``); empty where HQ
     # could not place the call and for principals HQ constructs itself.
     device: str = ""
+    # The held change (``ApprovalRequest``) whose decision ``approved_by``
+    # took, by its id, where the consent was one; its entry says the rest.
+    approval: str = ""
 
     def permits(self, *capabilities: Capability | str) -> bool:
         """Whether this principal holds every capability named.
