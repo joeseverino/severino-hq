@@ -51,6 +51,20 @@ func Shipped(dir string) ([]string, error) {
 	return shipped, nil
 }
 
+// Verified is the path of every unit under dir that `systemd-analyze verify`
+// is given, before an install and in CI's lint:units alike: the whole set
+// loads together, so an ordering cycle between two of them is found. Each
+// unit's drop-ins load with it.
+func Verified(dir string, shipped []string) []string {
+	var units []string
+	for _, name := range shipped {
+		if !strings.Contains(name, "/") {
+			units = append(units, filepath.Join(dir, name))
+		}
+	}
+	return units
+}
+
 // WithDropIns is shipped's drop-ins and the named units, to install together.
 // A drop-in reaches every unit its directory's name covers, a prefix
 // directory (severino-hq-.service.d) every unit under it, so a unit installed
