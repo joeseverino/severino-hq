@@ -6,6 +6,7 @@ update, and stops what comes after it."""
 
 from typing import Annotated
 
+from django.db import transaction
 from django.test import TestCase
 from django.urls import reverse
 from pydantic import Field
@@ -385,15 +386,25 @@ class ApproveUpdateTests(TestCase):
         self.assertIn(APP, again["standing"]["note"])
         self.assertEqual(self.applies().count(), 2)
 
-    def test_no_press_is_offered_while_another_run_holds_its_playbook(self):
-        payload = {"hosts": [APP], "parameters": {"revision": "d" * 40}}
-        held = run_capability(APPLY_RUN, payload, principal=PERSON, idempotency_key="example-run").answer
-        self.assertTrue(held["ok"], held)
+    def test_no_press_is_offered_while_another_run_holds_its_playbook_or_its_machine(self):
+        from .procedures import RESTART_RUN, manifest
 
-        page = self.container_page()
-        # Said why, where the press would be, rather than refused once pressed.
-        self.assertIsNone(page.context["container"]["act"])
-        self.assertTrue(page.context["container"]["state"].reason)
+        self.supply(applies(), manifest(hosts=(APP,)))
+        holders = {
+            "playbook": (APPLY_RUN, {"hosts": [APP], "parameters": {"revision": "d" * 40}}),
+            # Another playbook's run on the machine, before the one that applies has ever run.
+            "machine": (RESTART_RUN, {"hosts": [APP], "parameters": {"service": "example"}}),
+        }
+        for holds, (capability, payload) in holders.items():
+            with self.subTest(holds=holds), transaction.atomic():
+                held = run_capability(capability, payload, principal=PERSON, idempotency_key=f"example-{holds}").answer
+                self.assertTrue(held["ok"], held)
+
+                page = self.container_page()
+                # Said why, where the press would be, rather than refused once pressed.
+                self.assertIsNone(page.context["container"]["act"])
+                self.assertTrue(page.context["container"]["state"].reason)
+                transaction.set_rollback(True)
 
     def built_after(self, *commits):
         """The container page of thumb, built on example-box and released

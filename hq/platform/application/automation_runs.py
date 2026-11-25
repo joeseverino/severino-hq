@@ -375,8 +375,8 @@ def record_of(manifest: OperationManifest, *, consented: Consented) -> ManagedRe
     return ManagedResource.objects.select_for_update().get(key=key)
 
 
-def _holding(resource: ManagedResource, hosts: list[str]) -> OperationRequest | None:
-    """A run waiting or working on this procedure, else one on any of these hosts.
+def _holding(resource: ManagedResource | None, hosts: list[str]) -> OperationRequest | None:
+    """A run waiting or working on this procedure (none before its first run), else one on any of these hosts.
 
     One run per procedure is also the database's rule
     (``one_active_operation_per_resource_action``); one writer per host is
@@ -386,19 +386,20 @@ def _holding(resource: ManagedResource, hosts: list[str]) -> OperationRequest | 
     active = OperationRequest.objects.select_related("resource").filter(
         action=OperationRequest.Action.RUN, state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
     )
-    same = active.filter(resource=resource).first()
+    same = active.filter(resource=resource).first() if resource is not None else None
     if same is not None:
         return same
     return active.filter(hosts__host__in=hosts).order_by("created_at").first()
 
 
-def _held_by(holder: OperationRequest, resource: ManagedResource, hosts: list[str]) -> dict[str, Any]:
+def _held_by(holder: OperationRequest, resource: ManagedResource | None, hosts: list[str]) -> dict[str, Any]:
     """What a refusal says of the run in the way: the run, the machines it is
     on, and the asked machines it holds, none when it is this playbook's own
     run, so a page can say which of the two is held (``held_words``)."""
 
     machines = sorted(holder.hosts.values_list("host", flat=True))
-    shared = [] if holder.resource_id == resource.pk else sorted(set(machines) & set(hosts))
+    own = resource is not None and holder.resource_id == resource.pk
+    shared = [] if own else sorted(set(machines) & set(hosts))
     return {
         "holding": serialize_operation(holder),
         "playbook": str((holder.input or {}).get("operation", "")),
@@ -412,9 +413,10 @@ def run_in_way(manifest: OperationManifest, hosts: Iterable[str]) -> str:
     another run waiting or working (``_holding``), as a page says it; "" when
     none is in its way, so a page offers no press it refuses."""
 
+    asked = list(hosts)
     resource = ManagedResource.objects.filter(key=resource_key(manifest.id)).first()
-    holder = _holding(resource, list(hosts)) if resource is not None else None
-    words = held_words(_held_by(holder, resource, list(hosts))) if holder is not None and resource else None
+    holder = _holding(resource, asked)
+    words = held_words(_held_by(holder, resource, asked)) if holder is not None else None
     return words.sentence if words else ""
 
 
