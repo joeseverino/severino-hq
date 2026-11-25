@@ -18,7 +18,7 @@ class Landing:
     ref: str
 
 
-def _git(root: Path, *args: str) -> str | None:
+def git(root: Path, *args: str) -> str | None:
     done = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=False)
     return done.stdout.strip() if done.returncode == 0 else None
 
@@ -33,19 +33,19 @@ def landing(root: Path, among: Collection[str] | None = None) -> Landing | None:
     lacks), as a worktree made from that branch is; a tie is no landing. A detached tree lands nowhere:
     it is a gate's copy of one commit (test --at, the second machine's)."""
 
-    if not (own := _git(root, "symbolic-ref", "-q", "--short", "HEAD")):
+    if not (own := git(root, "symbolic-ref", "-q", "--short", "HEAD")):
         return None
-    if upstream := _git(root, "for-each-ref", "--format=%(upstream)", f"refs/heads/{own}"):
+    if upstream := git(root, "for-each-ref", "--format=%(upstream)", f"refs/heads/{own}"):
         # refs/remotes/<remote>/<branch>, or refs/heads/<branch> for a branch made to track a local one.
         return Landing(upstream.split("/", 3 if upstream.startswith("refs/remotes/") else 2)[-1], upstream)
     if among is None:
-        listed = _git(root, "for-each-ref", "--format=%(refname:lstrip=2) %(upstream)", "refs/heads") or ""
+        listed = git(root, "for-each-ref", "--format=%(refname:lstrip=2) %(upstream)", "refs/heads") or ""
         among = {name for name, _, upstream in (line.partition(" ") for line in listed.splitlines()) if upstream}
     if own in among:
         return Landing(own, f"refs/heads/{own}")
     apart: dict[str, tuple[int, ...]] = {}
     for name in sorted(among):
-        counts = (_git(root, "rev-list", "--left-right", "--count", f"HEAD...refs/heads/{name}") or "").split()
+        counts = (git(root, "rev-list", "--left-right", "--count", f"HEAD...refs/heads/{name}") or "").split()
         if len(counts) == 2:
             apart[name] = tuple(map(int, counts))
     nearest = [name for name, distance in apart.items() if distance == min(apart.values())]
