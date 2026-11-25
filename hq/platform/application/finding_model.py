@@ -172,9 +172,6 @@ class Finding:
     # decided, so a reader can never set it aside, and a mark from before
     # does not hide it.
     held: bool = False
-    # HQ is acting on it now (a press's work under way): its row asks again
-    # until that work ends, so it says where it stands without a refresh.
-    under_way: bool = False
     # What a finding no host rule raises says of itself, where a rule would:
     # an extension's or a held request's. A host rule's finding is worded by
     # its rule alone (``dashboard.finding_rows``), which ignores these.
@@ -187,6 +184,9 @@ class Finding:
     family: str = ""
     # Playbook context, derived from the observed service and adopted source.
     service_unit: str = field(default="", kw_only=True)
+    # HQ is acting on it now (a press's work under way): its row asks again
+    # until that work ends, so it says where it stands without a refresh.
+    under_way: bool = field(default=False, kw_only=True)
 
     def __post_init__(self) -> None:
         as_members(self)
