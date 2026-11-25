@@ -10,7 +10,7 @@ those readings, and a page says when they were taken.
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 lazy from django.utils import timezone
@@ -35,7 +35,7 @@ from .display_words import as_members, display
 from .figured import Figure
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
-from .moments import moment
+from .moments import duration, moment
 from .projection import projection_scope, read_once
 from .tone import Tone
 from .ui import counted
@@ -51,7 +51,6 @@ lazy from .github_estate import build_of, repositories
 lazy from .infrastructure import enabled_resources
 lazy from .inventory import record_token
 lazy from .machines import machine as machine_named, served_by
-lazy from .moments import when
 lazy from .projects import projects_by_repository, repository_key
 lazy from .supply_chain import supply_chain_of
 
@@ -80,8 +79,8 @@ _KNOWN_BY = {
 
 
 def up_for(status: str, started_at: object, *, running: bool) -> str:
-    """How long a container has been up, as HQ writes an age, when Docker's
-    inspect gave its start time; Docker's own phrase otherwise.
+    """How long a container has been up, as HQ writes a length of time, when
+    Docker's inspect gave its start time; Docker's own phrase otherwise.
 
     The one way any page says it. Docker's phrase is fixed at the moment it
     was read and rounds its own way, so beside an age HQ counts from the start
@@ -91,9 +90,9 @@ def up_for(status: str, started_at: object, *, running: bool) -> str:
     started = moment(str(started_at or ""))
     if started is None or not running:
         return uptime_of(status)
-    age = when(started)
-    up = (timezone.now() - started).total_seconds()
-    return Figure("Just started" if age == "just now" else f"Up {age.removesuffix(' ago')}", up)
+    up = timezone.now() - started
+    # Under a minute, a length of time reads "0 minutes".
+    return Figure("Just started" if up < timedelta(minutes=1) else f"Up {duration(up)}", up.total_seconds())
 
 
 def started_at(machine: str, container: str) -> str:
