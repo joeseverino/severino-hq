@@ -284,7 +284,8 @@ class ResourceState(Toned):
     (``resource_health``'s label)."""
 
     HEALTHY = "healthy", Tone.GOOD
-    # Nothing converges its kind, so HQ holds it as declared and checks nothing.
+    # Nothing converges its kind, or nothing reads what it applied, so HQ
+    # holds it as declared and checks nothing.
     DECLARED = "declared", Tone.NEUTRAL
     # Switched off, so HQ neither applies nor checks it.
     OFF = "off", Tone.NEUTRAL
@@ -362,8 +363,9 @@ def resource_health(resource: ManagedResource) -> HealthPart:
             said = f"HQ reads it every {duration(cadence(resource.kind).every)}."
             return _health(ResourceState.STALE, OUT_OF_DATE, ready.get("reason", ""), said)
         return _health(ResourceState.HEALTHY, "Working", ready.get("reason", ""), ready.get("message", ""))
-    # Nothing converges this kind, so "not reported" would never change.
-    if not converges:
+    # Nothing converges this kind, or nothing reads it back past the apply
+    # that reported no state, so "not read yet" would never change.
+    if not converges or ((provider := PROVIDERS.get(resource.kind)) is not None and provider.unobserved_reason):
         return _health(ResourceState.DECLARED, "Not checked")
     return _health(ResourceState.UNKNOWN, NOT_READ_LABEL, message="HQ has not read it yet.")
 
