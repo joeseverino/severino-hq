@@ -588,7 +588,7 @@ def _failed(what: str, step: str, again: str) -> str:
     """A step that ended badly, with the task it stopped on and the press that asks it again."""
 
     at = f" at “{step}”" if step else ""
-    return f"{what}{at}. Fix what stopped it, then {again} again."
+    return f"{ended(f'{what}{at}')} Fix what stopped it, then {again} again."
 
 
 def waits_on(operation: OperationRequest) -> str:
