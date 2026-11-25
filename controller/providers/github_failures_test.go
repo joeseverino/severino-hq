@@ -1,0 +1,140 @@
+package providers
+
+import (
+	"net/http"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/joeseverino/severino-hq/controller/runtime"
+)
+
+// githubLogHost is where the fake's signed log links point.
+const githubLogHost = "logs.example.com"
+
+// stepLog serves one step's log as GitHub does: the API answers with a
+// redirect to a signed link, and the link's host serves the plain text.
+func (f *githubFake) stepLog(job, step int, log string) {
+	key := "/repos/example/app/actions/jobs/" + strconv.Itoa(job) + "/steps/" + strconv.Itoa(step) + "/logs"
+	link := "/signed/" + strconv.Itoa(job) + "/" + strconv.Itoa(step)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.status[githubFakeAPI+" "+key] = http.StatusFound
+	f.headers[githubFakeAPI+" "+key] = map[string]string{"Location": "https://" + githubLogHost + link + "?sig=example"}
+	f.routes[githubLogHost+" "+link+"?sig=example"] = log
+}
+
+// githubLog is a step's log as GitHub writes it: each line after its time.
+func githubLog(lines ...string) string {
+	stamped := make([]string, len(lines))
+	for i, line := range lines {
+		stamped[i] = "2030-01-01T00:00:0" + strconv.Itoa(i%10) + ".1234567Z " + line
+	}
+	return "\uFEFF" + strings.Join(stamped, "\n") + "\n"
+}
+
+// The two shapes a failure's cause takes in a log: a tool that prints why
+// above the generic exit GitHub marks (mise's lock refusing an install), and
+// a scanner whose report runs many lines above it (govulncheck naming a
+// standard library fixed in a later release).
+var (
+	githubMiseLog = githubLog(
+		"##[group]Run jdx/mise-action@0123456789abcdef0123456789abcdef01234567",
+		"with:",
+		"  install: true",
+		"##[endgroup]",
+		"[command]/home/runner/.local/bin/mise install",
+		"\x1b[31mmise ERROR\x1b[0m Failed to install aqua:astral-sh/uv@0.13.10: uv@0.13.10 is not in the lockfile",
+		"\x1b[31mmise ERROR\x1b[0m Run with --verbose or MISE_VERBOSE=1 for more information",
+		"##[error]The process '/home/runner/.local/bin/mise' failed with exit code 1",
+		"##[group]Run never read",
+	)
+	githubVulnLog = githubLog(
+		"##[group]Run go tool govulncheck ./...",
+		"go tool govulncheck ./...",
+		"shell: /usr/bin/bash -e {0}",
+		"##[endgroup]",
+		"=== Symbol Results ===",
+		"",
+		"Vulnerability #1: GO-2026-6859",
+		"    A crafted request can exhaust a server's memory in net/http.",
+		"  More info: https://pkg.go.dev/vuln/GO-2026-6859",
+		"  Standard library",
+		"    Found in: net/http@go1.27.3",
+		"    Fixed in: net/http@go1.27.4",
+		"    Example traces found:",
+		"\t#1: main.go:12:3: example.serve calls http.ListenAndServe",
+		"",
+		"Your code is affected by 1 vulnerability from the Go standard library.",
+		"Use '-show verbose' for more details.",
+		"##[error]Process completed with exit code 3.",
+	)
+)
+
+// A failing job says why from its failed step's log: GitHub's error and the
+// output before it, read through the signed link with no credential sent
+// past it, its times, terminal colors and the step's command left out, and
+// cut to its bound however long the log runs.
+func TestAFailingJobSaysWhyFromItsStepsLog(t *testing.T) {
+	long := []string{}
+	for i := range githubLogLines * 3 {
+		long = append(long, "line "+strconv.Itoa(i)+" "+strings.Repeat("x", githubLogLineRunes))
+	}
+	for _, test := range []struct {
+		name, log, error string
+		says             []string
+	}{
+		{"a lock that refuses an install", githubMiseLog, "The process '/home/runner/.local/bin/mise' failed with exit code 1", []string{
+			"[command]/home/runner/.local/bin/mise install",
+			"mise ERROR Failed to install aqua:astral-sh/uv@0.13.10: uv@0.13.10 is not in the lockfile",
+			"mise ERROR Run with --verbose or MISE_VERBOSE=1 for more information",
+		}},
+		{"a standard library fixed in a later release", githubVulnLog, "Process completed with exit code 3.", []string{
+			"=== Symbol Results ===",
+			"Vulnerability #1: GO-2026-6859",
+			"    A crafted request can exhaust a server's memory in net/http.",
+			"  More info: https://pkg.go.dev/vuln/GO-2026-6859",
+			"  Standard library",
+			"    Found in: net/http@go1.27.3",
+			"    Fixed in: net/http@go1.27.4",
+			"    Example traces found:",
+			" #1: main.go:12:3: example.serve calls http.ListenAndServe",
+			"Your code is affected by 1 vulnerability from the Go standard library.",
+			"Use '-show verbose' for more details.",
+		}},
+		{"a log longer than its bound", githubLog(append(long, "##[error]Process completed with exit code 1.")...), "Process completed with exit code 1.", nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			routes := githubRepositoryRoutes()
+			api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
+			routes[api("/actions/runs?branch=main&per_page=100")] = `{"workflow_runs":[{"id":50,"name":"CI","workflow_id":11,"check_suite_id":80,"status":"completed","conclusion":"failure","event":"push","head_branch":"main","head_sha":"aaaa000000000000000000000000000000000000","created_at":"2030-01-03T00:00:00Z"}]}`
+			routes[api("/commits/aaaa000000000000000000000000000000000000/check-runs?per_page=100")] = `{"check_runs":[{"id":81,"name":"lint","status":"completed","conclusion":"failure","check_suite":{"id":80}}]}`
+			routes[api("/actions/jobs/81")] = `{"id":81,"steps":[{"name":"Set up job","status":"completed","conclusion":"success","number":1},{"name":"Check","status":"completed","conclusion":"failure","number":2}]}`
+			h := newGitHubHarness(t, routes, runtime.Environment{})
+			h.stepLog(81, 2, test.log)
+			record, _ := readRepository(t, h)
+
+			failure := record.Checks.Failures["lint"]
+			if failure.Step != "Check" || failure.Error != test.error {
+				t.Fatalf("failure %+v", failure)
+			}
+			if test.says != nil && !slices.Equal(failure.Log, test.says) {
+				t.Errorf("log %q", failure.Log)
+			}
+			if len(failure.Log) > githubLogLines {
+				t.Errorf("kept %d lines", len(failure.Log))
+			}
+			for _, line := range failure.Log {
+				if len([]rune(line)) > githubLogLineRunes {
+					t.Errorf("kept a line of %d characters", len([]rune(line)))
+				}
+			}
+			for _, call := range h.recorded() {
+				if call.host == githubLogHost && call.auth != "" {
+					t.Errorf("the log's host was sent %q", call.auth)
+				}
+			}
+		})
+	}
+}

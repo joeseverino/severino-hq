@@ -478,12 +478,30 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 	}
 }
 
+// githubArtifactComment is the comment Renovate's run leaves on its pull
+// request when a lock file would not update, as its branch worker writes it
+// (lib/workers/repository/update/branch/index.ts), around a tool's stderr.
+func githubArtifactComment(stderr string) string {
+	return "### ⚠️ Artifact update problem\n\nRenovate failed to update an artifact related to this branch. You probably do not want to merge this PR as-is.\n\n" +
+		"♻ Renovate will retry this branch, including artifacts, only when one of the following happens:\n\n - any of the package files in this branch needs updating, or \n" +
+		" - the branch becomes conflicted, or\n - you click the rebase/retry checkbox if found above, or\n - you rename this PR's title to start with \"rebase!\" to trigger it manually\n\n" +
+		"The artifact failure details are included below:\n\n##### File name: mise.toml\n\n```\n" + stderr + "\n```\n\n"
+}
+
 // githubRepositoryRoutes is one repository with a little of everything.
 func githubRepositoryRoutes() map[string]string {
 	api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
 	workflow, _ := json.Marshal("jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v4\n      - uses: \"actions/setup-go@0123456789abcdef0123456789abcdef01234567\"\n      - uses: ./.github/actions/local\n      - uses: docker://alpine:3\n  call:\n    uses: example/shared/.github/workflows/reuse.yml@main\n")
 	composite, _ := json.Marshal("runs:\n  steps:\n    - uses: actions/checkout@v4\n")
+	// The update's comments: a person quoting Renovate's heading, and the
+	// artifact problem Renovate's run left, newer than one it edited since.
+	comments, _ := json.Marshal([]map[string]any{
+		{"user": map[string]string{"login": "hq-example[bot]"}, "body": githubArtifactComment("mise ERROR an older problem")},
+		{"user": map[string]string{"login": "hq-example[bot]"}, "body": githubArtifactComment("\x1b[31mmise ERROR\x1b[0m cannot lock jdx/mise: not configured in this project")},
+		{"user": map[string]string{"login": "octo"}, "body": githubArtifactComment("not Renovate's")},
+	})
 	return map[string]string{
+		api("/issues/6/comments?per_page=100"): string(comments),
 		api(""): `{"full_name":"example/app","private":true,"archived":true,"html_url":"https://github.com/example/app","default_branch":"main","pushed_at":"2030-01-02T00:00:00Z","visibility":"private",
 			"security_and_analysis":{"secret_scanning":{"status":"enabled"},"advanced_security":{"status":"disabled"},"secret_scanning_push_protection":{"status":"paused"},"example_feature":{"status":"enabled"}}}`,
 		api("/commits/main"): `{"sha":"aaaa000000000000000000000000000000000000","html_url":"https://github.com/example/app/commit/aaaa","author":{"login":"octo"},
@@ -597,7 +615,8 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"the checks the newest pull request runs", record.PullRequestChecks, `["build","test"]`},
 		{"each open pull request, with its checks and files read only for an update's", record.PullRequests, `[{"number":6,"title":"Update example-lib to v2","url":"https://github.com/example/app/pull/6","author":"hq-example[bot]","draft":false,"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":"eeee","base":"dddd","branch":"renovate/example-lib-2.x","labels":["dependencies","security"],"head_repository":"example/app","checks":{"state":"failure","total":2,"failing":["test"],"running":0,"names":["build","test"]},` +
 			`"files":[{"path":"compose/example/compose.yml","status":"modified","additions":1,"deletions":1,"app":"example"},{"path":"README.md","status":"modified","additions":3,"deletions":0,"app":""},` +
-			`{"path":"compose/large/compose.yml","status":"added","additions":900,"deletions":0,"app":"large"},{"path":"compose/moved.yml","status":"renamed","additions":0,"deletions":0,"app":""}],"changed_files":4,"apps":null},` +
+			`{"path":"compose/large/compose.yml","status":"added","additions":900,"deletions":0,"app":"large"},{"path":"compose/moved.yml","status":"renamed","additions":0,"deletions":0,"app":""}],"changed_files":4,"apps":null,` +
+			`"artifact_problem":["mise ERROR cannot lock jdx/mise: not configured in this project"]},` +
 			`{"number":5,"title":"Bump","url":"https://github.com/example/app/pull/5","author":"octo","draft":true,"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-02T00:00:00Z","head":"bbbb","base":"","branch":"bump","labels":[],"head_repository":"","checks":null,"files":null,"changed_files":0,"apps":null}]`},
 		{"each open Dependabot alert, its package from the dependency or the vulnerability", record.DependabotAlerts, `[{"number":3,"package":"example-lib","ecosystem":"npm","manifest_path":"web/package.json","severity":"critical","first_patched_version":"2.0.1","url":"https://github.com/example/app/security/dependabot/3"},` +
 			`{"number":2,"package":"example.com/unfixed","ecosystem":"go","manifest_path":"go.mod","severity":"high","first_patched_version":null,"url":"https://github.com/example/app/security/dependabot/2"}]`},
@@ -721,7 +740,10 @@ func TestABranchFailsUntilEachWorkflowsNewestRunPasses(t *testing.T) {
 				page = append(page, scorecard(test.conclusion))
 			}
 			routes[api("/actions/runs?branch=main&per_page=100")] = `{"workflow_runs":[` + strings.Join(page, ",") + `]}`
-			record, _ := readRepository(t, newGitHubHarness(t, routes, runtime.Environment{}))
+			h := newGitHubHarness(t, routes, runtime.Environment{})
+			// A log GitHub no longer keeps leaves why unsaid, never the step.
+			h.refuse(githubFakeAPI, "/repos/example/app/actions/jobs/72/steps/2/logs", http.StatusGone)
+			record, _ := readRepository(t, h)
 
 			urls := []string{}
 			for _, run := range record.FailingRuns {
@@ -732,8 +754,8 @@ func TestABranchFailsUntilEachWorkflowsNewestRunPasses(t *testing.T) {
 			}
 			// Each failing job of a workflow run names the step it failed at.
 			for _, job := range test.failing {
-				if record.Checks.Steps[job] != "Publish results" {
-					t.Errorf("%s failed at %q", job, record.Checks.Steps[job])
+				if failure := record.Checks.Failures[job]; failure.Step != "Publish results" || failure.Error != "" {
+					t.Errorf("%s failed as %+v", job, failure)
 				}
 			}
 		})

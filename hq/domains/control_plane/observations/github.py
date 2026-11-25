@@ -3,8 +3,9 @@ public profile of each account a sign-in names, and how each dependency update
 run ended. What a repository's record holds is docs/Derived-Facts.md#github.
 
 Which repositories is the installation's own list, so choosing them on GitHub
-is the configuration. Secrets, variables' values and log contents are never
-read, so the schema has nowhere to put them.
+is the configuration. Secrets and variables' values are never read, so the
+schema has nowhere to put them; of a log, only a failing step's last lines
+are (``JobFailure``).
 """
 
 from collections.abc import Iterable, Mapping
@@ -139,10 +140,31 @@ class PullFile(ObservationRecord):
     app: str = ""
 
 
+class JobFailure(ObservationRecord):
+    """Why one failing job failed: the step it failed at, the error GitHub's
+    log of that step marks, and the step's last lines of output before it,
+    each the job's own words, bounded (``github_failures.go``)."""
+
+    step: str = ""
+    error: str = ""
+    log: list[str] = []
+
+
+class Checks(ObservationRecord):
+    """A commit's checks, each standing as its last run did, and why each
+    failing job of a workflow run failed, by the job's name."""
+
+    state: str = ""
+    total: int = 0
+    failing: list[str] = []
+    running: int = 0
+    names: list[str] = []
+    failures: dict[str, JobFailure] = {}
+
+
 class PullRequest(ObservationRecord):
     """One open pull request. For one Renovate opened (its branch under
-    ``renovate/``), ``checks`` is the head's ``{state, total, failing,
-    running, names}``, ``files`` each file it changes, one page of them, and
+    ``renovate/``), ``checks`` is the head's, ``files`` each file it changes, one page of them, and
     ``changed_files`` how many GitHub says it changes; they are None and 0
     for any other. ``apps`` is
     ``{app, read, images: [{service, before, after}]}`` per app whose
@@ -165,10 +187,13 @@ class PullRequest(ObservationRecord):
     # The repository its head branch lives in, owner/name: another
     # repository's for a fork, "" once that fork is gone.
     head_repository: str = ""
-    checks: dict[str, Any] | None = None
+    checks: Checks | None = None
     files: list[PullFile] | None = None
     changed_files: int = 0
     apps: list[dict[str, Any]] | None = None
+    # What the update run's artifact problem comment says it could not
+    # update, read while its checks fail.
+    artifact_problem: list[str] = []
 
 
 class RepositoryRecord(ObservationRecord):
@@ -181,7 +206,7 @@ class RepositoryRecord(ObservationRecord):
     default_branch: str = ""
     pushed_at: Stamp = None
     head: dict[str, Any] = {}
-    checks: dict[str, Any] = {}
+    checks: Checks = Checks()
     # Each workflow's newest run on the default branch where it failed, at
     # whatever commit, shaped as ``runs``' entries.
     failing_runs: list[dict[str, Any]] = []

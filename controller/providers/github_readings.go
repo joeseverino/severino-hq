@@ -148,6 +148,10 @@ type GitHubPull struct {
 	Files        []GitHubPullFile  `json:"files"`
 	ChangedFiles int               `json:"changed_files"`
 	Apps         []GitHubAppChange `json:"apps"`
+	// ArtifactProblem is what the updater's run said it could not update
+	// (githubArtifactProblem), read for an update's pull request whose
+	// checks fail.
+	ArtifactProblem []string `json:"artifact_problem,omitempty"`
 }
 
 // GitHubPullFile is one file a pull request changes, and App the app whose
@@ -317,6 +321,8 @@ type githubRepository struct {
 	// updater is githubBot, read once: a sweep shares one across every
 	// repository it reads.
 	updater func() (string, error)
+	// token is the one api sends, for a request outside the generated client.
+	token string
 }
 
 func (r *Registry) githubRepository(ctx context.Context, c githubConnection, name string) *githubRepository {
@@ -325,7 +331,8 @@ func (r *Registry) githubRepository(ctx context.Context, c githubConnection, nam
 	if g.owner, g.repo, err = githubRepositoryName(name); err != nil {
 		g.api = r.githubClient("", false, err)
 	} else {
-		g.api = r.githubAs(ctx, c, []string{name}, githubRead)
+		g.token, err = r.githubToken(ctx, c, []string{name}, githubRead)
+		g.api = r.githubClient(g.token, true, err)
 	}
 	return g
 }
@@ -409,7 +416,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		return record, err
 	}
 	record.PullRequests = githubPulls(pulls)
-	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests, githubs, layout); err != nil {
+	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests, githubs, githubWorkflowSuites(slices.Concat(runs.WorkflowRuns, read)), layout); err != nil {
 		return record, err
 	}
 	record.Runs = latestRuns(runs.WorkflowRuns, workflows.Workflows)

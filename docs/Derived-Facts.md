@@ -796,7 +796,8 @@ installation token per repository, read-only permissions only, minted for each
 read. A record is a repository's head and its checks, open pull requests
 (for each Renovate opened, its author, the repository its head lives in,
 its head's checks, the files it changes with the app directory each lies in,
-and how many GitHub says it changes),
+how many GitHub says it changes, and, while its checks fail, what the update
+run's artifact problem comment says it could not update),
 workflows waiting on an approval, and deployments with the steps each ran
 before deploying whose names begin "Verify". A repository a project opts in
 to updates also holds each app's Compose files under `compose/<app>/` on its
@@ -812,6 +813,14 @@ alert counts by severity, admission artifacts, who has access (collaborators,
 deploy keys, the default workflow token, Actions settings), and the names of
 its Actions variables. Each part is refused on its own where the repository's
 plan offers none, and says so.
+
+Each failing job of a workflow run, on the default branch or an update's pull
+request, says why it failed: the step it failed at, the error GitHub's log of
+that step marks, and the step's last lines of output before it
+(`github_failures.go`). Only a failing step's log is read, one call each,
+through the signed link GitHub hands out, which is sent no credential; the
+cut is bounded in lines and characters and stripped of terminal codes, and
+pages show it as text.
 
 A `github.pull_request` record is one pull request at the head commit a person
 approved. Its `merge` reads that head's checks and merges only once every one

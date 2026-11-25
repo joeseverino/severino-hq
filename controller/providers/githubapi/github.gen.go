@@ -1889,6 +1889,9 @@ type Issue struct {
 type IssueComment struct {
 	// Body Contents of the issue comment
 	Body string `json:"body,omitempty"`
+
+	// User A GitHub user.
+	User NullableSimpleUser `json:"user"`
 }
 
 // Job Information of a job execution in a workflow run

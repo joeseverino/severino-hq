@@ -3888,6 +3888,45 @@
         "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
         "type": "string"
       },
+      "GitHubRepositoryChecks": {
+        "description": "A commit's checks, each standing as its last run did, and why each\nfailing job of a workflow run failed, by the job's name.",
+        "properties": {
+          "state": {
+            "default": "",
+            "type": "string"
+          },
+          "total": {
+            "default": 0,
+            "type": "integer"
+          },
+          "failing": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "running": {
+            "default": 0,
+            "type": "integer"
+          },
+          "names": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failures": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GitHubRepositoryJobFailure"
+            },
+            "default": {},
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
       "GitHubRepositoryCollaborator": {
         "properties": {
           "login": {
@@ -3930,6 +3969,27 @@
         },
         "type": "object"
       },
+      "GitHubRepositoryJobFailure": {
+        "description": "Why one failing job failed: the step it failed at, the error GitHub's\nlog of that step marks, and the step's last lines of output before it,\neach the job's own words, bounded (``github_failures.go``).",
+        "properties": {
+          "step": {
+            "default": "",
+            "type": "string"
+          },
+          "error": {
+            "default": "",
+            "type": "string"
+          },
+          "log": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "GitHubRepositoryPullFile": {
         "description": "One file a pull request changes.",
         "properties": {
@@ -3957,7 +4017,7 @@
         "type": "object"
       },
       "GitHubRepositoryPullRequest": {
-        "description": "One open pull request. For one Renovate opened (its branch under\n``renovate/``), ``checks`` is the head's ``{state, total, failing,\nrunning, names}``, ``files`` each file it changes, one page of them, and\n``changed_files`` how many GitHub says it changes; they are None and 0\nfor any other. ``apps`` is\n``{app, read, images: [{service, before, after}]}`` per app whose\ndirectory it changes, each service whose image differs at its head, in a\nrepository opted in to updates, and None otherwise (``github_compose.go``).",
+        "description": "One open pull request. For one Renovate opened (its branch under\n``renovate/``), ``checks`` is the head's, ``files`` each file it changes, one page of them, and\n``changed_files`` how many GitHub says it changes; they are None and 0\nfor any other. ``apps`` is\n``{app, read, images: [{service, before, after}]}`` per app whose\ndirectory it changes, each service whose image differs at its head, in a\nrepository opted in to updates, and None otherwise (``github_compose.go``).",
         "properties": {
           "number": {
             "default": 0,
@@ -4017,9 +4077,13 @@
             "type": "string"
           },
           "checks": {
-            "type": [
-              "object",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubRepositoryChecks"
+              },
+              {
+                "type": "null"
+              }
             ],
             "default": null
           },
@@ -4046,6 +4110,13 @@
               "null"
             ],
             "default": null
+          },
+          "artifact_problem": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -4086,8 +4157,15 @@
             "type": "object"
           },
           "checks": {
-            "default": {},
-            "type": "object"
+            "$ref": "#/components/schemas/GitHubRepositoryChecks",
+            "default": {
+              "state": "",
+              "total": 0,
+              "failing": [],
+              "running": 0,
+              "names": [],
+              "failures": {}
+            }
           },
           "failing_runs": {
             "default": [],

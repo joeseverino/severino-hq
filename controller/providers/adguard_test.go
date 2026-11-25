@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -66,6 +67,11 @@ func (h *fakeHTTP) Exchange(ctx context.Context, address, method string, headers
 		}
 	}
 	return runtime.Answer{Status: http.StatusOK, Header: answered, Body: data}, err
+}
+
+// Download hands nothing out: no provider these fakes serve reads a link.
+func (h *fakeHTTP) Download(context.Context, string, map[string]string, int64, func(io.Reader) error) (runtime.Answer, error) {
+	return runtime.Answer{}, errors.New("no download is served here")
 }
 
 // Request answers from routes, encoded as the real transport would return it.

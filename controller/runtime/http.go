@@ -242,3 +242,63 @@ func (h *HTTPClient) Exchange(ctx context.Context, address, method string, heade
 	answer.Body = data
 	return answer, nil
 }
+
+// Download reads what address hands out as a signed link (a job's log): a
+// GET of address answered with a redirect, whose target's body read is given,
+// cut at limit bytes. The redirect is followed once, by hand, to an https
+// address and with only the User-Agent of headers, so the credential that
+// asked for the link never reaches the host that serves it, and that host
+// redirects nowhere. The Answer is address's own, its headers what a rate
+// limit has left.
+func (h *HTTPClient) Download(ctx context.Context, address string, headers map[string]string, limit int64, read func(io.Reader) error) (Answer, error) {
+	timeout := h.Timeout
+	if timeout == 0 {
+		timeout = DefaultRequestTimeout
+	}
+	client := &http.Client{Transport: h.Transport, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	get := func(at string, send map[string]string) (*http.Response, error) {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, at, http.NoBody)
+		if err != nil || request.URL.User != nil || request.URL.Hostname() == "" || (request.URL.Scheme != "http" && request.URL.Scheme != "https") {
+			return nil, &ProviderError{Message: "not a direct API address", Failure: FailureClassAddress}
+		}
+		for name, value := range send {
+			request.Header.Set(name, value)
+			learnCredential(name, value)
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			return nil, requestFailure(err)
+		}
+		return response, nil
+	}
+	asked, err := get(address, headers)
+	if err != nil {
+		return Answer{}, err
+	}
+	_ = asked.Body.Close()
+	answer := Answer{Status: asked.StatusCode, Header: asked.Header}
+	link, err := asked.Location()
+	if asked.StatusCode < 300 || asked.StatusCode >= 400 || err != nil {
+		if asked.StatusCode >= 400 {
+			return answer, HTTPRefusal(asked.StatusCode)
+		}
+		return answer, &ProviderError{Message: "the service handed out no link to download"}
+	}
+	if link.Scheme != "https" {
+		return answer, &ProviderError{Message: "the service's download link is not https", Failure: FailureClassAddress}
+	}
+	served, err := get(link.String(), map[string]string{"User-Agent": headers["User-Agent"]})
+	if err != nil {
+		return answer, err
+	}
+	defer served.Body.Close()
+	if served.StatusCode != http.StatusOK {
+		return answer, HTTPRefusal(served.StatusCode)
+	}
+	if err := read(io.LimitReader(served.Body, limit)); err != nil {
+		return answer, &ProviderError{Message: "the download could not be read", Failure: FailureClassNetwork, Err: err}
+	}
+	return answer, nil
+}

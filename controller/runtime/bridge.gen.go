@@ -1742,6 +1742,17 @@ type GitHubRepositoriesPlan struct {
 	Held []GitHubRepositoryHeld `json:"held"`
 }
 
+// GitHubRepositoryChecks A commit's checks, each standing as its last run did, and why each
+// failing job of a workflow run failed, by the job's name.
+type GitHubRepositoryChecks struct {
+	Failing  []string                              `json:"failing,omitempty"`
+	Failures map[string]GitHubRepositoryJobFailure `json:"failures,omitempty"`
+	Names    []string                              `json:"names,omitempty"`
+	Running  int                                   `json:"running,omitempty"`
+	State    string                                `json:"state,omitempty"`
+	Total    int                                   `json:"total,omitempty"`
+}
+
 // GitHubRepositoryCollaborator defines model for GitHubRepositoryCollaborator.
 type GitHubRepositoryCollaborator struct {
 	Login string `json:"login"`
@@ -1765,6 +1776,15 @@ type GitHubRepositoryHeld struct {
 	Repository string `json:"repository"`
 }
 
+// GitHubRepositoryJobFailure Why one failing job failed: the step it failed at, the error GitHub's
+// log of that step marks, and the step's last lines of output before it,
+// each the job's own words, bounded (“github_failures.go“).
+type GitHubRepositoryJobFailure struct {
+	Error string   `json:"error,omitempty"`
+	Log   []string `json:"log,omitempty"`
+	Step  string   `json:"step,omitempty"`
+}
+
 // GitHubRepositoryPullFile One file a pull request changes.
 type GitHubRepositoryPullFile struct {
 	Additions int    `json:"additions,omitempty"`
@@ -1775,70 +1795,73 @@ type GitHubRepositoryPullFile struct {
 }
 
 // GitHubRepositoryPullRequest One open pull request. For one Renovate opened (its branch under
-// “renovate/“), “checks“ is the head's “{state, total, failing,
-// running, names}“, “files“ each file it changes, one page of them, and
+// “renovate/“), “checks“ is the head's, “files“ each file it changes, one page of them, and
 // “changed_files“ how many GitHub says it changes; they are None and 0
 // for any other. “apps“ is
 // “{app, read, images: [{service, before, after}]}“ per app whose
 // directory it changes, each service whose image differs at its head, in a
 // repository opted in to updates, and None otherwise (“github_compose.go“).
 type GitHubRepositoryPullRequest struct {
-	Apps           []map[string]any           `json:"apps,omitempty"`
-	Author         string                     `json:"author,omitempty"`
-	Base           string                     `json:"base,omitempty"`
-	Branch         string                     `json:"branch,omitempty"`
-	ChangedFiles   int                        `json:"changed_files,omitempty"`
-	Checks         map[string]any             `json:"checks,omitempty"`
-	CreatedAt      string                     `json:"created_at,omitempty"`
-	Draft          bool                       `json:"draft,omitempty"`
-	Files          []GitHubRepositoryPullFile `json:"files,omitempty"`
-	Head           string                     `json:"head,omitempty"`
-	HeadRepository string                     `json:"head_repository,omitempty"`
-	Labels         []string                   `json:"labels,omitempty"`
-	Number         int                        `json:"number,omitempty"`
-	Title          string                     `json:"title,omitempty"`
-	UpdatedAt      string                     `json:"updated_at,omitempty"`
-	URL            string                     `json:"url,omitempty"`
+	Apps            []map[string]any           `json:"apps,omitempty"`
+	ArtifactProblem []string                   `json:"artifact_problem,omitempty"`
+	Author          string                     `json:"author,omitempty"`
+	Base            string                     `json:"base,omitempty"`
+	Branch          string                     `json:"branch,omitempty"`
+	ChangedFiles    int                        `json:"changed_files,omitempty"`
+	Checks          GitHubRepositoryChecks     `json:"checks,omitempty"`
+	CreatedAt       string                     `json:"created_at,omitempty"`
+	Draft           bool                       `json:"draft,omitempty"`
+	Files           []GitHubRepositoryPullFile `json:"files,omitempty"`
+	Head            string                     `json:"head,omitempty"`
+	HeadRepository  string                     `json:"head_repository,omitempty"`
+	Labels          []string                   `json:"labels,omitempty"`
+	Number          int                        `json:"number,omitempty"`
+	Title           string                     `json:"title,omitempty"`
+	UpdatedAt       string                     `json:"updated_at,omitempty"`
+	URL             string                     `json:"url,omitempty"`
 }
 
 // GitHubRepositoryRecord One github.repository record: GitHub repository.
 type GitHubRepositoryRecord struct {
-	Access            GitHubRepositoryRepositoryAccess `json:"access,omitempty"`
-	Alerts            map[string]map[string]int        `json:"alerts,omitempty"`
-	Archived          bool                             `json:"archived,omitempty"`
-	Artifacts         []map[string]any                 `json:"artifacts,omitempty"`
-	Builds            []map[string]any                 `json:"builds,omitempty"`
-	CalledWorkflows   []string                         `json:"called_workflows,omitempty"`
-	Carried           bool                             `json:"carried,omitempty"`
-	Checks            map[string]any                   `json:"checks,omitempty"`
-	Compose           []string                         `json:"compose,omitempty"`
-	ComposeImages     []map[string]any                 `json:"compose_images,omitempty"`
-	ConnectionRef     string                           `json:"connection_ref"`
-	Dashboard         string                           `json:"dashboard,omitempty"`
-	DefaultBranch     string                           `json:"default_branch,omitempty"`
-	DependabotAlerts  []map[string]any                 `json:"dependabot_alerts,omitempty"`
-	Deployments       []map[string]any                 `json:"deployments,omitempty"`
-	Environments      []map[string]any                 `json:"environments,omitempty"`
-	FailingRuns       []map[string]any                 `json:"failing_runs,omitempty"`
-	Fingerprint       string                           `json:"fingerprint,omitempty"`
-	Head              map[string]any                   `json:"head,omitempty"`
-	HeldBranches      []map[string]any                 `json:"held_branches,omitempty"`
-	Images            []map[string]any                 `json:"images,omitempty"`
-	Pins              []map[string]any                 `json:"pins,omitempty"`
-	Private           bool                             `json:"private,omitempty"`
-	PullRequestChecks []string                         `json:"pull_request_checks,omitempty"`
-	PullRequests      []GitHubRepositoryPullRequest    `json:"pull_requests,omitempty"`
-	PushedAt          string                           `json:"pushed_at,omitempty"`
-	ReadAt            string                           `json:"read_at,omitempty"`
-	Release           map[string]any                   `json:"release,omitempty"`
-	Repository        string                           `json:"repository"`
-	Rules             map[string]any                   `json:"rules,omitempty"`
-	Runners           []map[string]any                 `json:"runners,omitempty"`
-	Runs              []map[string]any                 `json:"runs,omitempty"`
-	Updater           string                           `json:"updater,omitempty"`
-	URL               string                           `json:"url,omitempty"`
-	Variables         []string                         `json:"variables,omitempty"`
-	Waiting           []map[string]any                 `json:"waiting,omitempty"`
+	Access          GitHubRepositoryRepositoryAccess `json:"access,omitempty"`
+	Alerts          map[string]map[string]int        `json:"alerts,omitempty"`
+	Archived        bool                             `json:"archived,omitempty"`
+	Artifacts       []map[string]any                 `json:"artifacts,omitempty"`
+	Builds          []map[string]any                 `json:"builds,omitempty"`
+	CalledWorkflows []string                         `json:"called_workflows,omitempty"`
+	Carried         bool                             `json:"carried,omitempty"`
+
+	// Checks A commit's checks, each standing as its last run did, and why each
+	// failing job of a workflow run failed, by the job's name.
+	Checks            GitHubRepositoryChecks        `json:"checks,omitempty"`
+	Compose           []string                      `json:"compose,omitempty"`
+	ComposeImages     []map[string]any              `json:"compose_images,omitempty"`
+	ConnectionRef     string                        `json:"connection_ref"`
+	Dashboard         string                        `json:"dashboard,omitempty"`
+	DefaultBranch     string                        `json:"default_branch,omitempty"`
+	DependabotAlerts  []map[string]any              `json:"dependabot_alerts,omitempty"`
+	Deployments       []map[string]any              `json:"deployments,omitempty"`
+	Environments      []map[string]any              `json:"environments,omitempty"`
+	FailingRuns       []map[string]any              `json:"failing_runs,omitempty"`
+	Fingerprint       string                        `json:"fingerprint,omitempty"`
+	Head              map[string]any                `json:"head,omitempty"`
+	HeldBranches      []map[string]any              `json:"held_branches,omitempty"`
+	Images            []map[string]any              `json:"images,omitempty"`
+	Pins              []map[string]any              `json:"pins,omitempty"`
+	Private           bool                          `json:"private,omitempty"`
+	PullRequestChecks []string                      `json:"pull_request_checks,omitempty"`
+	PullRequests      []GitHubRepositoryPullRequest `json:"pull_requests,omitempty"`
+	PushedAt          string                        `json:"pushed_at,omitempty"`
+	ReadAt            string                        `json:"read_at,omitempty"`
+	Release           map[string]any                `json:"release,omitempty"`
+	Repository        string                        `json:"repository"`
+	Rules             map[string]any                `json:"rules,omitempty"`
+	Runners           []map[string]any              `json:"runners,omitempty"`
+	Runs              []map[string]any              `json:"runs,omitempty"`
+	Updater           string                        `json:"updater,omitempty"`
+	URL               string                        `json:"url,omitempty"`
+	Variables         []string                      `json:"variables,omitempty"`
+	Waiting           []map[string]any              `json:"waiting,omitempty"`
 }
 
 // GitHubRepositoryRepositoryAccess Who and what can reach a repository, and how its Actions may run.
