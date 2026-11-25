@@ -18,7 +18,7 @@ cp "${repo}/${task}" "${fixture}/${task}"
 . "${repo}/tests/shell/task-libraries.sh"
 copy_libraries "${repo}" "${fixture}" "${task}"
 cp "${repo}/tools/__init__.py" "${fixture}/tools/"
-cp "${repo}/tools/gate/__init__.py" "${repo}/tools/gate/tree.py" "${repo}/tools/gate/verdict.py" "${fixture}/tools/gate/"
+cp "${repo}/tools/gate/__init__.py" "${repo}/tools/gate/landing.py" "${repo}/tools/gate/tree.py" "${repo}/tools/gate/verdict.py" "${fixture}/tools/gate/"
 # The picker the extension set passes through, and the plugin API the host speaks.
 mkdir -p "${fixture}/tools/dev" "${fixture}/tools/pipeline" "${fixture}/hq/platform/application"
 cp "${repo}/tools/dev/__init__.py" "${repo}/tools/dev/extension_set.py" "${fixture}/tools/dev/"
