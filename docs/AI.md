@@ -142,7 +142,6 @@ agent's open streams beside its calls and refusals.
 | Each limit is answered on both doors in their own protocol | `hq/platform/application/tests/test_agent_limits_at_the_doors.py` |
 | A flood of refusals is one row a window, with its count | `hq/platform/application/tests/test_limited_denials.py` |
 | Two writes at once with one retry key act once, by any two doors | `hq/platform/api/tests/test_promises_each_door.py` |
-| The image serves from one process | `hq/platform/application/tests/test_one_serving_process.py` |
 | An open listen stream holds no thread | `hq/platform/mcp/tests/test_listen.py` |
 | A stream held back while its agent is paused hears once the brake lifts | `hq/platform/mcp/tests/test_listen_resume.py` |
 | The Agents page counts each agent's open streams against its cap, and says nothing for one holding none | `hq/platform/application/tests/test_agent_activity.py` |

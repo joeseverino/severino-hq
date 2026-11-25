@@ -107,14 +107,14 @@ class StatedKind:
     """What the records of a reading only a playbook states mean, in the
     shape a swept reading's ``ObservationSpec`` declares it: what the reading
     is called, each record's name, what it says and the tone of what it
-    says. ``progress`` says a line of JSON a task of the playbook says
-    while under way, or None for a line not of its shape."""
+    says. ``progress``, where a kind has one, says a line of JSON a task of
+    the playbook says while under way, or None for a line not of its shape."""
 
     label: str
     title: Callable[[Mapping[str, Any]], str]
     describe: Callable[[Mapping[str, Any]], str]
     tone: Callable[[Mapping[str, Any]], Tone]
-    progress: Callable[[Mapping[str, Any]], str | None] = lambda line: None
+    progress: Callable[[Mapping[str, Any]], str | None] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,8 +154,7 @@ def told(message: str) -> str:
         return message
     if isinstance(line, Mapping):
         for declared in _stated_kinds().values():
-            said = declared.progress(line)
-            if said is not None:
+            if declared.progress is not None and (said := declared.progress(line)) is not None:
                 return said
     return message
 

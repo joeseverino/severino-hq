@@ -131,6 +131,7 @@ class KeptTests(RunStatedTestCase):
         )
 
         worded, *others = (event["message"] for event in evidence.under_way)
+        assert PULLED_KIND.progress is not None
         self.assertEqual(worded, PULLED_KIND.progress(line))
         self.assertIn("example-web", worded)
         self.assertIn("Rolled back", worded)
