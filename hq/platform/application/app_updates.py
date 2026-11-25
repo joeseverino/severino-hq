@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from hq.domains.control_plane.models import OperationRequest
+
 from .containers import Container, containers, published_digest, ranked, standing_of
 from .entity_links import EntityLink
 from .github_estate import UPDATE_BRANCH, pull_checks, repositories
@@ -32,11 +34,13 @@ lazy from .app_update_approval import (
     approval_of,
     approve_target,
 )
-lazy from .app_update_open import OPEN, open_target
+lazy from .app_update_open import OPEN, open_standing, open_target
+lazy from .asks import DONE, RUNNING, Asked, Standing
 lazy from .container_findings import BY_HAND
 lazy from .finding_model import Fact, FindingRemedy
 lazy from .labels import lower_first
 lazy from .pages import PageAction, command_reach
+lazy from .resource_operations import OperationAsked, operation_asked
 
 # What an update's new pins bring of their own, as every page labels it.
 BRINGS = "New vulnerabilities"
@@ -382,12 +386,41 @@ class MergeStanding:
     # Of a preview or an apply that ended badly: the step it stopped on, and what it said.
     step: str = ""
     said: str = ""
+    # The run or reconcile it stands on; None for Renovate's run, which is a
+    # read asked of the controller rather than an operation.
+    operation: OperationRequest | None = None
 
     @property
     def lines(self) -> tuple[str, ...]:
-        """Its fact's detail: the step it stopped on, then what it said."""
+        """Its fact's detail: the step it stopped on, then what it said, each
+        left out where its words already say it."""
 
-        return tuple(line for line in (self.step, self.said) if line)
+        return tuple(line for line in (self.step, self.said) if line and line not in self.words)
+
+    @property
+    def live(self) -> bool:
+        """Whether a step of it is under way, so its card asks again until it ends:
+        taken and not yet ended, which is the one standing said in attention."""
+
+        return self.taken and self.tone == Tone.ATTENTION
+
+    @property
+    def again(self) -> Asked:
+        """What pressing it again answers while it stands taken: where it
+        stands, never a refusal, since the first press is still its request."""
+
+        if self.live:
+            return Asked(Standing(RUNNING, self.words), message=ended(f"Already asked. {self.words}"))
+        return Asked(Standing(DONE, self.words), message=ended(self.words))
+
+    def asked(self) -> OperationAsked:
+        """``again`` as a repeated ask of the operation it stands on answers
+        it, queuing nothing; only Renovate's run stands on none."""
+
+        if self.operation is None:
+            raise LookupError("Renovate's run is no operation, so its standing answers as ``again``.")
+        said = self.again
+        return operation_asked(self.operation, queued=False, standing=said.standing, message=said.message)
 
 
 @dataclass(frozen=True, slots=True)
@@ -416,6 +449,12 @@ class UpdateState:
         """Whether HQ is moving it now, or moved it: nothing is asked of anyone."""
 
         return self.standing is not None and self.standing.taken
+
+    @property
+    def standing_label(self) -> str:
+        """The label its standing is said under, on every page: the press it stands on."""
+
+        return {UpdateKind.OPEN: "Approval", UpdateKind.MERGED: "Apply"}.get(self.kind, "Pull request")
 
 
 UNOPENED = "Renovate has not seen the release yet."
@@ -466,12 +505,24 @@ def update_state(item: Container) -> UpdateState:
             managed=managed,
         )
     action = UpdateAction(OPEN, open_target(managed.repository, managed.app))
-    if held := held_branch(repository, managed.app):
+    held = held_branch(repository, managed.app)
+    standing = open_standing(managed.repository, held)
+    # While an Open PR is under way it is held back, as an approval is (``_decided``).
+    offered = {"action": action} if standing is None or not standing.taken else {"reason": standing.words}
+    if held:
         until = UNTIL.get(str(held.get("marker", "")), "")
         words = ended(" ".join(("Renovate is holding its branch", until)).strip())
         said = f"Ticks {held.get('branch', '')} on the Dependency Dashboard, then asks Renovate to run."
-        return UpdateState(UpdateKind.HELD, latest, words, action, said=said, managed=managed)
-    return UpdateState(UpdateKind.UNOPENED, latest, UNOPENED, action, said="Asks Renovate to run.", managed=managed)
+        return UpdateState(UpdateKind.HELD, latest, words, said=said, standing=standing, managed=managed, **offered)
+    return UpdateState(
+        UpdateKind.UNOPENED,
+        latest,
+        UNOPENED,
+        said="Asks Renovate to run.",
+        standing=standing,
+        managed=managed,
+        **offered,
+    )
 
 
 def _decided(

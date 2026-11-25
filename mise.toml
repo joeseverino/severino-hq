@@ -330,9 +330,7 @@ description = "To try a change in a browser: a throwaway server on loopback, DEB
 usage = '''
 flag "--demo" help="Serve the public demo's static site on loopback instead, built first by demo:build when its sources moved: --seed names which, showcase by default"
 flag "--keep" help="Reuse the last scratch database"
-flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds.py): the example estate as showcase (advanced posture) or standard, empty, or scale (years of records)" {
-    choices "showcase" "standard" "empty" "scale"
-}
+flag "--seed <seed>" help="Fill it with a data set by its name in SEEDS (hq/platform/core/seeds.py), which manage.py seed holds it to: the example estate as showcase (advanced posture) or standard, a state of one mechanism (app-updates, update-preview-failed), empty, or scale (years of records)"
 flag "--port <port>" help="A fixed port instead of a free one"
 flag "--reload" negate="--no-reload" help="Restart on each change to Python or a template, as it does by default; --no-reload serves the code it started with, without the reloader's supervising process and its memory"
 flag "--runner" help="To walk Playbooks end to end, as dev always does: serve the bridge and start the real automation worker on each Refresh or run, scanning tools/dev/scratch_playbooks and running each play on this machine alone"

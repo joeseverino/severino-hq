@@ -9,7 +9,7 @@ from django.views.generic import TemplateView
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
-from hq.platform.application.web_writes import execute_posted
+from hq.platform.application.web_writes import run_posted
 from hq.platform.core.held_values import format_html
 from hq.platform.core.web_refusals import refused
 lazy from hq.platform.application.app_update_approval import PLAYBOOKS
@@ -153,5 +153,6 @@ class AppUpdatePressView(View):
     runs: tuple[str, ...] = ()
 
     def post(self, request, owner, name, **route):
-        refused(request, execute_posted(request, self.runs[0], {"repository": f"{owner}/{name}", **route}))
+        # Its card says how the press went, so a press that ran says nothing more.
+        refused(request, run_posted(request, self.runs[0], {"repository": f"{owner}/{name}", **route}).answer)
         return redirect(safe_next(request, fallback=reverse("control_plane:containers")))

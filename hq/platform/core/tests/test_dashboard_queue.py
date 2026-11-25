@@ -249,6 +249,25 @@ class DashboardQueueTests(SignedInTestCase):
         self.assertTrue(button.inside(rows[0]))
         self.assertContains(short, "Example finding 1")
 
+    def test_a_row_hq_is_acting_on_is_asked_again_until_it_ends(self):
+        moving = Finding(
+            rule="example-moving",
+            subject="",
+            severity="attention",
+            title="An example update under way",
+            explanation="Previewing on example-box.",
+            primary=opens("Open the update", "/example/update/"),
+            under_way=True,
+        )
+        entries = gather_attention((("example.utility", "Example", lambda: (moving,), ()),))
+        with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries), uncached():
+            response = self.client.get("/action-items/")
+
+        (row,) = select(response, "data-fragment-poll")
+        self.assertIn("data-attention-item", row.attrs)
+        # Asked again at its own address: the row is answered from the page by its id.
+        self.assertTrue(row.attrs.get("id"))
+
     def test_search_includes_the_recommended_action(self):
         response = self.client.get("/action-items/", {"q": "Reconcile the bill"})
         self.assertContains(response, "Check the reading")

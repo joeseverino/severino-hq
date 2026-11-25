@@ -249,6 +249,22 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 /* A control among words, drawn as a link: the words alone, in their type. */
 .btn.link { min-height: 0; padding: 0; background: none; color: var(--accent); font: inherit; }
 .btn.link:hover { text-decoration: underline; }
+/* A button whose post is out (fragment.js) says it was taken at once: a band
+   travels along its foot in its own color, over the background its look
+   paints (so it comes after the looks), and its box never moves. Reduced
+   motion stills the band (base.css). */
+.btn[aria-busy="true"] {
+  cursor: progress;
+  background-image: linear-gradient(currentcolor, currentcolor);
+  background-repeat: no-repeat;
+  background-size: 30% 2px;
+  background-position: 50% 100%;
+  animation: press-sweep 1.1s ease-in-out infinite;
+}
+@keyframes press-sweep {
+  0% { background-position: -43% 100%; }
+  100% { background-position: 143% 100%; }
+}
 /* A control of the site header's bar, on the bar's own ground and as tall as
    its row. It weighs what the push button does, so each control's rule in the
    header's section sets its own width and padding over it. */

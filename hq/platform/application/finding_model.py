@@ -184,6 +184,9 @@ class Finding:
     family: str = ""
     # Playbook context, derived from the observed service and adopted source.
     service_unit: str = field(default="", kw_only=True)
+    # HQ is acting on it now (a press's work under way): its row asks again
+    # until that work ends, so it says where it stands without a refresh.
+    under_way: bool = field(default=False, kw_only=True)
 
     def __post_init__(self) -> None:
         as_members(self)
