@@ -215,6 +215,14 @@ class ConnectionProjectionTests(TestCase):
         self.assertEqual(api["summary"], "Reached over the internet")
         self.assertIsNone(api["peer_path"])
 
+    def test_a_controller_that_is_the_machine_reached_is_said_once(self):
+        connection("ssh", "example-host-shell", endpoint="100.64.0.5:22", controller_id="Example-Host")
+
+        said = text(self.client.get(reverse("control_plane:connections")))
+
+        self.assertIn("via example-controller", said)
+        self.assertNotIn("via Example-Host", said)
+
     def test_what_more_scope_would_show(self):
         rows = {
             item["connection_ref"]: item
@@ -236,10 +244,10 @@ class ConnectionProjectionTests(TestCase):
         self.assertContains(response, "Refresh all")
         self.assertTrue(select(response, "formaction", "/infrastructure/connections/read/?connection_ref=example-host"))
 
-    def test_a_connection_that_only_changes_says_so_where_its_reads_go(self):
+    def test_a_connection_that_only_changes_says_what_it_changes_under_changes(self):
         """A write-only credential (a vault certificates are published to) is
-        Working with nothing to read: its Reads cell says that, and what it
-        changes, rather than the empty marker beside a working state."""
+        Working with nothing to read: what it changes is said under Changes,
+        as on every row, never inside what it reads."""
 
         from ..entity_links import connection_anchor
 
@@ -251,8 +259,10 @@ class ConnectionProjectionTests(TestCase):
         self.assertEqual(row.reads, ())
         self.assertTrue(row.changes)
         (drawn,) = select(response, "id", connection_anchor("example-vault"))
+        changes = " ".join(block.words for block in select(response, "data-label", "Changes"))
         for state in row.changes:
-            self.assertIn(f"Changes only: {state.ability.label}", drawn.words)
+            self.assertIn(state.ability.label, changes)
+            self.assertNotIn(state.ability.label, drawn.words)
         self.assertNotIn("Last read", drawn.words)
 
     def test_a_read_asked_for_shows_on_its_row(self):

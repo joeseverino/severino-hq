@@ -182,10 +182,8 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
     # every row must show (`key-col`). Controls never leave, since the
     # open line copies what leaves, where a control would be drawn twice.
     # A key (`key-col`, or the closing figure of a table that marks none)
-    # never leaves. A state (a cell said by its pills, a date, or in a
-    # table that ranks its columns any under a heading of kind `status`
-    # that declares no rank) stands while any other column can, and goes
-    # to the open line only below every rank's width (`STATES_LEAVE`),
+    # never leaves. The row's state (below) stands while any other column
+    # can, and goes to the open line only below every rank's width (`STATES_LEAVE`),
     # where the name, the keys and the controls take the row.
     heading = heads[-1] if heads else []
     # A heading of kind `status` with a rank leaves by it, whatever its
@@ -193,8 +191,13 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
     statuses = {at for at, cell in enumerate(heading) if cell.kind == "status" and at != named}
     declared = statuses & set(drops)
     dated = {at for at in statuses if "date-col" in heading[at].classes}
-    states = {place for row in records for place, cell in _placed(row) if place != named and cell.states}
-    states = (states | dated | (statuses if drops else set())) - declared
+    # A table stands one state: its pills where a column of them says what a
+    # row is, else its first status, else its first date; any other such
+    # column leaves as a spare one does, so a figure or a date is whole on
+    # the row or on its open line, never broken to make room.
+    pills = {place for row in records for place, cell in _placed(row) if place != named and cell.states} - declared
+    said = sorted((statuses if drops else set()) - dated - declared) or sorted(dated - declared)
+    states = pills or set(said[:1])
     keys = set(_keys([(kinds.get(at, ""), cell.classes) for at, cell in enumerate(heading)]))
     does = {place for row in records for place, cell in _placed(row) if cell.fields}
     does |= {place for row in records for place, _ in _row_controls(row, kinds, named)}

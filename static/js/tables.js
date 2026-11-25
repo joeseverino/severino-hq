@@ -50,6 +50,7 @@
   // column's name, cloned from the region's `data-open-line` frame with no id
   // the row already draws.
   const HELD = ".row-more, .line-rest";
+  const HELD_LINE = "li.row-more";
   const heldBack = (cell) =>
     !cell.hasAttribute("data-blank") &&
     !cell.hasAttribute("colspan") &&
@@ -91,21 +92,31 @@
       entry.toggleAttribute("data-holds", holds);
       entry.querySelector("dt").textContent = columnName(row, cell);
       const value = entry.querySelector("dd");
-      let box = null;
-      [...cell.childNodes].forEach((node) => {
-        if (node.matches?.("[data-row-toggle]")) return;
-        const copy = node.cloneNode(true);
-        if (!holds || node.matches?.(HELD) || node.querySelector?.(HELD)) {
-          value.append(copy);
-          box = null;
-          return;
-        }
-        if (!box) {
-          box = shows.cloneNode();
-          value.append(box);
-        }
-        box.append(copy);
-      });
+      // What holds a line held back (a list's item) is copied as a shell
+      // around its children, so what the row's line shows above that line,
+      // however deep, is boxed; a held word stays with the words it follows.
+      const copyInto = (into, nodes) => {
+        let box = null;
+        nodes.forEach((node) => {
+          if (node.matches?.("[data-row-toggle]")) return;
+          if (!holds || node.matches?.(HELD) || (node.querySelector?.(HELD) && !node.querySelector(HELD_LINE))) {
+            into.append(node.cloneNode(true));
+            box = null;
+          } else if (node.querySelector?.(HELD_LINE)) {
+            const shell = node.cloneNode(false);
+            into.append(shell);
+            copyInto(shell, [...node.childNodes]);
+            box = null;
+          } else {
+            if (!box) {
+              box = shows.cloneNode();
+              into.append(box);
+            }
+            box.append(node.cloneNode(true));
+          }
+        });
+      };
+      copyInto(value, [...cell.childNodes]);
       // A copy names no row and draws no id twice.
       value.querySelectorAll("[id]").forEach((each) => each.removeAttribute("id"));
       value.querySelectorAll('[data-cell~="name"]').forEach((each) => {

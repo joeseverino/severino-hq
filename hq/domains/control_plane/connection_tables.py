@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
 
+from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.entity_links import connection_anchor, declared_link
 from hq.platform.application.freshness import reading_age
 from hq.platform.application.moments import when
@@ -86,7 +87,7 @@ def _connection_row(row: Any, request: Any, *, starts: bool) -> Row:
             replace(_name(row, starts=starts), below=_name_below(row)),
             replace(
                 _reads(row),
-                below=(Below("Changes", _abilities(row)),) if row.changes and not row.changes_only else (),
+                below=(Below("Changes", _abilities(row)),) if row.changes else (),
             ),
             _reaches(connection.instance),
             _state(row),
@@ -146,6 +147,9 @@ def _reached(row: Any) -> Cell | None:
         else:
             said.append(Cell(reach.label, after="," if reach.relay else ""))
         said += [Cell(reach.relay)] if reach.relay else []
+    # A controller that is the machine the reach names is said once.
+    machine = normalized_hostname(reach.machine.label) if reach is not None and reach.machine else None
+    facts = [fact for fact in facts if not (fact.label == "Controller" and normalized_hostname(fact.value) == machine)]
     said += [
         Cell(
             f"via {fact.value}" if fact.label == "Controller" else f"{fact.label}: {fact.value}",
@@ -183,10 +187,8 @@ def _name_below(row: Any) -> tuple[Below, ...]:
 
 
 def _reads(row: Any) -> Cell:
-    """What it reads, as many as the line holds; or, reading nothing, what it changes."""
+    """What it reads, as many as the line holds."""
 
-    if row.changes_only:
-        return Cell("Changes only:", muted=True, parts=_abilities(row), fit=True)
     return Cell(
         parts=tuple(
             Cell(piece=Piece(CONNECTION_READ, {"read": read, "connection": row.connection}, read.label))

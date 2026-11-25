@@ -450,10 +450,14 @@ a:not(.btn) > .icon:first-child { vertical-align: -0.15em; }
 
 /* A list read down (`{% list %}`): items read down, each its parts inline. */
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }
-/* In a table's cell its items are the cell's own lines, read at the row's rhythm: one that opens the cell starts on the row's first line, and one that holds something to press is a target tall, so links one to a line are a target apart. Each wraps as its cell does, so a state's lines keep theirs as the state does (tables.css), where a list's items in a cell otherwise wrap. */
+/* In a table's cell its items are the cell's own lines, read at the row's rhythm: one that opens the cell starts on the row's first line. A link on one is a target tall by its padding (cuts.css), so its words keep their line height wherever it wraps, and an item holding something to press stands from its neighbors by what a target stands past its line, so links one to a line are a target apart; the cell's padding holds it at the list's ends. Each wraps as its cell does, so a state's lines keep theirs as the state does (tables.css), where a list's items in a cell otherwise wrap. */
 .data-table :is(td, th) .stack-list { gap: 0; margin: 0; }
+.data-table :is(td, th) .stack-list > li:has(a[href], [tabindex]) { margin-block: calc((var(--target-min) - 1lh) / 2); }
+.data-table :is(td, th) .stack-list > li:first-child { margin-block-start: 0; }
+.data-table :is(td, th) .stack-list > li:last-child { margin-block-end: 0; }
 .data-table :is(td, th) .stack-list > li { text-wrap-mode: inherit; }
-.data-table :is(td, th) .stack-list > li:has(a[href], [tabindex]) { line-height: var(--target-min); }
+/* A block moved to the open line whole (`row-below`) keeps the rhythm its parts are drawn at elsewhere: an item holding something to press is a target tall. */
+.data-table .row-below .stack-list > li:has(a[href], [tabindex]) { line-height: var(--target-min); }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
 

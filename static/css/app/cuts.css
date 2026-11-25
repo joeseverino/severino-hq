@@ -126,7 +126,7 @@
    than its column breaks inside it: a piece of any length would otherwise
    hold its column, and the table, past the box. So its column asks for no
    more than a letter of it, and gives way as a column of words does. */
-.data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
+.data-table > tbody > tr > * :is(code:not(.cell-whole), .token, .whole) { overflow-wrap: anywhere; }
 /* An identifier's chip longer than a short value in a row that links its
    record (`data-chip`, table_layout), standing as a value of its own (not
    code in a sentence, base.css), is one line on its row's line, cut at its
@@ -143,17 +143,17 @@
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }
-/* A link on one of a cell's lines (a stack list's item, a cell line) is
-   text of its line, its target as tall as the line (figures.css) by its
-   padding: an inline box is its face's glyph box tall, never less than
-   1.2em. A button (`.btn`) is a target already, drawn as every button is
-   (page.css), so none of these reach it. */
-.data-table > tbody > tr > td :is(.stack-list > li, .cell-line, .cell-detail) a[href]:not(.btn) {
+/* A link on one of a cell's lines (a stack list's item, a run's part, a
+   cell line) is text of its line, a target tall by its padding, which leaves
+   its line the words' height: an inline box is its face's glyph box tall,
+   never less than 1.2em. A button (`.btn`) is a target already, drawn as
+   every button is (page.css), so none of these reach it. */
+.data-table > tbody > tr > td :is(.stack-list > li, .line-list li, .cell-line, .cell-detail) a[href]:not(.btn) {
   padding-block: calc((var(--target-min) - 1.2em) / 2);
 }
 /* A link in a cell of words (its prose role, read as base.css reads `.prose`) is a word of its sentence: its line keeps the words' height and it takes no target's padding. */
 .data-table > tbody > tr > td[data-cell~=prose] :is(li, a[href]:not(.btn)) { line-height: inherit; }
-.data-table > tbody > tr > td[data-cell~=prose] :is(.stack-list > li, .cell-line, .cell-detail) a[href]:not(.btn) { padding-block: 0; }
+.data-table > tbody > tr > td[data-cell~=prose] :is(.stack-list > li, .line-list li, .cell-line, .cell-detail) a[href]:not(.btn) { padding-block: 0; }
 /* A box a reader presses or tabs to is a target tall, as a link on a line of its own is (figures.css); a short value's box (`cell-short`, tables.css) is the cell's own. */
 .data-table > tbody > tr > [data-kind="identifier"] > :is(a[href], [tabindex]):not(.btn),
 .data-table > tbody > tr > [data-kind="identifier"] > .cell-short > :is(a[href], [tabindex]):not(.btn) { line-height: var(--target-min); }
@@ -267,8 +267,7 @@
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
 }
-/* A cell's run of links (`line_list`) wraps where its line is full and
-   stands over the next run, so each of its lines is a target tall, as links
-   one to a line are (figures.css). */
-.data-table td .line-list:has(a) { line-height: var(--target-min); }
+/* A cell's run of links (`line_list`) wraps where its line is full, its
+   lines as far apart as links one to a line are (figures.css). */
+.data-table td .line-list:has(a) { row-gap: calc(var(--target-min) - 1lh); }
 }
