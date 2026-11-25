@@ -190,7 +190,8 @@ _PROBE_STATE = """(failure) => ({
 # scrolling; beside them a region of its own with a press of its own, a press
 # answered with no page and one the server fails, and a link and a form of
 # the page's own.
-_ROWS = """{% load action_tags %}{% if said %}<ul class="messages"><li class="msg">{{ said }}</li></ul>{% endif %}
+_ROWS = """{% load action_tags notice_tags %}{% if said %}<ul class="messages"><li class="msg">{{ said }}</li></ul>{% endif %}
+{% if held %}<ul class="messages"><li>{% notice tone="error" %}{{ held }}{% endnotice %}</li></ul>{% endif %}
 <p data-probe="other">{{ other }}</p>
 {% for line in lines %}<p>An example line {{ line }}.</p>{% endfor %}
 <ul class="list-rows" data-probe="rows">{% for row in rows %}<li data-row="{{ row.key }}"><span>Example {{ row.key }}</span>
@@ -204,6 +205,7 @@ _ROWS = """{% load action_tags %}{% if said %}<ul class="messages"><li class="ms
 {% button "Broken" offer=presses.broken %}
 {% button "Refused" offer=presses.refused %}
 {% button "Declined" offer=presses.declined %}
+<table><tbody><tr id="probe-card"><td>Example card</td><td>{% button "Held" offer=presses.held %}</td></tr></tbody></table>
 <a data-probe="link" href="/probe-rows/?again=1">Again</a>
 <form method="post" action="/probe-rows/plain/"><button data-probe="plain">Send</button></form>
 {% for line in lines %}<p>An example line after {{ line }}.</p>{% endfor %}"""
@@ -213,6 +215,8 @@ _MAIN = re.compile(r"(<main\b[^>]*>).*?(</main>)", re.DOTALL)
 # sent the press on to, and as the whole answer to one it answered itself.
 _REFUSED = "Example refused: its connection only reads."
 _DECLINED = "Example declined: it needs a connection that manages."
+# Refused, and sent back to the page it was pressed on, which says why among its messages.
+_HELD = "Example held: another run holds it."
 # Another page, saying the refusal among its messages. Read again, it would
 # not: a message is said once.
 _ELSEWHERE = """<!doctype html><html><head><title>Elsewhere</title></head><body>
@@ -256,7 +260,14 @@ def _rows_pages(frame):
     """The rows page in each state a press leaves it, in ``frame``'s page."""
 
     # Each press of the page's own, by what it sends, at where it posts.
-    where = {"mark": "aside", "quiet": "quiet", "broken": "broken", "refused": "refused", "declined": "declined"}
+    where = {
+        "mark": "aside",
+        "quiet": "quiet",
+        "broken": "broken",
+        "refused": "refused",
+        "declined": "declined",
+        "held": "held",
+    }
     presses = {sent: offer_of(f"/probe-rows/{path}/", sent) for sent, path in where.items()}
 
     def draw(order, **values):
@@ -278,6 +289,7 @@ def _rows_pages(frame):
         order: draw(order, said="Example moved." if order != "ABC" else "") for order in ("ABC", *_PRESSED.values())
     }
     pages["marked"] = draw("ABC", aside="Marked", other="An example part drawn again elsewhere.")
+    pages["held"] = draw("ABC", held=_HELD)
     return pages
 
 
@@ -343,6 +355,8 @@ class FragmentBrowserTests(BrowserGate):
             if row == "quiet":
                 # What a view gives a script that asks with nothing to show.
                 return route.fulfill(status=204)
+            if row == "held":
+                return self.fulfill(route, self.rows["held"])
             if row == "aside":
                 self.order = "marked"
             elif row != "plain":
@@ -492,6 +506,22 @@ class FragmentBrowserTests(BrowserGate):
         self.assertTrue(self.page.url.endswith("/probe-rows/"))
         self.assertEqual(self.page.evaluate(_ROWS_SHOWN), "ABC")
         self.assertEqual(self.page.evaluate(_SAID), [_REFUSED])
+
+    def test_a_press_refused_on_a_card_says_why_on_that_card_and_keeps_what_was_opened(self):
+        self.page.goto(f"{ORIGIN}/probe-rows/", wait_until="load")
+        # The reader opened the card's fold (tables.js) before pressing.
+        self.page.evaluate(
+            "() => { window.kept = true; document.getElementById('probe-card').toggleAttribute('data-open', true); }"
+        )
+        self.page.get_by_role("button", name="Held").click()
+        self.page.wait_for_function("() => document.querySelector('#probe-card [role=alert]')")
+
+        self.assertTrue(self.page.evaluate("() => window.kept === true"))
+        said = "() => [...document.querySelectorAll('#probe-card [role=alert]')].map((line) => line.textContent.trim())"
+        self.assertEqual(self.page.evaluate(said), [_HELD])
+        # Said once, on the card, and not at the top of the page.
+        self.assertEqual(self.page.evaluate(_SAID), [])
+        self.assertTrue(self.page.evaluate("() => document.getElementById('probe-card').hasAttribute('data-open')"))
 
     def test_a_press_refused_with_a_sentence_says_that_sentence(self):
         self.page.goto(f"{ORIGIN}/probe-rows/", wait_until="load")

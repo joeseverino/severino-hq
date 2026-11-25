@@ -220,6 +220,23 @@ const hqFragment = (() => {
     if (list) list.append(drawn.firstElementChild);
     else region.prepend(drawn);
   };
+  // Why a press was refused, said on the card it was made on (the row or
+  // section holding it, found again by its id once the answer replaced it),
+  // beside the button pressed, where the reader is looking: the page's own
+  // line for it, at the top of what may be a long page, is let go.
+  const sayOn = (card, region, lines) => {
+    const holder = card?.id && document.getElementById(card.id);
+    const button = holder?.querySelector(`button[formaction="${CSS.escape(card.posts || "")}"]`);
+    const rowEnd = holder instanceof HTMLTableRowElement ? holder.cells[holder.cells.length - 1] : null;
+    const spot = button?.parentElement || rowEnd || holder || region;
+    document.querySelectorAll(".messages > li:has(> [role=alert])").forEach((line) => {
+      const list = line.parentElement;
+      if (spot.contains(line)) return;
+      line.remove();
+      if (!list.children.length) list.remove();
+    });
+    lines.forEach((line) => say(spot, line));
+  };
 
   // Why a post was refused, as the page it was answered with says it among
   // its messages: the server's own sentence, which nothing else carries once
@@ -291,6 +308,21 @@ const hqFragment = (() => {
     within(next, "details").forEach((details) => {
       const key = keyOfDisclosure(details);
       if (open.has(key)) details.open = open.get(key);
+    });
+    // A row the reader opened (tables.js) stays as they left it: a fold and
+    // the rows under it, or a row shown whole, which tables.js fills again
+    // once it is placed.
+    const rows = new Map(within(was, "tr[id]").map((row) => [row.id, row]));
+    within(next, "tr[id]").forEach((row) => {
+      const before = rows.get(row.id);
+      if (!before) return;
+      row.toggleAttribute("data-open", before.hasAttribute("data-open"));
+      row.classList.toggle("is-expanded", before.classList.contains("is-expanded"));
+      const [from, to] = [before, row].map((each) => each.querySelector("[data-row-toggle]"));
+      if (!from || !to) return;
+      to.setAttribute("aria-expanded", from.getAttribute("aria-expanded"));
+      // A row's own toggle says what it does next, in words tables.js set.
+      if (to.matches(".row-expand")) to.setAttribute("aria-label", from.getAttribute("aria-label"));
     });
   };
 
@@ -697,6 +729,8 @@ const hqFragment = (() => {
     // Asked before the swap: afterwards the region is another element.
     const box = form.closest("dialog");
     const done = box && !box.contains(region) ? box : null;
+    const card = pressed && { id: pressed.closest("[id]")?.id, posts: pressed.getAttribute("formaction") };
+    let declined = [];
     try {
       await swap(region, {
         url,
@@ -708,7 +742,14 @@ const hqFragment = (() => {
         busy: pressed ? form : undefined,
         focus: pressed,
         page: Boolean(pressed),
+        // A press refused and sent back to this page is answered with it,
+        // its refusal among the page's messages; read before the answer's
+        // nodes move into this page.
+        before: (page) => {
+          declined = pressed ? refusals(page) : [];
+        },
       });
+      if (declined.length) sayOn(card, region, declined);
       if (status) status.textContent = "";
       // A form that saved from inside a dialog has nothing more to say there.
       done?.close();
@@ -726,7 +767,7 @@ const hqFragment = (() => {
       // A press's region is the page's content, which keeps what it shows:
       // each line is said where the server says how a post went, among the
       // page's messages.
-      else if (pressed) said.forEach((line) => say(region, line));
+      else if (pressed) sayOn(card, region, said);
       else explain(region, said.join(" "));
     } finally {
       form.removeAttribute("aria-busy");
