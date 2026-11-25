@@ -194,7 +194,7 @@ class ApproveUpdateTests(TestCase):
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])
         self.assertIn(APP, again["standing"]["note"])
-        self.assertEqual(self.runs().count(), 1)
+        self.assertEqual((again["queued"], again["operation"]["id"]), (False, str(self.runs().get().pk)))
 
         preview = self.worked()
         succeeded(preview)
@@ -384,6 +384,7 @@ class ApproveUpdateTests(TestCase):
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])
         self.assertIn(APP, again["standing"]["note"])
+        self.assertEqual((again["queued"], again["operation"]["id"]), (False, first["operation"]["id"]))
         self.assertEqual(self.applies().count(), 2)
 
     def test_no_press_is_offered_while_another_run_holds_its_playbook_or_its_machine(self):

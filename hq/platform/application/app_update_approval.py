@@ -37,7 +37,6 @@ lazy from .app_update_open import ticked
 lazy from .app_updates import AppUpdate, app_updates, merged_of
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
-lazy from .asks import AskedAnswer
 lazy from .automation_manifest import OperationManifest
 lazy from .automation_runs import (
     CHECK,
@@ -225,7 +224,7 @@ def _parameters(manifest: OperationManifest, revision: str) -> dict[str, Any]:
 
 
 @transaction.atomic
-def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> OperationAsked | AskedAnswer:
+def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> OperationAsked:
     """Preview the apply of the update at the head reviewed where it runs,
     carrying the merge to queue once the preview passes, and the run that
     applies the merge once it is made."""
@@ -319,7 +318,7 @@ class ApplyUpdateCommand:
 
 
 @transaction.atomic
-def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> OperationAsked | AskedAnswer:
+def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> OperationAsked:
     """Run the playbook that applies app updates at the default branch's head,
     where a container of the app still runs a pin from before it."""
 
@@ -512,25 +511,33 @@ def merge_standing(update: AppUpdate) -> MergeStanding | None:
 def _previewed(preview: OperationRequest) -> MergeStanding:
     url = run_url(str(preview.pk))
     if preview.state in _ACTIVE:
-        return MergeStanding(_working("Previewing", preview), Tone.ATTENTION, url, taken=True, said=waits_on(preview))
+        return MergeStanding(
+            _working("Previewing", preview), Tone.ATTENTION, url, taken=True, said=waits_on(preview), operation=preview
+        )
     if preview.state == OperationRequest.State.SUCCEEDED:
         refused = str(((preview.result or {}).get(THEN) or {}).get("refused") or "")
-        return MergeStanding(ended(f"Previewed. {refused}".strip()), Tone.SERIOUS, url)
+        return MergeStanding(ended(f"Previewed. {refused}".strip()), Tone.SERIOUS, url, operation=preview)
     step, said = stopped_at(preview)
-    return MergeStanding(_failed("Preview failed", step, "approve"), Tone.SERIOUS, url, step=step, said=said)
+    return MergeStanding(
+        _failed("Preview failed", step, "approve"), Tone.SERIOUS, url, step=step, said=said, operation=preview
+    )
 
 
 def _merged(merge: OperationRequest) -> MergeStanding:
     result = merge.result or {}
     if merge.state in _ACTIVE:
-        return MergeStanding("Merging", Tone.ATTENTION, taken=True, said=waits_on(merge))
+        return MergeStanding("Merging", Tone.ATTENTION, taken=True, said=waits_on(merge), operation=merge)
     if merge.state == OperationRequest.State.SUCCEEDED:
         then = result.get(THEN) or {}
         if then.get("run"):
             return _applied(merge, str(then["run"]))
-        return MergeStanding(ended(f"Merged. {then.get('refused') or ''}".strip()), Tone.SERIOUS, taken=True)
+        return MergeStanding(
+            ended(f"Merged. {then.get('refused') or ''}".strip()), Tone.SERIOUS, taken=True, operation=merge
+        )
     refused = str((result.get("status") or {}).get("refused") or "")
-    return MergeStanding(REFUSED.get(refused) or str(result.get("message") or "The merge failed."), Tone.SERIOUS)
+    return MergeStanding(
+        REFUSED.get(refused) or str(result.get("message") or "The merge failed."), Tone.SERIOUS, operation=merge
+    )
 
 
 def _applied(merge: OperationRequest, first: str) -> MergeStanding:
@@ -540,7 +547,7 @@ def _applied(merge: OperationRequest, first: str) -> MergeStanding:
     revision = str(((queued.input or {}).get("parameters") or {}).get(REVISION) or "") if queued else ""
     standing = _apply_standing(str((queued.input or {}).get("operation", "")), revision) if queued else None
     if standing is None:
-        return MergeStanding("Merged", Tone.GOOD, run_url(first), taken=True)
+        return MergeStanding("Merged", Tone.GOOD, run_url(first), taken=True, operation=queued or merge)
     if standing.tone == Tone.GOOD:
         return standing
     # Once merged, a failed apply is pressed again from the default branch (``app_updates.UpdateKind.MERGED``).
@@ -567,14 +574,18 @@ def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] 
         return None
     url = run_url(str(apply.pk))
     if apply.state in _ACTIVE:
-        return MergeStanding(_working("Applying", apply), Tone.ATTENTION, url, taken=True, said=waits_on(apply))
+        return MergeStanding(
+            _working("Applying", apply), Tone.ATTENTION, url, taken=True, said=waits_on(apply), operation=apply
+        )
     if apply.state == OperationRequest.State.SUCCEEDED:
         done = apply.completed_at
         if done is not None and any(item.running.observed_at > done for item in items):
             return None
-        return MergeStanding("Applied", Tone.GOOD, url, taken=True)
+        return MergeStanding("Applied", Tone.GOOD, url, taken=True, operation=apply)
     step, said = stopped_at(apply)
-    return MergeStanding(_failed("Apply failed", step, "apply"), Tone.SERIOUS, url, step=step, said=said)
+    return MergeStanding(
+        _failed("Apply failed", step, "apply"), Tone.SERIOUS, url, step=step, said=said, operation=apply
+    )
 
 
 def _working(doing: str, run: OperationRequest) -> str:

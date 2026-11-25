@@ -97,4 +97,5 @@ class OpenUpdateTests(TestCase):
         again = self.press(key="example-open-2")
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])
-        self.assertEqual(OperationRequest.objects.filter(action=OperationRequest.Action.RECONCILE).count(), 1)
+        tick = OperationRequest.objects.get(action=OperationRequest.Action.RECONCILE)
+        self.assertEqual((again["queued"], again["operation"]["id"]), (False, str(tick.pk)))

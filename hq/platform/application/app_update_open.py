@@ -72,7 +72,8 @@ def open_update(command: OpenUpdateCommand, *, consented: Consented) -> Operatio
     # the same request: answered with where it stands, never refused.
     opening = (UpdateKind.HELD, UpdateKind.UNOPENED)
     if under_way := next((state.standing for state in states if state.at_work and state.kind in opening), None):
-        return under_way.asked()
+        # Renovate's run, asked of the controller, answers as asking it did.
+        return under_way.asked() if under_way.operation else under_way.again.answer()
     if not kinds & set(opening):
         if kinds & {UpdateKind.OPEN, UpdateKind.MERGED}:
             return Asked(Standing(DONE, OPENED), message=OPENED).answer()
@@ -120,12 +121,12 @@ def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStand
         if tick is None:
             return None
         if tick.state in _ACTIVE:
-            return MergeStanding(TICKING, Tone.ATTENTION, taken=True, said=waits_on(tick))
+            return MergeStanding(TICKING, Tone.ATTENTION, taken=True, said=waits_on(tick), operation=tick)
         result = tick.result or {}
         if tick.state != OperationRequest.State.SUCCEEDED:
-            return MergeStanding(NOT_TICKED, Tone.SERIOUS, said=str(result.get("message") or ""))
+            return MergeStanding(NOT_TICKED, Tone.SERIOUS, said=str(result.get("message") or ""), operation=tick)
         if refused := str((result.get(THEN) or {}).get("refused") or ""):
-            return MergeStanding(NOT_ASKED, Tone.SERIOUS, said=refused)
+            return MergeStanding(NOT_ASKED, Tone.SERIOUS, said=refused, operation=tick)
         since = tick.created_at
     return _run_standing(repository, since)
 

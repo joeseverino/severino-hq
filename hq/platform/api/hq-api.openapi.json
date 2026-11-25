@@ -32916,7 +32916,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationAskedAskedAnswerSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"
@@ -32991,7 +32991,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationAskedAskedAnswerSuccess"
+            "$ref": "#/components/responses/OperationAskedSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"

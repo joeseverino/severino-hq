@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from hq.domains.control_plane.models import OperationRequest
+
 from .containers import Container, containers, published_digest, ranked, standing_of
 from .entity_links import EntityLink
 from .github_estate import UPDATE_BRANCH, pull_checks, repositories
@@ -33,11 +35,12 @@ lazy from .app_update_approval import (
     approve_target,
 )
 lazy from .app_update_open import OPEN, open_standing, open_target
-lazy from .asks import DONE, RUNNING, Asked, AskedAnswer, Standing
+lazy from .asks import DONE, RUNNING, Asked, Standing
 lazy from .container_findings import BY_HAND
 lazy from .finding_model import Fact, FindingRemedy
 lazy from .labels import lower_first
 lazy from .pages import PageAction, command_reach
+lazy from .resource_operations import OperationAsked, operation_asked
 
 # What an update's new pins bring of their own, as every page labels it.
 BRINGS = "New vulnerabilities"
@@ -383,6 +386,9 @@ class MergeStanding:
     # Of a preview or an apply that ended badly: the step it stopped on, and what it said.
     step: str = ""
     said: str = ""
+    # The run or reconcile it stands on; None for Renovate's run, which is a
+    # read asked of the controller rather than an operation.
+    operation: OperationRequest | None = None
 
     @property
     def lines(self) -> tuple[str, ...]:
@@ -398,13 +404,23 @@ class MergeStanding:
 
         return self.taken and self.tone == Tone.ATTENTION
 
-    def asked(self) -> AskedAnswer:
+    @property
+    def again(self) -> Asked:
         """What pressing it again answers while it stands taken: where it
         stands, never a refusal, since the first press is still its request."""
 
         if self.live:
-            return Asked(Standing(RUNNING, self.words), message=ended(f"Already asked. {self.words}")).answer()
-        return Asked(Standing(DONE, self.words), message=ended(self.words)).answer()
+            return Asked(Standing(RUNNING, self.words), message=ended(f"Already asked. {self.words}"))
+        return Asked(Standing(DONE, self.words), message=ended(self.words))
+
+    def asked(self) -> OperationAsked:
+        """``again`` as a repeated ask of the operation it stands on answers
+        it, queuing nothing; only Renovate's run stands on none."""
+
+        if self.operation is None:
+            raise LookupError("Renovate's run is no operation, so its standing answers as ``again``.")
+        said = self.again
+        return operation_asked(self.operation, queued=False, standing=said.standing, message=said.message)
 
 
 @dataclass(frozen=True, slots=True)
