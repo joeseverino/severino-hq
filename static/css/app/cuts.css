@@ -127,6 +127,31 @@
    hold its column, and the table, past the box. So its column asks for no
    more than a letter of it, and gives way as a column of words does. */
 .data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
+/* An identifier's chip longer than a short value (`data-chip`, table_layout)
+   that stands as a value of its own (not code in a sentence, base.css) is
+   one line on its row's line, cut at its end: its one
+   track asks its column for nothing at its narrowest and all of it at its
+   widest, as a column of words does, so it is whole wherever the row has the
+   room. A row that links its record (`data-record`, table_layout) is read
+   whole there, so its chips stay cut when it opens; any other row holds them
+   back (its toggle, table_layout) and opening it shows them whole, so with no
+   script, where no row opens, they wrap whole. The line beneath an open row
+   shows its values whole. */
+.data-table > tbody > tr:not(.row-detail) > [data-chip] code:not(.cell-whole, :is(p, li:not(:is(.stack-list, .code-list) > li), [data-cell~=data], [data-cell~=prose], [popover], dialog) *) {
+  &:is(tr:is([data-record], :not(.is-expanded)) *) {
+    display: inline-grid; grid-template-columns: minmax(0, max-content); max-inline-size: 100%; vertical-align: top;
+    white-space: nowrap; overflow: hidden;
+    & > * { overflow: hidden; text-overflow: ellipsis; }
+    & * :is(.token, .whole, .part) { display: inline; }
+  }
+  @media (scripting: none) {
+    &:not(tr[data-record] *) {
+      display: revert-layer; grid-template-columns: revert-layer; max-inline-size: revert-layer; vertical-align: revert-layer;
+      white-space: revert-layer; overflow: revert-layer;
+      & > * { overflow: revert-layer; }
+    }
+  }
+}
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }
 .data-table > tbody > tr > td .line-list > :not(.line-rest) > .cell-part { white-space: normal; }

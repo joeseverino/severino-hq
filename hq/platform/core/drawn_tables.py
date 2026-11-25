@@ -29,12 +29,13 @@ from hq.platform.core.templatetags.value_tags import (
     money,
     outside,
     readout,
+    reads_as_code,
     when,
     when_text,
 )
 from hq.platform.core.templatetags.write_tags import row_editor
 
-from .table_layout import GIST, SAYS_NOTHING, CellFacts, Moved, RowFacts, TableFacts, lay_out
+from .table_layout import GIST, SAYS_NOTHING, SHORT, CellFacts, Moved, RowFacts, TableFacts, lay_out
 
 # The class a value that shows only part of the time is drawn in, which the
 # open line reads (``table_layout.HELD``).
@@ -381,6 +382,11 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         }
         | ({"line-rest"} if runs else set()),
         names=int(cell.name),
+        record=cell.name and bool(cell.url or cell.link),
+        chip=any(
+            part.readout and not part.link and len(part.text) > SHORT and reads_as_code(part.text)
+            for part in (cell, *cell.parts, *cell.lines)
+        ),
         row_header=cell.header,
         parted=any(part.role for part in (*cell.parts, *cell.lines)),
         folds=cell.fold,

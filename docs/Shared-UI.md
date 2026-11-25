@@ -601,8 +601,9 @@ as its column where that is more, so its column holds it whole while the table i
 one, and past its share it wraps inside its box. Its column still asks for the value whole
 (`calc-size` holds only the share as its floor), so room the table has past every column's needs
 goes to it; a longer one wraps at its words in a line of `--row-words`, or its share where that is
-less, as a long one does; a longer identifier and a row's own name break anywhere their column
-lacks room; a pill and prose break only inside a word wider than their column, a pill longer than
+less, as a long one does; a longer identifier in words and a row's own name break anywhere their
+column lacks room, and an identifier drawn as code that stands as a value of its own (a chip) is
+one line, cut at its end where its column lacks room (below); a pill and prose break only inside a word wider than their column, a pill longer than
 its column wrapping inside its one box. A status, a figure, a date or a control is never cut: its
 column is as wide as it is.
 
@@ -642,8 +643,17 @@ column differently.
 An identifier short enough to hold its line is never broken while every column stands; once
 columns leave for the open line, where it is drawn whole, its seams are where it breaks. The row's
 own name, free text, a preview and a context line wrap as they always do. *Gate:* `broken
-identifiers` in the layout survey,
-`test_an_identifier_in_a_table_is_whole_while_a_column_can_leave`.
+identifiers` in the layout survey.
+
+A chip on a row's line longer than a short value (`data-chip`: a readout drawn as code, not part
+of a sentence, outside the line beneath an open row) is one line, cut with an ellipsis where its
+column lacks room. Its column asks for nothing at
+its narrowest and the whole chip at its widest, so it is whole wherever the table has the room.
+Where it is read whole is decided by the row's link: a row whose name links its record's page
+(`data-record`, `table_layout`) is read whole there, so its chips stay cut when it opens; any other
+row holding a chip longer than a short value holds it back, offers its toggle, and shows it whole
+once opened. With no script no row opens, so such a chip wraps whole. *Gates:* `cut and closed`
+and `cut when open`.
 
 A box set in a line that cuts what it holds (an inline block whose overflow is not visible) takes
 its bottom edge as its baseline, so its words ride above the line's. So it is set by its top

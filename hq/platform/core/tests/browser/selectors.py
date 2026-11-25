@@ -201,10 +201,11 @@ _DECLARED = {
     # What an item means, after its title.
     "decision_detail": _S(".row-gist", "partials/_work_queue.html"),
     # Running text, and what an opened row shows beneath it: code in it is
-    # never cut, since only a cell's own identifier is. The rest of a
+    # never cut, since only a cell's own identifier is, a stack list's item
+    # being one of the cell's own lines (base.css). The rest of a
     # `line_list` is no text but the parts its line has no room for, each
     # an item of its own.
-    "running_text": _S(":is(p, li:not(.line-rest), .row-detail)", optional=True),
+    "running_text": _S(":is(p, li:not(.line-rest, :is(.stack-list, .code-list) > li), .row-detail)", optional=True),
     "code": _S("code", optional=True),
     # The box of a one-token name in a cell, and the parts it lays out on its
     # line.

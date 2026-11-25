@@ -90,6 +90,12 @@ class CellFacts:
     holds: set[str] = field(default_factory=set)
     # How many elements name the row: a leading bold, or the bold in a leading link.
     names: int = 0
+    # Whether it names the row with a link to the row's record, whose page
+    # shows every value of the row whole.
+    record: bool = False
+    # Whether it holds an identifier drawn in code longer than a short value,
+    # which its row's line cuts (cuts.css).
+    chip: bool = False
     # Whether what it shows on its row's line carries a part's role (`data-cell`).
     parted: bool = False
     # Whether it holds the toggle that opens a folded group.
@@ -266,7 +272,8 @@ def _mark_cells(
 ) -> None:
     """What each cell says of itself: blank, its whole column blank, the
     width its column leaves at, that it stands only in a wide box as its
-    heading does (`wide-only`), that its column holds a field (`data-field`)
+    heading does (`wide-only`), that it holds a long chip (`data-chip`), that
+    its column holds a field (`data-field`)
     and in the body the heading's words, and in the body its kind and its
     clamp."""
 
@@ -277,6 +284,7 @@ def _mark_cells(
             marks += [" data-blank-column"] if at in empty else []
             marks += [f' data-drop="{levels[at]}"'] if at in levels else []
             marks += [" data-wide-only"] if body and at in wide else []
+            marks += [" data-chip"] if body and cell.chip else []
             if at in fielded:
                 marks.append(f' data-field data-label="{escape(fielded[at])}"' if body else " data-field")
             if row.section != "thead":
@@ -348,7 +356,13 @@ def _detail(row: RowFacts, width: int, levels: dict[int, int]) -> tuple[bool, bo
 
     blocks: list[Moved] = []
     entries: list[Moved] = []
-    always = opens = held = False
+    # A row that links its record is read whole there, so its chips stay cut
+    # when it opens (`data-record`); one that does not holds its chips back
+    # for its opening to show whole.
+    always = opens = _chips_held(row)
+    held = False
+    if _record(row):
+        row.marks.append(" data-record")
     for at, cell in _placed(row):
         if cell.spans:
             continue
@@ -498,9 +512,11 @@ def _clamps(kind: str) -> bool:
 
 def _holds_back(row: RowFacts, kinds: dict[int, str], named: int) -> bool:
     """Whether the row can hold back from its line what its open line shows:
-    a long value a narrow box clamps, a part held for the open line, a block
-    moved there, its editor, or a fold."""
+    a long value a narrow box clamps, a chip its line cuts, a part held for
+    the open line, a block moved there, its editor, or a fold."""
 
+    if _chips_held(row):
+        return True
     for at, cell in _placed(row):
         if cell.folds or cell.holds & (HELD | {GIST}) or _moved(cell, "below") or _moved(cell, "editor"):
             return True
@@ -508,6 +524,19 @@ def _holds_back(row: RowFacts, kinds: dict[int, str], named: int) -> bool:
         if not cell.spans and _long(cell) and _words(cell, kind) and _clamps(kind):
             return True
     return False
+
+
+def _record(row: RowFacts) -> bool:
+    """Whether the row's name links its record's page."""
+
+    return any(cell.record for cell in row.cells)
+
+
+def _chips_held(row: RowFacts) -> bool:
+    """Whether the row cuts a chip that only its opening shows whole: one
+    in a row that does not link its record."""
+
+    return not _record(row) and any(cell.chip for cell in row.cells)
 
 
 def _sorts(records: list[RowFacts]) -> bool:
