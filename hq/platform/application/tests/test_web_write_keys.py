@@ -1,64 +1,13 @@
-"""Every web write carries a retry key, so a form sent twice acts once.
+"""Every web write carries a retry key, so a form sent twice acts once: file_rules holds every form that posts
+to ``{% write_token %}``, and the runner refuses a change the browser sends without one."""
 
-Held from the source: every form that posts, in the host's templates and the
-example plugin's, draws its key with ``{% write_token %}``, and the runner
-refuses a change the browser sends without one.
-"""
-
-import re
-from pathlib import Path
-
-from django.conf import settings
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import TestCase
 
 from hq.platform.core.testing import operator
 
 from ..plugin_testing import form_keyed
 from ..web_writes import RETRY_KEY_FIELD
-from .source import source_files
 from .writers import drawn_key
-
-ROOT = Path(settings.BASE_DIR)
-TEMPLATE_ROOTS = (ROOT / "templates", ROOT / "tests" / "fixtures" / "example_hq_plugin" / "templates")
-# A sign-in changes nothing a capability runs, so it keeps the CSRF field alone.
-SIGN_IN = ROOT / "templates" / "auth" / "login.html"
-_FORM = re.compile(r"<form\b(?P<attributes>[^>]*)>(?P<body>.*?)</form>", re.DOTALL | re.IGNORECASE)
-_POSTS = re.compile(r"""\bmethod\s*=\s*["']?post\b""", re.IGNORECASE)
-
-
-def unkeyed_forms(source: str) -> list[str]:
-    """The opening tag of each form in ``source`` that posts without ``{% write_token %}``."""
-
-    return [
-        f"<form{form['attributes']}>"
-        for form in _FORM.finditer(source)
-        if _POSTS.search(form["attributes"]) and "{% write_token %}" not in form["body"]
-    ]
-
-
-@tag("source", "tree")
-class WriteFormTests(SimpleTestCase):
-    def test_every_form_that_posts_draws_its_retry_key(self):
-        templates = [path for root in TEMPLATE_ROOTS for path in source_files(root, "*.html")]
-        self.assertTrue(templates, "the walk found no templates")
-
-        found = [
-            f"{path.relative_to(ROOT)}: {form}"
-            for path in templates
-            if path != SIGN_IN
-            for form in unkeyed_forms(path.read_text(encoding="utf-8"))
-        ]
-
-        self.assertEqual(found, [], "Carry {% write_token %} in place of {% csrf_token %}.")
-
-    def test_a_form_that_posts_without_the_tag_is_found_and_one_with_it_or_a_get_is_not(self):
-        source = (
-            '<form method="post">{% csrf_token %}</form>'
-            "<form method=POST action=x>{% write_token %}</form>"
-            '<form method="get"></form>'
-        )
-
-        self.assertEqual(unkeyed_forms(source), ['<form method="post">'])
 
 
 class RedrawnFormTests(TestCase):

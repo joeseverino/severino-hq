@@ -58,9 +58,9 @@ class UnrecognizedContainerTests(TestCase):
     }
 
     def setUp(self):
-        from ..adoption_testing import connection
+        from hq.platform.core.testing import connection
 
-        connection("portainer", "a-portainer")
+        connection("portainer", "a-portainer", manages=True)
         declare("a-docker-host", "machine", {"name": "a-docker-host", "addresses": ["10.0.0.9"]})
         bridged(
             "inventory",

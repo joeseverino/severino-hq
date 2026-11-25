@@ -14,10 +14,11 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
+from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.providers import registry_label
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core import testing
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare, operator
 
@@ -440,18 +441,8 @@ class SubjectTests(TestCase):
         from ..credential_sight import fed_kinds
         from ..machines import Machine
 
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-tailnet",
-            provider="tailscale",
-            observed_at=timezone.now(),
-        )
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-shell",
-            provider="ssh",
-            observed_at=timezone.now(),
-        )
+        testing.connection("tailscale", "example-tailnet")
+        testing.connection("ssh", "example-shell")
         found = Machine(name="example-host", reached_by=("example-tailnet", "example-shell"))
 
         with patch("hq.platform.application.machines.machine", return_value=found):
@@ -472,14 +463,7 @@ class RefusingHostTests(TestCase):
         # A controller that arrived a moment ago.
         controller_arrived()
         for ref, reachable in (("example-shell", True), ("example-refusing", False)):
-            ProviderConnection.objects.create(
-                controller_id="example-controller",
-                connection_ref=ref,
-                provider="ssh",
-                probed=True,
-                reachable=reachable,
-                observed_at=timezone.now() - timedelta(minutes=10),
-            )
+            testing.connection("ssh", ref, reachable=reachable, observed_at=timezone.now() - timedelta(minutes=10))
         store(FAST)
         store("tailscale.device")
 

@@ -49,7 +49,7 @@ IN_USE = mock.patch("hq.platform.application.reach.DOCUMENTATION", (ip_network("
 @IN_USE
 class ServiceHealthTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare("lab-1", "machine", {"name": "lab-1", "addresses": ["198.51.100.10"]})

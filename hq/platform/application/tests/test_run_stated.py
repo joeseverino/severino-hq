@@ -1,8 +1,10 @@
 """What a run's playbook stated beside its result (``RunStated``) is kept on
 the run, struck of secrets, only when it keeps to the bridge contract's bounds
-and names only the run's own machines; the run's row and its read name the
-kinds of reading it stated. Every procedure here is a synthetic ``example.*``
-one."""
+and names only the run's own machines; the run's row and its read carry
+each reading it stated with its records. Every procedure here is a synthetic
+``example.*`` one."""
+
+import json
 
 from hq.domains.control_plane.models import OperationRequest
 
@@ -52,15 +54,90 @@ class KeptTests(RunStatedTestCase):
         self.assertEqual(run.state, OperationRequest.State.SUCCEEDED)
         self.assertEqual(run.result["stated"], STATED)
 
-    def test_the_run_s_row_and_its_read_name_each_kind_it_stated_once(self):
+    def test_the_run_s_row_and_its_read_carry_each_reading_it_stated_with_its_records(self):
         both = {"readings": {APP: STATED["readings"][APP], DB: {"host.filesystem": [FILESYSTEM]}}}
         run = self.claimed(self.run_of(APP, DB))
 
         self.report(run, both)
 
         (row,) = self.listed()
-        self.assertEqual(row.evidence.stated, ("host.filesystem", "host.reboot"))
-        self.assertEqual(get_run(str(run.pk))["stated"], ["host.filesystem", "host.reboot"])
+        said = [(each["host"], each["kind"], each["records"]) for each in get_run(str(run.pk))["stated"]]
+        self.assertEqual(
+            sorted(said),
+            sorted(
+                [
+                    (APP, "host.filesystem", [FILESYSTEM]),
+                    (APP, "host.reboot", [{"required": False}]),
+                    (DB, "host.filesystem", [FILESYSTEM]),
+                ]
+            ),
+        )
+        self.assertEqual(
+            sorted((reading.kind, reading.host) for reading in row.evidence.readings),
+            sorted((kind, host) for host, kind, _ in said),
+        )
+
+    def test_each_reading_reads_in_the_words_its_kind_declares_and_an_undeclared_one_only_as_stated(self):
+        from hq.domains.control_plane.observations import OBSERVATIONS
+
+        from ..work_runs import RunEvidence
+
+        undeclared = [{"example_member": 1}, {}]
+        pulled = [{"project": "example-app", "result": "rolled_back"}, {"project": "example-other", "result": "ok"}]
+        evidence = RunEvidence(
+            stated=(
+                {"host": APP, "kind": "host.filesystem", "records": [FILESYSTEM]},
+                {"host": APP, "kind": "example.undeclared", "records": undeclared},
+                {"host": APP, "kind": "apps.pull", "records": pulled},
+            )
+        )
+
+        filesystem, other, releases = evidence.readings
+        spec = OBSERVATIONS["host.filesystem"]
+        self.assertEqual(
+            (filesystem.label, [record[:2] for record in filesystem.records]),
+            (spec.label, [(spec.title(FILESYSTEM), spec.describe(FILESYSTEM))]),
+        )
+        self.assertTrue(spec.describe(FILESYSTEM))
+        self.assertEqual((other.label, other.records, other.count), ("", (), len(undeclared)))
+        self.assertIn("example_member", evidence.raw_readings)
+        # A record's tone is its kind's to declare: an app rolled back is one to look at.
+        self.assertEqual(
+            [(title, tone) for title, _said, tone in releases.records],
+            [
+                ("example-app", "attention"),
+                ("example-other", "good"),
+            ],
+        )
+        ((line, tone),) = evidence.amiss
+        self.assertEqual((line.startswith("example-app"), tone), (True, "attention"))
+
+    def test_a_task_s_line_of_json_reads_in_the_words_a_stated_kind_declares_and_any_other_as_said(self):
+        from ..app_update_approval import PULLED_KIND
+        from ..work_runs import RunEvidence
+
+        line = {
+            "running": True,
+            "result": "success",
+            "releasing": "example-web",
+            "ended": {"example-db": "rolled_back"},
+        }
+        lines = (json.dumps(line), json.dumps({"example_member": 1}), "Touched.", "")
+        evidence = RunEvidence(
+            worker=WORKER,
+            events=tuple(
+                {"host": APP, "task": f"Task {n}", "outcome": "started", "message": m} for n, m in enumerate(lines)
+            ),
+        )
+
+        worded, *others = (event["message"] for event in evidence.under_way)
+        assert PULLED_KIND.progress is not None
+        self.assertEqual(worded, PULLED_KIND.progress(line))
+        self.assertIn("example-web", worded)
+        self.assertIn("Rolled back", worded)
+        self.assertNotIn("rolled_back", worded)
+        self.assertEqual(others, list(lines[1:]))
+        self.assertEqual([event["message"] for event in evidence.tasks], [worded, *lines[1:]])
 
     def test_a_run_that_stated_nothing_names_no_kind(self):
         run = self.claimed(self.run_of(APP))

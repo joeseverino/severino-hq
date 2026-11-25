@@ -152,7 +152,7 @@ class CredentialFix:
 
     @property
     def expiry(self) -> str:
-        return expiry_phrase(self.expires_at.isoformat()) if self.expires_at else ""
+        return expiry_phrase(self.expires_at) if self.expires_at else ""
 
     @property
     def steps(self) -> tuple[Any, ...]:

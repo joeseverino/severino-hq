@@ -1,13 +1,10 @@
 """The bridge application: what it serves, what it refuses, and where it can be reached from."""
 
 import json
-import re
 from dataclasses import replace
-from pathlib import Path
 from unittest.mock import patch
 
-from django.conf import settings
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import SimpleTestCase, TestCase
 from django.urls import Resolver404, resolve
 from jsonschema import Draft202012Validator
 
@@ -17,7 +14,6 @@ from hq.domains.control_plane.bridge_contract import contract, max_body_bytes, o
 
 from . import bridge_client
 
-ROOT = Path(settings.BASE_DIR)
 PROBLEM = contract()["components"]["schemas"]["Problem"]
 
 
@@ -391,44 +387,11 @@ class ReachabilityTests(TestCase):
         self.assertEqual(answer.body, json.dumps(answer.json(), sort_keys=True).encode())
 
 
-@tag("source", "tree")
-class ListenerSourceTests(SimpleTestCase):
-    """Which listener is handed the bridge, read from the launcher source."""
-
-    def test_only_the_socket_listener_is_given_the_bridge_application(self):
-        """Source rule: one module hands each bridge application to a listener, and it is the Unix one."""
-
-        mention = re.compile(r"bridge_application\b|\bworker_application\b|unix_server\.serving")
-        holders = sorted(
-            str(path.relative_to(ROOT))
-            for path in (ROOT / "hq").rglob("*.py")
-            if "tests" not in path.parts
-            and path.name != "bridge_application.py"
-            and mention.search(path.read_text(encoding="utf-8"))
-        )
-        self.assertEqual(holders, ["hq/config/asgi.py"])
-        source = (ROOT / "hq/config/asgi.py").read_text(encoding="utf-8")
-        uses = [
-            line.strip() for line in source.splitlines() if mention.search(line) and not line.lstrip().startswith("#")
-        ]
-        self.assertEqual(
-            uses,
-            [
-                "lazy from hq.domains.control_plane.bridge_application import (",
-                "application as bridge_application,",
-                "worker_application as worker_bridge_application,",
-                "(bridge_application, settings.SEVERINO_BRIDGE_SOCKET),",
-                "(worker_bridge_application, settings.SEVERINO_AUTOMATION_BRIDGE_SOCKET),",
-                "await listening.enter_async_context(unix_server.serving(served, path))",
-            ],
-        )
-
-
 class ReportAttributionTests(TestCase):
     def test_a_sweep_is_stored_and_adopted_by_hq_itself_for_the_controller(self):
         from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-        from hq.platform.application.adoption_testing import managing_everything
         from hq.platform.core.models import AuditLog
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         bridge_client.call(

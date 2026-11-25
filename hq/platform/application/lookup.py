@@ -379,7 +379,7 @@ def look_up_address(
     # the stored one is not good enough.
     observed_at = now()
     readings.record(readings.public_address(str(parsed)), reading, observed_at=observed_at)
-    return {**reading, "observed_at": observed_at.isoformat()}
+    return {**reading, "observed_at": iso(observed_at)}
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:

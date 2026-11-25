@@ -4,13 +4,13 @@ word and gets the gate CI ran."""
 
 import fnmatch
 import re
-import subprocess
 
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.test_pipeline import ROOT, jobs, load, step_tasks, steps, workflow, workflows
 from tests.mise_tasks import mise_tasks
 from tools.gate.check import GATES
+from tools.source_scans import tracked_texts
 
 # `mise run`, or `mise -C <dir> run`, then its own options and a task, to the
 # end of the line or a closing backtick; `:::` starts the next task. A Python
@@ -84,21 +84,6 @@ def named_tasks(text: str) -> list[str]:
         *(name for match in MISE_RUN.finditer(text) for name in tasks_named(match[1].split())),
         *(name for match in MISE_RUN_LIST.finditer(text) for name in tasks_named(re.findall(r'"([^"]*)"', match[1]))),
     ]
-
-
-def tracked_texts() -> list[tuple[str, str]]:
-    """Every file git tracks that reads as text, by path."""
-
-    listed = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True, text=True).stdout
-    texts = []
-    for name in filter(None, listed.split("\0")):
-        path = ROOT / name
-        if path.is_file() and not path.is_symlink():
-            try:
-                texts.append((name, path.read_text()))
-            except UnicodeDecodeError:
-                continue
-    return texts
 
 
 def a_task(name: str, tasks: set[str]) -> bool:

@@ -108,7 +108,11 @@ def _title(node: TopologyNode, rows: tuple[RebootState, ...]) -> str:
 
 def _explanation(rows: tuple[RebootState, ...]) -> str:
     (row, *_) = rows
-    return "Everything on it stops until it is back." if row.scheduled else ""
+    return (
+        "Everything on it stops until it is back."
+        if row.scheduled
+        else "What was updated runs its old version until it restarts."
+    )
 
 
 def _evidence(row: RebootState) -> tuple[tuple[str, str], ...]:

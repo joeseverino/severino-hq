@@ -144,7 +144,7 @@ class FindingWordsTests(SimpleTestCase):
                     subject="example.com",
                     severity="attention",
                     title="Example reads late",
-                    explanation="",
+                    explanation="Example.",
                     why="The example was last read a week ago.",
                     clears="the example is read again",
                     family="Late examples",
@@ -177,7 +177,39 @@ class FindingWordsTests(SimpleTestCase):
         (row,) = finding_rows(
             "",
             "Approvals",
-            (Finding(rule="approval", subject="1", severity="attention", title="Example", explanation="", held=True),),
+            (
+                Finding(
+                    rule="approval",
+                    subject="1",
+                    severity="attention",
+                    title="Example",
+                    explanation="Example.",
+                    held=True,
+                ),
+            ),
         )
 
         self.assertTrue(row["held"])
+
+    def test_a_row_with_no_page_to_open_leads_with_its_first_press(self):
+        from hq.platform.application.finding_steps import Press
+
+        from .links import example_command
+
+        fix = example_command("fix", "Fix it", "remote_write", "/example/fix/", method="POST")
+        (row,) = finding_rows(
+            "example",
+            "Example",
+            (
+                Finding(
+                    rule="example",
+                    subject="",
+                    severity="attention",
+                    title="Example",
+                    explanation="Example.",
+                    steps=(Press(fix),),
+                ),
+            ),
+        )
+
+        self.assertEqual(row["action"], fix.label)

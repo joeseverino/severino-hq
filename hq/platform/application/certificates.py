@@ -32,6 +32,7 @@ from .sealed_secrets import sealed_slots, set_secret
 from .security import Principal
 from .ui import ended
 lazy from .asks import APPLIES_SHORTLY
+lazy from .projection import iso
 
 UPLOAD = "certificate.upload"
 # Where an uploaded certificate's private key is sealed; the controller's
@@ -168,7 +169,7 @@ def store_certificate(
         # learns nothing by being told it back, and a response is the easiest
         # place for a secret to end up somewhere it was not meant to go.
         "fingerprint_sha256": details["fingerprint_sha256"],
-        "not_after": details["not_after"].isoformat(),
+        "not_after": iso(details["not_after"]),
         "domains": details["domains"],
         "message": f"Stored a certificate for {ended(', '.join(details['domains']))} {APPLIES_SHORTLY}",
     }

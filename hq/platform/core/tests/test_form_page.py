@@ -1,7 +1,5 @@
 """Every page that is one form is drawn by one frame, ``form_page.html``."""
 
-import re
-
 from django import forms
 from django.template import engines
 from django.template.loader import render_to_string
@@ -11,14 +9,10 @@ from django.views.generic.edit import DeletionMixin, ModelFormMixin
 
 from hq.platform.application.markup_testing import elements, select, with_class
 from hq.platform.application.routes import routed
-from hq.platform.application.tests.tree import ROOT
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 FRAME = "form_page.html"
 CARD = f"{FRAME}#form_card"
-# What the frame's card carries, so a card drawn by hand is told from it.
-HOOK = 'data_frame="form"'
-_COMMENT = re.compile(r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}|{#.*?#}", re.DOTALL)
 
 
 def _frames(name: str) -> list[str]:
@@ -94,18 +88,3 @@ class FormCatalogTests(SimpleTestCase):
         cards = [name for name, template in entries.items() if CARD in template]
         self.assertGreaterEqual(len(cards), 2, "add a form/* entry with fields and one with none")
         self.assertTrue([name for name, template in entries.items() if 'method="get"' in template])
-
-
-@tag("source", "tree")
-class FormCardTests(SimpleTestCase):
-    def test_only_the_frame_draws_a_form_card(self):
-        """A page that is one form extends the frame, so its card is never
-        drawn by hand."""
-
-        templates = ROOT / "templates"
-        drawn = sorted(
-            path.relative_to(templates).as_posix()
-            for path in templates.rglob("*.html")
-            if HOOK in _COMMENT.sub("", path.read_text(encoding="utf-8"))
-        )
-        self.assertEqual(drawn, [FRAME], f'a page that is one form is {{% extends "{FRAME}" %}}')

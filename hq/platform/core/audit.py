@@ -30,7 +30,7 @@ from hq.platform.application import request_context
 from hq.platform.application.payload_words import changed_words
 lazy from hq.platform.application.request_identity import signed_in
 
-from . import speculation
+from . import speculation, tracing
 from .attribution import OperationContext, bound
 from .audit_words import REDACTED, changes_said
 from .facets import Facet, Timing, as_metadata as facet_metadata
@@ -489,15 +489,21 @@ def record_event(
     stamps = (stamp(obj, action, object_type) if stamp is not None else None) or {}
     user = stamps.get("user", user)
     subject = subject_of(obj)
+    operation_id = stamps.get("operation_id", context.operation_id)
+    # A row a seed dates under an operation of its own is that operation's root.
+    trace = context.chain if "operation_id" not in stamps else tracing.chain_id(operation_id)
     # Facets first, so an explicit `metadata` key still wins.
     event_metadata = {
         "interface": context.interface,
         "actor": _actor(context, user, stamped_user="user" in stamps),
         "operation": context.operation,
+        # A root's chain is its own id, which the column reads where none is written.
+        **({"trace": trace} if trace and trace != operation_id else {}),
         **({"device": context.device} if context.device else {}),
         **({"subject": subject} if subject else {}),
         **({"cause": context.cause} if context.cause else {}),
         **({"approved_by": context.approved_by} if context.approved_by else {}),
+        **({"approval": context.approval} if context.approval else {}),
         **facet_metadata(facets),
         **(metadata or {}),
         **stamps.get("metadata", {}),
@@ -510,7 +516,7 @@ def record_event(
             object_type=object_type,
             object_id=object_id,
             object_repr=object_repr,
-            operation_id=stamps.get("operation_id", context.operation_id),
+            operation_id=operation_id,
             connection=(str(connection or "").strip() or _connection_context.get())[:160],
             message=message,
             metadata=event_metadata,
@@ -537,28 +543,32 @@ def tallied() -> Iterator[list[AuditLog]]:
         yield rows
 
 
-def made_in(record: Model) -> str:
-    """The operation whose row made ``record``, where that is not its own; ""
-    for a record no row made, or one made under its own id."""
+def made_in(record: Model) -> tuple[str, str]:
+    """The operation whose row made ``record``, where that is not its own, and
+    the chain that row is part of: a held request made under its own id is
+    still in the chain of the ask that made it. "" for each for a record no
+    row made."""
 
     label = _AUDITED_MODELS.get(type(record))
     if label is None:
-        return ""
-    return (
+        return "", ""
+    made = (
         AuditLog.objects.filter(object_type=label, object_id=str(record.pk), action=AuditLog.Action.CREATED)
-        .exclude(operation_id=str(record.pk))
-        .values_list("operation_id", flat=True)
+        .order_by("created_at", "pk")
+        .values_list("operation_id", "trace")
         .first()
-        or ""
     )
+    if made is None:
+        return "", ""
+    operation, chain = made
+    return ("" if operation == str(record.pk) else operation), chain
 
 
 @dataclass(frozen=True, slots=True)
 class Outcome:
-    """How a piece of work, or one task of it, ended: ``seconds`` how long it
-    took where that was measured, ``facets`` what it measured of itself,
-    ``routine`` an end only the scheduler asked for that changed nothing, and
-    ``filed_under`` its row's type where no audit registration names one."""
+    """How a piece of work ended: ``seconds`` how long it took where that was
+    measured, ``facets`` what it measured of itself, ``routine`` an end only
+    the scheduler asked for that changed nothing, and ``filed_under`` its row's type where no audit registration names one."""
 
     message: str
     seconds: float | None = None
@@ -571,8 +581,8 @@ class Outcome:
 
 def work_ended(row: Model, outcome: Outcome) -> AuditLog | None:
     """The one row saying how the work ``row`` stands for ended, a job's or a
-    controller's operation's, or one task of it, beside the rows its work
-    wrote. Required: an end that cannot be recorded does not commit."""
+    controller's operation's, beside the rows its work wrote.
+    Required: an end that cannot be recorded does not commit."""
 
     model = type(row)
     return record_event(

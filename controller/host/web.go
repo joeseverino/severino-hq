@@ -1,6 +1,7 @@
 package host
 
 import (
+	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"path/filepath"
 	"time"
@@ -36,6 +37,22 @@ const (
 	TailscaledSocket = TailscaleRunDir + "/tailscaled.sock"
 )
 
+// Spool is the web container's temporary space, made by the image owned by
+// HQ's account (Dockerfile). It is no state of HQ's, so no Volume names it
+// and no backup reads it.
+const Spool = "/spool"
+
+// WebSocketDir is the directory of the web's own sockets, its probe among them
+// (hq/config/serve.py PROBE_SOCKET), which the image makes HQ's account's
+// alone. The root is read-only, so it is given a tmpfs of its own there,
+// with the same owner and mode.
+const WebSocketDir = "/run/hq-web"
+
+// webSocketTmpfs is the --tmpfs value for WebSocketDir.
+func webSocketTmpfs() string {
+	return fmt.Sprintf("%s:uid=%d,gid=%d,mode=0700", WebSocketDir, hostcore.WebUID, hostcore.WebGID)
+}
+
 // Args are the `docker run` arguments, after "docker". The container is
 // removed when it stops and has no restart policy: the unit restarts it, so
 // one thing decides when HQ runs.
@@ -52,6 +69,7 @@ func (w Web) Args() []string {
 		"--security-opt", "no-new-privileges:true",
 		"--read-only",
 		"--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
+		"--tmpfs", webSocketTmpfs(),
 		// A runaway request loop degrades HQ, not the services beside it.
 		"--pids-limit", "512",
 		"--memory", "1g",
@@ -61,9 +79,11 @@ func (w Web) Args() []string {
 		"--health-start-interval", "2s",
 		// Where the database, uploads and exports live is the image's to say
 		// (Dockerfile). A request body is spooled whole and an upload written
-		// again, so the temporary space is on the data volume, not the
-		// RAM-backed /tmp.
-		"--env", "TMPDIR=/data/tmp",
+		// again, so the temporary space is on disk, not the RAM-backed /tmp,
+		// and the container's own: a volume with no name, which --rm removes
+		// with it, so a web starting beside another never sees its files.
+		"--mount", "type=volume,target=" + Spool,
+		"--env", "TMPDIR=" + Spool,
 		"--env", "SEVERINO_CONTROLLER_DOORBELL=" + hostcore.RunDir + "/controller-doorbell",
 		"--env", "SEVERINO_BRIDGE_SOCKET=" + BridgeSocket,
 		"--env", "SEVERINO_AUTOMATION_BRIDGE_SOCKET=" + AutomationBridgeSocket,

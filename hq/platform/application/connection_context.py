@@ -45,7 +45,7 @@ from .path_model import ServicePath
 from .paths import hq_path
 from .posture import estate_inputs, guide, posture
 from .problems import problem_counts
-from .projection import complete, iso, projection_scope, read_once
+from .projection import iso, page_of, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .request_connection import connection as request_connection
 from .request_path import joined
@@ -331,9 +331,8 @@ class ConnectionsContext:
         """The derived facts, for the API, MCP, CLI and SDK."""
 
         estate = self.estate_posture
-        items = [row.as_dict() for row in self.rows]
         return {
-            **complete(items),
+            **page_of(self.rows, each=ConnectionRow.as_dict),
             "summary": {
                 "connections": estate.connection_count,
                 Tone.ATTENTION: estate.attention_count,

@@ -1,34 +1,13 @@
 """Markup a page would otherwise write by hand is drawn by its one partial or
 tag, so it reads the same everywhere and a change to it is made once."""
 
-import re
-
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements, texts
 from hq.platform.core.testing import render
 
-from .source import template_files
-
-FORM_ERRORS = "partials/_form_errors.html"
-
-
-def _templates():
-    """Each template's name and source, the one walk every guard here reads."""
-
-    for name, path in template_files():
-        yield name, path.read_text(encoding="utf-8")
-
-
-def _written_by_hand(pattern: str, partial: str) -> list[str]:
-    """Every template but ``partial`` that writes ``pattern``."""
-
-    return [name for name, text in _templates() if name != partial and re.search(pattern, text)]
-
 
 class OutsideLinkTests(SimpleTestCase):
-    PARTIAL = "partials/_outside_link.html"
-
     def test_markup_links_out_the_way_a_name_does(self):
         html = render(
             '{% outside_link url=url css="chip" tone="good" tip="Success" %}<b>deploy</b>{% endoutside_link %}'
@@ -113,29 +92,3 @@ class RecordLinkTests(SimpleTestCase):
     def test_a_thing_with_no_page_of_its_own_is_refused(self):
         with self.assertRaises(AttributeError):
             render("{% entity row|record %}", row={"name": "example"})
-
-
-@tag("source", "tree")
-class SharedMarkupTemplateTests(SimpleTestCase):
-    """No template writes by hand what a shared partial or tag draws."""
-
-    def test_only_the_partial_prints_a_form_s_own_errors(self):
-        found = _written_by_hand(r"\.non_field_errors", FORM_ERRORS)
-        self.assertEqual(found, [], f'include "{FORM_ERRORS}" instead')
-
-    def test_no_template_decides_a_fact_s_tone(self):
-        # The tag refuses the part when a page renders; this reads every
-        # template, rendered by a test or not.
-        found = [
-            f"{name}:{number}"
-            for name, text in _templates()
-            for number, line in enumerate(text.splitlines(), 1)
-            if re.search(r"\{%\s*tone\s*%\}", line)
-        ]
-        self.assertFalse(found, "give the fact's projection a tone and write tone=<it> on {% fact %}")
-
-    def test_only_the_outside_link_partial_writes_an_outside_link(self):
-        # An anchor to a web address, or one that leaves in a new tab.
-        outside = r'<a\b[^>]*(?:href="https?:|rel="noopener|target="_blank"|class="external-link)'
-        found = _written_by_hand(outside, OutsideLinkTests.PARTIAL)
-        self.assertEqual(found, [], "write {% entity url|outside label=name %} or {% outside_link %} instead")

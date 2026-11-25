@@ -4,8 +4,6 @@ from functools import cached_property
 from typing import override
 
 from django.core.exceptions import ValidationError
-from django.core.paginator import Page, Paginator
-from django.db.models import BooleanField, ExpressionWrapper, F, Q
 from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, TemplateView
 
@@ -32,8 +30,6 @@ from .models import AuditLog
 
 # ``?about=<key>``: the log narrowed to every row about one record.
 ABOUT = "about"
-# How many of the rest of an operation an event's page lists at a time.
-OPERATION_PAGE = 50
 
 
 class AuditLogListView(ListPageMixin, TemplateView):
@@ -88,13 +84,18 @@ class AuditLogListView(ListPageMixin, TemplateView):
 
     @override
     def list_query(self):
-        """Read as history, newest first, unsearched, not a queue and of every
-        action, a page is a page of events, one line per operation."""
+        """Read as history, newest first, unsearched, not a queue, of every
+        action and of no one chain, a page is a page of events, one line per
+        chain; one chain asked is every row of it."""
 
         asked = super().list_query()
         default = self.listing.sorts[0].name
         history_read = not (
-            self._awaiting() or asked.get("query") or asked.get("sort", default) != default or asked.get("action")
+            self._awaiting()
+            or asked.get("query")
+            or asked.get("sort", default) != default
+            or asked.get("action")
+            or asked.get(history.CHAIN)
         )
         return {**asked, "events": True} if history_read else asked
 
@@ -182,8 +183,10 @@ class AuditLogListView(ListPageMixin, TemplateView):
 
 # The metadata an event's page says in rows of their own rather than under
 # "Metadata": who acted, through which door and who approved it are the Who row's.
-# What started it and the record it is about are the Cause and About rows'.
-_STATED_ABOVE = frozenset({"changes", "operation", "actor", "interface", "approved_by", "cause", "subject"})
+# What started it is the chain's, and the record it is about the About row's.
+_STATED_ABOVE = frozenset(
+    {"changes", "operation", "actor", "interface", "approved_by", "approval", "cause", "trace", "subject"}
+)
 
 
 def operation_words(event: AuditLog) -> str:
@@ -215,29 +218,6 @@ def about_url(key: str) -> str:
     """The log narrowed to one record's whole story (``?about=``)."""
 
     return with_query(reverse("core:audit_list"), {ABOUT: key})
-
-
-def _cause(event: AuditLog) -> tuple[str, str] | None:
-    """The operation that started this row's own, as its name and the page that reads it.
-
-    That page is the operation's own row's (a queued request's, an approval's),
-    else its newest row's, which lists the rest of it. A row written before
-    rows named their cause has none.
-    """
-
-    if not event.cause:
-        return None
-    own = ExpressionWrapper(Q(object_id=F("operation_id")), output_field=BooleanField())
-    started = (
-        AuditLog.objects.filter(operation_id=event.cause)
-        .annotate(own_row=own)
-        .order_by("-own_row", "-created_at", "-pk")
-        .first()
-    )
-    if started is None:
-        return None
-    named = started.object_repr if started.own_row and started.object_repr else operation_words(started)
-    return named or started.summary, reverse("core:audit_detail", args=[started.pk])
 
 
 class AuditLogDetailView(PageMixin, DetailView):
@@ -297,7 +277,6 @@ class AuditLogDetailView(PageMixin, DetailView):
         context["operation"] = operation_words(event)
         # A row about the operation itself has its id as its object's, already said there.
         context["operation_id"] = event.operation_id if event.operation_id != event.object_id else ""
-        context["cause"] = _cause(event)
         if subject := _subject(event):
             context["about"] = (subject, about_url(subject))
         # Everything else in the metadata, minus what those rows already say.
@@ -324,42 +303,22 @@ class AuditLogDetailView(PageMixin, DetailView):
                 # Each playbook it changes, with Adopt and Reject while it waits.
                 scan_rows=playbook_table(adopted_procedures(), scan, web_principal(self.request.user), every=False),
             )
-        groups, page = self._other_events(event, with_operation=approval is None)
-        context["other_events"] = groups
-        # The list a history line's count of the rest opens to.
-        context["operation_list"] = history.OPERATION_LIST
-        # The rest of the operation is every row of it, a page at a time.
-        context.update(
-            page_obj=page,
-            paginator=page.paginator if page else None,
-            is_paginated=bool(page and page.has_other_pages()),
-        )
+        context["other_events"] = self._other_events(event, with_chain=approval is None)
         return context
 
-    def _other_events(self, event: AuditLog, *, with_operation: bool) -> tuple[list[history.HistoryGroup], Page | None]:
+    def _other_events(self, event: AuditLog, *, with_chain: bool) -> list[history.HistoryGroup]:
         """The other events beside this one, one group each, as lines of the
-        history: the rest of its operation, a page of it at a time, then
-        everything else to its object, which folds away under the first;
-        beside the page of the operation shown."""
+        history: the chain it is part of, each of its operations a line with
+        what it changed beneath it, then everything else to its object, which
+        folds away under the first. An approval's card already says what it
+        covers."""
 
         others = AuditLog.objects.exclude(pk=event.pk).select_related("user")
         groups = []
-        page = None
-        # The rest of the same operation: what `operation_id` is for. One
-        # action can touch many rows, and matching them up by timestamp alone
-        # is guesswork. An approval's card already says what it covers.
-        if with_operation and event.operation_id:
-            siblings = others.filter(operation_id=event.operation_id).order_by("-created_at", "-pk")
-            page = Paginator(siblings, OPERATION_PAGE).get_page(self.request.GET.get("page"))
-            if page.object_list:
-                groups.append(
-                    history.HistoryGroup(
-                        tuple(history.entries(list(page.object_list))), "Rest of this operation", page.paginator.count
-                    )
-                )
-                others = others.exclude(operation_id=event.operation_id)
-            else:
-                page = None
+        if with_chain and event.trace:
+            steps = history.chain(event.trace)
+            groups.append(history.HistoryGroup(steps, history.EVENTS))
+            others = others.exclude(trace=event.trace)
         if event.object_type and event.object_id:
             to_object = list(others.filter(object_type=event.object_type, object_id=event.object_id)[:20])
             if to_object:
@@ -367,8 +326,7 @@ class AuditLogDetailView(PageMixin, DetailView):
                     history.HistoryGroup(
                         tuple(history.entries(to_object)),
                         "Everything else to this object",
-                        len(to_object),
                         "audit-object-history" if groups else "",
                     )
                 )
-        return groups, page
+        return groups

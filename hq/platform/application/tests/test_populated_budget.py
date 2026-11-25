@@ -15,7 +15,7 @@ from hq.domains.projects.models import Project
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.models import UpstreamReading
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import readings
@@ -121,14 +121,8 @@ def populate(size: int = 8) -> None:
             observed_generation=1,
             last_observed_at=now,
         )
-        ProviderConnection.objects.create(
-            connection_ref=f"example-host-{index}",
-            controller_id="example-controller",
-            provider="ssh",
-            endpoint=f"100.64.0.{index + 1}:22",
-            reachable=index != 1,
-            probed=True,
-            observed_at=now,
+        connection(
+            "ssh", f"example-host-{index}", endpoint=f"100.64.0.{index + 1}:22", reachable=index != 1, observed_at=now
         )
     declare(
         "example-cert",
@@ -137,15 +131,7 @@ def populate(size: int = 8) -> None:
         status={"not_after": (now + timedelta(days=20)).isoformat()},
     )
     for ref, provider in (("example-dns", "cloudflare_api"), ("example-tailnet", "tailscale")):
-        ProviderConnection.objects.create(
-            connection_ref=ref,
-            controller_id="example-controller",
-            provider=provider,
-            endpoint="https://api.example.com",
-            reachable=True,
-            probed=True,
-            observed_at=now,
-        )
+        connection(provider, ref, endpoint="https://api.example.com", observed_at=now)
     DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
     readings.record(
         readings.weather("41.8781,-87.6298"),

@@ -117,7 +117,7 @@ class RunFormTests(TestCase):
         self.assertTrue(form_class.base_fields["parameters.service"].required)
         form = form_class({"hosts": [APP], "parameters.service": "web", **CONFIRMED})
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.command_payload, {"hosts": [APP], "parameters": {"service": "web"}})
+        self.assertEqual(form.command_payload, {"hosts": [APP], "parameters": {"service": "web"}, "check": False})
         answer = self.asked(form)
         self.assertTrue(answer["ok"], answer)
 
@@ -128,7 +128,7 @@ class RunFormTests(TestCase):
         self.assertEqual([name for name in form_class.base_fields if name.startswith("parameters")], [])
         form = form_class({"hosts": [APP], **CONFIRMED})
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.command_payload, {"hosts": [APP]})
+        self.assertEqual(form.command_payload, {"hosts": [APP], "check": False})
         self.assertTrue(self.asked(form)["ok"])
 
     def test_an_object_inside_the_inputs_is_drawn_as_its_fields_too(self):

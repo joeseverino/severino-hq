@@ -3,9 +3,9 @@
 from django.test import SimpleTestCase, TestCase
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.platform.core.testing import connection
 
 from ..adoption import manages_through
-from ..adoption_testing import connection
 
 RECORD_KIND = "cloudflare.dns_record"
 
@@ -39,7 +39,7 @@ class ManagesThroughTests(SimpleTestCase):
 
 class ManagesThroughReadsTests(TestCase):
     def test_it_reads_the_connections_on_the_first_ask_only(self):
-        connection("cloudflare_dns", "example-dns")
+        connection("cloudflare_dns", "example-dns", manages=True)
 
         with self.assertNumQueries(0):
             manages = manages_through()

@@ -12,6 +12,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.platform.core.testing import connection
 
 from .. import hq_self
 from ..action_items import item_key
@@ -20,14 +21,14 @@ from ..dashboard import work_queue
 from ..derivation_testing import frozen, uncached
 from ..finding_model import Finding, FindingRule
 from ..finding_steps import Press
-from ..findings import RULE_MODULES, _estate, estate_findings, finding_key, read_gate
+from ..findings import RULE_MODULES, _estate, estate_findings, finding_key, read_gate, rule_for
 from ..infrastructure import ResourceState, resource_health
 from ..inventory_testing import store
 from ..projection import projection_scope
 from ..security import Capability, Principal
 from ..tone import Tone
 from ..topology import derive_topology
-from .finding_examples import AT, Ago, Example, Examples, Raised, Stored, connection
+from .finding_examples import AT, Ago, Example, Examples, Raised, Stored
 
 try:
     import time_machine
@@ -81,7 +82,7 @@ def _store(readings, *, failed: bool = False) -> None:
 def a_controller() -> None:
     """The controller every example's estate is read by, on its own machine."""
 
-    connection("example-tailnet", "tailscale")
+    connection("tailscale", "example-tailnet")
 
 
 class Walked:
@@ -100,6 +101,7 @@ class Walked:
             topology = derive_topology(principal=EVERYTHING)
             self.detected = rule.detect(_estate(topology, EVERYTHING))
             self.found: tuple[Finding, ...] = estate_findings(principal=EVERYTHING, rule=rule.name)
+            self.every: tuple[Finding, ...] = estate_findings(principal=EVERYTHING)
             self.queued = {item["key"] for item in work_queue()}
         self.subjects = {node.id: node for node in topology.nodes}
 
@@ -112,13 +114,14 @@ def _entered(held: object) -> AbstractContextManager[object]:
 
 def said(finding: Finding, raised: Raised | None = None) -> tuple[Any, ...]:
     """What ``finding`` says, in the terms ``raised`` states it in: its
-    evidence, steps and lead only where ``raised`` names them."""
+    reason, evidence, steps and lead only where ``raised`` names them."""
 
     told = tuple(step for step in finding.steps if not isinstance(step, Press))
     presses = tuple(press.capability for press in finding.presses)
     return (
         finding.title,
         finding.severity,
+        str(finding.explanation) if raised is None or raised.explanation is not None else None,
         presses,
         # A fact that links its record is stated by its words.
         tuple((label, str(value)) for label, value in finding.evidence)
@@ -126,6 +129,7 @@ def said(finding: Finding, raised: Raised | None = None) -> tuple[Any, ...]:
         else None,
         told if raised is None or raised.steps is not None else None,
         (finding.primary.label, finding.primary.url) if finding.primary and raised and raised.primary else None,
+        finding.notice.written if finding.notice else None,
     )
 
 
@@ -135,10 +139,12 @@ def stated(rule: FindingRule, raised: Raised) -> tuple[Any, ...]:
     return (
         raised.title,
         raised.severity or rule.severity,
+        raised.explanation,
         raised.presses,
         raised.evidence,
         raised.steps,
         raised.primary,
+        raised.notice,
     )
 
 
@@ -202,6 +208,16 @@ class EveryRuleTests(TestCase):
             [stated(rule, raised) for raised in example.raises],
             "it raised, as an example states it:\n" + "\n".join(_as_example(rule, finding) for finding in found),
         )
+        standing = {finding_key(finding): finding for finding in walked.every}
+        causes = {finding_key(each): finding for finding in walked.every for each in finding.consequences}
+        for finding, raised in zip(found, example.raises, strict=True):
+            key = finding_key(finding)
+            self.assertEqual(
+                tuple(each.title for each in standing[key].consequences) if key in standing else (),
+                raised.beneath,
+                "what follows from it is said beneath it",
+            )
+            self.assertFalse(key in standing and key in causes, "a consequence never stands beside its cause")
         for finding in found:
             self.assertIn(finding.severity, rule.bars)
             self.assertIn(rule.bars[finding.severity], finding_why(finding, rule))
@@ -218,8 +234,17 @@ class EveryRuleTests(TestCase):
                     finding.check.url if finding.check else "",
                     "a claim about a kind offers to read it again",
                 )
-            if finding.severity.acted_on and not finding.awaiting_fix and _confirmed(finding):
-                self.assertIn(item_key(rule.domain or ESTATE, finding_key(finding)), walked.queued)
+            # One that follows from another is queued as its cause's item.
+            item = causes.get(finding_key(finding), finding)
+            if item.severity.acted_on and not item.awaiting_fix and _confirmed(item):
+                self.assertIn(item_key(_section(item), finding_key(item)), walked.queued)
+
+
+def _section(finding: Finding) -> str:
+    """Where the queue keeps ``finding``: its rule's section, else the estate's."""
+
+    declared = rule_for(finding.rule)
+    return (declared.domain if declared else "") or ESTATE
 
 
 def _confirmed(finding: Finding) -> bool:
@@ -249,4 +274,6 @@ def _as_example(rule: FindingRule, finding: Finding) -> str:
         parts.append(f"severity=Tone.{Tone(finding.severity).name}")
     if presses := tuple(press.capability for press in finding.presses):
         parts.append(f"presses={presses!r}")
+    if finding.notice:
+        parts.append(f"notice={finding.notice.written!r}")
     return f"Raised({', '.join(parts)})," if len(parts) > 1 else f"{finding.title!r},"

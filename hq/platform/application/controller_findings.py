@@ -87,7 +87,7 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=node.id,
                 title=f"{node_name(node)} was missing from HQ's last read",
                 severity=Tone.SERIOUS,
-                explanation="",
+                explanation="What HQ shows of it is what it said before that read.",
                 evidence=(
                     _when("Last seen", node.observed_at),
                     _when("Others read" if others else LAST_READ, newest),
@@ -201,8 +201,13 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                     else f"Portainer lists no containers on {machine}"
                 ),
                 severity=Tone.SERIOUS,
-                # Its step says to restart what holds the socket, where HQ can name it.
-                explanation="" if holder else "Restart what gives Portainer its Docker socket.",
+                # Its step names what holds the socket, where HQ can name it.
+                explanation=" ".join(
+                    (
+                        "What holds Portainer's Docker socket keeps one that no longer answers.",
+                        *(() if holder else ("Restart what gives Portainer its Docker socket.",)),
+                    )
+                ),
                 evidence=(
                     ("Environment", name or machine),
                     *((("Status", str(environment["status"])),) if environment.get("status") else ()),
@@ -339,7 +344,7 @@ def _controller_stopped(estate: FindingEstate, machine: str, controller: str, ki
         subject=controller,
         title=f"The controller on {machine} stopped reading",
         severity=Tone.SERIOUS,
-        explanation="",
+        explanation="What HQ shows of what it reads is what it last read.",
         evidence=(
             ("Not read", ", ".join(sorted(_many(kind) for kind in kinds))),
             *((_when(LAST_READ, last),) if last else ()),
@@ -392,7 +397,8 @@ def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
 def _fault_said(node: TopologyNode, otherwise: tuple[str, str]) -> tuple[str, str]:
     """What the resource itself says is wrong, as a title as far as its first
     sentence and what it says after that; a resource that says nothing, or
-    too much to title, gets ``otherwise``'s title."""
+    too much to title, gets ``otherwise``'s title, and one that says no more
+    than its title gets ``otherwise``'s reason."""
 
     said = node.detail.strip()
     if not said:
@@ -406,7 +412,7 @@ def _fault_said(node: TopologyNode, otherwise: tuple[str, str]) -> tuple[str, st
         first, rest = lead, [ended(after), *rest]
     if len(first) > 110:
         return otherwise[0], said
-    return first, " ".join(rest)
+    return first, " ".join(rest) or otherwise[1]
 
 
 def _fault_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
@@ -576,7 +582,11 @@ def _unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
             subject=node.id,
             title=f"{_what(node, node.label)} could not be checked",
             severity=Tone.ATTENTION,
-            explanation="",
+            explanation=(
+                "Its last reading is too old to say how it stands now."
+                if node.status_label == OUT_OF_DATE
+                else "Its reading reports no state of its own."
+            ),
             evidence=(_when(LAST_READ, node.observed_at or None),),
             remedies=reconcile_remedy(node),
         )
@@ -646,10 +656,8 @@ def _work_that_keeps_failing(estate: FindingEstate) -> tuple[Finding, ...]:
 def _keeps_failing(node: TopologyNode, unfinished: tuple[str, ...], machine: str) -> Said:
     return {
         "title": f"Work through {node.label} keeps failing",
-        "explanation": "",
-        "steps": journal_step(
-            "Read the controller's log", machine, CONTROLLER_UNIT, ("It retries every few minutes.",)
-        ),
+        "explanation": "The controller retries it every few minutes, and each try has failed.",
+        "steps": journal_step("Read the controller's log", machine, CONTROLLER_UNIT),
     }
 
 

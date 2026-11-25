@@ -11,7 +11,7 @@ class ManifestImportForm(forms.Form):
         # shape. Both spellings, because a vault export written by a script is
         # as likely to arrive typed `application/json` as named `.json`.
         widget=forms.ClearableFileInput(attrs={"accept": ".json,application/json"}),
-        help_text=("JSON array of doc records from the vault export. Same format as the import_docs_manifest command."),
+        help_text="JSON array of doc records from the vault export.",
     )
     update_existing = forms.BooleanField(
         required=False,

@@ -2,13 +2,14 @@
 
 from django.test import TestCase
 
+from hq.platform.core.testing import connection
+
 from ..topology_facts import perimeter_unchecked
-from .test_tailnet_posture import tailnet_connection
 
 
 class PerimeterUncheckedTests(TestCase):
     def setUp(self):
-        tailnet_connection("example-edge", provider="ssh")
+        connection("ssh", "example-edge", endpoint="https://api.example.com")
 
     def test_the_reason_is_derived_from_the_record(self):
         self.assertEqual(perimeter_unchecked({}), "no public address")

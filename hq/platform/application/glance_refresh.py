@@ -36,6 +36,7 @@ from .glance import (
 from .moments import moment
 from .security import Principal
 lazy from .capabilities import capability_words, command_spec
+lazy from .projection import iso
 
 DASHBOARD_REFRESH = "dashboard.panels.refresh"
 DASHBOARD_REFRESH_STALE = "dashboard.panels.refresh_due"
@@ -173,7 +174,7 @@ def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
             "weather": {"point": configuration.weather_point, "endpoint": NWS_API},
         },
         # Every request made by now is one a reading begun after this answers.
-        "as_of": timezone.now().isoformat(),
+        "as_of": iso(timezone.now()),
     }
 
 
@@ -252,7 +253,7 @@ def record_dashboard_observations(payload: list[dict[str, Any]], *, admitted: Ad
         else:
             _record_weather_reading(observation, configuration=configuration, as_of=as_of, observed_at=now)
         stored.append(panel_id)
-    return {"ok": True, "recorded": stored, "observed_at": now.isoformat()}
+    return {"ok": True, "recorded": stored, "observed_at": iso(now)}
 
 
 def _keep[Shape: (Machine, Weather)](key: str, reading: Shape, *, worked: Callable[[Shape], bool], now: Any) -> None:

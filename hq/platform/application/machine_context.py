@@ -144,7 +144,7 @@ def _names(machine, *, principal: Principal) -> ServiceSection | None:
         reading = measured.get(normalized_hostname(hostname))
         if not reading:
             return Cell("unmeasured", muted=True)
-        return Cell(f"{reading['pageviews']:,}")
+        return Cell(f"{reading['pageviews']:,}", sort=str(reading["pageviews"]))
 
     ordered = sorted(
         hostnames,

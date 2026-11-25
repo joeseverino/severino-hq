@@ -636,6 +636,12 @@ def connection_anchor(ref):
 _IDENTIFIER = re.compile(r"[-_./:@=#]")
 
 
+def reads_as_code(text: str) -> bool:
+    """Whether a readout shows ``text`` as an identifier in code."""
+
+    return " " not in text.strip() and bool(_IDENTIFIER.search(text))
+
+
 @register.filter
 def readout(value):
     """A value as a readout shows it: an identifier in code, anything a person
@@ -646,7 +652,7 @@ def readout(value):
     """
 
     text = str(admitted(value))
-    if " " not in text.strip() and _IDENTIFIER.search(text):
+    if reads_as_code(text):
         return format_html("<code>{}</code>", breakable(text))
     # A phrase can still name something ("restart example-web"): its names
     # are held as tokens, its words stay text.

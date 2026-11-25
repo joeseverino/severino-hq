@@ -16,11 +16,11 @@ from hq.domains.assets.models import Asset
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.domains.projects.models import Project
 from hq.platform.application.approvals import ApproveCommand, approve
-from hq.platform.application.controller import ControllerReport, claim_next_operation, report_operation
+from hq.platform.application.controller import claim_next_operation
 from hq.platform.application.security import web_principal
 from hq.platform.application.tests.procedures import APP, DB, RESTART, RESTART_RUN, Supply, manifest, run_payload
 from hq.platform.application.tests.test_page_projections import page_lists, populate, served_lists
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import operator, run_ended
 
 from .doors import MCP, OPERATOR, SDK, Api, Caller, at_the_door, each_door
 
@@ -192,10 +192,7 @@ def _work(*events):
 
     claimed = claim_next_operation(WORKER, capabilities=CLAIMS)
     operation = OperationRequest.objects.get(pk=claimed["operation"]["id"])
-    report = ControllerReport(
-        success=True, observed_generation=operation.input["generation"], message="Restarted.", events=list(events)
-    )
-    report_operation(str(operation.pk), report, controller_id=WORKER)
+    run_ended(str(operation.pk), WORKER, events=events, success=True, message="Restarted.")
     return str(operation.pk)
 
 

@@ -6,10 +6,10 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application import adoption, zones
-from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.inventory import record_inventory
 from hq.platform.application.record_errors import PolicyError
 from hq.platform.application.security import cli_principal
+from hq.platform.core.testing import managing_everything
 
 KIND = "adguard.rewrite"
 REFUSED = {"domain": "app.example.com", "answer": "192.0.2.10", "enabled": True}

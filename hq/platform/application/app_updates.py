@@ -12,7 +12,7 @@ and their image, and the move is judged by the one judge every upgrade uses
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hq.domains.control_plane.models import OperationRequest
 
@@ -41,6 +41,10 @@ lazy from .finding_model import Fact, FindingRemedy
 lazy from .labels import lower_first
 lazy from .pages import PageAction, command_reach
 lazy from .resource_operations import OperationAsked, operation_asked
+lazy from .work_runs import standing_of as run_standing
+
+if TYPE_CHECKING:
+    from .work_runs import WorkRun
 
 # What an update's new pins bring of their own, as every page labels it.
 BRINGS = "New vulnerabilities"
@@ -398,23 +402,33 @@ class MergeStanding:
 
     words: str
     tone: str
-    # The page of the run it stands on: the preview, or the apply.
-    run_url: str = ""
     # Whether it previews, merges, applies or merged, so no second approval is offered.
     taken: bool = False
-    # Of a preview or an apply that ended badly: the step it stopped on, and what it said.
-    step: str = ""
-    said: str = ""
+    # Its fact's detail: what it waits on, or of a preview or an apply that
+    # ended, the step it stopped on, what that said and each app the run did
+    # not release; each left out where its words already say it.
+    lines: tuple[str, ...] = ()
     # The run or reconcile it stands on; None for Renovate's run, which is a
     # read asked of the controller rather than an operation.
     operation: OperationRequest | None = None
+    # That operation as every list of work shows it, whose page and standing
+    # each surface that names it shows.
+    run: WorkRun | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "lines", tuple(line for line in self.lines if line and line not in self.words))
 
     @property
-    def lines(self) -> tuple[str, ...]:
-        """Its fact's detail: the step it stopped on, then what it said, each
-        left out where its words already say it."""
+    def run_url(self) -> str:
+        """The page of the run it stands on, the preview or the apply; "" for none."""
 
-        return tuple(line for line in (self.step, self.said) if line and line not in self.words)
+        return self.run.url if self.run else ""
+
+    @property
+    def standing(self) -> Standing | None:
+        """How its run stands while it is under way (``work_runs.standing_of``); None otherwise."""
+
+        return run_standing(self.run) if self.live and self.run else None
 
     @property
     def live(self) -> bool:
@@ -429,7 +443,7 @@ class MergeStanding:
         stands, never a refusal, since the first press is still its request."""
 
         if self.live:
-            return Asked(Standing(RUNNING, self.words), message=ended(f"Already asked. {self.words}"))
+            return Asked(self.standing or Standing(RUNNING, self.words), message=ended(f"Already asked. {self.words}"))
         return Asked(Standing(DONE, self.words), message=ended(self.words))
 
     def asked(self) -> OperationAsked:

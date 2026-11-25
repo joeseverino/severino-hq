@@ -11,7 +11,7 @@ from django.test import SimpleTestCase, tag
 
 from tools.gate import chain, selection
 
-PROBES = Path("hq/platform/core/tests/test_startup.py")
+PROBES = Path("hq/platform/core/tests/test_settings_env.py")
 
 
 @tag("source")

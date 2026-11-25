@@ -26,7 +26,12 @@ class ActionItemRow(TypedDict):
     source: Annotated[str, Describe("The part of HQ it comes from, in words, such as `Containers`.")]
     label: Annotated[str, Describe("What needs doing, in a line.")]
     detail: Annotated[str, Describe("More on it: what was read, and what to do.")]
-    action: Annotated[str, Describe("The button that opens it, such as `Open containers`; empty for none.")]
+    action: Annotated[
+        str,
+        Describe(
+            "What it leads with: the button that opens it, such as `Open containers`, else the first command HQ runs for it; empty for neither."
+        ),
+    ]
     url: Annotated[str, Describe("The page where it is dealt with.")]
     since: Since
 

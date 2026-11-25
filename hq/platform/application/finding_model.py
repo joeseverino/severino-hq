@@ -8,7 +8,7 @@ import re
 import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 
 from hq.domains.control_plane.providers import PROVIDERS
@@ -20,6 +20,7 @@ from .display_words import Code, as_members, in_words
 from .entity_links import EntityLink, link_url
 from .finding_steps import Do, Press, Run, Step
 from .moments import moment
+from .non_empty import RequiredText, holds_something
 from .tone import Tone
 from .topology_model import Topology, TopologyNode
 from .ui import ended
@@ -27,6 +28,7 @@ lazy from .capabilities import capability_spec, capability_words
 lazy from .pages import command_reach
 
 if TYPE_CHECKING:
+    from .asks import Standing
     from .cadence import ControllerSweepCommand
     from .security import Principal
 
@@ -88,6 +90,34 @@ class FindingEvidence(TypedDict):
     code: Annotated[bool, Describe("Whether the value is what a machine wrote (a digest, a path), to read exactly.")]
 
 
+def matter_key(rule: str, about: str, part: str = "") -> str:
+    """What a finding is about, as its item in the queue is keyed: its rule,
+    its subject (else its scope), and the one thing on that subject it names."""
+
+    key = f"finding:{rule}:{about}"
+    # Two containers on one machine are two matters, each keyed by its own.
+    return f"{key}:{part}" if part else key
+
+
+@dataclass(frozen=True, slots=True)
+class Notice:
+    """What makes a notice new: the occurrence it tells of, such as the day of
+    the last loaded leg session or the commit on its way to production.
+
+    A dismissed notice stays gone until this moves (``action_items.item_revision``),
+    so its wording, its tone and its count never bring it back.
+    """
+
+    occurrence: date | RequiredText
+
+    def __post_init__(self) -> None:
+        holds_something(self)
+
+    @property
+    def written(self) -> str:
+        return self.occurrence.isoformat() if isinstance(self.occurrence, date) else self.occurrence
+
+
 def written_fact(label: str, value: str | EntityLink) -> FindingEvidence:
     """A line of evidence as every door answers it, a record with its page."""
 
@@ -104,7 +134,9 @@ class Finding:
     subject: str
     title: str
     severity: Tone
-    explanation: str
+    # Why it matters, in plain words: every finding says its reason, so none
+    # reaches a person as a title alone.
+    explanation: RequiredText
     evidence: tuple[Fact, ...] = ()
     # The commands that would fix it, as its detector names them. Derivation
     # resolves each once, into a ``Press`` among its steps for a reader who may
@@ -162,9 +194,10 @@ class Finding:
     # How many things one finding stands for, where it counts a backlog of
     # records: what the queue's row counts, and what brings a set-aside one back.
     count: int = 0
-    # News rather than a problem (a draft in hand, a deploy on its way): the
-    # queue keeps it in its own section, below what needs doing.
-    notice: bool = False
+    # News or advice rather than a problem (a draft in hand, a deploy on its
+    # way, a coaching tip), and the occurrence it tells of: the queue keeps it
+    # in its own section, below what needs doing, and out of every count.
+    notice: Notice | None = None
     # Its only remedy does not exist yet (an alert no released version fixes):
     # it stays a finding, and the queue leaves it out until one does.
     awaiting_fix: bool = False
@@ -184,12 +217,20 @@ class Finding:
     family: str = ""
     # Playbook context, derived from the observed service and adopted source.
     service_unit: str = field(default="", kw_only=True)
-    # HQ is acting on it now (a press's work under way): its row asks again
-    # until that work ends, so it says where it stands without a refresh.
-    under_way: bool = field(default=False, kw_only=True)
+    # How the work HQ does on it now stands (a press's run under way), with
+    # its page: its row says it and asks again until that work ends, so it
+    # says where it stands without a refresh.
+    under_way: Standing | None = field(default=None, kw_only=True)
+    # The findings it follows from, each by its key (``matter_key``), as the
+    # rule that knows the dependency declares them: while one stands, this
+    # stands beneath it (``finding_fold``).
+    follows: tuple[str, ...] = field(default=(), kw_only=True)
+    # What follows from it, set by derivation alone: each said beneath it, never alone.
+    consequences: tuple[Finding, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         as_members(self)
+        holds_something(self)
         # A card says it as written, so what it says is words, and each
         # reading's label is drawn once with its values beside it.
         for text in (self.title, self.explanation):
@@ -237,11 +278,11 @@ class FindingRule:
     # The precise action that resolves a finding of this rule by hand. Required:
     # a finding either offers an operation through the gated queue or says
     # exactly what to do. A finding may state a more specific one.
-    operator_action: str
+    operator_action: RequiredText
     # Why HQ cannot resolve a finding of this rule itself: shown whenever one
     # carries no remedy and no exact command. Required, so no finding reaches
     # an operator as bare prose.
-    no_help_reason: str = ""
+    no_help_reason: RequiredText = ""
     subsumes: tuple[str, ...] = ()
     # The card of its subject's page that draws it, where the page has one for
     # the parts it is about ("containers" on a machine's page); empty, the
@@ -271,10 +312,7 @@ class FindingRule:
 
     def __post_init__(self) -> None:
         as_members(self)
-        if not self.operator_action.strip():
-            raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
-        if not self.no_help_reason.strip():
-            raise ValueError(f"Finding rule {self.name!r} must say why HQ cannot resolve it itself.")
+        holds_something(self)
         if not self.bars.get(self.severity, "").strip():
             raise ValueError(f"Finding rule {self.name!r} must say the bar its {self.severity} findings cross (bars).")
 
@@ -367,7 +405,7 @@ class Said(TypedDict):
     """What a connection-fact finding says of one connection; the rest is its rule's."""
 
     title: str
-    explanation: str
+    explanation: RequiredText
     remedies: NotRequired[tuple[FindingRemedy, ...]]
     steps: NotRequired[tuple[Run | Do, ...]]
 

@@ -23,7 +23,9 @@ permission lists it and its tests read, `audit:image`'s reader of a built
 image (`audit_image.py`), `audit:supports`'s asker of the gates' engines
 (`audit_supports.py`), `lint:sdk-breaking`, which holds `hq_sdk` to
 its base's extensions (`sdk_breaking.py`), `lint:file-lines`, which holds each
-source file to the line ceiling (`file_lines.py`), and the check-or-write every
+source file to the line ceiling (`file_lines.py`), `lint:source-scans`, which
+refuses a command form that breaks something in any tracked text file
+(`source_scans.py`), and the check-or-write every
 derived file's writer outside Django runs as its `lint:drift-*` gate
 (`derived.py`).
 

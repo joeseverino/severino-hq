@@ -6,13 +6,15 @@ read what each boundary made of the caller it resolved.
 """
 
 import re
-from pathlib import Path
+from unittest import mock
 
+import uvicorn
 from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.handlers.asgi import ASGIRequest
-from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings, tag
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
+from hq.config import serve
 from hq.platform.core.models import AuditLog
 from hq.platform.core.network import SOCKET_PEER, client_ip, socket_peer
 
@@ -252,22 +254,10 @@ class SignInLockoutTests(TestCase):
         )
 
 
-@tag("source")
 class ServerReadsNoForwardedHeadersTests(SimpleTestCase):
     """Uvicorn's own proxy-header reading would resolve the caller before the peer is recorded."""
 
-    def test_every_launch_of_the_application_turns_it_off(self):
-        root = Path(settings.BASE_DIR)
+    def test_the_image_server_turns_it_off(self):
         # The development servers' is tools/dev/tests/test_serve.py's.
-        launches = {
-            "Dockerfile": (
-                (root / "Dockerfile").read_text(encoding="utf-8").replace("\\\n", ""),
-                "hq.config.serve",
-            ),
-        }
-        for name, (text, served) in launches.items():
-            with self.subTest(launch=name):
-                lines = [line for line in text.splitlines() if served in line]
-                self.assertTrue(lines, f"{name} no longer launches the application")
-                for line in lines:
-                    self.assertIn("--no-proxy-headers", line)
+        with mock.patch.object(uvicorn.Config, "configure_logging"):
+            self.assertFalse(serve.config().proxy_headers)

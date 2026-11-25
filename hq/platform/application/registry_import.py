@@ -1,7 +1,7 @@
 """One document of projects and assets, imported in one transaction.
 
-For facts no connection knows. Every record goes through the same upsert use
-cases the single-record capabilities use, so validation, persistence and
+For facts no connection knows. Every record goes through the save its
+create and update capabilities use, so validation, persistence and
 attribution are theirs. What it checks, keeps and reports, and why a derived
 value wins over an imported one: docs/Derived-Facts.md#one-time-import.
 """
@@ -279,7 +279,8 @@ def _apply(planned: _Planned, principal: Principal) -> None:
         _audit(planned, planned.slug)
         return
     try:
-        result = load(planned.kind.upsert)(planned.command, principal=principal)
+        current = planned.slug if planned.outcome == "updated" else None
+        result = load(planned.kind.save)(planned.command, principal=principal, current_slug=current)
     except DjangoValidationError as exc:
         errors = (
             _said(exc) if hasattr(exc, "error_dict") else [(Code.INVALID_INPUT, message) for message in exc.messages]
@@ -345,7 +346,7 @@ class HqImported(TypedDict):
 
 
 def import_registry(command: HQImportCommand, *, principal: Principal) -> HqImported | RefusalEnvelope:
-    """Validate the whole document, then upsert every record or none."""
+    """Validate the whole document, then save every record or none."""
 
     total = len(command.projects) + len(command.assets)
     if total > MAX_IMPORT_RECORDS:

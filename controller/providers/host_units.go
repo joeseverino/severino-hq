@@ -3,9 +3,12 @@ package providers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"iter"
 	"os"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,10 +29,13 @@ const hostUnitsMaxBytes = 1 << 20
 const hostUnitsRefused = "the unit state is not what systemctl show prints"
 
 var (
-	hostUnitName      = api.MustPattern("HostUnitRecord", "properties", "unit")
-	hostUnitWord      = api.MustPattern("HostUnitRecord", "properties", "active")
-	hostUnitText      = api.MustPattern("HostUnitRecord", "properties", "title")
-	hostUnitTextLimit = api.MustLimit("HostUnitRecord", "properties", "title", "maxLength")
+	hostUnitName        = api.MustPattern("HostUnitRecord", "properties", "unit")
+	hostUnitWord        = api.MustPattern("HostUnitRecord", "properties", "active")
+	hostUnitText        = api.MustPattern("HostUnitRecord", "properties", "title")
+	hostUnitTextLimit   = api.MustLimit("HostUnitRecord", "properties", "title", "maxLength")
+	hostUnitStatus      = api.MustPattern("HostUnitRecord", "properties", "status")
+	hostUnitStatusLimit = api.MustLimit("HostUnitRecord", "properties", "status", "maxLength")
+	hostUnitRequires    = api.MustLimit("HostUnitRecord", "properties", "requires", "maxItems")
 )
 
 // hostUnitProperties is every property the reading keeps, by the name
@@ -55,6 +61,9 @@ var hostUnitProperties = map[string]func(*runtime.HostUnitRecord, string) bool{
 	"Unit":                   func(r *runtime.HostUnitRecord, v string) bool { return unitName(&r.Activates, v) },
 	"NRestarts":              func(r *runtime.HostUnitRecord, v string) bool { return unitNumber(&r.Restarts, v) },
 	"ActiveEnterTimestamp":   func(r *runtime.HostUnitRecord, v string) bool { return unitInstant(&r.ActiveAt, v) },
+	"Requires":               func(r *runtime.HostUnitRecord, v string) bool { return unitRequires(r, strings.Fields(v)) },
+	"RequiresMountsFor":      func(r *runtime.HostUnitRecord, v string) bool { return unitRequires(r, mountUnits(v)) },
+	"StatusText":             func(r *runtime.HostUnitRecord, v string) bool { return unitStatus(&r.Status, v) },
 }
 
 func unitName(field *string, value string) bool {
@@ -75,6 +84,58 @@ func unitText(field *string, value string) bool {
 		*field = value
 	}
 	return true
+}
+
+// unitStatus is what the unit last told systemd of itself, which HQ's own
+// program sets to why its run failed. One the contract does not admit is
+// left out, never cut, as a title is.
+func unitStatus(field *string, value string) bool {
+	if len(value) <= hostUnitStatusLimit && hostUnitStatus.MatchString(value) {
+		*field = value
+	}
+	return true
+}
+
+// unitRequires adds the units a unit cannot start without, each once. A
+// name the contract does not admit, or one past the contract's count, is
+// left out: a dependency another package declares never refuses the reading.
+func unitRequires(record *runtime.HostUnitRecord, names []string) bool {
+	for _, name := range names {
+		if len(record.Requires) < hostUnitRequires && hostUnitName.MatchString(name) && !slices.Contains(record.Requires, name) {
+			record.Requires = append(record.Requires, name)
+		}
+	}
+	return true
+}
+
+// mountUnits is the mount unit systemd names for each path in a
+// RequiresMountsFor list, as systemd-escape --path --suffix=mount names it,
+// so the reading keeps the unit and never the path.
+func mountUnits(value string) []string {
+	units := []string{}
+	for path := range strings.FieldsSeq(value) {
+		if !strings.HasPrefix(path, "/") {
+			continue
+		}
+		trimmed := strings.Trim(filepath.Clean(path), "/")
+		if trimmed == "" {
+			units = append(units, "-.mount")
+			continue
+		}
+		var name strings.Builder
+		for i := range len(trimmed) {
+			switch c := trimmed[i]; {
+			case c == '/':
+				name.WriteByte('-')
+			case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ':' || c == '_' || (c == '.' && i > 0):
+				name.WriteByte(c)
+			default:
+				fmt.Fprintf(&name, `\x%02x`, c)
+			}
+		}
+		units = append(units, name.String()+".mount")
+	}
+	return units
 }
 
 func unitNumber(field *int, value string) bool {
@@ -202,6 +263,8 @@ func restartingHostUnits(text, readAt string, shipped []runtime.HostUnitRecord) 
 		}
 		seen[record.Unit] = true
 		record.Foreign = true
+		// What another package's service says of itself is its own, never HQ's to keep.
+		record.Status = ""
 		records = append(records, record)
 	}
 	return records

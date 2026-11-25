@@ -1,8 +1,8 @@
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
 from ...report_testing import report_connections
-from . import Example, Examples, Raised, connection, stored
+from . import Example, Examples, Raised, stored
 
 OPERATOR = "someone@example.test"
 # HQ's machine, which took the reading, and an edge that admits it on 80 alone.
@@ -22,7 +22,7 @@ RECONCILE = "infrastructure.resource.reconcile"
 def ssh(*, reachable: bool, raises: tuple[Raised | str, ...] = ()) -> Example:
     return Example(
         given=lambda: connection(
-            "example-ssh", "ssh", endpoint="192.0.2.9:22", reachable=reachable, detail="" if reachable else "Timed out"
+            "ssh", "example-ssh", endpoint="192.0.2.9:22", reachable=reachable, detail="" if reachable else "Timed out"
         ),
         raises=raises,
     )
@@ -65,7 +65,7 @@ EXAMPLES = (
             # A credential refused says refused, in the provider's words.
             Example(
                 readings={"cloudflare.pages_project": stored(reachable=False, refusal=CREDENTIAL_REFUSAL, error="x")},
-                given=lambda: connection("example-cf", "cloudflare_api"),
+                given=lambda: connection("cloudflare_api", "example-cf"),
                 raises=("example-cf: credential refused",),
             ),
             # An address that is not the API is said to be one.

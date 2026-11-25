@@ -7,13 +7,14 @@ seed can ask for a run knowing only its id.
 """
 
 import hashlib
+import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from itertools import count
 from typing import Any
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from django.contrib.auth import get_user_model
 from django.db.models.signals import pre_save
@@ -21,8 +22,10 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import (
     AdoptedCatalog,
+    ApprovalRequest,
     CapabilityRule,
     ManagedResource,
+    OperationHost,
     OperationRequest,
     SourceProposal,
 )
@@ -46,6 +49,7 @@ from hq.platform.core.models import UpstreamReading
 from . import doors
 from .agents import CLAIMS, ruled
 from .names import LAPTOP_NAME, MACHINE, back, hexed, share
+from .testing import clock_at
 
 # The automation worker, as it names itself when it claims.
 WORKER = "example-automation-worker"
@@ -53,6 +57,7 @@ CLAIMS_RUNS = ((OPERATION_KIND, "run"),)
 CLAIMS_SCANS = ((SOURCE_KIND, "scan"),)
 # The namespace a run's id is drawn from, with its idempotency key.
 _RUNS = uuid5(NAMESPACE_URL, "https://example.com/runs")
+_APPLIES = uuid5(NAMESPACE_URL, "https://example.com/applies")
 
 CACHE_FLUSH = "example.cache_flush"
 DISK_REPORT = "example.disk_report"
@@ -110,6 +115,7 @@ PROCEDURES = (
             "timeout_seconds": 60,
             "retry": "safe",
             "recovery": ["Nothing changes, so nothing needs recovering."],
+            "readings": ["host.filesystem"],
             "inputs": {"mount": {"pattern": "^/[A-Za-z0-9/_.-]*$", "max_length": 200}},
         },
         title="Report a mount's use",
@@ -321,6 +327,7 @@ def _apply(hosts: tuple[str, ...]) -> dict[str, Any]:
             "retry": "observe_first",
             "recovery": ["Run it again; each app converges to its pins."],
             "fixes": ["container-image-update"],
+            "readings": ["apps.pull"],
             "hosts": list(hosts),
             "inputs": {"revision": {"pattern": "^[0-9a-f]{40}$", "max_length": 40}},
         },
@@ -343,6 +350,21 @@ def applies_updates(person: Principal, hosts: tuple[str, ...]) -> None:
     with doors.page("command", name="automation.source.adopt"):
         _ran(ADOPT, {"proposal": scan.result["proposal"]}, principal=person, key=f"example-adopt-{scan.pk}")
     catch_up()
+    with numbered(_APPLIES):
+        _applying(person, hosts[0])
+
+
+def _applying(person: Principal, host: str) -> None:
+    """The applier's runs on ``host``, asked by ``person`` once the estate's
+    working run there ended: one that released two apps and rolled one back,
+    and one releasing now."""
+
+    for held in OperationHost.objects.filter(host=host, operation__state=OperationRequest.State.CLAIMED):
+        _reported(DONE)(held.operation)
+    applier = operation_registry()[APPS_APPLY]
+    parameters = {"revision": APPLY_REVISION}
+    for ago, carried_out in ((timedelta(hours=2), _reported(APPLIED)), (timedelta(minutes=2), _working(RELEASING))):
+        _asked(applier, host, person, ago, carried_out, approver=person, parameters=parameters)
 
 
 def proposed(person: Principal) -> None:
@@ -442,6 +464,12 @@ FAILED = Ended(
     message="A task failed; nothing after it ran.",
     events=(("Read what it holds", "ok", ""), ("Empty it", "failed", "The service did not answer.")),
 )
+# How far the working run has got: two tasks done, the third under way.
+UNDER_WAY = (
+    ("Read what it holds", "ok", ""),
+    ("Empty it", "changed", "Emptied."),
+    ("Check it is empty", "started", ""),
+)
 # How the read ended on the machine it last ran on: the result its playbook stated.
 REPORTED = Ended(
     success=True,
@@ -452,6 +480,45 @@ REPORTED = Ended(
             {"mount": "/", "free_bytes": 365226196992, "total_bytes": 494345830400, "read_at": "2026-11-13T12:00:00Z"}
         ]
     },
+)
+
+
+# What the applier stated of each app it released (its ``compose_project_outcomes``).
+RELEASES = [
+    {"project": app, "service": app, "image": image, "running_digest": f"sha256:{hexed('digest', app)}", **said}
+    for app, image, said in (
+        ("forgejo", "codeberg.org/forgejo/forgejo:9.0.2", {"health": "healthy", "result": "ok"}),
+        ("immich", "ghcr.io/immich-app/immich-server:v1.120.1", {"health": "healthy", "result": "ok"}),
+        (
+            "jellyfin",
+            "jellyfin/jellyfin:10.10.1",
+            {"health": "unhealthy: restarted 3 times in its settle window", "result": "rolled_back"},
+        ),
+    )
+]
+APPLIED = Ended(
+    success=True,
+    message=f"{APPLY_REVISION[:12]}: released 2 apps; rolled back jellyfin",
+    events=(
+        ("Fetch the commit", "ok", ""),
+        ("Release forgejo", "changed", "Released."),
+        ("Release immich", "changed", "Released."),
+        ("Release jellyfin", "changed", "Rolled back."),
+    ),
+    readings={"apps.pull": RELEASES},
+)
+# How far the applier has got releasing the next commit: the host's pull
+# started, and its follow's latest pass, one app released and the next under way.
+RELEASING = (
+    ("Start the host's pull unit for the revision", "changed", ""),
+    (
+        "Follow the pull unit until it ends",
+        "started",
+        json.dumps(
+            {"running": True, "result": "success", "releasing": "immich", "ended": {"forgejo": "ok"}},
+            separators=(",", ":"),
+        ),
+    ),
 )
 
 
@@ -506,7 +573,7 @@ def runs(
     if others:
         _asked(others[0], read_on, person, timedelta(hours=5), _reported(REPORTED), approver=approver)
     # Now: one run working on the server, one waiting.
-    _asked(first, server, person, timedelta(minutes=3), _working, approver=approver)
+    _asked(first, server, person, timedelta(minutes=3), _working(UNDER_WAY), approver=approver)
     if len(others) > 1:
         _asked(others[1], waiting_on, agent, timedelta(minutes=1), lambda _run: None, approver=approver)
     changes = [manifest for manifest in supplied if manifest.effect.changes]
@@ -534,31 +601,47 @@ def _held(manifest, host, agent, owner) -> None:
         raise RuntimeError(f"The agent's run was not held for a person: {answer}")
 
 
-def _asked(manifest, host, principal, ago, carried_out, *, approver: Principal | None, correlation="") -> None:
+def _asked(
+    manifest, host, principal, ago, carried_out, *, approver: Principal | None, correlation="", parameters=None
+) -> None:
     """One run of ``manifest`` on ``host``, asked for ``ago``, approved by
     ``approver`` where the ask waits for a person (left waiting without
-    one), then carried out, with every audit row it writes dated to the
-    moment it was asked."""
+    one), then carried out, each audit row it writes dated to the moment
+    its step happened: the ask, the decision, the claim and the end."""
 
     at = back(ago, manifest.id, host)
     name = capability_name(manifest.id)
     # Each ask through its asker's own door, as the command page or the MCP server binds one.
     door = doors.mcp() if principal.interface == MCP_INTERFACE else doors.request(f"/commands/{name}/")
     key = f"example-run-{manifest.id}-{host}-{int(ago.total_seconds())}"
-    with stamped(lambda *_: {"created_at": at}):
-        with door:
-            answer = _ran(name, {"hosts": [host], "correlation": correlation}, principal=principal, key=key)
-        if is_held(answer):
-            if approver is None:
-                # Nobody here may approve it, so it waits, as a real one would.
-                return
-            held = answer["approval"]["id"]
-            with doors.page("core:approval_entry", approval_id=held):
-                answer = _ran(APPROVE, {"approval_id": held}, principal=approver, key=f"{key}-approved")["result"]
-        run = OperationRequest.objects.get(pk=answer["operation"]["id"])
-        OperationRequest.objects.filter(pk=run.pk).update(created_at=at, updated_at=at)
+    with stamped(lambda *_: {"created_at": at}), door:
+        asked = {"hosts": [host], "correlation": correlation, **({"parameters": parameters} if parameters else {})}
+        answer = _ran(name, asked, principal=principal, key=key)
+    queued = at
+    if is_held(answer):
+        if approver is None:
+            # Nobody here may approve it, so it waits, as a real one would.
+            return
+        held = answer["approval"]["id"]
+        queued = at + timedelta(seconds=5) + share(timedelta(seconds=40), key, "decided")
+        # The decision's own time is the clock's when it is written, and its row says it.
+        with (
+            stamped(lambda *_: {"created_at": queued}),
+            clock_at(queued),
+            doors.page("core:approval_entry", approval_id=held),
+        ):
+            answer = _ran(APPROVE, {"approval_id": held}, principal=approver, key=f"{key}-approved")["result"]
+        ApprovalRequest.objects.filter(pk=held).update(created_at=at)
+    run = OperationRequest.objects.get(pk=answer["operation"]["id"])
+    OperationRequest.objects.filter(pk=run.pk).update(created_at=queued, updated_at=queued)
+    claimed, completed = _times(run.pk, queued)
+
+    def when(obj, *_: Any) -> dict[str, Any]:
+        return {"created_at": completed if getattr(obj, "completed_at", None) else claimed}
+
+    with stamped(when):
         carried_out(run)
-    _dated(run.pk, at)
+    _dated(run.pk, queued)
 
 
 def _ran(
@@ -574,7 +657,7 @@ def _ran(
 
 
 @contextmanager
-def numbered() -> Iterator[None]:
+def numbered(namespace: UUID = _RUNS) -> Iterator[None]:
     """Give each operation written in the block an id drawn from its place in
     the order they are written, so every build of the estate gives a run the
     same one and a run's page a look found on one build is found on the server's."""
@@ -583,7 +666,7 @@ def numbered() -> Iterator[None]:
 
     def name(sender: type, instance: OperationRequest, **_: Any) -> None:
         if instance._state.adding:
-            instance.pk = uuid5(_RUNS, str(next(written)))
+            instance.pk = uuid5(namespace, str(next(written)))
 
     pre_save.connect(name, sender=OperationRequest, weak=False)
     try:
@@ -592,24 +675,28 @@ def numbered() -> Iterator[None]:
         pre_save.disconnect(name, sender=OperationRequest)
 
 
-def _claimed(run: OperationRequest) -> dict[str, Any]:
+def _claimed(run: OperationRequest) -> None:
+    """Its worker's claim, unless it was claimed by name (``_applying``)."""
+
+    if run.state == OperationRequest.State.CLAIMED:
+        return
     with doors.controller("claim"):
         claimed = claim_next_operation(WORKER, capabilities=CLAIMS_RUNS, attempt=f"claim-{run.pk.hex[:12]}")[
             "operation"
         ]
     if claimed is None or claimed["id"] != str(run.pk):
         raise RuntimeError("The estate's run was not the one its worker claimed.")
-    return claimed
 
 
 def _reported(ended: Ended) -> Callable[[OperationRequest], None]:
     def carry_out(run: OperationRequest) -> None:
         _claimed(run)
+        with doors.controller("renew"):
+            renew_operation(str(run.pk), controller_id=WORKER, events=_events(run.input["hosts"][0], ended.events))
         report = ControllerReport(
             success=ended.success,
             observed_generation=run.input["generation"],
             message=ended.message,
-            events=_events(run.input["hosts"][0], ended.events),
             stated={"readings": {run.input["hosts"][0]: ended.readings}} if ended.readings else None,
         )
         with doors.controller("report"):
@@ -645,23 +732,38 @@ def _outlived(run: OperationRequest) -> None:
         claim_next_operation(WORKER, capabilities=CLAIMS_RUNS)
 
 
-def _working(run: OperationRequest) -> None:
-    _claimed(run)
-    with doors.controller("renew"):
-        renew_operation(str(run.pk), controller_id=WORKER)
-    OperationRequest.objects.filter(pk=run.pk).update(lease_expires_at=timezone.now() + WORKING_LEASE)
+def _working(events: tuple[tuple[str, str, str], ...]) -> Callable[[OperationRequest], None]:
+    """Claimed, with its worker holding it through ``events`` so far."""
+
+    def carry_out(run: OperationRequest) -> None:
+        _claimed(run)
+        with doors.controller("renew"):
+            renew_operation(str(run.pk), controller_id=WORKER, events=_events(run.input["hosts"][0], events))
+        OperationRequest.objects.filter(pk=run.pk).update(lease_expires_at=timezone.now() + WORKING_LEASE)
+
+    return carry_out
 
 
 def _lapse(run: OperationRequest) -> None:
     OperationRequest.objects.filter(pk=run.pk).update(lease_expires_at=timezone.now() - timedelta(minutes=10))
 
 
+def _times(pk, at) -> tuple[datetime, datetime]:
+    """When a worker claims a run queued ``at``, and when it ends."""
+
+    claimed = at + timedelta(seconds=5) + share(timedelta(seconds=40), pk, "claimed")
+    return claimed, claimed + timedelta(seconds=30) + share(timedelta(minutes=4), pk, "took")
+
+
 def _dated(pk, at) -> None:
-    """The run's own times, as long after its ask as a worker would take."""
+    """The run's own times, as long after it was queued as a worker would take,
+    the moments its audit rows were dated to (``_times``)."""
 
     run = OperationRequest.objects.get(pk=pk)
-    claimed = at + timedelta(seconds=5) + share(timedelta(seconds=40), pk, "claimed") if run.claimed_at else None
-    dates: dict[str, Any] = {"claimed_at": claimed}
+    claimed, completed = _times(pk, at)
+    dates: dict[str, Any] = {"claimed_at": claimed if run.claimed_at else None}
     if run.completed_at:
-        dates["completed_at"] = (claimed or at) + timedelta(seconds=30) + share(timedelta(minutes=4), pk, "took")
-    OperationRequest.objects.filter(pk=pk).update(updated_at=dates.get("completed_at") or claimed or at, **dates)
+        dates["completed_at"] = completed if run.claimed_at else at + (completed - claimed)
+    OperationRequest.objects.filter(pk=pk).update(
+        updated_at=dates.get("completed_at") or dates["claimed_at"] or at, **dates
+    )

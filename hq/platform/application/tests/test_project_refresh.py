@@ -12,7 +12,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
+from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.testing import held_jobs
 from hq.domains.projects.models import Project
@@ -20,7 +20,7 @@ from hq.platform.application.markup_testing import select, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 
 from ..capabilities import execute_capability
 from ..outbound_work import ANOTHER_RUNNING
@@ -33,11 +33,7 @@ OPERATOR = Principal("operator", "web", OPERATOR_CAPABILITIES)
 
 
 def read_by_app(repository: str = "example/alpha") -> None:
-    ProviderConnection.objects.update_or_create(
-        controller_id="example-controller",
-        connection_ref=REF,
-        defaults={"provider": "github_app", "observed_at": timezone.now()},
-    )
+    connection("github_app", REF)
     ProviderInventory.objects.update_or_create(
         kind="github.repository",
         defaults={

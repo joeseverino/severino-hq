@@ -1,0 +1,50 @@
+# A change to a row is written once, by its model's audit signal
+# (register_audit), with the field diff and the subject. A record_event whose
+# action is a change (created, updated, deleted, settings changed), or an
+# action read from elsewhere that may be one, writes that row by hand with
+# words of its own. A call that records one act over many rows says why with
+# its suppression.
+id: row-change-recorded-by-its-signal
+language: python
+severity: error
+message: A change to a row is recorded by hand.
+note: >-
+  Register the model with register_audit(Model, label) in its app's ready() and
+  set audit_said (audit_gone for a delete) on the row before it is saved, so its
+  signal writes the row.
+files:
+  - "hq/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/core/audit.py"
+utils:
+  an-act:
+    kind: attribute
+    regex: \.Action\.[A-Z_]+$
+    not:
+      regex: \.Action\.(CREATED|UPDATED|DELETED|SETTINGS_CHANGED)$
+  acts-only:
+    any:
+      - matches: an-act
+      - kind: conditional_expression
+        all:
+          - has: {nthChild: 1, matches: an-act}
+          - has: {nthChild: 3, matches: an-act}
+rule:
+  kind: call
+  has:
+    field: function
+    regex: (^|\.)record_event$
+  all:
+    - has:
+        field: arguments
+        has:
+          kind: keyword_argument
+          has:
+            field: name
+            regex: ^action$
+          all:
+            - has:
+                field: value
+                not:
+                  matches: acts-only

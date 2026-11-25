@@ -13,7 +13,7 @@ from hq.platform.application.approvals import REJECT, offers
 from hq.platform.application.attention import readable_by
 from hq.platform.application.automation_runs import capability_name, command_type, request_run
 from hq.platform.application.capabilities import run_capability
-from hq.platform.application.controller import ControllerReport, claim_next_operation, report_operation
+from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
 from hq.platform.application.projection import projection_scope
@@ -76,13 +76,20 @@ def _report(operation_id: str) -> None:
     """The worker's report that the run did what it was asked on each machine."""
 
     run = OperationRequest.objects.get(pk=operation_id)
+    # A run's tasks reach its record through the worker's renewal, as a real worker's do.
+    with doors.controller("renew"):
+        renew_operation(
+            operation_id,
+            controller_id=automation.WORKER,
+            events=[
+                {"host": host, "task": "Run the playbook", "outcome": "ok", "message": ""}
+                for host in run.input["hosts"]
+            ],
+        )
     report = ControllerReport(
         success=True,
         observed_generation=run.input["generation"],
         message="Done on every machine.",
-        events=[
-            {"host": host, "task": "Run the playbook", "outcome": "ok", "message": ""} for host in run.input["hosts"]
-        ],
     )
     with doors.controller("report"):
         report_operation(operation_id, report, controller_id=automation.WORKER)

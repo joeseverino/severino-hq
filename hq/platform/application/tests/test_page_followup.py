@@ -8,9 +8,9 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import elements, hrefs, select, text
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 from ..entity_links import entity_link
 from ..projection import projection_scope
@@ -168,14 +168,7 @@ class FacetVisibilityTests(TestCase):
 
     def test_a_connection_that_does_not_read_it_is_named(self):
         for ref, provider in (("example-dns", "cloudflare_api"), ("example-npm", "npm")):
-            ProviderConnection.objects.create(
-                connection_ref=ref,
-                controller_id="example-controller",
-                provider=provider,
-                reachable=True,
-                probed=True,
-                observed_at=timezone.now(),
-            )
+            connection(provider, ref)
 
         note = self.facet("certificate").not_visible
 

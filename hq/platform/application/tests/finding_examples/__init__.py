@@ -13,10 +13,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from django.utils import timezone
-
-from hq.domains.control_plane.models import ProviderConnection
-
 from ...finding_steps import Do, Run
 from ...tone import Tone
 
@@ -42,23 +38,6 @@ def ago(**age: float) -> Ago:
 NOW = ago()
 
 
-def connection(ref: str, provider: str, **fields: Any) -> None:
-    """A connection example-controller reports, answering unless ``fields`` say otherwise."""
-
-    ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id="example-controller",
-        provider=provider,
-        **{
-            "endpoint": "https://api.example.com",
-            "reachable": True,
-            "probed": True,
-            "observed_at": timezone.now(),
-            **fields,
-        },
-    )
-
-
 @dataclass(frozen=True, slots=True)
 class Stored:
     """One kind's reading as a sweep stored it: its records, and the
@@ -78,15 +57,21 @@ def stored(*records: Mapping[str, Any], **fields: Any) -> Stored:
 class Raised:
     """What one finding says that tells it apart: its title, its severity
     (its rule's, unless given) and the commands HQ offers to run, and, where
-    an example is about them, its evidence, what a person does about it and
-    the label and address of what its card leads with."""
+    an example is about them, its reason, its evidence, what a person does about it and
+    the label and address of what its card leads with, and what follows from it."""
 
     title: str
     severity: Tone | None = None
+    # Why it matters, where an example is about where its reason comes from.
+    explanation: str | None = None
     presses: tuple[str, ...] = ()
     evidence: tuple[tuple[str, str], ...] | None = None
     steps: tuple[Run | Do, ...] | None = None
     primary: tuple[str, str] | None = None
+    # The titles of what follows from it, said beneath it once every rule is derived.
+    beneath: tuple[str, ...] = ()
+    # The occurrence a notice tells of, as it is written; none for a problem.
+    notice: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

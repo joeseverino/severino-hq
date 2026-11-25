@@ -29,12 +29,13 @@ from hq.platform.core.templatetags.value_tags import (
     money,
     outside,
     readout,
+    reads_as_code,
     when,
     when_text,
 )
 from hq.platform.core.templatetags.write_tags import row_editor
 
-from .table_layout import GIST, SAYS_NOTHING, CellFacts, Moved, RowFacts, TableFacts, lay_out
+from .table_layout import GIST, SAYS_NOTHING, SHORT, CellFacts, Moved, RowFacts, TableFacts, lay_out
 
 # The class a value that shows only part of the time is drawn in, which the
 # open line reads (``table_layout.HELD``).
@@ -124,9 +125,9 @@ def drawn(table: DataTable, context: Any, *, empty: str = "") -> dict[str, Any]:
         for row in group.rows:
             if row.row.across and gutter:
                 row.cells[0].facts.added.append("row-gutter")
-            _mark(row, width, drawing)
+            _mark(row, width, drawing, sorts=laid.sorts)
     if footer:
-        _mark(footer, width, drawing)
+        _mark(footer, width, drawing, sorts=False)
     sorting = {"table": {"selected_sort": table.sorted_by or ""}}
     rows = any(group.rows for group in groups)
     return {
@@ -286,8 +287,9 @@ def _actions(row: Row) -> CellFacts:
     )
 
 
-def _mark(row: DrawnRow, width: int, drawing: _Drawing) -> None:
-    """Write the marks the layout gave the row and its cells, and draw their values."""
+def _mark(row: DrawnRow, width: int, drawing: _Drawing, *, sorts: bool) -> None:
+    """Write the marks the layout gave the row and its cells, and draw their
+    values: in a table that sorts on the page, each cell's with what it sorts by."""
 
     for cell in (row.select, *row.cells, row.actions):
         if cell is None:
@@ -296,7 +298,7 @@ def _mark(row: DrawnRow, width: int, drawing: _Drawing) -> None:
             cell.facts.marks.insert(0, f' colspan="{width}"')
         # The tick-box's and the actions' partials write their own class.
         own = "select-column" if cell is row.select else "row-actions" if cell is row.actions else ""
-        cell.attributes = _attributes(cell.facts, cell.role, own, cell.cell.sort)
+        cell.attributes = _attributes(cell.facts, cell.role, own, cell.cell.sort_value if sorts else "")
         cell.box, cell.toggle, cell.named = cell.facts.box, cell.facts.toggle, cell.facts.named
         cell.whole_parts = cell.box == "cell-state" and any(each.parts for each in (cell.cell, *cell.cell.lines))
     for cell in row.cells:
@@ -380,6 +382,11 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
         }
         | ({"line-rest"} if runs else set()),
         names=int(cell.name),
+        record=cell.name and bool(cell.url or cell.link),
+        chip=any(
+            part.readout and not part.link and len(part.text) > SHORT and reads_as_code(part.text)
+            for part in (cell, *cell.parts, *cell.lines)
+        ),
         row_header=cell.header,
         parted=any(part.role for part in (*cell.parts, *cell.lines)),
         folds=cell.fold,

@@ -1,0 +1,20 @@
+# A hostname is compared in one spelling, the one
+# hq.domains.control_plane.names.normalized_hostname writes, so two that name
+# the same host never differ by a case or a root's trailing dot.
+id: hostname-spelled-by-normalized-hostname
+language: python
+severity: error
+message: A hostname is lowered and stripped of its trailing dot by hand.
+note: Spell it with normalized_hostname(name) from hq.domains.control_plane.names.
+files:
+  - "hq/platform/application/**"
+  - "hq/domains/control_plane/**"
+  - "hq/platform/core/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "hq/domains/control_plane/names.py"
+rule:
+  any:
+    - pattern: $NAME.lower().rstrip(".")
+    - pattern: $NAME.rstrip(".").lower()

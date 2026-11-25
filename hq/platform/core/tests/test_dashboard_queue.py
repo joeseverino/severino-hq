@@ -7,6 +7,7 @@ from django.test import TestCase
 
 from hq.platform.application import cadence
 from hq.platform.application.action_links import read_link
+from hq.platform.application.asks import RUNNING, Standing
 from hq.platform.application.contracts import Effect
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
@@ -255,9 +256,9 @@ class DashboardQueueTests(SignedInTestCase):
             subject="",
             severity="attention",
             title="An example update under way",
-            explanation="Previewing on example-box.",
+            explanation="An example update is ready.",
             primary=opens("Open the update", "/example/update/"),
-            under_way=True,
+            under_way=Standing(RUNNING, "Previewing: Check the example", url="/jobs/runs/example/"),
         )
         entries = gather_attention((("example.utility", "Example", lambda: (moving,), ()),))
         with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries), uncached():
@@ -265,6 +266,11 @@ class DashboardQueueTests(SignedInTestCase):
 
         (row,) = select(response, "data-fragment-poll")
         self.assertIn("data-attention-item", row.attrs)
+        # It says where its run stands in the run's own words, its state linked to the run.
+        (run,) = select(response, "href", "/jobs/runs/example/")
+        self.assertTrue(run.inside(row))
+        self.assertEqual(run.words, "Running")
+        self.assertIn("Previewing: Check the example", row.words)
         # Asked again at its own address: the row is answered from the page by its id.
         self.assertTrue(row.attrs.get("id"))
 

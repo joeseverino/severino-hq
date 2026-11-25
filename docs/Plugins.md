@@ -137,6 +137,12 @@ by the host's source check (`hq.platform.application.plugin_validation`):
 The host's own code is held to the same rule, and an extension to the refusal
 from `PLUGIN_API_VERSION` 6.
 
+The same source check holds each of the package's templates, stylesheets and
+scripts to the rules the host's own keep one file at a time
+(`hq.platform.application.file_rules`, the host's `lint:file-rules`): a
+script's nonce, a form's retry key, a state drawn by `{% status %}`, an empty
+state drawn by its partial. Each rule's message names the one way to write it.
+
 The shape of that surface is what the modules declare: each one's `__all__`
 and the signatures, fields, enum members and public methods behind it. An
 extension's binding to a renamed field or a new required parameter is a change
@@ -991,6 +997,9 @@ hand.
 `PLUGIN_API_VERSION` 25 retires `hq_sdk.plugin.Finding`'s `compose_target`,
 `compose_targets`, `deployment`, `deployments`, `update_targets` and
 `reviewed_updates`: a finding offers no Compose deployment of its own.
+`PLUGIN_API_VERSION` 26 makes `Finding`'s `under_way` the `Standing` of the
+work under way on it, or None, in place of a bool: its row says where that
+work stands and links to its page.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

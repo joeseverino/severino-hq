@@ -144,7 +144,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
                 item["updated_at"] = moment(item["updated_at"], naive="keep")
                 item["published_at"] = stamp_day(item["published_at"])
         # What waits on this person, counted as the header's count endpoint
-        # counts it: everything open that they have not set aside.
+        # counts it: everything open that needs doing and is not set aside.
         queue = queue_state.with_aside_state(snapshot["priority"], self.request.user)
         doing, told = queue_state.split_waiting(queue)
         action_queue_count = len(doing)
@@ -232,7 +232,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             install_guide=docs_url("Install.md") if getting_started.remaining() else "",
             notice_count=len(told),
             aside_count=len(queue) - action_queue_count - len(told),
-            profile_action_count=action_queue_count + len(told),
+            profile_action_count=action_queue_count,
             show_action_count=True,
             dashboard_cards=highlights["compact"],
             dashboard_highlights=highlights["highlights"],

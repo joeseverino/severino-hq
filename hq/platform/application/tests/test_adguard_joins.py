@@ -4,10 +4,10 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
-from hq.platform.core.testing import READER, declare, operator
+from hq.platform.core.testing import READER, connection, declare, operator
 from hq_sdk.testing import plain
 
 from ..entity_links import entity_link
@@ -33,17 +33,6 @@ def store(kind, *records):
     )
 
 
-def connection(ref, provider):
-    ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id=CONTROLLER,
-        provider=provider,
-        reachable=True,
-        probed=True,
-        observed_at=timezone.now(),
-    )
-
-
 def machine(name, address):
     declare(name, "machine", {"name": name, "addresses": [address]})
 
@@ -61,7 +50,7 @@ def summary(domain, queries, **extra):
 
 class AdGuardJoinTests(TestCase):
     def setUp(self):
-        connection(ADGUARD, "adguard")
+        connection("adguard", ADGUARD)
         machine("lab-1", "100.64.0.10")
         machine("laptop-1", "100.64.0.2")
         for name in ("app", "idle"):
@@ -141,7 +130,7 @@ class AdGuardJoinTests(TestCase):
         self.assertIn("12 lookups from 1 device in 24 hours: laptop", plain(page.content))
 
     def test_a_reading_of_another_connection_says_nothing_about_this_one(self):
-        connection("other-adguard", "adguard")
+        connection("adguard", "other-adguard")
         topology = derive_topology(principal=READER)
         other = next(
             node for node in topology.nodes if node.kind == "connection" and node.connection_ref == "other-adguard"

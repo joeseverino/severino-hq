@@ -6,6 +6,7 @@ from typing import TypedDict
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 
+from hq.platform.application.projection import page_of
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
@@ -86,7 +87,7 @@ class _ExampleRecord(TypedDict):
 
 
 def _rows(**_):
-    return {"items": [], "count": 0}
+    return page_of([])
 
 
 class ListFieldRegistrationTests(SimpleTestCase):

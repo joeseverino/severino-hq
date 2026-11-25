@@ -21,7 +21,7 @@ from hq.platform.application.markup_testing import hrefs, select, text, with_cla
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 from hq_sdk.testing import plain
 
@@ -159,14 +159,7 @@ class DashboardGlanceTests(TestCase):
         self.machine = declare(
             "app-server", "machine", {"name": "app", "addresses": ["100.64.0.10"]}, status={"kept": True}
         )
-        ProviderConnection.objects.create(
-            connection_ref="app-ssh",
-            controller_id="app-server",
-            provider="ssh",
-            endpoint="100.64.0.10",
-            reaches=["app"],
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "app-ssh", controller_id="app-server", endpoint="100.64.0.10", reaches=["app"])
         DashboardConfiguration.objects.create(weather_point="41.0000,-87.0000")
         DashboardMachine.objects.create(machine=self.machine)
 
@@ -656,14 +649,7 @@ class GlanceEndpointTests(TestCase):
     def setUp(self):
         operator(self.client, "op")
         self.machine = declare("app-server", "machine", {"name": "app"})
-        ProviderConnection.objects.create(
-            connection_ref="app-ssh",
-            controller_id="app-server",
-            provider="ssh",
-            endpoint="100.64.0.10",
-            reaches=["app"],
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "app-ssh", controller_id="app-server", endpoint="100.64.0.10", reaches=["app"])
         DashboardMachine.objects.create(machine=self.machine)
         readings.record(
             readings.machine_telemetry(self.machine.key),

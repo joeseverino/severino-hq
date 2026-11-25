@@ -11,8 +11,8 @@ from hq.domains.jobs.runner import run
 from hq.platform.core.audit import record_event
 from hq.platform.core.bindings import audit_operation, operation_context
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import connection
 
-from ..adoption_testing import connection
 from ..approvals import APPROVE, ApprovalError, ApproveCommand, RejectCommand, approve, lapse_expired, reject
 from ..capabilities import CapabilitySpec, Consented, execute_capability, run_capability
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
@@ -63,7 +63,7 @@ def last_row() -> int:
 
 class CapabilityRunTests(TestCase):
     def setUp(self):
-        connection("adguard")
+        connection("adguard", manages=True)
 
     def run_pair(self, prefix: str) -> list[AuditLog]:
         mark = last_row()
@@ -113,7 +113,7 @@ class ApprovalLifeTests(TestCase):
     """A request, its decision, the change it applies and its lapse are one operation."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.resource = declare_policy()
@@ -210,7 +210,7 @@ class ApprovalLifeTests(TestCase):
 
 class JobTests(TestCase):
     def setUp(self):
-        connection("adguard")
+        connection("adguard", manages=True)
 
     def test_a_capability_run_inside_a_job_writes_under_the_jobs_id(self):
         def work(progress):

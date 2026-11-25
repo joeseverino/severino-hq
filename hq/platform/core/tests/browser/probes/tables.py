@@ -630,7 +630,9 @@ STATE_LEFT = (
 # width, and either the cut draws no ellipsis, so nothing tells a reader there
 # is more to see, or nothing around it carries its whole text as a title or a
 # tip (`data-tip`, app.js), or its box is narrow (`--whole`: 0, tables.css),
-# where no pointer hovers. Cut is read as `CUTS` reads it, up to the cell.
+# where no pointer hovers. A chip (`data-chip`, table_layout) is read whole
+# on the record's page its row links. Cut is read as `CUTS` reads it, up to
+# the cell.
 CUT_AND_CLOSED = (
     "(unseen) => {"
     + DESCRIBE
@@ -656,6 +658,7 @@ CUT_AND_CLOSED = (
     for (const cell of row.querySelectorAll(':scope > :is(td, th)')) {
       for (const {node, boxes, marked} of cutsIn(cell, unseen)) {
         const by = boxes.at(-1);
+        if (marked && cell.matches('[data-chip]') && node.parentElement.closest('code')) continue;
         const why = !marked ? 'with no ellipsis' : narrow ? 'in a narrow box' : titled(node, boxes[0], cell) ? '' : 'with no title';
         if (why) found.push(`${describe(by)} "${by.textContent.trim().slice(0, 40)}" is cut ${why}, in a row that does not open`);
       }
@@ -1119,6 +1122,7 @@ def _cut_values() -> dict[str, DataTable]:
         ("Clamped", cut("clamped")),
         ("Inline", cut("inline", url="#")),
         ("Unmarked", cut("unmarked")),
+        (Cell("Linked", url="#"), Cell(_CHIP, readout=True)),
         (Cell("Chip", lines=(Cell(_CHIP, readout=True, muted=True),)), Cell("Short")),
     )
     opening = (TableColumn("Name"), TableColumn("Value", css="key-col"), TableColumn("Note"))
@@ -1324,7 +1328,8 @@ CHECKS = {
         reader_sees="a cut value with no way to read it whole",
         # Touch has no hover, so in a narrow box only an opening row shows a
         # cut value whole, where a wide box also shows a titled one on hover;
-        # a cut that draws no ellipsis is found at any width.
+        # a cut that draws no ellipsis is found at any width. A chip is read
+        # whole on the record's page its row links.
         plants=(
             Plant(
                 _CUT_TABLE,

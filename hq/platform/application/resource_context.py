@@ -307,12 +307,13 @@ def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: s
         resources = resources.filter(kind=kind)
     if kinds:
         resources = resources.filter(kind__in=kinds.split(","))
-    page = page_of(resources, limit, order=("kind", "key"))
     # Read once for the whole page: asked per row, where each forwards is a
     # query budget that grows with the estate.
     machines, targets = declared_machines(), delivery_targets()
     at = whereabouts(machines)
-    return {**page, "items": [listed(resource, machines, at, targets) for resource in page["items"]]}
+    return page_of(
+        resources, limit, order=("kind", "key"), each=lambda resource: listed(resource, machines, at, targets)
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,9 +355,9 @@ class ResourceContext:
             ],
             "expiry": (
                 {
-                    "not_after": expiry.not_after.isoformat(),
+                    "not_after": iso(expiry.not_after),
                     "days_left": expiry.days_left,
-                    "renewal_at": expiry.renewal_at.isoformat(),
+                    "renewal_at": iso(expiry.renewal_at),
                 }
                 if expiry
                 else None

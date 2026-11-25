@@ -95,11 +95,12 @@ WORK_QUEUE = _part(
     row becoming one quiet line with the way back and the counts over it following. Only "all of
     these" asks the server what "these" are.
 
-    **A notice is not something to do.** An owner marks an item a notice (`Insight(notice=True)`) when
-    it reports something that happened or was measured and there is nothing to resolve. The queue
-    keeps notices in their own section, out of the "needs you" count, and a dismissed notice is done
-    with: it returns only when what it reports changes. The line is drawn once
-    (`action_items.split_waiting`) from what each item says of itself.
+    **A notice is not something to do.** An owner marks an item a notice (`Finding(notice=Notice(day))`)
+    when it reports something that happened, was measured or is advised, and there is nothing to
+    resolve. It names the occurrence it tells of, such as the day of the last session. The queue keeps
+    notices in their own section, out of every count, and a dismissed notice is done with: it returns
+    only when that occurrence moves. The line is drawn once (`action_items.split_waiting`) from what
+    each item says of itself.
 
     The queue page is sections by the domain that raised each item, derived from what the items carry
     (`hq/platform/application/action_items.py`), so a domain that starts raising items has its section

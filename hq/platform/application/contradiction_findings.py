@@ -407,6 +407,8 @@ def wiring_incomplete(hostname: str, faults: tuple[str, ...], *, url: str = "") 
     wherever it is drawn: the queue, and the service's own page."""
 
     title, explanation = _fault_said(hostname, faults)
+    # A fault said in one sentence leaves what it means for the name to say.
+    explanation = explanation or "It is not served as HQ declares it."
     return Finding(
         rule="service-wiring-incomplete",
         subject=_subject(hostname),

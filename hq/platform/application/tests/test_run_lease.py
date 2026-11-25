@@ -1,9 +1,9 @@
-"""A claimed run holds its lease only while its worker renews it, stops when HQ
-says stop, is never run again blindly once the lease lapses, and lands its
-report as bounded evidence on the run, never as its record's status. Every
-procedure here is a synthetic ``example.*`` one."""
+"""A claimed run holds its lease only while its worker renews it, holds its
+tasks so far as its worker's renewals say them, stops when HQ says stop, is
+never run again blindly once the lease lapses, and lands its report as bounded
+evidence on the run, never as its record's status. Every procedure here is a
+synthetic ``example.*`` one."""
 
-import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -25,10 +25,10 @@ RUNS = (("automation.operation", "run"),)
 PAUSED = "hq.platform.application.agent_access.paused_interfaces"
 
 
-def renew(operation_id: str, *, controller_id: str = WORKER, lease_seconds: int = 300):
+def renew(operation_id: str, *, controller_id: str = WORKER, lease_seconds: int = 300, events=None):
     from ..controller import renew_operation
 
-    return renew_operation(operation_id, controller_id=controller_id, lease_seconds=lease_seconds)
+    return renew_operation(operation_id, controller_id=controller_id, lease_seconds=lease_seconds, events=events)
 
 
 def event(outcome: str = "changed", *, host: str = APP, message: str = "Restarted.") -> dict:
@@ -55,7 +55,11 @@ class LeasedRunTestCase(TestCase):
             lease_expires_at=timezone.now() - timedelta(seconds=1)
         )
 
-    def report(self, *, success: bool = True, **fields):
+    def report(self, *, success: bool = True, events=None, **fields):
+        """The run's report, after the renewal that says ``events``, its tasks, where given."""
+
+        if events is not None:
+            renew(self.operation_id, events=events)
         operation = self.operation()
         return report_operation(
             self.operation_id,
@@ -77,14 +81,26 @@ class RenewTests(LeasedRunTestCase):
         self.assertEqual(answer["lease_expires_at"], after.isoformat())
         self.assertEqual(self.operation().state, OperationRequest.State.CLAIMED)
 
-    def test_another_controller_cannot_renew_it(self):
+    def test_another_controller_cannot_renew_it_or_say_its_tasks(self):
         self.claim()
         before = self.operation().lease_expires_at
 
         with self.assertRaisesMessage(ValueError, "different controller"):
-            renew(self.operation_id, controller_id="example-other")
+            renew(self.operation_id, controller_id="example-other", events=[event()])
 
         self.assertEqual(self.operation().lease_expires_at, before)
+        self.assertNotIn("events", self.operation().result or {})
+
+    def test_each_renewal_that_says_the_tasks_so_far_replaces_them_and_one_that_says_none_keeps_them(self):
+        self.claim()
+        started = event("started", message="")
+
+        renew(self.operation_id, events=[started])
+        under_way = self.operation().result["events"]
+        renew(self.operation_id, events=[event()])
+        renew(self.operation_id)
+
+        self.assertEqual((under_way, self.operation().result["events"]), ([started], [event()]))
 
     def test_a_lease_that_ran_out_is_not_renewed(self):
         self.claim()
@@ -119,7 +135,7 @@ class RenewTests(LeasedRunTestCase):
         self.assertEqual(too_long.status, 400, too_long.body)
 
         answer = bridge_client.call(
-            "renew", app=bridge_client.worker(), controller_id=WORKER, operation=self.operation_id
+            "renew", {}, app=bridge_client.worker(), controller_id=WORKER, operation=self.operation_id
         )
 
         self.assertTrue(answer["continue"], answer)
@@ -329,59 +345,19 @@ class RunReportTests(LeasedRunTestCase):
             self.report(status={"service": "web"})
         self.assertEqual(self.operation().state, OperationRequest.State.CLAIMED)
 
-    def test_task_outcomes_are_audited_as_the_run_s_own_and_lead_back_to_the_ask(self):
-        asked = AuditLog.objects.get(
-            object_type=audited_labels()[OperationRequest], object_id=self.operation_id, action=AuditLog.Action.CREATED
-        )
-
-        self.report(success=False, events=[event(), event("failed", host=DB), event("ok", host=DB)])
-
-        # Each task's row names its event; the run's own ending row names none.
-        outcomes = AuditLog.objects.filter(
-            object_id=self.operation_id,
-            action__in=(AuditLog.Action.DONE, AuditLog.Action.FAILED),
-            metadata__has_key="event",
-        )
-        self.assertEqual(
-            sorted((row.action, row.metadata["event"]["host"]) for row in outcomes),
-            [(AuditLog.Action.DONE, APP), (AuditLog.Action.FAILED, DB)],
-        )
-        for row in outcomes:
-            self.assertEqual(row.operation_id, self.operation_id)
-            self.assertEqual(row.metadata["cause"], asked.operation_id)
-
     def test_a_run_s_end_is_one_typed_row_and_never_a_change_to_its_state(self):
         before = AuditLog.objects.order_by("-pk").values_list("pk", flat=True).first()
 
-        self.report(success=False, message="It stopped.", events=[event("failed", host=DB)])
+        self.report(success=False, message="It stopped.", events=[event(), event("failed", host=DB)])
 
-        rows = AuditLog.objects.filter(pk__gt=before, object_id=self.operation_id).exclude(metadata__has_key="event")
-        (ended,) = rows
+        # Its tasks are the run's record's alone: the log holds its end.
+        (ended,) = AuditLog.objects.filter(pk__gt=before, object_id=self.operation_id)
         self.assertEqual(ended.action, AuditLog.Action.FAILED)
         self.assertEqual(ended.message, "It stopped.")
         self.assertEqual(ended.operation_id, self.operation_id)
         self.assertIn("timing", ended.metadata)
         self.assertEqual(ended.metadata["failure"]["message"], "It stopped.")
         self.assertEqual(self.operation().state, OperationRequest.State.FAILED)
-
-    def test_a_report_over_the_contract_s_bound_is_refused_at_the_bridge(self):
-        from hq.domains.control_plane.bridge_contract import limit
-
-        bound = limit("ControllerReport", "properties", "events", "maxItems")
-        body = {
-            "success": True,
-            "observed_generation": self.operation().input["generation"],
-            "events": [event()] * (bound + 1),
-        }
-        answer = bridge_client.request(
-            "/report",
-            query={"controller-id": WORKER, "operation": self.operation_id},
-            body=json.dumps(body).encode(),
-            app=bridge_client.worker(),
-        )
-
-        self.assertEqual(answer.status, 422, answer.body)
-        self.assertEqual(self.operation().state, OperationRequest.State.CLAIMED)
 
     def test_events_from_work_other_than_a_run_are_refused(self):
         OperationRequest.objects.filter(pk=self.operation_id).update(action=OperationRequest.Action.RECONCILE)

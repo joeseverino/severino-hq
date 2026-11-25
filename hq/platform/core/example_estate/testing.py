@@ -7,13 +7,14 @@ from pathlib import Path
 from unittest import mock
 
 from django.test import override_settings
+from django.utils import timezone
 
 from hq.domains.receipts.models import Receipt
 
 from . import doors
 from .names import HQ, HQ_REVISION, HQ_SOURCE, LAN, SSO, container_id
 
-__all__ = ("as_production", "sign_in", "throwaway_media")
+__all__ = ("as_production", "clock_at", "sign_in", "throwaway_media")
 
 
 @contextmanager
@@ -68,3 +69,12 @@ def sign_in(client, owner):
 
     with doors.page(doors.SIGN_IN):
         client.force_login(owner, backend=SSO)
+
+
+@contextmanager
+def clock_at(at):
+    """Django's clock held at ``at``, so a decision the estate dates in the
+    past is written as it was then: its own time and its row's words alike."""
+
+    with mock.patch.object(timezone, "now", return_value=at):
+        yield

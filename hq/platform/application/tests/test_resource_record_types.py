@@ -27,6 +27,7 @@ from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.integration_validation import validate_resource_spec
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.plugins import plugin_resource_specs
+from hq.platform.application.projection import page_of
 from hq.platform.application.resources import (
     BoundedQuery,
     get_resource,
@@ -48,7 +49,7 @@ class _ExampleNote(TypedDict):
 
 
 def _notes(*, limit: int = 50) -> dict[str, Any]:
-    return {"items": [], "count": 0}
+    return page_of([])
 
 
 def _validator(kind: Any) -> Draft202012Validator:

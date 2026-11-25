@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
-from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
 from hq.platform.application.markup_testing import links, text
 from hq.platform.core.models import AgentIdentity
 from hq.platform.core.testing import AGENT, MCP_READER, operator
@@ -176,6 +176,42 @@ class AgentAskedRunTests(RunTestCase):
         for name in self.CHANGES:
             self.assertNotIn(Rule.ALLOW, offered[name], name)
         self.assertIn(Rule.ALLOW, offered[f"automation.{LOGS}.run"])
+
+
+class PreviewTests(RunTestCase):
+    """Any playbook previews through its own run command, in check mode, held
+    to every rule its run is held to."""
+
+    def test_a_preview_reaches_the_worker_as_check_mode_and_a_run_never_does(self):
+        self.assertTrue(self.ask(run_payload(check=True))["ok"])
+
+        claimed = claim_next_operation("example-worker", capabilities=((KIND, "run"),))
+        self.assertIs(claimed["input"]["check"], True)
+        OperationRequest.objects.update(state=OperationRequest.State.SUCCEEDED, completed_at="2026-01-01T00:00:00Z")
+        self.assertTrue(self.ask(run_payload(), key="example-run-2")["ok"])
+        acted = OperationRequest.objects.get(state=OperationRequest.State.QUEUED)
+        self.assertNotIn("check", acted.input)
+
+    def test_a_preview_is_refused_wherever_its_run_is(self):
+        self.refused(run_payload(check=True), "forbidden", principal=MCP_READER)
+        self.supply(manifest(hosts=(DB,)))
+        self.refused(run_payload(APP, check=True), "precondition")
+
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_an_agent_s_preview_of_a_change_waits_for_a_person_and_approving_it_only_previews(self):
+        from .test_approval_staleness import decided
+
+        AgentIdentity.objects.create(
+            client_id=AGENT.actor, interfaces=["mcp"], granted=["read", "manage_infrastructure"]
+        )
+        answer = self.ask(run_payload(check=True), principal=AGENT)
+        self.assertEqual(answer.get("status"), "awaiting_approval", answer)
+        self.assertFalse(OperationRequest.objects.exists())
+
+        decided(ApprovalRequest.objects.get())
+
+        self.assertIs(OperationRequest.objects.get().input["check"], True)
 
 
 class DoorbellTests(RunTestCase):

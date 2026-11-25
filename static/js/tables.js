@@ -21,35 +21,20 @@
   // too (hand_drawn_tables). A press sorts ascending, the next descending,
   // the third puts the rows back as they came.
   // Rows keep to their own section, a section's heading row stays on top of
-  // it, and an open row takes the line beneath it along.
-  const UNIT_SECONDS = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2629800, year: 31557600 };
-  const EMPTY = /^[\s\u2013\u2014-]*$/;
+  // it, and an open row takes the line beneath it along. A cell sorts by the
+  // value the server wrote on it where that is not its words (`data-sort`,
+  // `Cell.sort_value`), else by the words it shows; one that says nothing
+  // (`data-blank`) sorts last.
   const sortValue = (cell) => {
-    if (!cell) return null;
-    if (cell.dataset.sort !== undefined) {
-      const given = Number(cell.dataset.sort);
-      return Number.isNaN(given) ? cell.dataset.sort.toLowerCase() : given;
-    }
-    const stamp = cell.querySelector("time[datetime]");
-    if (stamp) {
-      const when = Date.parse(stamp.getAttribute("datetime"));
-      if (!Number.isNaN(when)) return when;
+    if (!cell || cell.hasAttribute("data-blank")) return null;
+    const given = cell.dataset.sort;
+    if (given !== undefined) {
+      const number = Number(given);
+      return Number.isNaN(number) ? given.toLowerCase() : number;
     }
     const copy = cell.cloneNode(true);
     copy.querySelectorAll(".visually-hidden, [data-row-toggle], [aria-hidden=true]").forEach((part) => part.remove());
-    const text = copy.textContent.trim().replace(/\s+/g, " ");
-    if (EMPTY.test(text)) return null;
-    // A length of time, however it is phrased around the number.
-    const span = text.match(/^(?:up |in |about )?(\d+(?:\.\d+)?)\s*(second|minute|hour|day|week|month|year)s?\b/i);
-    if (span) return Number(span[1]) * UNIT_SECONDS[span[2].toLowerCase()];
-    // An amount: a sign, a currency mark, digits, a unit after.
-    const amount = text.replace(/\u2060/g, "").replace(/\u2212/g, "-").match(/^([-+]?)[$\u00a3\u20ac]?\s?(\d[\d,]*(?:\.\d+)?)\s*(?:[%a-z\u00b0/ ]{0,12})$/i);
-    if (amount) return Number(amount[2].replace(/,/g, "")) * (amount[1] === "-" ? -1 : 1);
-    if (/\d/.test(text) && text.length < 32 && /[/,:-]|[a-z]{3}/i.test(text)) {
-      const when = Date.parse(text);
-      if (!Number.isNaN(when)) return when;
-    }
-    return text.toLowerCase();
+    return copy.textContent.trim().replace(/\s+/g, " ").toLowerCase() || null;
   };
   const compare = (left, right) => {
     if (typeof left === "number" && typeof right === "number") return left - right;

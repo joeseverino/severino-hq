@@ -149,7 +149,11 @@ def _key_expiring(estate: FindingEstate) -> tuple[Finding, ...]:
             title=f"{name} leaves the tailnet in {counted(days, 'day')}"
             if days > 0
             else f"{name} has left the tailnet",
-            explanation="",
+            explanation=(
+                "Once its key runs out, nothing on the tailnet reaches it until it signs in again."
+                if days > 0
+                else "Its key ran out, so nothing on the tailnet reaches it until it signs in again."
+            ),
             evidence=(("Key expires" if days > 0 else "Key expired", when_day(expires)),),
             steps=(
                 Do(

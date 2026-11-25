@@ -18,7 +18,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import all_elements, elements, text, texts
 from hq.platform.application.pages import runs_at
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 from ..action_links import command_url
 from ..capabilities import capability_registry, capability_words
@@ -31,7 +31,7 @@ from ..security import web_principal
 from .test_approvals import POLICY_KEY, declare_policy
 from .test_finding_fixes import document
 from .test_paths import PUBLIC_RANGE, estate, record, store
-from .test_tailnet_posture import policy as tailnet_policy, tailnet_connection
+from .test_tailnet_posture import policy as tailnet_policy
 
 # The notice a form draws when a blank field would overwrite the record.
 TRAP = "data-command-blanks"
@@ -151,7 +151,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         policy.generation, policy.observed_generation = 2, 1
         policy.save(update_fields=["conditions", "generation", "observed_generation"])
         # The tailnet as read: an empty group and a tag no device wears, granted.
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         tailnet_policy(
             groups=[{"name": "group:empty", "members": []}],
             grants=[{"src": ["group:empty"], "dst": ["tag:gone:443"]}],

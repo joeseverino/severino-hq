@@ -10,11 +10,10 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.tests.consent import consented
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import declare, managing_everything
 from hq.platform.mcp import services
 from hq.platform.mcp.identity import set_principal
 
-from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
 from ..record_errors import PolicyError
 from ..resource_operations import OperationCommand, request_reconcile

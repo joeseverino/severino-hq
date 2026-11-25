@@ -40,7 +40,7 @@ lazy from .finding_model import Finding
 lazy from .finding_steps import Do
 lazy from .hq_self import own_addresses, served_at, served_port, site_label
 lazy from .locate import index_of
-lazy from .projection import complete, iso
+lazy from .projection import iso, page_of
 
 # How each role in the forwarded chain was decided.
 _CHAIN_DETAIL = {
@@ -630,10 +630,9 @@ def request_path(request, principal=None) -> RequestPath:
 def serialize_request_path(found: RequestPath) -> dict[str, Any]:
     """The request path as every adapter returns it: its hops as the items."""
 
-    hops = [serialize_hop(hop) for hop in found.hops]
     connection = found.connection
     return {
-        **complete(hops),
+        **page_of(found.hops, each=serialize_hop),
         "hostname": found.path.hostname,
         "proof": found.proof,
         "findings": [

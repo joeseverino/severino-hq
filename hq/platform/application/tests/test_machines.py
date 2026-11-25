@@ -20,7 +20,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application.markup_testing import all_elements, text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 from hq_sdk.testing import plain
 
 from ..capabilities import capability_words
@@ -29,19 +29,6 @@ from ..machines import MachineState, machine, machine_catalog
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..services import CONTAINER_KIND
 from .glance_readings import HOST, reported_machine
-
-
-def a_connection(ref, provider, endpoint="", reaches=(), *, reachable=True):
-    return ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id="a-controller",
-        provider=provider,
-        endpoint=endpoint,
-        reaches=list(reaches),
-        reachable=reachable,
-        probed=True,
-        observed_at=timezone.now(),
-    )
 
 
 def containers(*records):
@@ -57,9 +44,9 @@ def containers(*records):
 
 class MembershipTests(TestCase):
     def test_a_portainer_environment_is_a_machine(self):
-        a_connection(
-            "a-portainer",
+        connection(
             "portainer",
+            "a-portainer",
             endpoint="https://portainer.example",
             reaches=["a-docker-host", "a-cloud-host"],
         )
@@ -76,9 +63,9 @@ class MembershipTests(TestCase):
         servers.
         """
 
-        a_connection(
-            "cloudflare-dns",
+        connection(
             "cloudflare_dns",
+            "cloudflare-dns",
             endpoint="https://api.example/client/v4",
             reaches=["example.com", "example.net"],
         )
@@ -88,7 +75,7 @@ class MembershipTests(TestCase):
     def test_a_connection_that_opens_a_shell_is_itself_a_machine(self):
         """Nothing else names it, and it is still somewhere HQ can log into."""
 
-        a_connection("edge", "ssh", endpoint="198.51.100.7:22")
+        connection("ssh", "edge", endpoint="198.51.100.7:22")
 
         found = machine_catalog()
         self.assertEqual([item.name for item in found], ["edge"])
@@ -113,9 +100,9 @@ class MembershipTests(TestCase):
 
 class TieTests(TestCase):
     def setUp(self):
-        a_connection(
-            "a-portainer",
+        connection(
             "portainer",
+            "a-portainer",
             endpoint="https://portainer.example",
             reaches=["a-docker-host"],
         )
@@ -146,9 +133,9 @@ class TieTests(TestCase):
 class MachinePageTests(TestCase):
     def setUp(self):
         self.user = operator(self.client)
-        a_connection(
-            "a-portainer",
+        connection(
             "portainer",
+            "a-portainer",
             endpoint="https://portainer.example",
             reaches=["a-docker-host"],
         )
@@ -679,7 +666,7 @@ class OneStateTests(TestCase):
 
     def setUp(self):
         self.user = operator(self.client)
-        a_connection("example-tailnet", "tailscale")
+        connection("tailscale", "example-tailnet")
 
     def device(self, *, online, tags=("tag:server",)):
         ProviderInventory.objects.update_or_create(
@@ -725,7 +712,7 @@ class OneStateTests(TestCase):
         self.assertEqual(machine("example-host").state, MachineState.ONLINE)
 
     def test_without_presence_the_connection_answer_decides(self):
-        a_connection("example-ssh", "ssh", endpoint="192.0.2.8:22", reachable=False)
+        connection("ssh", "example-ssh", endpoint="192.0.2.8:22", reachable=False)
 
         found = machine("example-ssh")
 
@@ -733,7 +720,7 @@ class OneStateTests(TestCase):
         self.assertEqual(found.unanswered, ("example-ssh",))
 
     def test_a_connection_that_did_not_answer_is_marked_where_it_is_named(self):
-        a_connection("example-ssh", "ssh", endpoint="192.0.2.8:22", reachable=False)
+        connection("ssh", "example-ssh", endpoint="192.0.2.8:22", reachable=False)
 
         listing = self.client.get(reverse("control_plane:machines"))
 

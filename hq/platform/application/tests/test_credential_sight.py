@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.html import escape
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_KINDS, CONNECTION_LABELS
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec
 from hq.domains.control_plane.observations.contract import registry
 from hq.domains.control_plane.permissions import Cloudflare, Tailscale
@@ -18,7 +18,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
 )
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import text
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import _controller_contract
@@ -380,13 +380,7 @@ class CredentialSightPageTests(TestCase):
             ("example-api", "cloudflare_api"),
             ("example-tailnet", "tailscale"),
         ):
-            ProviderConnection.objects.create(
-                connection_ref=ref,
-                controller_id="example-controller",
-                provider=provider,
-                endpoint="",
-                observed_at=now,
-            )
+            connection(provider, ref, observed_at=now)
         # Fully readable.
         for kind in ("host.perimeter", "caddy.route"):
             ProviderInventory.objects.create(kind=kind, records=[{"record": "a"}], observed_at=now)
@@ -449,13 +443,7 @@ class CredentialSightPageTests(TestCase):
         self.assertNotRegex(response.content.decode(), r"\b(Onepassword|Adguard)\b")
 
     def test_a_second_ssh_connection_does_not_show_the_first_ones_readings(self):
-        ProviderConnection.objects.create(
-            connection_ref="example-shared-host",
-            controller_id="example-controller",
-            provider="ssh",
-            endpoint="",
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "example-shared-host")
         ProviderInventory.objects.filter(kind="caddy.route").update(
             records=[{"connection_ref": "example-ssh", "domain": f"{n}.example.com"} for n in ("a", "b", "c")]
         )

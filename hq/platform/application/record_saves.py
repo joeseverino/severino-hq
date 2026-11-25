@@ -43,6 +43,7 @@ from .json_schemas import Written, as_written
 from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound, Sentence
 from .security import Principal
+lazy from .projection import iso
 lazy from .resources import resource_registry
 lazy from .ui import ended
 
@@ -213,7 +214,7 @@ def _plain(value: Any) -> Any:
     if isinstance(value, Decimal | UUID):
         return str(value)
     if isinstance(value, date):
-        return value.isoformat()
+        return iso(value)
     return value
 
 

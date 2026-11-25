@@ -1,0 +1,10 @@
+id: admin-never-imported
+valid:
+  - 'from django.contrib import auth'
+  - 'from django.contrib.admindocs import views'
+invalid:
+  - 'from django.contrib import admin'
+  - 'from django.contrib import auth, admin'
+  - 'from django.contrib.admin import site'
+  - 'import django.contrib.admin'
+  - 'lazy from django.contrib.admin.sites import AdminSite'

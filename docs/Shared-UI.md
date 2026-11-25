@@ -602,7 +602,8 @@ one, and past its share it wraps inside its box. Its column still asks for the v
 (`calc-size` holds only the share as its floor), so room the table has past every column's needs
 goes to it; a longer one wraps at its words in a line of `--row-words`, or its share where that is
 less, as a long one does; a longer identifier and a row's own name break anywhere their column
-lacks room; a pill and prose break only inside a word wider than their column, a pill longer than
+lacks room, unless it is a chip its row's record shows whole (below); a pill and prose break only
+inside a word wider than their column, a pill longer than
 its column wrapping inside its one box. A status, a figure, a date or a control is never cut: its
 column is as wide as it is.
 
@@ -642,8 +643,14 @@ column differently.
 An identifier short enough to hold its line is never broken while every column stands; once
 columns leave for the open line, where it is drawn whole, its seams are where it breaks. The row's
 own name, free text, a preview and a context line wrap as they always do. *Gate:* `broken
-identifiers` in the layout survey,
-`test_an_identifier_in_a_table_is_whole_while_a_column_can_leave`.
+identifiers` in the layout survey.
+
+A chip on a row's line longer than a short value, in a row whose name links its record's page
+(`data-chip`: a readout drawn as code, not part of a sentence, outside the line beneath an open
+row), is one line, cut with an ellipsis where its column lacks room, open or not, since the
+record's page shows it whole. Its column asks for nothing at its narrowest and the whole chip at
+its widest, so it is whole wherever the table has the room. A chip in a row that links no record
+wraps whole and holds nothing back. *Gate:* `cut and closed`.
 
 A box set in a line that cuts what it holds (an inline block whose overflow is not visible) takes
 its bottom edge as its baseline, so its words ride above the line's. So it is set by its top
@@ -847,8 +854,8 @@ it has a value. The search takes the line's room; every other control is as wide
 a select its longest option. A control the script shows only once it has something to act on is
 drawn `hidden` in the bar and stays so. *Gate:* the `filter-bar` shape refuses
 `.filter-bar`, a search field and a select written by hand, outside the parts that draw them.
-`test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the templates. It refuses a
-count written in the summary and a narrowing bar with no count.
+The `filter-bar-summary` and `filter-bar-count` file rules read every `{% filter_bar %}` in the
+templates. They refuse a count written in the summary and a narrowing bar with no count.
 
 ### headed (host only)
 
@@ -860,14 +867,20 @@ so a dialog opened from inside a section still heads its own sections a level un
 ### history_table (host only)
 
 Every table of audit events is this part, its rows the ones the audit log draws (`history.table`,
-drawn by `{% data_table %}`): the audit log, an event's other events and a record's recent
-changes. On a phone only What and When stay, so What's second line says how it came out. Each
-group (`history.HistoryGroup`) is a `tbody` under
-its heading row where it has a label, and a group that starts folded away (`folds`) marks each of
-its rows as folded under its heading. An event that changed things heads them: its gutter holds the
-fold rather than the row's own toggle. A fold carries at most `history.SHOWN` of what the event
-changed, and a last row counts the others and links to the list of them all. Its headings are
-`history.COLUMNS`, without who did each where `hide_who` is set.
+drawn by `{% data_table %}`): the audit log, an event's other events, a record's recent
+changes and a run's chain. On a phone only What and When stay, so What's second line says how it
+came out. Each group (`history.HistoryGroup`) is a `tbody` under its heading row where it has a
+label, its count every row of history it draws (`HistoryGroup.count`, which a section heading
+the table reads too), and a group that starts folded away (`folds`) marks each of its rows as
+folded under its heading. An event that changed things heads them: its gutter holds the fold
+rather than the row's own toggle. A fold carries at most `history.SHOWN` of what the event
+changed, and a last row counts the others and links to the list of them all. Each row's User,
+Action and Message are one audit row's: the line's own row, else its newest, so a row names who
+did what it says, its "approved by" opening the approval's entry where one was decided. A chain's
+steps run oldest first, each later one's time how long after the first it came; each step and
+the rows beneath it open the one page that holds the whole step (a run's, an approval's entry,
+else its record's), and a title opening the page the table is drawn on is no link. Its headings
+are `history.COLUMNS`, without who did each where `hide_who` is set.
 
 ### layout
 
@@ -1373,8 +1386,11 @@ where the table holds two rows to put in order, counted across its groups. A col
 and a heading named for assistive technology alone have nothing to order, and
 `DataTable(keeps_order=True)` keeps a table's own order, as a list page does with the one page of its
 server's order it holds and a change table does with a change. `tables.js` sorts the rows on
-the page: ascending, descending, then as they came. Amounts, dates and lengths of time sort as
-what they are; a cell may say its own value with `data-sort`. Sections keep their own rows.
+the page: ascending, descending, then as they came. A cell whose value is not its words carries
+it as `data-sort` (`Cell.sort_value`): a moment its instant, an amount its sum, words a figure's
+function wrote (`Figure`: `money`, `measured`, `counted`, `duration`, `span`, `when`) their
+number, and `Cell(sort=)` any other. Every other cell sorts by the words it shows, compared as
+written, never parsed for a number or a date. Sections keep their own rows.
 *Gate:* `test_any_table_sorts_by_a_heading`.
 
 Rows selected together (`data-selectable-table`) start with a column of tick-boxes: the heading
@@ -1525,11 +1541,12 @@ and key), so dismissing or restoring one composes nothing. With script it happen
 row becoming one quiet line with the way back and the counts over it following. Only "all of
 these" asks the server what "these" are.
 
-**A notice is not something to do.** An owner marks an item a notice (`Insight(notice=True)`) when
-it reports something that happened or was measured and there is nothing to resolve. The queue
-keeps notices in their own section, out of the "needs you" count, and a dismissed notice is done
-with: it returns only when what it reports changes. The line is drawn once
-(`action_items.split_waiting`) from what each item says of itself.
+**A notice is not something to do.** An owner marks an item a notice (`Finding(notice=Notice(day))`)
+when it reports something that happened, was measured or is advised, and there is nothing to
+resolve. It names the occurrence it tells of, such as the day of the last session. The queue keeps
+notices in their own section, out of every count, and a dismissed notice is done with: it returns
+only when that occurrence moves. The line is drawn once (`action_items.split_waiting`) from what
+each item says of itself.
 
 The queue page is sections by the domain that raised each item, derived from what the items carry
 (`hq/platform/application/action_items.py`), so a domain that starts raising items has its section
@@ -1680,7 +1697,7 @@ mark is toned ("Up to date"), and with `shown=False` the mark stands alone, its 
 to a screen reader, as a certificate's check after the name it serves is. A first word holding a digit, a version, is said as written. A cell
 that is a state carries its tone (`Cell(word, tone=...)`) and is drawn by it. *Catalog:*
 `status/icon`. *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
-`test_status_tags.py`, which reads every template root for a hand-written pill or a state's tone
+the `status-by-hand` file rule, which reads every template for a hand-written pill or a state's tone
 written as a class.
 
 ### steps (host only)

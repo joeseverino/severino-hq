@@ -1,10 +1,8 @@
 """One days-left rule, and one derivation of a resource for every adapter."""
 
-import re
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone as dj_timezone
 
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
@@ -15,7 +13,6 @@ from ..expiry import days_until, renewal_opens_at, renewal_window
 from ..resource_context import resource_context
 from ..resources import get_resource
 from ..security import Capability, Principal
-from .source import source_files
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
@@ -52,34 +49,6 @@ class DaysUntilTests(SimpleTestCase):
         for model in (TLSCertificateSpec, ResolvedTLSCertificateSpec):
             with self.subTest(model=model.__name__):
                 self.assertEqual(model.model_fields["renewal_window_days"].default, renewal_window({}))
-
-
-@tag("source", "tree")
-class DaysUntilSourceTests(SimpleTestCase):
-    """No other module counts days itself."""
-
-    def test_no_other_module_counts_days_itself(self):
-        """A second copy of the arithmetic can disagree by a day, so there is one."""
-
-        root = Path(__file__).resolve().parents[4]
-        pattern = re.compile(r"(?<!/)/\s*86400|\)\.days\b")
-        allowed = {
-            "hq/platform/application/expiry.py",
-            "hq/platform/application/ui.py",
-            "hq/platform/application/analytics.py",
-        }
-        found = []
-        for path in source_files(root, "*.py"):
-            relative = path.relative_to(root).as_posix()
-            if relative in allowed or "/test" in relative:
-                continue
-            text = path.read_text(encoding="utf-8")
-            if "expir" not in text and "not_after" not in text:
-                continue
-            for number, line in enumerate(text.splitlines(), 1):
-                if pattern.search(line) and "MAX_QUERY_DAYS" not in line:
-                    found.append(f"{relative}:{number}")
-        self.assertEqual(found, [])
 
 
 class OneAnswerTests(TestCase):

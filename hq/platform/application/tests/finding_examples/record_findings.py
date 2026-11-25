@@ -9,7 +9,7 @@ from hq.domains.content.models import ContentItem
 from hq.domains.receipts.models import Receipt
 
 from ..test_references import an_expense
-from . import Example, Examples
+from . import AT, Example, Examples, Raised
 
 PRICED = {"purchase_date": date(2026, 3, 1), "total_cost": Decimal("120.00")}
 
@@ -50,7 +50,14 @@ def attached() -> Receipt:
 EXAMPLES = (
     Examples(
         "content-drafts",
-        fires=(held(piece("draft"), piece("draft"), raises=("2 drafts are not published",)),),
+        # Told of by the newest draft, begun as the example's clock reads.
+        fires=(
+            held(
+                piece("draft"),
+                piece("draft"),
+                raises=(Raised(title="2 drafts are not published", notice=AT.isoformat()),),
+            ),
+        ),
         quiet=(held(piece("published")),),
     ),
     Examples(

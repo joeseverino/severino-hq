@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 from ..services import find_service
 from .service_world import declare_world, healthy
@@ -173,22 +173,9 @@ class ConnectedMachineTests(TestCase):
     """
 
     def test_an_address_a_connection_points_at_is_named(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderConnection
-
         from ..whereabouts import locate
 
-        ProviderConnection.objects.create(
-            connection_ref="a-shared-host",
-            controller_id="a-controller",
-            provider="ssh",
-            endpoint="203.0.113.10:21098",
-            reaches=[],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "a-shared-host", controller_id="a-controller", endpoint="203.0.113.10:21098")
 
         origin = locate("203.0.113.10:443", ())
 
@@ -204,22 +191,9 @@ class ConnectedMachineTests(TestCase):
         self.assertEqual(origin.qualifier, "unknown host")
 
     def test_a_url_endpoint_matches_by_its_hostname(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderConnection
-
         from ..whereabouts import locate
 
-        ProviderConnection.objects.create(
-            connection_ref="a-proxy",
-            controller_id="a-controller",
-            provider="npm",
-            endpoint="https://proxy.example",
-            reaches=[],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("npm", "a-proxy", controller_id="a-controller", endpoint="https://proxy.example")
 
         origin = locate("proxy.example:81", ())
 
@@ -244,22 +218,9 @@ class PortlessOriginTests(TestCase):
         self.assertFalse(origin.external)
 
     def test_a_bare_address_matches_a_connection_too(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderConnection
-
         from ..whereabouts import locate
 
-        ProviderConnection.objects.create(
-            connection_ref="a-shared-host",
-            controller_id="a-controller",
-            provider="ssh",
-            endpoint="203.0.113.10:21098",
-            reaches=[],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "a-shared-host", controller_id="a-controller", endpoint="203.0.113.10:21098")
 
         origin = locate("203.0.113.10", ())
 

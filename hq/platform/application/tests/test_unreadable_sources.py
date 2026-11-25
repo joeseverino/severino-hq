@@ -125,7 +125,7 @@ class UnreadableSiblingTests(SimpleTestCase):
             subject="example.com",
             severity="attention",
             title="Lapses in ten days",
-            explanation="",
+            explanation="Example.",
             steps=(Do("Look into it."),),
         )
         sooner = replace(later, severity="serious", title="Lapsed")
@@ -134,7 +134,7 @@ class UnreadableSiblingTests(SimpleTestCase):
             subject="",
             severity="attention",
             title="Something else",
-            explanation="",
+            explanation="Example.",
             steps=(Do("Look into it."),),
         )
         self.installed(PluginIntegration(), PluginIntegration(attention=lambda: (later, other, sooner)))

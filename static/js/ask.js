@@ -33,8 +33,6 @@
   const POLL_MS = 2000;
   // A tab nobody is looking at should not spend the night asking.
   const HIDDEN_POLL_MS = 15000;
-  // Past this the work's own status has long since said how it ended.
-  const FOLLOW_LIMIT_MS = 60 * 60 * 1000;
   const RELOAD_GAP_MS = 120_000;
   // Where the result shows when the control names no part.
   const CONTENT = "#content";
@@ -338,7 +336,7 @@
         if (waiting.length) await land(waiting[0], standing).catch(() => {});
         return false;
       },
-      { ms: POLL_MS, hiddenMs: HIDDEN_POLL_MS, limitMs: FOLLOW_LIMIT_MS, expired: end },
+      { ms: POLL_MS, hiddenMs: HIDDEN_POLL_MS, follows: true, expired: end },
     );
   };
 

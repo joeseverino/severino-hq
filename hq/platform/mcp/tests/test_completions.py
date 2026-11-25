@@ -5,6 +5,7 @@ from django.test import TestCase
 from mcp import Client, types
 
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
+from hq.platform.application.projection import page_of
 from hq.platform.application.resources import EmptyQuery
 from hq.platform.application.security import Capability, Principal
 from hq.platform.core.testing import MCP_READER
@@ -18,7 +19,7 @@ NAMES = [f"example-{number:03}" for number in range(150)]
 
 
 def _listing():
-    return {"items": [{"name": name, "state": "ok"} for name in NAMES], "count": len(NAMES)}
+    return page_of([{"name": name, "state": "ok"} for name in NAMES])
 
 
 def _kind():

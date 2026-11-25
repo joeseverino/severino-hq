@@ -1,12 +1,10 @@
 """A queue item drawn from a stored reading says when that reading was taken."""
 
-import re
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
 from .facts import TOP, Import, imports, scan
-from .source import template_files
 
 APPLICATION = Path(__file__).resolve().parents[1]
 PACKAGE = "hq.platform.application"
@@ -225,27 +223,3 @@ class ReadingItemsCarryTheirAgeTests(SimpleTestCase):
             ("container_findings", "_image_findings"), readers, "the walk no longer follows an indirect reader"
         )
         self.assertEqual(missing, [])
-
-
-TEMPLATES = APPLICATION.parents[2] / "templates"
-PARTIAL = TEMPLATES / "partials/_reading_age.html"
-# "read" just before an age: a page wording a reading's age itself.
-OWN_WORDING = re.compile(r"\bread\b[^{<]{0,4}\{\{[^}]*\|(?:when|when_text)\b", re.IGNORECASE)
-
-
-@tag("source", "tree")
-class OneWordingTests(SimpleTestCase):
-    def test_a_page_says_a_readings_age_through_the_partial(self):
-        """Each page worded it its own way ("read 5 minutes ago", "as of",
-        "Seen"), so the same age read differently from page to page."""
-
-        found = [
-            f"{name}:{text.count(chr(10), 0, match.start()) + 1}"
-            for name, path in template_files()
-            if path != PARTIAL
-            for text in (path.read_text(encoding="utf-8"),)
-            for match in OWN_WORDING.finditer(text)
-        ]
-
-        self.assertRegex("Last read {{ at|when }}", OWN_WORDING, "the rule no longer finds an age worded by hand")
-        self.assertEqual(found, [])

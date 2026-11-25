@@ -4,7 +4,7 @@ from typing import Literal
 
 from django import template
 
-from hq.platform.core.part_examples import tags
+from hq.platform.core.part_examples import work
 from hq.platform.core.template_parts import Part, slotted
 lazy from hq.platform.application import work_runs
 
@@ -37,8 +37,8 @@ slotted(
         """,
         partial="partials/_run_evidence.html",
         function=run_evidence,
-        example=tags.RUN_EVIDENCE,
-        states={"in-rows": tags.RUN_EVIDENCE_IN_ROWS},
+        example=work.RUN_EVIDENCE,
+        states={"in-rows": work.RUN_EVIDENCE_IN_ROWS},
     ),
     library=register,
 )

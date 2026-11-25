@@ -4,10 +4,10 @@ records of it, and the finding once that passes what the pipeline takes."""
 from datetime import UTC, datetime, timedelta
 
 from django.test import TestCase
-from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.platform.core.testing import connection
 
 from ..inventory import record_inventory
 
@@ -43,12 +43,7 @@ def stored():
 
 class OthersSpendTests(TestCase):
     def setUp(self):
-        ProviderConnection.objects.create(
-            connection_ref="example-app",
-            controller_id="example-controller",
-            provider="github_app",
-            observed_at=timezone.now(),
-        )
+        connection("github_app", "example-app")
 
     def test_others_spend_is_what_github_counted_beyond_the_last_sweeps_own(self):
         sweep(allowance(used=100, spent=40))

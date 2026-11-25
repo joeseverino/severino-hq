@@ -7,7 +7,6 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import claim_next_operation, schedule_automatic_operations
 from hq.platform.application.derivation_testing import frozen
@@ -22,7 +21,7 @@ from hq.platform.application.resource_operations import (
 )
 from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
 from hq.platform.application.tests.consent import consented
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import declare, managing_everything, operator
 
 from ..models import ManagedResource, OperationRequest
 from ..providers import PROVIDERS

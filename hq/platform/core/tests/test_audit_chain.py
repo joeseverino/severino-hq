@@ -12,11 +12,12 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.history import Moment
-from hq.platform.application.markup_testing import Element, all_elements, hrefs, select, text
+from hq.platform.application.markup_testing import Element, all_elements, hrefs, text
 from hq.platform.core import append_only
-from hq.platform.core.audit import audited_labels
+from hq.platform.core.attribution import own_operation
+from hq.platform.core.audit import Outcome, audited_labels, work_ended
 from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare, operator
@@ -24,8 +25,6 @@ from hq.platform.core.testing import declare, operator
 # How many records one controller inventory pass changed, the shape that drew
 # a fold of rows linking nowhere.
 INVENTORY = 90
-# The id of the list on an event's page that a fold's count opens.
-OPERATION_LIST = "rest-of-operation"
 
 
 def _inventory(count: int, *, operation: str = "", at=None) -> str:
@@ -183,7 +182,7 @@ class EveryLineOpensSomewhereTests(_Signed):
                 self.assertTrue(links, f"a row folded under {head} links somewhere")
 
     def test_a_pass_no_row_stands_for_opens_its_newest_row_and_its_count_opens_the_list_of_all(self):
-        _inventory(INVENTORY)
+        operation = _inventory(INVENTORY)
         newest = AuditLog.objects.order_by("-created_at", "-pk").first()
         page = reverse("core:audit_detail", args=[newest.pk])
 
@@ -191,10 +190,7 @@ class EveryLineOpensSomewhereTests(_Signed):
 
         (head_links,) = [links for row, _cells, links in _rows(html) if "data-folds" in row.attrs]
         self.assertIn(page, head_links)
-        self.assertIn(f"{page}#{OPERATION_LIST}", hrefs(html))
-        # That list is on the page it opens.
-        listed = self.client.get(page).content.decode()
-        self.assertEqual(len(select(listed, "id", OPERATION_LIST)), 1)
+        self.assertIn(f"{reverse('core:audit_list')}?chain={operation}", hrefs(html))
 
 
 class ChainBudgetTests(_Signed):
@@ -224,7 +220,7 @@ class TimeAndWhoTests(_Signed):
 
         shown = text(self.client.get(reverse("core:audit_list")))
 
-        self.assertIn("example-agent · approved by owner", shown)
+        self.assertIn("example-agent approved by owner", shown)
 
     def test_a_row_its_actor_approved_names_them_once(self):
         AuditLog.objects.create(
@@ -256,28 +252,89 @@ class RecordStoryTests(_Signed):
 
         self.assertIn(f"{reverse('core:audit_list')}?about=example-story", hrefs(page))
 
-    def test_an_events_page_names_what_started_it_and_the_record_it_is_about(self):
-        cause = str(uuid7())
-        started = AuditLog.objects.create(
-            action=AuditLog.Action.CREATED,
-            object_type="Infrastructure operation",
-            object_id=cause,
-            object_repr="example-story: reconcile",
-            operation_id=cause,
-        )
+    def test_an_events_page_names_the_record_it_is_about(self):
         event = AuditLog.objects.create(
             action=AuditLog.Action.UPDATED,
             object_type="Managed resource",
             object_repr="example-story",
             operation_id=str(uuid7()),
-            metadata={"cause": cause, "subject": "example-story"},
+            metadata={"cause": str(uuid7()), "subject": "example-story"},
         )
 
         page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
-        links = hrefs(page)
 
-        self.assertIn(reverse("core:audit_detail", args=[started.pk]), links)
-        self.assertIn(f"{reverse('core:audit_list')}?about=example-story", links)
-        self.assertIn("example-story: reconcile", text(page))
+        self.assertIn(f"{reverse('core:audit_list')}?about=example-story", hrefs(page))
         # Said in words, never as the stored ids.
         self.assertEqual(set(page.context["extra"]), set())
+
+
+def _pressed_and_ran() -> tuple[OperationRequest, AuditLog]:
+    """A press on the web that declared a record and queued a run of it, then
+    the run's claim and its failed end, each written where HQ writes it: the
+    press under its request, the run under its own id."""
+
+    press = uuid7().hex
+    with operation_context(interface="web", actor="owner", operation="example.press", operation_id=press):
+        resource = declare("example-story", "example.record")
+        run = OperationRequest.objects.create(
+            resource=resource,
+            action=OperationRequest.Action.RUN,
+            requested_actor="owner",
+            requested_interface="web",
+            idempotency_key=f"run:{press}",
+        )
+    with operation_context(interface="controller", actor="controller", operation="example.claim"), own_operation(run):
+        run.claimed_by = "example-worker"
+        run.state = OperationRequest.State.CLAIMED
+        run.claimed_at = run.lease_expires_at = timezone.now()
+        run.save()
+        ended = work_ended(run, Outcome(message="A task failed.", ok=False))
+    return run, ended
+
+
+class OneChainTests(_Signed):
+    def test_a_press_and_the_run_it_queued_are_one_line_named_by_how_the_run_ended(self):
+        run, ended = _pressed_and_ran()
+
+        page = self.client.get(reverse("core:audit_list"))
+        (line,) = [each for each in page.context["object_list"] if not each.under]
+
+        self.assertEqual(line.head, ended)
+        self.assertEqual(line.action, AuditLog.Action.FAILED)
+        # Its steps fold beneath it in the order they ran, the run's opening its page.
+        steps = [each for each in line.lines if each.under]
+        self.assertEqual([step.page.operation_id for step in steps][-1], str(run.pk))
+        self.assertIn(reverse("jobs:run", kwargs={"pk": run.pk}), hrefs(page))
+        # The press's own row's page reads the whole chain too.
+        pressed = AuditLog.objects.get(object_id=str(run.pk), action=AuditLog.Action.CREATED)
+        detail = self.client.get(reverse("core:audit_detail", args=[pressed.pk]))
+        self.assertIn(reverse("jobs:run", kwargs={"pk": run.pk}), hrefs(detail))
+
+    def test_a_job_a_press_asked_for_is_a_step_of_the_press_s_line(self):
+        from hq.domains.jobs.runner import run as run_job
+
+        press = uuid7().hex
+        with operation_context(interface="web", actor="owner", operation="example.press", operation_id=press):
+            declare("example-asked", "example.record")
+            job = run_job("example.sweep", "Sweep the examples", lambda progress: {"created": 1}, actor="owner")
+
+        page = self.client.get(reverse("core:audit_list"))
+        (line,) = [each for each in page.context["object_list"] if not each.under]
+        self.assertEqual({step.page.operation_id for step in line.steps}, {press, str(job.pk)})
+
+    def test_what_a_sweep_found_for_a_read_a_press_asked_for_is_in_the_press_s_chain(self):
+        from hq.platform.application.cadence import ask
+        from hq.platform.application.inventory import READING_AUDIT_TYPE
+        from hq.platform.application.report_testing import bridged
+        from hq.platform.application.tests.inventory_records import A_REWRITE, a_sweep
+
+        kind = "adguard.rewrite"
+        bridged("inventory", a_sweep(**{kind: [A_REWRITE]}))
+        press = uuid7().hex
+        with operation_context(interface="web", actor="owner", operation="example.press", operation_id=press):
+            ask(reads=(kind,))
+        bridged("inventory", a_sweep(**{kind: [{**A_REWRITE, "answer": "192.0.2.10"}]}))
+
+        found = AuditLog.objects.get(action=AuditLog.Action.OBSERVED, object_type=READING_AUDIT_TYPE)
+        answered = AuditLog.objects.get(object_type="Read request", action=AuditLog.Action.DELETED)
+        self.assertEqual((found.trace, answered.trace), (press, press))

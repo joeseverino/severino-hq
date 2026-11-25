@@ -4,11 +4,9 @@ from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import texts
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 from ..findings import findings
 from ..inventory_testing import store
@@ -16,18 +14,6 @@ from ..security import Capability, Principal
 from ..tailnet import TAILNET_KIND, WELL_KNOWN_PORTS, grant_ports
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
-
-
-def tailnet_connection(ref="example-tailnet", provider="tailscale"):
-    return ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id="example-controller",
-        provider=provider,
-        endpoint="https://api.example.com",
-        reachable=True,
-        probed=True,
-        observed_at=timezone.now(),
-    )
 
 
 def policy(*, lock=None, **record):
@@ -42,7 +28,7 @@ def raised(rule):
 
 class DeviceApprovalTests(TestCase):
     def setUp(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
 
     def test_the_tailnet_page_marks_the_setting_and_links_the_problem(self):
         from ..tailnet_context import tailnet_context
@@ -73,15 +59,7 @@ class PortNameTests(TestCase):
             "tailscale.device",
             {"name": "example-host", "online": True, "tags": ["tag:server"], "addresses": ["100.64.0.5"]},
         )
-        ProviderConnection.objects.create(
-            connection_ref="example-host",
-            controller_id="example-controller",
-            provider="ssh",
-            endpoint="100.64.0.5:7722",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "example-host", endpoint="100.64.0.5:7722")
         store(
             "portainer.container",
             {"host": "example-host", "name": "example-admin", "ports": [9000]},
@@ -100,15 +78,7 @@ class PortNameTests(TestCase):
     def test_a_connection_to_a_service_names_its_port(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 
-        ProviderConnection.objects.create(
-            connection_ref="example-dns",
-            controller_id="example-host",
-            provider="adguard",
-            endpoint="http://127.0.0.1:3001",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("adguard", "example-dns", controller_id="example-host", endpoint="http://127.0.0.1:3001")
 
         self.assertEqual(self.names("tcp:3001")["tcp:3001"], CONNECTION_LABELS["adguard"])
         self.assertEqual(self.names("tcp:3001", dst=("tag:other",))["tcp:3001"], "")
@@ -258,7 +228,7 @@ class GrantReachesOnlyLoopbackTests(TestCase):
     def setUp(self):
         import json
 
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         declare("example-host", "machine", {"name": "example-host", "addresses": ["100.64.0.5"]})
         store(TAILNET_KIND, {"name": "example-host", "addresses": ["100.64.0.5"]})
         written = {**self.GRANT, "srcPosture": ["posture:latest"]}

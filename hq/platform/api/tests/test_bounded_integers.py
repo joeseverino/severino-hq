@@ -52,8 +52,8 @@ class PastTheCeilingTests(TestCase):
 
     def test_a_count_past_the_ceiling_is_invalid_where_a_tool_takes_one(self):
         for caller in (WRITER, OPERATOR):
-            for door in each_door(self, caller, "recent_activity", doors=(MCP, SHELL)):
+            for door in each_door(self, caller, "get_findings", doors=(MCP, SHELL)):
                 with door:
-                    answer = door("recent_activity", limit=PAST)
+                    answer = door("get_findings", limit=PAST)
 
                     self.assertEqual(answer["error"]["code"], "invalid_input", answer)

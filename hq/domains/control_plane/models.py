@@ -13,19 +13,21 @@ from django.utils import timezone
 from hq.domains.jobs.models import JobState
 from hq.platform.application.labels import dotted
 from hq.platform.application.tone import Tone, TonedChoices
+from hq.platform.core.attribution import queued_chain
 from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
+from hq.platform.core.stored_json import StoredJSONField
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 lazy from hq.platform.application.approval_review import title as approval_title
-lazy from hq.platform.application.automation_adoption import playbook_titles
+lazy from hq.platform.application.automation_adoption import adopted_procedures, playbook_titles
 lazy from hq.platform.application.automation_runs import run_title
 lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.glance import _panel_names
 lazy from hq.platform.application.security import subject_parts
 lazy from hq.platform.application.work_runs import scan_title
 
-lazy from .providers import readout_rows, registry_label, resource_home
+lazy from .providers import readout_rows, registry_label, resource_home, validate_spec
 
 
 # Choices as callables, which Django reads on first use: the contracts live in
@@ -70,7 +72,8 @@ class ManagedResource(TimestampedModel):
     id = models.UUIDField("ID", primary_key=True, default=uuid.uuid4, editable=False)
     key = models.SlugField(max_length=180, unique=True)
     kind = models.CharField(max_length=64)
-    spec = models.JSONField(default=dict)
+    # Read through its kind's provider, as every write holds it.
+    spec = StoredJSONField(default=dict, load=lambda resource: validate_spec(resource.kind, resource.spec))
     enabled = models.BooleanField(default=True)
     desired_fingerprint = models.CharField(max_length=64, blank=True, default="")
     generation = models.PositiveIntegerField(default=1)
@@ -346,6 +349,9 @@ class ReadRequest(TimestampedModel):
     connection_ref = models.CharField(max_length=160, blank=True)
     kind = models.CharField(max_length=64, blank=True)
     requested_at = models.DateTimeField(default=timezone.now)
+    # The chain of its latest ask, which the sweep that answers it continues
+    # (``sweep.record_sweep``).
+    traceparent = queued_chain()
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=("connection_ref", "kind"), name="one_read_request_per_subject")]
@@ -539,6 +545,10 @@ class OperationRequest(TimestampedModel):
     claim_attempt = models.CharField(max_length=64, blank=True, default="")
     attempt_count = models.PositiveIntegerField(default=0)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # The chain it was queued in, as a W3C ``traceparent``, taken from the
+    # binding wherever it is made: what its claim and report continue
+    # (``attribution.own_operation``).
+    traceparent = queued_chain()
 
     class Meta:
         ordering = ("-created_at",)
@@ -665,7 +675,10 @@ class AdoptedCatalog(TimestampedModel):
     # Each procedure as adopted: its manifest's fields, its inputs, the
     # commit it runs at, the files it runs and the files of that commit no
     # playbook runs, which it may read.
-    procedures = models.JSONField(default=list)
+    procedures = StoredJSONField(
+        default=list,
+        load=lambda catalog: adopted_procedures(catalog),  # noqa: PLW0108 - reads the lazy import as a row loads
+    )
     # Over the procedures: what every process builds its commands from, and
     # so how it knows its own are current.
     digest = models.CharField(max_length=64)

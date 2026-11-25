@@ -85,8 +85,13 @@ window.hqFetch = hqFetch;
 // back runs what came due while it was away. A task that fails is asked less
 // often, up to eight times its pace, until it answers again.
 //
-// `work` answers false to stop; anything else keeps it going.
+// `work` answers false to stop; anything else keeps it going. A task that
+// `follows` work under way (a polled region, an ask) stops after the hour any
+// work HQ runs has long since said how it ended in, counted from its start
+// whether or not the tab was showing: a shorter bound ends the following of a
+// long playbook run while the server still draws it under way.
 const hqEvery = (() => {
+  const FOLLOW_MS = 60 * 60 * 1000;
   const tasks = new Set();
   let timer = null;
   const pace = (task) =>
@@ -132,7 +137,7 @@ const hqEvery = (() => {
 
   document.addEventListener("visibilitychange", plan);
 
-  return (work, { ms, hiddenMs = 0, limitMs = 0, expired } = {}) => {
+  return (work, { ms, hiddenMs = 0, follows = false, expired } = {}) => {
     const task = {
       work,
       ms,
@@ -140,7 +145,7 @@ const hqEvery = (() => {
       hiddenMs,
       expired,
       last: Date.now(),
-      until: limitMs ? Date.now() + limitMs : 0,
+      until: follows ? Date.now() + FOLLOW_MS : 0,
       running: false,
     };
     tasks.add(task);
@@ -181,7 +186,6 @@ const hqFragment = (() => {
 
   // Where an expired session is sent: the page says, from the route itself.
   const SIGN_IN = document.body.dataset.signIn;
-  const POLL_LIMIT_MS = 180_000;
   // What a request in flight is keyed by -> its abort. A newer request for
   // the same thing ends the older one, so answers never land out of order.
   const pending = new WeakMap();
@@ -583,8 +587,8 @@ const hqFragment = (() => {
   };
 
   // A region the server marks as still changing is asked again until the
-  // server stops marking it, the region leaves the page, or a few minutes
-  // pass. A tick is never a request to leave the page.
+  // server stops marking it, the region leaves the page, or the hour followed
+  // work is given passes (`hqEvery`). A tick is never a request to leave the page.
   function watch(region) {
     within(region, "[data-fragment-poll]").forEach((polling) => {
       if (polled.has(polling)) return;
@@ -615,7 +619,7 @@ const hqFragment = (() => {
         },
         {
           ms: Math.max(1, Number(polling.dataset.fragmentPoll) || 3) * 1000,
-          limitMs: POLL_LIMIT_MS,
+          follows: true,
           expired: stop,
         },
       );

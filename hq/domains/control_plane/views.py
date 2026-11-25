@@ -63,6 +63,7 @@ from hq.platform.application.work_runs import run_rows
 from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.web_refusals import refusal_response, refused
 lazy from hq.platform.application.page_relations import for_container
+lazy from hq.platform.application.projection import iso
 
 from .cells import run
 from .models import ApprovalRequest, ManagedResource, OperationRequest
@@ -658,7 +659,7 @@ class ResourceReportDownloadView(View):
                     "id": str(operation.id),
                     "action": operation.action,
                     "state": operation.state,
-                    "created_at": operation.created_at.isoformat(),
+                    "created_at": iso(operation.created_at),
                     "result": operation.result,
                 }
                 for operation in resource.operations.all()[:50]

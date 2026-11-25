@@ -14,7 +14,7 @@ from .adoption import ADOPT, AdoptCommand, adopt
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
 from .path_records import PathRecord
-from .projection import complete, projection_scope, read_once
+from .projection import page_of, projection_scope, read_once
 from .record_errors import RecordNotFound
 from .resources import EmptyQuery
 from .security import Capability
@@ -108,8 +108,7 @@ def list_services() -> dict[str, Any]:
     """Every listed hostname, HQ's own and observed ones marked, and its wiring."""
 
     with projection_scope():
-        items = [serialize_service(service) for service in listed_services()]
-    return complete(items)
+        return page_of(listed_services(), each=serialize_service)
 
 
 def get_service(hostname: str) -> ServiceRecord:

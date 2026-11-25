@@ -1,0 +1,40 @@
+id: class-annotations-name-no-lazy-import
+valid:
+  - |
+    from typing import TYPE_CHECKING
+    if TYPE_CHECKING:
+        from example.rows import Row
+    class Mention:
+        row: Row
+  - |
+    from example.links import Link
+    class Mention:
+        link: Link
+  - |
+    lazy from example.links import Link
+    class Mention:
+        def named(self) -> Link: ...
+  - |
+    lazy from example.links import Link
+    def named(link: Link) -> Link: ...
+  - |
+    lazy import example.kinds
+    class Mention:
+        kind: other.example
+invalid:
+  - |
+    lazy from example.links import Link
+    class Mention:
+        link: Link | None
+  - |
+    lazy import example.kinds
+    class Mention:
+        kind: example.kinds.Kind
+  - |
+    lazy from example.links import Other as Link
+    class Mention:
+        link: list[Link]
+  - |
+    lazy import example.kinds as kinds
+    class Mention:
+        kind: kinds.Kind = None

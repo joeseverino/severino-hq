@@ -7,6 +7,7 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.domains.projects.models import Project
 from hq.platform.application.contracts import Closed
+from hq.platform.application.projection import page_of
 from hq.platform.core.testing import NOBODY, OPERATOR, READER, declare
 
 from ..command_center import command_center
@@ -59,7 +60,7 @@ class ResourceExecutionTests(TestCase):
             "Example records",
             "Synthetic plugin records.",
             Capability.READ,
-            listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, _ExampleRecord),
+            listing=ListRead(lambda: page_of([]), EmptyQuery, _ExampleRecord),
             web_route="missing:list",
         )
         with offering(resources=(plugin,)):
@@ -214,7 +215,7 @@ NESTED = ResourceSpec(
     "Nested",
     "Synthetic records with collections inside.",
     Capability.READ,
-    listing=ListRead(lambda: {"items": [_nested(None), {"name": "flat"}], "count": 2}, EmptyQuery, _ExampleRecord),
+    listing=ListRead(lambda: page_of([_nested(None), {"name": "flat"}]), EmptyQuery, _ExampleRecord),
     detail_handler=_nested,
     identifier="name",
 )
@@ -310,7 +311,7 @@ class ResourceRegistrationTests(SimpleTestCase):
                 "Records",
                 "A query that takes the selection's name.",
                 Capability.READ,
-                listing=ListRead(lambda **_: {"items": [], "count": 0}, query, _ExampleRecord),
+                listing=ListRead(lambda **_: page_of([]), query, _ExampleRecord),
             )
             with (
                 self.subTest(query=query.__name__),
@@ -330,7 +331,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             "Records",
             "A query that drops a filter it does not declare.",
             Capability.READ,
-            listing=ListRead(lambda **_: {"items": [], "count": 0}, Open, _ExampleRecord),
+            listing=ListRead(lambda **_: page_of([]), Open, _ExampleRecord),
         )
         with (
             offering(resources=(spec,)),
@@ -344,7 +345,7 @@ class ResourceRegistrationTests(SimpleTestCase):
             "Records",
             "A nested plugin route.",
             Capability.READ,
-            listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, _ExampleRecord),
+            listing=ListRead(lambda: page_of([]), EmptyQuery, _ExampleRecord),
             web_route="example:records:list",
         )
         with offering(resources=(nested,)):

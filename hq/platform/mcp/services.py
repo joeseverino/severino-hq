@@ -21,7 +21,7 @@ from hq.platform.application.held_answer import HeldCall
 from hq.platform.application.input_errors import unknown_field_errors
 from hq.platform.application.integration_specs import FIELD_MASK, PAGE_FIELD
 from hq.platform.application.projection import MAX_PAGE_SIZE
-from hq.platform.application.read_models import DocumentationStatus, RecentActivity, SystemHealth
+from hq.platform.application.read_models import SystemHealth
 from hq.platform.application.record_fields import MOST_INTEGER, RecordId
 from hq.platform.application.registry import RegistryAudit, audit_registry as audit_application_registry
 from hq.platform.application.reports import (
@@ -35,7 +35,6 @@ from hq.platform.application.resources import (
     PageNumber,
     ResourceCatalog,
     ResourceCollection,
-    TopLimit,
     describe_resources as describe_application_resources,
     get_resource as get_application_resource,
     list_resource as list_application_resource,
@@ -237,7 +236,7 @@ def get_resource(
 def audit_registry() -> RegistryAudit:
     """The projects and assets that no doc covers yet.
 
-    `documentation_status` covers the docs that exist.
+    `list_resource` with the name `documentation` lists the docs that exist.
     """
 
     return audit_application_registry()
@@ -255,30 +254,6 @@ def export_year_summary(
     """
 
     return export_application_year_summary(year, format, principal=current_principal())
-
-
-@tool("Documentation coverage", requires=holding(Capability.READ), budget=Budget(1_200))
-def documentation_status() -> DocumentationStatus:
-    """The docs HQ knows of: counts by status and type, and the first page
-    of docs, each with its title, system and location. Sensitive docs are
-    left out.
-
-    For the next page, send `next` as the `page` of `list_resource` with
-    the name `documentation`. `next` is null when this
-    page holds them all. `audit_registry` names the records no doc covers.
-    """
-    return read_models.documentation_status(principal=current_principal())
-
-
-@tool("What changed lately", requires=holding(Capability.READ_AUDIT_LOG), budget=Budget(12_500))
-def recent_activity(*, limit: TopLimit = 25) -> RecentActivity:
-    """The newest audit-log events, newest first: who did what to which
-    record, and when.
-
-    It needs the `read_audit_log` permission. `dashboard_snapshot` reads
-    what needs doing.
-    """
-    return read_models.recent_activity(limit=limit)
 
 
 @tool("HQ health check", requires=holding(Capability.READ), budget=Budget(200))

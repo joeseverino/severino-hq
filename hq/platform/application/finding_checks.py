@@ -88,7 +88,9 @@ def checks(principal: Principal) -> DataTable:
     """The table of every rule, grouped by the section it raises under, in
     the order the rules are declared."""
 
-    raised = Counter(finding.rule for finding in estate_findings(principal=principal))
+    raised = Counter(
+        each.rule for finding in estate_findings(principal=principal) for each in (finding, *finding.consequences)
+    )
     labels = {domain.id: domain.label for domain in host_domains()}
     grouped: dict[str, list[Row]] = {}
     for rule in finding_rules():

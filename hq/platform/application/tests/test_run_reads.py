@@ -5,9 +5,9 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import OperationRequest
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import AGENT, MCP_READER
+from hq.platform.core.testing import AGENT, MCP_READER, run_ended
 
-from ..controller import ControllerReport, claim_next_operation, report_operation
+from ..controller import claim_next_operation
 from ..record_errors import RecordNotFound
 from ..resources import get_resource
 from ..security import AuthorizationError, Capability, Principal
@@ -35,17 +35,7 @@ class ReadOneRunTests(TestCase):
 
     def finish(self, operation_id, *events):
         claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
-        operation = OperationRequest.objects.get(pk=operation_id)
-        report_operation(
-            operation_id,
-            ControllerReport(
-                success=True,
-                observed_generation=operation.input["generation"],
-                message="Restarted.",
-                events=list(events),
-            ),
-            controller_id=WORKER,
-        )
+        run_ended(operation_id, WORKER, events=events, success=True, message="Restarted.")
 
     def test_a_run_is_read_by_the_operation_id_its_answer_carried(self):
         operation_id = self.asked(APP, correlation="example-investigation-7")

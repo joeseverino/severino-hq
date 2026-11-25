@@ -754,6 +754,7 @@ def _run(
         tallied() as written,
         ringing() as asked,
     ):
+        # ast-grep-ignore: capability-handler-run-by-the-runner
         result = spec.handler(command, **arguments)
         if spec.effect.changes and not written:
             # A write whose handler recorded no row still leaves its act: what

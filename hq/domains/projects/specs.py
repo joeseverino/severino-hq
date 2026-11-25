@@ -40,14 +40,14 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             "hq.import",
             "Import projects and assets from one file. Nothing is saved unless every record in it is valid.",
             Effect.REMOTE_WRITE,
-            # The capabilities of the upserts it runs, both of them.
+            # The capabilities of the saves it runs, both of them.
             registry_import.REQUIRED_CAPABILITIES,
             registry_import.HQImportCommand,
             registry_import.execute_hq_import,
             subject_resource="projects",
             execution_notes=(
                 "Validate every record before writing any.",
-                "Upsert each record through project.upsert or asset.upsert, in one transaction.",
+                "Create or update each record as its kind's create and update capabilities do, in one transaction.",
                 "Keep a stored derived field that differs, and report it.",
                 "Record one audit event per record and one for the import.",
             ),

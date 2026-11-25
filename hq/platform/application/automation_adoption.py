@@ -32,6 +32,7 @@ from pydantic import (
     StrictInt,
     StrictStr,
     StringConstraints,
+    TypeAdapter,
     ValidationError,
     create_model,
 )
@@ -53,11 +54,12 @@ from .record_fields import RecordId
 from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
-lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, timeout_words
+lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, reading_words, timeout_words
 lazy from .findings import rule_for
 lazy from .labels import dotted, lower_first
 lazy from .payload_words import field_words
 lazy from .ui import ended
+lazy from .work_runs import wording
 
 ADOPT = "automation.source.adopt"
 REJECT = "automation.source.reject"
@@ -123,6 +125,8 @@ class AdoptedProcedure(ProcedureTerms):
 
         return self.model_dump(exclude={"revision"}) == other.model_dump(exclude={"revision"})
 
+
+_ADOPTED = TypeAdapter(tuple[AdoptedProcedure, ...])
 
 # ---------------------------------------------------------------- the catalog
 
@@ -245,9 +249,15 @@ def _load(digest: str) -> _Known:
     catalog = AdoptedCatalog.objects.filter(digest=digest).first() if digest else None
     if catalog is None:
         return _Known(digest, (), ())
-    # As JSON, which the row is stored as: a list is a strict tuple there.
-    rows = tuple(AdoptedProcedure.model_validate_json(json.dumps(row)) for row in catalog.procedures)
+    rows = adopted_procedures(catalog)
     return _Known(digest, rows, tuple(manifest(row) for row in rows))
+
+
+def adopted_procedures(catalog: AdoptedCatalog) -> tuple[AdoptedProcedure, ...]:
+    """``catalog``'s procedures, read as JSON, which the row is stored as: a
+    list is a strict tuple there."""
+
+    return _ADOPTED.validate_json(json.dumps(catalog.procedures))
 
 
 def manifest(procedure: AdoptedProcedure) -> OperationManifest:
@@ -440,6 +450,11 @@ def _procedure(
 
     try:
         declaration = ProcedureDeclaration.model_validate_json(json.dumps(scanned["declaration"]))
+        problems.extend(
+            f"Its sidecar's readings names {kind}, which is no reading HQ declares."
+            for kind in declaration.readings
+            if wording(kind) is None
+        )
         inputs = _inputs(scanned, declaration.inputs, problems)
         procedure = AdoptedProcedure(
             **declaration.model_dump(include=set(ProcedureTerms.model_fields)),
@@ -552,6 +567,7 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
         "verification": list(procedure.verification),
         "fixes": [found.title if (found := rule_for(rule)) else rule for rule in procedure.fixes],
         "investigates": [found.title if (found := rule_for(rule)) else rule for rule in procedure.investigates],
+        "readings": [reading_words(kind) for kind in procedure.readings],
         "inputs": [field_words(name) for name in procedure.inputs],
         "files": {path: name[:SHOWN_OBJECT] for path, name in procedure.files.items()},
         "shared_files": {path: name[:SHOWN_OBJECT] for path, name in procedure.shared.items()},

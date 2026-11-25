@@ -1,0 +1,8 @@
+id: hostname-spelled-by-normalized-hostname
+valid:
+  - 'host = normalized_hostname(name)'
+  - 'host = name.lower()'
+  - 'stem = name.rstrip("/").lower()'
+invalid:
+  - 'host = name.lower().rstrip(".")'
+  - 'host = record.name.rstrip(".").lower()'

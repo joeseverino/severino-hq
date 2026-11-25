@@ -6,7 +6,6 @@ so nothing here derives a fact. Readings leave only through their schema
 so none can be returned.
 """
 
-from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -18,7 +17,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from .json_schemas import as_written
 from .labels import human_label
 from .own_addresses import tailnet_sightings
-from .projection import complete, page_of, page_size, projection_scope
+from .projection import page_of, page_size, projection_scope
 from .record_errors import RecordNotFound, one_of
 from .references import Kind
 from .security import Principal
@@ -39,6 +38,7 @@ lazy from .machine_records import LoadPart, MachineRecord, PeeringPart, Presence
 lazy from .path_records import HopRow, ObservedPart, PathRecord, RoutePart
 lazy from .paths import path_to
 lazy from .plugins import checked_cards
+lazy from .projection import iso
 lazy from .reading_records import ReadingItem, ReadingRecord
 lazy from .record_parts import CheckPart, MeasurementPart
 lazy from .record_saves import row
@@ -54,20 +54,8 @@ lazy from .zones import ZONE_KIND, find_zone, told_apart
 
 def _moment(value: Any) -> str | None:
     if isinstance(value, datetime):
-        return value.isoformat()
+        return iso(value)
     return str(value) if value else None
-
-
-def _collection(
-    items: Sequence[Any], limit: int | None = None, serialize: Callable[[Any], Any] = lambda item: item
-) -> dict[str, Any]:
-    """Every match, or the first page of them with how many there were; only
-    the page is serialized."""
-
-    if limit is None:
-        return complete([serialize(item) for item in items])
-    page = page_of(items, limit)
-    return {**page, "items": [serialize(item) for item in page["items"]]}
 
 
 # ----- Estate -----------------------------------------------------------------
@@ -77,7 +65,7 @@ def list_estate(*, principal: Principal) -> dict[str, Any]:
     """The dashboard's estate figures as ``principal`` may read them, each linking to the page that lists it."""
 
     with projection_scope():
-        return _collection(
+        return page_of(
             [
                 {
                     "id": card["id"],
@@ -100,7 +88,7 @@ def list_action_items(
     with projection_scope():
         queue = dashboard.readable_queue(principal)
         items = filter_items(queue, query=query, status=status or "", source=source or "")
-    return _collection(items, limit, dashboard.listed_item)
+    return page_of(items, limit, each=dashboard.listed_item)
 
 
 # ----- Machines ---------------------------------------------------------------
@@ -147,7 +135,7 @@ def list_machines(*, limit: int = 50) -> dict[str, Any]:
     """Every machine anything reported, as the machine list shows them."""
 
     with projection_scope():
-        return _collection(connections.machines_once(), limit, serialize_machine)
+        return page_of(connections.machines_once(), limit, each=serialize_machine)
 
 
 def get_machine(name: str) -> MachineRecord:
@@ -184,7 +172,7 @@ def _domains() -> list[DomainRow]:
                 ],
                 "registration": (
                     {
-                        "expires": registration.expires.isoformat(),
+                        "expires": iso(registration.expires),
                         "source": registration.source,
                         "auto_renew": registration.auto_renew,
                     }
@@ -200,7 +188,7 @@ def list_domains(*, limit: int = 50) -> dict[str, Any]:
     """Every domain HQ declares or a sweep has seen, with the services it holds."""
 
     with projection_scope():
-        return _collection(_domains(), limit)
+        return page_of(_domains(), limit)
 
 
 def get_domain(name: str) -> DomainRecord:
@@ -339,7 +327,7 @@ def list_request_path(*, principal: Principal | None = None) -> dict[str, Any]:
     request = request_context.current()
     if request is None:
         return {
-            **_collection([]),
+            **page_of([]),
             "unread": ["not read: request, because this caller made no HTTP request to describe"],
         }
 
@@ -380,7 +368,7 @@ def list_readings(*, provider: str | None = None, limit: int = 50) -> dict[str, 
 
     kinds = [kind for kind, spec in OBSERVATIONS.items() if provider is None or spec.provider == provider]
     rows = _rows(kinds)
-    return _collection(kinds, limit, lambda kind: _reading(kind, rows.get(kind)))
+    return page_of(kinds, limit, each=lambda kind: _reading(kind, rows.get(kind)))
 
 
 def get_reading(kind: str) -> ReadingRecord:
@@ -413,7 +401,7 @@ def serialize_provider_sight(found: Any) -> CredentialRecord:
 def list_credentials() -> dict[str, Any]:
     """Each connection provider and what its credential can see."""
 
-    return _collection([serialize_provider_sight(found) for found in credential_sight()])
+    return page_of(credential_sight(), each=serialize_provider_sight)
 
 
 def get_credential(provider: str) -> CredentialRecord:
@@ -428,9 +416,8 @@ def get_credential(provider: str) -> CredentialRecord:
 def search(query: str = "", *, limit: int = 20, principal: Principal) -> dict[str, Any]:
     """Machines, services and domains first, then records, as the search page ranks them."""
 
-    bound = page_size(limit)
     if not query.strip():
-        return _collection([])
+        return page_of([])
     with projection_scope():
         items = [
             {
@@ -443,7 +430,9 @@ def search(query: str = "", *, limit: int = 20, principal: Principal) -> dict[st
             }
             for item in estate_search(query, principal=principal)
         ]
-        for group in global_search(query, principal=principal, limit_per_scope=bound)["groups"]:
+        # Each scope is cut one past the page before merging, so a full page
+        # says whether more follow, though the merged length counts nothing.
+        for group in global_search(query, principal=principal, limit_per_scope=page_size(limit) + 1)["groups"]:
             items.extend(
                 {
                     "kind": group["scope"],
@@ -455,7 +444,4 @@ def search(query: str = "", *, limit: int = 20, principal: Principal) -> dict[st
                 }
                 for hit in group["items"]
             )
-    # Each scope was cut at the bound before merging, so the merged length is
-    # not how many matched: the total stays unknown and a full page reads as cut.
-    page = items[:bound]
-    return {"items": page, "count": len(page), "total": None}
+    return page_of(items, limit)

@@ -8,9 +8,9 @@ which undoes the switch-off.
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import managing_everything
 
 from ..adoption import unmanaged
-from ..adoption_testing import managing_everything
 from ..report_testing import bridged
 from ..zones import find_zone
 from .inventory_records import A_REWRITE, a_sweep

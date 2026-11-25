@@ -90,6 +90,12 @@ class CellFacts:
     holds: set[str] = field(default_factory=set)
     # How many elements name the row: a leading bold, or the bold in a leading link.
     names: int = 0
+    # Whether it names the row with a link to the row's record, whose page
+    # shows every value of the row whole.
+    record: bool = False
+    # Whether it holds an identifier drawn in code longer than a short value,
+    # which its row's line cuts where the row links its record (cuts.css).
+    chip: bool = False
     # Whether what it shows on its row's line carries a part's role (`data-cell`).
     parted: bool = False
     # Whether it holds the toggle that opens a folded group.
@@ -266,17 +272,22 @@ def _mark_cells(
 ) -> None:
     """What each cell says of itself: blank, its whole column blank, the
     width its column leaves at, that it stands only in a wide box as its
-    heading does (`wide-only`), that its column holds a field (`data-field`)
+    heading does (`wide-only`), that it holds a long chip its row's record
+    shows whole (`data-chip`), that its column holds a field (`data-field`)
     and in the body the heading's words, and in the body its kind and its
     clamp."""
 
     body = row.section == "tbody"
+    # A chip is cut only where the row links its record, whose page shows it
+    # whole; any other row's chip wraps whole, so no row holds one back.
+    record = any(cell.record for cell in row.cells)
     for at, cell in _placed(row):
         marks = [" data-blank"] if body and cell.says_nothing else []
         if not cell.spans:
             marks += [" data-blank-column"] if at in empty else []
             marks += [f' data-drop="{levels[at]}"'] if at in levels else []
             marks += [" data-wide-only"] if body and at in wide else []
+            marks += [" data-chip"] if body and record and cell.chip else []
             if at in fielded:
                 marks.append(f' data-field data-label="{escape(fielded[at])}"' if body else " data-field")
             if row.section != "thead":

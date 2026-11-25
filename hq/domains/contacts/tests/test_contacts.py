@@ -3,11 +3,11 @@ is queued for the controller. Nothing here reaches D1 or holds a credential."""
 
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, TestCase, override_settings, tag
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.contact_submissions import (
@@ -24,10 +24,9 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.consent import consented
-from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 
 from .. import inbox
 
@@ -58,13 +57,6 @@ def _read(*records, reachable=True, error=""):
     ProviderInventory.objects.update_or_create(
         kind=inbox.READING,
         defaults={"records": list(records), "observed_at": timezone.now(), "reachable": reachable, "error": error},
-    )
-
-
-def _manages(*, manages=True):
-    ProviderConnection.objects.update_or_create(
-        connection_ref=REF,
-        defaults={"provider": "cloudflare_api", "manages": manages, "observed_at": timezone.now()},
     )
 
 
@@ -140,7 +132,7 @@ class ContactViewTests(TestCase):
     def setUp(self):
         operator(self.client, "joe")
         _read(_row(1))
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
 
     def test_list_renders_with_tabs_and_actions(self):
         response = self.client.get(reverse("contacts:list"))
@@ -181,7 +173,7 @@ class ContactViewTests(TestCase):
         self.assertNotIn('href="mailto:a@example.com\r', body)
 
     def test_set_status_queues_and_redirects_back(self):
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
         response = self.client.post(
             reverse("contacts:set_status", args=[1]),
             form_keyed({"status": "read", "next": reverse("contacts:list") + "?status=unread"}),
@@ -198,14 +190,14 @@ class ContactViewTests(TestCase):
         )
 
     def test_set_status_ignores_offsite_next(self):
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
         response = self.client.post(
             reverse("contacts:set_status", args=[1]), form_keyed({"status": "read", "next": "https://evil.example/"})
         )
         self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
 
     def test_a_principal_without_the_contacts_capability_is_refused_and_recorded(self):
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
         lacking = _principal(Capability.READ)
         for url, data in (
             (reverse("contacts:set_status", args=[1]), {"status": "read"}),
@@ -222,7 +214,7 @@ class ContactViewTests(TestCase):
         )
 
     def test_the_detail_form_saves_through_the_review_capability(self):
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
         response = self.client.post(
             reverse("contacts:detail", args=[1]),
             form_keyed({"status": "replied", "assigned_to": "ada", "admin_notes": "done"}),
@@ -232,7 +224,7 @@ class ContactViewTests(TestCase):
         self.assertEqual((review["status"], review["assigned_to"]), ("replied", "ada"))
 
     def test_delete_post_queues_and_redirects(self):
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
         response = self.client.post(reverse("contacts:delete", args=[1]), form_keyed())
         self.assertRedirects(response, reverse("contacts:list"), fetch_redirect_response=False)
         self.assertEqual(ManagedResource.objects.get(kind=inbox.DECLARATION).spec["deletions"], [1])
@@ -245,7 +237,7 @@ class ContactViewTests(TestCase):
         )
 
     def test_a_refused_change_is_said_and_queues_nothing(self):
-        _manages(manages=False)
+        connection("cloudflare_api", REF, manages=False)
 
         response = self.client.post(
             reverse("contacts:set_status", args=[1]), form_keyed({"status": "read"}), follow=True
@@ -287,7 +279,7 @@ class ReadOnlyConnectionTests(TestCase):
                 self.assertIn(missing, page)
 
     def test_a_connection_that_only_reads_offers_no_change_and_names_its_flag(self):
-        _manages(manages=False)
+        connection("cloudflare_api", REF, manages=False)
 
         self._no_change_offered("manages: 1")
 
@@ -295,14 +287,14 @@ class ReadOnlyConnectionTests(TestCase):
         self._no_change_offered("a Cloudflare API connection")
 
     def test_the_permission_a_change_needs_is_said_beside_what_is_missing(self):
-        _manages(manages=False)
+        connection("cloudflare_api", REF, manages=False)
 
         for url, page in self._pages():
             with self.subTest(url=url):
                 self.assertIn(Cloudflare.D1_EDIT, page)
 
     def test_a_managing_connection_offers_every_change(self):
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
 
         for url, page in self._pages():
             with self.subTest(url=url):
@@ -316,7 +308,7 @@ class ReadOnlyConnectionTests(TestCase):
 class QueuedChangeTests(TestCase):
     def setUp(self):
         _read(_row(2), _row(1, status="read"))
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
 
     def test_a_review_is_queued_for_the_controller_and_shown_waiting(self):
         answer = execute_contact_review(
@@ -423,22 +415,6 @@ class NoCredentialTests(TestCase):
         self.assertIsNone(contacts.integration.connections)
 
 
-@tag("source", "tree")
-class NoCredentialSourceTests(SimpleTestCase):
-    """The contacts code, read for a token setting."""
-
-    def test_the_contacts_code_reads_no_token_setting(self):
-        contacts = ROOT / "hq" / "domains" / "contacts"
-        sources = [
-            *sorted(path.relative_to(ROOT) for path in contacts.glob("*.py")),
-            "hq/platform/application/contact_submissions.py",
-        ]
-        self.assertGreater(len(sources), 3)
-        for literal in scan({"string": STRING}, *sources):
-            for text in strings(literal):
-                self.assertNotRegex(text, r"(?i)_(TOKEN|SECRET|PASSWORD|API_KEY)$", literal.path.name)
-
-
 NOTE = "example private note"
 ASSIGNEE = "example-assignee"
 
@@ -449,7 +425,7 @@ class WithheldSpecTests(TestCase):
 
     def setUp(self):
         _read(_row(2), _row(1, status="read"))
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
         execute_contact_review(
             ContactReviewCommand(status="replied", assigned_to=ASSIGNEE, admin_notes=NOTE),
             consented=consented(OPERATOR),

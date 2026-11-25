@@ -11,14 +11,13 @@ from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-from hq.platform.application.adoption_testing import connection, managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_capabilities import LIFECYCLE_VERBS, resource_capabilities
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.writers import keyed
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, managing_everything, operator
 
 HQ_MACHINE, HQ_ADDRESS = "example-host", "192.0.2.10"
 OTHER_MACHINE = "example-edge"
@@ -111,7 +110,7 @@ class UnitLifecycleTests(TestCase):
         self.assertTrue(self.offered(UNSUPERVISED)["stop"].enabled)
 
     def test_a_connection_inside_it_is_started_again_through_its_unit(self):
-        reader = connection("portainer", "example-portainer")
+        reader = connection("portainer", "example-portainer", manages=True)
         reader.endpoint = f"http://{HQ_ADDRESS}:9000"
         reader.reaches = [HQ_MACHINE, OTHER_MACHINE]
         reader.save(update_fields=["endpoint", "reaches"])

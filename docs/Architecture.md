@@ -635,7 +635,7 @@ record, so a rollback removes all three changes. The backend is replaceable
 without changing table views, query parameters, CLI output or models.
 
 ```bash
-mise run manage --scratch -- search_hq projects "certificate automation"
+printf '%s' '{"tool":"list_resource","arguments":{"name":"projects","filters":{"query":"certificate automation"}}}' | mise run manage --scratch -- hq_call
 mise run manage --scratch -- rebuild_search_index
 ```
 
@@ -809,9 +809,9 @@ links one, through `read_sensitive_documentation`, which `HELD_ONLY_AT` keeps
 from every agent door; `application.sensitivity` is the one place either rule
 is applied.
 
-**Documentation sync.** `hq.platform.application.sync.execute_hq_sync()` is the
-one external sync. The local vault MCP emits the manifest and `hq sync` sends
-it as one `hq.sync` capability call, applied in one transaction. The vault
+**Documentation sync.** `documentation.sync` is the one external sync. The
+local vault MCP emits the manifest and `hq sync` sends it as one
+`documentation.sync` capability call, applied in one transaction. The vault
 describes documentation and nothing else; HQ derives the infrastructure.
 
 The sync is safe to repeat and preflight-validated against the frontmatter
@@ -1049,7 +1049,14 @@ already leased rather than a second one. A claimed run's answer carries its
 claim of other work, carry none.
 
 Long work keeps its lease through `renew`, which only the claimant may call and
-only before the lease runs out. It answers `continue: false` once the asker is
+only before the lease runs out. A run's renewal also carries its tasks so far
+(`RunProgress`), each a `RunEvent` that reads `started` while its task is under
+way and then how it ended; they replace what the run's result held of them,
+so a renewal sent twice holds the same, and one that carries none keeps them.
+That is the one record of a run's tasks, written only through the claimant's
+live lease, within the contract's bounds and struck at the bridge's door, and
+the run's page draws it as it changes, as AWX streams ansible-runner's events
+into a job's rows. It answers `continue: false` once the asker is
 held by the pause or a block (the lease is still extended, so the worker has
 time to stop and report) or the operation was cancelled. A run whose lease
 lapses may have changed machines. So the next claim, or the next ask for a
@@ -1060,10 +1067,9 @@ observation is the worker's to make. A worker that reports
 `OutcomeUnknown` itself ends its run the same way, so a run that stopped
 reporting reads "Stopped early", its result "Stopped reporting"
 (`work_runs.STOPPED_REPORTING`), before HQ ends it and after. A run's report
-writes nothing to its playbook's record: a `status` is refused. Its `events` land on the run's
-result: each task's outcome on one machine, bounded by the contract's
-`RunEvent` and struck of secrets at the bridge's door. Each changed or failed
-one is an audit row under the run's own id that leads back to the ask, and
+writes nothing to its playbook's record: a `status` is refused, and it
+carries no tasks, which its renewals already said. Each changed or failed
+task is an audit row under the run's own id that leads back to the ask, and
 the run's end is one DONE or FAILED row (`audit.work_ended`), as a job's is,
 never a change to its record's state.
 
@@ -1401,6 +1407,7 @@ or one out of range is refused when it is built. What it holds, and why:
 | `recovery` | How to recover from a partial run | A cancel or a failure cannot undo what was applied. |
 | `retry` | `never`, `observe_first` or `safe` | After an uncertain failure, whether the run may repeat, or must be observed first. |
 | `fixes` | The finding rules a run of it fixes, `filesystem-nearly-full`; empty by default | A finding of one about a machine it may run on offers its Run page, the machine chosen, as a remedy. It grants nothing: the run is authorized, approved and held as any other, and it is left out of what a run binds to. |
+| `readings` | The kinds of reading a run states through `set_stats`, `apps.pull`; empty for one that states its result alone | Whoever asks for a run knows what to read back. Each is a kind HQ declares the words of (`work_runs.wording`), so an adoption refuses one it does not, and it is left out of what a run binds to. |
 
 `admits(kind, host)` says whether a target is one the manifest names.
 
@@ -1418,8 +1425,8 @@ HQ's facts, never from the caller.
 A procedure is a playbook, `<name>.yml`, with a sidecar beside it,
 `<name>.hq.yml`, anywhere in the repository. The sidecar says what HQ needs to
 know that Ansible has no word for. That is the manifest's `id`, `target_kinds`,
-`hosts`, `privilege`, `effect`, `timeout_seconds`, `recovery`, `retry` and
-`fixes`, as the table above has them. It also holds `inputs`, which gives each text input
+`hosts`, `privilege`, `effect`, `timeout_seconds`, `recovery`, `retry`,
+`fixes` and `readings`, as the table above has them. It also holds `inputs`, which gives each text input
 its roles' argument specs declare a `pattern` and a `max_length`. The rest is
 Ansible's own, read from the playbook and its roles at the commit ([Refreshing
 the playbooks](#refreshing-the-playbooks)), and a sidecar names no playbook,
@@ -1457,7 +1464,7 @@ names, the enumerations, and the inputs' names. What it cannot say HQ still
 refuses at a Refresh, naming each in the proposal. That is a read that names a
 privilege, a host not in HQ's spelling, a statement that is only whitespace, an
 input `pattern` Python cannot compile, a finding in `fixes` HQ raises none of,
-and two sidecars with one id.
+a kind in `readings` HQ declares no words for, and two sidecars with one id.
 
 ### Running a playbook
 
@@ -1477,11 +1484,13 @@ holds its lease and reports: [The controller](#the-controller).
 The command takes `hosts` (machines by their name in HQ), `parameters` (the
 manifest's input type), an optional `correlation` (up to 200 printable
 characters, no space or comma, kept with the run so an investigation can find
-it on Jobs or in the `work` list) and `reason`.
+it on Jobs or in the `work` list), `reason` and `check`, which makes the run a
+preview ([Previewing a run](#previewing-a-run)).
 Anything else is refused, inside the parameters too. Each host resolves to a
 machine `machine_catalog()` knows, by its name or an alias, and is held to
 `admits`. The operation's `input` carries `operation`, `revision`,
-`parameters` as validated, `hosts` as resolved and `correlation`; the web
+`parameters` as validated, `hosts` as resolved and `correlation`, and
+`check` on a preview alone; the web
 process holds no SSH user, key or host key, which stay in the connections
 document the worker reads. Each resolved host is also an `OperationHost` row
 written in the same transaction, so a machine's runs, and the one-writer check
@@ -1511,9 +1520,47 @@ held run is measured against the manifest as supplied, its parameters as
 validated and its hosts as they resolve then (`approvals.measured_by`). So a
 new revision, a parameter that validates to another value, or a host that now
 resolves elsewhere stales the approval. Its card reads that baseline back
-(`automation_runs.run_preview`, declared as `measured_by`'s `shown`): the
-machines, the inputs by their form's labels, what it does, its access and the
-adopted commit, so a person approves what applying it runs.
+(`playbook_about.run_preview`, declared as `measured_by`'s `shown`): the
+machines, whether it previews, the inputs by their form's labels, what it
+does, its access and the adopted commit, so a person approves what applying
+it runs. The playbook's command page, its `playbooks` read and its notes in
+`describe_capabilities` name the readings it declares, and a run's page names
+each one it has not stated, "Not stated" once it ended.
+
+### Previewing a run
+
+Every adopted playbook previews through its own command: `check` true on
+`automation.<id>.run` runs it in Ansible's check mode, and the worker passes
+`--check` for the `check` its claim carries (`hq_runner/ansible.py`).
+`automation_runs.queue_run` is the one place a run's `input` takes `check`,
+for a person's or an agent's ask and for the app-update approval alike. A
+preview is a field of the run, never a command of its own, as AWX makes check
+a run's job type that the same execute role launches and ansible-playbook
+makes it a flag on the same playbook: one grant, one approval and one code
+path, so a preview cannot be allowed where its run is refused.
+
+A preview runs through the playbook's own privilege login, the apply's. Check
+mode is no sandbox: a module that supports it reports what it would change and
+changes nothing, one that does not is skipped, and a task that declares
+`check_mode: false` (a precondition asking `sudo -n -l`, a read of the
+journal) runs as it would in the apply. Its security properties follow from
+that:
+
+- A preview never exceeds its run. It is the run's command, so the grant, an
+  agent rule, the pause and an agent's block refuse it where they refuse the
+  run, and its login is the run's profile, so no task of it holds any access
+  the apply does not.
+- Its approval is the run's. A preview of a change waits for a person when an
+  agent asks, as the apply does, since its `check_mode: false` tasks act with
+  the apply's access; a read previews on the grant alone.
+- An approval of a preview applies only a preview. `check` is part of what a
+  held run is measured against (`run_subject`), so approving it never queues
+  a run that acts.
+- What a preview changes on a machine is bounded by its reviewed playbook: only
+  the tasks its author marked `check_mode: false`, in the files an adoption
+  reviewed. Nothing a caller sends adds one.
+- A preview carries nothing on. Only the app-update approval writes `then`,
+  so a preview asked by hand queues no merge and counts as no apply.
 
 A queued run is stored, then announced: once its transaction commits, HQ
 rings the automation worker's doorbell (`cadence.ask(doorbell="automation")`),
@@ -1558,13 +1605,10 @@ time. Its approval is measured against the head, every pin before and after,
 what the new pins fix and bring, and the apply, so a moved head, a changed pin
 or a new adoption stales it.
 
-A preview is Ansible's check mode: the run's `input` carries `check`, which
-no run command takes, and the worker passes `--check` for it
-(`hq_runner/ansible.py`); a `check` that is not a boolean is refused before
-anything runs. It goes through the playbook's own privilege login, so a task
-that declares `check_mode: false` (a precondition asking `sudo -n -l` whether
-the start is allowed) reads with the authority the apply has. `then` is HQ's
-alone and never reaches the worker's claim.
+The preview is a run with `check` ([Previewing a run](#previewing-a-run)),
+queued through `queue_run` as any preview is; a `check` that is not a boolean
+is refused before anything runs. `then` is HQ's alone and never reaches the
+worker's claim.
 
 Every update of a running image has one state, `app_updates.update_state`,
 which the finding and the container page both draw: its words ("<container>
@@ -1590,8 +1634,13 @@ a machine the playbook does not run on is refused by Approve and Apply at
 their own boundary (`applied_on`). While a step HQ queued works, or once it
 applied and until a reading of the containers since says they still run an
 older pin, the update asks nothing of anyone and raises no finding
-(`UpdateState.at_work`). A preview or an apply that ended badly names the step
-it stopped on and what it said.
+(`UpdateState.at_work`). A step that is a playbook's run is said as the run
+says it (`work_runs.standing_of`): while it works, its card and the press that
+asked it follow the run's status (`jobs:run_status`) and link to its page, and
+once it ends the card keeps how it went, linked to the run. A preview or an
+apply that ended badly names the step it stopped on and what it said, and an
+apply names each app its machine did not release, in the tone the `apps.pull`
+reading declares for that app's result.
 
 An image built on its host is classified once, where its standing is decided
 (`containers._built_here`): the machine's copy holds no registry digest, and
@@ -1620,11 +1669,10 @@ Its security properties:
   files as GitHub says it changes (`app_update_approval._unapprovable`).
   Anything else reads "Review it on GitHub".
 - Nothing merges before the host shows it can apply. Only a preview that
-  succeeded queues a merge, and only a run whose `input` carries `check`
-  counts as one, so no run that acted, and no run a person asks for by hand,
-  merges anything.
-- A preview never acts. `check` is set by the approval alone and kept on a
-  run put back after a lapsed lease. Apply never carries it.
+  succeeded queues a merge, and only one carrying the approval's `then`, so no
+  run that acted, and no preview a person asks for by hand, merges anything.
+- A preview never acts beyond its `check_mode: false` tasks. `check` is kept
+  on a run put back after a lapsed lease, and Apply never carries it.
 - No new merge rights. The merge goes through the same controller action,
   token and `Consent.require` as before; the consent is the press's, held as
   the preview's requester and `approved_by`.
@@ -1759,9 +1807,26 @@ smoke holds what is installed to the file.
 What Ansible loads from beside a playbook or inside a role, no setting turns
 off, so a scan reports each such directory. While it runs the worker renews
 the lease and stops when HQ answers stop or a renewal fails, and
-ansible-runner's own job timeout ends it at the manifest's `timeout_seconds`. Its report carries one event
-per task and machine, built from Ansible's message alone and struck of
-secrets: the run's secret parameters, the token and each identity's path.
+ansible-runner's own job timeout ends it at the manifest's `timeout_seconds`.
+Each task's start on a machine (`runner_on_start`), each pass of a task that
+polls with `until:` and goes again (`runner_retry`), and its outcome reach HQ
+on the next renewal, which ansible-runner's cancel callback asks for every few
+seconds on the thread that passes each event, and once more as the playbook
+ends (`worker._Hold`). One event per task and machine, a retry and then its
+outcome taking its start's place (`events.Tasks`), built from Ansible's message
+alone and struck of secrets: the run's secret parameters, the token and each
+identity's path. A retry is still under way, and its message is the line its
+module printed (`res.stdout`), the one stdout of a task the worker reads:
+ansible-runner 2.4.3 hands a retry over with the task's whole result as `res`
+(`display_callback/callback/awx_display.py`, `v2_runner_retry`), whose `msg` a
+polling command leaves empty, and AWX stores the event as it comes and shows
+only Ansible's own "FAILED - RETRYING" line for it (`awx/main/models/events.py`,
+`runner_retry` among `EVENT_TYPES`). That line is what a polling task writes for
+HQ to read, how far the work it follows has got, as a task writes its `msg`,
+so the same bounds hold it: struck of every secret shape and learned value,
+cut to one line and clipped to a message's length, and `censored` under
+`no_log`. Any other event's stdout, and every other field of a result, never
+leaves the worker.
 A run Ansible stops before any task fails or a machine goes unreached (a
 file that does not parse, a module no installed collection provides) says
 the first line Ansible printed as an error, color stripped, with the file and
@@ -1786,7 +1851,16 @@ playbook stated about any other machine, and HQ refuses a report that names
 one (`controller._hold_stated`), so a compromised worker can misstate only
 the machines of the runs it claims. Both doors strike secrets, the worker as
 it reports and HQ as it settles, and the run keeps what was stated in its
-result, whose kinds of reading the run's page and the `runs` read name. A
+result. The `runs` read carries each reading as stated; the run's page says
+each record in the words its kind declares, a swept reading's
+`ObservationSpec` (`title`, `describe`) or a playbook's own `StatedKind`
+(the applier's `apps.pull`, `app_update_approval.PULLED_KIND`), names and
+counts a kind HQ declares nothing of, and folds the readings as stated under
+Raw data (`work_runs.wording`). A task's message that is a line of JSON, as a
+retry's often is, it says in the words of the `StatedKind` whose `progress`
+reads that shape (the applier's following task: the app releasing and how
+each ended app ended), and any other as the task said it (`work_runs.told`);
+the `runs` read carries the message as the worker said it. A
 journal names each claim before it is sent and records a run once it starts,
 so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook

@@ -6,10 +6,12 @@ name no unit, so one added to ``deploy/systemd`` is covered once installed.
 """
 
 import shlex
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
+
+from django.utils.text import capfirst, get_text_list
 
 from hq.domains.control_plane.observations.host import UNIT_KIND, unescaped
 
@@ -21,12 +23,15 @@ from .finding_model import (
     cannot_run_commands,
     journal_step,
     machine_step,
+    matter_key,
 )
+from .finding_steps import Run
 from .moments import duration, moment, when
+from .quoted import Quoted
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
-from .ui import agreed, counted
+from .ui import agreed, counted, ended
 
 # ``LoadState`` when systemd holds the unit's configuration, and
 # ``UnitFileState`` when the file is there and nothing starts it at boot.
@@ -60,10 +65,16 @@ RESTARTING_FROM = 10
 # have settled: longer than a loop's RestartSec and one run before it stops.
 SETTLED_AFTER = timedelta(minutes=10)
 
-# Why the reading holds no state for a machine, as evidence says it.
+# The host's own program, as a unit runs it.
+HQ_HOST = "/usr/local/lib/severino-hq/deploy/bin/hq-host"
+
+FAILED = "unit-failed"
+NOT_INSTALLED = "unit-not-installed"
+
+# Why the reading holds no state for a machine, as its item says it.
 UNREAD_REASONS = {
     "unread": "HQ could not read them",
-    "refused": "The answer could not be understood",
+    "refused": "their answer could not be understood",
 }
 
 
@@ -96,6 +107,10 @@ class UnitState(ReadingRow):
     active_at: str = ""
     # "yes" for a service HQ does not ship, read because systemd restarted it.
     foreign: str = ""
+    # The units it cannot start without, and what HQ's own program last told
+    # systemd of it, such as why its run failed.
+    requires: tuple[str, ...] = ()
+    status: str = ""
 
     @classmethod
     def record(cls, record: dict[str, Any], snapshot: Any) -> UnitState:
@@ -189,10 +204,12 @@ def unit_state(record: dict[str, Any]) -> UnitState:
         restarts=said("restarts"),
         active_at=said("active_at"),
         foreign="yes" if record.get("foreign") else "",
+        requires=tuple(str(name) for name in record.get("requires") or ()),
+        status=said("status"),
     )
 
 
-def _units(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[UnitState, ...]]]:
+def machine_units(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[UnitState, ...]]]:
     """Each machine's units, without the rows that say the reading failed."""
 
     for node, rows in stated(estate, UnitState):
@@ -222,7 +239,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
 
     found = []
     said = render_status_findings.failed_units(estate)
-    for node, units in _units(estate):
+    for node, units in machine_units(estate):
         failed = tuple(unit for unit in units if unit.failed and unit.unit not in said.get(node.id, ()))
         if not failed:
             continue
@@ -231,7 +248,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
         scheduled = {unit.activates for unit in units if unit.starter}
         found.append(
             Finding(
-                rule="unit-failed",
+                rule=FAILED,
                 subject=node.id,
                 scope=UNIT_KIND,
                 title=(
@@ -240,13 +257,20 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                     else f"{counted(len(failed), 'background job', 'background jobs')} failed on {node.label}"
                 ),
                 severity=Tone.ATTENTION if all(unit.unit in scheduled for unit in failed) else Tone.SERIOUS,
-                explanation=agreed(len(failed), "It has not run since.", "None has run since."),
+                # What HQ's own program said as the run failed, where one unit
+                # failed and said it; each one's, beside it, where several did.
+                explanation=(
+                    _why(failed[0])
+                    if len(failed) == 1 and failed[0].status
+                    else agreed(len(failed), "It has not run since.", "None has run since.")
+                ),
                 evidence=tuple(
                     item
                     for unit in failed
                     for item in (
                         ("Job", unit.unit),
                         ("How it ended", _ended(unit)),
+                        *((("Why", _why(unit)),) if unit.status and len(failed) > 1 else ()),
                         ("Failed", _failed_when(node.label, unit, estate.now)),
                     )
                 ),
@@ -263,9 +287,71 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                     )
                 ),
                 no_help_reason=cannot_run_commands(node.label),
+                # A job cannot start without a unit it requires, so its failure
+                # follows from that unit not being set up.
+                follows=(matter_key(NOT_INSTALLED, node.id),) if _requires_absent(failed, units) else (),
             )
         )
     return tuple(found)
+
+
+def _why(unit: UnitState) -> Quoted:
+    """Why the unit's last run failed, as HQ's own program told systemd."""
+
+    return Quoted(ended(capfirst(unit.status)))
+
+
+def _requires_absent(failed: tuple[UnitState, ...], units: tuple[UnitState, ...]) -> bool:
+    """Whether a failed unit requires one of ``units`` that is not set up."""
+
+    absent = {unit.unit for unit in units if unit.absent and not unit.foreign}
+    return any(name in absent for unit in failed for name in unit.requires)
+
+
+@dataclass(frozen=True, slots=True)
+class Setup:
+    """How a shipped unit in one of ``UnitState.absent``'s states is set up:
+    the act its item's sentence names and the command its step runs, so the
+    two never name different remedies."""
+
+    sentence: str
+    label: str
+    command: Callable[[UnitState], str]
+
+
+# Installing the release installs, enables and starts every unit it ships
+# (``hq-host install``); a unit it installed that is off or idle needs only
+# turning on or starting.
+SETUP = {
+    "Not installed": Setup(
+        "Installing HQ's release sets {it} up.", "Install HQ's release", lambda _unit: f"{HQ_HOST} install"
+    ),
+    "Switched off": Setup(
+        "Turning {it} on sets {it} up.",
+        "Turn on {unit}",
+        lambda unit: f"systemctl enable --now {shlex.quote(unit.unit)}",
+    ),
+    "Not started": Setup(
+        "Starting {it} sets {it} up.", "Start {unit}", lambda unit: f"systemctl start {shlex.quote(unit.unit)}"
+    ),
+}
+
+
+def _set_up(node: TopologyNode, absent: tuple[UnitState, ...]) -> tuple[str, tuple[Run, ...]]:
+    """What sets ``absent`` up on ``node``: a sentence per state and each
+    distinct command once, both from ``SETUP``."""
+
+    states = {unit.absent: [each for each in absent if each.absent == unit.absent] for unit in absent}
+    sentence = " ".join(
+        SETUP[state].sentence.format(it=agreed(len(units), "it", "them")) for state, units in states.items()
+    )
+    steps: dict[str, Run] = {}
+    for unit in absent:
+        setup = SETUP[unit.absent]
+        command = setup.command(unit)
+        if command not in steps:
+            steps[command] = machine_step(setup.label.format(unit=unit.named), node.label, command)[0]
+    return sentence, tuple(steps.values())
 
 
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -274,15 +360,16 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
     mount that is not active holds nothing."""
 
     found = []
-    for node, units in _units(estate):
+    for node, units in machine_units(estate):
         # A service another package installs is read only for its restarts;
         # deploying HQ sets up none of it.
         absent = tuple(unit for unit in units if unit.absent and not unit.foreign)
         if not absent:
             continue
+        sentence, steps = _set_up(node, absent)
         found.append(
             Finding(
-                rule="unit-not-installed",
+                rule=NOT_INSTALLED,
                 subject=node.id,
                 scope=UNIT_KIND,
                 title=(
@@ -291,18 +378,9 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                     else f"{counted(len(absent), 'background job', 'background jobs')} are not set up on {node.label}"
                 ),
                 severity=Tone.SERIOUS,
-                explanation=f"Deploying HQ sets {agreed(len(absent), 'it', 'them')} up.",
+                explanation=sentence,
                 evidence=tuple(item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))),
-                steps=tuple(
-                    step
-                    for unit in absent
-                    if unit.installed and unit.kept_active
-                    for step in machine_step(
-                        f"Turn on {unit.named}",
-                        node.label,
-                        f"systemctl enable --now {shlex.quote(unit.unit)}",
-                    )
-                ),
+                steps=steps,
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
@@ -338,7 +416,7 @@ def _stalled(estate: FindingEstate) -> tuple[Finding, ...]:
     """
 
     found = []
-    for node, units in _units(estate):
+    for node, units in machine_units(estate):
         by_name = {unit.unit: unit for unit in units}
         stalled = tuple(
             (timer, why)
@@ -370,14 +448,14 @@ def _stalled_finding(
             else f"{counted(len(timers), 'timer')} on {node.label} are not starting their jobs"
         ),
         severity=Tone.SERIOUS,
-        # Why each is stalled is its evidence.
-        explanation="",
+        # Why one is stalled, said as its reason; each one's, beside it, where several are.
+        explanation=ended(stalled[0][1]) if len(stalled) == 1 else "None of their jobs is running on schedule.",
         evidence=tuple(
             item
             for timer, why in stalled
             for item in (
                 ("Timer", timer.unit),
-                ("Why", why),
+                *((("Why", why),) if len(stalled) > 1 else ()),
                 ("Last ran", when(timer.last_trigger_at, now)),
             )
         ),
@@ -417,7 +495,13 @@ _restarting = OnEachMachine(
         if len(looping) == 1
         else f"{counted(len(looping), 'service keeps', 'services keep')} restarting on {node.label}"
     ),
-    explanation=lambda _looping: "",
+    explanation=lambda looping: (
+        _why(looping[0])
+        if len(looping) == 1 and looping[0].status
+        else agreed(
+            len(looping), "It stops again each time systemd starts it.", "Each stops again when systemd starts it."
+        )
+    ),
     evidence=lambda unit: (
         ("Service", unit.unit),
         ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
@@ -454,8 +538,13 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 scope=UNIT_KIND,
                 title=_cannot_check(node),
                 severity=Tone.ATTENTION,
-                explanation="",
-                evidence=tuple(("Why", UNREAD_REASONS.get(reason, "Could not be read")) for reason in reasons),
+                explanation=ended(
+                    capfirst(
+                        get_text_list(
+                            [UNREAD_REASONS.get(reason, "they could not be read") for reason in reasons], "and"
+                        )
+                    )
+                ),
                 steps=machine_step(
                     "See whether systemd answers for HQ's jobs",
                     node.label,
@@ -475,7 +564,7 @@ def _cannot_check(node: TopologyNode) -> str:
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
-        "unit-failed",
+        FAILED,
         "Background job failed",
         Tone.SERIOUS,
         _failed,
@@ -488,12 +577,12 @@ RULES: tuple[FindingRule, ...] = (
         },
     ),
     FindingRule(
-        "unit-not-installed",
+        NOT_INSTALLED,
         "Background job not set up",
         Tone.SERIOUS,
         _absent,
         gathered=True,
-        operator_action="Deploy HQ, or turn the job on on the machine.",
+        operator_action="Install HQ's release on the machine, or start the job there.",
         no_help_reason=cannot_run_commands(),
         bars={Tone.SERIOUS: "a job HQ needs is not installed or not turned on"},
     ),

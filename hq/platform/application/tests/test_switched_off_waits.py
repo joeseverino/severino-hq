@@ -14,8 +14,8 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import managing_everything
 
-from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation, peek_next_operation
 from ..report_testing import bridged

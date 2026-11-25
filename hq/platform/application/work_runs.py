@@ -6,7 +6,7 @@ much work has run.
 """
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal
@@ -16,9 +16,11 @@ from django.db.models.fields.json import KT
 from django.db.models.functions import Coalesce, Collate, Concat, NullIf
 from django.db.models.lookups import Exact
 from django.utils import timezone
+from django.utils.text import get_text_list
 
 from hq.domains.control_plane.models import OPERATION_LAPSE, OperationHost, OperationRequest, OperationState
 from hq.domains.jobs.models import LAPSE as JOB_LAPSE, Job, JobState
+lazy from hq.domains.control_plane.observations import OBSERVATIONS, ObservationSpec
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
@@ -27,12 +29,15 @@ from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
 from .quoted import Quoted
+from .routes import reverse
 from .tone import Tone, Toned
+lazy from .app_update_approval import PULLED, PULLED_KIND
 lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, capability_specs
 lazy from .cadence import automation_standing
 lazy from .entity_links import entity_link
 lazy from .history import Acts, asked_by, asking, who_did_each
+lazy from .labels import dotted
 lazy from .outbound_work import job_names
 lazy from .references import Kind
 
@@ -43,8 +48,9 @@ RUN: Source = "run"
 
 class TaskOutcome(Toned):
     """What a run's task did on one host (the bridge's ``RunEvent``), in the
-    tone a run's state takes for the same news."""
+    tone a run's state takes for the same news: started while it is under way."""
 
+    STARTED = "started", JobState.RUNNING.tone
     OK = "ok", Tone.GOOD
     CHANGED = "changed", Tone.GOOD
     SKIPPED = "skipped", Tone.NEUTRAL
@@ -52,9 +58,10 @@ class TaskOutcome(Toned):
     UNREACHABLE = "unreachable", Tone.SERIOUS
 
 
-# The outcomes a run's audit trail records one row each: what changed a
-# machine or went wrong. Every outcome stays in the run's result.
-AUDITED_OUTCOMES = frozenset({TaskOutcome.CHANGED, TaskOutcome.FAILED, TaskOutcome.UNREACHABLE})
+# Where a run's result holds its tasks so far, each a ``RunEvent``: written
+# by its worker's renewals alone (``controller.renew_operation``) and read by
+# ``run_events`` alone.
+RUN_EVENTS = "events"
 # How work in each state stands for a control that follows it (``asks.Standing``).
 STANDS = {
     JobState.QUEUED: QUEUED,
@@ -75,6 +82,8 @@ STOPPED_REPORTING = "Stopped reporting"
 # tone of something to look at: it is neither under way nor waiting its turn.
 NOT_STARTED = "Not started"
 NOT_STARTED_TONE = Tone.ATTENTION
+# What a run or scan waiting its turn says it waits on, where it is followed.
+WORKER_DUE = "Waiting for HQ's playbook worker."
 # The states of a run that has no outcome to say yet.
 UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
 # A kind of work whose latest run ended so is one to look at.
@@ -94,13 +103,82 @@ _LISTED = (OperationRequest.Action.RUN, OperationRequest.Action.SCAN)
 
 
 @dataclass(frozen=True, slots=True)
+class StatedKind:
+    """What the records of a reading only a playbook states mean, in the
+    shape a swept reading's ``ObservationSpec`` declares it: what the reading
+    is called, each record's name, what it says and the tone of what it
+    says. ``progress``, where a kind has one, says a line of JSON a task of
+    the playbook says while under way, or None for a line not of its shape."""
+
+    label: str
+    title: Callable[[Mapping[str, Any]], str]
+    describe: Callable[[Mapping[str, Any]], str]
+    tone: Callable[[Mapping[str, Any]], Tone]
+    progress: Callable[[Mapping[str, Any]], str | None] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Reading:
+    """One reading a run stated, in words: its kind and what it is called
+    ("" where HQ declares nothing of it), its machine, each record's name,
+    what it says and its tone ("" where its kind declares none), and how many
+    records it holds."""
+
+    kind: str
+    label: str
+    host: str
+    records: tuple[tuple[str, str, str], ...]
+    count: int
+
+
+def _stated_kinds() -> dict[str, StatedKind]:
+    """The readings only a playbook states, by kind."""
+
+    return {PULLED: PULLED_KIND}
+
+
+def wording(kind: str) -> ObservationSpec | StatedKind | None:
+    """What HQ declares a reading of ``kind`` means: the swept reading's
+    spec, or a playbook's own (``_stated_kinds``)."""
+
+    return OBSERVATIONS.get(kind) or _stated_kinds().get(kind)
+
+
+def told(message: str) -> str:
+    """What a task said, in words: a line of JSON as the stated kind whose
+    ``progress`` reads it says it, any other as the task said it."""
+
+    try:
+        line = json.loads(message)
+    except ValueError:
+        return message
+    if isinstance(line, Mapping):
+        for declared in _stated_kinds().values():
+            if declared.progress is not None and (said := declared.progress(line)) is not None:
+                return said
+    return message
+
+
+def _worded(kind: str, host: str, records: Sequence[Mapping[str, Any]]) -> Reading:
+    declared = wording(kind)
+    if declared is None:
+        return Reading(kind, "", host, (), len(records))
+    toned = declared.tone if isinstance(declared, StatedKind) else lambda _record: ""
+    worded = tuple((declared.title(record), declared.describe(record), toned(record)) for record in records)
+    return Reading(kind, declared.label, host, worded, len(records))
+
+
+@dataclass(frozen=True, slots=True)
 class RunEvidence:
     """What a piece of work shows for itself (``partials/_run_evidence.html``):
     its machines, its asker's correlation id, the worker holding it and until
     when while it is claimed, how many tries it took, its tasks' outcomes
-    (each a ``RunEvent`` with its ``tone``), the kinds of reading its playbook
+    (each a ``RunEvent`` with its ``tone``), each reading its playbook
     stated, what each name served of the certificate it checked, and the
-    result of an operation with no page of its own."""
+    result of an operation with no page of its own.
+
+    ``stated`` is each reading its playbook stated, a ``{host, kind,
+    records}`` per machine and kind (``stated_readings``)."""
 
     hosts: tuple[str, ...] = ()
     correlation: str = ""
@@ -108,11 +186,49 @@ class RunEvidence:
     lease_until: datetime | None = None
     attempts: int = 0
     events: tuple[dict[str, Any], ...] = ()
-    stated: tuple[str, ...] = ()
+    stated: tuple[dict[str, Any], ...] = ()
     # The certificate's fingerprint, and each name's answer (``matches_expected``).
     expected: str = ""
     consumers: tuple[dict[str, Any], ...] = ()
     raw: str = ""
+
+    @property
+    def tasks(self) -> tuple[dict[str, Any], ...]:
+        """Each task so far, its message in words (``told``)."""
+
+        return tuple({**event, "message": told(str(event.get("message") or ""))} for event in self.events)
+
+    @property
+    def under_way(self) -> tuple[dict[str, Any], ...]:
+        """The tasks started and not yet ended while a worker holds the run."""
+
+        return (
+            tuple(event for event in self.tasks if event.get("outcome") == TaskOutcome.STARTED) if self.worker else ()
+        )
+
+    @property
+    def readings(self) -> tuple[Reading, ...]:
+        """Each reading in the words its kind declares (``wording``); one of a
+        kind HQ declares none for is named and counted, its records left to
+        ``raw_readings``."""
+
+        return tuple(_worded(str(each["kind"]), str(each["host"]), each["records"]) for each in self.stated)
+
+    @property
+    def amiss(self) -> tuple[tuple[str, Tone], ...]:
+        """Each record of its readings whose kind says it in a tone to act on,
+        said in a line, with that tone."""
+
+        return tuple(
+            (dotted(title, said), Tone(tone))
+            for reading in self.readings
+            for title, said, tone in reading.records
+            if tone in (Tone.ATTENTION, Tone.SERIOUS)
+        )
+
+    @property
+    def raw_readings(self) -> str:
+        return json.dumps(list(self.stated), indent=2, sort_keys=True) if self.stated else ""
 
     @property
     def affected(self) -> tuple[dict[str, Any], ...]:
@@ -169,10 +285,28 @@ class WorkRun:
     actions: tuple[Any, ...] = ()
 
     @property
-    def url(self) -> str:
-        """Its own page, for a run or a scan; "" for a job, which has none."""
+    def stopped(self) -> tuple[str, str]:
+        """The task it stopped on, once it ended badly, and what that said; the
+        task "" where it stopped before any ran, said by its note."""
 
-        return run_url(self.id) if self.source == RUN else ""
+        failed = next(
+            (
+                event
+                for event in self.evidence.tasks
+                if event.get("outcome") in (TaskOutcome.FAILED, TaskOutcome.UNREACHABLE)
+            ),
+            None,
+        )
+        if failed is None:
+            return "", self.note
+        return str(failed.get("task") or ""), Quoted(str(failed.get("message") or ""))
+
+    @property
+    def url(self) -> str:
+        """Its own page, for a run or a scan; "" for a job or any other
+        operation (a merge, a reconcile), which has none."""
+
+        return run_url(self.id) if self.source == RUN and (operation_of(self.kind) or self.kind == REFRESH) else ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -424,6 +558,18 @@ def run_url(operation_id: str) -> str:
     return entity_link(Kind.RUN, operation_id).url
 
 
+def run_row(operation: OperationRequest) -> WorkRun:
+    """One operation, read again, as the row every list of work draws."""
+
+    return run_rows(seen_as_runs(OperationRequest.objects.filter(pk=operation.pk).select_related("resource")))[0]
+
+
+def run_status_url(operation_id: str) -> str:
+    """Where a page follows the run or scan ``operation_id`` (``standing_of``)."""
+
+    return reverse("jobs:run_status", args=[operation_id])
+
+
 def run_hosts() -> list[str]:
     """Each machine a run has acted on, by its canonical name, A to Z: a scan acts on none."""
 
@@ -497,11 +643,18 @@ def job_run(job: Job, title: str = "", by: Attribution = NOBODY) -> WorkRun:
 
 
 def standing_of(run: WorkRun) -> Standing:
-    """How a job or a run stands, for a control that follows it. A run that
-    will not start while no worker takes it has ended, so no page follows it."""
+    """How a job or a run stands, for a control that follows it and every
+    card that names it: waiting its turn, the worker it waits on; under way,
+    the task its worker runs now and how far it has got. A run that will not
+    start while no worker takes it has ended, so no page follows it."""
 
     state = FAILED if run.word == NOT_STARTED else STANDS[JobState(run.state)]
-    return Standing(state, run.note, since=run.created_at, percent=run.percent, word=run.word)
+    now = get_text_list(
+        [dotted(str(event.get("task") or ""), event["message"]) for event in run.evidence.under_way], "and"
+    )
+    waits = WORKER_DUE if state == QUEUED and run.source == RUN else ""
+    note = run.note or now or waits
+    return Standing(state, note, since=run.created_at, percent=run.percent, word=run.word, url=run.url)
 
 
 def standing_tone(state: str, word: str) -> str:
@@ -574,10 +727,8 @@ def _run_row(
             worker=operation.claimed_by if claimed else "",
             lease_until=operation.lease_expires_at if claimed else None,
             attempts=operation.attempt_count,
-            events=tuple(
-                {**event, "tone": outcome_tone(event.get("outcome", ""))} for event in result.get("events") or ()
-            ),
-            stated=stated_kinds(result),
+            events=run_events(result),
+            stated=stated_readings(result),
             expected=str(status.get("expected_fingerprint_sha256") or ""),
             consumers=tuple(status.get("consumers") or ()),
             # A run or a scan has a page of its own, where its record is.
@@ -610,19 +761,6 @@ def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:
     return Quoted((problem.get("message") if problem else "") or said)
 
 
-def stopped_at(operation: OperationRequest) -> tuple[str, str]:
-    """The task a run that ended badly stopped on and what it said, the task
-    "" where it stopped before any ran."""
-
-    events = (operation.result or {}).get("events") or ()
-    failed = next(
-        (event for event in events if event.get("outcome") in (TaskOutcome.FAILED, TaskOutcome.UNREACHABLE)), None
-    )
-    if failed is not None:
-        return str(failed.get("task") or ""), Quoted(str(failed.get("message") or ""))
-    return "", _said(operation, None)
-
-
 def shown_result(result: dict[str, Any]) -> dict[str, Any]:
     """An operation's result less the certificate, which is on its record's
     page: a row of history is not a second copy."""
@@ -631,11 +769,21 @@ def shown_result(result: dict[str, Any]) -> dict[str, Any]:
     return {**result, "status": {k: v for k, v in status.items() if k != "certificate_pem"}} if status else result
 
 
-def stated_kinds(result: dict[str, Any]) -> tuple[str, ...]:
-    """The kinds of reading a run's playbook stated on any of its machines, each once."""
+def run_events(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    """A run's tasks so far from its result, in the order they started, each in its outcome's tone."""
+
+    return tuple({**event, "tone": outcome_tone(event.get("outcome", ""))} for event in result.get(RUN_EVENTS) or ())
+
+
+def stated_readings(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    """Each reading a run's playbook stated, by machine then kind, A to Z, with its records."""
 
     readings = (result.get("stated") or {}).get("readings") or {}
-    return tuple(sorted({kind for kinds in readings.values() for kind in kinds}))
+    return tuple(
+        {"host": host, "kind": kind, "records": list(records)}
+        for host, kinds in sorted(readings.items())
+        for kind, records in sorted(kinds.items())
+    )
 
 
 def _seconds(start: datetime | None, end: datetime | None) -> float | None:

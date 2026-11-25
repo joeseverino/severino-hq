@@ -1,0 +1,30 @@
+# A command's form is opened by
+# hq.platform.application.action_links.command_url, the one builder that
+# encodes a target the way the form reads it: a hand-built query opened the
+# form with nothing chosen.
+id: command-linked-by-command-url
+language: python
+severity: error
+message: A command's form is linked by reversing its route by hand.
+note: Link it with command_url(name, target) from hq.platform.application.action_links.
+files:
+  - "hq/platform/application/**"
+  - "hq/domains/control_plane/**"
+  - "hq/platform/core/**"
+  - "hq/platform/api/**"
+  - "hq/platform/mcp/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "hq/platform/application/action_links.py"
+rule:
+  kind: call
+  has:
+    field: function
+    regex: (^|\.)reverse$
+  all:
+    - has:
+        field: arguments
+        has:
+          nthChild: 1
+          regex: ^["']command["']$

@@ -186,6 +186,8 @@ def replace(user, target_kind: str, keys) -> None:
 
 
 def _audit(user, message: str, **metadata: Any) -> None:
+    # One act on many of a person's pins at once, which no one row's signal writes.
+    # ast-grep-ignore: row-change-recorded-by-its-signal
     record_event(
         action=AuditLog.Action.UPDATED,
         type_label=AUDIT_LABEL,

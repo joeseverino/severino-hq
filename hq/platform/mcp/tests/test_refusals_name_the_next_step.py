@@ -15,6 +15,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
+from hq.platform.application.projection import page_of
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.resources import EmptyQuery, resource_registry
 from hq.platform.application.security import Principal, agent_principal, mcp_principal
@@ -141,7 +142,7 @@ def _record(identifier):
 
 
 def _listing():
-    return {"items": [{"name": "example-one"}], "count": 1}
+    return page_of([{"name": "example-one"}])
 
 
 class NamedServedReadTests(TestCase):
@@ -212,7 +213,7 @@ def _example_records(owner_of):
 
     def listing(principal):
         items = [{"name": name} for name, owner in owner_of.items() if owner == principal.actor]
-        return {"items": items, "count": len(items)}
+        return page_of(items)
 
     def detail(identifier, principal):
         if owner_of.get(identifier) != principal.actor:

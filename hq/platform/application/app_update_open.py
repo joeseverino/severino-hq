@@ -121,12 +121,12 @@ def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStand
         if tick is None:
             return None
         if tick.state in _ACTIVE:
-            return MergeStanding(TICKING, Tone.ATTENTION, taken=True, said=waits_on(tick), operation=tick)
+            return MergeStanding(TICKING, Tone.ATTENTION, taken=True, lines=(waits_on(tick),), operation=tick)
         result = tick.result or {}
         if tick.state != OperationRequest.State.SUCCEEDED:
-            return MergeStanding(NOT_TICKED, Tone.SERIOUS, said=str(result.get("message") or ""), operation=tick)
+            return MergeStanding(NOT_TICKED, Tone.SERIOUS, lines=(str(result.get("message") or ""),), operation=tick)
         if refused := str((result.get(THEN) or {}).get("refused") or ""):
-            return MergeStanding(NOT_ASKED, Tone.SERIOUS, said=refused, operation=tick)
+            return MergeStanding(NOT_ASKED, Tone.SERIOUS, lines=(refused,), operation=tick)
         since = tick.created_at
     return _run_standing(repository, since)
 
@@ -147,14 +147,14 @@ def _run_standing(repository: str, since: datetime | None) -> MergeStanding | No
 
     if (asked := asked_at()) is not None and (since is None or asked >= since):
         said = controller_standing().cannot("", now=timezone.now())
-        return MergeStanding(RUN_WAITS, Tone.ATTENTION, taken=True, said=said)
+        return MergeStanding(RUN_WAITS, Tone.ATTENTION, taken=True, lines=(said,))
     run = last_run(repository)
     if run is None or since is None or run.started_at < since:
         return None
     if run.seen == JobState.RUNNING:
         return MergeStanding(RUN_GOES, Tone.ATTENTION, taken=True)
     if run.seen != JobState.SUCCEEDED:
-        return MergeStanding(RUN_FAILED, Tone.SERIOUS, said=run.seen.label)
+        return MergeStanding(RUN_FAILED, Tone.SERIOUS, lines=(run.seen.label,))
     return None
 
 

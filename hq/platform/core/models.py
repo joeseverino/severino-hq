@@ -200,6 +200,15 @@ class AuditLog(models.Model):
         output_field=models.CharField(max_length=128),
         db_persist=True,
     )
+    # The chain the row's operation is part of: the trace id of its root
+    # operation (``OperationContext.chain``), so a press and every step it set
+    # going read as one; a row written before rows named one is its own
+    # operation's.
+    trace = models.GeneratedField(
+        expression=Coalesce(KeyTextTransform("trace", "metadata"), "operation_id"),
+        output_field=models.CharField(max_length=128),
+        db_persist=True,
+    )
     # Defaults to now, and a seed or test may pass the moment it records.
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
@@ -214,6 +223,7 @@ class AuditLog(models.Model):
             models.Index(fields=("device", "-created_at")),
             models.Index(fields=("subject", "created_at")),
             models.Index(fields=("cause",)),
+            models.Index(fields=("trace", "created_at")),
         ]
 
     @override
@@ -254,6 +264,7 @@ class AuditLog(models.Model):
             str(metadata.get("interface") or ""),
             through=str(metadata.get("actor") or ""),
             approved_by=str(metadata.get("approved_by") or ""),
+            approval=str(metadata.get("approval") or ""),
         )
 
     @property

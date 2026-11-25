@@ -23,7 +23,7 @@ from .integration_specs import PAGE_FIELD, SEARCH_FIELD, SORT_FIELD, ResourceSpe
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .json_schemas import narrowed, sent_schema
-from .projection import MAX_PAGE_SIZE, PageScope, Search, page_size, paging
+from .projection import MAX_PAGE_SIZE, PageScope, Search, paging
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
 from .resource_refusals import (
@@ -371,20 +371,20 @@ def list_resource(
         read.counted,
         read.keeps(around, searched=searched is not None),
         read.totals,
+        PAGE_FIELD in type(parsed).model_fields,
     )
     with paging(scope):
         result = read.reader(**asked, **_caller(spec, principal))
-    # A schema that offers a page is a promise every full page says the next.
-    if PAGE_FIELD in type(parsed).model_fields and not scope.claimed:
-        raise RuntimeError(f"Resource {name!r} declares a page its handler never paged by.")
+    # Every list's page is cut by ``page_of``, which says where it stands.
+    if not scope.claimed:
+        raise RuntimeError(f"Resource {name!r} list handler never cut its page through page_of.")
     invalid = RuntimeError(f"Resource {name!r} list handler returned an invalid collection.")
     try:
-        handled = _HANDLED.validate_python(result, strict=True)
+        page = _ANSWERED.validate_python(result, strict=True)
     except ValidationError:
         raise invalid from None
-    if handled["count"] != len(handled["items"]):
+    if page["count"] != len(page["items"]):
         raise invalid
-    page: ResourceCollection = {**handled, **_page(parsed, handled, scope)}
     # Each item holds only what its type declares, whatever its handler built,
     # and by default only its kind's fields of that.
     kept = frozenset(read.fields if fields is None else typed_keys(read.item))
@@ -437,42 +437,7 @@ class ResourceCollection(PagePosition):
     count: Annotated[int, Describe("How many records this page holds.")]
 
 
-@with_config(ConfigDict(extra="allow"))
-class _HandledPage(TypedDict):
-    """What a list handler answers, before HQ says where its page stopped."""
-
-    items: list[dict[str, Any]]
-    count: int
-    total: NotRequired[int | None]
-    truncated: NotRequired[bool]
-
-
-_HANDLED = TypeAdapter(_HandledPage)
-
-
-def _page(parsed: BaseModel, result: _HandledPage, scope: PageScope) -> PagePosition:
-    """Whether more follow this page, and the numbers of the pages beside it.
-
-    ``total`` is what the handler counted, or None where counting is not cheap.
-    A page cut through ``projection``'s helpers says whether more follow; one
-    cut by hand is read as cut off when its page is full, so a full page is
-    never mistaken for the whole list, and names no page after it, since
-    nothing could read it.
-    """
-
-    count, total = result["count"], result.get("total")
-    if scope.claimed and PAGE_FIELD in type(parsed).model_fields:
-        return {
-            "total": total,
-            "truncated": scope.more,
-            "next": scope.page + 1 if scope.more else None,
-            "previous": scope.page - 1 if scope.page > 1 else None,
-        }
-    # A list's query model is its declarer's, plugin or host, and need not page.
-    limit = getattr(parsed, "limit", None)
-    full = isinstance(limit, int) and count >= page_size(limit)
-    truncated = result.get("truncated", total > count if isinstance(total, int) else full)
-    return {"total": total, "truncated": truncated, "next": None, "previous": None}
+_ANSWERED = TypeAdapter(ResourceCollection)
 
 
 def masked_kind(spec: ResourceSpec, *, listed: bool) -> type | None:

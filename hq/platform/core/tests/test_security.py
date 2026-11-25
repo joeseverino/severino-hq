@@ -10,12 +10,11 @@ import json
 import re
 import subprocess
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 from django.conf import settings
-from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings, tag
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import Resolver404, resolve, reverse
 from django.urls.resolvers import RoutePattern
 from django.utils import timezone
@@ -836,26 +835,6 @@ class FormActionTests(SimpleTestCase):
             with self.subTest(issuer=issuer):
                 for policy in form_action(issuer):
                     self.assertEqual(policy, ["'self'"])
-
-
-@tag("source", "tree")
-class SourceBoundaryTests(SimpleTestCase):
-    """What the shipped sources may contain, read from the checkout."""
-
-    def test_nothing_imports_the_admin(self):
-        root = Path(settings.BASE_DIR)
-        imports = re.compile(
-            r"^\s*(from django\.contrib\.admin\b|import django\.contrib\.admin\b"
-            r"|from django\.contrib import [^\n]*\badmin\b)",
-            re.MULTILINE,
-        )
-        registered = [
-            str(path.relative_to(root))
-            for package in ("hq", "hq_sdk")
-            for path in (root / package).rglob("*.py")
-            if imports.search(path.read_text())
-        ]
-        self.assertEqual(registered, [])
 
 
 class CookiePrefixTests(SimpleTestCase):

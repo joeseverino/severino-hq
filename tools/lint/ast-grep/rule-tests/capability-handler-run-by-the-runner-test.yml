@@ -1,0 +1,9 @@
+id: capability-handler-run-by-the-runner
+valid:
+  - 'execute_capability(name, payload, principal=principal)'
+  - |
+    def named(handler):
+        handler(command)
+invalid:
+  - 'spec.handler(command)'
+  - 'found.spec.handler(command, principal=None)'

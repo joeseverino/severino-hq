@@ -40,7 +40,7 @@ BRAKES = {"pause": _paused, "block": _blocked}
 
 class BrakesHoldAskedWorkTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare_policy()

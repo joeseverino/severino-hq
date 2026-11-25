@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -21,6 +22,9 @@ const hostUnitsShown = "Id=severino-hq-backup.service\nDescription=Create and ve
 	"ExecMainCode=1\nExecMainStatus=3\n" +
 	"InactiveExitTimestamp=@1767323100\nInactiveEnterTimestamp=@1767323160\n" +
 	"ConditionResult=yes\nConditionTimestamp=@1767323100\n" +
+	"Requires=severino-hq-secrets.service sysinit.target\n" +
+	"RequiresMountsFor=/var/lib/severino-hq/automation/ /\n" +
+	"StatusText=the backup's volume example-data is not there: hq-host deploy makes it\n" +
 	"Environment=EXAMPLE_TOKEN=sentinel-value\n" +
 	"\n" +
 	"Id=severino-hq-backup.timer\n" +
@@ -60,6 +64,9 @@ func TestHostUnitsAreWhatSystemdSaysOfEachUnit(t *testing.T) {
 			Result: "exit-code", MainCode: 1, MainStatus: 3,
 			StartedAt: "2026-01-02T03:05:00Z", EndedAt: "2026-01-02T03:06:00Z",
 			Condition: "yes", ConditionAt: "2026-01-02T03:05:00Z", ReadAt: readAt,
+			// A path it requires a mount for is kept as that mount's unit.
+			Requires: []string{"severino-hq-secrets.service", "sysinit.target", `var-lib-severino\x2dhq-automation.mount`, "-.mount"},
+			Status:   "the backup's volume example-data is not there: hq-host deploy makes it",
 		},
 		runtime.HostUnitRecord{
 			Unit: "severino-hq-backup.timer", Load: "loaded", FileState: "enabled", Active: "active", Sub: "waiting",
@@ -70,7 +77,7 @@ func TestHostUnitsAreWhatSystemdSaysOfEachUnit(t *testing.T) {
 			Unit: "severino-hq-job@audit.prune.service", Load: "not-found", Active: "inactive", Sub: "dead", ReadAt: readAt,
 		},
 	}
-	if !slices.Equal(records, want) {
+	if !reflect.DeepEqual(records, want) {
 		t.Fatalf("records\n%+v\nwant\n%+v", records, want)
 	}
 }
@@ -306,6 +313,7 @@ InactiveExitTimestamp=@1767323100
 InactiveEnterTimestamp=@1767323160
 ActiveEnterTimestamp=@1767323101
 NRestarts=4127
+StatusText=Uploading to example.com
 `
 
 func hostUnitsRestarting(t *testing.T, restarting string) ([]any, error) {
@@ -331,7 +339,8 @@ func TestHostUnitsCarryEachServiceSystemdKeepsRestarting(t *testing.T) {
 		}
 	}
 	upload := records[3].(runtime.HostUnitRecord)
-	if !upload.Foreign || upload.Restarts != 4127 || upload.ActiveAt != "2026-01-02T03:05:01Z" || upload.Sub != "auto-restart" {
+	// What another package's service says of itself is never kept.
+	if !upload.Foreign || upload.Restarts != 4127 || upload.ActiveAt != "2026-01-02T03:05:01Z" || upload.Sub != "auto-restart" || upload.Status != "" {
 		t.Errorf("restarting %+v", upload)
 	}
 }

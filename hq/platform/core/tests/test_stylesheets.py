@@ -5,7 +5,6 @@ import re
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core.stylesheets import sheet_paths
-from hq.platform.core.table_layout import TRACKS
 
 CONTAINER_QUERY = re.compile(r"@container\s+([^{]+)\{")
 QUERY_NAME = re.compile(r"([a-zA-Z_][\w-]*)\s*(?=\(|not\b|style\()")
@@ -24,8 +23,6 @@ WRAPS = re.compile(r"white-space\s*:\s*(?:normal|pre-wrap|pre-line|break-spaces)
 # A selector whose subject is a control: a `.btn` or a `button`, last in it.
 BUTTON = re.compile(r"(?:\.btn\b|(?<![\w.#-])button\b)[^\s>+~,]*\)?\s*(?:,|$)")
 CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
-# A table's tracks after its row's tick-box: the one that names the rows, then the rest.
-TABLE_TRACKS = re.compile(r"grid-template-columns:\s*var\(--lead,\)\s*\[name\]\s*auto\s+repeat\((\d+),")
 # The push button's rule (page.css).
 PUSH_BUTTON = ".btn, :where(button:not([class]))"
 
@@ -84,15 +81,6 @@ class SheetTests(SimpleTestCase):
 
         self.assertEqual(unnamed, [], "a size query names the container it is asked of")
         self.assertEqual(undeclared, [], "every container a query names is declared")
-
-    def test_a_tables_grid_has_a_track_for_each_column_it_may_draw(self):
-        """A row's grid is its table's, so a column past the last track has
-        none of its own and is drawn over that one. `DataTable` refuses more
-        columns than ``TRACKS``, and the grid holds that many."""
-
-        sheet = next(path for path in sheet_paths() if path.name == "tables.css")
-
-        self.assertEqual(TABLE_TRACKS.findall(sheet.read_text(encoding="utf-8")), [str(TRACKS - 1)])
 
     def test_a_scroll_state_query_is_held_to_a_scroll_state_container(self):
         declared = ".bar { container: bar / scroll-state; } .size { container-name: size; }"

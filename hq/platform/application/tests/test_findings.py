@@ -7,7 +7,7 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
-from hq.platform.core.testing import MANAGER, READER, declare
+from hq.platform.core.testing import MANAGER, READER, connection, declare
 
 from ..findings import FINDINGS_SCHEMA_VERSION, derive_findings, finding_rules, findings, rule_for
 from ..topology import derive_topology
@@ -40,14 +40,11 @@ def observed(resource: ManagedResource, when, *, reason="Observed", revision=1, 
 class FindingsTests(SentinelMixin, TestCase):
     def setUp(self):
         self.now = timezone.now()
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-cloudflare",
-            provider="cloudflare_dns",
+        connection(
+            "cloudflare_dns",
+            "example-cloudflare",
             endpoint="https://api.example.test/client/v4",
             reaches=["example.com"],
-            reachable=True,
-            probed=True,
             observed_at=self.now,
         )
 
@@ -325,18 +322,15 @@ class AutoRepairTests(TestCase):
     """
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.now = timezone.now()
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-adguard",
-            provider="adguard",
+        connection(
+            "adguard",
+            "example-adguard",
             endpoint="http://192.0.2.5",
             reaches=["adguard"],
-            reachable=True,
-            probed=True,
             manages=True,
             observed_at=self.now,
         )

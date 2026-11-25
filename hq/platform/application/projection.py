@@ -200,26 +200,9 @@ def listing(
     a save or a fetch answers.
     """
 
-    qs = guarded(rows if isinstance(rows, QuerySet) else rows.objects.all())
-    page = page_of(qs, limit, order=order)
-    return {**page, "items": [serialize(row) for row in page["items"]]}
-
-
-def complete(items: list[Any]) -> dict[str, Any]:
-    """A collection holding every match, in the fields every list read answers with.
-
-    For a projection a page and a read both draw: the page renders the same
-    dict the read returns, so neither adds paging fields the other lacks.
-    """
-
-    return {
-        "items": items,
-        "count": len(items),
-        "total": len(items),
-        "truncated": False,
-        "next": None,
-        "previous": None,
-    }
+    return page_of(
+        guarded(rows if isinstance(rows, QuerySet) else rows.objects.all()), limit, order=order, each=serialize
+    )
 
 
 def matched(rows, page: list[Any], limit: int) -> int:
@@ -255,7 +238,8 @@ class PageScope:
     """One list read's page, its search, the order its caller asked for and the
     one its list declares first, whether it counts its rows, the condition its
     filters and toggles keep a row by, what reads the matched rows' totals,
-    and, once a cut claims it, whether more follow."""
+    whether its query offers a page after this one, and, once a cut claims it,
+    whether more follow."""
 
     page: int = 1
     search: Search | None = None
@@ -264,6 +248,7 @@ class PageScope:
     counted: bool = True
     keeps: Q = field(default_factory=Q)
     totals: Callable[[QuerySet], Mapping[str, Any]] | None = None
+    paged: bool = True
     claimed: bool = False
     more: bool = False
 
@@ -319,22 +304,25 @@ class Combined:
 
 def page_of(
     rows: QuerySet | Combined | Sequence[Any],
-    limit: int,
+    limit: int | None = None,
     *,
     order: tuple[str, ...] = (),
     maximum: int = MAX_PAGE_SIZE,
     then: Callable[[QuerySet], QuerySet] | None = None,
+    each: Callable[[Any], Any] | None = None,
 ) -> dict[str, Any]:
     """One page of a list read: a queryset or a combined one, the rows its
     search finds, in the order its caller asked for, else the best match
     first, else the one its list declares first, else ``order``; or a list
-    derived whole on every read, in its own order. ``then`` narrows the rows
-    the filters and toggles kept by what depends on them all (one row per
-    operation of those kept). ``maximum`` is a page's ceiling where its list
-    declares its own; an uncounted list reads one row past its page to learn
-    whether more follow, and counts nothing."""
+    derived whole on every read, in its own order, answered whole with no
+    ``limit``. ``then`` narrows the rows the filters and toggles kept by what
+    depends on them all (one row per operation of those kept), and ``each``
+    is what each row of the page is answered as. ``maximum`` is a page's
+    ceiling where its list declares its own; an uncounted list reads one row
+    past its page to learn whether more follow, and counts nothing."""
 
-    scope, size = _claimed(), page_size(limit, maximum=maximum)
+    scope = _claimed()
+    size = len(rows) if limit is None and isinstance(rows, Sequence) else page_size(limit or 0, maximum=maximum)
     start = (scope.page - 1) * size
     total: int | None
     summed: dict[str, Any] = {}
@@ -358,9 +346,22 @@ def page_of(
     else:
         if scope.search is not None or scope.order or scope.keeps or scope.totals is not None:
             raise RuntimeError("A list derived whole has its own search, order and filters, so its read declares none.")
-        page, more, total = list(rows[start : start + size]), start + size < len(rows), len(rows)
+        page, more = list(rows[start : start + size]), start + size < len(rows)
+        total = len(rows) if scope.counted else None
     scope.more = more
-    return {"items": page, "count": len(page), "total": total, "truncated": more, **summed}
+    if each is not None:
+        page = [each(row) for row in page]
+    return {
+        "items": page,
+        "count": len(page),
+        "total": total,
+        "truncated": more,
+        # A list whose query has no page answers a top ``limit``, whose next
+        # page nothing could read.
+        "next": scope.page + 1 if more and scope.paged else None,
+        "previous": scope.page - 1 if scope.page > 1 else None,
+        **summed,
+    }
 
 
 def addressable(model, serialize, slug: str) -> dict[str, Any]:

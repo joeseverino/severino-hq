@@ -7,7 +7,7 @@ from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, 
 from hq.platform.core.testing import declare
 
 from ...delivery_progress import STALLED_AFTER
-from . import Example, Examples
+from . import Example, Examples, Raised
 
 RUN = "https://github.example.com/example/host/actions/runs/9"
 
@@ -52,8 +52,14 @@ def delivery(stage: str, state: str, **said) -> Example:
     return Example(readings={KIND: ()}, given=lambda: delivered(stage, state, **said))
 
 
-def raising(example: Example, *titles: str) -> Example:
-    return replace(example, raises=titles)
+def raising(example: Example, *raised: str | Raised) -> Example:
+    return replace(example, raises=raised)
+
+
+def on_its_way(title: str) -> Raised:
+    """A deploy's notice, told of by the commit on its way."""
+
+    return Raised(title=title, notice="b" * 40)
 
 
 RUNNING = delivery("Compose run 9 is running", "running")
@@ -69,8 +75,8 @@ EXAMPLES = (
     Examples(
         "deploy-running",
         fires=(
-            raising(RUNNING, "A deploy is running"),
-            raising(delivery("No deploy has started", "not_started"), "A deploy is about to start"),
+            raising(RUNNING, on_its_way("A deploy is running")),
+            raising(delivery("No deploy has started", "not_started"), on_its_way("A deploy is about to start")),
         ),
         quiet=(WAITING, *ENDED),
     ),

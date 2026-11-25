@@ -1,7 +1,9 @@
 from datetime import timedelta
 
+from hq.platform.core.testing import connection
+
 from ...inventory import record_inventory
-from . import AT, Example, Examples, Raised, connection
+from . import AT, Example, Examples, Raised
 
 RESETS = AT + timedelta(minutes=50)
 
@@ -11,7 +13,7 @@ def swept(*sweeps: tuple[int, int, int], resets=(), raises: tuple[Raised | str, 
     the sweep started, what GitHub counted, and what the sweep itself spent."""
 
     def given() -> None:
-        connection("example-app", "github_app")
+        connection("github_app", "example-app")
         for index, (minute, used, spent) in enumerate(sweeps):
             record = {
                 "connection_ref": "example-app",

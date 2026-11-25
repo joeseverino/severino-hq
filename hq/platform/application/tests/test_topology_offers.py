@@ -1,11 +1,9 @@
 """A page that shows a declaration offers no more of its edit and removal
 than the page the declaration lives on."""
 
-import re
-from pathlib import Path
 from urllib.parse import urlsplit
 
-from django.test import SimpleTestCase, TestCase, override_settings, tag
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
@@ -13,17 +11,6 @@ from hq.platform.application.markup_testing import actions, hrefs
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.testing import declare
-
-ROOT = Path(__file__).resolve().parents[4]
-# The edit and removal routes, which a control reaches only through the
-# commands their views run (``pages.command_reach``), never by name.
-_ROUTES = re.compile(r"""["']control_plane:(?:edit|remove)["']""")
-# A file that names a route without offering it: a benchmark visits each
-# page, and the example estate records the door its rows came through.
-_NAMES_WITHOUT_OFFERING = {
-    "hq/platform/core/management/commands/bench_pages.py",
-    "hq/platform/core/example_estate/history.py",
-}
 
 
 def _offers(html, routes: dict[str, str]) -> dict[str, set[str]]:
@@ -148,20 +135,3 @@ class SourcedRecordTests(TestCase):
         named = self._procedure()
         dropped = declare("automation-example-retired", named.kind, {**named.spec, "operation": "example.retired"})
         self.assertTrue(offered_changes([dropped])[dropped.key].removes)
-
-
-@tag("source", "tree")
-class OfferedLinksTests(SimpleTestCase):
-    def test_no_file_links_a_declarations_edit_or_removal_by_its_route(self):
-        files = [*ROOT.joinpath("hq").rglob("*.py"), *ROOT.joinpath("templates").rglob("*.html")]
-        naming = {
-            relative
-            for path in files
-            if "tests" not in path.parts
-            and (relative := path.relative_to(ROOT).as_posix()) not in _NAMES_WITHOUT_OFFERING
-            and _ROUTES.search(path.read_text(encoding="utf-8"))
-        }
-
-        self.assertEqual(sorted(naming), [])
-        # The guard reads a link built by the route's name.
-        self.assertTrue(_ROUTES.search('reverse("control_plane:edit", kwargs={"key": key})'))

@@ -43,7 +43,9 @@ def _offline(_estate: FindingEstate) -> tuple[Finding, ...]:
                 subject=Kind.MACHINE.of(machine.name),
                 title=f"{machine.name} is offline",
                 severity=Tone.SERIOUS if machine.hostnames or machine.roles or machine.runs_hq else Tone.ATTENTION,
-                explanation=f"It serves {counted(len(machine.hostnames), 'name')}." if machine.hostnames else "",
+                explanation=f"It serves {counted(len(machine.hostnames), 'name')}."
+                if machine.hostnames
+                else "Nothing on it can be reached.",
                 evidence=(("Last seen by Tailscale", when(seen)), *((("Role", what),) if what else ())),
                 primary=opens("Open machine", machine.url),
             )

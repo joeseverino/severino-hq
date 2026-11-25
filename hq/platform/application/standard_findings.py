@@ -117,7 +117,7 @@ def worded(
     primary: ActionLink | None = None,
 ) -> Finding:
     """What is wrong as the title, after the subject's name for a finding
-    about one; what reaches it, else why its one check matters, as the
+    about one; what reaches it, else why its checks matter, as the
     explanation; where it fails and what was read as the evidence; and each
     fix as a step, with why it matters, unless its help names its own."""
 
@@ -128,7 +128,9 @@ def worded(
     severity, reached = Tone.SERIOUS if any(check.serious for check in checks) else Tone.ATTENTION, ""
     if about and about.reach:
         severity, reached = about.reach(severity)
-    explanation = reached or (checks[0].why_said if len(checks) == 1 else "")
+    # Why each check matters, where nothing reaches it; a check that says no why leaves its failing.
+    whys = " ".join(dict.fromkeys(check.why_said for check in checks if check.why_said))
+    explanation = reached or whys or "It does not meet its standard."
     return Finding(
         rule=rule,
         subject=about.node if about else "",
@@ -164,4 +166,4 @@ def why(check: Check, said: str = "") -> tuple[str, ...]:
     """Why a check matters, as the note under its fix, unless the finding
     already ``said`` it."""
 
-    return (check.why_said,) if check.why_said and check.why_said != said else ()
+    return (check.why_said,) if check.why_said and check.why_said not in said else ()

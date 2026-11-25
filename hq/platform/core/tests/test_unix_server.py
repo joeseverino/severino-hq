@@ -1,5 +1,6 @@
 """The private Unix listener: who may bind it, who may call it, and what it leaves behind."""
 
+import contextlib
 import http.client
 import os
 import socket
@@ -28,7 +29,7 @@ class PrivateListenerTests(SimpleTestCase):
         self.path = self.directory / "bridge.sock"
 
     def bound(self, path: Path | None = None) -> socket.socket:
-        listener = private_listener(str(path or self.path))
+        listener, _ = private_listener(str(path or self.path))
         self.addCleanup(listener.close)
         return listener
 
@@ -86,7 +87,7 @@ class PrivateListenerTests(SimpleTestCase):
         self.assertTrue(target.exists())
 
     def test_a_socket_a_previous_run_left_is_replaced(self):
-        first = private_listener(str(self.path))
+        first, _ = private_listener(str(self.path))
         first.close()
         self.assertTrue(self.path.exists())
         self.bound()
@@ -126,6 +127,14 @@ class ServingTests(SimpleTestCase):
             self.assertEqual(post(self.path, "/"), (200, b"None"))
             self.assertEqual(stat.S_IMODE(os.lstat(self.path).st_mode), 0o600)
         self.assertFalse(self.path.exists())
+
+    def test_a_server_that_stops_leaves_the_socket_a_later_server_bound(self):
+        with contextlib.ExitStack() as retiring:
+            retiring.enter_context(served(hello, self.path))
+            with served(hello, self.path):
+                retiring.close()
+                self.assertEqual(post(self.path, "/"), (200, b"None"))
+            self.assertFalse(self.path.exists())
 
     def test_another_accounts_connection_is_dropped_unheard(self):
         for answered in (os.geteuid() + 1, 0, None):

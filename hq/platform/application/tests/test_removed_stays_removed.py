@@ -10,9 +10,9 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import managing_everything
 
 from ..adoption import AdoptCommand, AdoptServiceCommand, adopt, adopt_service, unmanaged
-from ..adoption_testing import managing_everything
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import RecordNotFound
 from ..report_testing import bridged

@@ -25,7 +25,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 from .. import cadence, readings
 from ..cadence import (
@@ -162,7 +162,7 @@ class SweepPolicyTests(TestCase):
 
 class DoorbellTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.settings_override, self.directory = markers()
@@ -300,32 +300,20 @@ class ProbesAreNotPresenceTests(TestCase):
 class CarriedConnectionPolicyTests(TestCase):
     """Which SSH connections a sweep may report without logging in again."""
 
-    def _connection(self, ref, *, controller="here", provider="ssh", age_minutes=5, reachable=True, probed=True):
-        from hq.domains.control_plane.models import ProviderConnection
-
-        return ProviderConnection.objects.create(
-            controller_id=controller,
-            connection_ref=ref,
-            provider=provider,
-            reachable=reachable,
-            probed=probed,
-            observed_at=timezone.now() - timedelta(minutes=age_minutes),
-        )
-
     @override_settings(SEVERINO_SSH_PROBE_INTERVAL_SECONDS=3600)
     def test_only_recent_good_ssh_answers_are_carried(self):
-        self._connection("fresh")
-        self._connection("old", age_minutes=61)
-        self._connection("failing", reachable=False)
-        self._connection("never-asked", probed=False)
-        self._connection("an-api", provider="cloudflare_dns")
-        self._connection("fresh", controller="elsewhere")
+        connection("ssh", "fresh", controller_id="here")
+        connection("ssh", "old", controller_id="here", observed_at=timezone.now() - timedelta(minutes=61))
+        connection("ssh", "failing", controller_id="here", reachable=False)
+        connection("ssh", "never-asked", controller_id="here", probed=False)
+        connection("cloudflare_dns", "an-api", controller_id="here")
+        connection("ssh", "fresh", controller_id="elsewhere")
 
         self.assertEqual(carried_connections("here"), ["fresh"])
         self.assertEqual(sweep_due("here")["carry"], ["fresh"])
 
     def test_without_a_controller_nothing_is_carried(self):
-        self._connection("fresh")
+        connection("ssh", "fresh", controller_id="here")
 
         self.assertEqual(sweep_due()["carry"], [])
 
@@ -339,15 +327,7 @@ class CarriedConnectionRecordTests(TestCase):
         from ..report_testing import report_connections
 
         taken = timezone.now() - timedelta(minutes=20)
-        ProviderConnection.objects.create(
-            controller_id="here",
-            connection_ref="shared-hosting",
-            provider="ssh",
-            reachable=True,
-            probed=True,
-            detail="user@host:22",
-            observed_at=taken,
-        )
+        connection("ssh", "shared-hosting", controller_id="here", detail="user@host:22", observed_at=taken)
 
         report_connections(
             [
@@ -697,13 +677,8 @@ class AskedReadCarryTests(TestCase):
     def setUp(self):
         self.enterContext(markers()[0])
         for ref, reachable in (("down", False), ("up", True)):
-            ProviderConnection.objects.create(
-                controller_id="here",
-                connection_ref=ref,
-                provider="ssh",
-                reachable=reachable,
-                probed=True,
-                observed_at=timezone.now() - timedelta(minutes=5),
+            connection(
+                "ssh", ref, controller_id="here", reachable=reachable, observed_at=timezone.now() - timedelta(minutes=5)
             )
         ReadRequest.objects.create(kind="adguard.rewrite", requested_at=timezone.now())
 
@@ -776,9 +751,7 @@ class AnsweredReadTests(TestCase):
         ProviderInventory.objects.filter(kind=kind).update(updated_at=at)
 
     def test_a_connection_probed_at_the_moment_it_was_asked_for_is_still_owed(self):
-        ProviderConnection.objects.create(
-            connection_ref="example-tailnet", provider="tailscale", observed_at=self.asked
-        )
+        connection("tailscale", "example-tailnet", observed_at=self.asked)
         self.ask(connection_ref="example-tailnet")
         for kind in cadence.forced_kinds("example-tailnet", ""):
             self.store(kind, self.asked + timedelta(seconds=5))

@@ -89,7 +89,6 @@ VERBS = frozenset(
         "toggle",
         "update",
         "upload",
-        "upsert",
         "withdraw",
     }
 )

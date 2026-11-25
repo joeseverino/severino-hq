@@ -170,8 +170,11 @@ TABLE_HEADING = Part(
     and a heading named for assistive technology alone have nothing to order, and
     `DataTable(keeps_order=True)` keeps a table's own order, as a list page does with the one page of its
     server's order it holds and a change table does with a change. `tables.js` sorts the rows on
-    the page: ascending, descending, then as they came. Amounts, dates and lengths of time sort as
-    what they are; a cell may say its own value with `data-sort`. Sections keep their own rows.
+    the page: ascending, descending, then as they came. A cell whose value is not its words carries
+    it as `data-sort` (`Cell.sort_value`): a moment its instant, an amount its sum, words a figure's
+    function wrote (`Figure`: `money`, `measured`, `counted`, `duration`, `span`, `when`) their
+    number, and `Cell(sort=)` any other. Every other cell sorts by the words it shows, compared as
+    written, never parsed for a number or a date. Sections keep their own rows.
     *Gate:* `test_any_table_sorts_by_a_heading`.
 
     Rows selected together (`data-selectable-table`) start with a column of tick-boxes: the heading
@@ -419,7 +422,8 @@ DATA_TABLE = Part(
     (`calc-size` holds only the share as its floor), so room the table has past every column's needs
     goes to it; a longer one wraps at its words in a line of `--row-words`, or its share where that is
     less, as a long one does; a longer identifier and a row's own name break anywhere their column
-    lacks room; a pill and prose break only inside a word wider than their column, a pill longer than
+    lacks room, unless it is a chip its row's record shows whole (below); a pill and prose break only
+    inside a word wider than their column, a pill longer than
     its column wrapping inside its one box. A status, a figure, a date or a control is never cut: its
     column is as wide as it is.
 
@@ -459,8 +463,14 @@ DATA_TABLE = Part(
     An identifier short enough to hold its line is never broken while every column stands; once
     columns leave for the open line, where it is drawn whole, its seams are where it breaks. The row's
     own name, free text, a preview and a context line wrap as they always do. *Gate:* `broken
-    identifiers` in the layout survey,
-    `test_an_identifier_in_a_table_is_whole_while_a_column_can_leave`.
+    identifiers` in the layout survey.
+
+    A chip on a row's line longer than a short value, in a row whose name links its record's page
+    (`data-chip`: a readout drawn as code, not part of a sentence, outside the line beneath an open
+    row), is one line, cut with an ellipsis where its column lacks room, open or not, since the
+    record's page shows it whole. Its column asks for nothing at its narrowest and the whole chip at
+    its widest, so it is whole wherever the table has the room. A chip in a row that links no record
+    wraps whole and holds nothing back. *Gate:* `cut and closed`.
 
     A box set in a line that cuts what it holds (an inline block whose overflow is not visible) takes
     its bottom edge as its baseline, so its words ride above the line's. So it is set by its top

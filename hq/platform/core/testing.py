@@ -1,6 +1,6 @@
 """What a test arranges most: a person, signed in or not, a declared resource,
-the principals a use case is called as, a template drawn and the widths a
-table's columns leave at, each made one way here."""
+a provider connection, the principals a use case is called as, a template
+drawn and the widths a table's columns leave at, each made one way here."""
 
 from dataclasses import replace
 from typing import Any
@@ -8,8 +8,10 @@ from typing import Any
 from django.contrib.auth import get_user_model
 from django.template import Context
 from django.test import Client, TestCase
+from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.platform.application import roles
 from hq.platform.application.markup_testing import elements
 from hq.platform.application.security import Capability, Principal
@@ -26,11 +28,14 @@ __all__ = (
     "OPERATOR",
     "READER",
     "SignedInTestCase",
+    "connection",
     "declare",
     "leaving",
+    "managing_everything",
     "operator",
     "person",
     "render",
+    "run_ended",
 )
 
 # A reader, a manager of infrastructure, everything and nothing, as a test calls
@@ -69,6 +74,43 @@ def declare(key: str, kind: str, spec: dict[str, Any] | None = None, /, **fields
     """A resource HQ declares, with ``fields`` for any other column a test is about."""
 
     return ManagedResource.objects.create(key=key, kind=kind, spec=spec or {}, **fields)
+
+
+def connection(
+    provider: str, connection_ref: str = "", /, *, controller_id: str = "example-controller", **fields: Any
+) -> ProviderConnection:
+    """A connection of ``provider`` the example controller reported now, with
+    ``fields`` for any other column a test is about."""
+
+    found, _ = ProviderConnection.objects.update_or_create(
+        connection_ref=connection_ref or f"example-{provider}",
+        controller_id=controller_id,
+        defaults={"provider": provider, "observed_at": timezone.now(), **fields},
+    )
+    return found
+
+
+def managing_everything(*refs: tuple[str, str]) -> None:
+    """A managing connection per provider, plus each named ``(provider, ref)``."""
+
+    for provider in CONNECTION_CREDENTIALS:
+        connection(provider, manages=True)
+    for provider, ref in refs:
+        connection(provider, ref, manages=True)
+
+
+def run_ended(operation_id: str, worker: str, *, events: Any = (), **report: Any) -> None:
+    """A claimed run's worker saying its tasks, as its renewals do, then how it ended (``ControllerReport``)."""
+
+    from hq.domains.control_plane.models import OperationRequest
+    from hq.platform.application.controller import ControllerReport, renew_operation, report_operation
+
+    if events:
+        renew_operation(str(operation_id), controller_id=worker, events=list(events))
+    generation = OperationRequest.objects.get(pk=operation_id).input["generation"]
+    report_operation(
+        str(operation_id), ControllerReport(observed_generation=generation, **report), controller_id=worker
+    )
 
 
 def render(source: str, **context: Any) -> str:

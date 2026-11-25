@@ -41,6 +41,7 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions, registry_label
+lazy from hq.platform.core.attribution import continuing, queued_in
 lazy from hq.platform.core.doorbell import ask_soon
 
 from . import readings
@@ -60,6 +61,7 @@ from .ui import ended
 lazy from .adoption import manages_through, observes_only
 lazy from .credential_sight import fed_kinds
 lazy from .facts import stored_snapshots
+lazy from .projection import iso
 
 # A kind HQ stores readings of, or none. Read as a schema is first built, so
 # declaring the command loads no registry.
@@ -534,6 +536,8 @@ class ForcedRead:
     kind: str
     requested_at: datetime
     kinds: tuple[str, ...] | None
+    # The creation context of its latest ask, which its answer continues.
+    traceparent: str = ""
 
     @property
     def subject(self) -> str:
@@ -543,7 +547,7 @@ class ForcedRead:
         return {
             "connection_ref": self.connection_ref,
             "kind": self.kind,
-            "requested_at": self.requested_at.isoformat(),
+            "requested_at": iso(self.requested_at),
             "kinds": list(self.kinds) if self.kinds is not None else None,
         }
 
@@ -593,11 +597,16 @@ def asked_at(kind: str) -> datetime | None:
     return next((read.requested_at for read in forced_reads() if read.kind == kind), None)
 
 
-def forced_reads() -> tuple[ForcedRead, ...]:
-    """Read requests not yet answered and not yet expired, oldest first."""
+def forced_reads(asked: Iterable[ReadRequest] | None = None) -> tuple[ForcedRead, ...]:
+    """Read requests not yet answered and not yet expired, oldest first: of
+    ``asked`` where a caller holds every request already, else of all."""
 
     since = timezone.now() - read_request_lifetime()
-    requests = tuple(ReadRequest.objects.filter(requested_at__gte=since).order_by("requested_at"))
+    if asked is None:
+        asked = ReadRequest.objects.filter(requested_at__gte=since)
+    requests = sorted(
+        (request for request in asked if request.requested_at >= since), key=lambda request: request.requested_at
+    )
     if not requests:
         return ()
     stored = dict(ProviderInventory.objects.values_list("kind", "updated_at"))
@@ -610,22 +619,35 @@ def forced_reads() -> tuple[ForcedRead, ...]:
             request.kind,
             request.requested_at,
             forced_kinds(request.connection_ref, request.kind),
+            request.traceparent,
         )
         for request in requests
     )
     return tuple(read for read in reads if not _answered(read, stored, probed))
 
 
+def askers(kinds: Iterable[str]) -> dict[str, str]:
+    """The creation context of the newest pending read that forces each of
+    ``kinds``, by kind, read before a sweep stores them, so what the sweep
+    writes of a kind joins the chain that asked for it."""
+
+    found: dict[str, str] = {}
+    for read in reversed(forced_reads()):
+        for kind in kinds if read.kinds is None else read.kinds:
+            found.setdefault(kind, read.traceparent)
+    return found
+
+
 def settle_read_requests() -> int:
     """Forget read requests that were answered or expired; how many went."""
 
-    pending = {(read.connection_ref, read.kind) for read in forced_reads()}
-    settled = [
-        request for request in ReadRequest.objects.all() if (request.connection_ref, request.kind) not in pending
-    ]
+    every = list(ReadRequest.objects.all())
+    pending = {(read.connection_ref, read.kind) for read in forced_reads(every)}
+    settled = [request for request in every if (request.connection_ref, request.kind) not in pending]
     for request in settled:
         request.audit_gone = f"Read of {request.connection_ref or request.kind or 'every connection'} answered"
-        request.delete()
+        with continuing(request.traceparent):
+            request.delete()
     return len(settled)
 
 
@@ -851,7 +873,9 @@ def ask(
     if activity:
         note_activity()
     for kind in kinds or (("",) if connection or every else ()):
-        ReadRequest.objects.update_or_create(connection_ref=connection, kind=kind, defaults={"requested_at": now})
+        ReadRequest.objects.update_or_create(
+            connection_ref=connection, kind=kind, defaults={"requested_at": now, "traceparent": queued_in()}
+        )
     if panels:
         asked = DashboardRefreshRequest.objects.select_for_update().in_bulk(list(panels), field_name="panel_id")
         for panel_id, said in panels.items():

@@ -541,7 +541,7 @@ def registration(zone) -> ZoneInsight | None:
     registrar = str(found.get("registrar", "") or "").strip()
     return ZoneInsight(
         label="Registration",
-        value=expiry_phrase(when.isoformat()),
+        value=expiry_phrase(when),
         detail=(
             ended(f"Renews itself through {registrar or 'the registrar'}")
             if renews

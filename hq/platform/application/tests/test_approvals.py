@@ -108,7 +108,7 @@ class HeldRequestTests(TestCase):
     """A credential may ask. Asking is all it may do."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.resource = declare_policy()
@@ -321,7 +321,7 @@ class OperatorRequestTests(TestCase):
     """A person at the web surface is the signal the gate is waiting for."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.resource = declare_policy()
@@ -364,7 +364,7 @@ class DecisionTests(TestCase):
     """What a decision does, and what no decision can do."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.resource = declare_policy()
@@ -556,7 +556,7 @@ class ControllerTests(TestCase):
 
     def setUp(self):
         super().setUp()
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
 
@@ -695,7 +695,7 @@ class SurfaceTests(TestCase):
     """A held request that nobody can see is a held request nobody answers."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare_policy()

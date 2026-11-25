@@ -13,7 +13,7 @@ from hq.platform.application.routes import reverse
 from .action_links import read_link
 from .derivations import reached, whole
 from .entity_links import web_url
-from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_model import Finding, FindingEstate, FindingRule, Notice, opens
 from .finding_steps import Do, Run
 from .github_estate import (
     ARTIFACT_ATTENTION_DAYS,
@@ -70,7 +70,8 @@ def _as_read(repo: Repository, found: Said) -> Finding:
     finding, was = found
     if not repo.reading.stale:
         return finding
-    return replace(finding, title=was, severity=Tone.ATTENTION, notice=True)
+    # It tells of the reading it is drawn from; one with no time is the same unread reading until one arrives.
+    return replace(finding, title=was, severity=Tone.ATTENTION, notice=Notice(repo.observed_at or "unread"))
 
 
 def _each(said: Callable[[Repository], Iterator[Said]]) -> Callable[[FindingEstate], tuple[Finding, ...]]:
@@ -106,7 +107,10 @@ def _waiting(repo: Repository) -> Iterator[Said]:
 def _failing(repo: Repository) -> Iterator[Said]:
     if not repo.failing:
         return
-    failing = repo.record["checks"].get("failing") or []
+    checks = repo.record["checks"]
+    # Each job by the step it failed at, where the reading names one.
+    steps = checks.get("steps") or {}
+    failing = [f"{job} (at {steps[job]})" if steps.get(job) else job for job in checks.get("failing") or []]
     runs = repo.failing_runs
     one = runs[0] if len(runs) == 1 else None
     sha = repo.head.get("sha", "")
@@ -115,7 +119,7 @@ def _failing(repo: Repository) -> Iterator[Said]:
         FAILING,
         title=f"{repo.short} is failing on {repo.default_branch}",
         severity=Tone.SERIOUS,
-        explanation=_named("Failing job", "Failing jobs", failing),
+        explanation=_named("Failing job", "Failing jobs", failing) or "A check failed.",
         evidence=(("Failing", str(len(failing) or 1)),),
         primary=opens("Open run", one.url) if one else opens("Open checks", f"{repo.url}/commit/{sha}"),
         offers=() if one else runs,

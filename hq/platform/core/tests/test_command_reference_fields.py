@@ -4,10 +4,8 @@ from unittest import mock
 
 from django.apps import apps
 from django.test import TestCase
-from django.utils import timezone
 
 from hq.domains.assets.models import Asset
-from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 from hq.platform.application import references
@@ -21,7 +19,7 @@ from hq.platform.application.security import Principal, web_principal
 from hq.platform.application.stored_columns import _model_of
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
-from hq.platform.core.testing import SignedInTestCase
+from hq.platform.core.testing import SignedInTestCase, connection
 
 from .command_shapes import field_schema
 
@@ -77,15 +75,12 @@ class ReferenceFieldTests(SignedInTestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        ProviderConnection.objects.create(
-            connection_ref="a-portainer",
+        connection(
+            "portainer",
+            "a-portainer",
             controller_id="a-controller",
-            provider="portainer",
             endpoint="https://portainer.example.com",
             reaches=["lab-1"],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
         )
         Project.objects.create(name="An Example Project", slug="an-example")
         Asset.objects.create(item_name="A router", slug="a-router")

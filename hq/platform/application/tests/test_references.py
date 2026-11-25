@@ -9,14 +9,13 @@ from django.db import connection, models
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext, isolate_apps
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
-from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, links, select, text, texts
+from hq.platform.core import testing
 from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
@@ -37,15 +36,12 @@ def one(items):
 
 
 def a_machine(name: str = "lab-1") -> None:
-    ProviderConnection.objects.create(
-        connection_ref="a-portainer",
+    testing.connection(
+        "portainer",
+        "a-portainer",
         controller_id="a-controller",
-        provider="portainer",
         endpoint="https://portainer.example.com",
         reaches=[name],
-        reachable=True,
-        probed=True,
-        observed_at=timezone.now(),
     )
 
 
@@ -393,15 +389,12 @@ class ChoicesTests(TestCase):
         return dict(references.choices(self.field, principal=self.principal, held=held)[1:])
 
     def test_each_kind_is_a_group_in_name_order_whatever_the_case(self):
-        ProviderConnection.objects.create(
-            connection_ref="a-portainer",
+        testing.connection(
+            "portainer",
+            "a-portainer",
             controller_id="a-controller",
-            provider="portainer",
             endpoint="https://portainer.example.com",
             reaches=["lab-2", "Lab-1", "lab-3"],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
         )
 
         machines = self.offered()["Machines"]

@@ -21,6 +21,7 @@ from .chart_numbers import (
 )
 from .display_words import display
 from .drawings import LegendKey
+from .figured import Figure
 from .labels import dotted, plural
 from .money import signed_number
 from .tone import Tone
@@ -101,7 +102,7 @@ def counted(count: int, one: str, many: str | None = None) -> str:
     ("entry" counts as "entries"); a phrase has a verb, and a verb cannot be
     pluralized by adding a letter.
     """
-    return f"{count:,} {agreed(count, one, many)}"
+    return Figure(f"{count:,} {agreed(count, one, many)}", count)
 
 
 def agreed(count: int, one: str, many: str | None = None) -> str:

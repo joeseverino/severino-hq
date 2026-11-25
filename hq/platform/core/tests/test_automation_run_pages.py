@@ -2,18 +2,15 @@
 its runs went, and a machine's page lists the runs that acted on it, each
 drawn by the shared section renderer with its state in its word and tone."""
 
-import re
 from urllib.parse import parse_qs, urlsplit
 
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.platform.application.automation_runs import access_words
 from hq.platform.application.markup_testing import links, select, text, texts, with_class, within
-from hq.platform.application.tests.source import source_files, template_files
-from hq.platform.application.tests.tree import ROOT
 from hq.platform.core import seeds
-from hq.platform.core.example_estate.automation import CACHE_FLUSH, PROCEDURES, REVISION
+from hq.platform.core.example_estate.automation import CACHE_FLUSH, PROCEDURES
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.testing import declare
@@ -109,6 +106,27 @@ class AutomationRunPageTests(TestCase):
                     ("Waiting for approval", decided_at),
                     [(element.words, element.attrs.get("href")) for element in within(html, "id", "held-runs")],
                 )
+
+    def test_a_playbook_names_the_reading_it_declares_and_a_run_ended_without_it_says_so(self):
+        from hq.domains.control_plane.models import OperationRequest
+        from hq.platform.application.playbook_about import reading_words
+        from hq.platform.core.example_estate.automation import DISK_REPORT
+
+        declared = reading_words("host.filesystem")
+        about = " ".join(
+            element.words
+            for element in select(
+                self.page(reverse("command", args=[f"automation.{DISK_REPORT}.run"])), "id", "command-about"
+            )
+        )
+        self.assertIn(f"Reading {declared}", about)
+        run = OperationRequest.objects.filter(input__operation=DISK_REPORT, completed_at__isnull=False).first()
+        run.result = {key: value for key, value in run.result.items() if key != "stated"}
+        run.save(update_fields=("result",))
+
+        said = text(self.page(reverse("jobs:run", kwargs={"pk": run.pk})))
+
+        self.assertIn(f"Reading {declared} Not stated", said)
 
     def test_a_command_with_nothing_to_say_of_itself_draws_no_more_than_its_form(self):
         html = self.page(reverse("command", args=["infrastructure.controller.refresh"]))
@@ -255,8 +273,9 @@ class ProcedurePageTests(TestCase):
                     self.assertIn(access_words(manifest.privilege), about)
 
     def test_a_procedure_runs_on_the_machines_it_names_each_by_its_link_and_else_on_any(self):
-        from hq.platform.application.automation_runs import about, operation_registry
+        from hq.platform.application.automation_runs import operation_registry
         from hq.platform.application.entity_links import entity_link
+        from hq.platform.application.playbook_about import about
         from hq.platform.application.security import Capability, Principal
 
         declared = operation_registry()[CACHE_FLUSH]
@@ -282,27 +301,3 @@ class ProcedurePageTests(TestCase):
         record = ManagedResource.objects.get(key=resource_key(CACHE_FLUSH))
         dropped = declare(resource_key("example.retired"), record.kind, {**record.spec, "operation": "example.retired"})
         self.assertEqual(self.client.get(reverse("control_plane:detail", kwargs={"key": dropped.key})).status_code, 200)
-
-
-@tag("source", "tree")
-class NoProcedureNamedTests(SimpleTestCase):
-    """The host draws a procedure from the adopted catalog alone: no template
-    and no module outside the example estate and the tests names one."""
-
-    def test_no_template_or_module_names_a_seeded_procedure(self):
-        named = {REVISION}
-        for procedure in PROCEDURES:
-            named |= {procedure["declaration"]["id"], procedure["playbook"], procedure["sidecar"]}
-        needle = re.compile("|".join(re.escape(word) for word in sorted(named)))
-        modules = [
-            path
-            for path in source_files(ROOT / "hq", "*.py")
-            if not {"tests", "example_estate"} & set(path.relative_to(ROOT).parts)
-        ]
-        self.assertTrue(modules)
-        offenses = [
-            f"{path.relative_to(ROOT)}: {found.group(0)}"
-            for path in (*modules, *(path for _name, path in template_files()))
-            if (found := needle.search(path.read_text()))
-        ]
-        self.assertEqual(offenses, [], "a procedure is named in the host; draw it from the adopted catalog")

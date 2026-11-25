@@ -9,8 +9,8 @@ import asyncio
 import threading
 from unittest import mock
 
+import uvicorn
 from django.test import SimpleTestCase
-from uvicorn.main import main as uvicorn_command
 
 from hq.config import serve
 from hq.platform.core import unix_server
@@ -20,14 +20,11 @@ from .unix_serving import UnixConnection, served, socket_directory
 
 class ServerStopTests(SimpleTestCase):
     def test_the_image_server_is_given_the_bound(self):
-        with mock.patch.object(serve.os, "execvp") as replaced, mock.patch("sys.argv", ["serve"]):
-            serve.main()
+        with mock.patch.object(uvicorn.Config, "configure_logging"):
+            bound = serve.config().timeout_graceful_shutdown
 
-        command = replaced.call_args.args[1]
-        # Read as Uvicorn's own command line reads it.
-        options = uvicorn_command.make_context("uvicorn", command[1:]).params
-        self.assertIsNotNone(options["timeout_graceful_shutdown"], "the image's server waits on open streams")
-        self.assertEqual(options["timeout_graceful_shutdown"], serve.GRACEFUL_SHUTDOWN_SECONDS)
+        self.assertIsNotNone(bound, "the image's server waits on open streams")
+        self.assertEqual(bound, serve.GRACEFUL_SHUTDOWN_SECONDS)
 
     def test_a_stream_open_on_the_bridge_is_cut_and_its_stop_ends(self):
         """The web's lifespan ends with the bridge's server, so a stop waits on its streams too."""

@@ -330,13 +330,11 @@ capability is refused `forbidden` whatever it sent. Before that, the API
 refuses a body's own form: a field the envelope does not name, a `payload` that
 is not an object, or a field sent as `null`.
 
-A write to a record that exists (an update, or an upsert of one already
-there) sets the fields its `payload` holds, and every field it leaves out
-keeps its value; a new record takes each default its schema shows. An update
+An update sets the fields its `payload` holds, and every field it leaves
+out keeps its value; a new record takes each default its schema shows. An update
 requires only its target: its `input_schema` requires no field the record
 holds and shows no defaults, and its description says that a field left out
-keeps its value. An upsert may create, so it still requires what a create
-does. The update's handler declares what it keeps (`integration_specs.Kept`):
+keeps its value. The update's handler declares what it keeps (`integration_specs.Kept`):
 the record as a caller would send it, which `capabilities.validate_command`
 lays the payload over and validates as one command, so a rule across two
 fields reads the record as it will be. The runner hands a handler the names
@@ -446,15 +444,15 @@ every answer it receives, masked ones included.
 
 A list read is one page, asked for by its number as GitHub's sortable lists
 are. `page` is 1 first (`?page=` over HTTP, and an argument of
-`list_resource` beside its `filters` and `limit`, as `get_findings` and
-`recent_activity` take `limit`). `truncated` says more follow it, `next` and
+`list_resource` beside its `filters` and `limit`, as `get_findings` takes
+`limit`). `truncated` says more follow it, `next` and
 `previous` are the numbers of the pages beside it, null past either end, and
 `total` counts every match, so a page says where it stands ("2 of 7"). On MCP,
 a `limit` or `page` sent inside `filters` is refused, so paging has one place
 on every tool. A row added or removed between two reads moves the rows after
 it, so one can be skipped or shown twice; a page number holds under any order,
-which a key does not. A query that offers a `page` is held to it: a handler
-that cuts its page without the shared helper fails the read. A list too long
+which a key does not. Every list's handler cuts its page through the shared
+helper, `projection.page_of`, or the read fails. A list too long
 to count on every read declares itself uncounted (`ListRead.counted`), and
 its pages say whether more follow with `total` null.
 
@@ -468,8 +466,7 @@ declares its search takes `query`, looked up in its search scope, the one the
 site's search uses, with the best match first unless a `sort` is asked. A
 kind whose query has no `page` (search, which ranks each scope apart,
 analytics' ranked breakdowns, and an extension's own query) answers a top
-`limit`, narrowed rather than paged, with `next` null. `documentation_status`
-carries the documentation list's first page and its `next`.
+`limit`, narrowed rather than paged, with `next` null.
 
 Readings leave only through their schema: `ObservationSpec.admitted` drops any
 field the record model does not name. Node ids are the topology's:
@@ -908,7 +905,7 @@ entry's schema alone and its document and recorded examples hold that shape.
 `dashboard_snapshot` answers what needs doing: the figures, the cards, the
 priority queue's first page, with `priority_count` counting it whole. For the whole queue and each other list the page shows (the
 recent activity, the active projects, the draft and published content), its
-`lists` names the `recent_activity` or `list_resource` call that reads it, and
+`lists` names the `list_resource` call that reads it, and
 leaves out one the caller may not read. Every domain, an extension's too,
 raises items into the queue, so `list_resource` answers `action_items` a page
 of `dashboard_answer.ACTION_ITEMS_PAGE` when no `limit` is sent, `next`

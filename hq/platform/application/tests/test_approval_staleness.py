@@ -45,7 +45,7 @@ def decided(held: ApprovalRequest) -> str:
 
 class DeclarationStalenessTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         # As the controller's last reconcile reported it, enabled flag and all.
@@ -86,7 +86,7 @@ class LiveComparisonStalenessTests(TestCase):
     """An apply is shown against the live record, so that record counts."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.resource = declare_policy()
@@ -140,7 +140,7 @@ class SettledThroughTheRunnerTests(TestCase):
     transaction; a refusal that settles the request still leaves it settled."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare("photos", REWRITE, dict(RECORD))

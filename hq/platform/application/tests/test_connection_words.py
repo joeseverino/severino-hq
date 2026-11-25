@@ -2,34 +2,20 @@
 
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.zone_views import _pin_action
 from hq.platform.application.markup_testing import text
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 
 from ..action_links import _CONNECTION_ROUTES
 from ..connection_lifecycle import Lifecycle
 from ..entity_links import entity_link
 
 
-def connect(ref, provider):
-    ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id="example-controller",
-        provider=provider,
-        endpoint="https://service.example.com",
-        reachable=True,
-        probed=True,
-        observed_at=timezone.now(),
-    )
-
-
 class NameTests(TestCase):
     def test_a_connection_is_called_by_the_service_it_reaches(self):
-        connect("example-portainer", "portainer")
+        connection("portainer", "example-portainer", endpoint="https://service.example.com")
 
         link = entity_link("connection", "example-portainer")
 
@@ -37,8 +23,8 @@ class NameTests(TestCase):
         self.assertEqual(link.title, "example-portainer")
 
     def test_two_connections_to_one_service_are_told_apart_by_their_names(self):
-        connect("example-dns", "cloudflare_dns")
-        connect("example-zones", "cloudflare_dns")
+        connection("cloudflare_dns", "example-dns", endpoint="https://service.example.com")
+        connection("cloudflare_dns", "example-zones", endpoint="https://service.example.com")
 
         labels = {ref: entity_link("connection", ref).label for ref in ("example-dns", "example-zones")}
 
@@ -49,12 +35,12 @@ class NameTests(TestCase):
                 self.assertIn(ref, label)
 
     def test_a_connection_no_service_claims_keeps_its_own_name(self):
-        connect("example-mystery", "")
+        connection("", "example-mystery", endpoint="https://service.example.com")
 
         self.assertEqual(entity_link("connection", "example-mystery").label, "example-mystery")
 
     def test_the_connections_page_heads_a_row_by_its_service(self):
-        connect("example-portainer", "portainer")
+        connection("portainer", "example-portainer", endpoint="https://service.example.com")
         operator(self.client)
 
         page = text(self.client.get(reverse("control_plane:connections")))

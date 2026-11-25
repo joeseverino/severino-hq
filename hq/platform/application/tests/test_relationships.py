@@ -13,6 +13,7 @@ from hq.domains.control_plane.models import ManagedResource, ProviderConnection,
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import hrefs, text
+from hq.platform.core import testing
 from hq.platform.core.testing import READER, declare, operator
 from hq.platform.core.tests.estate_sizes import (
     assert_cost_does_not_grow,
@@ -46,18 +47,6 @@ def store(kind, *records, reachable=True, connected=True, error=""):
             "controller_id": CONTROLLER,
             "observed_at": timezone.now(),
         },
-    )
-
-
-def connected(ref, provider):
-    return ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id=CONTROLLER,
-        provider=provider,
-        reaches=[],
-        reachable=True,
-        probed=True,
-        observed_at=timezone.now(),
     )
 
 
@@ -298,8 +287,8 @@ class ManagedCertificatePathTests(TestCase):
 def estate(size):
     """``size`` machines on the tailnet, each serving one name in one domain."""
 
-    connected("example-tailnet", PROVIDERS[TAILNET_KIND].connection_providers[0])
-    connected("example-cloudflare", "cloudflare_api")
+    testing.connection(PROVIDERS[TAILNET_KIND].connection_providers[0], "example-tailnet")
+    testing.connection("cloudflare_api", "example-cloudflare")
     declare("example-com", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare"})
     store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare", "account_id": ACCOUNT})
     devices, records, apps = [], [], []
@@ -640,7 +629,7 @@ class UnreadableScopeTests(TestCase):
     def test_a_refused_hostname_reading_is_named_on_a_service_and_not_elsewhere(self):
         kind = next(kind for kind, spec in OBSERVATIONS.items() if spec.joins_hostnames and not spec.joins_addresses)
         store(kind, reachable=False, error="refused")
-        connected("example-ssh", "ssh")
+        testing.connection("ssh", "example-ssh")
         machine_at("example-host", "192.0.2.44")
 
         with projection_scope():

@@ -161,6 +161,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
+		// systemd keeps what a unit last said of itself until it next starts,
+		// so the unit's reading carries why this run failed (host.unit's status).
+		failure, _, _ := strings.Cut(mask.Text(err.Error()), "\n")
+		_ = host.Notify(getenv("NOTIFY_SOCKET"), "STATUS="+failure)
 		return exitStatus(err)
 	}
 	return 0

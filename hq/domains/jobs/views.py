@@ -154,6 +154,16 @@ class JobStatusView(DetailView):
         return JsonResponse(work_runs.standing_of(work_runs.job_run(self.object)).as_json())
 
 
+class RunStatusView(View):
+    """How one run or scan stands, for a page following it: one row, no template."""
+
+    def get(self, request, pk):
+        found = work_runs.run_of(str(pk))
+        if found is None:
+            raise Http404("No run has that id.")
+        return JsonResponse(work_runs.standing_of(found[0]).as_json())
+
+
 class WorkAskView(AskMixin, View):
     """Where a control asks for declared outbound work, through the work's own
     capability, so a press is authorized and recorded as the API's call is."""

@@ -1,17 +1,18 @@
 from datetime import timedelta
 
 from hq.domains.analytics.models import AnalyticsSite, RumDaily
+from hq.platform.core.testing import connection
 
 from ...connections import ConnectionInstance, ConnectionLink, ConnectionSpec
 from ...plugin_testing import offering
 from ...security import Capability
-from . import AT, Example, Examples, Raised, connection
+from . import AT, Example, Examples, Raised
 
 PERIMETER = "host.perimeter"
 
 
 def an_edge() -> None:
-    connection("example-edge", "ssh")
+    connection("ssh", "example-edge")
 
 
 def perimeter(raises: tuple[Raised | str, ...] = (), **record) -> Example:

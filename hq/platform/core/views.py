@@ -384,7 +384,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         # once however many people signed it in: an audit row names the client.
         by_client = {standing.identity.client_id: standing.activity for standing in standings}
         context["agent_events"] = tuple(
-            history.HistoryGroup(tuple(history.entries(list(activity.latest))), client, len(activity.latest))
+            history.HistoryGroup(tuple(history.entries(list(activity.latest))), client)
             for client, activity in by_client.items()
             if activity.latest
         )

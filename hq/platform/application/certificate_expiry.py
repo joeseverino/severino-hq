@@ -278,7 +278,7 @@ def renewals_judged(found: Iterable[tuple[Any, Expiry]], now: datetime) -> tuple
                 severity=Tone.SERIOUS if days <= SERIOUS_DAYS.value else Tone.ATTENTION,
                 title=f"{expiry.subject} {expiry_words(days)}",
                 explanation="Its renewal has not run.",
-                evidence=(("Expires", expiry_phrase(expiry.expires.isoformat())),),
+                evidence=(("Expires", expiry_phrase(expiry.expires)),),
                 primary=opens("Open certificate", expiry.url),
                 remedies=(
                     FindingRemedy(

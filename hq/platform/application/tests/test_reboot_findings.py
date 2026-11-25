@@ -6,12 +6,12 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 from ..findings import estate_findings
 from ..inventory_testing import store
 from ..projection import projection_scope
-from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
+from .test_tailnet_posture import EVERYTHING, raised
 
 # Written out rather than imported, so the module loads where the reading is
 # not declared yet.
@@ -45,16 +45,7 @@ def sweep(*records, kind: str = KIND, **fields) -> None:
 def edge(ref: str = "example-edge") -> None:
     """An SSH transport, which is the machine at its other end, named by its ref."""
 
-    from hq.domains.control_plane.models import ProviderConnection
-
-    ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id="example-controller",
-        provider="ssh",
-        endpoint="198.51.100.7:22",
-        reachable=True,
-        observed_at=timezone.now(),
-    )
+    connection("ssh", ref, endpoint="198.51.100.7:22")
 
 
 def evidence(finding) -> dict[str, str]:
@@ -69,7 +60,7 @@ def steps(rule: str = RULE) -> list[str]:
 
 class WaitingTests(TestCase):
     def setUp(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
 
     def test_the_machine_the_controller_runs_on_shows_it_on_its_page(self):
         from django.urls import reverse

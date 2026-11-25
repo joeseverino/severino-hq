@@ -1,8 +1,10 @@
 from datetime import timedelta
 
+from hq.platform.core.testing import connection
+
 from ...finding_steps import Run
 from ...freshness import stale_after
-from . import NOW, Ago, Example, Examples, ago, connection, stored
+from . import NOW, Ago, Example, Examples, ago, stored
 
 KIND = "host.reboot"
 EDGE_KIND = "host.edge_reboot"
@@ -45,7 +47,7 @@ def reading(*, pending: bool = True, **said) -> dict:
 def edge() -> None:
     """An SSH transport, which is the machine at its other end."""
 
-    connection("example-edge", "ssh", endpoint="198.51.100.7:22", probed=False)
+    connection("ssh", "example-edge", endpoint="198.51.100.7:22", probed=False)
 
 
 def on_its_own_edge(older: str, newer: str) -> Example:

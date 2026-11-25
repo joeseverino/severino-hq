@@ -9,7 +9,6 @@ from hq.platform.application.integration_specs import CapabilitySpec, ListFilter
 from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
-from hq.platform.application.sync import HQSyncCommand, execute_hq_sync
 
 from .models import DocumentationRecord
 
@@ -17,21 +16,11 @@ from .models import DocumentationRecord
 def capabilities() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
-            "hq.sync",
-            "Bring HQ's list of docs up to date from the vault.",
-            Effect.REMOTE_WRITE,
-            # Documentation authority alone, so an account allowed to sync docs
-            # needs no control-plane authority.
-            Capability.SYNC_DOCUMENTATION,
-            HQSyncCommand,
-            execute_hq_sync,
-            subject_resource="documentation",
-            label="Update docs from the vault",
-        ),
-        CapabilitySpec(
             documentation.SYNC,
             "Bring HQ's list of docs up to date from a vault export.",
             Effect.REMOTE_WRITE,
+            # Documentation authority alone, so an account allowed to sync docs
+            # needs no control-plane authority.
             Capability.SYNC_DOCUMENTATION,
             documentation.DocumentationSyncCommand,
             documentation.execute_documentation_sync,
@@ -80,7 +69,12 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Sensitivity-aware documentation pointers indexed by HQ.",
             Capability.READ,
             listing=ListRead(
-                documentation.list_documentation, DocumentationQuery, DocumentationRow, sorts=SORTS, filters=FILTERS
+                documentation.list_documentation,
+                DocumentationQuery,
+                DocumentationRow,
+                sorts=SORTS,
+                filters=FILTERS,
+                totals=documentation.list_totals,
             ),
             detail_handler=documentation.get_documentation,
             identifier="doc_id",

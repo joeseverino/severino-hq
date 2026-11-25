@@ -33,9 +33,7 @@ class ReadsRefusedAtTheDoorTests(TestCase):
     def test_every_tool_refuses_a_caller_its_declaration_does_not_admit(self):
         refused = [name for name, tool in mcp.tools.items() if not tool.requires.admits(WRITER)]
         # The reads that once refused in their own bodies are among them.
-        self.assertLessEqual(
-            {"get_topology", "get_findings", "system_health", "audit_registry", "recent_activity"}, set(refused)
-        )
+        self.assertLessEqual({"get_topology", "get_findings", "system_health", "audit_registry"}, set(refused))
         for name in refused:
             answer = self._called(name, example_call(mcp.tools[name].input_schema), WRITER)
             with self.subTest(tool=name):
@@ -43,13 +41,13 @@ class ReadsRefusedAtTheDoorTests(TestCase):
                 self.assertEqual(answer.structured_content["error"]["code"], "forbidden", answer.structured_content)
 
     def test_the_audit_trail_is_refused_a_caller_holding_only_read(self):
-        answer = self._called("recent_activity", {}, MCP_READER)
+        answer = self._called("list_resource", {"name": "audit"}, MCP_READER)
 
         self.assertTrue(answer.is_error, answer.structured_content)
         self.assertEqual(answer.structured_content["error"]["code"], "forbidden")
 
     def test_a_tool_that_reads_under_read_answers_a_reader(self):
-        for name in ("get_topology", "system_health", "audit_registry", "documentation_status"):
+        for name in ("get_topology", "system_health", "audit_registry"):
             answer = self._called(name, example_call(mcp.tools[name].input_schema), MCP_READER)
             with self.subTest(tool=name):
                 self.assertFalse(answer.is_error, answer.structured_content)

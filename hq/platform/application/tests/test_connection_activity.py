@@ -2,12 +2,11 @@
 
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationRequest, ProviderConnection
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import SignedInTestCase, declare
+from hq.platform.core.testing import SignedInTestCase, connection, declare
 from hq.platform.core.tests import audit_rows
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
@@ -90,17 +89,9 @@ class ConnectionEventTests(TestCase):
 
 
 class LastActivityPageTests(SignedInTestCase):
-    def _connection(self, ref, provider="cloudflare_dns"):
-        return ProviderConnection.objects.create(
-            connection_ref=ref,
-            controller_id="example-controller",
-            provider=provider,
-            observed_at=timezone.now(),
-        )
-
     def test_a_row_does_not_paste_its_last_activity(self):
-        self._connection("example-dns")
-        self._connection("example-quiet", provider="ssh")
+        connection("cloudflare_dns", "example-dns")
+        connection("ssh", "example-quiet")
         event = AuditLog.objects.create(
             action=AuditLog.Action.UPDATED,
             connection="example-dns",
@@ -121,7 +112,7 @@ class LastActivityPageTests(SignedInTestCase):
             ProviderConnection.objects.all().delete()
             for index in range(count):
                 ref = f"example-{index}"
-                self._connection(ref)
+                connection("cloudflare_dns", ref)
                 AuditLog.objects.create(action=AuditLog.Action.UPDATED, connection=ref, message="x")
 
         assert_cost_does_not_grow(

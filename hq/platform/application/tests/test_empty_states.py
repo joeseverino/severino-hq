@@ -1,28 +1,16 @@
-import re
-
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
-from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import DECLARATIONS
 from hq.platform.application.markup_testing import all_elements
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 
 from ..connection_setup import setups
 from ..entity_links import connection_anchor
 from ..page_reads import Remedy, need, pages_reading, readers, remedy, setup_url
 from ..pages import PageAction, page_context
-from .source import template_files
-
-PARTIAL = "partials/_empty_state.html"
-
-
-def _templates():
-    for name, path in template_files():
-        yield name, path.read_text(encoding="utf-8")
 
 
 class OneEmptyStateTests(SimpleTestCase):
@@ -34,31 +22,6 @@ class OneEmptyStateTests(SimpleTestCase):
         )["page"]
 
         self.assertEqual(page.remedy.label, "New asset")
-
-
-@tag("source", "tree")
-class EmptyStateTemplateTests(SimpleTestCase):
-    """Templates draw an empty state only through the partial."""
-
-    def test_no_list_overrides_what_empty_means(self):
-        # An empty state drawn by hand writes the part's class, which no page may.
-        for name, text in _templates():
-            with self.subTest(template=name):
-                self.assertNotIn("{% block empty %}", text, "a list says what empty means with table_empty")
-
-    def test_an_empty_state_is_one_line_and_one_remedy(self):
-        include = re.compile(r'\{% include "partials/_empty_state\.html"(.*?)%\}', re.DOTALL)
-        for name, text in _templates():
-            for arguments in include.findall(text):
-                with self.subTest(template=name, arguments=arguments):
-                    self.assertNotIn("compact=", arguments, "the surface rule frames it, or not")
-                    self.assertRegex(arguments, r"\b(?:message|absent)=")
-
-    def test_no_page_names_an_identity_provider(self):
-        comment = re.compile(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", re.DOTALL)
-        for name, text in _templates():
-            with self.subTest(template=name):
-                self.assertNotIn("Pocket ID", comment.sub("", text), "say 'your sign-in'; HQ works with any")
 
 
 class PageReadsTests(TestCase):
@@ -88,9 +51,7 @@ class PageReadsTests(TestCase):
         self.assertTrue(found.url.endswith("#setup-portainer"))
 
     def test_once_connected_it_names_that_connection_at_its_row(self):
-        ProviderConnection.objects.create(
-            connection_ref="example-portainer", provider="portainer", observed_at=timezone.now()
-        )
+        connection("portainer", "example-portainer")
 
         found = remedy(["portainer.container"])
 

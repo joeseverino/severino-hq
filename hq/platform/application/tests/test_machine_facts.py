@@ -8,7 +8,7 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import hrefs, text, texts
-from hq.platform.core.testing import READER, operator
+from hq.platform.core.testing import READER, connection, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import connection_readings
@@ -57,22 +57,10 @@ def device(name, address, os="linux"):
     }
 
 
-def tailnet_connection(ref=TAILNET_REF):
-    return ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id=CONTROLLER,
-        provider=PROVIDERS[TAILNET_KIND].connection_providers[0],
-        reaches=[],
-        reachable=True,
-        probed=True,
-        observed_at=timezone.now(),
-    )
-
-
 def estate():
     """Two devices, a DNS reading naming one, a refused and a not-connected kind."""
 
-    tailnet_connection()
+    connection(PROVIDERS[TAILNET_KIND].connection_providers[0], TAILNET_REF)
     store(
         TAILNET_KIND,
         device("example-host", "100.64.0.1"),
@@ -100,7 +88,7 @@ class ReachedThroughTests(TestCase):
         self.assertEqual(found["example-host"].opened_by, ())
 
     def test_a_record_naming_its_connection_wins(self):
-        tailnet_connection("other-tailnet")
+        connection(PROVIDERS[TAILNET_KIND].connection_providers[0], "other-tailnet")
         record = device("example-host", "100.64.0.1")
         record["connection_ref"] = "other-tailnet"
         store(TAILNET_KIND, record)
@@ -196,7 +184,7 @@ class RelationTests(TestCase):
 class CatalogQueryCountTests(TestCase):
     def arrange(self, devices):
         ProviderConnection.objects.all().delete()
-        tailnet_connection()
+        connection(PROVIDERS[TAILNET_KIND].connection_providers[0], TAILNET_REF)
         store(
             TAILNET_KIND,
             *(device(f"example-host-{i}", f"100.64.0.{i + 1}") for i in range(devices)),

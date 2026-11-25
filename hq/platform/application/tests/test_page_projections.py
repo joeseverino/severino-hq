@@ -11,11 +11,11 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.permissions import Tailscale
 from hq.platform.application.markup_testing import select, text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.core.testing import READER, operator
+from hq.platform.core.testing import READER, connection, operator
 
 from ..connection_context import ConnectionsContext, connections_context
 from ..field_masks import WHOLE_RECORD
@@ -41,14 +41,6 @@ def store(kind, records, **extra):
             "controller_id": "example-controller",
             **extra,
         },
-    )
-
-
-def connect(ref, provider, endpoint):
-    ProviderConnection.objects.update_or_create(
-        controller_id="example-controller",
-        connection_ref=ref,
-        defaults={"provider": provider, "endpoint": endpoint, "observed_at": NOW},
     )
 
 
@@ -90,8 +82,8 @@ def populate():
     store("tailscale.dns", [{"record": "dns", "nameservers": ["100.64.0.5"]}])
     # The credential reads devices but was refused users: a missing permission.
     store("tailscale.user", [], reachable=False, refusal="permission", error="Forbidden")
-    connect("example-tailnet", "tailscale", "https://api.example.com")
-    connect("example-host", "ssh", "100.64.0.5:22")
+    connection("tailscale", "example-tailnet", endpoint="https://api.example.com", observed_at=NOW)
+    connection("ssh", "example-host", endpoint="100.64.0.5:22", observed_at=NOW)
 
 
 def page_lists(client, connection_ref):
@@ -251,7 +243,7 @@ class ConnectionProjectionTests(TestCase):
 
         from ..entity_links import connection_anchor
 
-        connect("example-vault", "onepassword", "https://vault.example.com")
+        connection("onepassword", "example-vault", endpoint="https://vault.example.com", observed_at=NOW)
 
         response = self.client.get(reverse("control_plane:connections"))
 

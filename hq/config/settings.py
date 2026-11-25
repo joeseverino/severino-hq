@@ -234,7 +234,7 @@ SEVERINO_CSP_REPORT_PATH = "/csp-report/"
 SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 
 # Django owns the browser security boundary. A script runs only when HQ
-# rendered its tag: each carries the response's nonce (TemplateSourceTests), and
+# rendered its tag: each carries the response's nonce (file_rules), and
 # 'strict-dynamic' makes the nonce, and scripts a nonced one adds, all a CSP3
 # browser trusts, so a same-origin file cannot run as script just by being
 # here. 'self' is for a browser without 'strict-dynamic'. A response that took

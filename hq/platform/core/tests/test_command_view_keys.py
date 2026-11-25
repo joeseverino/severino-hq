@@ -4,10 +4,9 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationRequest
-from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import declare, managing_everything, operator
 
 RESOURCE = "example-rewrite"
 

@@ -39,8 +39,8 @@ class AuditQuery(BoundedQuery):
     )
 
 
-class AuditItem(TypedDict):
-    """One row of the log: what was done to what, by whom, and where."""
+class AuditChange(TypedDict):
+    """One row of the log: what was done to what, and by whom."""
 
     id: Annotated[int, Describe("The row's id, which its page names it by.")]
     url: PageUrl
@@ -50,14 +50,30 @@ class AuditItem(TypedDict):
     object_type: Annotated[str, Describe("The kind of record it was done to; empty for none.")]
     object_id: Annotated[str, Describe("That record's id; empty for none.")]
     object_repr: Annotated[str, Describe("What that record was called when it was done.")]
-    title: Annotated[str, Describe("What the row was, as the log titles it: its record, else its operation.")]
     message: Annotated[str, Describe("What it says happened; empty when it says nothing more.")]
     actor: Annotated[str, Describe("Who or what acted; empty for nobody recorded.")]
+
+
+class AuditItem(AuditChange):
+    """One row of the log, or with ``events`` one operation's line: what was
+    done to what, by whom, where, and what else it changed."""
+
+    title: Annotated[str, Describe("What it was, as the log titles it: its record, else its operation.")]
+    by: Annotated[str, Describe("Who started it, through which door, and who approved it, as the log says it.")]
+    changed: Annotated[list[AuditChange], Describe("With `events`, the newest rows its operation changed; else none.")]
+    more: Annotated[int, Describe("How many rows it changed past those in `changed`, which its page lists.")]
     source: Annotated[str, Describe(ended(f"Where it was recorded: {listed(dict(history.SOURCES))}"))]
     operation_id: Annotated[str, Describe("The operation it was written in; empty for a row of none.")]
+    cause: Annotated[
+        str, Describe("The operation that started this row's operation; empty for one that started itself.")
+    ]
+    trace: Annotated[
+        str, Describe("The chain it is part of: its root operation's trace id, which every row of the chain carries.")
+    ]
+    subject: Annotated[str, Describe("The key of the record it is about; empty for a row about none.")]
 
 
-def _item(event: AuditLog) -> dict[str, Any]:
+def _change(event: AuditLog) -> AuditChange:
     return {
         "id": event.pk,
         "url": reverse("core:audit_detail", args=[event.pk]),
@@ -67,12 +83,31 @@ def _item(event: AuditLog) -> dict[str, Any]:
         "object_type": event.object_type,
         "object_id": event.object_id,
         "object_repr": event.object_repr,
-        "title": history.HistoryLine(event.created_at, events=(event,)).title,
         "message": event.message,
         "actor": event.who.actor,
+    }
+
+
+def _item(event: AuditLog, line: history.HistoryLine | None = None) -> dict[str, Any]:
+    """One row, titled and attributed by its line: an operation's, else its own."""
+
+    line = line or history.HistoryLine(event.created_at, events=(event,))
+    return {
+        **_change(event),
+        "url": reverse("core:audit_detail", args=[line.page.pk]),
+        "action": line.action,
+        "action_label": line.action_label,
+        "message": line.message,
+        "title": line.title,
+        "by": line.who.words,
+        "changed": [_change(row) for row in line.items],
+        "more": line.more,
         # The annotation audit_rows adds; the model has no such field.
         "source": vars(event)["source"],
         "operation_id": event.operation_id,
+        "cause": event.cause,
+        "trace": event.trace,
+        "subject": event.subject,
     }
 
 
@@ -93,11 +128,23 @@ def audit_rows(*, about: str | None = None, on: date | None = None, awaiting: bo
 def list_audit(
     *, about: str | None = None, on: date | None = None, awaiting: bool = False, events: bool = False, limit: int = 50
 ) -> dict[str, Any]:
-    """The log a page at a time, newest first, never counted."""
+    """The log a page at a time, newest first, never counted; with
+    ``events``, each operation once, as its line."""
 
     rows = guarded(audit_rows(about=about, on=on, awaiting=awaiting))
-    page = page_of(rows, limit, then=history.heads if events else None)
-    return {**page, "items": [_item(event) for event in page["items"]]}
+    if not events:
+        return page_of(rows, limit, each=_item)
+    # Each line reads its operation's other rows from those the filters kept.
+    kept: list[QuerySet[AuditLog]] = []
+
+    def heads(found: QuerySet[AuditLog]) -> QuerySet[AuditLog]:
+        kept.append(found)
+        return history.heads(found)
+
+    page = page_of(rows, limit, then=heads)
+    lines = history.entries(page["items"], within=kept[0]) if page["items"] else []
+    line_of = {row.pk: line for line in lines for row in line.events}
+    return {**page, "items": [_item(event, line_of.get(event.pk)) for event in page["items"]]}
 
 
 def get_event(event_id: int) -> dict[str, Any]:
@@ -142,6 +189,8 @@ def resources() -> tuple[ResourceSpec, ...]:
                 filters=(
                     ListFilter("source", "Where", history.SOURCES),
                     ListFilter("action", "Action", AuditLog.Action.choices),
+                    # Every row of one chain (``AuditLog.trace``), asked by its id, never offered.
+                    ListFilter(history.CHAIN, "Chain", lambda: (), lookup="trace", pattern=history.CHAIN_PATTERN),
                 ),
                 # Off until asked for: an ask for a fresh reading, or routine work, changes nothing.
                 toggles=(

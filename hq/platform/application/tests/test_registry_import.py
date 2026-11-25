@@ -1,11 +1,8 @@
 """The one-time import: validated whole, applied whole, audited per record."""
 
-import io
 import json
 from decimal import Decimal
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase
 
 from hq.domains.assets.models import Asset
@@ -238,13 +235,13 @@ class DerivedFieldTests(TestCase):
 
 
 class CapabilityGateTests(TestCase):
-    def test_it_requires_what_both_upserts_require(self):
+    def test_it_requires_what_creating_both_requires(self):
         spec = command_spec("hq.import")
-        upserts = set(command_spec("project.upsert").required_capabilities) | set(
-            command_spec("asset.upsert").required_capabilities
+        creates = set(command_spec("project.create").required_capabilities) | set(
+            command_spec("asset.create").required_capabilities
         )
 
-        self.assertEqual(set(spec.required_capabilities), upserts)
+        self.assertEqual(set(spec.required_capabilities), creates)
 
     def test_a_principal_missing_either_is_refused(self):
         for held in ("write_projects", "write_assets"):
@@ -255,37 +252,3 @@ class CapabilityGateTests(TestCase):
             self.assertFalse(result["ok"])
             self.assertEqual(result["error"]["code"], "forbidden")
             self.assertFalse(Project.objects.exists())
-
-
-class ManagementCommandTests(TestCase):
-    def write(self, document):
-        import tempfile
-
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
-            json.dump(document, handle)
-        self.addCleanup(lambda: __import__("os").unlink(handle.name))
-        return handle.name
-
-    def test_the_command_imports_a_file(self):
-        output = io.StringIO()
-
-        call_command("import_registry", self.write(DOCUMENT), stdout=output)
-
-        self.assertIn("Imported 2 projects and 1 asset", output.getvalue())
-        self.assertEqual(Project.objects.count(), 2)
-
-    def test_the_command_check_only_writes_nothing(self):
-        output = io.StringIO()
-
-        call_command("import_registry", self.write(DOCUMENT), "--check-only", stdout=output)
-
-        self.assertIn("Would import", output.getvalue())
-        self.assertFalse(Project.objects.exists())
-
-    def test_the_command_fails_on_a_refused_document(self):
-        with self.assertRaises(CommandError):
-            call_command(
-                "import_registry",
-                self.write({"projects": [{"name": "No slug"}]}),
-                stderr=io.StringIO(),
-            )

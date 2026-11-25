@@ -112,8 +112,8 @@ derives from its adapter's `DEFINITIONS`, `CONNECTIONS` and `OBSERVATIONS`
 ([Providers](docs/Architecture.md#providers)).
 
 Tests live in each package's `tests/` directory, and what one arranges (a
-person, a signed-in client, a declared resource, the standard principals, a
-drawn template) comes from `hq/platform/core/testing.py`. When a definition moves,
+person, a signed-in client, a declared resource, a provider connection, the
+standard principals, a drawn template) comes from `hq/platform/core/testing.py`. When a definition moves,
 retarget every `mock.patch` that named its old home, since a patch of a name
 no longer looked up there patches nothing. A check that walks a path (an
 architecture test, a glob) fails when its path matches nothing.
@@ -134,6 +134,11 @@ architecture test, a glob) fails when its path matches nothing.
   one on a table that holds rows first passes `manage.py constraint_preflight
   --path <database>` against production data, in a migration operation of its
   own.
+- A JSON column read through a declared shape (a pydantic model, a kind's
+  spec) is a `StoredJSONField` whose `load` is the one function its readers
+  call (`hq/platform/core/stored_json.py`). The release rehearsal loads every
+  stored value through it, so a shape that refuses what production holds
+  ships with the migration that rewrites those rows.
 - Every mutation is atomic and audit-attributed. Machine writes are safely
   retryable with durable idempotency.
 - Money computed in the database (a `GeneratedField`, an annotation) works
@@ -186,7 +191,7 @@ than styling a page.
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
 - Scripts are deferred and respect `prefers-reduced-motion`; only the one
-  `test_script_loading.py` names runs before the first frame. Nothing moves
+  `file_rules.BEFORE_DRAWING` names runs before the first frame. Nothing moves
   once a page is drawn: a script fills space the server's HTML already holds.
 
 ## Structural checks

@@ -7,7 +7,7 @@ that reads each other list.
 
 from typing import Any, TypedDict
 
-from hq.platform.application.dashboard import WITHHELD_ACTIVITY, Kpis, Upstreams, listed_item, operating_snapshot
+from hq.platform.application.dashboard import Kpis, Upstreams, listed_item, operating_snapshot
 from hq.platform.application.estate_records import ActionItem
 from hq.platform.application.resources import readable, resource_registry
 from hq.platform.application.security import Principal
@@ -49,17 +49,16 @@ class AgentSnapshot(TypedDict):
 # The page's lists another tool reads, each by the resource whose list it is.
 _LISTED: dict[str, tuple[str, dict[str, Any]]] = {
     "priority": ("action_items", {}),
+    "recent_activity": ("audit", {"events": True}),
     "active_projects": ("projects", {"status": "active"}),
     "draft_content": ("content", {"status": "draft"}),
     "recent_published": ("content", {"status": "published"}),
 }
 
 
-def _lists(principal: Principal, unread: list[str]) -> dict[str, ListRead]:
+def _lists(principal: Principal) -> dict[str, ListRead]:
     registry = resource_registry()
     found: dict[str, ListRead] = {}
-    if WITHHELD_ACTIVITY not in unread:
-        found["recent_activity"] = {"tool": "recent_activity", "arguments": {}}
     for part, (name, filters) in _LISTED.items():
         if readable(registry[name], principal):
             found[part] = {"tool": "list_resource", "arguments": {"name": name, "filters": filters}}
@@ -79,5 +78,5 @@ def agent_snapshot(*, principal: Principal) -> AgentSnapshot:
         "priority_count": snapshot["priority_count"],
         "priority": [listed_item(item) for item in snapshot["priority"][:ACTION_ITEMS_PAGE]],
         "unread": snapshot["unread"],
-        "lists": _lists(principal, snapshot["unread"]),
+        "lists": _lists(principal),
     }

@@ -17,7 +17,7 @@ from .deletion import DeleteCommand, RecordDeleted, delete_record
 from .domains import host_records, records_of
 from .host_sections import load
 from .integration_specs import TARGET_KINDS, CapabilitySpec
-from .labels import adding, lower_first, one
+from .labels import adding, one
 from .record_declaration import Records
 from .security import Principal
 from .ui import ended
@@ -103,17 +103,6 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             records.save,
             ended(f"Add a new {title}"),
             adding(title),
-            False,
-        ),
-        (
-            "upsert",
-            bool(records.upsert),
-            Effect.REMOTE_WRITE,
-            records.write,
-            command,
-            records.upsert,
-            f"Add a new {title}, or update it if it already exists. On one that exists, {lower_first(KEPT)}",
-            f"Add or update {one(title)}",
             False,
         ),
         (

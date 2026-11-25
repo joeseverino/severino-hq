@@ -24,7 +24,6 @@ from pydantic import (
     ValidationError,
 )
 
-from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane import models
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 lazy from hq.platform.core.audit import audited_labels
@@ -77,8 +76,6 @@ PROBLEM_LIMIT = 500
 MOST_PROBLEMS = 20
 # The characters of a commit's id a page names it by: enough to tell two apart.
 SHORT_REVISION = 12
-# What a queued scan says it waits on while HQ's playbook worker arrives.
-WORKER_DUE = "Waiting for HQ's playbook worker."
 
 
 def _pattern(value: str) -> str:
@@ -202,21 +199,6 @@ def _source(consented: Consented) -> ManagedResource:
     return models.ManagedResource.objects.select_for_update().get(key=SOURCE_KEY)
 
 
-def scan_status_url(operation_id: str) -> str:
-    """Where a page follows one scan, signed so it reports on nothing else."""
-
-    return with_query(reverse("control_plane:playbooks_status"), {"watch": asks.watch_token({"scan": operation_id})})
-
-
-def _scan_asked(operation: OperationRequest, *, queued: bool) -> OperationAsked:
-    """How the scan stands, saying nothing beyond its standing's own note."""
-
-    scan = str(operation.pk)
-    return operation_asked(
-        operation, queued=queued, standing=scan_standing(scan) or asks.Standing(), status_url=scan_status_url(scan)
-    )
-
-
 @transaction.atomic
 def refresh(command: RefreshCommand, *, consented: Consented) -> OperationAsked:
     """Queue one scan of the automation source for the worker, and answer the
@@ -238,7 +220,7 @@ def refresh(command: RefreshCommand, *, consented: Consented) -> OperationAsked:
         # The worker pulls the scan over the bridge; the ring only says one
         # waits, and only once it is stored for the claim to find.
         ask(doorbell="automation")
-    return _scan_asked(operation, queued=created)
+    return operation_asked(operation, queued=created)
 
 
 # ----------------------------------------------------------- how it stands
@@ -318,22 +300,6 @@ def _scans():
     )
 
 
-def scan_standing(operation_id: str) -> Standing | None:
-    """How one scan stands, or None when the source has no scan by that id."""
-
-    found = _scans().filter(pk=operation_id).first()
-    return _stands(found) if found is not None else None
-
-
-def _stands(scan: OperationRequest) -> Standing:
-    """How a scan stands, a queued one saying what it waits on: HQ's
-    playbook worker while it arrives, and while none does, that it has not
-    started and why (``work_runs.standing_of``)."""
-
-    standing = standing_of(run_rows((scan,))[0])
-    return replace(standing, note=WORKER_DUE) if standing.state == asks.QUEUED else standing
-
-
 def reviewed(proposal: SourceProposal) -> Reviewed:
     """``proposal`` as a person decides on it, compared with the catalog adopted now."""
 
@@ -371,7 +337,7 @@ def standing(proposal: int | None = None) -> SourceStanding:
         raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
     scans = _scans().order_by("-created_at")
     scan = scans.first()
-    scanned = _stands(scan) if scan is not None else asks.Standing()
+    scanned = standing_of(run_rows((scan,))[0]) if scan is not None else asks.Standing()
     # While a newer scan has not ended, started or not, what the page says of
     # the repository's reach is still the last one that ended.
     reached = scans.exclude(state__in=UNENDED).first() if scan is not None and scan.state in UNENDED else scan

@@ -1,0 +1,47 @@
+# A job's or a run's end is written by audit.work_ended alone, which
+# words the outcome and attributes it to whoever asked for the work. A
+# record_event about a record (an obj) that may say DONE or FAILED, or whose
+# action is read from elsewhere, writes that end by hand.
+id: work-end-recorded-by-work-ended
+language: python
+severity: error
+message: A record's end is recorded by hand.
+note: Record it with audit.work_ended.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/core/audit.py"
+utils:
+  no-end:
+    kind: attribute
+    regex: \.Action\.[A-Z_]+$
+    not:
+      regex: \.Action\.(DONE|FAILED)$
+  never-ends:
+    any:
+      - matches: no-end
+      - kind: conditional_expression
+        all:
+          - has: {nthChild: 1, matches: no-end}
+          - has: {nthChild: 3, matches: no-end}
+rule:
+  kind: call
+  has:
+    field: function
+    regex: (^|\.)record_event$
+  all:
+    - has:
+        field: arguments
+        has:
+          kind: keyword_argument
+          has: {field: name, regex: ^obj$}
+    - not:
+        has:
+          field: arguments
+          has:
+            kind: keyword_argument
+            has: {field: name, regex: ^action$}
+            all:
+              - has: {field: value, matches: never-ends}

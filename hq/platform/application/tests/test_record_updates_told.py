@@ -15,7 +15,7 @@ from ..records import KEPT
 
 def _keeping_specs():
     """Every command that writes to a record it targets and shares its fields
-    with one that creates: each record domain's update and upsert, and any
+    with one that creates: each record domain's update, and any
     other targeted command whose command a create also takes. A command with
     no fields has nothing to reset, whatever else takes it."""
 
@@ -25,7 +25,7 @@ def _keeping_specs():
         for spec in registry
         if not spec.target_kind and command_schema(spec.command_type).get("properties")
     }
-    names = {f"{records.noun}.{verb}" for records in host_records() for verb in ("update", "upsert")}
+    names = {f"{records.noun}.update" for records in host_records()}
     return [
         spec
         for spec in registry
@@ -62,7 +62,7 @@ class KeepingSelectionTests(SimpleTestCase):
 
 
 class EveryUpdateIsToldWhatWasSentTests(SimpleTestCase):
-    def test_every_record_update_and_upsert_is_told_what_was_sent(self):
+    def test_every_record_update_is_told_what_was_sent(self):
         specs = _keeping_specs()
         self.assertIn("calendar.entry.update", {spec.name for spec in specs})
         for spec in specs:

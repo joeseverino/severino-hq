@@ -47,6 +47,7 @@ from .workflow_contracts import ActionLink
 lazy from .app_updates import UpdateKind, UpdateState, update_state
 lazy from .topology_estate import machine_nodes
 lazy from .upgrades import HIGH, MAJOR, Plan, plan_for
+lazy from .work_runs import standing_of as run_standing
 
 # The files a stack's override is read from, beside its compose file.
 OVERRIDES = (
@@ -100,12 +101,18 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
     elif _moves(standing, plan) and _offered(standing, state := update_state(_lead(running))):
         title = f"{_names(running)} has an update" + (f", {state.move}" if state.move else "")
         upgrade = _upgrade(running, plan, state)
-        # Once a press is asked, its card says where that stands, in the words its page does.
+        # Once a press is asked, its card says where that stands, in the
+        # words its page does; while its run is under way, the run's own
+        # standing says it (``Finding.under_way``).
         pressed = state.standing
-        explanation = ended(pressed.words) if pressed else state.words
-        # What the title and its line say is not said again among its facts.
+        under_way = pressed.standing if pressed else None
+        explanation = ended(pressed.words) if pressed and not under_way else state.words
+        # What the title and its line say is not said again among its facts;
+        # a link opens a page, which no words say.
         said = f"{title} {explanation}".casefold()
-        upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if str(fact[1]).casefold() not in said)
+        upgrade["evidence"] = tuple(
+            fact for fact in upgrade["evidence"] if not isinstance(fact[1], str) or fact[1].casefold() not in said
+        )
         yield _found(
             running,
             subject,
@@ -113,7 +120,7 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
             severity=Tone.ATTENTION,
             title=title,
             explanation=explanation,
-            under_way=bool(pressed and pressed.live),
+            under_way=under_way,
             **upgrade,
         )
     if by_tag := [item for item in running if _unpinned(item.standing)]:
@@ -226,13 +233,21 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
 
 
 def _standing(state: UpdateState) -> tuple[Fact, ...]:
-    """Where its last press stands, with what it waits on or the step it
-    stopped on and what that said, under the label its page says it under."""
+    """Where its last press stands once its run is not under way, under the
+    label its page says it under: the run's page, named by the state it
+    ended in, then what it waits on, or the step it stopped on, what that said
+    and each app it did not release."""
 
     standing = state.standing
-    if standing is None:
+    if standing is None or standing.standing is not None:
         return ()
-    return ((state.standing_label, " ".join((ended(standing.words), *map(ended, standing.lines)))),)
+    run = standing.run
+    lead = (
+        entity_link(Kind.RUN, run.id, label=run_standing(run).label)
+        if run is not None and run.url
+        else ended(standing.words)
+    )
+    return tuple((state.standing_label, said) for said in (lead, *map(ended, standing.lines)))
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:

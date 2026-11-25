@@ -10,10 +10,9 @@ import json
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, managing_everything, operator
 
 from ..adoption import ADOPT, ADOPT_SERVICE, unmanaged
-from ..adoption_testing import connection, managing_everything
 from ..approvals import APPROVE
 from ..capabilities import execute_capability
 from ..certificates import material_for

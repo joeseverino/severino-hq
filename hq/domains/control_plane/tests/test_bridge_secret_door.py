@@ -26,7 +26,9 @@ EXAMPLES: dict[str, Any] = {
         "status": {"note": "Applied.", "consumers": [{"consumer": "example-proxy"}]},
         "conditions": [{"type": "Ready", "status": True, "reason": "Applied", "message": "Applied."}],
         "message": "Applied.",
-        "events": [{"host": "app.example.com", "task": "Restart", "outcome": "changed", "message": "Restarted."}],
+    },
+    "renew": {
+        "events": [{"host": "app.example.com", "task": "Restart", "outcome": "changed", "message": "Restarted."}]
     },
     "connections": [
         {

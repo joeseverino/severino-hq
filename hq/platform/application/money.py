@@ -10,6 +10,7 @@ from collections.abc import Callable
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import overload
 
+from .figured import Figure
 lazy from .ui import MISSING
 
 CENTS = Decimal("0.01")
@@ -80,7 +81,7 @@ def signed_number[N: (Decimal, float, int)](value: N | None, figure: Callable[[N
     if value is None:
         return MISSING
     written = figure(abs(value))
-    return signed(written, negative=value < 0 and written != figure(value - value), plus=plus)
+    return Figure(signed(written, negative=value < 0 and written != figure(value - value), plus=plus), value)
 
 
 def money(value: Decimal | int | float | None, *, cents: bool = True, plus: bool = False) -> str:

@@ -19,7 +19,12 @@ from django.conf import settings
 lazy from django.test import override_settings
 
 lazy from hq.config import sandbox
+lazy from hq.domains.content.models import ContentItem
+lazy from hq.platform.application.action_items import set_aside
+lazy from hq.platform.application.dashboard import readable_queue
 lazy from hq.platform.application.plugins import installed_integrations
+lazy from hq.platform.application.projection import projection_scope
+lazy from hq.platform.application.security import web_principal
 lazy from hq.platform.core import bench, example_estate
 lazy from hq.platform.core.attribution import outside_every_door
 lazy from hq.platform.core.audit import stamped
@@ -170,6 +175,20 @@ def _unattended(owner) -> None:
     example_estate.automation.unattended()
 
 
+def _worker_image_missing(owner) -> None:
+    """The example estate once a release stopped short on HQ's machine: the
+    playbook worker's image is not there, so its unit failed and it stopped
+    reporting, and the journal's mount never started."""
+
+    _estate(owner)
+    _short_release()
+
+
+def _short_release() -> None:
+    example_estate.automation.unattended()
+    example_estate.work.worker_image_missing()
+
+
 def _glance_aged(owner) -> None:
     """The example estate as the dashboard finds it after nobody looked for a
     while: the machine's reading due again, nothing asked yet."""
@@ -204,6 +223,19 @@ def _policy_change(owner) -> None:
     example_estate.agents.asks_to_open_the_policy()
 
 
+def _told_again(owner) -> None:
+    """A fresh install with one problem, its playbook worker stopped, and a
+    notice of a draft its owner dismissed, which a newer draft has since told
+    again."""
+
+    example_estate.automation.unattended()
+    ContentItem.objects.create(title="An example draft", slug="example-draft")
+    with projection_scope():
+        queue = readable_queue(web_principal(owner))
+    set_aside(owner, [item["key"] for item in queue if item["notice"]], aside=True, current=queue)
+    ContentItem.objects.create(title="A second example draft", slug="example-second-draft")
+
+
 def _approved(ended: str) -> Callable[[Any], None]:
     """The example estate with its app update approved and ended as
     ``ended`` says, so its container's Upgrade card draws that standing."""
@@ -223,14 +255,13 @@ def _updates(on: str = "") -> Callable[[Any], None]:
     def seed(owner) -> None:
         from hq.platform.application.security import web_principal
 
+        # Declared first, so every scan the estate reports reaches it.
+        if on:
+            apps.get_model("control_plane", "ManagedResource").objects.create(key=on, kind="machine", spec={"name": on})
         _estate(owner)
         example_estate.docker.updates_out()
         example_estate.work.update_states(example_estate.docker.UPDATES)
-        hosts = (example_estate.names.MACHINE,)
-        if on:
-            apps.get_model("control_plane", "ManagedResource").objects.create(key=on, kind="machine", spec={"name": on})
-            hosts = (on,)
-        example_estate.automation.applies_updates(web_principal(owner), hosts)
+        example_estate.automation.applies_updates(web_principal(owner), (on or example_estate.names.MACHINE,))
 
     return seed
 
@@ -274,6 +305,10 @@ SEEDS: dict[str, Seed] = {
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.
     "playbooks-stopped": Seed(lambda _owner: example_estate.automation.unattended()),
+    "told-again": Seed(_told_again),
+    "worker-image-missing": Seed(_worker_image_missing, _SET_UP),
+    # The same on a fresh install, so the dashboard's Needs you card holds what it raises.
+    "worker-image-missing-alone": Seed(lambda _owner: _short_release()),
     "policy-change": Seed(_policy_change, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),

@@ -137,6 +137,8 @@ def approval_queue() -> str:
 
 # What a held request is raised under: no host rule, so it says its own why.
 APPROVAL = "approval"
+# What holding a request means, said by its item.
+HELD = "HQ writes nothing until an operator approves or rejects it."
 
 
 def waiting_for_approval() -> tuple[Finding, ...]:
@@ -152,8 +154,9 @@ def waiting_for_approval() -> tuple[Finding, ...]:
                 subject=str(held.id),
                 severity=Tone.ATTENTION,
                 title=str(sentence),
-                explanation="" if sentence.whole else _asked_change(shown),
-                why="An agent asked for this change, and HQ writes nothing until an operator approves or rejects it.",
+                # A title that says the whole change leaves the hold itself to say.
+                explanation=("" if sentence.whole else _asked_change(shown)) or HELD,
+                why="An agent asked for this change. " + HELD,
                 primary=opens("", _approval_entry(held)),
                 since=held.created_at,
                 held=True,
@@ -170,7 +173,7 @@ def readable_by[Item: Mapping[str, Any]](principal, items: list[Item]) -> list[I
     decisions ``approvals.offers`` offers it.
     """
 
-    items = [item for item in items if principal.permits(*item.get("read_capabilities", ()))]
+    items = [told for item in items for told in _told(principal, item)]
     if not any(item.get("held") for item in items):
         return items
     held = {_approval_entry(row): row for row in pending(principal=internal_principal("action-queue"), limit=None)}
@@ -179,6 +182,21 @@ def readable_by[Item: Mapping[str, Any]](principal, items: list[Item]) -> list[I
         items = [item for item in items if item.get("url") not in held or held[item["url"]].pk in own]
     offered = offers(principal, (held[item["url"]] for item in items if item.get("url") in held))
     return [_offering(item, offered[held[item["url"]].pk]) if item.get("url") in held else item for item in items]
+
+
+def _told[Item: Mapping[str, Any]](principal, item: Item) -> list[Item]:
+    """``item`` as ``principal`` may read it: without the lines of what
+    follows from it that it may not read, or, where it may not read the item,
+    each thing that follows from it that it may, so no reader loses one."""
+
+    consequences = item.get("consequences", ())
+    told = [each for each in consequences if principal.permits(*each.get("read_capabilities", ()))]
+    if not principal.permits(*item.get("read_capabilities", ())):
+        return told
+    if len(told) == len(consequences):
+        return [item]
+    untold = [fact for each in consequences if each not in told for fact in each["beneath"]]
+    return [cast(Item, {**item, "facts": [fact for fact in item["facts"] if fact not in untold], "consequences": told})]
 
 
 def _offering[Item: Mapping[str, Any]](item: Item, offer: Offer) -> Item:

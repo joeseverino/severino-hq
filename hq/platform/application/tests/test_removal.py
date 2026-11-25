@@ -38,7 +38,7 @@ def a_rewrite(**overrides) -> ManagedResource:
 class RemovalRequestTests(TestCase):
     def setUp(self):
         super().setUp()
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
 
@@ -117,7 +117,7 @@ class RemovalReportTests(TestCase):
 
     def setUp(self):
         super().setUp()
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
 
@@ -199,7 +199,7 @@ class RemovalWebTests(TestCase):
         a_rewrite()
 
     def test_through_an_observing_connection_it_forgets_and_deletes_nothing(self):
-        from hq.platform.application.adoption_testing import connection
+        from hq.platform.core.testing import connection
 
         connection("adguard", manages=False)
         response = self.client.post(
@@ -212,7 +212,7 @@ class RemovalWebTests(TestCase):
         self.assertFalse(ManagedResource.objects.filter(key="app-dns").exists())
 
     def test_the_page_asks_before_doing_anything(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         response = self.client.get(reverse("control_plane:remove", kwargs={"key": "app-dns"}))
@@ -222,7 +222,7 @@ class RemovalWebTests(TestCase):
         self.assertFalse(OperationRequest.objects.exists())
 
     def test_the_reason_is_asked_only_beside_the_press_that_sends_it(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         url = reverse("control_plane:remove", kwargs={"key": "app-dns"})
@@ -238,7 +238,7 @@ class RemovalWebTests(TestCase):
                 self.assertEqual((bool(reasons), bool(presses)), (offered, offered))
 
     def test_confirming_queues_removal_without_dropping_the_row(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         response = self.client.post(

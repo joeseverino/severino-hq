@@ -1,0 +1,6 @@
+id: first-letter-lowered-by-lower-first
+valid:
+  - 'said = lower_first(label)'
+  - 'said = label.lower()'
+invalid:
+  - 'said = label[:1].lower() + label[1:]'

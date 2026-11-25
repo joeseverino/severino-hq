@@ -1,0 +1,31 @@
+id: bridge-served-on-the-socket-alone
+valid:
+  - |
+    lazy from hq.domains.control_plane.bridge_application import application as bridge_application
+    async def serve():
+        async with unix_server.serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):
+            pass
+  - |
+    lazy from hq.domains.control_plane.bridge_application import (
+        application as bridge_application,
+        worker_application as worker_bridge_application,
+    )
+    async def serve(listening):
+        for served, path in (
+            (bridge_application, settings.SEVERINO_BRIDGE_SOCKET),
+            (worker_bridge_application, settings.SEVERINO_AUTOMATION_BRIDGE_SOCKET),
+        ):
+            await listening.enter_async_context(unix_server.serving(served, path))
+invalid:
+  - 'from hq.domains.control_plane.bridge_application import application'
+  - 'server = uvicorn.Server(Config(bridge_application, port=8001))'
+  - 'APP = "hq.domains.control_plane.bridge_application:application"'
+  - |
+    from hq.domains.control_plane.bridge_application import application as bridge_application
+    routes = {"/bridge": bridge_application}
+  - |
+    from hq.domains.control_plane.bridge_application import worker_application as worker_bridge_application
+    server = uvicorn.Server(Config(worker_bridge_application, port=8002))
+  - |
+    from hq.domains.control_plane.bridge_application import application as bridge_application
+    pairs = [(bridge_application, 8001)]

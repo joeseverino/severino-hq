@@ -50,7 +50,16 @@ EXAMPLES = (
     ),
     Examples(
         "github-failing",
-        fires=(alpha(checks={"state": "failure", "failing": ["lint"]}, raises=("alpha is failing on main",)),),
+        fires=(
+            alpha(checks={"state": "failure", "failing": ["lint"]}, raises=("alpha is failing on main",)),
+            # A job of a workflow run says the step it failed at.
+            alpha(
+                checks={"state": "failure", "failing": ["lint", "test"], "steps": {"test": "Run tests"}},
+                raises=(
+                    Raised(title="alpha is failing on main", explanation="Failing jobs: lint, test (at Run tests)"),
+                ),
+            ),
+        ),
         quiet=(QUIET,),
     ),
     Examples(

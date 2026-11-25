@@ -89,6 +89,7 @@ var admittedMembers = map[string]any{
 	"HostRenderStatusRecord.Reason":          "missing",
 	"HostUnitRecord.Unit":                    "example.service",
 	"HostUnitRecord.Activates":               "example.service",
+	"HostUnitRecord.Requires":                []string{"example.mount"},
 	"HostUnitRecord.StartedAt":               instant,
 	"HostUnitRecord.EndedAt":                 instant,
 	"HostUnitRecord.ConditionAt":             instant,

@@ -21,6 +21,7 @@ from hq.platform.application.capabilities import run_capability
 from hq.platform.application.held_reads import standing
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import Principal
+lazy from hq.platform.application.projection import iso
 
 IDENTIFIER = "io.modelcontextprotocol/tasks"
 # A person answers in minutes or hours, so a poll sooner than this only reads
@@ -124,7 +125,7 @@ def _task(held: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
         "taskId": approval["id"],
         "status": _status(held, answer),
         "createdAt": approval["requested_at"],
-        "lastUpdatedAt": held.updated_at.isoformat(),
+        "lastUpdatedAt": iso(held.updated_at),
         # Until a person decides, the request lapses at its expiry. HQ keeps a
         # settled hold, so its task stays readable however long applying takes.
         "ttlMs": None if settled else int((held.expires_at - held.created_at).total_seconds() * 1000),

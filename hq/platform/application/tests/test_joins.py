@@ -14,11 +14,11 @@ from django.utils.html import escape
 
 from hq.domains.control_plane.certificate_authorities import authority_name
 from hq.domains.control_plane.dns_lookup import LookupNotFound, LookupUnavailable
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, DOMAIN_KIND
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.markup_testing import select, text
-from hq.platform.core.testing import READER, declare, operator
+from hq.platform.core.testing import READER, connection, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -464,16 +464,7 @@ class TopologyEstateTests(TestCase):
         declare("example-host", "machine", {"name": "example-host", "addresses": ["100.64.0.53"]})
         store("tailscale.dns", {"record": "dns", "nameservers": ["100.64.0.53"]})
         for ref, provider in ((CLOUDFLARE, "cloudflare_api"), ("example-tailnet", "tailscale")):
-            ProviderConnection.objects.create(
-                controller_id="example-controller",
-                connection_ref=ref,
-                provider=provider,
-                endpoint="https://api.example.test",
-                reaches=["example.com"],
-                reachable=True,
-                probed=True,
-                observed_at=timezone.now(),
-            )
+            connection(provider, ref, endpoint="https://api.example.test", reaches=["example.com"])
         self.finance = ConnectionSpecFixture.spec()
 
     def project(self):
@@ -600,16 +591,7 @@ class QueryCostTests(TestCase):
     def setUp(self):
         estate()
         operator(self.client)
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref=CLOUDFLARE,
-            provider="cloudflare_api",
-            endpoint="https://api.example.test",
-            reaches=["example.com"],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("cloudflare_api", CLOUDFLARE, endpoint="https://api.example.test", reaches=["example.com"])
 
     def grow(self, count):
         # An address record, so each name is a service of its own rather than an alias.

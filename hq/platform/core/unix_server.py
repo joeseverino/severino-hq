@@ -23,7 +23,8 @@ from typing import Any, override
 import uvicorn
 from uvicorn.protocols.http.h11_impl import H11Protocol
 
-from hq.config.serve import GRACEFUL_SHUTDOWN_SECONDS
+# Lazily: the image's server is built on this module's listener and protocol.
+lazy from hq.config.serve import GRACEFUL_SHUTDOWN_SECONDS
 
 logger = logging.getLogger("severino.unix_server")
 
@@ -65,12 +66,14 @@ def peer_uid(connection: Any) -> int | None:
         return None
 
 
-def private_listener(path: str, *, backlog: int = 64) -> socket.socket:
-    """Bind and listen on ``path``, or refuse.
+def private_listener(path: str, *, backlog: int = 64) -> tuple[socket.socket, tuple[int, int]]:
+    """Bind and listen on ``path``, or refuse; the listener and the file it bound.
 
     The directory must be this account's, a real directory, and closed to
     group and other. Whatever is at the path must be this account's own
     socket, left by a previous run; it is replaced. Anything else is refused.
+    The file is named by its device and inode, so its server removes that
+    file alone, never one a later server bound at the same path.
     """
 
     if not Path(path).is_absolute() or os.path.normpath(path) != path:
@@ -101,12 +104,13 @@ def private_listener(path: str, *, backlog: int = 64) -> socket.socket:
         listener.bind(path)
         # Before listen: nothing can connect until the mode is the one served.
         Path(path).chmod(SOCKET_MODE)
+        bound = os.lstat(path)
         listener.listen(backlog)
     except OSError as exc:
         listener.close()
         raise SocketRefused("The socket could not be bound.") from exc
     listener.setblocking(False)
-    return listener
+    return listener, (bound.st_dev, bound.st_ino)
 
 
 class PeerCheckedProtocol(H11Protocol):
@@ -121,9 +125,12 @@ class PeerCheckedProtocol(H11Protocol):
             transport.abort()
 
 
-def _remove_socket(path: str) -> None:
+def remove_bound(path: str, bound: tuple[int, int]) -> None:
+    """Remove the socket at ``path`` while it is still the file ``bound`` names."""
+
     with contextlib.suppress(OSError):
-        if stat.S_ISSOCK(os.lstat(path).st_mode):
+        held = os.lstat(path)
+        if (held.st_dev, held.st_ino) == bound:
             Path(path).unlink()
 
 
@@ -133,11 +140,11 @@ async def serving(application: Any, path: str) -> AsyncIterator[None]:
 
     The server runs on a thread and an event loop of its own, so it shares
     neither a listener nor a routing table with whatever the caller serves.
-    It is accepting when the block is entered, and the socket is gone when the
-    block is left.
+    It is accepting when the block is entered, and the socket it bound is gone
+    when the block is left, unless another server has bound the path since.
     """
 
-    listener = private_listener(path)
+    listener, bound = private_listener(path)
     config = uvicorn.Config(
         application,
         http=PeerCheckedProtocol,
@@ -163,4 +170,4 @@ async def serving(application: Any, path: str) -> AsyncIterator[None]:
     finally:
         server.should_exit = True
         await asyncio.to_thread(thread.join)
-        _remove_socket(path)
+        remove_bound(path, bound)

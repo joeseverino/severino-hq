@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 from pydantic import ConfigDict, Field
 
 from hq.platform.application.reasons import Checked
+lazy from hq.platform.application.labels import human_bytes
 
 from .contract import ObservationRecord, ObservationSpec, Stamp
 
@@ -137,6 +138,8 @@ class HostRenderStatusRecord(ObservationRecord):
 # the repository for a unit it ships and by another package for a service read
 # because it restarts, so it is admitted only as printable ASCII on one line,
 # without a slash or an equals sign, so no path or assignment can stand in it.
+# A status is the other: what HQ's own program says as it fails, kept for the
+# units the repository ships alone.
 # The controller reads each pattern from this record's schema in the bridge
 # contract and checks it first. A name may carry systemd's \xNN escape, which
 # a unit named for a path uses for a dash in it (run-a\x2db.mount).
@@ -146,6 +149,14 @@ UNIT_INSTANT = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
 UNIT_NAME_LENGTH = 255
 UNIT_TEXT = r"^[ -.0-<>-~]+$"
 UNIT_TEXT_LENGTH = 120
+# What HQ's own program said as it failed (sd_notify STATUS=): one line of
+# printable ASCII, which may name the image or directory it found missing
+# and never assigns a value. The controller keeps it only for a unit the
+# repository ships.
+UNIT_STATUS = r"^[ -<>-~]+$"
+UNIT_STATUS_LENGTH = 400
+# The most units one unit can require that HQ keeps.
+UNIT_REQUIRES = 32
 
 
 _ESCAPE = re.compile(rb"\\x([0-9a-f]{2})")
@@ -172,6 +183,7 @@ OptionalUnitName = Annotated[str, Field(pattern=_or_blank(UNIT_NAME), max_length
 OptionalUnitWord = Annotated[str, Field(pattern=_or_blank(UNIT_WORD))]
 OptionalUnitInstant = Annotated[str, Field(pattern=_or_blank(UNIT_INSTANT))]
 OptionalUnitText = Annotated[str, Field(pattern=_or_blank(UNIT_TEXT), max_length=UNIT_TEXT_LENGTH)]
+OptionalUnitStatus = Annotated[str, Field(pattern=_or_blank(UNIT_STATUS), max_length=UNIT_STATUS_LENGTH)]
 
 
 class HostUnitRecord(ObservationRecord):
@@ -179,8 +191,9 @@ class HostUnitRecord(ObservationRecord):
     it: the host.unit reading's record. The launcher asks systemd for exactly
     these properties of the units the repository ships and of each other
     service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words,
-    an instant in UTC or the unit file's own title for a person to read; none
-    is a path, a command line or an environment.
+    an instant in UTC, the unit file's own title for a person to read, or
+    what HQ's own program said of a shipped unit as it failed; none is a
+    command line or an environment, and only that last may name a path.
     """
 
     # The controller sends these members and no other; HQ drops one it does
@@ -245,6 +258,20 @@ class HostUnitRecord(ObservationRecord):
     )
     active_at: OptionalUnitInstant = Field(
         default="", description="ActiveEnterTimestamp: when the unit last became active, on this boot."
+    )
+    requires: tuple[UnitName, ...] = Field(
+        default=(),
+        max_length=UNIT_REQUIRES,
+        description=(
+            "Requires, and the mount unit of each path in RequiresMountsFor: the units this one cannot start without."
+        ),
+    )
+    status: OptionalUnitStatus = Field(
+        default="",
+        description=(
+            "StatusText: what a unit the repository ships last told systemd of itself, such as why its run failed. "
+            "systemd keeps it until the unit next starts."
+        ),
     )
     foreign: bool = Field(
         default=False,
@@ -385,6 +412,9 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Disk space",
         HostFilesystemRecord,
         title=lambda record: str(record.get("mount", "")),
+        describe=lambda record: (
+            f"{human_bytes(record.get('free_bytes', 0))} free of {human_bytes(record.get('total_bytes', 0))}"
+        ),
         relation="Disk space on",
     ),
     ObservationSpec(

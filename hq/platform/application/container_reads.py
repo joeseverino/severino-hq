@@ -8,7 +8,6 @@ what it would take to change it. Nothing here derives a fact.
 """
 
 from collections.abc import Callable
-from dataclasses import asdict
 from typing import Any
 
 from .integration_specs import ListRead, ResourceSpec, typed_keys
@@ -17,12 +16,13 @@ from .record_errors import one_of
 from .resources import BoundedQuery
 from .security import Capability
 lazy from .app_update_approval import approval_of
-lazy from .app_updates import app_updates
+lazy from .app_updates import MergeStanding, app_updates
 lazy from .container_records import (
     AppUpdateRecord,
     AppUpdateRow,
     ContainerRecord,
     ContainerRow,
+    MergePart,
     RepositoryPart,
     UpgradeRecord,
     UpgradeRow,
@@ -266,9 +266,19 @@ def serialize_app_update(update: Any) -> AppUpdateRecord:
         checks={key: update.checks.get(key, default) for key, default in _CHECKS.items()},
         fixes=_advisories(update.fixes),
         brings=_advisories(update.brings),
-        merge=asdict(approval.standing) if approval.standing else None,
+        merge=_merge(approval.standing) if approval.standing else None,
         held=approval.held,
     )
+
+
+def _merge(standing: MergeStanding) -> MergePart:
+    return {
+        "words": standing.words,
+        "tone": standing.tone,
+        "run_url": standing.run_url,
+        "taken": standing.taken,
+        "lines": list(standing.lines),
+    }
 
 
 # What a head's checks say before any ran.

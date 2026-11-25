@@ -13,6 +13,7 @@ from pydantic import Field
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
 from hq.platform.application.contracts import Closed
+from hq.platform.core.testing import run_ended
 
 from ..approvals import ApproveCommand, Settled, approve
 from ..capabilities import run_capability
@@ -57,7 +58,7 @@ def stopped(task=REFUSED_TASK, message=REFUSED_SAID):
 
 class ApproveUpdateTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         arranged(pull(moves=[moved()]))
@@ -87,17 +88,7 @@ class ApproveUpdateTests(TestCase):
         """The worker's report of the run it claims next, and what its playbook ``stated``."""
 
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
-        report_operation(
-            claimed["operation"]["id"],
-            ControllerReport(
-                success=success,
-                observed_generation=claimed["input"]["generation"],
-                events=list(events),
-                message=message,
-                stated=stated,
-            ),
-            controller_id=WORKER,
-        )
+        run_ended(claimed["operation"]["id"], WORKER, events=events, success=success, message=message, stated=stated)
         return OperationRequest.objects.get(pk=claimed["operation"]["id"])
 
     def settle(self, *, success=True, status=None):
@@ -144,12 +135,13 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(preview.input["parameters"], {"revision": HEAD})
         self.assertEqual(preview.input["hosts"], [APP])
         self.assertEqual(preview.requested_actor, PERSON.actor)
-        # Under way, said with the machine it runs on.
+        # Under way, said as its run stands, with its page.
+        from ..work_runs import run_url
+
         self.assertTrue(self.standing().live)
-        self.assertIn(APP, self.standing().words)
-        # The worker is told to preview and nothing of the steps after it.
+        self.assertEqual(self.standing().run_url, run_url(str(preview.pk)))
+        # The worker is told nothing of the steps after it.
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
-        self.assertIs(claimed["input"]["check"], True)
         self.assertNotIn("then", claimed["input"])
         # An API or MCP reader sees what the page shows.
         from ..container_reads import get_app_update
@@ -173,7 +165,7 @@ class ApproveUpdateTests(TestCase):
         # It names the task it stopped on, in its own words as in its detail.
         self.assertEqual((standing.tone, standing.live), ("serious", False))
         self.assertIn(REFUSED_TASK, standing.words)
-        self.assertEqual((standing.step, standing.said), (REFUSED_TASK, REFUSED_SAID))
+        self.assertIn(REFUSED_SAID, standing.lines)
         self.assertEqual(standing.run_url, run_url(str(preview.pk)))
         # Once the host is fixed it is approved again, which previews again.
         self.assertEqual(approval_of(app_updates()[0]).held, "")
@@ -193,8 +185,9 @@ class ApproveUpdateTests(TestCase):
         again = self.press(key="example-approve-2")
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])
-        self.assertIn(APP, again["standing"]["note"])
         self.assertEqual((again["queued"], again["operation"]["id"]), (False, str(self.runs().get().pk)))
+        # Where a page follows the run it stands on.
+        self.assertEqual(again["status_url"], reverse("jobs:run_status", args=[again["operation"]["id"]]))
 
         preview = self.worked()
         succeeded(preview)
@@ -214,7 +207,7 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(merge.requested_actor, PERSON.actor)
         self.assertEqual(merge.input["correlation"], preview.input["correlation"])
         self.assertEqual(preview.result["then"], {"merge": str(merge.pk)})
-        self.assertEqual((self.standing().words, self.standing().taken), ("Merging", True))
+        self.assertEqual((self.standing().live, self.standing().operation), (True, merge))
 
     def test_the_container_page_draws_the_press_that_previews_the_update(self):
         page = self.container_page()
@@ -353,17 +346,17 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(serialize_operation(run)["requested_actor"], PERSON.actor)
         self.assertEqual(run.input["correlation"], merge.input["correlation"])
         self.assertEqual(merge.result["then"], {"run": str(run.pk)})
-        # The update links the run, and the run names the pull request it applies.
-        from ..run_pages import run_context
+        # The update links the run, and the run's chain holds the merge of the pull request it applies.
+        from hq.platform.core.testing import operator
+
         from ..work_runs import run_url
 
         self.assertEqual(self.standing().run_url, run_url(str(run.pk)))
         self.assertTrue(self.standing().live)
-        self.assertIn(APP, self.standing().words)
-        context = run_context(
-            {"operation_id": run.pk, "approved_by": "", "capability": "", "playbook": "", "state_label": ""}, user=None
-        )
-        self.assertEqual(context["merged_from"]["label"], "example/alpha#7")
+        operator(self.client)
+        (steps,) = self.client.get(run_url(str(run.pk))).context["events"]
+        merging = [step for step in steps.lines if step.page.operation_id == str(merge.pk)]
+        self.assertEqual([step.url for step in merging], [merge.resource.get_absolute_url()])
 
     def merged_on_main(self):
         """Its pull request closed, and the default branch's head pinning what it merged."""
@@ -379,17 +372,23 @@ class ApproveUpdateTests(TestCase):
         standing = self.standing()
         self.assertEqual((standing.tone, standing.taken, standing.live), ("serious", True, False))
         self.assertIn("Start the pull unit", standing.words)
-        self.assertEqual((standing.step, standing.said), ("Start the pull unit", "The pull unit failed."))
+        self.assertIn("The pull unit failed.", standing.lines)
         self.merged_on_main()
         apply = self.container_page().context["container"]["act"]
+        from .test_containers import named, queued
+
+        # Its card keeps how it went, the run's page named by its standing.
+        (card,) = [item for item in queued() if "app" in named(item, "Container")]
+        run, *said = [value for label, value in card.evidence if label == "Apply"]
+        self.assertEqual(run.url, reverse("jobs:run", kwargs={"pk": standing.run.id}))
+        self.assertIn("Failed", run.label)
+        self.assertIn("The pull unit failed.", said)
         self.assertEqual(self.client.post(apply.url, {"__retry_key": "example-apply"}).status_code, 302)
         again = self.applies().last()
         self.assertEqual((again.input["parameters"], again.input["hosts"]), ({"revision": MERGED}, [APP]))
         # Once asked, it is not offered again while it runs, and asks nothing of anyone.
         page = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
         self.assertIsNone(page.context["container"]["act"])
-        from .test_containers import named, queued
-
         self.assertEqual([item for item in queued("container-image-update") if "app" in named(item, "Container")], [])
 
     def test_a_second_apply_while_one_runs_is_answered_with_where_it_stands(self):
@@ -406,8 +405,8 @@ class ApproveUpdateTests(TestCase):
         self.assertTrue(first["ok"], first)
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])
-        self.assertIn(APP, again["standing"]["note"])
         self.assertEqual((again["queued"], again["operation"]["id"]), (False, first["operation"]["id"]))
+        self.assertEqual(again["status_url"], reverse("jobs:run_status", args=[first["operation"]["id"]]))
         self.assertEqual(self.applies().count(), 2)
 
     def test_no_press_is_offered_while_another_run_holds_its_playbook_or_its_machine(self):
@@ -477,6 +476,15 @@ class ApproveUpdateTests(TestCase):
         container = self.container_page().context["container"]
         self.assertEqual((container["state"].standing.words, container["act"]), ("Applied", None))
 
+    def test_an_apply_whose_machine_rolled_an_app_back_stands_applied_in_the_tone_to_look_at(self):
+        self.merged()
+
+        self.worked(stated={"readings": {APP: {"apps.pull": [{"project": "app", "result": "rolled_back"}]}}})
+
+        standing = self.standing()
+        self.assertEqual(standing.tone, "attention")
+        self.assertTrue(any("app" in line and "Rolled back" in line for line in standing.lines), standing.lines)
+
     def test_a_container_read_running_an_older_pin_after_it_applied_is_applied_again(self):
         from django.utils import timezone
 
@@ -517,7 +525,7 @@ class ApproveUpdateTests(TestCase):
         self.worked()
 
         self.assertEqual(self.merges().filter(state=OperationRequest.State.QUEUED).count(), 1)
-        self.assertEqual((self.standing().words, self.standing().taken), ("Merging", True))
+        self.assertEqual((self.standing().live, self.standing().taken), (True, True))
 
     def test_a_merge_commit_that_is_no_sha_queues_no_run(self):
         merge = self.merged(status={"merge_sha": "not-a-sha"})

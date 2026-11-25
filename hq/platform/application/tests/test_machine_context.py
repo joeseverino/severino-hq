@@ -230,13 +230,13 @@ class ReachedThroughTests(TestCase):
 
     def test_a_connection_named_for_its_machine_is_named_by_its_kind(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+        from hq.platform.core.testing import connection
 
-        from ..adoption_testing import connection
         from ..machine_context import machine_links
 
         provider, kind = next(iter(CONNECTION_LABELS.items()))
-        connection(provider, "box")
-        connection(provider, "example-other")
+        connection(provider, "box", manages=True)
+        connection(provider, "example-other", manages=True)
         record = {
             "name": "box",
             "aliases": [],

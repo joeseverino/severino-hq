@@ -179,7 +179,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             lookup="slug",
             command="hq.platform.application.projects:ProjectCommand",
             save="hq.platform.application.projects:save_project",
-            upsert="hq.platform.application.projects:upsert_project",
         ),
     ),
     DomainDescriptor(
@@ -370,7 +369,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             lookup="slug",
             command="hq.platform.application.assets:AssetCommand",
             save="hq.platform.application.assets:save_asset",
-            upsert="hq.platform.application.assets:upsert_asset",
         ),
     ),
     DomainDescriptor(

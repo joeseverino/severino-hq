@@ -127,9 +127,18 @@
    hold its column, and the table, past the box. So its column asks for no
    more than a letter of it, and gives way as a column of words does. */
 .data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
-/* Past a narrow box the column that names each row holds its identifiers' pieces whole: it is the one track given the room the others leave, so asking it of every column alike would break a piece there while the others had room. */
-@container table-region (width >= 36rem) {
-  .data-table > tbody > tr > [data-kind="name"] :is(code:not(.cell-whole), .token) { overflow-wrap: break-word; }
+/* An identifier's chip longer than a short value in a row that links its
+   record (`data-chip`, table_layout), standing as a value of its own (not
+   code in a sentence, base.css), is one line on its row's line, cut at its
+   end, open or not, since the record's page shows it whole: its one track
+   asks its column for nothing at its narrowest and all of it at its widest,
+   as a column of words does, so it is whole wherever the row has the room.
+   The line beneath an open row shows its values whole. */
+.data-table > tbody > tr:not(.row-detail) > [data-chip] code:not(.cell-whole, :is(p, li:not(:is(.stack-list, .code-list) > li), [data-cell~=data], [data-cell~=prose], [popover], dialog) *) {
+  display: inline-grid; grid-template-columns: minmax(0, max-content); max-inline-size: 100%; vertical-align: top;
+  white-space: nowrap; overflow: hidden;
+  & > * { overflow: hidden; text-overflow: ellipsis; }
+  & * :is(.token, .whole, .part) { display: inline; }
 }
 /* A part of a run (`line_list`) is whole on its line while the line holds it (the run wraps between its parts); one longer than the line takes the line and wraps at its words. */
 .data-table > tbody > tr > td .line-list > :not(.line-rest) { min-inline-size: 0; }

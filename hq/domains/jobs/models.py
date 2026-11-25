@@ -16,6 +16,7 @@ from django.db import models
 from django.utils import timezone
 
 from hq.platform.application.tone import Tone, TonedChoices
+from hq.platform.core.attribution import queued_chain
 from hq.platform.core.lapses import Lapse
 from hq.platform.core.rules import Rule, one_of
 
@@ -86,6 +87,8 @@ class Job(models.Model):
     # Touched by every progress report. Not `auto_now`, which any unrelated
     # write would also move: this has to stop when the process stops.
     heartbeat_at = models.DateTimeField(null=True, blank=True)
+    # The chain it was asked for in, which its rows continue (``attribution.own_operation``).
+    traceparent = queued_chain()
 
     class Meta:
         ordering = ("-created_at",)

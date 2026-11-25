@@ -73,14 +73,12 @@ TOOLS = {
     "describe_capabilities": True,
     "describe_connections": True,
     "describe_resources": True,
-    "documentation_status": True,
     "execute_capability": False,
     "export_year_summary": False,
     "get_findings": True,
     "get_resource": True,
     "get_topology": True,
     "list_resource": True,
-    "recent_activity": True,
     "system_health": True,
 }
 
@@ -131,7 +129,7 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertEqual(result["relationships"]["assets"], [asset.slug])
         self.assertEqual(result["relationships"]["documentation"], ["rb-hq-mcp"])
 
-    def test_documentation_status_excludes_sensitive_and_restricted_records(self):
+    def test_the_documentation_list_and_its_totals_leave_out_sensitive_and_restricted_records(self):
         DocumentationRecord.objects.create(
             doc_id="rb-safe",
             title="Safe",
@@ -148,10 +146,12 @@ class ServiceTests(SentinelMixin, TestCase):
             sensitivity=DocumentationRecord.Sensitivity.RESTRICTED,
         )
 
-        result = services.documentation_status()
+        result = services.list_resource("documentation")
 
         self.assertEqual(result["total"], 1)
-        self.assertEqual([record["doc_id"] for record in result["records"]], ["rb-safe"])
+        self.assertEqual([record["doc_id"] for record in result["items"]], ["rb-safe"])
+        self.assertEqual(sum(result["totals"]["by_status"].values()), 1)
+        self.assertEqual(sum(result["totals"]["by_type"].values()), 1)
 
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
         sent = "sent-by-the-caller-7f3a"
@@ -283,11 +283,11 @@ class ServiceTests(SentinelMixin, TestCase):
 
         self.enterContext(set_principal(mcp_principal()))
         result = services.execute_capability(
-            "hq.sync", {"manifest": "hunter2-not-for-logs", "idempotency_key": "example-key"}
+            "documentation.sync", {"manifest": "hunter2-not-for-logs", "idempotency_key": "example-key"}
         )
 
         self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(result["error"]["message"], "hq.sync: manifest must be a valid list.")
+        self.assertEqual(result["error"]["message"], "documentation.sync: manifest must be a valid list.")
         # Nor anywhere else: the agent's transcript keeps whatever it is told.
         self.assertNotIn("hunter2", json.dumps(result, default=repr))
 

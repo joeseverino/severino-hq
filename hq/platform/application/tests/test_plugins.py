@@ -23,7 +23,7 @@ from hq.platform.application.tests.links import example_command
 from ..card_items import Kpi
 from ..composed_providers import answered_by
 from ..domains import domain_navigation
-from ..finding_model import Finding
+from ..finding_model import Finding, Notice
 from ..finding_steps import Do
 from ..pages import page_context
 from ..plugin_testing import importable
@@ -584,7 +584,7 @@ class AttentionContractTests(TestCase):
                         subject="A watch",
                         severity="attention",
                         title="A watch",
-                        explanation="",
+                        explanation="Example.",
                         steps=(Do("Look into it."),),
                     )
                 ],
@@ -594,7 +594,7 @@ class AttentionContractTests(TestCase):
                         subject="B urgent",
                         severity="serious",
                         title="B urgent",
-                        explanation="",
+                        explanation="Example.",
                         steps=(Do("Look into it."),),
                     )
                 ],
@@ -611,14 +611,16 @@ class AttentionContractTests(TestCase):
             (manifest,),
             {
                 "example.demo": [
-                    Finding(rule="example", subject="Fine", severity="good", title="Fine", explanation=""),
-                    Finding(rule="example", subject="Context", severity="neutral", title="Context", explanation=""),
+                    Finding(rule="example", subject="Fine", severity="good", title="Fine", explanation="Example."),
+                    Finding(
+                        rule="example", subject="Context", severity="neutral", title="Context", explanation="Example."
+                    ),
                     Finding(
                         rule="example",
                         subject="Broken",
                         severity="serious",
                         title="Broken",
-                        explanation="",
+                        explanation="Example.",
                         steps=(Do("Look into it."),),
                     ),
                 ]
@@ -638,7 +640,7 @@ class AttentionContractTests(TestCase):
                         subject="T",
                         severity="serious",
                         title="T",
-                        explanation="",
+                        explanation="Example.",
                         steps=(Do("Look into it."),),
                     )
                 ]
@@ -774,7 +776,7 @@ class ComposedPluginTestKitTests(TestCase):
 
 
 class AttentionOrderTests(SimpleTestCase):
-    def entry(self, title, status="attention", *, since=None, notice=False, source="Example", actions=(), check=None):
+    def entry(self, title, status="attention", *, since=None, notice=None, source="Example", actions=(), check=None):
         from ..finding_model import Finding
         from ..finding_steps import Do, Press
 
@@ -783,7 +785,7 @@ class AttentionOrderTests(SimpleTestCase):
             subject=title,
             severity=status,
             title=title,
-            explanation="",
+            explanation="Example.",
             since=since,
             notice=notice,
             steps=tuple(Press(action) for action in actions) or (Do("Fix it."),),
@@ -815,7 +817,7 @@ class AttentionOrderTests(SimpleTestCase):
     def test_severity_then_what_needs_doing_then_the_longest_standing(self):
         now = timezone.now()
         entries = [
-            self.entry("a notice", notice=True, since=now - timedelta(days=30)),
+            self.entry("a notice", notice=Notice("example-occurrence"), since=now - timedelta(days=30)),
             self.entry("undated"),
             self.entry("newer", since=now - timedelta(days=1)),
             self.entry("older", since=now - timedelta(days=9), source="Zulu"),

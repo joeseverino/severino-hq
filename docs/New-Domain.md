@@ -19,8 +19,8 @@ smallest one.
 
 A `records` declaration yields:
 
-- the commands `<noun>.create` (unless `create=False`), `<noun>.upsert` (with
-  `upsert`), `<noun>.update` and `<noun>.delete`;
+- the commands `<noun>.create` (unless `create=False`), `<noun>.update` and
+  `<noun>.delete`;
 - the `write_<resource>` and `delete_<resource>` permissions, which operators
   hold, and MCP under its write and delete switches;
 - deletion itself (`hq.platform.application.records.deleter`) and its count on

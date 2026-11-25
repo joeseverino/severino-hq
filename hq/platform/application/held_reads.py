@@ -17,7 +17,7 @@ from .contracts import Effect
 from .describe import Describe
 from .held_answer import HELD, HeldRequest, applying
 from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
-from .projection import complete
+from .projection import page_of
 from .record_errors import RecordNotFound
 from .refusal_codes import Code
 from .refusal_status import refusal_of, refuse
@@ -105,7 +105,7 @@ def _item(held: ApprovalRequest) -> dict[str, Any]:
 def list_held(*, principal: Principal) -> dict[str, Any]:
     """The changes waiting for a person that ``principal`` may read: an agent's own, or every one for a person."""
 
-    return complete([_item(held) for held in approvals.pending(principal=principal)])
+    return page_of(approvals.pending(principal=principal), each=_item)
 
 
 def get_held(approval_id: str, *, principal: Principal) -> dict[str, Any]:

@@ -11,6 +11,7 @@ from typing import Literal
 lazy from django.utils import dateformat, timezone
 lazy from django.utils.timesince import timesince
 
+from .figured import Figure
 lazy from .derivations import reached, since, this_year
 lazy from .expiry import days_until
 lazy from .ui import counted
@@ -146,6 +147,10 @@ def when(value: date | str | None, now: datetime | None = None) -> str:
     found = moment(value) if isinstance(value, str) else value
     if found is None:
         return "never"
+    return Figure(_when(found, now), epoch(found))
+
+
+def _when(found: date, now: datetime | None) -> str:
     if not isinstance(found, datetime) or reached(found + NEAR, now=now) or not reached(found - NEAR, now=now):
         return when_at(found)
     # ``since`` holds the wording until the next whole unit, ahead or behind.
@@ -155,6 +160,13 @@ def when(value: date | str | None, now: datetime | None = None) -> str:
     if said.startswith(("0\xa0minutes", "0 minutes")):
         return "just now" if age >= timedelta(0) else "in under a minute"
     return f"{said} ago" if age >= timedelta(0) else f"in {said}"
+
+
+def epoch(found: date) -> float:
+    """A moment as the number it is ordered by: its seconds since the epoch, a day's from its start in UTC."""
+
+    at = found if isinstance(found, datetime) else datetime(found.year, found.month, found.day, tzinfo=UTC)
+    return at.timestamp()
 
 
 def when_exact(value: date) -> str:
@@ -239,6 +251,10 @@ def duration(delta: timedelta, *, short: bool = False) -> str:
     ``elapsed`` ticks one: "45 s", "4 min 33 s", "1 h 2 min", never a zero part after a larger one."""
 
     delta = max(delta, timedelta(0))
+    return Figure(_lasted(delta, short=short), delta.total_seconds())
+
+
+def _lasted(delta: timedelta, *, short: bool) -> str:
     if not short:
         start = datetime(2000, 1, 1, tzinfo=UTC)
         return timesince(start, start + delta)
@@ -262,7 +278,7 @@ def span(days: int) -> str:
     # Past a few weeks, a no-break space keeps the number with its unit ("2\xa0weeks").
     said = counted(abs(days), "day") if abs(days) <= DAYS_SAID_AS_DAYS else duration(timedelta(days=abs(days)))
     # A count below nothing is that long past.
-    return f"{said} overdue" if days < 0 else said
+    return Figure(f"{said} overdue" if days < 0 else said, days)
 
 
 def expiry_words(when: datetime | int, now: datetime | None = None) -> str:

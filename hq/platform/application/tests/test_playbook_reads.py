@@ -32,7 +32,7 @@ class PlaybookReadTests(TestCase):
         self.assertEqual(listed[RESTART]["reachable"], [APP])
 
     def test_a_playbook_read_by_its_id_states_what_its_run_page_does(self):
-        from ..automation_runs import about
+        from ..playbook_about import about
 
         record = get_resource("playbooks", RESTART, principal=MCP_READER)
 

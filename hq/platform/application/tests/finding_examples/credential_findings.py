@@ -2,9 +2,10 @@ from datetime import timedelta
 
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
+from hq.platform.core.testing import connection
 
 from ...tone import Tone
-from . import AT, Example, Examples, Raised, connection, stored
+from . import AT, Example, Examples, Raised, stored
 
 PAGES = "cloudflare.pages_project"
 READ = {PAGES: ({"name": "example", "account_id": "0123abcd"},)}
@@ -24,7 +25,7 @@ def connected(readings=READ, raises: tuple[Raised | str, ...] = (), expires_in: 
     expires = {} if expires_in is None else {"expires_at": AT + timedelta(days=expires_in)}
     return Example(
         readings=readings,
-        given=lambda: connection("example-api", "cloudflare_api", store=STORE, **expires),
+        given=lambda: connection("cloudflare_api", "example-api", store=STORE, **expires),
         raises=raises,
     )
 

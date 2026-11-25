@@ -250,8 +250,13 @@ class MergePart(TypedDict):
     taken: Annotated[
         bool, Describe("Whether it previews, merges, applies or merged, so no second approval is offered.")
     ]
-    step: Annotated[str, Describe("The step a failed preview or apply stopped on; empty for none.")]
-    said: Annotated[str, Describe("What that run said as it stopped; empty for none.")]
+    lines: Annotated[
+        list[str],
+        Describe(
+            "Its detail: what it waits on, how long its run has run, or of a preview or an apply that ended,"
+            " the step it stopped on, what that said and each app the run did not release."
+        ),
+    ]
 
 
 class AppUpdateRecord(AppUpdateRow):

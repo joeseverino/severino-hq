@@ -7,7 +7,7 @@ model and decides no number.
 
 from collections.abc import Iterable, Mapping
 from functools import partial
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from django.utils import timezone
 
@@ -26,19 +26,24 @@ from .domains import (
     provided,
     reader_variant,
 )
+from .finding_fold import said_beneath
 from .finding_model import PLAYBOOK_INVESTIGATION, Finding, FindingEvidence, written_fact
 from .finding_steps import WrittenStep
 from .findings import finding_key, rule_for
 from .json_schemas import as_written
 from .plugins import source_overview
 from .projection import iso, projection_scope
-from .read_models import ActivityEvent, recent_activity
 from .security import Capability, Principal
 from .workflows import WrittenAction
 lazy from .action_items import item_key, item_revision, waiting_count
 lazy from .estate_records import ActionItem
+lazy from .resources import list_resource
 lazy from .routes import reverse
 lazy from .ui import DomainOverview
+
+if TYPE_CHECKING:
+    from .asks import StandingAnswer
+    from .audit_specs import AuditItem
 
 
 @derivation("dashboard.highlights", reads=DASHBOARD_READS, vary=reader_variant)
@@ -142,8 +147,9 @@ class QueueItem(TypedDict):
     notice: bool
     # A request a person decides, never set aside (``Finding.held``).
     held: bool
-    # HQ is acting on it now, so its row asks again (``Finding.under_way``).
-    under_way: bool
+    # How the work HQ does on it now stands, so its row says it and asks
+    # again (``Finding.under_way``); null while none is under way.
+    under_way: StandingAnswer | None
     family: str
     # Why it is as urgent as its status says (``attention.finding_why``).
     why: str
@@ -157,6 +163,12 @@ class QueueItem(TypedDict):
     facts: list[FindingEvidence]
     links: list[WrittenAction]
     read_capabilities: list[str]
+    # The rows of what follows from it (``Finding.consequences``), so a reader
+    # who may not read it is told those it may (``attention.readable_by``).
+    consequences: list[QueueItem]
+    # The lines its cause's row says of it (``said_beneath``); empty unless
+    # it follows from one.
+    beneath: list[FindingEvidence]
 
 
 def finding_rows(source_id: str, source: str, findings: Iterable[Finding]) -> tuple[QueueItem, ...]:
@@ -181,6 +193,8 @@ def gathered_rows(entries: Iterable[Mapping[str, Any]]) -> list[QueueItem]:
 def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str) -> QueueItem:
     rule = rule_for(finding.rule)
     primary = finding.primary
+    # What it leads with: the page it opens, else the first command HQ runs for it.
+    lead = primary or next(iter(finding.presses), None)
     pages = finding.pages
     return {
         "key": item_key(source_id, finding_key(finding)),
@@ -191,7 +205,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "detail": finding.explanation,
         "count": finding.count or 1,
         "status": finding.severity,
-        "action": primary.label if primary else "",
+        "action": lead.label if lead else "",
         # A finding of a page's own (an unmet check, a step a request contradicts) has no rule the findings page lists.
         "url": primary.url if primary else with_query(findings_url, {"rule": finding.rule}) if rule else "",
         "steps": [as_written(step) for step in finding.steps],
@@ -199,9 +213,9 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "check": as_written(finding.check) if finding.check else None,
         "actions": [as_written(link) for link in pages if link.name == PLAYBOOK_INVESTIGATION],
         "subject": as_written(finding.subject_link) if finding.subject_link else None,
-        "notice": finding.notice,
+        "notice": finding.notice is not None,
         "held": finding.held,
-        "under_way": finding.under_way,
+        "under_way": finding.under_way.as_json() if finding.under_way else None,
         # A rule's findings are one kind of matter, named as the rule names itself.
         "family": rule.title if rule is not None else finding.family,
         "why": finding_why(finding, rule),
@@ -212,6 +226,14 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "facts": [written_fact(*fact) for fact in finding.evidence],
         "links": [as_written(link) for link in pages if link.name != PLAYBOOK_INVESTIGATION],
         "read_capabilities": list(finding.read_capabilities),
+        "consequences": [
+            {
+                **_queue_item(source_id, source, each, findings_url),
+                "beneath": [written_fact(*fact) for fact in said_beneath(each)],
+            }
+            for each in finding.consequences
+        ],
+        "beneath": [],
     }
 
 
@@ -262,7 +284,7 @@ class Kpis(TypedDict):
 
 
 class _Activity(TypedDict):
-    recent_activity: list[ActivityEvent]
+    recent_activity: list[AuditItem]
     # Each part this caller may not read, said, so withheld and empty read apart.
     unread: list[str]
 
@@ -300,7 +322,7 @@ def operating_snapshot(*, principal) -> OperatingSnapshot:
     """
     with projection_scope():
         # When it was asked for, not when it was derived.
-        return {"generated_at": timezone.now().isoformat(), **_operating_snapshot(principal)}
+        return {"generated_at": iso(timezone.now()), **_operating_snapshot(principal)}
 
 
 def _snapshot_variant(principal) -> tuple[Any, ...]:
@@ -373,5 +395,6 @@ WITHHELD_ACTIVITY = "not read: recent_activity, because this caller may not read
 
 def _activity(principal) -> _Activity:
     if principal.permits(Capability.READ_AUDIT_LOG):
-        return {"recent_activity": recent_activity(limit=8)["items"], "unread": []}
+        events = list_resource("audit", {"events": True, "limit": 8}, principal=principal)["items"]
+        return {"recent_activity": cast("list[AuditItem]", events), "unread": []}
     return {"recent_activity": [], "unread": [WITHHELD_ACTIVITY]}

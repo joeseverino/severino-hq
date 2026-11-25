@@ -17,7 +17,7 @@ from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import declare, managing_everything, operator
 
 from ..adoption import (
     AdoptCommand,
@@ -28,7 +28,6 @@ from ..adoption import (
     unmanaged,
     unmanaged_services,
 )
-from ..adoption_testing import managing_everything
 from ..inventory import record_inventory
 from ..record_errors import RecordNotFound
 from ..report_testing import bridged, refused_part

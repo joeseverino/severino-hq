@@ -81,7 +81,7 @@ class Expiry:
 
     @property
     def phrase(self) -> str:
-        return expiry_phrase(self.expires.isoformat())
+        return expiry_phrase(self.expires)
 
     @property
     def url(self) -> str:

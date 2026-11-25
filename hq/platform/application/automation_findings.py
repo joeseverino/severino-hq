@@ -9,11 +9,12 @@ from typing import Any
 
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 
-from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_model import Finding, FindingEstate, FindingRule, matter_key, opens
 from .finding_steps import Do, Run
 from .moments import when
 from .security import Capability, Principal
 from .tone import Tone
+from .unit_findings import FAILED, HQ_HOST, NOT_INSTALLED, machine_units
 lazy from .cadence import WorkerStanding, automation_standing
 lazy from .infrastructure import declared_resources
 lazy from .problems import About, problems_by_part
@@ -25,8 +26,7 @@ RULE = "automation-worker-absent"
 _READ = (str(Capability.READ),)
 # The unit that starts the worker on HQ's machine (deploy/systemd).
 AUTOMATION_UNIT = "severino-hq-automation.service"
-# The host's own program, as the unit runs it, and its configuration.
-HQ_HOST = "/usr/local/lib/severino-hq/deploy/bin/hq-host"
+# The host's configuration.
 HOST_CONFIGURATION = "/etc/severino-hq/host.json"
 
 # As deploy/host.example.json shows it: the grant is one of the file's own,
@@ -69,6 +69,21 @@ def _standing() -> WorkerStanding | None:
     return worker
 
 
+def _causes(estate: FindingEstate) -> tuple[str, ...]:
+    """The findings the worker's absence follows from, on the machine whose
+    units include the one that starts it: that unit failed, or it or what
+    starts it is not set up."""
+
+    causes = []
+    for node, units in machine_units(estate):
+        starts = tuple(unit for unit in units if AUTOMATION_UNIT in (unit.unit, unit.activates))
+        if any(unit.unit == AUTOMATION_UNIT and unit.failed for unit in starts):
+            causes.append(matter_key(FAILED, node.id))
+        if any(unit.absent for unit in starts):
+            causes.append(matter_key(NOT_INSTALLED, node.id))
+    return tuple(causes)
+
+
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
     worker = _standing()
     if worker is None or not worker.cannot("refresh", now=estate.now):
@@ -87,6 +102,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 evidence=(("Last seen", "never"),),
                 steps=(*_ENTRY, _START),
                 primary=playbooks,
+                follows=_causes(estate),
             ),
         )
     return (
@@ -100,6 +116,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
             evidence=(("Last seen", when(worker.seen_at, now=estate.now)),),
             steps=(_START, _LOG),
             primary=playbooks,
+            follows=_causes(estate),
         ),
     )
 

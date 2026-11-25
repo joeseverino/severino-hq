@@ -9,6 +9,7 @@ second copy of AdGuard.
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
@@ -25,6 +26,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, read_spec, record_spec, registry_label
 from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.platform.application.labels import field_label
+from hq.platform.core.attribution import continuing
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.digests import canonical
 from hq.platform.core.models import AuditLog
@@ -37,6 +39,7 @@ from .credential_mint import parse_expiry, store_references
 from .ui import counted, ended
 lazy from .credential_sight import standing
 lazy from .facts import inventory_records
+lazy from .projection import iso
 
 
 def record_token(kind: str, identity: tuple[str, ...]) -> str:
@@ -53,7 +56,9 @@ def record_token(kind: str, identity: tuple[str, ...]) -> str:
 
 
 @transaction.atomic
-def record_inventory(payload: dict[str, Any], *, controller_id: str = "") -> dict[str, Any]:
+def record_inventory(
+    payload: dict[str, Any], *, controller_id: str = "", asked: Mapping[str, str] | None = None
+) -> dict[str, Any]:
     """Store one controller sweep, replacing whatever the last one said.
 
     Replaced rather than merged: merging would keep records since deleted, the
@@ -61,6 +66,8 @@ def record_inventory(payload: dict[str, Any], *, controller_id: str = "") -> dic
     reached keeps its last records and when they were seen, so the data ages
     visibly instead of vanishing (``_record_report``). ``payload`` is the
     contract's ``Inventory``, which the bridge holds every sweep to first.
+    What it writes of a kind joins the chain ``asked`` names for it, the
+    creation context of the read that asked for the kind (``cadence.askers``).
     """
 
     observed_at = timezone.now()
@@ -77,7 +84,8 @@ def record_inventory(payload: dict[str, Any], *, controller_id: str = "") -> dic
             if _record_carried(kind, report, controller_id, observed_at):
                 stored.append(kind)
             continue
-        row = _record_report(kind, report, controller_id, observed_at)
+        with continuing((asked or {}).get(kind, "")):
+            row = _record_report(kind, report, controller_id, observed_at)
         stored.append(kind)
         summary[kind] = _summary(row)
 
@@ -88,7 +96,7 @@ def record_inventory(payload: dict[str, Any], *, controller_id: str = "") -> dic
     return {
         "ok": True,
         "recorded": stored,
-        "observed_at": observed_at.isoformat(),
+        "observed_at": iso(observed_at),
         "kinds": summary,
     }
 
@@ -660,7 +668,7 @@ def record_connections(payload: list[dict[str, Any]], *, admitted: Admitted) -> 
     return {
         "ok": True,
         "recorded": sorted(stored),
-        "observed_at": observed_at.isoformat(),
+        "observed_at": iso(observed_at),
     }
 
 
@@ -686,6 +694,8 @@ def _record_probe(row: ProviderConnection) -> None:
 def _record_manages(row: ProviderConnection) -> None:
     """Whether a connection may make records managed. Kept, never pruned."""
 
+    # A provider's own setting, as a read found it, which no row's signal writes.
+    # ast-grep-ignore: row-change-recorded-by-its-signal
     record_event(
         action=AuditLog.Action.SETTINGS_CHANGED,
         obj=row,

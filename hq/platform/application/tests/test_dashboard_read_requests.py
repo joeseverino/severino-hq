@@ -2,16 +2,14 @@
 
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
-    ProviderConnection,
 )
 from hq.platform.core.bindings import audit_operation
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 from ..glance_refresh import DashboardRefreshCommand, request_dashboard_refresh
 from ..security import cli_principal
@@ -25,14 +23,7 @@ class DashboardAskTests(TestCase):
         self.machine = declare(
             "app-server", "machine", {"name": "app", "addresses": ["192.0.2.10"]}, status={"kept": True}
         )
-        ProviderConnection.objects.create(
-            connection_ref="app-ssh",
-            controller_id="app-server",
-            provider="ssh",
-            endpoint="192.0.2.10",
-            reaches=["app"],
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "app-ssh", controller_id="app-server", endpoint="192.0.2.10", reaches=["app"])
         DashboardConfiguration.objects.create(weather_point="41.0000,-87.0000", weather_label="Example town")
         DashboardMachine.objects.create(machine=self.machine)
 

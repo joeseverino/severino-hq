@@ -374,7 +374,7 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
             "source": item.source.id,
             "calendar": item.source.label,
             "title": item.event.title,
-            "starts": item.event.starts.isoformat(),
+            "starts": iso(item.event.starts),
             "ends": iso(item.event.ends),
             "all_day": not item.event.timed,
             "state": item.event.state or None,
@@ -383,7 +383,7 @@ def list_agenda(*, start: date | None = None, days: int = 14, limit: int = 200) 
         }
         for item in paged["items"]
     ]
-    return {**paged, "start": first.isoformat(), "end": last.isoformat(), "items": shown}
+    return {**paged, "start": iso(first), "end": iso(last), "items": shown}
 
 
 def get_entry(uid: str) -> dict[str, Any]:

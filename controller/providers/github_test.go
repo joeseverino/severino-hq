@@ -678,7 +678,7 @@ func TestGitHubsOwnRunsFailNoCommit(t *testing.T) {
 
 // A workflow that does not run on every push fails the default branch from
 // its newest run there, at an older commit, whatever passed on the head since,
-// until a run of it passes: a rerun included. A pull request's run from a
+// until a run of it passes: a rerun included, and names the step it failed at. A pull request's run from a
 // branch of the same name is not the branch's, and a weekly run behind a full
 // page of the branch's runs is read from its workflow.
 func TestABranchFailsUntilEachWorkflowsNewestRunPasses(t *testing.T) {
@@ -708,6 +708,9 @@ func TestABranchFailsUntilEachWorkflowsNewestRunPasses(t *testing.T) {
 			routes[api("/check-suites/70/check-runs?per_page=100")] = `{"check_runs":[
 				{"id":71,"name":"Analysis","status":"completed","conclusion":"success","check_suite":{"id":70}},
 				{"id":72,"name":"Publish","status":"completed","conclusion":"failure","check_suite":{"id":70}}]}`
+			routes[api("/actions/jobs/72")] = `{"id":72,"steps":[
+				{"name":"Set up job","status":"completed","conclusion":"success","number":1},
+				{"name":"Publish results","status":"completed","conclusion":"failure","number":2}]}`
 			page := []string{forked, ci}
 			if test.full {
 				for len(page) < githubListPage {
@@ -726,6 +729,12 @@ func TestABranchFailsUntilEachWorkflowsNewestRunPasses(t *testing.T) {
 			}
 			if record.Checks.State != test.state || !slices.Equal(record.Checks.Failing, test.failing) || !slices.Equal(urls, test.runs) {
 				t.Errorf("checks %+v, failing runs %v", record.Checks, urls)
+			}
+			// Each failing job of a workflow run names the step it failed at.
+			for _, job := range test.failing {
+				if record.Checks.Steps[job] != "Publish results" {
+					t.Errorf("%s failed at %q", job, record.Checks.Steps[job])
+				}
 			}
 		})
 	}

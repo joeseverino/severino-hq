@@ -18,7 +18,7 @@ lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .adoption import adopt_discovered, unmanaged
-from .cadence import settle_read_requests
+from .cadence import askers, settle_read_requests
 from .inventory import (
     confirm_observed,
     record_inventory,
@@ -44,7 +44,7 @@ def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, An
 
     report = admission(admitted)
     principal = report.principal
-    result = record_inventory(payload, controller_id=report.controller_id)
+    result = record_inventory(payload, controller_id=report.controller_id, asked=askers(payload))
     # After the sweep is stored: adoption reads each spec back out of the
     # records just recorded, so every declaration it writes starts equal to
     # what the controller found and the first reconcile is a no-op.

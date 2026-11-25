@@ -84,7 +84,11 @@ class TracedTests(PassTestCase):
         self.assertTrue(root.attributes["hq.ok"])
         self.assertEqual(ran.attributes["hq.procedure"], fakes.PROCEDURE)
         self.assertEqual(
-            [(event.name, event.attributes["ansible.task"]) for event in ran.events],
+            [
+                (event.name, event.attributes["ansible.task"])
+                for event in ran.events
+                if "ansible.task" in event.attributes
+            ],
             [("ok", "Say hello"), ("changed", "Touch a file"), ("ok", "Hidden"), ("skipped", "Skip me")],
         )
         said = json.dumps(

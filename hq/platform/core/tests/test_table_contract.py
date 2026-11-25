@@ -1,11 +1,11 @@
 """A data table is declared (``tables.DataTable``), so its shape is in the HTML on first paint."""
 
 import re
-from datetime import date
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from django.core.paginator import Paginator
 from django.template import Context, RequestContext, Template
 from django.template.autoreload import get_template_directories
 from django.test import RequestFactory, SimpleTestCase, tag
@@ -15,9 +15,12 @@ from hq.platform.application import asks
 from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.markup_testing import all_elements, elements, links, select, with_class, within
+from hq.platform.application.moments import when
+from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Row, TableColumn, typed
+from hq.platform.application.ui import MISSING, measured
 from hq.platform.core.part_examples import table
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 from hq.platform.core.table_layout import TRACKS
@@ -36,21 +39,6 @@ def _template_roots() -> list[Path]:
 @tag("source", "tree")
 class TableContractTests(SimpleTestCase):
     maxDiff = None
-
-    def test_no_template_writes_what_the_region_derives(self):
-        """A figure's alignment follows from its heading's kind and the sort
-        control from the rows the table holds, so no template spells either
-        on a cell or a heading."""
-
-        derived = re.compile(r"\|\s*sortable\b|\bnum-col\b")
-        found = [
-            f"{path.relative_to(root)}:{text.count(chr(10), 0, match.start()) + 1}: {match.group()}"
-            for root in _template_roots()
-            for path in sorted(root.rglob("*.html"))
-            for text in [path.read_text(encoding="utf-8")]
-            for match in derived.finditer(text)
-        ]
-        self.assertEqual(found, [], "The declared table derives these; drop them from the template.")
 
     def test_the_gutter_reads_nothing_a_script_marks(self):
         """The gutter moves every name in its column, so whether it is kept
@@ -385,8 +373,7 @@ class TableTagTests(SimpleTestCase):
 
     def test_pagination_links_keep_the_filters_and_set_the_page(self):
         request = RequestFactory().get("/things/", {"q": "x", "sort": "name", "page": "2"})
-        paginator = Paginator(range(30), 10)
-        context = {"is_paginated": True, "page_obj": paginator.page(2), "paginator": paginator}
+        context = {"pages": {"previous": 1, "next": 3, "number": 2, "of": 3}}
         html = _render('{% include "partials/_pagination.html" %}', context, request)
         queries = [parse_qs(urlsplit(link.attrs["href"]).query) for link in elements(html, "a")]
         self.assertEqual(queries, [{"q": ["x"], "sort": ["name"], "page": [str(n)]} for n in (1, 3)])
@@ -460,6 +447,26 @@ class TableTagTests(SimpleTestCase):
         html = _drawn(weeks)
         self.assertEqual(select(html, "data-sort-local"), [])
         self.assertNotIn("data-sort-ready", elements(html, "th")[0].attrs)
+
+    def test_a_cell_sorts_by_the_value_it_declares(self):
+        """A table that sorts on the page writes on each cell whose value is
+        not its words what it orders by: a figure's number however its words
+        read, a moment's instant. Words and a cell that says nothing write
+        none, nor does a table that keeps its own order."""
+
+        stamp = date(2026, 1, 2)
+        rows = (
+            _row(money(Decimal("-1234.5")), measured(4.25, "mi"), Cell(moment=stamp), "Beta"),
+            _row(money(Decimal(9)), when(stamp), Cell(), MISSING),
+        )
+        columns = ("Cost", "Distance", "When", "Name")
+        sorted_by = [
+            each.attrs.get("data-sort") for each in _cells(_drawn(_things(*[(c,) for c in columns], rows=rows)))
+        ]
+        epoch = str(datetime(2026, 1, 2, tzinfo=UTC).timestamp())
+        self.assertEqual(sorted_by, ["-1234.50", "4.25", epoch, None, "9.00", epoch, None, None])
+        kept = _drawn(_things(*[(c,) for c in columns], rows=rows, keeps_order=True))
+        self.assertEqual([each.attrs.get("data-sort") for each in _cells(kept)], [None] * 8)
 
     def test_a_figures_cells_align_as_its_heading_says(self):
         """A numeric column's cells are marked with its kind, body and totals

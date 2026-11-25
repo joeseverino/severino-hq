@@ -15,7 +15,7 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.permissions import Tailscale
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL, PERMISSION_REFUSAL
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 from tests.mise_tasks import body, mise_tasks
 
 from ..credential_mint import (
@@ -70,17 +70,6 @@ def production_shape(refusal: str = CREDENTIAL_REFUSAL) -> None:
                 error="Authentication error",
                 observed_at=now,
             )
-
-
-def connect(store=STORE, **fields) -> ProviderConnection:
-    return ProviderConnection.objects.create(
-        connection_ref="example-api",
-        controller_id="example-controller",
-        provider="cloudflare_api",
-        store=store,
-        observed_at=timezone.now(),
-        **fields,
-    )
 
 
 def missing_from_readings() -> tuple[str, ...]:
@@ -196,7 +185,7 @@ class PerReadingRefusalTests(TestCase):
 class MintCommandTests(TestCase):
     def test_the_command_is_derived_from_references_only(self):
         production_shape()
-        connect()
+        connection("cloudflare_api", "example-api", store=STORE)
 
         fix = credential_fixes()["example-api"]
 
@@ -214,7 +203,7 @@ class MintCommandTests(TestCase):
 
     def test_no_item_reported_leaves_no_command(self):
         production_shape()
-        connect(store={})
+        connection("cloudflare_api", "example-api", store={})
 
         fix = credential_fixes()["example-api"]
 
@@ -224,7 +213,7 @@ class MintCommandTests(TestCase):
     def test_no_account_in_the_readings_leaves_no_command(self):
         production_shape()
         ProviderInventory.objects.filter(kind=PAGES).update(records=[{"name": "example"}])
-        connect()
+        connection("cloudflare_api", "example-api", store=STORE)
 
         fix = credential_fixes()["example-api"]
 
@@ -233,7 +222,7 @@ class MintCommandTests(TestCase):
 
     def test_no_bootstrap_item_reads_the_bootstrap_from_the_environment(self):
         production_shape()
-        connect(store={"vault": "Example Vault", "item": "exampleitem01"})
+        connection("cloudflare_api", "example-api", store={"vault": "Example Vault", "item": "exampleitem01"})
 
         fix = credential_fixes()["example-api"]
 
@@ -242,7 +231,7 @@ class MintCommandTests(TestCase):
 
     def test_a_healthy_credential_offers_nothing(self):
         ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
-        connect(expires_at=timezone.now() + timedelta(days=80))
+        connection("cloudflare_api", "example-api", store=STORE, expires_at=timezone.now() + timedelta(days=80))
 
         fix = credential_fixes()["example-api"]
 
@@ -257,12 +246,8 @@ class MintCommandTests(TestCase):
             error="Tailscale refused the users read (404).",
             observed_at=timezone.now(),
         )
-        ProviderConnection.objects.create(
-            connection_ref="example-tailnet",
-            controller_id="example-controller",
-            provider="tailscale",
-            store={**STORE, "bootstrap": "op://Operator Vault/Tailscale bootstrap"},
-            observed_at=timezone.now(),
+        connection(
+            "tailscale", "example-tailnet", store={**STORE, "bootstrap": "op://Operator Vault/Tailscale bootstrap"}
         )
 
         fix = credential_fixes()["example-tailnet"]

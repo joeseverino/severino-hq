@@ -5,8 +5,7 @@ from django.test import TestCase
 from pydantic import ValidationError
 
 from hq.platform.application.capabilities import InvalidCapabilityQuery
-from hq.platform.application.projection import PageScope
-from hq.platform.application.resources import BoundedQuery, InvalidResourceInput, _page
+from hq.platform.application.resources import InvalidResourceInput
 from hq.platform.application.security import mcp_principal
 from hq.platform.core.testing import declare
 
@@ -83,14 +82,3 @@ class CutOffListSaysSoTests(TestCase):
         for filters in ({"limit": 0}, {"kinds": "Not A Kind"}, {"page": 2}):
             with self.subTest(filters=filters), self.assertRaises(InvalidResourceInput):
                 services.list_resource("infrastructure", filters)
-
-    def test_a_full_page_from_a_list_that_does_not_count_is_read_as_cut_off(self):
-        full = {"items": [{}, {}], "count": 2}
-
-        def page(limit):
-            return _page(BoundedQuery(limit=limit), full, PageScope())
-
-        self.assertTrue(page(2)["truncated"])
-        self.assertIsNone(page(2)["total"])
-        self.assertIsNone(page(2)["next"], "nothing could resume a page cut by hand")
-        self.assertFalse(page(3)["truncated"])

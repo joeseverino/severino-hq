@@ -9,11 +9,11 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.markup_testing import hrefs, links, select, text, texts, within
-from hq.platform.core.testing import NOBODY, READER, declare, operator
+from hq.platform.core.testing import NOBODY, READER, connection, declare, operator
 from hq_sdk.testing import plain
 
 from ..action_links import topology_investigation_links, topology_url
@@ -33,7 +33,7 @@ class TopologyPageTests(TestCase):
         declare("internal-name", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
 
     def test_page_is_progressively_enhanced_and_actions_remain_real_forms(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         with host_only():
@@ -52,7 +52,7 @@ class TopologyPageTests(TestCase):
         )
 
     def test_the_page_carries_summaries_and_fetches_a_body_when_opened(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         response = self.page()
@@ -434,15 +434,11 @@ class TopologyLensTests(TestCase):
         self.unobserved = declare(
             "lonely-record", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"}
         )
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-cloudflare",
-            provider="cloudflare_dns",
+        connection(
+            "cloudflare_dns",
+            "example-cloudflare",
             endpoint="https://api.example.test/client/v4",
             reaches=["example.com"],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
         )
 
     def project(self):

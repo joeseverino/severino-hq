@@ -1,0 +1,8 @@
+id: entity-page-linked-by-entity-link
+valid:
+  - 'url = page_url("machine", name)'
+  - 'url = reverse("control_plane:machines")'
+invalid:
+  - 'url = reverse("control_plane:machine", args=[name])'
+  - 'url = reverse("zones:detail", kwargs={"name": zone})'
+  - url = routes.reverse("projects:detail", args=[key])

@@ -1,0 +1,27 @@
+# The application resolves a route through hq.platform.application.routes,
+# whose reverse is Django's, remembered: one queue asks for several hundred
+# addresses, most of them the same few dozen, and Django's own works each out
+# afresh.
+id: routes-reversed-through-their-owner
+language: python
+severity: error
+message: The application imports Django's reverse.
+note: Import reverse from hq.platform.application.routes.
+files:
+  - "hq/platform/application/**"
+  - "hq/domains/control_plane/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/application/routes.py"
+rule:
+  kind: import_from_statement
+  has:
+    field: module_name
+    regex: ^django\.urls$
+  all:
+    - has:
+        stopBy: end
+        kind: identifier
+        regex: ^reverse$
+        not:
+          inside: {kind: aliased_import, field: alias}

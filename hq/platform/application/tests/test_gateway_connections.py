@@ -6,10 +6,10 @@ from django.utils import timezone
 from hq.domains.control_plane.models import (
     DashboardConfiguration,
     ManagedResource,
-    ProviderConnection,
     ProviderInventory,
 )
 from hq.domains.projects.models import Project
+from hq.platform.core.testing import connection
 
 from .. import readings
 from ..capabilities import command_spec, execute_capability
@@ -61,9 +61,7 @@ class GatewayConnectionTests(TestCase):
             ],
             observed_at=timezone.now(),
         )
-        ProviderConnection.objects.create(
-            connection_ref="example-cloudflare", provider="cloudflare_api", manages=True, observed_at=timezone.now()
-        )
+        connection("cloudflare_api", "example-cloudflare", manages=True)
         readings.record(
             readings.weather("41.8781,-87.6298"),
             reported_weather("41.8781,-87.6298", city="Chicago", state="IL"),
