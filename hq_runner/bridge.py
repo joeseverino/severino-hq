@@ -1,4 +1,4 @@
-"""The worker's calls to HQ: claim, renew and report, over HQ's bridge socket.
+"""The worker's calls to HQ: claim, renew and report, over the bridge socket HQ serves the worker alone.
 
 The Go controller's client (``controller/runtime/bridge.go``) with the same
 trust: the socket and its directory are this account's alone and the peer must

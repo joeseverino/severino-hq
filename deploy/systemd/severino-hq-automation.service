@@ -3,6 +3,9 @@ Description=Severino HQ automation worker
 After=network-online.target docker.service severino-hq-secrets.service
 Wants=network-online.target
 Requires=docker.service
+# The journal's own noexec mount (var-lib-severino\x2dhq-automation.mount),
+# which hq-host automation refuses to start the worker without.
+RequiresMountsFor=/var/lib/severino-hq/automation
 
 [Service]
 Type=oneshot

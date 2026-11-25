@@ -339,6 +339,7 @@ func automation(stdout, stderr io.Writer) *host.Automation {
 		Source:      host.Source(host.BuildSource),
 		SecretDir:   hostcore.SecretDir,
 		Journal:     host.AutomationState,
+		Mounts:      func() ([]byte, error) { return os.ReadFile(hostcore.MountTable) },
 		Project:     config.Automation,
 		Grants:      config.Grants,
 		ID:          id,

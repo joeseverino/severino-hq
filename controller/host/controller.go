@@ -181,7 +181,7 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	}
 	// The bridge, from the declaration the web container is given it by.
 	args = append(args,
-		"--mount", "type=volume,source="+bridgeVolume()+",target="+filepath.Dir(BridgeSocket)+",readonly",
+		"--mount", "type=volume,source="+volumeAt(filepath.Dir(BridgeSocket)).Name+",target="+filepath.Dir(BridgeSocket)+",readonly",
 		"--env", "SEVERINO_BRIDGE_SOCKET="+BridgeSocket,
 		image)
 	switch pass {
@@ -218,15 +218,6 @@ func (c *Controller) unitSocket() []string {
 
 func readOnly(source, target string) string {
 	return "type=bind,source=" + source + ",target=" + target + ",readonly"
-}
-
-func bridgeVolume() string {
-	for _, volume := range Volumes {
-		if volume.Target == filepath.Dir(BridgeSocket) {
-			return volume.Name
-		}
-	}
-	panic("the bridge socket's directory is not a declared volume")
 }
 
 // prepareACME makes the certificate state the controller's, every run and

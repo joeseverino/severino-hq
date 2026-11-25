@@ -240,16 +240,16 @@ RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
         -x '/tests/' hq hq_sdk
 
 # Mounted volumes; create empty so the container can boot before a host mount.
-# The bridge socket's directory is this account's alone: a volume first mounted
+# Each bridge socket's directory is this account's alone: a volume first mounted
 # there takes that owner and mode, and HQ refuses to serve from anything wider.
 # Made after every step that runs HQ, and refused if one left a file there: a
 # new volume starts as a copy of the image's directory, so a file a root step
 # wrote would be root's in the volume, where HQ's account cannot write it.
-RUN mkdir -p /data /media /exports /run/hq-bridge \
-    && left="$(find /data /media /exports /run/hq-bridge -mindepth 1)" \
+RUN mkdir -p /data /media /exports /run/hq-bridge /run/hq-automation-bridge \
+    && left="$(find /data /media /exports /run/hq-bridge /run/hq-automation-bridge -mindepth 1)" \
     && if [ -n "$left" ]; then echo "A build step left files in HQ's volumes: $left" >&2; exit 1; fi \
-    && chown -R severino:severino /data /media /exports /run/hq-bridge \
-    && chmod 0700 /run/hq-bridge
+    && chown -R severino:severino /data /media /exports /run/hq-bridge /run/hq-automation-bridge \
+    && chmod 0700 /run/hq-bridge /run/hq-automation-bridge
 
 USER severino
 EXPOSE 8000

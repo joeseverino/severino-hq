@@ -101,7 +101,7 @@ if [ "${usage_plan:-false}" = true ]; then
     env | grep -E '^(DJANGO_|SEVERINO_|UVICORN_|HQ_DEV_|PYTHONPATH=)' | grep -Ev '^[A-Z_]*(SECRET_KEY|_SECRET)=' | sort
     echo "serve: $host:$port, $serving"
     if [ "$runner" = true ]; then
-        echo "automation: the bridge at $bridge/bridge.sock, the worker from var/runner/venv on each doorbell, scanning tools/dev/scratch_playbooks"
+        echo "automation: the bridge at $bridge/automation.sock, the worker from var/runner/venv on each doorbell, scanning tools/dev/scratch_playbooks"
     fi
     exit 0
 fi
@@ -194,7 +194,8 @@ if [ "$runner" = true ]; then
     # (tools/dev/scratch_automation.py).
     (umask 077 && mkdir -p "$bridge")
     SEVERINO_BRIDGE_SOCKET="$bridge/bridge.sock"
-    export SEVERINO_BRIDGE_SOCKET
+    SEVERINO_AUTOMATION_BRIDGE_SOCKET="$bridge/automation.sock"
+    export SEVERINO_BRIDGE_SOCKET SEVERINO_AUTOMATION_BRIDGE_SOCKET
     # shellcheck source=tools/lib/runner-environment.sh
     . ./tools/lib/runner-environment.sh
     "$python" -m tools.dev.scratch_automation watch "$$" "$root/$runner_venv/bin/python" &

@@ -156,8 +156,9 @@ its commit can be adopted, and a run is claimed, run by ansible-playbook and
 reported with each task's outcome, on the machine page and in Jobs. Without
 `--runner`, a scratch server's Refresh or run stays queued.
 
-The server serves the bridge as the image does (`SEVERINO_BRIDGE_SOCKET`), on
-a socket in a private directory under `$TMPDIR`, one per database, since the
+The server serves the bridge as the image does (`SEVERINO_BRIDGE_SOCKET`,
+and the worker's `SEVERINO_AUTOMATION_BRIDGE_SOCKET` beside it, which the worker
+is given), on a socket in a private directory under `$TMPDIR`, one per database, since the
 database's directory can be too long a path for one. `tools/dev/scratch_automation.py` stands
 where the host's automation units stand: on each automation doorbell, or 15
 minutes after the last worker ended, it writes a connections document for

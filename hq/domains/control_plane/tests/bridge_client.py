@@ -71,7 +71,15 @@ def request(
     return Answer(start["status"], media_type, content)
 
 
-def call(action: str, payload: Any = None, **query: Any) -> Any:
+def worker() -> Any:
+    """The automation worker's socket, for a test that calls as the worker does."""
+
+    from hq.domains.control_plane.bridge_application import worker_application
+
+    return worker_application
+
+
+def call(action: str, payload: Any = None, *, app: Any = application, **query: Any) -> Any:
     """Run one action and return its answer, failing on a refusal or an answer
     off the contract the Go controller's client is generated from.
 
@@ -82,6 +90,7 @@ def call(action: str, payload: Any = None, **query: Any) -> Any:
         f"/{action}",
         query={name.replace("_", "-"): value for name, value in query.items()},
         body=json.dumps(payload).encode() if payload is not None else b"",
+        app=app,
     )
     if answer.status != 200:
         raise AssertionError(f"bridge {action} answered {answer.status}: {answer.body.decode()}")

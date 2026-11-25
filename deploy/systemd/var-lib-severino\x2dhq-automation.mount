@@ -1,0 +1,14 @@
+[Unit]
+Description=Severino HQ automation journal
+Documentation=https://github.com/joeseverino/severino-hq/blob/main/docs/Architecture.md#the-automation-worker-on-the-host
+After=systemd-tmpfiles-setup.service
+
+[Mount]
+# The journal directory over itself, so a mount of it is noexec: Docker's bind
+# mount takes no such option, and a bind copies its source's flags. The worker
+# writes here and runs nothing from here. mount(8) applies the flags to a
+# bind by remounting it (util-linux 2.27 and later).
+What=/var/lib/severino-hq/automation
+Where=/var/lib/severino-hq/automation
+Type=none
+Options=bind,noexec,nosuid,nodev

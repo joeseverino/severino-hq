@@ -66,6 +66,7 @@ func (w Web) Args() []string {
 		"--env", "TMPDIR=/data/tmp",
 		"--env", "SEVERINO_CONTROLLER_DOORBELL=" + hostcore.RunDir + "/controller-doorbell",
 		"--env", "SEVERINO_BRIDGE_SOCKET=" + BridgeSocket,
+		"--env", "SEVERINO_AUTOMATION_BRIDGE_SOCKET=" + AutomationBridgeSocket,
 		"--env", "SEVERINO_SCHEMA_SNAPSHOT=/data/" + SchemaSnapshot,
 	}
 	for _, volume := range Volumes {

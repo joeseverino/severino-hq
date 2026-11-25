@@ -1,7 +1,8 @@
 """What the controller may ask of HQ, one function per bridge action.
 
 Every action is declared once, in ``ACTIONS``: its name and the function that
-runs it. The contract (``bridge_contract``) states each action's parameters
+runs it. ``WORKER_ACTIONS`` are the three HQ's playbook worker's own socket
+serves, held to its lane as the controller's are to theirs. The contract (``bridge_contract``) states each action's parameters
 and whether it carries a payload; the bridge application parses a request
 against that and calls the function with the result, so an action never reads
 a request itself.
@@ -11,7 +12,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, final
 
-from hq.domains.control_plane.models import ManagedResource
+from django.core.exceptions import ValidationError
+
+from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.analytics import analytics_plan, record_analytics
 from hq.platform.application.cadence import note_automation, note_controller, sweep_due
@@ -40,8 +43,8 @@ Run = Callable[[Parameters, Any], Any]
 
 # Who a controller's report is recorded under, in the audit trail.
 CONTROLLER = "controller"
-# The records whose work only HQ's playbook worker claims: a playbook's runs
-# and the source's scans.
+# The records whose work only HQ's playbook worker claims, renews and reports,
+# and only on its own socket: a playbook's runs and the source's scans.
 AUTOMATION_KINDS = frozenset({OPERATION_KIND, SOURCE_KIND})
 
 
@@ -52,34 +55,70 @@ def _capabilities(parameters: Parameters) -> tuple[tuple[str, str], ...]:
     return tuple((kind, action) for kind, action in parsed)
 
 
-def _claim(parameters: Parameters, payload: Any) -> Any:
-    # Every applying pass claims, an idle one included, before any work that
-    # could end it early, and neither a preflight nor a glance pass does: so
-    # this is the controller arriving. A glance pass runs when a person asks,
-    # and counted, it would hide a controller that had stopped. A claim of
-    # nothing but scans and runs is HQ's playbook worker arriving instead,
-    # which would hide a stopped controller just the same.
-    del payload
-    capabilities = _capabilities(parameters)
-    if capabilities and all(kind in AUTOMATION_KINDS for kind, _action in capabilities):
-        note_automation()
-    else:
-        note_controller()
-    return claim_next_operation(
-        parameters["controller-id"],
-        lease_seconds=parameters["lease-seconds"],
-        capabilities=capabilities,
-        attempt=parameters["attempt"] or "",
-    )
+@dataclass(frozen=True, slots=True)
+class Lane:
+    """Whose queued work a bridge socket's caller claims, renews and reports:
+    the automation kinds' on the worker's socket, every other kind's on the
+    controller's. The socket a call arrives on decides it, never the call."""
+
+    automation: bool
+
+    def holds(self, kind: str) -> bool:
+        return (kind in AUTOMATION_KINDS) == self.automation
+
+    def operation(self, operation_id: str) -> str:
+        """``operation_id``, refused as not found unless its record's kind is this lane's."""
+
+        try:
+            kind = OperationRequest.objects.filter(pk=operation_id).values_list("resource__kind", flat=True).first()
+        except ValueError, ValidationError:
+            kind = None
+        if kind is None or not self.holds(kind):
+            raise ValueError(f"Operation {operation_id!r} was not found.")
+        return operation_id
 
 
-def _renew(parameters: Parameters, payload: Any) -> Any:
-    del payload
-    return renew_operation(
-        parameters["operation"],
-        controller_id=parameters["controller-id"],
-        lease_seconds=parameters["lease-seconds"],
-    )
+CONTROLLER_LANE = Lane(automation=False)
+WORKER_LANE = Lane(automation=True)
+
+
+def _claim(lane: Lane) -> Run:
+    def run(parameters: Parameters, payload: Any) -> Any:
+        # Every applying pass claims, an idle one included, before any work
+        # that could end it early, and neither a preflight nor a glance pass
+        # does: so a claim on the controller's socket is the controller
+        # arriving. A glance pass runs when a person asks, and counted, it
+        # would hide a controller that had stopped. One on the worker's socket
+        # is HQ's playbook worker arriving instead.
+        del payload
+        capabilities = _capabilities(parameters)
+        refused = next((kind for kind, _action in capabilities if not lane.holds(kind)), None)
+        if refused is not None:
+            raise ValueError(f"This socket claims no {refused} work.")
+        if lane.automation:
+            note_automation()
+        else:
+            note_controller()
+        return claim_next_operation(
+            parameters["controller-id"],
+            lease_seconds=parameters["lease-seconds"],
+            capabilities=capabilities,
+            attempt=parameters["attempt"] or "",
+        )
+
+    return run
+
+
+def _renew(lane: Lane) -> Run:
+    def run(parameters: Parameters, payload: Any) -> Any:
+        del payload
+        return renew_operation(
+            lane.operation(parameters["operation"]),
+            controller_id=parameters["controller-id"],
+            lease_seconds=parameters["lease-seconds"],
+        )
+
+    return run
 
 
 def _peek(parameters: Parameters, payload: Any) -> Any:
@@ -179,11 +218,16 @@ def _schedule(parameters: Parameters, payload: Any) -> Any:
     return schedule_automatic_operations(parameters["controller-id"])
 
 
-def _report(parameters: Parameters, payload: Any) -> Any:
-    # Held to the contract's ``ControllerReport`` before it arrives here.
-    return report_operation(
-        parameters["operation"], ControllerReport(**payload), controller_id=parameters["controller-id"]
-    )
+def _report(lane: Lane) -> Run:
+    def run(parameters: Parameters, payload: Any) -> Any:
+        # Held to the contract's ``ControllerReport`` before it arrives here.
+        return report_operation(
+            lane.operation(parameters["operation"]),
+            ControllerReport(**payload),
+            controller_id=parameters["controller-id"],
+        )
+
+    return run
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,8 +240,19 @@ class Action:
     run: Run
 
 
+def _queue(lane: Lane) -> tuple[Action, ...]:
+    """The three actions that lease queued work and end it, held to ``lane``."""
+
+    return (
+        Action("claim", "The controller took the next queued work", _claim(lane)),
+        Action("renew", "A worker said it is still on queued work", _renew(lane)),
+        Action("report", "The controller said how queued work ended", _report(lane)),
+    )
+
+
+# The controller's socket: the whole contract.
 ACTIONS: tuple[Action, ...] = (
-    Action("claim", "The controller took the next queued work", _claim),
+    *_queue(CONTROLLER_LANE),
     Action("peek", "The controller looked for queued work", _peek),
     Action("export", "The controller read what a record declares", _export),
     Action("schedule", "The controller queued the automatic work", _schedule),
@@ -210,8 +265,8 @@ ACTIONS: tuple[Action, ...] = (
     Action("sweep-due", "The controller asked which readings are due", _sweep_due),
     Action("glance-plan", "The controller asked which panels to refresh", _glance_plan),
     Action("glance", "The controller refreshed the dashboard", _glance),
-    Action("renew", "A worker said it is still on queued work", _renew),
-    Action("report", "The controller said how queued work ended", _report),
     Action("registry", "The controller read what each provider declares", _registry),
     Action("job", "The controller ran scheduled work", _job),
 )
+# HQ's playbook worker's socket: its claim, renewal and report, and nothing else.
+WORKER_ACTIONS: tuple[Action, ...] = _queue(WORKER_LANE)

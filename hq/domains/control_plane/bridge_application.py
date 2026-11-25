@@ -21,7 +21,7 @@ from starlette.responses import Response
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, Action
+from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, WORKER_ACTIONS, Action
 from hq.domains.control_plane.bridge_contract import (
     Operation,
     Parameter,
@@ -245,21 +245,24 @@ async def _http_error(request: Request, exc: Exception) -> Response:
 
 def _routes(actions: tuple[Action, ...]) -> list[Route]:
     declared = operations()
-    by_name = {action.name: action for action in actions}
-    if len(by_name) != len(actions) or set(by_name) != set(declared):
-        raise RuntimeError(
-            "Bridge actions and the contract's paths differ: " + ", ".join(sorted(set(by_name) ^ set(declared)))
-        )
-    return [Route(f"/{name}", endpoint(by_name[name], declared[name]), methods=["POST"]) for name in sorted(declared)]
+    names = [action.name for action in actions]
+    by_name = dict(zip(names, actions, strict=True))
+    wrong = {name for name in names if name not in declared or names.count(name) > 1}
+    if wrong:
+        raise RuntimeError("Bridge actions and the contract's paths differ: " + ", ".join(sorted(wrong)))
+    return [Route(f"/{name}", endpoint(by_name[name], declared[name]), methods=["POST"]) for name in sorted(by_name)]
 
 
-def bridge(actions: tuple[Action, ...] = ACTIONS) -> UnixSocketOnly:
-    """The bridge application serving ``actions``, which name exactly the contract's paths.
+def bridge(actions: tuple[Action, ...]) -> UnixSocketOnly:
+    """The bridge application serving ``actions``, each a path the contract declares, once.
 
-    Served with ``ACTIONS``; a test hands actions that record they ran.
+    Served with ``ACTIONS`` and ``WORKER_ACTIONS``; a test hands actions that record they ran.
     """
 
     return UnixSocketOnly(Starlette(routes=_routes(actions), exception_handlers={HTTPException: _http_error}))
 
 
-application = bridge()
+# The controller's socket, and HQ's playbook worker's: each a socket of its own,
+# so the worker, which runs as the same account, reaches only its lane.
+application = bridge(ACTIONS)
+worker_application = bridge(WORKER_ACTIONS)

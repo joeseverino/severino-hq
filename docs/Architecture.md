@@ -1184,7 +1184,16 @@ each fails if a call comes to cost a process again.
   own, served by a second listener in the web process
   (`hq/platform/core/unix_server.py`). It is not a route of the web
   application, it refuses a request that arrived on a network listener, and it
-  serves no web route.
+  serves no web route. The automation worker's bridge is the same application
+  built with three actions, served on a third listener
+  (`SEVERINO_AUTOMATION_BRIDGE_SOCKET`, [The automation worker on the
+  host](#the-automation-worker-on-the-host)).
+- **Each socket its own lane.** The worker's socket serves claim, renew and
+  report alone, of the automation kinds alone (`AUTOMATION_KINDS`); the
+  controller's refuses those kinds' claim, renewal and report. The socket a
+  call arrives on decides its lane (`bridge_actions.Lane`), never what the call
+  says, and work of another lane is answered as not found. The two run as one
+  account and may name one host, so the socket is all that tells them apart.
 - **The socket is the authorization.** It sits in a directory only the web
   account can enter (a volume mounted read-only into the controller's
   container), owned by that account with mode 0600. Each side asks the kernel
@@ -1954,11 +1963,22 @@ What it is given, and what that means:
 - **Custody.** It holds the runner-role connections and their identities alone,
   the pinned host keys and the grant's token. They are copied under the
   renderer's lock into a directory of its own on the renderer's tmpfs and lent
-  read-only. Its journal directory is the one host path it writes. No
-  controller or glance pass holds a runner connection or its key
-  (`lendConnections`), and the controller never dials one (`SSHRefs`). It is
-  given no other credential, no web volume, no seal key, certificate state,
-  unit socket or docker socket.
+  read-only. The grant may only read: `host.json` is refused when the
+  automation entry names one with any permission above `read`. Its journal
+  directory is the one host path it writes, and runs nothing: Docker's bind
+  mount takes no `noexec`, so the directory is a `noexec` mount of its own
+  (`var-lib-severino\x2dhq-automation.mount`, which the unit requires), whose
+  flags a bind copies, and `hq-host automation` refuses to start the worker
+  when the mount table does not hold it so. No controller or glance pass
+  holds a runner connection or its key (`lendConnections`), and the controller
+  never dials one (`SSHRefs`). It is given no other credential, no web volume,
+  no seal key, certificate state, unit socket or docker socket.
+- **Bridge.** It is lent its own socket's volume
+  (`AutomationBridgeSocket`, `/run/hq-automation-bridge`), never the
+  controller's. That socket serves the claim, renewal and report of a
+  playbook's runs and the source's scans and nothing else, and the
+  controller's socket refuses those, so each lane's work is ended only by the
+  process that holds it.
 - **Reach.** The table lets its network reach each lent connection's address
   and port, and public IPv4 addresses (GitHub, the public resolvers). It drops
   everything else: the LAN, the tailnet, the host's other services, other
@@ -1966,8 +1986,11 @@ What it is given, and what that means:
   an IPv4 address cannot be named by the table, so it is not lent.
 - **A compromised worker** reaches the runner login on each machine lent to it,
   with the rights that machine gives the login. It gets an hour's read of the
-  playbooks' repository, and the whole bridge as the web account, as the
-  controller does, since the socket authorizes by account.
+  playbooks' repository. Over its socket it can claim, renew and report only
+  runs and scans: it misstates the outcome of the runs it claims and what
+  their playbooks stated of the machines they ran on, and no more. It cannot
+  send a reading, settle a merge or report any other record's work, all of
+  which only the controller's socket takes.
 - **A reviewed playbook's local tasks** run as the worker's account, and can
   read the token file and the identity files, as any Ansible controller's
   can.
