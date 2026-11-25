@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/joeseverino/severino-hq/controller/host"
 )
@@ -95,5 +97,39 @@ func TestADeployExitsWithItsOutcomesStatus(t *testing.T) {
 	}
 	if got := exitStatus(errors.New("the new image did not become healthy")); got != 1 {
 		t.Errorf("a release that did not go live exited %d, want 1", got)
+	}
+}
+
+// A run that fails tells systemd why, which the unit's reading carries until
+// the unit next starts.
+func TestAFailedRunTellsSystemdWhy(t *testing.T) {
+	// A socket's path has a short limit (104 bytes on macOS), which a test's
+	// own temporary directory can pass.
+	dir, err := os.MkdirTemp("/tmp", "hq-notify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path := filepath.Join(dir, "notify")
+	listener, err := net.ListenUnixgram("unixgram", &net.UnixAddr{Name: path, Net: "unixgram"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	getenv := func(name string) string { return map[string]string{"NOTIFY_SOCKET": path}[name] }
+	if code := run(context.Background(), []string{"release"}, getenv, 0, strings.NewReader(""), io.Discard, io.Discard); code == 0 {
+		t.Fatal("a release without an image succeeded")
+	}
+	// The datagram is queued before run returns; the deadline only keeps a run that sent none from hanging.
+	if err := listener.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	buffer := make([]byte, 512)
+	n, _, err := listener.ReadFromUnix(buffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if said := string(buffer[:n]); said != "STATUS="+usage {
+		t.Errorf("told systemd %q", said)
 	}
 }

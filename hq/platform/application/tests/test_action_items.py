@@ -54,7 +54,14 @@ OTHER = {**ITEM, "key": "example:gadget", "label": "A gadget is stale", "count":
 class IdentityTests(TestCase):
     def finding(self, **fields):
         return Finding(
-            **{"rule": "rule", "subject": "a", "severity": "attention", "title": "t", "explanation": "", **fields}
+            **{
+                "rule": "rule",
+                "subject": "a",
+                "severity": "attention",
+                "title": "t",
+                "explanation": "Example.",
+                **fields,
+            }
         )
 
     def test_an_item_is_what_it_is_about_not_what_it_says(self):

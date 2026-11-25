@@ -442,5 +442,5 @@ class ServiceFaultRowTests(SimpleTestCase):
             [row["label"] for row in rows], ["www.example.com: No certificate covers it, and 1 more problem"]
         )
         # Each fault said once: the first in the title, the others in the facts.
-        self.assertEqual(rows[0]["detail"], "")
+        self.assertFalse(any(fault.rstrip(".") in rows[0]["detail"] for fault in faults))
         self.assertEqual([(fact["label"], fact["value"]) for fact in rows[0]["facts"]], [("Also", faults[1])])

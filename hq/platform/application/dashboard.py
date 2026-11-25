@@ -26,6 +26,7 @@ from .domains import (
     provided,
     reader_variant,
 )
+from .finding_fold import said_beneath
 from .finding_model import PLAYBOOK_INVESTIGATION, Finding, FindingEvidence, written_fact
 from .finding_steps import WrittenStep
 from .findings import finding_key, rule_for
@@ -162,6 +163,12 @@ class QueueItem(TypedDict):
     facts: list[FindingEvidence]
     links: list[WrittenAction]
     read_capabilities: list[str]
+    # The rows of what follows from it (``Finding.consequences``), so a reader
+    # who may not read it is told those it may (``attention.readable_by``).
+    consequences: list[QueueItem]
+    # The lines its cause's row says of it (``said_beneath``); empty unless
+    # it follows from one.
+    beneath: list[FindingEvidence]
 
 
 def finding_rows(source_id: str, source: str, findings: Iterable[Finding]) -> tuple[QueueItem, ...]:
@@ -186,6 +193,8 @@ def gathered_rows(entries: Iterable[Mapping[str, Any]]) -> list[QueueItem]:
 def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str) -> QueueItem:
     rule = rule_for(finding.rule)
     primary = finding.primary
+    # What it leads with: the page it opens, else the first command HQ runs for it.
+    lead = primary or next(iter(finding.presses), None)
     pages = finding.pages
     return {
         "key": item_key(source_id, finding_key(finding)),
@@ -196,7 +205,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "detail": finding.explanation,
         "count": finding.count or 1,
         "status": finding.severity,
-        "action": primary.label if primary else "",
+        "action": lead.label if lead else "",
         # A finding of a page's own (an unmet check, a step a request contradicts) has no rule the findings page lists.
         "url": primary.url if primary else with_query(findings_url, {"rule": finding.rule}) if rule else "",
         "steps": [as_written(step) for step in finding.steps],
@@ -217,6 +226,14 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "facts": [written_fact(*fact) for fact in finding.evidence],
         "links": [as_written(link) for link in pages if link.name != PLAYBOOK_INVESTIGATION],
         "read_capabilities": list(finding.read_capabilities),
+        "consequences": [
+            {
+                **_queue_item(source_id, source, each, findings_url),
+                "beneath": [written_fact(*fact) for fact in said_beneath(each)],
+            }
+            for each in finding.consequences
+        ],
+        "beneath": [],
     }
 
 

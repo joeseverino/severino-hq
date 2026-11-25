@@ -182,7 +182,7 @@ class IdTests(SimpleTestCase):
                 subject="machine:example-box",
                 title=part,
                 severity="attention",
-                explanation="",
+                explanation="Example.",
                 part=part,
             )
 

@@ -20,6 +20,7 @@ from .display_words import Code, as_members, in_words
 from .entity_links import EntityLink, link_url
 from .finding_steps import Do, Press, Run, Step
 from .moments import moment
+from .non_empty import RequiredText
 from .tone import Tone
 from .topology_model import Topology, TopologyNode
 from .ui import ended
@@ -89,6 +90,15 @@ class FindingEvidence(TypedDict):
     code: Annotated[bool, Describe("Whether the value is what a machine wrote (a digest, a path), to read exactly.")]
 
 
+def matter_key(rule: str, about: str, part: str = "") -> str:
+    """What a finding is about, as its item in the queue is keyed: its rule,
+    its subject (else its scope), and the one thing on that subject it names."""
+
+    key = f"finding:{rule}:{about}"
+    # Two containers on one machine are two matters, each keyed by its own.
+    return f"{key}:{part}" if part else key
+
+
 def written_fact(label: str, value: str | EntityLink) -> FindingEvidence:
     """A line of evidence as every door answers it, a record with its page."""
 
@@ -105,7 +115,9 @@ class Finding:
     subject: str
     title: str
     severity: Tone
-    explanation: str
+    # Why it matters, in plain words: every finding says its reason, so none
+    # reaches a person as a title alone.
+    explanation: RequiredText
     evidence: tuple[Fact, ...] = ()
     # The commands that would fix it, as its detector names them. Derivation
     # resolves each once, into a ``Press`` among its steps for a reader who may
@@ -189,9 +201,17 @@ class Finding:
     # its page: its row says it and asks again until that work ends, so it
     # says where it stands without a refresh.
     under_way: Standing | None = field(default=None, kw_only=True)
+    # The findings it follows from, each by its key (``matter_key``), as the
+    # rule that knows the dependency declares them: while one stands, this
+    # stands beneath it (``finding_fold``).
+    follows: tuple[str, ...] = field(default=(), kw_only=True)
+    # What follows from it, set by derivation alone: each said beneath it, never alone.
+    consequences: tuple[Finding, ...] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         as_members(self)
+        if not self.explanation.strip():
+            raise ValueError(f"A finding of {self.rule!r} must say why it matters (explanation): {self.title!r}.")
         # A card says it as written, so what it says is words, and each
         # reading's label is drawn once with its values beside it.
         for text in (self.title, self.explanation):
@@ -369,7 +389,7 @@ class Said(TypedDict):
     """What a connection-fact finding says of one connection; the rest is its rule's."""
 
     title: str
-    explanation: str
+    explanation: RequiredText
     remedies: NotRequired[tuple[FindingRemedy, ...]]
     steps: NotRequired[tuple[Run | Do, ...]]
 

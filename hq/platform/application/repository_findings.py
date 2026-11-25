@@ -106,7 +106,10 @@ def _waiting(repo: Repository) -> Iterator[Said]:
 def _failing(repo: Repository) -> Iterator[Said]:
     if not repo.failing:
         return
-    failing = repo.record["checks"].get("failing") or []
+    checks = repo.record["checks"]
+    # Each job by the step it failed at, where the reading names one.
+    steps = checks.get("steps") or {}
+    failing = [f"{job} (at {steps[job]})" if steps.get(job) else job for job in checks.get("failing") or []]
     runs = repo.failing_runs
     one = runs[0] if len(runs) == 1 else None
     sha = repo.head.get("sha", "")
@@ -115,7 +118,7 @@ def _failing(repo: Repository) -> Iterator[Said]:
         FAILING,
         title=f"{repo.short} is failing on {repo.default_branch}",
         severity=Tone.SERIOUS,
-        explanation=_named("Failing job", "Failing jobs", failing),
+        explanation=_named("Failing job", "Failing jobs", failing) or "A check failed.",
         evidence=(("Failing", str(len(failing) or 1)),),
         primary=opens("Open run", one.url) if one else opens("Open checks", f"{repo.url}/commit/{sha}"),
         offers=() if one else runs,

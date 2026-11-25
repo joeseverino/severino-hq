@@ -170,6 +170,20 @@ def _unattended(owner) -> None:
     example_estate.automation.unattended()
 
 
+def _worker_image_missing(owner) -> None:
+    """The example estate once a release stopped short on HQ's machine: the
+    playbook worker's image is not there, so its unit failed and it stopped
+    reporting, and the journal's mount never started."""
+
+    _estate(owner)
+    _short_release()
+
+
+def _short_release() -> None:
+    example_estate.automation.unattended()
+    example_estate.work.worker_image_missing()
+
+
 def _glance_aged(owner) -> None:
     """The example estate as the dashboard finds it after nobody looked for a
     while: the machine's reading due again, nothing asked yet."""
@@ -273,6 +287,9 @@ SEEDS: dict[str, Seed] = {
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.
     "playbooks-stopped": Seed(lambda _owner: example_estate.automation.unattended()),
+    "worker-image-missing": Seed(_worker_image_missing, _SET_UP),
+    # The same on a fresh install, so the dashboard's Needs you card holds what it raises.
+    "worker-image-missing-alone": Seed(lambda _owner: _short_release()),
     "policy-change": Seed(_policy_change, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),

@@ -4882,7 +4882,7 @@
         "additionalProperties": false,
         "properties": {
           "action": {
-            "description": "The button that opens it, such as `Open containers`; empty for none.",
+            "description": "What it leads with: the button that opens it, such as `Open containers`, else the first command HQ runs for it; empty for neither.",
             "type": "string"
           },
           "detail": {
@@ -15552,6 +15552,7 @@
           },
           "explanation": {
             "description": "Why it matters and what it rests on, in sentences.",
+            "minLength": 1,
             "type": "string"
           },
           "id": {

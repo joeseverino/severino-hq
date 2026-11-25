@@ -2176,7 +2176,7 @@ type HostTailnetLockTailnetLockSigner struct {
 	Votes    int               `json:"votes,omitempty"`
 }
 
-// HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships and of each other service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.
+// HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships and of each other service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC, the unit file's own title for a person to read, or what HQ's own program said of a shipped unit as it failed; none is a command line or an environment, and only that last may name a path.
 type HostUnitRecord struct {
 	// Activates Unit: the unit a timer or path starts.
 	Activates string `json:"activates,omitempty"`
@@ -2220,6 +2220,9 @@ type HostUnitRecord struct {
 	// ReadAt When the launcher asked systemd.
 	ReadAt string `json:"read_at"`
 
+	// Requires Requires, and the mount unit of each path in RequiresMountsFor: the units this one cannot start without.
+	Requires []string `json:"requires,omitempty"`
+
 	// Restarts NRestarts: how often systemd restarted the service on its own since it was last started deliberately or reset.
 	Restarts int `json:"restarts,omitempty"`
 
@@ -2228,6 +2231,9 @@ type HostUnitRecord struct {
 
 	// StartedAt InactiveExitTimestamp: when the last start began, on this boot.
 	StartedAt string `json:"started_at,omitempty"`
+
+	// Status StatusText: what a unit the repository ships last told systemd of itself, such as why its run failed. systemd keeps it until the unit next starts.
+	Status string `json:"status,omitempty"`
 
 	// Sub SubState: the unit type's own word for the same state, such as waiting or elapsed for a timer.
 	Sub string `json:"sub"`

@@ -584,7 +584,7 @@ class AttentionContractTests(TestCase):
                         subject="A watch",
                         severity="attention",
                         title="A watch",
-                        explanation="",
+                        explanation="Example.",
                         steps=(Do("Look into it."),),
                     )
                 ],
@@ -594,7 +594,7 @@ class AttentionContractTests(TestCase):
                         subject="B urgent",
                         severity="serious",
                         title="B urgent",
-                        explanation="",
+                        explanation="Example.",
                         steps=(Do("Look into it."),),
                     )
                 ],
@@ -611,14 +611,16 @@ class AttentionContractTests(TestCase):
             (manifest,),
             {
                 "example.demo": [
-                    Finding(rule="example", subject="Fine", severity="good", title="Fine", explanation=""),
-                    Finding(rule="example", subject="Context", severity="neutral", title="Context", explanation=""),
+                    Finding(rule="example", subject="Fine", severity="good", title="Fine", explanation="Example."),
+                    Finding(
+                        rule="example", subject="Context", severity="neutral", title="Context", explanation="Example."
+                    ),
                     Finding(
                         rule="example",
                         subject="Broken",
                         severity="serious",
                         title="Broken",
-                        explanation="",
+                        explanation="Example.",
                         steps=(Do("Look into it."),),
                     ),
                 ]
@@ -638,7 +640,7 @@ class AttentionContractTests(TestCase):
                         subject="T",
                         severity="serious",
                         title="T",
-                        explanation="",
+                        explanation="Example.",
                         steps=(Do("Look into it."),),
                     )
                 ]
@@ -783,7 +785,7 @@ class AttentionOrderTests(SimpleTestCase):
             subject=title,
             severity=status,
             title=title,
-            explanation="",
+            explanation="Example.",
             since=since,
             notice=notice,
             steps=tuple(Press(action) for action in actions) or (Do("Fix it."),),

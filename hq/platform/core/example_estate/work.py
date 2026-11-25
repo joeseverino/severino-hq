@@ -96,6 +96,9 @@ TITLES = {
     "severino-hq-secrets.timer": "Periodically refresh Severino HQ secrets from 1Password",
     "severino-hq-unit.socket": "Severino HQ's requests to stop, start or restart a container's unit",
     "severino-hq-web.service": "Severino HQ",
+    "severino-hq-automation.service": "Severino HQ automation worker",
+    "severino-hq-automation.timer": "Run the Severino HQ automation worker",
+    "var-lib-severino\\x2dhq-automation.mount": "Severino HQ automation journal",
 }
 
 
@@ -488,9 +491,9 @@ def _ran(declared, ago, work):
     )
 
 
-def units():
+def units(*more: dict):
     """systemd's word on each unit HQ ships and on a service it keeps
-    restarting, and the last credentials render."""
+    restarting, then on ``more``, and the last credentials render."""
 
     found = [
         {
@@ -552,6 +555,7 @@ def units():
         }
         for service, last in started.items()
     )
+    found.extend(more)
     # A service HQ does not ship that systemd has kept restarting for days,
     # read beside HQ's own units because it restarts.
     looping = {
@@ -592,6 +596,52 @@ def units():
             },
         },
     )
+
+
+def worker_image_missing() -> None:
+    """HQ's machine as a release that stopped short leaves it: the playbook
+    worker's image never pulled, so its unit failed, and the journal's mount
+    never started."""
+
+    automation = (
+        {
+            "unit": "severino-hq-automation.timer",
+            "load": "loaded",
+            "file_state": "enabled",
+            "active": "active",
+            "sub": "waiting",
+            "activates": "severino-hq-automation.service",
+            "last_trigger_at": stamp(timedelta(minutes=4)),
+            "next_elapse_at": stamp(-timedelta(minutes=11)),
+            "read_at": stamp(),
+        },
+        {
+            "unit": "severino-hq-automation.service",
+            "load": "loaded",
+            "file_state": "static",
+            "active": "failed",
+            "sub": "failed",
+            "result": "exit-code",
+            "main_code": 1,
+            "main_status": 1,
+            "started_at": stamp(timedelta(minutes=4)),
+            "ended_at": stamp(timedelta(minutes=4) - timedelta(seconds=2)),
+            "requires": ["sysinit.target", "var-lib-severino\\x2dhq-automation.mount"],
+            "status": "the automation worker's image ghcr.io/example/hq-runner@sha256:"
+            + "0" * 64
+            + " is not on this host: `hq-host deploy` verifies and pulls it",
+            "read_at": stamp(),
+        },
+        {
+            "unit": "var-lib-severino\\x2dhq-automation.mount",
+            "load": "loaded",
+            "file_state": "static",
+            "active": "inactive",
+            "sub": "dead",
+            "read_at": stamp(),
+        },
+    )
+    units(*automation)
 
 
 # How the app update's approval ends in each seed that draws one: its preview

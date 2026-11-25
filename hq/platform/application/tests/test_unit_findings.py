@@ -63,35 +63,32 @@ def sweep(*records, **fields) -> None:
 class RecordTests(SimpleTestCase):
     def test_the_reading_holds_no_secret(self):
         """Every field is a unit name, a state word, a number, a flag or an
-        instant, but the unit file's title, which is words and never a path or
-        an assignment."""
+        instant, but the unit file's title and what HQ's own program last told
+        systemd, which are words, never an assignment, and only the second may
+        name a path."""
 
         declared = contract()["components"]["schemas"]["HostUnitRecord"]
         self.assertFalse(declared["additionalProperties"])
+        patterns = {
+            name: schema.get("pattern") or schema.get("items", {}).get("pattern")
+            for name, schema in declared["properties"].items()
+        }
         for name, schema in declared["properties"].items():
             with self.subTest(field=name):
-                self.assertTrue(schema["type"] in ("integer", "boolean") or schema.get("pattern"), "free text")
+                self.assertTrue(schema["type"] in ("integer", "boolean") or patterns[name], "free text")
                 self.assertNotRegex(name, r"exec|environment|credential|path|command")
-        # Description is the one field of words; a second waits on a decision.
-        words = {"title"}
-        self.assertEqual(
-            {
-                name
-                for name, schema in declared["properties"].items()
-                if re.search(schema.get("pattern", "^$"), "two words")
-            },
-            words,
-        )
-        for refused, anywhere in (
-            ("EXAMPLE_TOKEN=sentinel-value", True),
-            ("/run/example/token", True),
-            ("a title\nover two lines", True),
-            ("two words", False),
-            ("Sentinel0123456789abcdef0123456789abcdef", False),
+        words = {"title", "status"}
+        self.assertEqual({name for name, pattern in patterns.items() if re.search(pattern or "^$", "two words")}, words)
+        for refused, allowed in (
+            ("EXAMPLE_TOKEN=sentinel-value", ()),
+            ("/run/example/token", {"status"}),
+            ("a title\nover two lines", ()),
+            ("two words", words),
+            ("Sentinel0123456789abcdef0123456789abcdef", words),
         ):
-            for name, schema in declared["properties"].items():
-                if "pattern" in schema and (anywhere or name not in words):
-                    self.assertIsNone(re.search(schema["pattern"], refused), (name, refused))
+            for name, pattern in patterns.items():
+                if pattern and name not in allowed:
+                    self.assertIsNone(re.search(pattern, refused), (name, refused))
 
 
 @tag("source")

@@ -128,6 +128,17 @@ NONE = units()
 # Due an hour after it was read, and read a day ago: on time when systemd was asked.
 READ_A_DAY_AGO = units(service(read_at=ago(days=1)), timer(read_at=ago(days=1), next_elapse_at=ago(hours=23)))
 QUIET = (RUNNING, ACTIVE, NONE, READ_A_DAY_AGO)
+# A mount a deploy never started, and a job of HQ's that requires it failed.
+SHORT_DEPLOY = raising(
+    failed(requires=["run-example.mount"]),
+    socket("run-example.mount", activates="", active="inactive", sub="dead"),
+    raises=(
+        Raised(
+            title="run-example.mount is not set up on example-controller",
+            beneath=(f"{SERVICE} failed on example-controller",),
+        ),
+    ),
+)
 
 EXAMPLES = (
     Examples(
@@ -176,6 +187,18 @@ EXAMPLES = (
                 readings={KIND: (failed(SECRETS), failed()), RENDERED: (read(outcome="failed", failure="host"),)},
                 raises=(f"{SERVICE} failed on example-controller",),
             ),
+            # Where a deploy left a unit it requires not set up, it is that unit's item.
+            Example(readings=SHORT_DEPLOY.readings, raises=(f"{SERVICE} failed on example-controller",)),
+            # What HQ's own program told systemd as it failed is why.
+            raising(
+                failed(status="the example image is not on this host: `hq-host deploy` pulls it"),
+                raises=(
+                    Raised(
+                        title=f"{SERVICE} failed on example-controller",
+                        explanation="The example image is not on this host: `hq-host deploy` pulls it.",
+                    ),
+                ),
+            ),
             # One that failed before it could say so is its unit's to report.
             Example(
                 readings={KIND: (failed(SECRETS),), RENDERED: (read(),)},
@@ -210,6 +233,14 @@ EXAMPLES = (
                 socket("severino-hq-example.socket", active="inactive", sub="dead"),
                 socket("run-example.mount", activates="", active="inactive", sub="dead"),
                 raises=("2 background jobs are not set up on example-controller",),
+            ),
+            # A failed job of HQ's follows from a deploy that stopped short of it.
+            SHORT_DEPLOY,
+            # One that fails without requiring it is a matter of its own.
+            raising(
+                failed(),
+                socket("run-example.mount", activates="", active="inactive", sub="dead"),
+                raises=("run-example.mount is not set up on example-controller",),
             ),
             # A shipped service switched off is said even while it runs.
             raising(

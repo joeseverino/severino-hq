@@ -65,6 +65,7 @@ from .contracts import Effect, route_url
 from .derivations import derivation, present
 from .derived_inputs import FINDINGS_READS, estate_variant
 from .describe import Describe, listed
+from .finding_fold import Subsumed, beneath_causes, finding_key, finding_scopes
 from .finding_model import (
     CHECK_AGAIN,
     PLAYBOOK_INVESTIGATION,
@@ -82,6 +83,7 @@ from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenS
 from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import held_graph
+from .non_empty import RequiredText
 from .projection import MAX_PAGE_SIZE, QUERY, projection_scope, read_once
 from .security import Principal
 from .tone import Tone
@@ -435,7 +437,7 @@ def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...]
     about nothing that carries no gate leaves it underivable.
     """
 
-    scopes = _finding_scopes(finding)
+    scopes = finding_scopes(finding)
     declared = _RULE_BY_NAME.get(finding.rule)
     section, through = (declared.domain, declared.read_through) if declared is not None else ("", "")
     if (finding.subject and subject is None) or not (
@@ -527,65 +529,6 @@ def _verification(
     return verify, None
 
 
-def _finding_scopes(finding: Finding) -> tuple[str, ...]:
-    return ((finding.scope,) if finding.scope else ()) + finding.affected_scopes
-
-
-def _silenced_kinds(
-    raised: dict[str, tuple[Finding, ...]],
-) -> set[str]:
-    return {
-        scope
-        for declared in RULES
-        for finding in raised[declared.name]
-        if declared.subsumes
-        for scope in _finding_scopes(finding)
-    }
-
-
-def _silenced_scopes(
-    raised: dict[str, tuple[Finding, ...]],
-) -> dict[str, set[str]]:
-    silenced: dict[str, set[str]] = {}
-    for declared in RULES:
-        scopes = {scope for finding in raised[declared.name] for scope in _finding_scopes(finding)}
-        for name in declared.subsumes:
-            silenced.setdefault(name, set()).update(scopes)
-    return silenced
-
-
-def _subsumed_subjects(
-    raised: dict[str, tuple[Finding, ...]],
-) -> dict[str, set[str]]:
-    subjects: dict[str, set[str]] = {}
-    for declared in RULES:
-        found = {finding.subject for finding in raised[declared.name] if finding.subject}
-        for name in declared.subsumes:
-            subjects.setdefault(name, set()).update(found)
-    return subjects
-
-
-def _is_suppressed(
-    finding: Finding,
-    declared: FindingRule,
-    node: TopologyNode | None,
-    *,
-    exact_rule: bool,
-    kinds: set[str],
-    scopes: dict[str, set[str]],
-    subjects: dict[str, set[str]],
-) -> bool:
-    """Whether a higher-order claim already says this fact more usefully."""
-
-    if exact_rule:
-        return False
-    return (
-        finding.subject in subjects.get(declared.name, set())
-        or finding.scope in scopes.get(declared.name, set())
-        or (node is not None and node.kind_key in kinds)
-    )
-
-
 def derive_findings(
     topology: Topology, *, principal: Principal, rule: str = "", gathered: Gathered | None = None
 ) -> tuple[Finding, ...]:
@@ -605,10 +548,7 @@ def derive_findings(
 
     # A rule that fired takes its subsumed rules off the same subject, and off
     # the whole kind when it speaks for one.
-    silenced_kinds = _silenced_kinds(raised)
-    silenced_scopes_by_rule = _silenced_scopes(raised)
-    subsumed_by = _subsumed_subjects(raised)
-
+    subsumed = Subsumed(RULES, raised)
     by_id = {node.id: node for node in topology.nodes}
     findings = []
     for declared in RULES:
@@ -616,19 +556,11 @@ def derive_findings(
             continue
         for finding in raised[declared.name]:
             node = by_id.get(finding.subject)
-            if _is_suppressed(
-                finding,
-                declared,
-                node,
-                exact_rule=wanted is not None,
-                kinds=silenced_kinds,
-                scopes=silenced_scopes_by_rule,
-                subjects=subsumed_by,
-            ):
+            if wanted is None and subsumed.silences(finding, declared, node):
                 continue
             findings.append(_resolved(finding, principal, node))
 
-    return tuple(sorted(findings, key=lambda f: (f.severity.rank, f.rule, f.subject)))
+    return tuple(sorted(beneath_causes(findings), key=lambda f: (f.severity.rank, f.rule, f.subject)))
 
 
 def estate_findings(*, principal: Principal, rule: str = "") -> tuple[Any, ...]:
@@ -656,14 +588,6 @@ def _estate_findings(principal: Principal, rule: str) -> tuple[Any, ...]:
         replace(finding, since=None if finding.notice else finding.since or seen.get(finding_key(finding)))
         for finding in raised
     )
-
-
-def finding_key(finding: Finding) -> str:
-    """What a finding is about, as its item in the queue is keyed."""
-
-    about = f"finding:{finding.rule}:{finding.subject or finding.scope}"
-    # Two containers on one machine are two matters, each keyed by its own.
-    return f"{about}:{finding.part}" if finding.part else about
 
 
 def finding_id(finding: Finding) -> str:
@@ -701,7 +625,7 @@ class FindingFacts(TypedDict):
     affected_scopes: Annotated[list[str], Describe("Other record types or reading types it bears on.")]
     title: Annotated[str, Describe("The problem, in a line.")]
     severity: Annotated[str, Describe(f"How serious it is: {listed(Tone)}, most severe first.")]
-    explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
+    explanation: Annotated[RequiredText, Describe("Why it matters and what it rests on, in sentences.")]
     evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
     no_help_reason: WrittenReason
     since: Annotated[

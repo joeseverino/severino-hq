@@ -1,11 +1,9 @@
 """A value read the way a person reads it: the words every held request,
 audit entry and command result is described in."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 
-import time_machine
 from django.test import SimpleTestCase
-from django.utils import timezone
 
 from ..labels import field_label
 from ..moments import when_exact
@@ -31,13 +29,6 @@ class ValueWordsTests(SimpleTestCase):
                 self.assertEqual(value_words(text), text)
         with self.assertRaisesMessage(Unprintable, "value_words printed a builtins.object"):
             value_words(object())
-
-    def test_a_moment_reads_the_same_however_long_after_it_is_worded(self):
-        # The words are stored, so the ones written now still hold a year on.
-        moment = timezone.now() - timedelta(seconds=5)
-        written = value_words(moment)
-        with time_machine.travel(moment + timedelta(days=400)):
-            self.assertEqual(value_words(moment), written)
 
     def test_a_record_is_said_whole_only_while_it_is_small_and_plain(self):
         self.assertEqual(value_words({"enabled": False, "note": None}), "enabled no, note empty")

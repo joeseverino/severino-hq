@@ -58,6 +58,8 @@ class _Backlog:
     query: Mapping[str, str]
     count: Callable[[], int] | None = None
     named: Callable[[], tuple[EntityLink, ...]] | None = None
+    # Why the backlog matters, said where none of its records are named.
+    why: str = ""
     # Work in hand rather than a problem to fix.
     notice: bool = False
 
@@ -77,7 +79,7 @@ class _Backlog:
                 subject="",
                 title=counted(count, self.one, self.many),
                 severity=Tone.ATTENTION,
-                explanation=ended(names) if names else "",
+                explanation=ended(names) if names else self.why,
                 evidence=((self.counts, f"{count:,}"),),
                 primary=opens(self.opens_as, with_query(reverse(self.route), self.query)),
                 offers=tuple(opens(link.label, link.url) for link in first if link.url),
@@ -141,7 +143,7 @@ def _links_to_nothing(rule: str, model: type) -> FindingRule:
                 part=found.key,
                 title=found.title,
                 severity=Tone.ATTENTION,
-                explanation="",
+                explanation="What it links to is no longer in HQ.",
                 primary=opens("Open record", found.url),
             )
             for found in naming_nothing(model)
@@ -168,6 +170,7 @@ RULES: tuple[FindingRule, ...] = (
         _Backlog(
             one="draft is not published",
             many="drafts are not published",
+            why="Nobody can read a draft until it is published.",
             counts="Drafts",
             opens_as="Open drafts",
             route="content:list",
@@ -186,6 +189,7 @@ RULES: tuple[FindingRule, ...] = (
         _Backlog(
             one="published piece has no doc linked",
             many="published pieces have no doc linked",
+            why="A reader has nowhere to go from it for the detail.",
             counts="Published with no doc",
             opens_as="Link a doc",
             route="content:list",
@@ -210,6 +214,7 @@ RULES: tuple[FindingRule, ...] = (
         _Backlog(
             one="unread message from the contact form",
             many="unread messages from the contact form",
+            why="A message from the contact form has no reply yet.",
             counts="Unread",
             opens_as="Read messages",
             route="contacts:list",
@@ -227,6 +232,7 @@ RULES: tuple[FindingRule, ...] = (
         _Backlog(
             one="expense has no receipt",
             many="expenses have no receipt",
+            why="A deduction needs its receipt.",
             counts="With no receipt",
             opens_as="Attach receipts",
             route="expenses:list",
@@ -245,6 +251,7 @@ RULES: tuple[FindingRule, ...] = (
         _Backlog(
             one="receipt is not attached to an expense or asset",
             many="receipts are not attached to an expense or asset",
+            why="A receipt proves nothing until it is attached.",
             counts="Attached to nothing",
             opens_as="Attach receipts",
             route="receipts:list",

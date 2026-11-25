@@ -377,7 +377,10 @@
         "running": 1,
         "names": [
           "example"
-        ]
+        ],
+        "steps": {
+          "example": "example"
+        }
       },
       "failing_runs": [
         {
@@ -417,7 +420,10 @@
             "running": 1,
             "names": [
               "example"
-            ]
+            ],
+            "steps": {
+              "example": "example"
+            }
           },
           "files": [
             {
@@ -780,9 +786,13 @@
       "main_status": 1,
       "next_elapse_at": "2030-01-01T00:00:00Z",
       "read_at": "2030-01-01T00:00:00Z",
+      "requires": [
+        "example.mount"
+      ],
       "restarts": 1,
       "result": "example",
       "started_at": "2030-01-01T00:00:00Z",
+      "status": "example",
       "sub": "example",
       "title": "example",
       "unit": "example.service"

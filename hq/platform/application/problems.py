@@ -31,11 +31,19 @@ def _by_subject() -> dict[str, tuple[dict[str, Any], ...]]:
     """The host's open items by the page each is about, in the queue's order."""
 
     found: dict[str, list[dict[str, Any]]] = {}
-    for item in gathered_rows(_host_entries()):
-        if item["notice"] or not (item["subject"] or {}).get("url"):
+    entries = _host_entries()
+    for entry, item in zip(entries, gathered_rows(entries), strict=True):
+        if item["notice"]:
             continue
-        found.setdefault(item["subject"]["url"], []).append(item)
+        # An item stands on the page of each thing it is about, what follows from it included.
+        for url in dict.fromkeys(_subject_url(each) for each in (entry["finding"], *entry["finding"].consequences)):
+            if url:
+                found.setdefault(url, []).append(item)
     return {url: tuple(items) for url, items in found.items()}
+
+
+def _subject_url(finding: Any) -> str:
+    return finding.subject_link.url if finding.subject_link else ""
 
 
 def problems_about(url: str, principal: Principal) -> tuple[dict[str, Any], ...]:
@@ -103,7 +111,7 @@ class _Part:
         link = str(item["url"] or "")
         return (
             (item["subject"] or {}).get("url") in self.pages
-            or finding_key(finding) in self.keys
+            or any(finding_key(each) in self.keys for each in (finding, *finding.consequences))
             or any(link == root or link.startswith(f"{root}/") for root in self.roots)
         )
 
@@ -116,14 +124,12 @@ def problems_by_part(parts: Mapping[str, About], principal: Principal) -> tuple[
     # A held request is about no part of a page: it is decided on its own.
     kept = [entry for entry in _host_entries() if not entry["finding"].held]
     entries = list(zip(kept, gathered_rows(kept), strict=True))
-    told = {id(item) for item in readable_by(principal, [item for _, item in entries])}
     found = []
     for entry, item in entries:
-        if item["notice"] or id(item) not in told:
-            continue
-        name = next((test.name for test in tests if test.holds(entry, item)), None)
-        if name is not None:
-            found.append((name, item))
+        for told in readable_by(principal, [item]):
+            name = next((test.name for test in tests if test.holds(entry, told)), None)
+            if not told["notice"] and name is not None:
+                found.append((name, told))
     return tuple(found)
 
 
