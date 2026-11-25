@@ -49,6 +49,19 @@ units="${root}/etc/systemd/system"
 mkdir -p "${units}" "${root}/usr/lib/systemd"
 cp -R deploy/systemd/. "${units}/"
 cp -R /usr/lib/systemd/system "${root}/usr/lib/systemd/system"
+# A unit of this machine's that links outside the copy (dracut's point into
+# /usr/lib/dracut) would be a missing file to verify, which it prints as an
+# error that is no defect of ours, so the copy drops it. A link to /dev/null
+# masks a unit, and stays.
+find "${root}/usr/lib/systemd/system" -type l >"${root}/links"
+while IFS= read -r link; do
+    target="$(readlink "${link}")"
+    case "${target}" in
+        /dev/null) ;;
+        /*) [ -e "${root}${target}" ] || rm "${link}" ;;
+        *) [ -e "${link}" ] || rm "${link}" ;;
+    esac
+done <"${root}/links"
 find "${units}" -type f -exec sed -n 's/^Exec[A-Za-z]*=[-@:+!|]*\(\/[^ ]*\).*/\1/p' {} + >"${root}/programs"
 while IFS= read -r program; do
     mkdir -p "${root}${program%/*}"
