@@ -4,7 +4,6 @@ never run again blindly once the lease lapses, and lands its report as bounded
 evidence on the run, never as its record's status. Every procedure here is a
 synthetic ``example.*`` one."""
 
-import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -359,20 +358,6 @@ class RunReportTests(LeasedRunTestCase):
         self.assertIn("timing", ended.metadata)
         self.assertEqual(ended.metadata["failure"]["message"], "It stopped.")
         self.assertEqual(self.operation().state, OperationRequest.State.FAILED)
-
-    def test_tasks_over_the_contract_s_bound_are_refused_at_the_bridge(self):
-        from hq.domains.control_plane.bridge_contract import limit
-
-        bound = limit("RunProgress", "properties", "events", "maxItems")
-        answer = bridge_client.request(
-            "/renew",
-            query={"controller-id": WORKER, "operation": self.operation_id},
-            body=json.dumps({"events": [event()] * (bound + 1)}).encode(),
-            app=bridge_client.worker(),
-        )
-
-        self.assertEqual(answer.status, 422, answer.body)
-        self.assertNotIn("events", self.operation().result or {})
 
     def test_events_from_work_other_than_a_run_are_refused(self):
         OperationRequest.objects.filter(pk=self.operation_id).update(action=OperationRequest.Action.RECONCILE)

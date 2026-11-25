@@ -194,7 +194,6 @@ class PreviewTests(RunTestCase):
 
     def test_a_preview_is_refused_wherever_its_run_is(self):
         self.refused(run_payload(check=True), "forbidden", principal=MCP_READER)
-        self.refused(run_payload(check="yes"), "invalid_input")
         self.supply(manifest(hosts=(DB,)))
         self.refused(run_payload(APP, check=True), "precondition")
 

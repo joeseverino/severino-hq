@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from hq.domains.content.models import ContentItem
 from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
@@ -29,8 +30,10 @@ from ..action_items import (
     with_aside_state,
 )
 from ..capabilities import execute_capability
+from ..dashboard import readable_queue
 from ..finding_model import Finding
 from ..findings import finding_key
+from ..projection import projection_scope
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal
 
 ITEM = {
@@ -77,21 +80,35 @@ class IdentityTests(TestCase):
         self.assertNotEqual(item_revision(base), item_revision(self.finding(count=3)))
         self.assertNotEqual(item_revision(base), item_revision(self.finding(count=2, severity="serious")))
 
-    def test_a_notice_comes_back_only_when_it_reports_something_else(self):
-        told = self.finding(notice=True, explanation="Rose 19 bpm on the Sep 21 run")
 
-        # Nothing about a notice gets worse, and a counter that moves on its
-        # own is not news.
-        self.assertEqual(
-            item_revision(told),
-            item_revision(
-                self.finding(notice=True, severity="serious", count=4, explanation="Rose 19 bpm on the Sep 21 run")
-            ),
-        )
-        self.assertNotEqual(
-            item_revision(told),
-            item_revision(self.finding(notice=True, explanation="Rose 12 bpm on the Sep 28 run")),
-        )
+class NoticeTests(TestCase):
+    """A notice is told once per occurrence: dismissed, it stays gone until what it tells of moves."""
+
+    def setUp(self):
+        self.user = operator(username="op")
+
+    def told(self):
+        """The queue's notices as the operator sees them, and the queue they were drawn from."""
+
+        with projection_scope():
+            queue = readable_queue(cli_principal())
+        return [item for item in with_aside_state(queue, self.user) if item["notice"]], queue
+
+    def test_a_dismissed_notice_stays_gone_until_what_it_tells_of_moves_then_returns_once(self):
+        ContentItem.objects.create(title="A draft", slug="a-draft")
+        [item], queue = self.told()
+        set_aside(self.user, [item["key"]], aside=True, current=queue)
+
+        # Another word in the draft it tells of is not news.
+        ContentItem.objects.filter(slug="a-draft").update(title="A draft, retitled")
+        self.assertEqual([each["aside"] for each in self.told()[0]], [True])
+
+        ContentItem.objects.create(title="A newer draft", slug="a-newer-draft")
+        [item], queue = self.told()
+        self.assertFalse(item["aside"])
+
+        set_aside(self.user, [item["key"]], aside=True, current=queue)
+        self.assertEqual([each["aside"] for each in self.told()[0]], [True])
 
 
 class AsideStateTests(TestCase):
@@ -323,9 +340,9 @@ class PageTests(TestCase):
             page = self.client.get(reverse("action_items"))
             self.assertEqual(self.shown(page), [ITEM["label"]])
             self.assertEqual(self.shown(page, "notice_groups"), [told["label"]])
-            # The header counts everything waiting; dismissing the notices
-            # leaves what needs doing where it was.
-            self.assertEqual(page.context["profile_action_count"], 2)
+            # The header counts only what needs doing; dismissing the notices
+            # leaves it where it was.
+            self.assertEqual(page.context["profile_action_count"], 1)
             self.client.post(page.context["dismiss_notices"].url, form_keyed())
             page = self.client.get(reverse("action_items"))
             self.assertEqual(self.shown(page), [ITEM["label"]])

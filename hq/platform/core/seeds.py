@@ -19,7 +19,12 @@ from django.conf import settings
 lazy from django.test import override_settings
 
 lazy from hq.config import sandbox
+lazy from hq.domains.content.models import ContentItem
+lazy from hq.platform.application.action_items import set_aside
+lazy from hq.platform.application.dashboard import readable_queue
 lazy from hq.platform.application.plugins import installed_integrations
+lazy from hq.platform.application.projection import projection_scope
+lazy from hq.platform.application.security import web_principal
 lazy from hq.platform.core import bench, example_estate
 lazy from hq.platform.core.attribution import outside_every_door
 lazy from hq.platform.core.audit import stamped
@@ -218,6 +223,19 @@ def _policy_change(owner) -> None:
     example_estate.agents.asks_to_open_the_policy()
 
 
+def _told_again(owner) -> None:
+    """A fresh install with one problem, its playbook worker stopped, and a
+    notice of a draft its owner dismissed, which a newer draft has since told
+    again."""
+
+    example_estate.automation.unattended()
+    ContentItem.objects.create(title="An example draft", slug="example-draft")
+    with projection_scope():
+        queue = readable_queue(web_principal(owner))
+    set_aside(owner, [item["key"] for item in queue if item["notice"]], aside=True, current=queue)
+    ContentItem.objects.create(title="A second example draft", slug="example-second-draft")
+
+
 def _approved(ended: str) -> Callable[[Any], None]:
     """The example estate with its app update approved and ended as
     ``ended`` says, so its container's Upgrade card draws that standing."""
@@ -287,6 +305,7 @@ SEEDS: dict[str, Seed] = {
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.
     "playbooks-stopped": Seed(lambda _owner: example_estate.automation.unattended()),
+    "told-again": Seed(_told_again),
     "worker-image-missing": Seed(_worker_image_missing, _SET_UP),
     # The same on a fresh install, so the dashboard's Needs you card holds what it raises.
     "worker-image-missing-alone": Seed(lambda _owner: _short_release()),

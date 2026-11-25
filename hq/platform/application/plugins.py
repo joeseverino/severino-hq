@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("severino.composition")
 
-PLUGIN_API_VERSION = 26
+PLUGIN_API_VERSION = 27
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -605,7 +605,7 @@ def distinct_attention(source_id: str, items: tuple[Finding, ...]) -> tuple[Find
 
 
 def _urgency(item: Finding) -> tuple[int, bool]:
-    return item.severity.rank, item.notice
+    return item.severity.rank, item.notice is not None
 
 
 def _refused_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
@@ -770,7 +770,7 @@ def ordered_attention(entries: Iterable[dict[str, Any]]) -> tuple[dict[str, Any]
         since = item.since
         return (
             item.severity.rank,
-            item.notice,
+            item.notice is not None,
             not item.one_press,
             since is None,
             since.timestamp() if since is not None else 0.0,

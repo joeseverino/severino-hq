@@ -129,6 +129,7 @@ def said(finding: Finding, raised: Raised | None = None) -> tuple[Any, ...]:
         else None,
         told if raised is None or raised.steps is not None else None,
         (finding.primary.label, finding.primary.url) if finding.primary and raised and raised.primary else None,
+        finding.notice.written if finding.notice else None,
     )
 
 
@@ -143,6 +144,7 @@ def stated(rule: FindingRule, raised: Raised) -> tuple[Any, ...]:
         raised.evidence,
         raised.steps,
         raised.primary,
+        raised.notice,
     )
 
 
@@ -272,4 +274,6 @@ def _as_example(rule: FindingRule, finding: Finding) -> str:
         parts.append(f"severity=Tone.{Tone(finding.severity).name}")
     if presses := tuple(press.capability for press in finding.presses):
         parts.append(f"presses={presses!r}")
+    if finding.notice:
+        parts.append(f"notice={finding.notice.written!r}")
     return f"Raised({', '.join(parts)})," if len(parts) > 1 else f"{finding.title!r},"

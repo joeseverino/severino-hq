@@ -8,7 +8,7 @@ import re
 import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 
 from hq.domains.control_plane.providers import PROVIDERS
@@ -20,7 +20,7 @@ from .display_words import Code, as_members, in_words
 from .entity_links import EntityLink, link_url
 from .finding_steps import Do, Press, Run, Step
 from .moments import moment
-from .non_empty import RequiredText
+from .non_empty import RequiredText, holds_something
 from .tone import Tone
 from .topology_model import Topology, TopologyNode
 from .ui import ended
@@ -99,6 +99,25 @@ def matter_key(rule: str, about: str, part: str = "") -> str:
     return f"{key}:{part}" if part else key
 
 
+@dataclass(frozen=True, slots=True)
+class Notice:
+    """What makes a notice new: the occurrence it tells of, such as the day of
+    the last loaded leg session or the commit on its way to production.
+
+    A dismissed notice stays gone until this moves (``action_items.item_revision``),
+    so its wording, its tone and its count never bring it back.
+    """
+
+    occurrence: date | RequiredText
+
+    def __post_init__(self) -> None:
+        holds_something(self)
+
+    @property
+    def written(self) -> str:
+        return self.occurrence.isoformat() if isinstance(self.occurrence, date) else self.occurrence
+
+
 def written_fact(label: str, value: str | EntityLink) -> FindingEvidence:
     """A line of evidence as every door answers it, a record with its page."""
 
@@ -175,9 +194,10 @@ class Finding:
     # How many things one finding stands for, where it counts a backlog of
     # records: what the queue's row counts, and what brings a set-aside one back.
     count: int = 0
-    # News rather than a problem (a draft in hand, a deploy on its way): the
-    # queue keeps it in its own section, below what needs doing.
-    notice: bool = False
+    # News or advice rather than a problem (a draft in hand, a deploy on its
+    # way, a coaching tip), and the occurrence it tells of: the queue keeps it
+    # in its own section, below what needs doing, and out of every count.
+    notice: Notice | None = None
     # Its only remedy does not exist yet (an alert no released version fixes):
     # it stays a finding, and the queue leaves it out until one does.
     awaiting_fix: bool = False
@@ -210,8 +230,7 @@ class Finding:
 
     def __post_init__(self) -> None:
         as_members(self)
-        if not self.explanation.strip():
-            raise ValueError(f"A finding of {self.rule!r} must say why it matters (explanation): {self.title!r}.")
+        holds_something(self)
         # A card says it as written, so what it says is words, and each
         # reading's label is drawn once with its values beside it.
         for text in (self.title, self.explanation):
@@ -259,11 +278,11 @@ class FindingRule:
     # The precise action that resolves a finding of this rule by hand. Required:
     # a finding either offers an operation through the gated queue or says
     # exactly what to do. A finding may state a more specific one.
-    operator_action: str
+    operator_action: RequiredText
     # Why HQ cannot resolve a finding of this rule itself: shown whenever one
     # carries no remedy and no exact command. Required, so no finding reaches
     # an operator as bare prose.
-    no_help_reason: str = ""
+    no_help_reason: RequiredText = ""
     subsumes: tuple[str, ...] = ()
     # The card of its subject's page that draws it, where the page has one for
     # the parts it is about ("containers" on a machine's page); empty, the
@@ -293,10 +312,7 @@ class FindingRule:
 
     def __post_init__(self) -> None:
         as_members(self)
-        if not self.operator_action.strip():
-            raise ValueError(f"Finding rule {self.name!r} must say how it is resolved.")
-        if not self.no_help_reason.strip():
-            raise ValueError(f"Finding rule {self.name!r} must say why HQ cannot resolve it itself.")
+        holds_something(self)
         if not self.bars.get(self.severity, "").strip():
             raise ValueError(f"Finding rule {self.name!r} must say the bar its {self.severity} findings cross (bars).")
 

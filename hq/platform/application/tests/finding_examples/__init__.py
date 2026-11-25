@@ -70,6 +70,8 @@ class Raised:
     primary: tuple[str, str] | None = None
     # The titles of what follows from it, said beneath it once every rule is derived.
     beneath: tuple[str, ...] = ()
+    # The occurrence a notice tells of, as it is written; none for a problem.
+    notice: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

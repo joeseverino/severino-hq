@@ -79,11 +79,11 @@ def item_revision(finding: Finding) -> str:
     """What makes a dismissed item come back.
 
     Something to resolve returns when it gets worse or stands for more, never
-    because its wording moved. A
-    notice has nothing to get worse: it returns when it reports something else.
+    because its wording moved. A notice has nothing to get worse: it returns
+    when the occurrence it tells of moves (``Notice.occurrence``).
     """
 
-    seen = ["notice", finding.explanation] if finding.notice else [finding.severity, finding.count or 1]
+    seen = ["notice", finding.notice.written] if finding.notice else [finding.severity, finding.count or 1]
     # A set-aside revision is stored as this digest of spaced JSON; on
     # digest's form every item set aside would come back.
     # ast-grep-ignore: json-digest-by-digests
@@ -132,9 +132,10 @@ def waiting_count(items: list[dict[str, Any]], user) -> int:
 
 
 def count_waiting(items: list[dict[str, Any]]) -> int:
-    """How many of ``items``, already carrying their state, are not set aside."""
+    """How many of ``items``, already carrying their state, need doing: a
+    notice asks for nothing, so no count holds it."""
 
-    return sum(1 for item in items if not item["aside"])
+    return len(split_waiting(items)[0])
 
 
 def split_waiting(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

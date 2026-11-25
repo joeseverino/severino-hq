@@ -11,13 +11,14 @@ from hq.platform.application.plugins import (
     plugin_dashboard_sections,
     plugin_overviews,
 )
-lazy from hq.platform.application.finding_model import Finding, opens
+lazy from hq.platform.application.finding_model import Finding, Notice, opens
 
 __all__ = [
     "PLUGIN_API_VERSION",
     "Finding",
     "NavigationGroup",
     "NavigationItem",
+    "Notice",
     "PluginIntegration",
     "PluginManifest",
     "installed_plugins",

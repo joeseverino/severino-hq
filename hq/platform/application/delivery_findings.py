@@ -8,7 +8,7 @@ the delivery's own record, read as its health says (``infrastructure``).
 
 from .delivery_progress import STALLED_AFTER, WAITING, delivery_progress
 from .entity_links import entity_link
-from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_model import Finding, FindingEstate, FindingRule, Notice, opens
 from .references import Kind
 from .tone import Tone
 from .ui import counted, ended
@@ -57,7 +57,8 @@ def _deploys(_estate: FindingEstate) -> tuple[Finding, ...]:
                     ("Stalls after", STALLS_AFTER),
                 ),
                 primary=opens("Open deploy", link.url),
-                notice=True,
+                # Dismissed, it stays gone until another commit is on its way.
+                notice=Notice(progress.admitted),
             )
         )
     return tuple(found)

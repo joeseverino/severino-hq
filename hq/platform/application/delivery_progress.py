@@ -35,6 +35,8 @@ class DeliveryProgress:
     state: str
     since: datetime | None
     run_url: str = ""
+    # The commits on their way, each an extension's that production does not run yet.
+    admitted: str = ""
 
     @property
     def stalled_at(self) -> datetime | None:
@@ -63,7 +65,8 @@ def delivery_progress(resource) -> DeliveryProgress | None:
         return None
     state = WAITING if WAITING in stages else RUNNING if RUNNING in stages else STARTING
     run_url = next((web_url(item.get("run_url")) for item in behind if _stage(item) == state), "")
-    return DeliveryProgress(state, held_since(resource.conditions, DEGRADED), run_url)
+    admitted = " ".join(sorted({str(item["admitted"]) for item in behind}))
+    return DeliveryProgress(state, held_since(resource.conditions, DEGRADED), run_url, admitted)
 
 
 def on_its_way(progress: DeliveryProgress | None) -> bool:

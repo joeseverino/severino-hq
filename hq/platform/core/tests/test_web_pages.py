@@ -1,6 +1,7 @@
 """The web shell's pages: search, lists, the dashboard and the navigation."""
 
-from datetime import timedelta
+from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import call, patch
 
 from django.urls import reverse
@@ -13,6 +14,7 @@ from hq.domains.control_plane.models import (
     DashboardRefreshRequest,
     ProviderInventory,
 )
+from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
@@ -316,7 +318,7 @@ class DashboardWorkflowTests(SignedInTestCase):
         self.assertNotIn(drafts, hrefs(filtered))
 
     def test_profile_count_is_lazy_off_dashboard(self):
-        ContentItem.objects.create(title="Count me", status=ContentItem.Status.DRAFT)
+        Expense.objects.create(date=date(2026, 3, 1), vendor="Example Registrar", total_cost=Decimal("12.00"))
 
         page = self.client.get("/projects/")
         with host_only():

@@ -213,7 +213,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "check": as_written(finding.check) if finding.check else None,
         "actions": [as_written(link) for link in pages if link.name == PLAYBOOK_INVESTIGATION],
         "subject": as_written(finding.subject_link) if finding.subject_link else None,
-        "notice": finding.notice,
+        "notice": finding.notice is not None,
         "held": finding.held,
         "under_way": finding.under_way.as_json() if finding.under_way else None,
         # A rule's findings are one kind of matter, named as the rule names itself.

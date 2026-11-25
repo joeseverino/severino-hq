@@ -8,6 +8,7 @@ A record whose reference names nothing is one finding of its own.
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from datetime import date
 
 from django.db.models import Count
 
@@ -25,7 +26,7 @@ lazy from hq.domains.receipts.specs import UNLINKED
 
 from . import sections
 from .entity_links import EntityLink, entity_link
-from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_model import Finding, FindingEstate, FindingRule, Notice, opens
 from .references import naming_nothing
 from .tone import Tone
 from .ui import counted, ended
@@ -60,8 +61,9 @@ class _Backlog:
     named: Callable[[], tuple[EntityLink, ...]] | None = None
     # Why the backlog matters, said where none of its records are named.
     why: str = ""
-    # Work in hand rather than a problem to fix.
-    notice: bool = False
+    # Work in hand rather than a problem to fix: the occurrence its notice
+    # tells of, read when it is raised.
+    occurrence: Callable[[], date | str] | None = None
 
     def found(self, rule: str) -> tuple[Finding, ...]:
         named = self.named() if self.named is not None else ()
@@ -84,7 +86,7 @@ class _Backlog:
                 primary=opens(self.opens_as, with_query(reverse(self.route), self.query)),
                 offers=tuple(opens(link.label, link.url) for link in first if link.url),
                 count=count,
-                notice=self.notice,
+                notice=Notice(self.occurrence()) if self.occurrence is not None else None,
             ),
         )
 
@@ -108,6 +110,12 @@ def _backlog(
         domain=domain,
         gathered=True,
     )
+
+
+def _newest_draft() -> date:
+    """When the newest draft was begun."""
+
+    return ContentItem.objects.filter(status=ContentItem.Status.DRAFT).latest("created_at").created_at
 
 
 def _unread() -> int:
@@ -176,7 +184,8 @@ RULES: tuple[FindingRule, ...] = (
             route="content:list",
             query={"status": "draft"},
             count=lambda: sections.content_reading()["drafts"],
-            notice=True,
+            # A new draft is news again; another word in one already told of is not.
+            occurrence=_newest_draft,
         ),
         domain="hq.content",
         operator_action="Finish each draft and publish it, or delete it.",

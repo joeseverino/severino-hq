@@ -23,7 +23,7 @@ from hq.platform.application.tests.links import example_command
 from ..card_items import Kpi
 from ..composed_providers import answered_by
 from ..domains import domain_navigation
-from ..finding_model import Finding
+from ..finding_model import Finding, Notice
 from ..finding_steps import Do
 from ..pages import page_context
 from ..plugin_testing import importable
@@ -776,7 +776,7 @@ class ComposedPluginTestKitTests(TestCase):
 
 
 class AttentionOrderTests(SimpleTestCase):
-    def entry(self, title, status="attention", *, since=None, notice=False, source="Example", actions=(), check=None):
+    def entry(self, title, status="attention", *, since=None, notice=None, source="Example", actions=(), check=None):
         from ..finding_model import Finding
         from ..finding_steps import Do, Press
 
@@ -817,7 +817,7 @@ class AttentionOrderTests(SimpleTestCase):
     def test_severity_then_what_needs_doing_then_the_longest_standing(self):
         now = timezone.now()
         entries = [
-            self.entry("a notice", notice=True, since=now - timedelta(days=30)),
+            self.entry("a notice", notice=Notice("example-occurrence"), since=now - timedelta(days=30)),
             self.entry("undated"),
             self.entry("newer", since=now - timedelta(days=1)),
             self.entry("older", since=now - timedelta(days=9), source="Zulu"),

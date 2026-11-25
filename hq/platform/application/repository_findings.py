@@ -13,7 +13,7 @@ from hq.platform.application.routes import reverse
 from .action_links import read_link
 from .derivations import reached, whole
 from .entity_links import web_url
-from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_model import Finding, FindingEstate, FindingRule, Notice, opens
 from .finding_steps import Do, Run
 from .github_estate import (
     ARTIFACT_ATTENTION_DAYS,
@@ -70,7 +70,8 @@ def _as_read(repo: Repository, found: Said) -> Finding:
     finding, was = found
     if not repo.reading.stale:
         return finding
-    return replace(finding, title=was, severity=Tone.ATTENTION, notice=True)
+    # It tells of the reading it is drawn from; one with no time is the same unread reading until one arrives.
+    return replace(finding, title=was, severity=Tone.ATTENTION, notice=Notice(repo.observed_at or "unread"))
 
 
 def _each(said: Callable[[Repository], Iterator[Said]]) -> Callable[[FindingEstate], tuple[Finding, ...]]:
