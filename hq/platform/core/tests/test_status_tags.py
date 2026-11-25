@@ -1,10 +1,7 @@
 """A state drawn by `{% status %}` reads one way wherever it stands."""
 
-import re
-
 from django.template import engines
-from django.template.autoreload import get_template_directories
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from hq.platform.application.markup_testing import elements
 from hq.platform.core.templatetags.status_tags import severity_tone, status_pill
@@ -127,37 +124,3 @@ class StatusPillTests(SimpleTestCase):
             for word in ("goood", "archived", "drifted"):
                 with self.subTest(source, word=word), self.assertRaises(ValueError):
                     _drawn(source, tone=word)
-
-
-# A class a status draws, which a template writing it by hand would spell itself,
-# and a state's tone spelled as a `control-` class: a state, a tone, or one filled in.
-def _status_class() -> re.Pattern[str]:
-    from hq.platform.application.infrastructure import ResourceState
-    from hq.platform.application.tone import Tone
-
-    words = "|".join(sorted({*ResourceState, *Tone}))
-    return re.compile(r"^(pill|toned|worth)(-|$)|^control-(\{\{|(" + words + r")$)")
-
-
-_CLASS = re.compile(r"""\bclass\s*=\s*(["'])(.*?)\1""", re.DOTALL)
-# A class's words, a word chosen inside `{% if %}` among them.
-_CLASS_WORDS = re.compile(r"\s+|\{%|%\}")
-
-
-@tag("source", "tree")
-class StatusDrawnByTheTagTests(SimpleTestCase):
-    def test_no_template_draws_a_status_by_hand(self):
-        """A pill, a toned figure or a state's words in its tone are
-        `{% status %}`'s to draw, in the host and in every installed
-        extension, so each says its state one way."""
-
-        status_class = _status_class()
-        found = [
-            f"{path.relative_to(root)}: {word}"
-            for root in sorted(get_template_directories())
-            for path in sorted(root.rglob("*.html"))
-            for match in _CLASS.finditer(path.read_text(encoding="utf-8"))
-            for word in _CLASS_WORDS.split(match.group(2))
-            if status_class.match(word)
-        ]
-        self.assertEqual(found, [], "Draw these with {% status ... %} (pill=False for a toned figure).")

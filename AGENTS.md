@@ -186,7 +186,7 @@ than styling a page.
 - Avoid N+1 queries. Prefetch relation panels and add a query-budget regression
   test for a projection that can grow with data or plugins.
 - Scripts are deferred and respect `prefers-reduced-motion`; only the one
-  `test_script_loading.py` names runs before the first frame. Nothing moves
+  `file_rules.BEFORE_DRAWING` names runs before the first frame. Nothing moves
   once a page is drawn: a script fills space the server's HTML already holds.
 
 ## Structural checks

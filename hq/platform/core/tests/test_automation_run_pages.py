@@ -2,18 +2,15 @@
 its runs went, and a machine's page lists the runs that acted on it, each
 drawn by the shared section renderer with its state in its word and tone."""
 
-import re
 from urllib.parse import parse_qs, urlsplit
 
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.platform.application.automation_runs import access_words
 from hq.platform.application.markup_testing import links, select, text, texts, with_class, within
-from hq.platform.application.tests.source import source_files, template_files
-from hq.platform.application.tests.tree import ROOT
 from hq.platform.core import seeds
-from hq.platform.core.example_estate.automation import CACHE_FLUSH, PROCEDURES, REVISION
+from hq.platform.core.example_estate.automation import CACHE_FLUSH, PROCEDURES
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.testing import declare
@@ -304,27 +301,3 @@ class ProcedurePageTests(TestCase):
         record = ManagedResource.objects.get(key=resource_key(CACHE_FLUSH))
         dropped = declare(resource_key("example.retired"), record.kind, {**record.spec, "operation": "example.retired"})
         self.assertEqual(self.client.get(reverse("control_plane:detail", kwargs={"key": dropped.key})).status_code, 200)
-
-
-@tag("source", "tree")
-class NoProcedureNamedTests(SimpleTestCase):
-    """The host draws a procedure from the adopted catalog alone: no template
-    and no module outside the example estate and the tests names one."""
-
-    def test_no_template_or_module_names_a_seeded_procedure(self):
-        named = {REVISION}
-        for procedure in PROCEDURES:
-            named |= {procedure["declaration"]["id"], procedure["playbook"], procedure["sidecar"]}
-        needle = re.compile("|".join(re.escape(word) for word in sorted(named)))
-        modules = [
-            path
-            for path in source_files(ROOT / "hq", "*.py")
-            if not {"tests", "example_estate"} & set(path.relative_to(ROOT).parts)
-        ]
-        self.assertTrue(modules)
-        offenses = [
-            f"{path.relative_to(ROOT)}: {found.group(0)}"
-            for path in (*modules, *(path for _name, path in template_files()))
-            if (found := needle.search(path.read_text()))
-        ]
-        self.assertEqual(offenses, [], "a procedure is named in the host; draw it from the adopted catalog")

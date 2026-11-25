@@ -1,7 +1,8 @@
 """For an extension's source tree: the static checks it must pass, each read without importing the extension.
 
-Its Python imports are Ruff's to hold (tools/pipeline/extension-imports.toml)
-and the rest the ast-grep rules ``plugin:check`` names.
+Its Python imports are Ruff's to hold (tools/pipeline/extension-imports.toml),
+the rules a file keeps on its own ``file_rules``, and the rest the ast-grep
+rules ``plugin:check`` names.
 """
 
 import argparse
@@ -15,6 +16,7 @@ lazy import django
 lazy from django.apps import apps
 lazy from django.template.base import Lexer, TokenType
 
+lazy from hq.platform.application import file_rules
 lazy from hq.platform.core import template_contract
 lazy from hq.platform.core.hand_drawn import hand_drawn
 
@@ -501,7 +503,8 @@ _SENTENCES = (
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Reject templates outside the public template contract and page sentences closed on a value by hand."
+            "Reject templates outside the public template contract, page sentences closed on a value by hand"
+            " and files that break a rule of file_rules."
         )
     )
     parser.add_argument("source_root", type=Path)
@@ -529,10 +532,11 @@ def main() -> int:
             template_violations(args.source_root),
         ),
         _report(_SENTENCES, sentence_closes(args.source_root)),
+        file_rules.report(args.source_root),
     ]
     if any(refused):
         return 1
-    print("HQ SDK template and sentence boundaries passed.")
+    print("HQ SDK template, sentence and file rules passed.")
     return 0
 
 

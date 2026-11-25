@@ -1,6 +1,4 @@
-import re
-
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
@@ -13,14 +11,6 @@ from ..connection_setup import setups
 from ..entity_links import connection_anchor
 from ..page_reads import Remedy, need, pages_reading, readers, remedy, setup_url
 from ..pages import PageAction, page_context
-from .source import template_files
-
-PARTIAL = "partials/_empty_state.html"
-
-
-def _templates():
-    for name, path in template_files():
-        yield name, path.read_text(encoding="utf-8")
 
 
 class OneEmptyStateTests(SimpleTestCase):
@@ -32,31 +22,6 @@ class OneEmptyStateTests(SimpleTestCase):
         )["page"]
 
         self.assertEqual(page.remedy.label, "New asset")
-
-
-@tag("source", "tree")
-class EmptyStateTemplateTests(SimpleTestCase):
-    """Templates draw an empty state only through the partial."""
-
-    def test_no_list_overrides_what_empty_means(self):
-        # An empty state drawn by hand writes the part's class, which no page may.
-        for name, text in _templates():
-            with self.subTest(template=name):
-                self.assertNotIn("{% block empty %}", text, "a list says what empty means with table_empty")
-
-    def test_an_empty_state_is_one_line_and_one_remedy(self):
-        include = re.compile(r'\{% include "partials/_empty_state\.html"(.*?)%\}', re.DOTALL)
-        for name, text in _templates():
-            for arguments in include.findall(text):
-                with self.subTest(template=name, arguments=arguments):
-                    self.assertNotIn("compact=", arguments, "the surface rule frames it, or not")
-                    self.assertRegex(arguments, r"\b(?:message|absent)=")
-
-    def test_no_page_names_an_identity_provider(self):
-        comment = re.compile(r"\{% comment %\}.*?\{% endcomment %\}|\{#.*?#\}", re.DOTALL)
-        for name, text in _templates():
-            with self.subTest(template=name):
-                self.assertNotIn("Pocket ID", comment.sub("", text), "say 'your sign-in'; HQ works with any")
 
 
 class PageReadsTests(TestCase):

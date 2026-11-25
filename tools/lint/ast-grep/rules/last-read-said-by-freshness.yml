@@ -18,6 +18,9 @@ ignores:
   - "**/migrations/**"
   # Where the words are declared.
   - "hq/platform/application/freshness.py"
+  # A file rule's cases are template source it refuses or passes; no page
+  # receives them.
+  - "hq/platform/application/file_rules.py"
 rule:
   kind: string
   regex: '^f?["'']Last read(["'']| \{)'

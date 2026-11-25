@@ -84,6 +84,26 @@ hooks {
         glob = List("tools/source_scans.py") + toolchain
         check = "uv run python -m tools.source_scans"
       }
+      // The rules a file keeps on its own, which the extension check holds
+      // an extension's files to as well; each rule names the files it reads.
+      ["file-rules"] {
+        glob = List("**/*.html", "**/*.css", "**/*.js", "hq/**/*.py")
+        check = "uv run python -m hq.platform.application.file_rules . {{files}}"
+      }
+      ["file-rules-whole"] {
+        // and the declarations its rules read their words from.
+        glob = List(
+          "hq/platform/application/file_rules.py",
+          "hq/platform/application/ui.py",
+          "hq/platform/application/tone.py",
+          "hq/platform/application/infrastructure.py",
+          "hq/platform/application/connection_lifecycle.py",
+          "hq/platform/core/table_layout.py",
+          "hq/platform/core/interface_text.py",
+          "hq/platform/core/example_estate/automation.py"
+        ) + toolchain
+        check = "uv run python -m hq.platform.application.file_rules . templates static hq tests examples"
+      }
       // mise.toml's SEVERINO_FILE_LINE_* say which files the ceiling holds, so
       // the step is handed every file and keeps those.
       ["file-lines"] {

@@ -239,7 +239,7 @@ reference and the Design page's gallery are each one document under the site
 header: no page head and no footer, the title spoken alone, the document
 filling the view edge to edge and scrolled as the page scrolls
 (`[data-document-page]`, page.css), bringing its own gutters. The page fills
-`{% block document %}`; `test_document_page.py` fails any other template that
+`{% block document %}`; `lint:file-rules` fails any other template that
 empties the footer and any other rule that fills the view from the column.
 
 **One menu.** `.overflow-menu` for "more actions", a section group's dropdown

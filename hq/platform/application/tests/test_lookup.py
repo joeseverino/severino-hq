@@ -16,10 +16,10 @@ from ..security import Capability, Principal
 
 OPERATOR = Principal("joe", "test", frozenset(Capability))
 
-# Derived rather than written out. `test_no_tracked_file_names_a_reachable
-# _endpoint` reads every tracked file for addresses, and allows exactly two
-# literals, so a fixture that spells out a range trips the architecture
-# suite even though the range is a well-known public resolver's.
+# Derived rather than written out. The reachable-endpoint scan
+# (tools/source_scans.py) reads every tracked file for addresses, and allows
+# exactly two literals, so a fixture that spells out a range trips it even
+# though the range is a well-known public resolver's.
 GLOBAL = "1.1.1.1"
 BLOCK = GLOBAL.rsplit(".", 1)[0]
 # 10.0.0.0/8 is what this repository's fixtures use for a private address; the

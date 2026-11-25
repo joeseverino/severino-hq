@@ -1,7 +1,7 @@
 """A status: one short state, drawn in its tone and said in sentence case.
 
 The one way a page draws a state (`{% status %}`, `status_pill` in Python), so
-every state reads alike wherever it stands. `test_status_tags.py` refuses a
+every state reads alike wherever it stands. `lint:file-rules` refuses a
 pill or tone class written by hand in any shipped template.
 """
 
@@ -289,7 +289,7 @@ slotted(
         to a screen reader, as a certificate's check after the name it serves is. A first word holding a digit, a version, is said as written. A cell
         that is a state carries its tone (`Cell(word, tone=...)`) and is drawn by it. *Catalog:*
         `status/icon`. *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
-        `test_status_tags.py`, which reads every template root for a hand-written pill or a state's tone
+        the `status-by-hand` file rule, which reads every template for a hand-written pill or a state's tone
         written as a class.
         """,
         about="One short state, drawn in its tone and said in sentence case, the one way a page draws a state.",

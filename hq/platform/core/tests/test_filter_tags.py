@@ -9,7 +9,6 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.markup_testing import elements, select, with_class
-from hq.platform.application.tests.source import template_files
 from hq.platform.core.testing import render
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 
@@ -308,64 +307,3 @@ class FilterBarCatalogTests(SimpleTestCase):
         self.assertIn("data_", opened)
         self.assertIn("{% summary %}", entries)
         self.assertIn("{% choices %}", entries)
-
-
-# What a filter bar's controls and summary may not say for themselves.
-_BAR = re.compile(r"\{% filter_bar(?P<options>.*?)%\}(?P<body>.*?)\{% endfilter_bar %\}", re.DOTALL)
-_COMMENT = re.compile(r"\{% comment %\}.*?\{% endcomment %\}", re.DOTALL)
-_A_COUNT = re.compile(r"\b(?:of|shown)\b")
-# Its count is its pager's, which the list's table draws under it.
-_COUNTED_BY_ITS_PAGER = frozenset({"partials/_table_toolbar.html"})
-
-
-def filter_bar_faults(name: str, source: str) -> list[str]:
-    """What each ``{% filter_bar %}`` in ``source`` says for itself that the part says."""
-
-    faults = []
-    for bar in _BAR.finditer(_COMMENT.sub("", source)):
-        _, _, summary = bar["body"].partition("{% summary %}")
-        options = bar["options"]
-        if _A_COUNT.search(re.sub(r"\{.*?\}", "", summary, flags=re.DOTALL)):
-            faults.append(f"{name}: a count written in the summary; give the bar shown= and total=")
-        if "filtered=" in options and "shown=" not in options and name not in _COUNTED_BY_ITS_PAGER:
-            faults.append(f"{name}: a bar that narrows says how many it shows; give it shown= and total=")
-    return faults
-
-
-class FilterBarFaultTests(SimpleTestCase):
-    """What the check over every use refuses, and what it lets pass."""
-
-    def test_a_bar_that_says_for_itself_what_the_part_says_is_refused(self):
-        for source in (
-            '{% filter_bar search="Find" %}{% summary %}{{ n }} of {{ m }}{% endfilter_bar %}',
-            '{% filter_bar search="Find" filtered=x clear=y %}{% endfilter_bar %}',
-        ):
-            with self.subTest(source=source):
-                self.assertEqual(len(filter_bar_faults("example.html", source)), 1)
-
-    def test_a_bar_through_the_part_passes(self):
-        source = (
-            '{% filter_bar search="Find" filtered=x clear=y shown=n total=m %}{% choices %}'
-            '{% select "k" kinds every="kind" %}{% summary %}{{ k|counted:"needs a look,need a look" }}.'
-            "{% endfilter_bar %}"
-        )
-
-        self.assertEqual(filter_bar_faults("example.html", source), [])
-
-
-@tag("source", "tree")
-class FilterBarUseTests(SimpleTestCase):
-    def test_every_filter_bar_says_its_count_through_the_part(self):
-        """Every bar reads the same: the search first and the choices beside
-        it in {% choices %}, which fold where the row has no room, an empty choice only
-        as "Any" from every=, and the count, what is held back and the link
-        to it in the part's words, so no page's bar says everything while
-        its count shows a part."""
-
-        faults = [
-            fault
-            for name, path in template_files()
-            for fault in filter_bar_faults(name, path.read_text(encoding="utf-8"))
-        ]
-
-        self.assertEqual(faults, [], "filter_bar's rules")

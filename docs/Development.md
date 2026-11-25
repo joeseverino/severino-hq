@@ -484,7 +484,7 @@ cache rechecks only a changed module and those whose imports' interfaces
 changed.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
-`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
+`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:file-rules`, `lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
 fast hands it the files the change touched: its step reads those its glob
 matches, and its `-whole` step reads the whole tree when one of them is a file
 that step names (the tool's config, the pins). Run alone, with no files, as

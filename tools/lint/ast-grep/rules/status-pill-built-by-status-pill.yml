@@ -19,6 +19,9 @@ ignores:
   # A shape's examples are template source it refuses or keeps; no page
   # receives them.
   - "hq/platform/core/hand_drawn.py"
+  # A file rule's cases are template source it refuses or passes; no page
+  # receives them.
+  - "hq/platform/application/file_rules.py"
 rule:
   kind: string
   regex: class=\\?["']pill(\s|\\?["'])

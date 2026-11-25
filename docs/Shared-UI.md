@@ -847,8 +847,8 @@ it has a value. The search takes the line's room; every other control is as wide
 a select its longest option. A control the script shows only once it has something to act on is
 drawn `hidden` in the bar and stays so. *Gate:* the `filter-bar` shape refuses
 `.filter-bar`, a search field and a select written by hand, outside the parts that draw them.
-`test_filter_tags.FilterBarUseTests` reads every `{% filter_bar %}` in the templates. It refuses a
-count written in the summary and a narrowing bar with no count.
+The `filter-bar-summary` and `filter-bar-count` file rules read every `{% filter_bar %}` in the
+templates. They refuse a count written in the summary and a narrowing bar with no count.
 
 ### headed (host only)
 
@@ -1683,7 +1683,7 @@ mark is toned ("Up to date"), and with `shown=False` the mark stands alone, its 
 to a screen reader, as a certificate's check after the name it serves is. A first word holding a digit, a version, is said as written. A cell
 that is a state carries its tone (`Cell(word, tone=...)`) and is drawn by it. *Catalog:*
 `status/icon`. *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
-`test_status_tags.py`, which reads every template root for a hand-written pill or a state's tone
+the `status-by-hand` file rule, which reads every template for a hand-written pill or a state's tone
 written as a class.
 
 ### steps (host only)

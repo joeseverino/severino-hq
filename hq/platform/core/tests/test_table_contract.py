@@ -40,21 +40,6 @@ def _template_roots() -> list[Path]:
 class TableContractTests(SimpleTestCase):
     maxDiff = None
 
-    def test_no_template_writes_what_the_region_derives(self):
-        """A figure's alignment follows from its heading's kind and the sort
-        control from the rows the table holds, so no template spells either
-        on a cell or a heading."""
-
-        derived = re.compile(r"\|\s*sortable\b|\bnum-col\b")
-        found = [
-            f"{path.relative_to(root)}:{text.count(chr(10), 0, match.start()) + 1}: {match.group()}"
-            for root in _template_roots()
-            for path in sorted(root.rglob("*.html"))
-            for text in [path.read_text(encoding="utf-8")]
-            for match in derived.finditer(text)
-        ]
-        self.assertEqual(found, [], "The declared table derives these; drop them from the template.")
-
     def test_the_gutter_reads_nothing_a_script_marks(self):
         """The gutter moves every name in its column, so whether it is kept
         follows from the server's markup and the box's width, never from what

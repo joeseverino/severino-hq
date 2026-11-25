@@ -96,8 +96,9 @@ export SEVERINO_DATABASE_PATH="$work/check.sqlite3"
 DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 export DJANGO_SECRET_KEY
 export PYTHONPATH="$hq_root"
-# The package's templates are held to the host's declarations, read from
-# this host's tree with no extension installed: -P keeps the package root off
+# The package's templates are held to the host's declarations, and each of
+# its files to the host's file rules, read from this host's tree with no
+# extension installed: -P keeps the package root off
 # the path, so nothing the package ships can stand in for the host's.
 SEVERINO_HQ_PLUGINS='' "$python" -P -m hq.platform.application.plugin_validation src
 export SEVERINO_HQ_PLUGINS="$plugin_reference"
@@ -116,14 +117,10 @@ MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
 # every routed view's source, the plugin's included. A package keeps no copy
 # of any of them.
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
-    hq.platform.core.tests.test_table_contract.TableContractTests \
-    hq.platform.application.tests.test_reading_age.OneWordingTests \
-    hq.platform.application.tests.test_script_loading hq.platform.application.tests.test_action_words.DeclaredWordsTests \
+    hq.platform.application.tests.test_action_words.DeclaredWordsTests \
     hq.platform.application.tests.test_architecture_primitives.FragmentPrimitiveTests \
-    hq.platform.application.tests.test_shared_markup.SharedMarkupTemplateTests \
     hq.platform.core.tests.test_template_separators.TemplateSeparatorTests \
     hq.platform.application.tests.test_action_words.CallSiteWordsTests \
-    hq.platform.application.tests.test_architecture_styles.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row \
     hq.platform.application.tests.test_view_writes.ViewWriteTests.test_no_view_writes_outside_the_runner \
     hq.platform.application.tests.test_architecture.DeliveryAdapterArchitectureTests.test_no_page_paginates_a_list_of_its_own \
     hq.platform.application.tests.test_architecture_pages.PageTrailTests
