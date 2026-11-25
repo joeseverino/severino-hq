@@ -92,7 +92,7 @@ def up_for(status: str, started_at: object, *, running: bool) -> str:
         return uptime_of(status)
     up = timezone.now() - started
     # Under a minute, a length of time reads "0 minutes".
-    return Figure("Just started" if up < timedelta(minutes=1) else f"Up {duration(up)}", up.total_seconds())
+    return Figure("Just started" if up < timedelta(minutes=1) else f"Up {duration(up, depth=1)}", up.total_seconds())
 
 
 def started_at(machine: str, container: str) -> str:
