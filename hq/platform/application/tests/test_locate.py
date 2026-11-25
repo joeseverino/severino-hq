@@ -11,10 +11,9 @@ for.
 
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection
-from hq.platform.core.testing import declare, operator
+from hq.domains.control_plane.models import ManagedResource
+from hq.platform.core.testing import connection, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..infrastructure import declared_machines
@@ -37,19 +36,6 @@ def a_proxy(key, hostname, host, port=8000):
             "forward_port": port,
             "connection_ref": "an-npm",
         },
-    )
-
-
-def a_connection(ref, provider, endpoint="", reaches=()):
-    return ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id="a-controller",
-        provider=provider,
-        endpoint=endpoint,
-        reaches=list(reaches),
-        reachable=True,
-        probed=True,
-        observed_at=timezone.now(),
     )
 
 
@@ -114,7 +100,7 @@ class NamespaceTests(TestCase):
         answers there, not under the credential.
         """
 
-        a_connection("10.0.0.5", "cloudflare_dns", endpoint="https://api.example")
+        connection("cloudflare_dns", "10.0.0.5", endpoint="https://api.example")
 
         self.assertEqual(machines_index().at("10.0.0.5"), "example-alpha")
 
@@ -151,7 +137,7 @@ class ForwardingAddressTests(TestCase):
     def test_a_machine_only_a_credential_names_still_answers(self):
         """A credential that opens a shell somewhere is that somewhere."""
 
-        a_connection("example-edge", "ssh", endpoint="198.51.100.7:22")
+        connection("ssh", "example-edge", endpoint="198.51.100.7:22")
 
         self.assertEqual(locate("198.51.100.7:8000", declared_machines()).host, "example-edge")
 
@@ -165,7 +151,7 @@ class OneMachineOneRowTests(TestCase):
 
     def setUp(self):
         a_machine("example-alpha", "example-alpha", "10.0.0.5", role="Workstation")
-        a_connection("example-shell", "ssh", endpoint="10.0.0.5:22")
+        connection("ssh", "example-shell", endpoint="10.0.0.5:22")
         a_proxy("example-proxy", "dev.example.com", "10.0.0.5")
 
     def catalog(self):
@@ -198,7 +184,7 @@ class ConnectionPageTests(TestCase):
         return self.client.get(reverse("control_plane:connections"))
 
     def test_a_credential_opening_a_declared_machine_names_it(self):
-        a_connection("example-shell", "ssh", endpoint="10.0.0.5:22")
+        connection("ssh", "example-shell", endpoint="10.0.0.5:22")
 
         response = self.page()
         self.assertContains(response, "example-alpha")
@@ -207,9 +193,9 @@ class ConnectionPageTests(TestCase):
     def test_a_credential_pointing_at_a_declared_machine_names_it(self):
         """A URL endpoint is a service on a machine, and HQ knows whose."""
 
-        a_connection(
-            "example-dns",
+        connection(
             "cloudflare_dns",
+            "example-dns",
             endpoint="https://10.0.0.5/api",
             reaches=["example.com"],
         )
@@ -217,7 +203,7 @@ class ConnectionPageTests(TestCase):
         self.assertContains(self.page(), "example-alpha")
 
     def test_a_credential_pointing_nowhere_hq_knows_still_shows_its_endpoint(self):
-        a_connection("example-far", "ssh", endpoint="198.51.100.9:22")
+        connection("ssh", "example-far", endpoint="198.51.100.9:22")
 
         response = self.page()
         self.assertContains(response, "198.51.100.9:22")
@@ -280,7 +266,7 @@ class EvidenceTests(TestCase):
         """Most deliberate first, so one machine does not become two rows."""
 
         a_machine("example-alpha", "example-alpha", "10.0.0.5")
-        a_connection("example-shell", "ssh", endpoint="10.0.0.5:22")
+        connection("ssh", "example-shell", endpoint="10.0.0.5:22")
 
         self.assertEqual(machines_index().at("10.0.0.5"), "example-alpha")
 

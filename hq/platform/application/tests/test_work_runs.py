@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationRequest
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
-from hq.platform.core.testing import AGENT, operator
+from hq.platform.core.testing import AGENT, operator, run_ended
 from hq.platform.core.tests.estate_sizes import at_both_sizes
 
 from ..capabilities import run_capability
@@ -64,13 +64,7 @@ class WorkRunsTestCase(TestCase):
 
     def reported(self, run, *, success=True, events=(), message="Done."):
         self.claimed(run)
-        report_operation(
-            str(run.pk),
-            ControllerReport(
-                success=success, observed_generation=run.input["generation"], message=message, events=list(events)
-            ),
-            controller_id=WORKER,
-        )
+        run_ended(str(run.pk), WORKER, events=events, success=success, message=message)
         run.refresh_from_db()
         return run
 
@@ -376,7 +370,7 @@ class EvidenceTests(WorkRunsTestCase):
         self.assertEqual((done.evidence.worker, done.evidence.lease_until), ("", None))
 
     def test_each_task_outcome_is_said_in_a_tone(self):
-        outcomes = ("ok", "changed", "skipped", "failed", "unreachable")
+        outcomes = ("started", "ok", "changed", "skipped", "failed", "unreachable")
         self.reported(
             self.run_of(APP),
             events=[

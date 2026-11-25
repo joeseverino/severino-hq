@@ -8,7 +8,6 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.domains.expenses.models import Expense
-from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.test_record_timeline import KEY, REWRITE, claim_and_report
@@ -16,6 +15,7 @@ from hq.platform.core import audit
 from hq.platform.core.audit import audited_labels, register_audit
 from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import managing_everything
 
 # What ``audit._changes`` stores, in each shape it stores: a plain pair, a
 # value now set or now cleared, a pair of nothings, a secret, and a record

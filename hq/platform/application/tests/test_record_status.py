@@ -81,7 +81,7 @@ class RecordNameTests(TestCase):
 
 class RecordPageTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         rewrite(conditions=READY, last_observed_at=timezone.now())
@@ -158,7 +158,7 @@ class RecordPageTests(TestCase):
 
 class RecordStatusTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.now = timezone.now()
@@ -188,7 +188,7 @@ class ReportedFieldTests(TestCase):
     """A field holding the thing's own report is a problem in its words, never drift."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.spec = {

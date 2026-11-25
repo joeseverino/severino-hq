@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from hq.platform.application.command_fields import Describe
 from hq.platform.application.domains import records_of
+from hq.platform.application.projection import page_of
 from hq.platform.application.security import Principal
 
 from .models import Widget
@@ -31,5 +32,4 @@ def save_widget(
 
 
 def list_widgets(*, limit: int = 50) -> dict[str, Any]:
-    items = [{"slug": w.slug, "name": w.name} for w in Widget.objects.order_by("slug")[:limit]]
-    return {"items": items, "count": len(items)}
+    return page_of(Widget.objects.all(), limit, order=("slug",), each=lambda w: {"slug": w.slug, "name": w.name})

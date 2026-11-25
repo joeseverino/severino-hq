@@ -188,12 +188,18 @@ def _closes_by_hand(tree: ast.AST) -> list[tuple[int, str]]:
 _SENTENCE_LEFT_OUT = frozenset({"tests", "migrations", "management"})
 
 
-def sentence_closes(source_root: str | Path) -> list[str]:
-    """Return stable ``path:line: value`` lines for each page sentence closed on a value by hand."""
+def sentence_closes(source_root: str | Path, *within: str | Path) -> list[str]:
+    """Return stable ``path:line: value`` lines for each page sentence closed on a value by hand, in the
+    modules ``within`` names under ``source_root`` (a directory: each module under it), by default all."""
 
     root = Path(source_root).resolve()
+    modules = {
+        module
+        for named in map(Path, within or (root,))
+        for module in (named.resolve().rglob("*.py") if named.is_dir() else (named.resolve(),))
+    }
     found: list[str] = []
-    for path in sorted(root.rglob("*.py")):
+    for path in sorted(modules):
         relative = path.relative_to(root)
         if _SENTENCE_LEFT_OUT & set(relative.parts):
             continue
@@ -486,6 +492,12 @@ def _report(heading: str, violations: list[str]) -> bool:
     return bool(violations)
 
 
+_SENTENCES = (
+    'Page sentences closed on a value with a hand-written period; write ended(f"... {value}")'
+    " from hq_sdk.ui, which keeps a value's own period:"
+)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -493,7 +505,16 @@ def main() -> int:
         )
     )
     parser.add_argument("source_root", type=Path)
+    parser.add_argument(
+        "modules",
+        nargs="*",
+        type=Path,
+        help="Only these modules' page sentences (a directory: each module under it), as the host's quick gate"
+        " hands them: the host's own templates draw more than the public contract",
+    )
     args = parser.parse_args()
+    if args.modules:
+        return int(_report(_SENTENCES, sentence_closes(args.source_root, *args.modules)))
     if not any(args.source_root.rglob("*.py")):
         # A root that holds no package would pass every check by checking nothing.
         print(f"{args.source_root} holds no Python package to check.")
@@ -507,11 +528,7 @@ def main() -> int:
             "Templates outside HQ's public template contract (docs/Plugins.md, Shared UI contract):",
             template_violations(args.source_root),
         ),
-        _report(
-            'Page sentences closed on a value with a hand-written period; write ended(f"... {value}")'
-            " from hq_sdk.ui, which keeps a value's own period:",
-            sentence_closes(args.source_root),
-        ),
+        _report(_SENTENCES, sentence_closes(args.source_root)),
     ]
     if any(refused):
         return 1

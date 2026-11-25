@@ -44,8 +44,8 @@ business rule" ([API](API.md)).
 
 HQ's MCP server offers one tool for each handler in `HANDLERS`
 (`hq/platform/mcp/declarations.py`). All but one read what HQ already holds:
-capabilities, resources, connections, topology, findings, recent activity and
-health. `export_year_summary` also records its export in the audit log. The
+capabilities, resources, connections, topology, findings and health.
+`export_year_summary` also records its export in the audit log. The
 one write, `execute_capability`, runs a capability the same way the API's
 `POST /api/v2/capabilities/<name>/` does.
 

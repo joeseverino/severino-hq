@@ -10,7 +10,6 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from hq.platform.application.action_links import read_link
-from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.command_center import command_center
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.finding_model import Finding
@@ -23,9 +22,9 @@ from hq.platform.application.resources import get_resource
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.consent import consented
 from hq.platform.application.topology_model import TopologyNode
-from hq.platform.core.testing import READER, declare, operator
+from hq.platform.core.testing import READER, connection, declare, managing_everything, operator
 
-from ..models import DashboardMachine, ManagedResource, OperationRequest, ProviderConnection
+from ..models import DashboardMachine, ManagedResource, OperationRequest
 from ..provider_adapters.cloudflare import _dns_record_readout
 from ..providers import PROVIDERS, validate_spec
 from .certificate_cases import certificate_spec, declare_targets
@@ -109,15 +108,8 @@ class InfrastructureWebTests(TestCase):
     def test_a_proxy_host_and_its_upstream_are_distinct_machine_edges(self):
         declare("example-host", "machine", {"name": "example-host", "addresses": ["100.64.0.9"]})
         declare("app-server", "machine", {"name": "app-server", "addresses": ["100.64.0.10"]})
-        ProviderConnection.objects.create(
-            connection_ref="an-npm",
-            controller_id="example-host",
-            provider="npm",
-            endpoint="https://npm.example.test",
-            reaches=["app-server"],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
+        connection(
+            "npm", "an-npm", controller_id="example-host", endpoint="https://npm.example.test", reaches=["app-server"]
         )
         proxy = declare(
             "an-app-proxy",

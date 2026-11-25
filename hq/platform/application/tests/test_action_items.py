@@ -350,14 +350,14 @@ class ActivityActorTests(TestCase):
     def test_an_agent_row_names_the_agent_not_system(self):
         from hq.platform.core.models import AuditLog
 
-        from ..read_models import recent_activity
+        from ..resources import list_resource
 
         AuditLog.objects.create(
             action=AuditLog.Action.CREATED, object_type="Approval", metadata={"actor": "example-agent"}
         )
 
         self.assertEqual(
-            recent_activity(limit=1)["items"][0]["actor"],
+            list_resource("audit", {"events": True, "limit": 1}, principal=cli_principal())["items"][0]["actor"],
             "example-agent",
         )
 

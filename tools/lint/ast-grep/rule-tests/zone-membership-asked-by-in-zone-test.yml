@@ -1,0 +1,8 @@
+id: zone-membership-asked-by-in-zone
+valid:
+  - 'inside = in_zone(name, zone)'
+  - 'json = path.endswith(".json")'
+  - 'named = name.endswith(f"-{suffix}")'
+invalid:
+  - 'inside = name.endswith(f".{zone}")'
+  - 'inside = host.name.endswith(f".{zone.name}") or host.name == zone.name'

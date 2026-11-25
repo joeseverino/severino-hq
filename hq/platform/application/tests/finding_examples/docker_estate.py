@@ -1,9 +1,9 @@
 from unittest import mock
 
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
 from ...finding_steps import Run
-from . import Example, Examples, Raised, connection
+from . import Example, Examples, Raised
 
 ON_LAB = {"connection_ref": "example-portainer", "environment_id": 1, "host": "lab-1", "host_address": "192.0.2.10"}
 OLD, NEW, LOOSE = "sha256:" + "a" * 64, "sha256:" + "b" * 64, "sha256:" + "c" * 64
@@ -12,7 +12,7 @@ OLD, NEW, LOOSE = "sha256:" + "a" * 64, "sha256:" + "b" * 64, "sha256:" + "c" * 
 def lab() -> None:
     """lab-1, whose containers example-portainer reads, and which HQ manages through it."""
 
-    connection("example-portainer", "portainer", manages=True)
+    connection("portainer", "example-portainer", manages=True)
     declare("lab-1", "machine", {"name": "lab-1", "addresses": ["192.0.2.10"]})
 
 

@@ -105,7 +105,7 @@ class CallTests(BridgeTestCase):
         )
 
         with self.assertRaisesRegex(BridgeError, "Operation lease has expired"):
-            self.bridge.renew("example-worker", "op-1", lease_seconds=120)
+            self.bridge.renew("example-worker", "op-1", lease_seconds=120, progress={})
 
     def test_an_answer_that_is_not_a_json_object_is_an_error(self):
         for answer in (
@@ -116,7 +116,7 @@ class CallTests(BridgeTestCase):
             with self.subTest(answer=answer):
                 self.answer = answer
                 with self.assertRaises(BridgeError):
-                    self.bridge.renew("example-worker", "op-1", lease_seconds=120)
+                    self.bridge.renew("example-worker", "op-1", lease_seconds=120, progress={})
 
 
 class TrustTests(BridgeTestCase):
@@ -124,14 +124,14 @@ class TrustTests(BridgeTestCase):
         self.socket.chmod(0o666)
 
         with self.assertRaisesRegex(BridgeError, "mode is not 0600"):
-            self.bridge.renew("example-worker", "op-1", lease_seconds=120)
+            self.bridge.renew("example-worker", "op-1", lease_seconds=120, progress={})
         self.assertEqual(self.requests, [])
 
     def test_a_directory_open_to_another_account_is_refused(self):
         self.socket.parent.chmod(0o755)
 
         with self.assertRaisesRegex(BridgeError, "open to another account"):
-            self.bridge.renew("example-worker", "op-1", lease_seconds=120)
+            self.bridge.renew("example-worker", "op-1", lease_seconds=120, progress={})
         self.assertEqual(self.requests, [])
 
     def test_a_socket_answered_by_another_account_is_refused(self):
@@ -141,15 +141,15 @@ class TrustTests(BridgeTestCase):
             patch("hq_runner.bridge.peer_uid", return_value=os.geteuid() + 1),
             self.assertRaisesRegex(BridgeError, "answered by another account"),
         ):
-            self.bridge.renew("example-worker", "op-1", lease_seconds=120)
+            self.bridge.renew("example-worker", "op-1", lease_seconds=120, progress={})
         self.assertEqual(self.requests, [])
 
     def test_the_peer_this_account_is_read_from_the_connection(self):
-        self.bridge.renew("example-worker", "op-1", lease_seconds=120)
+        self.bridge.renew("example-worker", "op-1", lease_seconds=120, progress={})
 
         self.assertEqual(len(self.requests), 1)
 
     def test_a_relative_or_unclean_path_is_refused(self):
         for path in ("bridge.sock", f"{self.socket.parent}/../{self.socket.parent.name}/bridge.sock"):
             with self.subTest(path=path), self.assertRaisesRegex(BridgeError, "absolute, clean"):
-                Bridge(path).renew("example-worker", "op-1", lease_seconds=120)
+                Bridge(path).renew("example-worker", "op-1", lease_seconds=120, progress={})

@@ -12,6 +12,7 @@ worker misses fails here.
 
 import json
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -38,7 +39,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(events.HOST_LIMIT, run_event["host"]["maxLength"])
         self.assertEqual(events.TASK_LIMIT, run_event["task"]["maxLength"])
         self.assertEqual(events.MESSAGE_LIMIT, run_event["message"]["maxLength"])
-        self.assertEqual(events.EVENT_LIMIT, self.schemas["ControllerReport"]["properties"]["events"]["maxItems"])
+        self.assertEqual(events.EVENT_LIMIT, self.schemas["RunProgress"]["properties"]["events"]["maxItems"])
         outcomes = {"ok", "changed", *(outcome for outcome in events._OUTCOMES.values())}
         self.assertLessEqual(outcomes, set(run_event["outcome"]["enum"]))
 
@@ -68,6 +69,36 @@ class ContractTests(unittest.TestCase):
 
         self.assertEqual(set(said["readings"]), {"app.example.com", "db.example.com"})
         self.assertEqual([error.message for error in validator.iter_errors(said)], [])
+
+    def test_each_renewal_the_worker_sends_of_the_recorded_run_conforms_to_run_progress(self):
+        from jsonschema import Draft202012Validator
+        from referencing import Registry, Resource
+        from referencing.jsonschema import DRAFT202012
+
+        from hq_runner.journal import Journal
+
+        from . import fakes
+
+        contract = json.loads(BASE.read_text(encoding="utf-8"))
+        uri = "urn:hq-bridge"
+        registry = Registry().with_resource(uri, Resource.from_contents(contract, default_specification=DRAFT202012))
+        validator = Draft202012Validator({"$ref": f"{uri}#/components/schemas/RunProgress"}, registry=registry)
+        bridge = fakes.Bridge(fakes.pending())
+        with tempfile.TemporaryDirectory() as scratch:
+            worker.work_once(
+                bridge,
+                controller_id=fakes.WORKER,
+                installed=fakes.installed,
+                reach=fakes.reach,
+                journal=Journal(Path(scratch) / "journal.json"),
+                runner=fakes.Runner(fakes.RECORDED, status="failed"),
+                scan=fakes.scanned,
+                clock=fakes.Clock(),
+            )
+
+        self.assertTrue(any("events" in sent for sent in bridge.progress))
+        for sent in bridge.progress:
+            self.assertEqual([error.message for error in validator.iter_errors(sent)], [])
 
     def test_a_scan_s_catalog_is_held_to_source_catalog_s_bounds(self):
         from hq_runner import catalog

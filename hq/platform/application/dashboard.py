@@ -7,7 +7,7 @@ model and decides no number.
 
 from collections.abc import Iterable, Mapping
 from functools import partial
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from django.utils import timezone
 
@@ -32,13 +32,17 @@ from .findings import finding_key, rule_for
 from .json_schemas import as_written
 from .plugins import source_overview
 from .projection import iso, projection_scope
-from .read_models import ActivityEvent, recent_activity
 from .security import Capability, Principal
 from .workflows import WrittenAction
 lazy from .action_items import item_key, item_revision, waiting_count
 lazy from .estate_records import ActionItem
+lazy from .resources import list_resource
 lazy from .routes import reverse
 lazy from .ui import DomainOverview
+
+if TYPE_CHECKING:
+    from .asks import StandingAnswer
+    from .audit_specs import AuditItem
 
 
 @derivation("dashboard.highlights", reads=DASHBOARD_READS, vary=reader_variant)
@@ -142,8 +146,9 @@ class QueueItem(TypedDict):
     notice: bool
     # A request a person decides, never set aside (``Finding.held``).
     held: bool
-    # HQ is acting on it now, so its row asks again (``Finding.under_way``).
-    under_way: bool
+    # How the work HQ does on it now stands, so its row says it and asks
+    # again (``Finding.under_way``); null while none is under way.
+    under_way: StandingAnswer | None
     family: str
     # Why it is as urgent as its status says (``attention.finding_why``).
     why: str
@@ -201,7 +206,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "subject": as_written(finding.subject_link) if finding.subject_link else None,
         "notice": finding.notice,
         "held": finding.held,
-        "under_way": finding.under_way,
+        "under_way": finding.under_way.as_json() if finding.under_way else None,
         # A rule's findings are one kind of matter, named as the rule names itself.
         "family": rule.title if rule is not None else finding.family,
         "why": finding_why(finding, rule),
@@ -262,7 +267,7 @@ class Kpis(TypedDict):
 
 
 class _Activity(TypedDict):
-    recent_activity: list[ActivityEvent]
+    recent_activity: list[AuditItem]
     # Each part this caller may not read, said, so withheld and empty read apart.
     unread: list[str]
 
@@ -300,7 +305,7 @@ def operating_snapshot(*, principal) -> OperatingSnapshot:
     """
     with projection_scope():
         # When it was asked for, not when it was derived.
-        return {"generated_at": timezone.now().isoformat(), **_operating_snapshot(principal)}
+        return {"generated_at": iso(timezone.now()), **_operating_snapshot(principal)}
 
 
 def _snapshot_variant(principal) -> tuple[Any, ...]:
@@ -373,5 +378,6 @@ WITHHELD_ACTIVITY = "not read: recent_activity, because this caller may not read
 
 def _activity(principal) -> _Activity:
     if principal.permits(Capability.READ_AUDIT_LOG):
-        return {"recent_activity": recent_activity(limit=8)["items"], "unread": []}
+        events = list_resource("audit", {"events": True, "limit": 8}, principal=principal)["items"]
+        return {"recent_activity": cast("list[AuditItem]", events), "unread": []}
     return {"recent_activity": [], "unread": [WITHHELD_ACTIVITY]}

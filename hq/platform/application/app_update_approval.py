@@ -11,12 +11,14 @@ and what each may do: docs/Architecture.md, "Approving an app update".
 """
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from typing import Annotated, Any
 
 from django.db import transaction
 from django.utils import timezone
-from django.utils.text import get_text_list
+from django.utils.text import capfirst, get_text_list
 from pydantic import Field, ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
@@ -33,6 +35,7 @@ from .record_fields import RecordId
 from .security import Capability, PolicyDenied
 from .tone import Tone
 from .ui import counted, ended
+from .work_runs import StatedKind
 lazy from .app_update_open import ticked
 lazy from .app_updates import AppUpdate, app_updates, merged_of
 lazy from .approval_review import ChangePreview
@@ -55,10 +58,11 @@ lazy from .containers import Container
 lazy from .entity_links import web_url
 lazy from .github_estate import repositories
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
-lazy from .labels import lower_first
+lazy from .labels import dotted, lower_first
+lazy from .moments import duration
 lazy from .payload_words import ChangeRow
 lazy from .resource_operations import ACTION_CAPABILITY, THEN, OperationAsked, queue_carried_merge
-lazy from .work_runs import run_url, stopped_at, untaken
+lazy from .work_runs import WorkRun, run_row, standing_of as run_standing
 
 # The input of the playbook that applies a merge: the commit it applies.
 REVISION = "revision"
@@ -248,8 +252,9 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
     reached(manifest, hosts)
     pull = _declared(command, consented=consented)
     correlation = f"{command.repository}#{command.number}@{command.head_sha[:12]}"
-    # The preview's record is the playbook's as approved (``queue_run``):
-    # the apply runs only while it still is.
+    # The preview is the run in check mode, asked the one way every preview
+    # is (``queue_run``), whose record is the playbook's as approved: the
+    # apply runs only while it still is.
     return queue_run(
         manifest,
         {
@@ -258,7 +263,6 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
             "parameters": _parameters(manifest, command.head_sha),
             "hosts": list(hosts),
             "correlation": correlation,
-            CHECK: True,
             THEN: {
                 "pull_request": pull.key,
                 "head_sha": command.head_sha,
@@ -273,6 +277,7 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
         },
         reason="",
         consented=consented,
+        check=True,
     )
 
 
@@ -516,24 +521,19 @@ def merge_standing(update: AppUpdate) -> MergeStanding | None:
 
 
 def _previewed(preview: OperationRequest) -> MergeStanding:
-    url = run_url(str(preview.pk))
+    run = run_row(preview)
     if preview.state in _ACTIVE:
-        return MergeStanding(
-            _working("Previewing", preview), Tone.ATTENTION, url, taken=True, said=waits_on(preview), operation=preview
-        )
+        return _under_way(preview, run)
     if preview.state == OperationRequest.State.SUCCEEDED:
         refused = str(((preview.result or {}).get(THEN) or {}).get("refused") or "")
-        return MergeStanding(ended(f"Previewed. {refused}".strip()), Tone.SERIOUS, url, operation=preview)
-    step, said = stopped_at(preview)
-    return MergeStanding(
-        _failed("Preview failed", step, "approve"), Tone.SERIOUS, url, step=step, said=said, operation=preview
-    )
+        return MergeStanding(ended(f"Previewed. {refused}".strip()), Tone.SERIOUS, operation=preview, run=run)
+    return _failed("Preview failed", "approve", preview, run)
 
 
 def _merged(merge: OperationRequest) -> MergeStanding:
     result = merge.result or {}
     if merge.state in _ACTIVE:
-        return MergeStanding("Merging", Tone.ATTENTION, taken=True, said=waits_on(merge), operation=merge)
+        return _under_way(merge, run_row(merge))
     if merge.state == OperationRequest.State.SUCCEEDED:
         then = result.get(THEN) or {}
         if then.get("run"):
@@ -551,10 +551,12 @@ def _applied(merge: OperationRequest, first: str) -> MergeStanding:
     """How the merge's apply stands: its newest run of the merge commit."""
 
     queued = OperationRequest.objects.filter(pk=first).first()
-    revision = str(((queued.input or {}).get("parameters") or {}).get(REVISION) or "") if queued else ""
-    standing = _apply_standing(str((queued.input or {}).get("operation", "")), revision) if queued else None
-    if standing is None:
-        return MergeStanding("Merged", Tone.GOOD, run_url(first), taken=True, operation=queued or merge)
+    if queued is None:
+        return MergeStanding("Merged", Tone.GOOD, taken=True, operation=merge)
+    revision = str(((queued.input or {}).get("parameters") or {}).get(REVISION) or "")
+    standing = _apply_standing(str((queued.input or {}).get("operation", "")), revision) or MergeStanding(
+        "Merged", Tone.GOOD, taken=True, operation=queued, run=run_row(queued)
+    )
     if standing.tone == Tone.GOOD:
         return standing
     # Once merged, a failed apply is pressed again from the default branch (``app_updates.UpdateKind.MERGED``).
@@ -579,51 +581,108 @@ def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] 
     )
     if apply is None:
         return None
-    url = run_url(str(apply.pk))
+    run = run_row(apply)
     if apply.state in _ACTIVE:
-        return MergeStanding(
-            _working("Applying", apply), Tone.ATTENTION, url, taken=True, said=waits_on(apply), operation=apply
-        )
+        return _under_way(apply, run)
     if apply.state == OperationRequest.State.SUCCEEDED:
         done = apply.completed_at
         if done is not None and any(item.running.observed_at > done for item in items):
             return None
-        return MergeStanding("Applied", Tone.GOOD, url, taken=True, operation=apply)
-    step, said = stopped_at(apply)
+        # An app the run did not release is said in the tone its reading gives it.
+        amiss = run.evidence.amiss
+        tone = Tone.worst((tone for _line, tone in amiss), Tone.GOOD)
+        return MergeStanding(
+            "Applied", tone, taken=True, lines=tuple(line for line, _tone in amiss), operation=apply, run=run
+        )
+    return _failed("Apply failed", "apply", apply, run)
+
+
+def _under_way(operation: OperationRequest, run: WorkRun) -> MergeStanding:
+    """A step under way, said as its run stands (``work_runs.standing_of``),
+    with what it waits on while nothing has taken it."""
+
+    standing = run_standing(run)
     return MergeStanding(
-        _failed("Apply failed", step, "apply"), Tone.SERIOUS, url, step=step, said=said, operation=apply
+        standing.said,
+        Tone.ATTENTION,
+        taken=True,
+        lines=(waits_on(operation), duration(timedelta(seconds=standing.seconds), short=True)),
+        operation=operation,
+        run=run,
     )
 
 
-def _working(doing: str, run: OperationRequest) -> str:
-    """A run under way, said with the machines it runs on."""
+def _failed(what: str, again: str, operation: OperationRequest, run: WorkRun) -> MergeStanding:
+    """A step that ended badly, with the task it stopped on and the press
+    that asks it again; its detail what that task said and each app the run
+    did not release."""
 
-    hosts = [str(host) for host in (run.input or {}).get("hosts") or ()]
-    return f"{doing} on {get_text_list(hosts, 'and')}" if hosts else doing
-
-
-def _failed(what: str, step: str, again: str) -> str:
-    """A step that ended badly, with the task it stopped on and the press that asks it again."""
-
+    step, said = run.stopped
     at = f" at “{step}”" if step else ""
-    return f"{ended(f'{what}{at}')} Fix what stopped it, then {again} again."
+    return MergeStanding(
+        f"{ended(f'{what}{at}')} Fix what stopped it, then {again} again.",
+        Tone.SERIOUS,
+        lines=(said, *(line for line, _tone in run.evidence.amiss)),
+        operation=operation,
+        run=run,
+    )
 
 
 def waits_on(operation: OperationRequest) -> str:
-    """What a queued step waits for while no worker reports to take it, "" once
-    one does: a playbook's run waits on the playbook worker, any other step on
-    the controller."""
+    """What a queued step the controller takes waits for while it does not
+    report, "" once it does; a playbook's run says what it waits on as it
+    stands (``work_runs.standing_of``)."""
 
-    if operation.state != OperationRequest.State.QUEUED:
+    if operation.state != OperationRequest.State.QUEUED or operation.action == OperationRequest.Action.RUN:
         return ""
-    if operation.action == OperationRequest.Action.RUN:
-        return untaken()
     return controller_standing().cannot("", now=timezone.now())
 
 
 # The reading the applier states of each machine it released apps on: one
-# ``{project, result}`` record per app, ``result`` "ok" for one released.
+# ``{project, result, health}`` record per app (the applier's
+# ``compose_project_outcomes``), ``result`` one of these, each in its words
+# and the tone a record of it is said in.
 PULLED = "apps.pull"
+RELEASED = "ok"
+_RESULTS = {
+    RELEASED: ("Released", Tone.GOOD),
+    "refused": ("Refused; its trial failed, so it runs as before", Tone.ATTENTION),
+    "rolled_back": ("Rolled back", Tone.ATTENTION),
+    "failed": ("Failed", Tone.SERIOUS),
+}
+
+
+def _result(record: Mapping[str, Any]) -> tuple[str, Tone]:
+    result = str(record.get("result") or "")
+    return _RESULTS.get(result, (capfirst(result), Tone.NEUTRAL))
+
+
+def _pulled(record: Mapping[str, Any]) -> str:
+    """What the applier did with one app, and the health it found."""
+
+    return dotted(_result(record)[0], record.get("health") or "")
+
+
+def _releasing(line: Mapping[str, Any]) -> str | None:
+    """How far the applier's pull has got, from one pass of its following
+    task (``{running, result, releasing, ended: {project: result}}``): the
+    app it is releasing, then how each ended app ended."""
+
+    ended = line.get("ended")
+    if "releasing" not in line or not isinstance(ended, Mapping):
+        return None
+    releasing = line["releasing"]
+    said = (f"{app}: {_result({'result': result})[0]}" for app, result in ended.items())
+    return dotted(f"Releasing {releasing}" if releasing else "", *said)
+
+
+PULLED_KIND = StatedKind(
+    "App releases",
+    title=lambda record: str(record.get("project") or ""),
+    describe=_pulled,
+    progress=_releasing,
+    tone=lambda record: _result(record)[1],
+)
 
 
 def applied_at(machine: str, app: str) -> str:
@@ -639,7 +698,7 @@ def applied_at(machine: str, app: str) -> str:
     ).order_by("-created_at")
     for run in runs.only("input", "result").iterator():
         pulled = run.result["stated"]["readings"][host][PULLED] or ()
-        if any(each.get("project") == app and each.get("result") == "ok" for each in pulled):
+        if any(each.get("project") == app and each.get("result") == RELEASED for each in pulled):
             return str(((run.input or {}).get("parameters") or {}).get(REVISION) or "")
     return ""
 

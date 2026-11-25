@@ -17,10 +17,8 @@ from .entity_links import EntityLink, entity_link
 from .projection import addressable, listing
 from .record_fields import Notes, Slug, one_of
 from .record_links import linked
-from .record_saves import Held, Link, linked_saver, row, saved_type
+from .record_saves import Held, Link, linked_saver, row
 from .references import Kind
-from .security import Principal
-from .upserts import upsert_by_slug
 lazy from . import zones
 
 # An asset's fields as its command writes them and its row reads them back, each said once.
@@ -121,26 +119,3 @@ save_asset = linked_saver(
     refusals=Held("That asset was not found.", "That asset changed after it was read."),
     links={"related_projects": Link("slug", "A related project was not found.")},
 )
-
-
-# What an asset's save answers, read off its record type (``saved_type``).
-type AssetSaved = saved_type("assets")
-
-
-def upsert_asset(
-    command: AssetCommand,
-    *,
-    principal: Principal,
-    expected_updated_at: str | None = None,
-    sent: frozenset[str] | None = None,
-) -> AssetSaved:
-    """Idempotently create or update an asset by its command slug."""
-
-    return upsert_by_slug(
-        Asset,
-        command,
-        save_asset,
-        principal=principal,
-        expected_updated_at=expected_updated_at,
-        sent=sent,
-    )

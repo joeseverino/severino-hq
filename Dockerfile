@@ -240,49 +240,34 @@ RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
         -x '/tests/' hq hq_sdk
 
 # Mounted volumes; create empty so the container can boot before a host mount.
-# Each bridge socket's directory is this account's alone: a volume first mounted
+# Each socket's directory, and the spool, are this account's alone: a volume first mounted
 # there takes that owner and mode, and HQ refuses to serve from anything wider.
 # Made after every step that runs HQ, and refused if one left a file there: a
 # new volume starts as a copy of the image's directory, so a file a root step
 # wrote would be root's in the volume, where HQ's account cannot write it.
-RUN mkdir -p /data /media /exports /run/hq-bridge /run/hq-automation-bridge \
-    && left="$(find /data /media /exports /run/hq-bridge /run/hq-automation-bridge -mindepth 1)" \
+RUN mkdir -p /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge \
+    && left="$(find /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge -mindepth 1)" \
     && if [ -n "$left" ]; then echo "A build step left files in HQ's volumes: $left" >&2; exit 1; fi \
-    && chown -R severino:severino /data /media /exports /run/hq-bridge /run/hq-automation-bridge \
-    && chmod 0700 /run/hq-bridge /run/hq-automation-bridge
+    && chown -R severino:severino /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge \
+    && chmod 0700 /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge
 
 USER severino
 EXPOSE 8000
 
 COPY --chown=severino:severino entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
-# The proxy in front of this speaks HTTP/1.1 upstream and holds a connection
-# open for 90 seconds. uvicorn's default is to hang up after 5, so a request
-# arriving on a connection idle for longer finds it already closed, and the
-# proxy reports what it saw:
-#
-#   upstream prematurely closed connection while reading response header
-#
-# Held above the proxy's 90s deliberately: whichever side hangs up first
-# decides, and it should be the one that knows a request is not in flight.
-#
-# Loopback only: every caller, /mcp/ included, comes through that proxy. Its
-# forwarded headers are read by the application (hq/config/asgi.py) from
-# SEVERINO_TRUSTED_PROXIES, so the server reads none of its own.
-#
-# One process, named so a WEB_CONCURRENCY in the host's environment cannot
-# start more: the agent limits (hq/platform/application/agent_limits.py) are
-# counted in it.
-#
-# The module runs uvicorn on the address and port its LISTENS_AT declares,
-# with these options after them.
-CMD ["python", "-m", "hq.config.serve", \
-     "--workers", "1", "--no-proxy-headers", "--access-log", "--timeout-keep-alive", "120"]
 
-# The probe is the static controller binary already in the image: no
-# interpreter or shell per check.
+# One process, which serves Uvicorn's server itself: the agent limits
+# (hq/platform/application/agent_limits.py) are counted in it. The module
+# says where it listens and with which options.
+CMD ["python", "-m", "hq.config.serve"]
+
+# The check is the static controller binary already in the image: no
+# interpreter or shell per check. It asks the server's probe socket
+# (hq/config/serve.py PROBE_SOCKET), so it reads this container's health
+# even while another web accepts on the same port.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD ["/usr/local/bin/hq-controller", "ready", "http://127.0.0.1:8000/health/ready/"]
+    CMD ["/usr/local/bin/hq-controller", "ready", "unix:/run/hq-web/ready.sock", "http://127.0.0.1:8000/health/ready/"]
 
 # Which commit this image is, and where it lives, for HQ to read about itself:
 # the same two values the build stamps as OCI labels, which a container shows

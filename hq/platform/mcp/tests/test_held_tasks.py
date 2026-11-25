@@ -115,7 +115,7 @@ async def _task(client, method, task_id, **fields):
 @override_settings(SEVERINO_SITE_HOST="hq.example.com")
 class HeldTaskTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare(POLICY_KEY, "tailscale.policy", {"document": "{}"})

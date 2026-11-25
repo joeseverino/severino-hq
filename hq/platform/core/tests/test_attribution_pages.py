@@ -75,5 +75,5 @@ class OneEventRowTests(TestCase):
 
         html = self.client.get(reverse("core:audit_detail", args=[row.pk])).content.decode()
 
-        others = _words(" ".join(element.words for element in within(html, "id", "rest-of-operation")))
+        others = _words(" ".join(element.words for element in within(html, "class", "data-table")))
         self.assertIn("example-agent, over MCP · approved by example-owner", others)

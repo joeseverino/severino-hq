@@ -1,9 +1,9 @@
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from hq.domains.control_plane.models import DashboardMachine, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import DashboardMachine, ProviderInventory
 from hq.platform.application.markup_testing import hrefs, text, with_class
-from hq.platform.core.testing import SignedInTestCase, declare, operator
+from hq.platform.core.testing import SignedInTestCase, connection, declare, operator
 
 from .. import cadence
 from ..getting_started import remaining, steps
@@ -25,15 +25,7 @@ class GettingStartedTests(TestCase):
 
     def test_a_step_is_gone_once_hq_can_see_it_done(self):
         cadence.note_controller()
-        ProviderConnection.objects.create(
-            connection_ref="example-portainer",
-            controller_id="example-controller",
-            provider="portainer",
-            endpoint="https://portainer.example.com",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("portainer", "example-portainer", endpoint="https://portainer.example.com")
 
         self.assertEqual(self.left(), ["machine"])
 
@@ -45,15 +37,7 @@ class GettingStartedTests(TestCase):
 
     def test_an_hq_with_everything_done_shows_no_steps(self):
         cadence.note_controller()
-        ProviderConnection.objects.create(
-            connection_ref="example-dns",
-            controller_id="example-controller",
-            provider="cloudflare_dns",
-            endpoint="https://api.example.com",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("cloudflare_dns", "example-dns", endpoint="https://api.example.com")
         machine = declare("app-host", "machine", {"name": "app-host"})
         DashboardMachine.objects.create(machine=machine, position=0)
         operator(self.client, "started")

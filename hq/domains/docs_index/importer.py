@@ -375,7 +375,7 @@ def import_manifest_data(
     prune_orphans: bool = False,
 ) -> dict[str, Any]:
     """Upsert the manifest and return its stats, the contract
-    `import_docs_manifest --json` emits and the `hq sync` wrapper parses."""
+    `documentation.sync` answers and the `hq sync` wrapper parses."""
     if not isinstance(items, list):
         raise ManifestImportError("Manifest must be a JSON array of records.")
 

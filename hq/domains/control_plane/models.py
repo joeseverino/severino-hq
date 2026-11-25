@@ -13,6 +13,7 @@ from django.utils import timezone
 from hq.domains.jobs.models import JobState
 from hq.platform.application.labels import dotted
 from hq.platform.application.tone import Tone, TonedChoices
+from hq.platform.core.attribution import queued_chain
 from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
@@ -346,6 +347,9 @@ class ReadRequest(TimestampedModel):
     connection_ref = models.CharField(max_length=160, blank=True)
     kind = models.CharField(max_length=64, blank=True)
     requested_at = models.DateTimeField(default=timezone.now)
+    # The chain of its latest ask, which the sweep that answers it continues
+    # (``sweep.record_sweep``).
+    traceparent = queued_chain()
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=("connection_ref", "kind"), name="one_read_request_per_subject")]
@@ -539,6 +543,10 @@ class OperationRequest(TimestampedModel):
     claim_attempt = models.CharField(max_length=64, blank=True, default="")
     attempt_count = models.PositiveIntegerField(default=0)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # The chain it was queued in, as a W3C ``traceparent``, taken from the
+    # binding wherever it is made: what its claim and report continue
+    # (``attribution.own_operation``).
+    traceparent = queued_chain()
 
     class Meta:
         ordering = ("-created_at",)

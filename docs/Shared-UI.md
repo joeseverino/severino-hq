@@ -1373,8 +1373,11 @@ where the table holds two rows to put in order, counted across its groups. A col
 and a heading named for assistive technology alone have nothing to order, and
 `DataTable(keeps_order=True)` keeps a table's own order, as a list page does with the one page of its
 server's order it holds and a change table does with a change. `tables.js` sorts the rows on
-the page: ascending, descending, then as they came. Amounts, dates and lengths of time sort as
-what they are; a cell may say its own value with `data-sort`. Sections keep their own rows.
+the page: ascending, descending, then as they came. A cell whose value is not its words carries
+it as `data-sort` (`Cell.sort_value`): a moment its instant, an amount its sum, words a figure's
+function wrote (`Figure`: `money`, `measured`, `counted`, `duration`, `span`, `when`) their
+number, and `Cell(sort=)` any other. Every other cell sorts by the words it shows, compared as
+written, never parsed for a number or a date. Sections keep their own rows.
 *Gate:* `test_any_table_sorts_by_a_heading`.
 
 Rows selected together (`data-selectable-table`) start with a column of tick-boxes: the heading

@@ -12,8 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# The argument the image hands uvicorn (hq.config.serve): the one process that is HQ serving.
-SERVING = "hq.config.asgi:application"
+# The module the image runs (its CMD): the one process that is HQ serving.
+SERVING = "hq.config.serve"
 SCOPE = re.compile(r"^0::(/system\.slice/docker-([0-9a-f]{64})\.scope)$", re.MULTILINE)
 # The units whose last run the report times.
 TIMED = ("severino-hq-controller.service", "severino-hq-glance.service")

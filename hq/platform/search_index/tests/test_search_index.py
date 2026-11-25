@@ -1,14 +1,12 @@
 import sqlite3
-from io import StringIO
 from unittest import mock
 
-from django.core.management import call_command
 from django.db import connection, transaction
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from hq.domains.projects.models import Project
-from hq.platform.application.search import apply_search, global_search, search_ids, search_records
+from hq.platform.application.search import apply_search, global_search, search_ids
 from hq.platform.application.security import MCP_INTERFACE, AuthorizationError, agent_principal, cli_principal
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare
@@ -95,19 +93,6 @@ class IndexedSearchTests(TestCase):
         self.assertEqual(search_ids("projects", "rolled", principal=OPERATOR), [])
         self.assertFalse(SearchDocument.objects.filter(scope="projects", body__icontains="rolled").exists())
 
-    def test_adapter_neutral_result_and_cli_are_json(self):
-        project = Project.objects.create(name="Searchable HQ")
-
-        result = search_records("projects", "search", principal=OPERATOR, limit=5)
-        stdout = StringIO()
-        call_command("search_hq", "projects", "search", stdout=stdout)
-
-        (item,) = result["items"]
-        self.assertEqual(item["id"], project.slug)
-        self.assertEqual(item["label"], str(project))
-        self.assertIn("Searchable", item["snippet"])
-        self.assertIn('"scope": "projects"', stdout.getvalue())
-
     def test_query_plan_uses_the_fts_virtual_table(self):
         with connection.cursor() as cursor:
             cursor.execute(
@@ -167,8 +152,6 @@ class RankedOrderTests(TestCase):
             group for group in global_search("ledger", principal=OPERATOR)["groups"] if group["scope"] == "projects"
         )
         self.assertEqual([item["id"] for item in group["items"]], slugs)
-        records = search_records("projects", "ledger", principal=OPERATOR)
-        self.assertEqual([item["id"] for item in records["items"]], slugs)
         listed = apply_search(Project.objects.all(), scope="projects", query="ledger", principal=OPERATOR).order_by(
             "_search_rank", "pk"
         )
@@ -284,34 +267,6 @@ class SingleStatementSearchTests(TestCase):
         with CaptureQueriesContext(connection) as queries:
             global_search("ledger", principal=READER)
         self.assertFalse([query["sql"] for query in queries if "audit" in query["sql"]])
-
-    def test_fallback_orders_and_omits_like_the_index_path(self):
-        with mock.patch("hq.platform.application.search._fts5_available", return_value=False):
-            with CaptureQueriesContext(connection) as queries:
-                outcome = global_search("ledger", principal=READER)
-            listed = apply_search(
-                Project.objects.all(),
-                scope="projects",
-                query="ledger",
-                principal=OPERATOR,
-            ).order_by("_search_rank", "pk")
-            nothing = apply_search(
-                Project.objects.all(),
-                scope="projects",
-                query="zzzznomatchhere",
-                principal=OPERATOR,
-            ).order_by("_search_rank", "pk")
-
-            self.assertEqual(
-                [project.pk for project in listed],
-                sorted(Project.objects.filter(name__icontains="ledger").values_list("pk", flat=True)),
-            )
-            self.assertEqual(list(nothing), [])
-        scopes = {group["scope"] for group in outcome["groups"]}
-        self.assertIn("projects", scopes)
-        self.assertNotIn("audit", scopes)
-        self.assertFalse([query["sql"] for query in queries if "search_index_fts" in query["sql"]])
-        self.assertFalse([query["sql"] for query in queries if "core_auditlog" in query["sql"]])
 
 
 class SearchedListTests(TestCase):
@@ -488,20 +443,6 @@ class GlobalSearchTests(TestCase):
         self.assertIn("audit", operator_scopes)
         self.assertNotIn("audit", limited_scopes)
 
-    def test_fallback_backend_still_produces_marked_snippets(self):
-        Project.objects.create(
-            name="Fallback target",
-            description="Portable snippet extraction without FTS",
-        )
-
-        with mock.patch("hq.platform.application.search._fts5_available", return_value=False):
-            outcome = global_search("portable", principal=OPERATOR)
-
-        group = next(g for g in outcome["groups"] if g["scope"] == "projects")
-        (item,) = group["items"]
-        marked = [t for t, hit in item["snippet"] if hit]
-        self.assertEqual([m.lower() for m in marked], ["portable"])
-
 
 class SearchAuthorizationTests(TestCase):
     def test_baseline_read_principal_cannot_search_the_audit_trail(self):
@@ -510,8 +451,6 @@ class SearchAuthorizationTests(TestCase):
 
         with self.assertRaises(AuthorizationError):
             search_ids("audit", "login", principal=limited)
-        with self.assertRaises(AuthorizationError):
-            search_records("audit", "login", principal=limited)
 
         # Baseline READ still covers ordinary record scopes.
         Project.objects.create(name="Reachable by MCP")

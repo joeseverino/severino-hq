@@ -202,7 +202,7 @@ def _project(project: Project) -> dict[str, Any]:
         "category_label": project.get_category_display(),
         "repository_url": project.repository_url,
         "public_url": project.public_url,
-        "last_active_at": last_active(project).isoformat(),
+        "last_active_at": iso(last_active(project)),
     }
 
 
@@ -213,7 +213,7 @@ def _content(item: ContentItem) -> dict[str, Any]:
         "content_type_label": item.get_content_type_display(),
         "published_url": item.published_url,
         "published_at": iso(item.published_at),
-        "updated_at": item.updated_at.isoformat(),
+        "updated_at": iso(item.updated_at),
     }
 
 

@@ -88,7 +88,7 @@ class CapabilityCallTests(TestCase):
         )
 
     def stale_write_call(self, handler, *, target_kind=None, target=None):
-        spec = self.spec("example.records.upsert", effect="read", target_kind=target_kind, handler=handler)
+        spec = self.spec("example.records.update", effect="read", target_kind=target_kind, handler=handler)
         return self.call(spec, {}, target=target, expected_updated_at="2026-01-01T00:00:00+00:00")
 
     def test_a_handler_that_declares_the_stale_write_token_is_handed_it(self):

@@ -1,0 +1,27 @@
+# A machine's, a service's, a zone's, a project's or a declaration's page is
+# addressed through hq.platform.application.entity_links, which knows each
+# kind's route and identity, so a link to an entity never reverses its route
+# by hand. A view reverses its own routes.
+id: entity-page-linked-by-entity-link
+language: python
+severity: error
+message: An entity's page is addressed by reversing its route by hand.
+note: Address it through hq.platform.application.entity_links (page_url, EntityLink).
+files:
+  - "hq/platform/application/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/views.py"
+  - "hq/platform/application/entity_links.py"
+rule:
+  kind: call
+  has:
+    field: function
+    regex: (^|\.)reverse$
+  all:
+    - has:
+        field: arguments
+        has:
+          nthChild: 1
+          regex: ^["'](control_plane:machine|control_plane:service|zones:detail|projects:detail|control_plane:detail)["']$

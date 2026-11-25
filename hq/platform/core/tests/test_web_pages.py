@@ -11,7 +11,6 @@ from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
     DashboardRefreshRequest,
-    ProviderConnection,
     ProviderInventory,
 )
 from hq.domains.projects.models import Project
@@ -25,7 +24,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resources import get_resource
 from hq.platform.application.tests.glance_readings import HOST, reported_machine
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.core.testing import READER, SignedInTestCase, declare
+from hq.platform.core.testing import READER, SignedInTestCase, connection, declare
 from hq_sdk.testing import plain
 
 
@@ -261,14 +260,12 @@ class DashboardWorkflowTests(SignedInTestCase):
     def test_dashboard_refresh_is_one_explicit_controller_request(self):
         machine = declare("example-host", "machine", {"name": "example-host"})
         DashboardMachine.objects.create(machine=machine)
-        ProviderConnection.objects.create(
-            connection_ref="example-portainer",
+        connection(
+            "portainer",
+            "example-portainer",
             controller_id="example-host",
-            provider="portainer",
             endpoint="https://portainer.example.test",
             reaches=["example-host"],
-            reachable=True,
-            observed_at=timezone.now(),
         )
 
         with (

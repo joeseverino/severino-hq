@@ -7,7 +7,7 @@
 
 set -eu
 # Hermetic: none of what the gates are asked for comes from the caller.
-unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST CHECK_RELEASE_BASE_REF \
+unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST \
     TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_HOST_EXIT TEST_UNAME TEST_HOST_REFUSES TEST_PROGRAM_PAD
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -40,8 +40,8 @@ git_ init -q
 git_ add -A
 git_ commit -q -m main
 git_ update-ref refs/remotes/origin/main HEAD
-# The release adds a unit main does not ship: the release installs it, so the
-# host is not expected to have it yet.
+# The release adds a unit: its deploy installs it, so the host is not expected
+# to have it yet.
 printf '[Timer]\nOnCalendar=daily\n' >"${repo}/deploy/systemd/severino-hq-example.timer"
 printf '// the release\n' >>"${repo}/controller/cmd/hq-host/main.go"
 git_ add -A
@@ -147,11 +147,6 @@ logged "check --release" "the host did not run hq-host check"
 grep -qx "./hq-host" "${TEST_PAYLOAD}" || fail "the host was not handed hq-host"
 grep -qx "./release/deploy/systemd/severino-hq-example.timer" "${TEST_PAYLOAD}" ||
     fail "the host was not handed the release's units"
-grep -qx "./main/deploy/systemd/severino-hq-web.service" "${TEST_PAYLOAD}" ||
-    fail "the host was not handed main's units"
-if grep -q "./main/deploy/systemd/severino-hq-example.timer" "${TEST_PAYLOAD}"; then
-    fail "main's units include the release's new one"
-fi
 git_ show HEAD:controller/cmd/hq-host/main.go | cmp -s - "${TEST_PAYLOAD}.program" ||
     fail "hq-host was not built from HEAD"
 

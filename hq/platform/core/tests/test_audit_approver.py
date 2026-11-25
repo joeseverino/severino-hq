@@ -14,7 +14,7 @@ from hq.platform.core.models import AuditLog
 
 class ApproverTests(TestCase):
     def test_each_row_an_approved_change_writes_names_who_approved_it(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare_policy()

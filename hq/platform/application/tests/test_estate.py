@@ -19,7 +19,7 @@ from hq.platform.application.markup_testing import elements, hrefs, text
 from hq.platform.application.security import cli_principal
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from .. import readings
@@ -51,19 +51,6 @@ def device(name, **fields):
 def devices(*records, nameservers=()):
     store("tailscale.device", *records)
     store("tailscale.policy", {"dns": {"dns": list(nameservers)}})
-
-
-def connection(ref, *, reachable=True, detail=""):
-    return ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id="example-controller",
-        provider="ssh",
-        endpoint="10.0.0.9:22",
-        reachable=reachable,
-        probed=True,
-        detail=detail,
-        observed_at=timezone.now(),
-    )
 
 
 def declared(key, kind, spec, *, status=None):
@@ -228,7 +215,7 @@ class EstateCardTests(TestCase):
     def setUp(self):
         devices(device("example-host"), device("example-nas", online=False, tags=["tag:server"]))
         declare_record("app-record", "app.example.com", "100.64.0.5")
-        connection("example-ssh", reachable=False, detail="Timed out")
+        connection("ssh", "example-ssh", reachable=False, detail="Timed out")
         declared(
             "example-cert",
             "tls.certificate",
@@ -295,7 +282,7 @@ class EstateCardTests(TestCase):
 
     def test_connections_are_counted_when_every_one_answers(self):
         ProviderConnection.objects.filter(connection_ref="example-ssh").update(reachable=True, detail="")
-        connection("example-dns")
+        connection("ssh", "example-dns")
 
         card = self.cards()["hq.estate.connections"]
 
@@ -316,14 +303,7 @@ class EstateCardTests(TestCase):
         from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
 
         ProviderConnection.objects.all().delete()
-        ProviderConnection.objects.create(
-            connection_ref="example-cf",
-            controller_id="example-controller",
-            provider="cloudflare_api",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("cloudflare_api", "example-cf")
         store(
             "cloudflare.pages_project",
             reachable=False,
@@ -470,9 +450,7 @@ class StaleGlanceTests(TestCase):
         from hq.domains.control_plane.models import DashboardMachine, DashboardRefreshRequest
 
         DashboardMachine.objects.create(machine=machine_spec, position=0)
-        ProviderConnection.objects.create(
-            connection_ref="example-ssh", controller_id="example-host", provider="ssh", observed_at=timezone.now()
-        )
+        connection("ssh", "example-ssh", controller_id="example-host")
         readings.record(
             readings.machine_telemetry("example-host"),
             reported_machine("example-host", host=HOST),
@@ -705,7 +683,7 @@ class EstateQueryBudgetTests(TestCase):
         devices(*(device(f"example-host-{index}", addresses=[f"100.64.0.{index + 1}"]) for index in range(size)))
         for index in range(size):
             declare_record(f"record-{index}", f"app{index}.example.com", f"100.64.0.{index + 1}")
-            connection(f"example-ssh-{index}", reachable=False)
+            connection("ssh", f"example-ssh-{index}", reachable=False)
         store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
 
     def test_the_estate_card_costs_the_same_whatever_the_estate_holds(self):
@@ -748,15 +726,7 @@ class ConnectionFigureTests(TestCase):
         from ..connection_context import connections_context
 
         declare("example-box", "machine", {"name": "example-box"})
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-dns",
-            provider="cloudflare_dns",
-            endpoint="https://api.example.com",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("cloudflare_dns", "example-dns", endpoint="https://api.example.com")
         admin = Principal("test", "admin", frozenset(Capability))
 
         with projection_scope():

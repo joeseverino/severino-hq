@@ -1,0 +1,33 @@
+# HQ ships no Django admin: every write goes through a capability, authorized
+# and audited, and the admin's forms would write around both. An import of
+# it, a test's included, is the first step to mounting it.
+id: admin-never-imported
+language: python
+severity: error
+message: A module imports django.contrib.admin.
+note: Write through a capability; HQ mounts no admin.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+rule:
+  any:
+    - kind: import_statement
+      has:
+        field: name
+        stopBy: end
+        regex: ^django\.contrib\.admin(\.|$)
+    - kind: import_from_statement
+      has:
+        field: module_name
+        regex: ^django\.contrib\.admin(\.|$)
+    - kind: import_from_statement
+      has:
+        field: module_name
+        regex: ^django\.contrib$
+      all:
+        - has:
+            stopBy: end
+            kind: identifier
+            regex: ^admin$
+            not:
+              inside: {kind: aliased_import, field: alias}

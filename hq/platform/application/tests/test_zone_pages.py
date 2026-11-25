@@ -8,10 +8,9 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.markup_testing import elements, hrefs, text, texts
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.consent import consented
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import declare, managing_everything, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
-from ..adoption_testing import managing_everything
 from ..security import cli_principal
 from .zone_records import DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, record, sweep
 
@@ -402,7 +401,7 @@ class PendingRemovalTests(TestCase):
     """
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         operator(self.client, "op")

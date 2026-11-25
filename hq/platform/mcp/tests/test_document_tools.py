@@ -86,8 +86,8 @@ class DocumentToolTests(SimpleTestCase):
     def test_invalid_arguments_never_invoke_execution(self):
         execute = AsyncMock()
         with patch("hq.platform.mcp.binding.sync_to_async", return_value=execute):
-            tool = bind_tools()["recent_activity"]
-        for arguments in ({"limit": "2"}, {"limit": True}, {"limit": None}):
+            tool = bind_tools()["get_findings"]
+        for arguments in ({"limit": "2"}, {"limit": True}, {"limit": 0}):
             with self.subTest(arguments=arguments), self.assertRaises(ValueError):
                 async_to_sync(tool.call)(arguments)
         execute.assert_not_awaited()
@@ -95,7 +95,7 @@ class DocumentToolTests(SimpleTestCase):
     def test_rejected_input_values_do_not_enter_tool_errors(self):
         tools = bind_tools()
         for name, arguments in (
-            ("recent_activity", {"limit": "synthetic-sensitive-input"}),
+            ("get_findings", {"limit": "synthetic-sensitive-input"}),
             ("list_resource", {"name": "synthetic-sensitive-input"}),
             ("execute_capability", {"name": "example.write", "payload": "synthetic-sensitive-input"}),
         ):

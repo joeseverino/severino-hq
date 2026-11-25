@@ -582,6 +582,14 @@ class FragmentBrowserTests(BrowserGate):
         self.page.evaluate("() => fetch('/probe-slot/')")
         self.assertEqual(self.asked.count(("/probe-strip/", "")), asked)
 
+    def test_a_region_drawn_under_way_for_minutes_is_followed_until_it_ends(self):
+        # A playbook's run takes minutes, its card drawn under way all that time.
+        self.page.clock.install()
+        self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
+        self.page.clock.fast_forward(5 * 60 * 1000)
+        self.page.clock.run_for(1000)
+        self.page.wait_for_function("() => document.querySelector('[data-fragment-poll]') === null", timeout=5000)
+
     def test_a_placeholder_waits_for_its_disclosure_and_refuses_a_whole_page(self):
         self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
         self.page.wait_for_selector(self.css(SELECTORS["fragment_failure"]))

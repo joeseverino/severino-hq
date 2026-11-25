@@ -10,7 +10,7 @@ import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import cache
 from typing import Annotated, Any, Literal, get_args
 
@@ -708,7 +708,7 @@ class ProviderResolutionContext:
     names_at: Callable[[str], tuple[str, ...]] | None = None
 
 
-def expiry_phrase(stamp: str) -> str:
+def expiry_phrase(stamp: str | datetime) -> str:
     """An expiry a person can act on: the date, and how long that leaves.
 
     The raw ISO timestamp is what the provider reports and the wrong thing to
@@ -717,9 +717,9 @@ def expiry_phrase(stamp: str) -> str:
     left) is the entire reason anyone looks at it.
     """
 
-    expires = moment(stamp)
+    expires = stamp if isinstance(stamp, datetime) else moment(stamp)
     if expires is None:
-        return stamp or ""
+        return str(stamp or "")
 
     days = days_until(expires)
     if days < 0:

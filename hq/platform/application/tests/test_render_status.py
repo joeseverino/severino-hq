@@ -16,7 +16,7 @@ from hq.domains.control_plane.observations.host import (
     STATUS_WORD,
 )
 from hq.platform.application.markup_testing import all_elements
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
 from .. import render_status_findings as rules
 from ..findings import estate_findings
@@ -24,7 +24,7 @@ from ..inventory_testing import store
 from ..security import web_principal
 from .commands import commands_on
 from .test_remedy_links import TRAP, UNOFFERED, _command_links, an_operator
-from .test_tailnet_posture import raised, tailnet_connection
+from .test_tailnet_posture import raised
 
 ROOT = Path(__file__).resolve().parents[4]
 SPEC = OBSERVATIONS[RENDER_STATUS_KIND]
@@ -149,7 +149,7 @@ class OneDeclarationTests(SimpleTestCase):
 class SubjectTests(TestCase):
     def test_a_controller_that_is_a_machine_carries_it_on_the_machine(self):
         declare("example-controller", "machine", {"name": "example-controller", "addresses": ["192.0.2.10"]})
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         sweep(unread("missing"))
 
         (finding,) = raised("render-status-unread")
@@ -162,7 +162,7 @@ class PageTests(TestCase):
     """The findings as a person meets them, with every link they carry followed."""
 
     def setUp(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         sweep(read(outcome="failed", failure="host", sync="TOKEN_NEEDED"), unread("missing", "other-apps"))
         self.user = an_operator()
         self.client.force_login(self.user)

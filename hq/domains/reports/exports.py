@@ -41,7 +41,7 @@ def _csv_cell(value) -> str:
     if isinstance(value, Decimal):
         return f"{value:.2f}"
     if isinstance(value, (date, datetime)):
-        return value.isoformat()
+        return iso(value)
     return str(value)
 
 
@@ -262,7 +262,7 @@ def year_summary(year: int, *, documentation: QuerySet[DocumentationRecord] | No
     expenses = Expense.objects.filter(date__year=year)
     assets = Asset.objects.filter(purchase_date__year=year)
     return {
-        "generated_at": timezone.now().isoformat(),
+        "generated_at": iso(timezone.now()),
         "year": year,
         "disclaimer": ("Estimated deductible = cost × business-use %. Estimate, not tax advice."),
         "totals": _year_totals(expenses, assets),
@@ -316,7 +316,7 @@ def _largest_expenses(expenses) -> list[dict[str, Any]]:
     return [
         {
             "id": row["id"],
-            "date": row["date"].isoformat(),
+            "date": iso(row["date"]),
             "vendor": row["vendor"],
             "item": row["item"],
             "category": row["category"],

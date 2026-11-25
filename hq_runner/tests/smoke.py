@@ -339,6 +339,9 @@ def main() -> int:
             wrong.append("a preview wrote the file its playbook writes")
     reports = 6 + len(STOPPED)
     scanned, ran, read, given, used, shown, *stopped = [*bridge.reports, *({} for _ in range(reports))][:reports]
+    # The tasks HQ holds of each run reported, in the order they were.
+    told = [bridge.tasks.get(sent["operation"], []) for action, sent in bridge.calls if action == "report"]
+    _, ran_tasks, read_tasks, *_ = [*told, *([] for _ in range(reports))][:reports]
     if shown.get("success") is not True:
         wrong.append(f"a preview of a playbook that writes a file did not succeed: {shown.get('message')}")
     for name, report in zip(STOPPED, stopped, strict=True):
@@ -366,9 +369,9 @@ def main() -> int:
         for found in procedure["roles"]
     }
     recorded = {role: ansible.entry_point(role, {role: spec}) for role, spec in fakes.RECORDED_ROLE_SPECS.items()}
-    seen = [(event["task"], event["outcome"]) for event in ran.get("events", [])]
+    seen = [(event["task"], event["outcome"]) for event in ran_tasks]
     print(f"smoke:runner: {worked} operations; scan {scanned.get('message')}; run {ran.get('message')}, events {seen}")
-    checked = [event["outcome"] for event in read.get("events", []) if event["task"] == "The read ran as its own login"]
+    checked = [event["outcome"] for event in read_tasks if event["task"] == "The read ran as its own login"]
     # One check in the role, one in the escalated block.
     if read.get("success") is not True or checked != ["ok", "ok"]:
         wrong.append(f"a read that asks to escalate did not run as its own login: {read.get('message')}, {checked}")

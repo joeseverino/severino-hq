@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import Annotated, Any, Literal, NotRequired, Required, TypeAliasType, TypedDict, final
 
+from django.db.models import Count, QuerySet
 from pydantic import ConfigDict, Field
 
 from hq.domains.docs_index import frontmatter_schema
@@ -359,6 +360,22 @@ def list_documentation(*, limit: int = 50, principal: Principal | None = None) -
         order=(),
         limit=limit,
     )
+
+
+class DocumentationTotals(TypedDict):
+    """How many of the docs a list read matched hold each status and type."""
+
+    by_status: Annotated[dict[str, int], Describe("How many hold each status.")]
+    by_type: Annotated[dict[str, int], Describe("How many are of each type.")]
+
+
+def list_totals(rows: QuerySet) -> DocumentationTotals:
+    """How the docs a list read matched divide, which it answers beside its page."""
+
+    def by(field: str) -> dict[str, int]:
+        return dict(rows.order_by(field).values_list(field).annotate(Count("pk")))
+
+    return {"by_status": by("status"), "by_type": by("doc_type")}
 
 
 def get_documentation(doc_id: str, *, principal: Principal | None = None) -> dict[str, Any]:

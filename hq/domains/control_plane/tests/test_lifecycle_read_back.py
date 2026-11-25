@@ -11,13 +11,12 @@ from django.utils.html import strip_tags
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application import cadence
-from hq.platform.application.adoption_testing import connection, managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, managing_everything, operator
 
 LIFECYCLE = (OperationRequest.Action.RESTART, OperationRequest.Action.START, OperationRequest.Action.STOP)
 HOST = "example-host"
@@ -133,7 +132,7 @@ class SelfDependencyTests(Estate):
     def setUp(self):
         super().setUp()
         containers(("example-portainer", "running", 9000), ("example-web", "running", 8080))
-        reader = connection("portainer", "example-portainer")
+        reader = connection("portainer", "example-portainer", manages=True)
         reader.endpoint = "http://192.0.2.10:9000"
         reader.reaches = [HOST, "example-edge"]
         reader.save(update_fields=["endpoint", "reaches"])
@@ -183,7 +182,7 @@ class LoopbackSelfDependencyTests(Estate):
             ],
             observed_at=timezone.now(),
         )
-        reader = connection("portainer", "example-portainer")
+        reader = connection("portainer", "example-portainer", manages=True)
         reader.endpoint = "http://127.0.0.1:9000"
         reader.controller_id = HOST
         reader.reaches = [HOST, "example-edge"]

@@ -1,0 +1,22 @@
+# Whether a name lies in a zone is asked of
+# hq.domains.control_plane.names.in_zone, which also answers for the zone's
+# apex and holds both to one spelling. A suffix test of its own misses the apex
+# or matches a zone whose name only ends the same way.
+id: zone-membership-asked-by-in-zone
+language: python
+severity: error
+message: A name's zone is asked by a suffix test of its own.
+note: Ask in_zone(name, zone) from hq.domains.control_plane.names.
+files:
+  - "hq/platform/application/**"
+  - "hq/domains/control_plane/**"
+  - "hq/platform/core/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "hq/domains/control_plane/names.py"
+rule:
+  pattern: $NAME.endswith($SUFFIX)
+constraints:
+  SUFFIX:
+    regex: ^f["']\.\{

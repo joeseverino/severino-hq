@@ -11,14 +11,12 @@ from django.test import TestCase
 
 from hq.domains.contacts.inbox import Inbox
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..projection import MAX_PAGE_SIZE
-from ..read_models import documentation_status
 from ..resources import list_resource, resource_registry
 from ..security import Principal, operator_capabilities
 
@@ -197,20 +195,3 @@ class EveryPageNamesTheOnesBesideItTests(TestCase):
                     ]
                     self.assertEqual([found_id for found_id in found if found_id in made], made)
                     transaction.set_rollback(True)
-
-
-class DocumentationStatusPagingTests(TestCase):
-    def test_the_summary_holds_one_page_and_its_next_reads_the_rest(self):
-        DocumentationRecord.objects.bulk_create(
-            DocumentationRecord(doc_id=f"rb-example-{n:03d}", title=f"Example {n}") for n in range(ROWS)
-        )
-
-        status = documentation_status(principal=READER)
-        rest = list_resource("documentation", {PAGE_FIELD: status["next"]}, principal=READER)
-
-        seen = [record["doc_id"] for record in status["records"] + rest["items"]]
-        self.assertEqual(status["total"], ROWS)
-        self.assertLess(len(status["records"]), ROWS)
-        self.assertGreater(len(seen), len(status["records"]))
-        whole = list_resource("documentation", {"limit": len(seen)}, principal=READER)
-        self.assertEqual(seen, [record["doc_id"] for record in whole["items"]])

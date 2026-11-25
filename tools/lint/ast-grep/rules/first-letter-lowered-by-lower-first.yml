@@ -1,0 +1,16 @@
+# A label's first letter is lowered by
+# hq.platform.application.labels.lower_first, which leaves an acronym as it
+# is ("DNS record", never "dNS record"). A copy of its own lowers it.
+id: first-letter-lowered-by-lower-first
+language: python
+severity: error
+message: A text's first letter is lowered by hand.
+note: Lower it with lower_first(text) from hq.platform.application.labels.
+files:
+  - "hq/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "hq/platform/application/labels.py"
+rule:
+  pattern: $TEXT[:1].lower()

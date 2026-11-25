@@ -8,13 +8,9 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
-from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.facts import imports, scan
-from hq.platform.application.tests.tree import SUITE
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 # How many modules each start loads, the host alone as production starts it
@@ -76,89 +72,3 @@ class StartupBudgetTests(SimpleTestCase):
         """What every management command and the container's boot steps load before they do anything."""
 
         self.assertLessEqual(len(self.setup), SETUP_BUDGET, "an app's ready() reaches it eagerly; reach it lazily")
-
-
-# A name a class-body field's annotation reads, with the class and the field:
-# an ast.Name, so neither an attribute's own name nor a keyword's.
-ANNOTATION_NAME = {
-    "kind": "identifier",
-    "not": {
-        "any": [
-            {"inside": {"kind": "attribute", "field": "attribute"}},
-            {"inside": {"kind": "keyword_argument", "field": "name"}},
-        ]
-    },
-    "inside": {
-        "stopBy": "end",
-        "kind": "type",
-        "inside": {
-            "field": "type",
-            "kind": "assignment",
-            "has": {"field": "left", "pattern": "$FIELD"},
-            "inside": {
-                "kind": "expression_statement",
-                "inside": {
-                    "kind": "block",
-                    "inside": {
-                        "field": "body",
-                        "kind": "class_definition",
-                        "has": {"field": "name", "pattern": "$CLASS"},
-                    },
-                },
-            },
-        },
-    },
-}
-
-
-def lazy_names_in_class_annotations(*paths: Path, root: Path = REPO_ROOT) -> list[str]:
-    """Each class-body annotation under ``paths`` that names one of its module's lazy imports, as ``path:line Class.field: Name``.
-
-    A dataclass, a pydantic model or a NamedTuple reads its annotations' values
-    as the class is made, and a base in another module can make any class one,
-    so such a name loads its lazy import with the module that declares it.
-    """
-
-    lazy: dict[Path, set[str]] = {}
-    for each in imports(*paths):
-        if each.top and "lazy" in each.waits:
-            lazy.setdefault(each.path, set()).update(each.bound())
-    return sorted(
-        f"{named.path.relative_to(root)}:{named.line} {named.captured['CLASS']}.{named.captured['FIELD']}: {named.text}"
-        for named in scan({"named": ANNOTATION_NAME}, *paths)
-        if named.text in lazy.get(named.path, ())
-    )
-
-
-@tag("source", "tree")
-class LazyImportAnnotationTests(SimpleTestCase):
-    def test_no_class_annotation_names_a_lazy_import(self):
-        self.assertEqual(
-            # Every Python package of the repository: a class anywhere may be made at start.
-            lazy_names_in_class_annotations(*(REPO_ROOT / root for root in SUITE)),
-            [],
-            "import an annotation-only name under `if TYPE_CHECKING:`; one also used at run time, by its module",
-        )
-
-    def test_a_planted_dataclass_field_is_found(self):
-        planted = (
-            "from dataclasses import dataclass\n"
-            "from typing import TYPE_CHECKING\n"
-            "lazy from example.links import Link\n"
-            "lazy import example.kinds\n"
-            "if TYPE_CHECKING:\n"
-            "    from example.rows import Row\n"
-            "@dataclass\n"
-            "class Mention:\n"
-            "    link: Link | None\n"
-            "    kind: example.kinds.Kind\n"
-            "    row: Row\n"
-            "    def named(self) -> Link: ...\n"
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
-            (root / "planted.py").write_text(planted)
-
-            found = lazy_names_in_class_annotations(root, root=root)
-
-        self.assertEqual(found, ["planted.py:10 Mention.kind: example", "planted.py:9 Mention.link: Link"])

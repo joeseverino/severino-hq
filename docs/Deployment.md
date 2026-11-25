@@ -368,9 +368,10 @@ call allow list. A unit that needs more widens it in its own
 | secrets | IPv4 loopback for Connect (`CAP_CHOWN`, `CAP_FOWNER`, `CAP_DAC_OVERRIDE`) |
 | script-drift | sudo-rs, with no-new-privileges off |
 
-`lint:units` scores each service with `systemd-analyze security --offline`
-over this directory and fails one above the bar `mise-tasks/lint/units` gives
-it. An install and a deploy put every drop-in in place with the first unit
+`lint:units` runs `systemd-analyze verify` over the units an install verifies
+(`hq-host verified`), beside the runner's own systemd units, and scores each
+service with `systemd-analyze security --offline` over this directory,
+failing one above the bar `mise-tasks/lint/units` gives it. An install and a deploy put every drop-in in place with the first unit
 they install.
 
 ### Reading one dashboard refresh
@@ -558,6 +559,8 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_AUTOMATION_BRIDGE_SOCKET` | platform | the Unix socket the automation worker's bridge is served on, its claim, renewal and report alone; unset serves none |
 | `SEVERINO_TAILSCALED_SOCKET` | platform | tailscaled's local API socket, which places each agent call on the tailnet device that sent it. Set by `hq-host run-web` to `/var/run/tailscale/tailscaled.sock` on a host where tailscaled is enabled, which binds `/var/run/tailscale` read-only at the same path; a socket missing or unanswering there makes a call wait (503). Empty, the default, is a deployment with no tailnet: a call is placed on no device and the client is the finest unit |
 | `SEVERINO_CONTROLLER_DOORBELL` | platform | the file HQ touches when it queues controller work |
+| `SEVERINO_HANDED_LISTENER` | platform | the Unix socket the image's server waits on for the listener it serves HQ on, which only root may send and which must be a listening TCP socket; unset, the server binds `127.0.0.1:8000` itself. Either way it answers its HEALTHCHECK on `/run/hq-web/ready.sock` from the start |
+| `TMPDIR` | platform | where a request body and an upload are spooled; `hq-host run-web` sets it to `/spool`, a volume of the container's own that is removed with it |
 | `SEVERINO_SCHEMA_SNAPSHOT` | platform | where boot keeps a copy of the database before migrating it |
 | `SEVERINO_LOG_LEVEL` | development | a standard Python log level; `INFO` by default |
 | `DJANGO_TEMPLATE_CACHE` | development | whether rendered templates are cached; on unless `DJANGO_DEBUG` |

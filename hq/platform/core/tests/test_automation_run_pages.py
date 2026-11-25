@@ -110,6 +110,27 @@ class AutomationRunPageTests(TestCase):
                     [(element.words, element.attrs.get("href")) for element in within(html, "id", "held-runs")],
                 )
 
+    def test_a_playbook_names_the_reading_it_declares_and_a_run_ended_without_it_says_so(self):
+        from hq.domains.control_plane.models import OperationRequest
+        from hq.platform.application.playbook_about import reading_words
+        from hq.platform.core.example_estate.automation import DISK_REPORT
+
+        declared = reading_words("host.filesystem")
+        about = " ".join(
+            element.words
+            for element in select(
+                self.page(reverse("command", args=[f"automation.{DISK_REPORT}.run"])), "id", "command-about"
+            )
+        )
+        self.assertIn(f"Reading {declared}", about)
+        run = OperationRequest.objects.filter(input__operation=DISK_REPORT, completed_at__isnull=False).first()
+        run.result = {key: value for key, value in run.result.items() if key != "stated"}
+        run.save(update_fields=("result",))
+
+        said = text(self.page(reverse("jobs:run", kwargs={"pk": run.pk})))
+
+        self.assertIn(f"Reading {declared} Not stated", said)
+
     def test_a_command_with_nothing_to_say_of_itself_draws_no_more_than_its_form(self):
         html = self.page(reverse("command", args=["infrastructure.controller.refresh"]))
 
@@ -255,8 +276,9 @@ class ProcedurePageTests(TestCase):
                     self.assertIn(access_words(manifest.privilege), about)
 
     def test_a_procedure_runs_on_the_machines_it_names_each_by_its_link_and_else_on_any(self):
-        from hq.platform.application.automation_runs import about, operation_registry
+        from hq.platform.application.automation_runs import operation_registry
         from hq.platform.application.entity_links import entity_link
+        from hq.platform.application.playbook_about import about
         from hq.platform.application.security import Capability, Principal
 
         declared = operation_registry()[CACHE_FLUSH]

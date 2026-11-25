@@ -9,12 +9,12 @@ from typing import Annotated, Any, TypedDict
 
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
-from . import automation_adoption, automation_runs
+from . import automation_adoption, automation_runs, playbook_about
 from .automation_manifest import OperationManifest, PlaybookEffect
 from .automation_sources import PLAYBOOKS as PAGE, Reviewed, standing
 from .describe import Describe
 from .integration_specs import CommandFact, ListRead, ResourceSpec
-from .projection import complete, iso
+from .projection import iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import RecordId
 from .resources import EmptyQuery
@@ -37,6 +37,13 @@ class PlaybookRow(TypedDict):
     effect: Annotated[
         PlaybookEffect,
         Describe("What it does to a machine. Anything but a read waits for an operator's approval when an agent asks."),
+    ]
+    readings: Annotated[
+        list[str],
+        Describe(
+            "The kinds of reading a run of it states, such as `apps.pull`. Once it ends, `runs` has each in the "
+            "run's `stated`, by machine. Empty when it states its result alone."
+        ),
     ]
     reachable: Annotated[
         list[str],
@@ -112,6 +119,7 @@ def _row(manifest: OperationManifest, titles: dict[str, str], reaches: frozenset
         "title": automation_runs.run_title(manifest.id, titles),
         "capability": automation_runs.capability_name(manifest.id),
         "effect": manifest.effect,
+        "readings": list(manifest.readings),
         "reachable": _reachable(manifest, reaches),
     }
 
@@ -125,7 +133,7 @@ def list_playbooks(**_caller: Principal) -> dict[str, Any]:
     """Every adopted playbook, in the catalog's order."""
 
     titles, reaches = automation_adoption.playbook_titles(), automation_runs.runner_reaches()
-    return complete([_row(manifest, titles, reaches) for manifest in _manifests()])
+    return page_of([_row(manifest, titles, reaches) for manifest in _manifests()])
 
 
 def get_playbook(playbook_id: str, *, principal: Principal) -> dict[str, Any]:
@@ -136,7 +144,7 @@ def get_playbook(playbook_id: str, *, principal: Principal) -> dict[str, Any]:
     except KeyError:
         raise RecordNotFound("No adopted playbook has that id.") from None
     row = _row(manifest, automation_adoption.playbook_titles(), automation_runs.runner_reaches())
-    return {**row, "facts": [_fact(fact) for fact in automation_runs.about(manifest, principal).facts]}
+    return {**row, "facts": [_fact(fact) for fact in playbook_about.about(manifest, principal).facts]}
 
 
 def _scan(reviewed: Reviewed) -> dict[str, Any]:
@@ -167,7 +175,7 @@ def list_scans() -> dict[str, Any]:
     """The newest scan result, the one there is to decide on; none before the first Refresh."""
 
     newest = _scanned(None)
-    return complete([newest] if newest is not None else [])
+    return page_of([newest] if newest is not None else [])
 
 
 def get_scan(scan_id: int) -> dict[str, Any]:

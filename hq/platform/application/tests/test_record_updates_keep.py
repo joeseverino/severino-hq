@@ -110,15 +110,6 @@ class AnUpdateKeepsWhatItWasNotSentTests(TestCase):
 
         self.assertEqual(result["error"]["code"], "not_found")
 
-    def test_a_project_upsert_of_one_that_exists_keeps_what_it_was_not_sent(self):
-        Project.objects.filter(slug="example").update(status=Project.Status.ACTIVE, notes="Kept.")
-
-        result = _run("project.upsert", {"name": "Renamed", "slug": "example"})
-
-        self.assertFalse(result["created"])
-        project = Project.objects.get(slug="example")
-        self.assertEqual((project.name, project.status, project.notes), ("Renamed", Project.Status.ACTIVE, "Kept."))
-
     def test_a_calendar_entry_update_keeps_how_it_repeats(self):
         created = _run(
             "calendar.entry.create",
@@ -160,7 +151,7 @@ class AnUpdateKeepsWhatItWasNotSentTests(TestCase):
 
     def test_a_new_record_takes_its_defaults(self):
         _run("asset.create", {"item_name": "Example box", "slug": "example-box"})
-        _run("project.upsert", {"name": "Example new", "slug": "example-new"})
+        _run("project.create", {"name": "Example new", "slug": "example-new"})
 
         self.assertEqual(Asset.objects.get(slug="example-box").business_use_percentage, 100)
         self.assertEqual(Project.objects.get(slug="example-new").status, Project.Status.IDEA)
@@ -242,8 +233,7 @@ class TheSchemaSaysAnUpdateKeepsTests(SimpleTestCase):
         self.assertEqual(capability_schema(command_spec("asset.create"))["required"], ["item_name"])
         self.assertEqual(capability_schema(command_spec("receipt.replace"))["required"], ["file"])
 
-    def test_an_upsert_says_what_it_keeps_and_a_create_shows_its_defaults(self):
-        self.assertIn("a field left out keeps its value", command_spec("asset.upsert").summary)
+    def test_a_create_shows_its_defaults_and_keeps_nothing(self):
         self.assertNotIn(KEPT, command_spec("asset.create").summary)
         properties = capability_schema(command_spec("asset.create"))["properties"]
         self.assertEqual(properties["business_use_percentage"]["default"], 100)

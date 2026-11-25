@@ -7,6 +7,7 @@ import jwt
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from hq.platform.application import tokens
+from hq.platform.application.projection import page_of
 from hq.platform.application.security import AuthorizationError
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.sentinel import (
@@ -17,7 +18,7 @@ from hq.platform.application.tests.sentinel import (
     plant_credentials,
 )
 from hq.platform.application.topology import TOPOLOGY_SCHEMA_VERSION
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
 from .. import views
 from ..testing import ContractClient
@@ -116,7 +117,7 @@ class CompositionCheckTests(SimpleTestCase):
             "Records",
             "Synthetic records.",
             "read",
-            listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, ExampleRecord),
+            listing=ListRead(lambda: page_of([]), EmptyQuery, ExampleRecord),
             web_route="missing:list",
         )
         connection = ConnectionSpec(
@@ -398,19 +399,7 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(projects["web_route"], "projects:list")
 
     def test_connections_expose_abilities_and_safe_cached_state(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderConnection
-
-        ProviderConnection.objects.create(
-            connection_ref="api-cloudflare",
-            controller_id="controller",
-            provider="cloudflare_dns",
-            reaches=["example.com"],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("cloudflare_dns", "api-cloudflare", controller_id="controller", reaches=["example.com"])
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving():
             response = self.client.get("/api/v2/connections/", **headers)
@@ -448,20 +437,8 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertFalse([query for query in queries if ProviderConnection._meta.db_table in query["sql"]])
 
     def test_topology_exposes_safe_nodes_edges_and_canonical_actions(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderConnection
-
         declare("api-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "api-cloudflare"})
-        ProviderConnection.objects.create(
-            connection_ref="api-cloudflare",
-            controller_id="api-controller",
-            provider="cloudflare_dns",
-            reaches=["example.com"],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("cloudflare_dns", "api-cloudflare", controller_id="api-controller", reaches=["example.com"])
         with _serving(), host_only():
             response = self.client.get(
                 "/api/v2/topology/?focus=resource%3Aapi-zone&direction=inbound&depth=2",

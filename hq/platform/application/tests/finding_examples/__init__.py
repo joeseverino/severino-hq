@@ -13,10 +13,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from django.utils import timezone
-
-from hq.domains.control_plane.models import ProviderConnection
-
 from ...finding_steps import Do, Run
 from ...tone import Tone
 
@@ -40,23 +36,6 @@ def ago(**age: float) -> Ago:
 
 
 NOW = ago()
-
-
-def connection(ref: str, provider: str, **fields: Any) -> None:
-    """A connection example-controller reports, answering unless ``fields`` say otherwise."""
-
-    ProviderConnection.objects.create(
-        connection_ref=ref,
-        controller_id="example-controller",
-        provider=provider,
-        **{
-            "endpoint": "https://api.example.com",
-            "reachable": True,
-            "probed": True,
-            "observed_at": timezone.now(),
-            **fields,
-        },
-    )
 
 
 @dataclass(frozen=True, slots=True)

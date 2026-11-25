@@ -1,0 +1,29 @@
+# The days left before an expiry are counted by
+# hq.platform.application.expiry.days_until, one arithmetic, since a second
+# copy can disagree by a day. A module about expiry that divides by a day's
+# seconds or reads a difference's .days counts them again.
+id: days-counted-by-days-until
+language: python
+severity: error
+message: A module about expiry counts days itself.
+note: Count them with days_until(when) from hq.platform.application.expiry.
+ignores:
+  - "**/test*"
+  - "**/test*/**"
+  - "hq/platform/application/expiry.py"
+  - "hq/platform/application/ui.py"
+  - "hq/platform/application/analytics.py"
+rule:
+  any:
+    - kind: binary_operator
+      has: {field: operator, regex: ^/$}
+      all:
+        - has: {field: right, regex: ^86400$}
+    - kind: attribute
+      has: {field: attribute, regex: ^days$}
+      all:
+        - has: {field: object, regex: \)$}
+  inside:
+    stopBy: end
+    kind: module
+    regex: expir|not_after

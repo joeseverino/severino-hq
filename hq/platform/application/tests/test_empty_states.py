@@ -2,14 +2,12 @@ import re
 
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
-from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import DECLARATIONS
 from hq.platform.application.markup_testing import all_elements
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 
 from ..connection_setup import setups
 from ..entity_links import connection_anchor
@@ -88,9 +86,7 @@ class PageReadsTests(TestCase):
         self.assertTrue(found.url.endswith("#setup-portainer"))
 
     def test_once_connected_it_names_that_connection_at_its_row(self):
-        ProviderConnection.objects.create(
-            connection_ref="example-portainer", provider="portainer", observed_at=timezone.now()
-        )
+        connection("portainer", "example-portainer")
 
         found = remedy(["portainer.container"])
 

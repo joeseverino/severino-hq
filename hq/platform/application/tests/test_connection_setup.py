@@ -1,13 +1,12 @@
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.html import escape
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import observer_permissions
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.markup_testing import hrefs, text
-from hq.platform.core.testing import SignedInTestCase
+from hq.platform.core.testing import SignedInTestCase, connection
 
 from ..connection_setup import setups
 from .host_only import host_only
@@ -79,17 +78,7 @@ class PageTests(SignedInTestCase):
         self.assertIn("https://github.com/example/hq/blob/main/docs/Secrets.md#connections", hrefs(response))
 
     def test_a_connected_provider_is_listed_above_not_offered_below(self):
-        from hq.domains.control_plane.models import ProviderConnection
-
-        ProviderConnection.objects.create(
-            connection_ref="example-portainer",
-            controller_id="example-controller",
-            provider="portainer",
-            endpoint="https://portainer.example.com",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("portainer", "example-portainer", endpoint="https://portainer.example.com")
 
         response = self.client.get(reverse("control_plane:connections"))
 
@@ -98,18 +87,9 @@ class PageTests(SignedInTestCase):
 
     def test_with_every_provider_connected_a_connection_can_still_be_added(self):
         self.enterContext(host_only())
-        from hq.domains.control_plane.models import ProviderConnection
 
         for provider in CONNECTION_KINDS:
-            ProviderConnection.objects.create(
-                connection_ref=f"example-{provider.replace('_', '-')}",
-                controller_id="example-controller",
-                provider=provider,
-                endpoint="https://service.example.com",
-                reachable=True,
-                probed=True,
-                observed_at=timezone.now(),
-            )
+            connection(provider, f"example-{provider.replace('_', '-')}", endpoint="https://service.example.com")
 
         response = self.client.get(reverse("control_plane:connections"))
 

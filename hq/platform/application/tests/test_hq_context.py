@@ -13,7 +13,7 @@ from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_
 from hq.domains.jobs.models import Job
 from hq.platform.application.markup_testing import all_elements, links, select, text
 from hq.platform.application.security import cli_principal
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..container_words import UP_TO_DATE, UPDATE_AVAILABLE
@@ -258,17 +258,8 @@ class ProjectionTests(TestCase):
 
     def test_a_reported_connection_is_never_called_unconnected_before_its_first_reading(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-        from hq.domains.control_plane.models import ProviderConnection
 
-        ProviderConnection.objects.create(
-            connection_ref="example-portainer",
-            controller_id="example-controller",
-            provider="portainer",
-            endpoint="https://portainer.example.com",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("portainer", "example-portainer", endpoint="https://portainer.example.com")
 
         seen = self.context().sight
 

@@ -1,9 +1,15 @@
 #!/bin/sh
-#MISE description="Every severino-hq service's sandbox, as systemd-analyze scores it offline over deploy/systemd, at or under the exposure its bar here allows"
+#MISE description="Every severino-hq unit as systemd-analyze reads it offline over deploy/systemd: the set verifies together, as a host's install verifies it, and each service's sandbox scores at or under the exposure its bar here allows"
 #MISE hide=true
-# systemd's own score of a unit's confinement, read the way a host reads the
-# units: each file with every drop-in that reaches it, the shared sandbox
+# systemd's own reading of the units, the way a host reads them: each file
+# with every drop-in that reaches it, the shared sandbox
 # (severino-hq-.service.d/20-sandbox.conf) and each unit's own widening.
+#
+# verify loads the whole set beside this machine's own units, from the list
+# `hq-host verified` gives, which is the list install verifies, so an ordering
+# cycle through a unit of systemd's is found here before a deploy. Each
+# program a unit runs is the host's, so the tree holds an empty executable at
+# its path; install verifies the real ones.
 #
 # systemd-analyze is Linux's, so CI's lint job runs this. Elsewhere it says it
 # did not run and passes, unless CI is set.
@@ -39,10 +45,41 @@ fi
 
 root="$(mktemp -d)"
 trap 'rm -rf "${root}"' EXIT
-mkdir -p "${root}/etc/systemd/system"
-cp -R deploy/systemd/. "${root}/etc/systemd/system/"
+units="${root}/etc/systemd/system"
+mkdir -p "${units}" "${root}/usr/lib/systemd"
+cp -R deploy/systemd/. "${units}/"
+cp -R /usr/lib/systemd/system "${root}/usr/lib/systemd/system"
+# A unit of this machine's that links outside the copy (dracut's point into
+# /usr/lib/dracut) would be a missing file to verify, which it prints as an
+# error that is no defect of ours, so the copy drops it. A link to /dev/null
+# masks a unit, and stays.
+find "${root}/usr/lib/systemd/system" -type l >"${root}/links"
+while IFS= read -r link; do
+    target="$(readlink "${link}")"
+    case "${target}" in
+        /dev/null) ;;
+        /*) [ -e "${root}${target}" ] || rm "${link}" ;;
+        *) [ -e "${link}" ] || rm "${link}" ;;
+    esac
+done <"${root}/links"
+find "${units}" -type f -exec sed -n 's/^Exec[A-Za-z]*=[-@:+!|]*\(\/[^ ]*\).*/\1/p' {} + >"${root}/programs"
+while IFS= read -r program; do
+    mkdir -p "${root}${program%/*}"
+    : >"${root}${program}"
+    chmod +x "${root}${program}"
+done <"${root}/programs"
 
+go -C controller run ./cmd/hq-host verified "${units}" >"${root}/verified"
+set --
+while IFS= read -r unit; do
+    set -- "$@" "${unit}"
+done <"${root}/verified"
 failed=0
+if ! systemd-analyze verify --root="${root}" "$@"; then
+    echo "lint:units: the units above fail systemd-analyze verify, as a host's install would refuse them. A cycle names the ordering (After=, Before=, Requires=) to drop." >&2
+    failed=1
+fi
+
 for file in deploy/systemd/*.service; do
     name="${file##*/}"
     if ! threshold="$(bar)"; then

@@ -7,9 +7,9 @@ from django.utils import timezone
 
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.infrastructure import resolved_spec
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
-from ..models import ManagedResource, OperationRequest, ProviderConnection, ProviderInventory
+from ..models import ManagedResource, OperationRequest, ProviderInventory
 from ..provider_adapters.declarations import TLSDeliveryTargetSpec
 from ..provider_spec import ProviderResolutionContext
 from ..providers import resolve_provider_spec
@@ -26,12 +26,7 @@ class DerivedConsumerTests(TestCase):
 
     def _estate(self):
         declare_targets()
-        ProviderConnection.objects.create(
-            connection_ref="edge",
-            provider="ssh",
-            endpoint="10.0.0.19:7722",
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "edge", endpoint="10.0.0.19:7722")
         ProviderInventory.objects.create(
             kind="adguard.rewrite",
             observed_at=timezone.now(),
@@ -68,12 +63,7 @@ class DerivedConsumerTests(TestCase):
         """
 
         declare_targets()
-        ProviderConnection.objects.create(
-            connection_ref="edge",
-            provider="ssh",
-            endpoint="https://edge.example.com",
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "edge", endpoint="https://edge.example.com")
         ProviderInventory.objects.create(
             kind="adguard.rewrite",
             observed_at=timezone.now(),
@@ -96,12 +86,7 @@ class DerivedConsumerTests(TestCase):
         """
 
         declare_targets()
-        ProviderConnection.objects.create(
-            connection_ref="edge",
-            provider="ssh",
-            endpoint="10.0.0.19:7722",
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "edge", endpoint="10.0.0.19:7722")
         declare("pending-dns", "adguard.rewrite", {"domain": "pending.example.com", "answer": "10.0.0.19"})
         certificate = declare("example-wildcard", "tls.certificate", certificate_spec())
 

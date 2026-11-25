@@ -10,7 +10,7 @@ from django.urls import reverse
 from hq.domains.assets.models import Asset
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import hrefs, with_class
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 
 from ..attention import raised
 from ..connection_context import connections_context
@@ -19,7 +19,7 @@ from ..resource_context import record_list
 from ..security import cli_principal
 from ..services import certificate_use
 from .host_only import host_only
-from .test_relationships import connected, estate
+from .test_relationships import estate
 
 
 class NamedBacklogTests(TestCase):
@@ -60,7 +60,7 @@ class CertificateUseTests(TestCase):
 class ConnectionRowsTests(TestCase):
     def setUp(self):
         estate(1)
-        connected("example-broken", "cloudflare_api")
+        connection("cloudflare_api", "example-broken")
         ProviderConnection.objects.filter(connection_ref="example-broken").update(reachable=False)
 
     def context(self):

@@ -201,8 +201,7 @@
               "merge.tone",
               "merge.run_url",
               "merge.taken",
-              "merge.step",
-              "merge.said",
+              "merge.lines",
               "held",
               "fixes",
               "fixes.id",
@@ -313,11 +312,27 @@
               "object_type",
               "object_id",
               "object_repr",
-              "title",
               "message",
               "actor",
+              "title",
+              "by",
+              "changed",
+              "changed.id",
+              "changed.url",
+              "changed.created_at",
+              "changed.action",
+              "changed.action_label",
+              "changed.object_type",
+              "changed.object_id",
+              "changed.object_repr",
+              "changed.message",
+              "changed.actor",
+              "more",
               "source",
               "operation_id",
+              "cause",
+              "trace",
+              "subject",
               "*"
             ],
             "type": "string"
@@ -1775,6 +1790,7 @@
               "title",
               "capability",
               "effect",
+              "readings",
               "reachable",
               "facts",
               "facts.label",
@@ -1801,6 +1817,7 @@
               "title",
               "capability",
               "effect",
+              "readings",
               "reachable",
               "*"
             ],
@@ -2163,6 +2180,9 @@
               "finished_at",
               "duration_seconds",
               "stated",
+              "stated.host",
+              "stated.kind",
+              "stated.records",
               "effect",
               "attempts",
               "worker",
@@ -2839,6 +2859,9 @@
               "finished_at",
               "duration_seconds",
               "stated",
+              "stated.host",
+              "stated.kind",
+              "stated.records",
               "effect",
               "attempts",
               "worker",
@@ -3480,21 +3503,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/HqImportedSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
-      "HqSyncedSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/HqSyncedSuccess"
             }
           }
         },
@@ -6192,150 +6200,6 @@
         ],
         "type": "string"
       },
-      "AssetCommand": {
-        "additionalProperties": false,
-        "description": "The command: the fields its input schema names.",
-        "properties": {
-          "business_use_percentage": {
-            "$ref": "#/components/schemas/BusinessUseShare",
-            "default": 100
-          },
-          "category": {
-            "$ref": "#/components/schemas/AssetCategory",
-            "default": "other",
-            "enum": [
-              "networking",
-              "server_hardware",
-              "software",
-              "subscription",
-              "domain",
-              "hosting",
-              "camera_audio",
-              "office",
-              "tools",
-              "training",
-              "other"
-            ],
-            "x-enumDescriptions": {
-              "camera_audio": "Camera / audio",
-              "domain": "Domain",
-              "hosting": "Hosting",
-              "networking": "Networking gear",
-              "office": "Office equipment",
-              "other": "Other",
-              "server_hardware": "Server hardware",
-              "software": "Software",
-              "subscription": "Subscription",
-              "tools": "Tools",
-              "training": "Training"
-            }
-          },
-          "infrastructure": {
-            "$ref": "#/components/schemas/AssetInfrastructure",
-            "default": "",
-            "maxLength": 300,
-            "title": "This is"
-          },
-          "item_name": {
-            "$ref": "#/components/schemas/AssetName",
-            "maxLength": 160,
-            "minLength": 1
-          },
-          "notes": {
-            "$ref": "#/components/schemas/Notes",
-            "default": "",
-            "format": "textarea"
-          },
-          "payment_method": {
-            "$ref": "#/components/schemas/PaymentMethod",
-            "default": "",
-            "enum": [
-              "",
-              "cash",
-              "debit",
-              "credit",
-              "ach",
-              "paypal",
-              "other"
-            ],
-            "x-enumDescriptions": {
-              "": "Not set",
-              "ach": "ACH / bank transfer",
-              "cash": "Cash",
-              "credit": "Credit card",
-              "debit": "Debit card",
-              "other": "Other",
-              "paypal": "PayPal"
-            }
-          },
-          "purchase_date": {
-            "$ref": "#/components/schemas/PurchaseDate",
-            "default": null
-          },
-          "related_projects": {
-            "$ref": "#/components/schemas/AssetProjects",
-            "default": []
-          },
-          "serial_number": {
-            "$ref": "#/components/schemas/SerialNumber",
-            "default": "",
-            "maxLength": 120
-          },
-          "slug": {
-            "$ref": "#/components/schemas/Slug",
-            "default": "",
-            "maxLength": 180,
-            "pattern": "^$|^[-a-zA-Z0-9_]+$"
-          },
-          "status": {
-            "$ref": "#/components/schemas/AssetStatus",
-            "default": "active",
-            "enum": [
-              "active",
-              "retired",
-              "sold",
-              "returned",
-              "replaced"
-            ],
-            "x-enumDescriptions": {
-              "active": "Active",
-              "replaced": "Replaced",
-              "retired": "Retired",
-              "returned": "Returned",
-              "sold": "Sold"
-            }
-          },
-          "total_cost": {
-            "$ref": "#/components/schemas/AssetCost",
-            "anyOf": [
-              {
-                "exclusiveMaximum": 10000000000,
-                "exclusiveMinimum": -10000000000,
-                "multipleOf": 0.01,
-                "type": "number"
-              },
-              {
-                "pattern": "^[+-]?(?:0*[0-9]{1,10}(?:\\.(?:[0-9]{1,2}0*)?)?|0*\\.[0-9]{1,2}0*)$",
-                "type": "string"
-              }
-            ],
-            "default": null
-          },
-          "vendor": {
-            "$ref": "#/components/schemas/AssetVendor",
-            "default": "",
-            "maxLength": 120
-          },
-          "warranty_date": {
-            "$ref": "#/components/schemas/WarrantyDate",
-            "default": null
-          }
-        },
-        "required": [
-          "item_name"
-        ],
-        "type": "object"
-      },
       "AssetCost": {
         "anyOf": [
           {
@@ -6374,7 +6238,148 @@
             "$ref": "#/components/schemas/ExpectedUpdatedAt"
           },
           "payload": {
-            "$ref": "#/components/schemas/AssetCommand"
+            "additionalProperties": false,
+            "description": "The command: the fields its input schema names.",
+            "properties": {
+              "business_use_percentage": {
+                "$ref": "#/components/schemas/BusinessUseShare",
+                "default": 100
+              },
+              "category": {
+                "$ref": "#/components/schemas/AssetCategory",
+                "default": "other",
+                "enum": [
+                  "networking",
+                  "server_hardware",
+                  "software",
+                  "subscription",
+                  "domain",
+                  "hosting",
+                  "camera_audio",
+                  "office",
+                  "tools",
+                  "training",
+                  "other"
+                ],
+                "x-enumDescriptions": {
+                  "camera_audio": "Camera / audio",
+                  "domain": "Domain",
+                  "hosting": "Hosting",
+                  "networking": "Networking gear",
+                  "office": "Office equipment",
+                  "other": "Other",
+                  "server_hardware": "Server hardware",
+                  "software": "Software",
+                  "subscription": "Subscription",
+                  "tools": "Tools",
+                  "training": "Training"
+                }
+              },
+              "infrastructure": {
+                "$ref": "#/components/schemas/AssetInfrastructure",
+                "default": "",
+                "maxLength": 300,
+                "title": "This is"
+              },
+              "item_name": {
+                "$ref": "#/components/schemas/AssetName",
+                "maxLength": 160,
+                "minLength": 1
+              },
+              "notes": {
+                "$ref": "#/components/schemas/Notes",
+                "default": "",
+                "format": "textarea"
+              },
+              "payment_method": {
+                "$ref": "#/components/schemas/PaymentMethod",
+                "default": "",
+                "enum": [
+                  "",
+                  "cash",
+                  "debit",
+                  "credit",
+                  "ach",
+                  "paypal",
+                  "other"
+                ],
+                "x-enumDescriptions": {
+                  "": "Not set",
+                  "ach": "ACH / bank transfer",
+                  "cash": "Cash",
+                  "credit": "Credit card",
+                  "debit": "Debit card",
+                  "other": "Other",
+                  "paypal": "PayPal"
+                }
+              },
+              "purchase_date": {
+                "$ref": "#/components/schemas/PurchaseDate",
+                "default": null
+              },
+              "related_projects": {
+                "$ref": "#/components/schemas/AssetProjects",
+                "default": []
+              },
+              "serial_number": {
+                "$ref": "#/components/schemas/SerialNumber",
+                "default": "",
+                "maxLength": 120
+              },
+              "slug": {
+                "$ref": "#/components/schemas/Slug",
+                "default": "",
+                "maxLength": 180,
+                "pattern": "^$|^[-a-zA-Z0-9_]+$"
+              },
+              "status": {
+                "$ref": "#/components/schemas/AssetStatus",
+                "default": "active",
+                "enum": [
+                  "active",
+                  "retired",
+                  "sold",
+                  "returned",
+                  "replaced"
+                ],
+                "x-enumDescriptions": {
+                  "active": "Active",
+                  "replaced": "Replaced",
+                  "retired": "Retired",
+                  "returned": "Returned",
+                  "sold": "Sold"
+                }
+              },
+              "total_cost": {
+                "$ref": "#/components/schemas/AssetCost",
+                "anyOf": [
+                  {
+                    "exclusiveMaximum": 10000000000,
+                    "exclusiveMinimum": -10000000000,
+                    "multipleOf": 0.01,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^[+-]?(?:0*[0-9]{1,10}(?:\\.(?:[0-9]{1,2}0*)?)?|0*\\.[0-9]{1,2}0*)$",
+                    "type": "string"
+                  }
+                ],
+                "default": null
+              },
+              "vendor": {
+                "$ref": "#/components/schemas/AssetVendor",
+                "default": "",
+                "maxLength": 120
+              },
+              "warranty_date": {
+                "$ref": "#/components/schemas/WarrantyDate",
+                "default": null
+              }
+            },
+            "required": [
+              "item_name"
+            ],
+            "type": "object"
           }
         },
         "required": [
@@ -7003,9 +7008,6 @@
         ],
         "type": "object"
       },
-      "AssetUpsertRequest": {
-        "$ref": "#/components/schemas/AssetCreateRequest"
-      },
       "AssetVendor": {
         "description": "Who it was bought from. Empty when not recorded.",
         "type": "string"
@@ -7065,9 +7067,9 @@
         },
         "type": "object"
       },
-      "AuditItem": {
+      "AuditChange": {
         "additionalProperties": false,
-        "description": "One row of the log: what was done to what, by whom, and where.",
+        "description": "One row of the log: what was done to what, and by whom.",
         "properties": {
           "action": {
             "description": "What was done: `created`, `updated`, `deleted`, `login`, `logout`, `login_failed`, `uploaded`, `exported`, `imported`, `done`, `failed`, `settings_changed`, `viewed`, `denied` or `observed`.",
@@ -7105,18 +7107,6 @@
             "description": "The kind of record it was done to; empty for none.",
             "type": "string"
           },
-          "operation_id": {
-            "description": "The operation it was written in; empty for a row of none.",
-            "type": "string"
-          },
-          "source": {
-            "description": "Where it was recorded: `hq`, `outside`, `deploy` or `container`.",
-            "type": "string"
-          },
-          "title": {
-            "description": "What the row was, as the log titles it: its record, else its operation.",
-            "type": "string"
-          },
           "url": {
             "$ref": "#/components/schemas/PageUrl"
           }
@@ -7130,11 +7120,142 @@
           "object_type",
           "object_id",
           "object_repr",
-          "title",
+          "message",
+          "actor"
+        ],
+        "type": "object"
+      },
+      "AuditChangePartial": {
+        "additionalProperties": false,
+        "description": "One row of the log: what was done to what, and by whom.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/AuditChange/properties/action"
+          },
+          "action_label": {
+            "$ref": "#/components/schemas/AuditChange/properties/action_label"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/AuditChange/properties/actor"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AuditChange/properties/created_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/AuditChange/properties/id"
+          },
+          "message": {
+            "$ref": "#/components/schemas/AuditChange/properties/message"
+          },
+          "object_id": {
+            "$ref": "#/components/schemas/AuditChange/properties/object_id"
+          },
+          "object_repr": {
+            "$ref": "#/components/schemas/AuditChange/properties/object_repr"
+          },
+          "object_type": {
+            "$ref": "#/components/schemas/AuditChange/properties/object_type"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "type": "object"
+      },
+      "AuditItem": {
+        "additionalProperties": false,
+        "description": "One row of the log, or with ``events`` one operation's line: what was\ndone to what, by whom, where, and what else it changed.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/AuditChange/properties/action"
+          },
+          "action_label": {
+            "$ref": "#/components/schemas/AuditChange/properties/action_label"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/AuditChange/properties/actor"
+          },
+          "by": {
+            "description": "Who started it, through which door, and who approved it, as the log says it.",
+            "type": "string"
+          },
+          "cause": {
+            "description": "The operation that started this row's operation; empty for one that started itself.",
+            "type": "string"
+          },
+          "changed": {
+            "description": "With `events`, the newest rows its operation changed; else none.",
+            "items": {
+              "$ref": "#/components/schemas/AuditChange"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AuditChange/properties/created_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/AuditChange/properties/id"
+          },
+          "message": {
+            "$ref": "#/components/schemas/AuditChange/properties/message"
+          },
+          "more": {
+            "description": "How many rows it changed past those in `changed`, which its page lists.",
+            "type": "integer"
+          },
+          "object_id": {
+            "$ref": "#/components/schemas/AuditChange/properties/object_id"
+          },
+          "object_repr": {
+            "$ref": "#/components/schemas/AuditChange/properties/object_repr"
+          },
+          "object_type": {
+            "$ref": "#/components/schemas/AuditChange/properties/object_type"
+          },
+          "operation_id": {
+            "description": "The operation it was written in; empty for a row of none.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Where it was recorded: `hq`, `outside`, `deploy` or `container`.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "The key of the record it is about; empty for a row about none.",
+            "type": "string"
+          },
+          "title": {
+            "description": "What it was, as the log titles it: its record, else its operation.",
+            "type": "string"
+          },
+          "trace": {
+            "description": "The chain it is part of: its root operation's trace id, which every row of the chain carries.",
+            "type": "string"
+          },
+          "url": {
+            "$ref": "#/components/schemas/AuditChange/properties/url"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "created_at",
+          "action",
+          "action_label",
+          "object_type",
+          "object_id",
+          "object_repr",
           "message",
           "actor",
+          "title",
+          "by",
+          "changed",
+          "more",
           "source",
-          "operation_id"
+          "operation_id",
+          "cause",
+          "trace",
+          "subject"
         ],
         "type": "object"
       },
@@ -7170,34 +7291,50 @@
       },
       "AuditItemPartial": {
         "additionalProperties": false,
-        "description": "One row of the log: what was done to what, by whom, and where.",
+        "description": "One row of the log, or with ``events`` one operation's line: what was\ndone to what, by whom, where, and what else it changed.",
         "properties": {
           "action": {
-            "$ref": "#/components/schemas/AuditItem/properties/action"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/action"
           },
           "action_label": {
-            "$ref": "#/components/schemas/AuditItem/properties/action_label"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/action_label"
           },
           "actor": {
-            "$ref": "#/components/schemas/AuditItem/properties/actor"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/actor"
+          },
+          "by": {
+            "$ref": "#/components/schemas/AuditItem/properties/by"
+          },
+          "cause": {
+            "$ref": "#/components/schemas/AuditItem/properties/cause"
+          },
+          "changed": {
+            "description": "With `events`, the newest rows its operation changed; else none.",
+            "items": {
+              "$ref": "#/components/schemas/AuditChangePartial"
+            },
+            "type": "array"
           },
           "created_at": {
-            "$ref": "#/components/schemas/AuditItem/properties/created_at"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/created_at"
           },
           "id": {
-            "$ref": "#/components/schemas/AuditItem/properties/id"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/id"
           },
           "message": {
-            "$ref": "#/components/schemas/AuditItem/properties/message"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/message"
+          },
+          "more": {
+            "$ref": "#/components/schemas/AuditItem/properties/more"
           },
           "object_id": {
-            "$ref": "#/components/schemas/AuditItem/properties/object_id"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/object_id"
           },
           "object_repr": {
-            "$ref": "#/components/schemas/AuditItem/properties/object_repr"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/object_repr"
           },
           "object_type": {
-            "$ref": "#/components/schemas/AuditItem/properties/object_type"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/object_type"
           },
           "operation_id": {
             "$ref": "#/components/schemas/AuditItem/properties/operation_id"
@@ -7205,11 +7342,17 @@
           "source": {
             "$ref": "#/components/schemas/AuditItem/properties/source"
           },
+          "subject": {
+            "$ref": "#/components/schemas/AuditItem/properties/subject"
+          },
           "title": {
             "$ref": "#/components/schemas/AuditItem/properties/title"
           },
+          "trace": {
+            "$ref": "#/components/schemas/AuditItem/properties/trace"
+          },
           "url": {
-            "$ref": "#/components/schemas/PageUrl"
+            "$ref": "#/components/schemas/AuditChangePartial/properties/url"
           }
         },
         "type": "object"
@@ -13069,6 +13212,9 @@
                   "$ref": "#/components/schemas/DocumentationRowPartial"
                 },
                 "type": "array"
+              },
+              "totals": {
+                "$ref": "#/components/schemas/DocumentationTotals"
               }
             }
           },
@@ -13170,19 +13316,6 @@
         ],
         "type": "object"
       },
-      "DocumentationSync": {
-        "additionalProperties": false,
-        "description": "What syncing the vault's docs into HQ did.",
-        "properties": {
-          "stats": {
-            "$ref": "#/components/schemas/SyncStats"
-          }
-        },
-        "required": [
-          "stats"
-        ],
-        "type": "object"
-      },
       "DocumentationSyncRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -13271,6 +13404,31 @@
       "DocumentationTitle": {
         "description": "The doc's title.",
         "type": "string"
+      },
+      "DocumentationTotals": {
+        "additionalProperties": false,
+        "description": "How many of the docs a list read matched hold each status and type.",
+        "properties": {
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "How many hold each status.",
+            "type": "object"
+          },
+          "by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "How many are of each type.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "by_status",
+          "by_type"
+        ],
+        "type": "object"
       },
       "DocumentationUpdateRequest": {
         "additionalProperties": false,
@@ -16769,87 +16927,6 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/HqImported"
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
-        "required": [
-          "ok",
-          "data"
-        ],
-        "type": "object"
-      },
-      "HqSyncRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "additionalProperties": false,
-            "description": "The command: the fields its input schema names.",
-            "properties": {
-              "confirm_prune": {
-                "$ref": "#/components/schemas/ConfirmPrune",
-                "default": false,
-                "title": "Confirm the delete"
-              },
-              "manifest": {
-                "description": "The records to sync, one per entry.",
-                "items": {
-                  "$ref": "#/components/schemas/ManifestEntry"
-                },
-                "title": "Records",
-                "type": "array"
-              },
-              "prune_orphans": {
-                "$ref": "#/components/schemas/PruneOrphans",
-                "default": false,
-                "title": "Delete unlisted records"
-              },
-              "report_orphans": {
-                "default": true,
-                "description": "Report records the manifest no longer lists.",
-                "title": "Report unlisted records",
-                "type": "boolean"
-              },
-              "update_existing": {
-                "$ref": "#/components/schemas/UpdateExisting",
-                "default": true
-              }
-            },
-            "required": [
-              "manifest"
-            ],
-            "type": "object"
-          }
-        },
-        "required": [
-          "payload"
-        ],
-        "type": "object"
-      },
-      "HqSynced": {
-        "additionalProperties": false,
-        "description": "What syncing HQ from the vault did, each part under its own name.",
-        "properties": {
-          "documentation": {
-            "$ref": "#/components/schemas/DocumentationSync"
-          }
-        },
-        "required": [
-          "documentation"
-        ],
-        "type": "object"
-      },
-      "HqSyncedSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/HqSynced"
           },
           "ok": {
             "$ref": "#/components/schemas/Outcome",
@@ -20633,16 +20710,15 @@
       "MergePart": {
         "additionalProperties": false,
         "properties": {
+          "lines": {
+            "description": "Its detail: what it waits on, how long its run has run, or of a preview or an apply that ended, the step it stopped on, what that said and each app the run did not release.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "run_url": {
             "description": "The page of the run it stands on, the preview or the apply; empty for none.",
-            "type": "string"
-          },
-          "said": {
-            "description": "What that run said as it stopped; empty for none.",
-            "type": "string"
-          },
-          "step": {
-            "description": "The step a failed preview or apply stopped on; empty for none.",
             "type": "string"
           },
           "taken": {
@@ -20663,22 +20739,18 @@
           "tone",
           "run_url",
           "taken",
-          "step",
-          "said"
+          "lines"
         ],
         "type": "object"
       },
       "MergePartPartial": {
         "additionalProperties": false,
         "properties": {
+          "lines": {
+            "$ref": "#/components/schemas/MergePart/properties/lines"
+          },
           "run_url": {
             "$ref": "#/components/schemas/MergePart/properties/run_url"
-          },
-          "said": {
-            "$ref": "#/components/schemas/MergePart/properties/said"
-          },
-          "step": {
-            "$ref": "#/components/schemas/MergePart/properties/step"
           },
           "taken": {
             "$ref": "#/components/schemas/MergePart/properties/taken"
@@ -22659,6 +22731,9 @@
           "reachable": {
             "$ref": "#/components/schemas/PlaybookRow/properties/reachable"
           },
+          "readings": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/readings"
+          },
           "title": {
             "$ref": "#/components/schemas/PlaybookRow/properties/title"
           }
@@ -22668,6 +22743,7 @@
           "title",
           "capability",
           "effect",
+          "readings",
           "reachable",
           "facts"
         ],
@@ -22695,6 +22771,9 @@
           },
           "reachable": {
             "$ref": "#/components/schemas/PlaybookRowPartial/properties/reachable"
+          },
+          "readings": {
+            "$ref": "#/components/schemas/PlaybookRowPartial/properties/readings"
           },
           "title": {
             "$ref": "#/components/schemas/PlaybookRowPartial/properties/title"
@@ -22746,6 +22825,13 @@
             },
             "type": "array"
           },
+          "readings": {
+            "description": "The kinds of reading a run of it states, such as `apps.pull`. Once it ends, `runs` has each in the run's `stated`, by machine. Empty when it states its result alone.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "title": {
             "description": "Its name in HQ, as its Run page is headed.",
             "type": "string"
@@ -22756,6 +22842,7 @@
           "title",
           "capability",
           "effect",
+          "readings",
           "reachable"
         ],
         "type": "object"
@@ -22804,6 +22891,9 @@
           },
           "reachable": {
             "$ref": "#/components/schemas/PlaybookRow/properties/reachable"
+          },
+          "readings": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/readings"
           },
           "title": {
             "$ref": "#/components/schemas/PlaybookRow/properties/title"
@@ -23644,116 +23734,6 @@
         ],
         "type": "string"
       },
-      "ProjectCommand": {
-        "additionalProperties": false,
-        "description": "The command: the fields its input schema names.",
-        "properties": {
-          "category": {
-            "$ref": "#/components/schemas/ProjectCategory",
-            "default": "other",
-            "enum": [
-              "wordpress_security",
-              "cloudflare",
-              "dns_email_security",
-              "homelab",
-              "vps",
-              "tailscale",
-              "adguard",
-              "networking",
-              "tls_certificates",
-              "automation",
-              "cybersecurity_labs",
-              "other"
-            ],
-            "x-enumDescriptions": {
-              "adguard": "AdGuard",
-              "automation": "Automation / scripts",
-              "cloudflare": "Cloudflare",
-              "cybersecurity_labs": "Cybersecurity labs",
-              "dns_email_security": "DNS / email security",
-              "homelab": "Homelab",
-              "networking": "UniFi / networking",
-              "other": "Other",
-              "tailscale": "Tailscale",
-              "tls_certificates": "TLS / certificates",
-              "vps": "VPS",
-              "wordpress_security": "WordPress security"
-            }
-          },
-          "deployment_notes": {
-            "$ref": "#/components/schemas/DeploymentNotes",
-            "default": "",
-            "format": "textarea"
-          },
-          "description": {
-            "$ref": "#/components/schemas/ProjectDescription",
-            "default": "",
-            "format": "textarea"
-          },
-          "name": {
-            "$ref": "#/components/schemas/ProjectName",
-            "maxLength": 160,
-            "minLength": 1
-          },
-          "notes": {
-            "$ref": "#/components/schemas/Notes",
-            "default": "",
-            "format": "textarea"
-          },
-          "public_url": {
-            "$ref": "#/components/schemas/PublishedUrl",
-            "default": "",
-            "maxLength": 200,
-            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
-          },
-          "repository_url": {
-            "$ref": "#/components/schemas/RepositoryUrl",
-            "default": "",
-            "maxLength": 200,
-            "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
-          },
-          "security_notes": {
-            "$ref": "#/components/schemas/SecurityNotes",
-            "default": "",
-            "format": "textarea"
-          },
-          "slug": {
-            "$ref": "#/components/schemas/Slug",
-            "default": "",
-            "maxLength": 180,
-            "pattern": "^$|^[-a-zA-Z0-9_]+$"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ProjectStatus",
-            "default": "idea",
-            "enum": [
-              "idea",
-              "active",
-              "paused",
-              "completed",
-              "published",
-              "archived"
-            ],
-            "x-enumDescriptions": {
-              "active": "Active",
-              "archived": "Archived",
-              "completed": "Completed",
-              "idea": "Idea",
-              "paused": "Paused",
-              "published": "Published"
-            }
-          },
-          "technologies_used": {
-            "$ref": "#/components/schemas/TechnologiesUsed",
-            "default": "",
-            "maxLength": 300
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "type": "object"
-      },
       "ProjectCreateRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -23762,7 +23742,114 @@
             "$ref": "#/components/schemas/ExpectedUpdatedAt"
           },
           "payload": {
-            "$ref": "#/components/schemas/ProjectCommand"
+            "additionalProperties": false,
+            "description": "The command: the fields its input schema names.",
+            "properties": {
+              "category": {
+                "$ref": "#/components/schemas/ProjectCategory",
+                "default": "other",
+                "enum": [
+                  "wordpress_security",
+                  "cloudflare",
+                  "dns_email_security",
+                  "homelab",
+                  "vps",
+                  "tailscale",
+                  "adguard",
+                  "networking",
+                  "tls_certificates",
+                  "automation",
+                  "cybersecurity_labs",
+                  "other"
+                ],
+                "x-enumDescriptions": {
+                  "adguard": "AdGuard",
+                  "automation": "Automation / scripts",
+                  "cloudflare": "Cloudflare",
+                  "cybersecurity_labs": "Cybersecurity labs",
+                  "dns_email_security": "DNS / email security",
+                  "homelab": "Homelab",
+                  "networking": "UniFi / networking",
+                  "other": "Other",
+                  "tailscale": "Tailscale",
+                  "tls_certificates": "TLS / certificates",
+                  "vps": "VPS",
+                  "wordpress_security": "WordPress security"
+                }
+              },
+              "deployment_notes": {
+                "$ref": "#/components/schemas/DeploymentNotes",
+                "default": "",
+                "format": "textarea"
+              },
+              "description": {
+                "$ref": "#/components/schemas/ProjectDescription",
+                "default": "",
+                "format": "textarea"
+              },
+              "name": {
+                "$ref": "#/components/schemas/ProjectName",
+                "maxLength": 160,
+                "minLength": 1
+              },
+              "notes": {
+                "$ref": "#/components/schemas/Notes",
+                "default": "",
+                "format": "textarea"
+              },
+              "public_url": {
+                "$ref": "#/components/schemas/PublishedUrl",
+                "default": "",
+                "maxLength": 200,
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
+              },
+              "repository_url": {
+                "$ref": "#/components/schemas/RepositoryUrl",
+                "default": "",
+                "maxLength": 200,
+                "pattern": "^$|^(?:[hH][tT][tT][pP]|[hH][tT][tT][pP][sS]|[fF][tT][pP]|[fF][tT][pP][sS])://(?:[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]+(?::[^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000:@/\\[\\]]*)?@)?(?:(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3}|\\[(?:(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4})?::(?:[0-9a-fA-F]{1,4}:){0,0}[0-9a-fA-F]{1,4}|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|(?:(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::|::(?:[fF]{4}:)?(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)(?:\\.(?:0|25[0-5]|2[0-4][0-9]|1[0-9]?[0-9]?|[1-9][0-9]?)){3})\\]|[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?(?:\\.[a-zA-Z\\u00a1-\\uffff0-9](?:[a-zA-Z\\u00a1-\\uffff0-9-]{0,61}[a-zA-Z\\u00a1-\\uffff0-9])?)*\\.(?:[a-zA-Z\\u00a1-\\uffff][a-zA-Z\\u00a1-\\uffff-]{0,61}[a-zA-Z\\u00a1-\\uffff]|[Xx][Nn]--[a-zA-Z0-9]{1,59})\\.?|[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])(?::[0-9]{1,5})?(?:[/?#][^\\t\\n\\x0b\\x0c\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$"
+              },
+              "security_notes": {
+                "$ref": "#/components/schemas/SecurityNotes",
+                "default": "",
+                "format": "textarea"
+              },
+              "slug": {
+                "$ref": "#/components/schemas/Slug",
+                "default": "",
+                "maxLength": 180,
+                "pattern": "^$|^[-a-zA-Z0-9_]+$"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ProjectStatus",
+                "default": "idea",
+                "enum": [
+                  "idea",
+                  "active",
+                  "paused",
+                  "completed",
+                  "published",
+                  "archived"
+                ],
+                "x-enumDescriptions": {
+                  "active": "Active",
+                  "archived": "Archived",
+                  "completed": "Completed",
+                  "idea": "Idea",
+                  "paused": "Paused",
+                  "published": "Published"
+                }
+              },
+              "technologies_used": {
+                "$ref": "#/components/schemas/TechnologiesUsed",
+                "default": "",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
           }
         },
         "required": [
@@ -24469,9 +24556,6 @@
           "target"
         ],
         "type": "object"
-      },
-      "ProjectUpsertRequest": {
-        "$ref": "#/components/schemas/ProjectCreateRequest"
       },
       "PruneOrphans": {
         "description": "Delete records the manifest no longer lists.",
@@ -27618,7 +27702,7 @@
             "type": "string"
           },
           "outcome": {
-            "description": "How it ended: `ok`, `changed`, `skipped`, `failed` or `unreachable`.",
+            "description": "How it ended, or `started` while it is under way: `started`, `ok`, `changed`, `skipped`, `failed` or `unreachable`.",
             "type": "string"
           },
           "task": {
@@ -29241,6 +29325,10 @@
           "tone": {
             "description": "The tone a page colors that label in; empty while nothing was asked.",
             "type": "string"
+          },
+          "url": {
+            "description": "The work's own page: a playbook run's or a scan's; empty where it has none.",
+            "type": "string"
           }
         },
         "required": [
@@ -29250,7 +29338,8 @@
           "live",
           "note",
           "seconds",
-          "percent"
+          "percent",
+          "url"
         ],
         "type": "object"
       },
@@ -29330,6 +29419,49 @@
           },
           "tone": {
             "$ref": "#/components/schemas/StandingPart/properties/tone"
+          }
+        },
+        "type": "object"
+      },
+      "StatedReading": {
+        "additionalProperties": false,
+        "description": "One kind of reading a run's playbook stated of one machine.",
+        "properties": {
+          "host": {
+            "description": "The machine it read.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The kind of reading.",
+            "type": "string"
+          },
+          "records": {
+            "description": "Its records, each shaped as its kind's.",
+            "items": {
+              "$ref": "#/components/schemas/AsRead"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "host",
+          "kind",
+          "records"
+        ],
+        "type": "object"
+      },
+      "StatedReadingPartial": {
+        "additionalProperties": false,
+        "description": "One kind of reading a run's playbook stated of one machine.",
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/StatedReading/properties/host"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/StatedReading/properties/kind"
+          },
+          "records": {
+            "$ref": "#/components/schemas/StatedReading/properties/records"
           }
         },
         "type": "object"
@@ -32348,7 +32480,7 @@
             "type": "string"
           },
           "events": {
-            "description": "Each task's outcome on each machine, in the order the worker ran them.",
+            "description": "Each task on each machine so far, in the order the worker started them, live while it runs.",
             "items": {
               "$ref": "#/components/schemas/RunTask"
             },
@@ -32408,7 +32540,7 @@
             "$ref": "#/components/schemas/_Evidence/properties/effect"
           },
           "events": {
-            "description": "Each task's outcome on each machine, in the order the worker ran them.",
+            "description": "Each task on each machine so far, in the order the worker started them, live while it runs.",
             "items": {
               "$ref": "#/components/schemas/RunTaskPartial"
             },
@@ -32501,9 +32633,9 @@
             "type": "string"
           },
           "stated": {
-            "description": "The kinds of reading its playbook stated, each once; empty when it stated none.",
+            "description": "Each reading its playbook stated, by machine then kind; empty when it stated none.",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/StatedReading"
             },
             "type": "array"
           },
@@ -32577,7 +32709,11 @@
             "$ref": "#/components/schemas/_Work/properties/state_label"
           },
           "stated": {
-            "$ref": "#/components/schemas/_Work/properties/stated"
+            "description": "Each reading its playbook stated, by machine then kind; empty when it stated none.",
+            "items": {
+              "$ref": "#/components/schemas/StatedReadingPartial"
+            },
+            "type": "array"
           },
           "title": {
             "$ref": "#/components/schemas/_Work/properties/title"
@@ -33492,81 +33628,6 @@
           "hq.assets"
         ],
         "x-hq-capability": "asset.update",
-        "x-hq-effect": "remote_write"
-      }
-    },
-    "/api/v2/capabilities/asset.upsert/": {
-      "post": {
-        "description": "Add a new asset, or update it if it already exists. On one that exists, a field left out keeps its value.",
-        "operationId": "assetUpsertV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssetUpsertRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/AssetSavedSuccess"
-          },
-          "202": {
-            "$ref": "#/components/responses/AwaitingApprovalAccepted"
-          },
-          "400": {
-            "$ref": "#/components/responses/UntargetedChangeBadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ChangeForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ChangeNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ChangeConflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/ChangeTooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearer": [
-              "write_assets"
-            ]
-          }
-        ],
-        "summary": "Add or update an asset",
-        "tags": [
-          "hq.assets"
-        ],
-        "x-hq-capability": "asset.upsert",
         "x-hq-effect": "remote_write"
       }
     },
@@ -35467,81 +35528,6 @@
         "x-hq-effect": "remote_write"
       }
     },
-    "/api/v2/capabilities/hq.sync/": {
-      "post": {
-        "description": "Bring HQ's list of docs up to date from the vault.",
-        "operationId": "hqSyncV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/HqSyncRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/HqSyncedSuccess"
-          },
-          "202": {
-            "$ref": "#/components/responses/AwaitingApprovalAccepted"
-          },
-          "400": {
-            "$ref": "#/components/responses/UntargetedChangeBadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ChangeForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ChangeNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ChangeConflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/ChangeTooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearer": [
-              "sync_documentation"
-            ]
-          }
-        ],
-        "summary": "Update docs from the vault",
-        "tags": [
-          "hq.docs"
-        ],
-        "x-hq-capability": "hq.sync",
-        "x-hq-effect": "remote_write"
-      }
-    },
     "/api/v2/capabilities/infrastructure.controller.refresh/": {
       "post": {
         "description": "Ask HQ to read everything again now.",
@@ -37254,81 +37240,6 @@
         "x-hq-effect": "remote_write"
       }
     },
-    "/api/v2/capabilities/project.upsert/": {
-      "post": {
-        "description": "Add a new project, or update it if it already exists. On one that exists, a field left out keeps its value.",
-        "operationId": "projectUpsertV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectUpsertRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/ProjectSavedSuccess"
-          },
-          "202": {
-            "$ref": "#/components/responses/AwaitingApprovalAccepted"
-          },
-          "400": {
-            "$ref": "#/components/responses/UntargetedChangeBadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ChangeForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ChangeNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ChangeConflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/ChangeTooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearer": [
-              "write_projects"
-            ]
-          }
-        ],
-        "summary": "Add or update a project",
-        "tags": [
-          "hq.projects"
-        ],
-        "x-hq-capability": "project.upsert",
-        "x-hq-effect": "remote_write"
-      }
-    },
     "/api/v2/capabilities/receipt.delete/": {
       "post": {
         "description": "Delete one receipt and its file.",
@@ -37801,7 +37712,6 @@
                 "asset.create",
                 "asset.delete",
                 "asset.update",
-                "asset.upsert",
                 "automation.run.cancel",
                 "automation.source.refresh",
                 "calendar.entry.create",
@@ -37827,7 +37737,6 @@
                 "expense.update",
                 "github.profile.read",
                 "hq.import",
-                "hq.sync",
                 "infrastructure.controller.refresh",
                 "infrastructure.resource.accept_observed",
                 "infrastructure.resource.adopt",
@@ -37851,7 +37760,6 @@
                 "project.dependency_updates.set",
                 "project.refresh",
                 "project.update",
-                "project.upsert",
                 "receipt.delete",
                 "receipt.update",
                 "tailnet.policy.remove_empty_groups",
@@ -39135,6 +39043,20 @@
             "style": "form"
           },
           {
+            "description": "Only the records whose chain is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "chain",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^[\\w.:-]{0,128}$",
+              "title": "Chain",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
             "description": "True for the asks for a fresh reading too; absent, they are left out.",
             "explode": true,
             "in": "query",
@@ -39221,6 +39143,7 @@
                   "query.about": "$request.query.about",
                   "query.action": "$request.query.action",
                   "query.awaiting": "$request.query.awaiting",
+                  "query.chain": "$request.query.chain",
                   "query.events": "$request.query.events",
                   "query.fields": "$request.query.fields",
                   "query.limit": "$request.query.limit",

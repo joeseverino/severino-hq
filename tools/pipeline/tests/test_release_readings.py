@@ -14,7 +14,8 @@ OTHER = "b" * 64
 # The cgroup files as a cgroup v2 kernel writes them.
 CPU_STAT = "usage_usec 25635004\nuser_usec 21455770\nsystem_usec 4179234\nnr_periods 0\n"
 MEMORY_STAT = "anon 147906560\nfile 20000000\nanon_thp 50331648\n"
-HQ = b"/usr/local/bin/python\0/usr/local/bin/uvicorn\0hq.config.asgi:application\0--port\0008000\0"
+# The image's CMD as the kernel records it.
+HQ = b"python\0-m\0hq.config.serve\0"
 
 
 def process(proc: Path, pid: int, argv: bytes, cgroup: str) -> None:

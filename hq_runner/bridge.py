@@ -1,4 +1,4 @@
-"""The worker's calls to HQ: claim, renew and report, over the bridge socket HQ serves the worker alone.
+"""The worker's calls to HQ: claim, renew (with a run's tasks so far) and report, over the bridge socket HQ serves the worker alone.
 
 The Go controller's client (``controller/runtime/bridge.go``) with the same
 trust: the socket and its directory are this account's alone and the peer must
@@ -169,9 +169,11 @@ class Bridge:
             },
         )
 
-    def renew(self, controller_id: str, operation: str, *, lease_seconds: int) -> dict[str, Any]:
+    def renew(
+        self, controller_id: str, operation: str, *, lease_seconds: int, progress: Mapping[str, Any]
+    ) -> dict[str, Any]:
         return self.call(
-            "renew", {"controller-id": controller_id, "operation": operation, "lease-seconds": lease_seconds}
+            "renew", {"controller-id": controller_id, "operation": operation, "lease-seconds": lease_seconds}, progress
         )
 
     def report(self, controller_id: str, operation: str, report: Mapping[str, Any]) -> dict[str, Any]:

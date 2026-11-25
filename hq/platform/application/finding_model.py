@@ -27,6 +27,7 @@ lazy from .capabilities import capability_spec, capability_words
 lazy from .pages import command_reach
 
 if TYPE_CHECKING:
+    from .asks import Standing
     from .cadence import ControllerSweepCommand
     from .security import Principal
 
@@ -184,9 +185,10 @@ class Finding:
     family: str = ""
     # Playbook context, derived from the observed service and adopted source.
     service_unit: str = field(default="", kw_only=True)
-    # HQ is acting on it now (a press's work under way): its row asks again
-    # until that work ends, so it says where it stands without a refresh.
-    under_way: bool = field(default=False, kw_only=True)
+    # How the work HQ does on it now stands (a press's run under way), with
+    # its page: its row says it and asks again until that work ends, so it
+    # says where it stands without a refresh.
+    under_way: Standing | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         as_members(self)

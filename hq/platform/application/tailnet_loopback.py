@@ -9,7 +9,9 @@ import re
 from dataclasses import dataclass
 
 from hq.config.networks import is_loopback
-from hq.config.serve import LISTENS_AT
+
+# Lazily: the module is the image server's, and loads Uvicorn.
+lazy from hq.config.serve import LISTENS_AT
 
 from . import connections
 from .projection import projection_scope, read_once

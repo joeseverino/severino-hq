@@ -10,6 +10,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.host import FILESYSTEM_KIND, RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.control_plane.tests import bridge_client
+from hq.platform.core.testing import connection
 
 from ..derivation_testing import frozen, uncached
 from ..filesystem_findings import FilesystemSpace
@@ -25,7 +26,7 @@ from . import (
     test_render_status as render,
     test_unit_findings as units,
 )
-from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
+from .test_tailnet_posture import EVERYTHING, raised
 
 # Past the line every reading of a machine is out of date at, so nothing it
 # says is current.
@@ -62,7 +63,7 @@ class ProductionCaseTests(TestCase):
     """A render status read long ago, the renderer current when read."""
 
     def setUp(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
 
     def test_until_it_is_out_of_date_it_is_judged_as_of_its_reading(self):
         read_ago(OUT_OF_DATE - timedelta(minutes=10))
@@ -169,7 +170,7 @@ class AgedReadingGuardTests(TestCase):
     past out of date."""
 
     def setUp(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         for _kind, store in READINGS.values():
             store()
         self.taken = {row.kind: row.observed_at for row in ProviderInventory.objects.filter(kind__in=KINDS)}

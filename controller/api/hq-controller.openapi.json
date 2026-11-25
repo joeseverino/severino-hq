@@ -203,7 +203,7 @@
     "/renew": {
       "post": {
         "operationId": "renew",
-        "summary": "Extend a claimed operation's lease, and say whether to go on.",
+        "summary": "Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.",
         "x-bridge-action": "renew",
         "parameters": [
           {
@@ -252,6 +252,16 @@
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
                 }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunProgress"
               }
             }
           }
@@ -1116,14 +1126,6 @@
           "message": {
             "type": "string"
           },
-          "events": {
-            "type": "array",
-            "maxItems": 200,
-            "items": {
-              "$ref": "#/components/schemas/RunEvent"
-            },
-            "description": "A run's task outcomes; an operation other than a run reports none."
-          },
           "catalog": {
             "$ref": "#/components/schemas/SourceCatalog",
             "description": "What a scan of an automation source found; an operation other than a scan reports none.",
@@ -1141,6 +1143,21 @@
           "observed_generation"
         ]
       },
+      "RunProgress": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/RunEvent"
+            },
+            "description": "A run's tasks so far, in the order they started, replacing what HQ held of them; left out, what HQ holds stands. An operation other than a run sends none."
+          }
+        },
+        "additionalProperties": false,
+        "description": "What a claimant says of its work as it renews the lease: a run's tasks so far."
+      },
       "RunEvent": {
         "type": "object",
         "properties": {
@@ -1155,6 +1172,7 @@
           "outcome": {
             "type": "string",
             "enum": [
+              "started",
               "ok",
               "changed",
               "failed",
@@ -1174,7 +1192,7 @@
           "outcome",
           "message"
         ],
-        "description": "One task's outcome on one machine, in a run's report."
+        "description": "One task on one machine: started while it is under way, else how it ended."
       },
       "RunStated": {
         "type": "object",

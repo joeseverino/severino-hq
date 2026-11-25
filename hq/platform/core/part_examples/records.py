@@ -4,7 +4,6 @@ lazy from collections.abc import Callable
 lazy from dataclasses import asdict
 lazy from datetime import UTC, date, datetime, timedelta
 
-lazy from django.core.paginator import Paginator
 lazy from django.templatetags.static import static
 
 from hq.platform.core.part_examples import DRAWN_AT, NARROW, runs, table
@@ -81,10 +80,16 @@ def _problems(*titles, family="", status="attention"):
 
 
 def _paged(number):
-    """A list's page ``number`` of three."""
+    """A list's page ``number`` of three, as ``ListPageMixin.pages`` says it."""
 
-    paginator = Paginator(range(60), 20)
-    return {"is_paginated": True, "paginator": paginator, "page_obj": paginator.page(number)}
+    return {
+        "pages": {
+            "previous": number - 1 or None,
+            "next": number + 1 if number < 3 else None,
+            "number": number,
+            "of": 3,
+        }
+    }
 
 
 def _images():

@@ -180,3 +180,37 @@ class TracedTests(TestCase):
         self.assertEqual(capability.attributes["error.type"], "forbidden")
         said = {str(value) for span in spans for value in span.attributes.values()}
         self.assertNotIn("example-agent", said)
+
+    def test_work_queued_in_a_request_is_taken_up_in_its_trace_as_its_audit_rows_name_it(self):
+        from hq.domains.control_plane.models import OperationRequest
+        from hq.platform.core import tracing
+        from hq.platform.core.attribution import own_operation
+        from hq.platform.core.bindings import operation_context
+        from hq.platform.core.models import AuditLog
+        from hq.platform.core.testing import declare
+
+        with (
+            tracing.trace("POST /example/press/") as pressed,
+            operation_context(interface="web", actor="owner", operation="example.press", operation_id=pressed),
+        ):
+            run = OperationRequest.objects.create(
+                resource=declare("example-queued", "example.record"),
+                action=OperationRequest.Action.RUN,
+                requested_actor="owner",
+                requested_interface="web",
+                idempotency_key="example-queued",
+            )
+        with (
+            tracing.trace("POST /example/claim/") as claimed,
+            operation_context(interface="controller", actor="controller", operation="example.claim"),
+            own_operation(run),
+        ):
+            run.attempt_count = 1
+            run.save()
+
+        spans = {span.name: span for span in self.sent.get_finished_spans()}
+        taken = spans["example.claim"]
+        # Taken up as a child of the creation context it carried, linked to the request that took it.
+        self.assertEqual(format(taken.context.trace_id, "032x"), pressed)
+        self.assertEqual([format(link.context.trace_id, "032x") for link in taken.links], [claimed])
+        self.assertEqual(set(AuditLog.objects.filter(object_id=str(run.pk)).values_list("trace", flat=True)), {pressed})

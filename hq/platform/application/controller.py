@@ -49,7 +49,7 @@ lazy from .github_profile import plan as github_profiles
 lazy from .github_repositories import plan as github_repositories
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .security import CONTROLLER_INTERFACE, cli_principal
-lazy from .work_runs import AUDITED_OUTCOMES, STOPPED_REPORTING
+lazy from .work_runs import RUN_EVENTS, STOPPED_REPORTING
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,8 +59,6 @@ class ControllerReport:
     status: dict[str, Any] = field(default_factory=dict)
     conditions: list[dict[str, Any]] = field(default_factory=list)
     message: str = ""
-    # A run's task outcomes (``RunEvent``); no other operation reports any.
-    events: list[dict[str, Any]] = field(default_factory=list)
     # What a scan found (``SourceCatalog``); no other operation reports one.
     catalog: dict[str, Any] | None = None
     # What a run's playbook stated beside its result (``RunStated``); no other
@@ -427,9 +425,14 @@ def claim_next_operation(
     operation.lease_expires_at = now + timedelta(seconds=lease_seconds)
     operation.claim_attempt = attempt
     operation.attempt_count += 1
+    # A run taken up again starts its tasks afresh.
+    afresh = RUN_EVENTS in (operation.result or {})
+    if afresh:
+        operation.result = {name: value for name, value in operation.result.items() if name != RUN_EVENTS}
     with own_operation(operation):
         operation.save(
             update_fields=(
+                *(("result",) if afresh else ()),
                 "state",
                 "claimed_by",
                 "claimed_at",
@@ -510,16 +513,30 @@ def _stop(reason: str, lease_expires_at=None) -> dict[str, Any]:
 
 
 @transaction.atomic
-def renew_operation(operation_id: str, *, controller_id: str, lease_seconds: int = 300) -> dict[str, Any]:
-    """Extend the lease the claimant holds, and say whether it may go on.
+def renew_operation(
+    operation_id: str,
+    *,
+    controller_id: str,
+    lease_seconds: int = 300,
+    events: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Extend the lease the claimant holds, hold a run's tasks so far, and say whether it may go on.
 
     Only the claimant renews, and only before its lease runs out. ``continue``
     is false once its asker is paused or blocked or the operation was
     cancelled; the lease is still extended so the worker can report. No audit
     row: a row per renewal would bury the claim and the outcome.
+
+    ``events``, a run's tasks so far (``RunProgress``), replace what the run's
+    result held of them, so a renewal sent twice holds the same. They are the
+    run's one record of its tasks: only the claimant writes them, while its
+    lease holds, within the contract's bounds and struck at the bridge's door,
+    and each carries only the four fields the worker keeps of a task.
     """
 
     _check_lease(lease_seconds)
+    if events is not None and (violation := departs("RunProgress", {"events": events})) is not None:
+        raise ValueError(violation)
     if not controller_id:
         raise ValueError("A renewal names the controller making it.")
     now = timezone.now()
@@ -536,11 +553,16 @@ def renew_operation(operation_id: str, *, controller_id: str, lease_seconds: int
     if OPERATION_LAPSE.holds(operation, now):
         raise ValueError("Operation lease has expired.")
     expires = now + timedelta(seconds=lease_seconds)
-    OperationRequest.objects.filter(pk=operation.pk).update(lease_expires_at=expires, updated_at=now)
+    progress: dict[str, Any] = {}
+    if events is not None:
+        if operation.action != OperationRequest.Action.RUN:
+            raise ValueError("Only a run reports events.")
+        progress["result"] = {**(operation.result or {}), RUN_EVENTS: events}
+    OperationRequest.objects.filter(pk=operation.pk).update(lease_expires_at=expires, updated_at=now, **progress)
     held = OperationRequest.objects.filter(pk=operation.pk).filter(agent_access.held_askers()).exists()
     if held:
         return _stop("Held", expires)
-    return {"ok": True, "continue": True, "reason": "", "lease_expires_at": expires.isoformat()}
+    return {"ok": True, "continue": True, "reason": "", "lease_expires_at": iso(expires)}
 
 
 @transaction.atomic
@@ -579,8 +601,6 @@ def report_operation(
     run = operation.action == OperationRequest.Action.RUN
     if run and report.status:
         raise ValueError("A run reports what its tasks did as events, never a status for its record.")
-    if report.events and not run:
-        raise ValueError("Only a run reports events.")
     if report.stated is not None:
         if not run:
             raise ValueError("Only a run reports what its playbook stated.")
@@ -649,14 +669,15 @@ def _stated_bytes(stated: dict[str, Any]) -> int:
 
 
 def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
-    """Record how a run ended, as evidence on the run alone, struck of secrets.
+    """Record how a run ended, as evidence on the run alone, struck of
+    secrets, beside the tasks its renewals held (``renew_operation``).
 
     What its playbook stated is struck again here, so one built outside a
     request holds no secret either.
     """
 
-    events = [dict(event) for event in report.events]
-    result: dict[str, Any] = {"message": report.message, "conditions": report.conditions, "events": events}
+    events = list((operation.result or {}).get(RUN_EVENTS) or ())
+    result: dict[str, Any] = {"message": report.message, "conditions": report.conditions, RUN_EVENTS: events}
     if report.stated:
         result["stated"] = struck(report.stated, declared_names())[0]
     # Ended as a run whose lease lapsed is (``_fail_lapsed_runs``).
@@ -666,17 +687,6 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
         _finish(operation, report, result)
         if report.success:
             succeeded(operation)
-    for event in events:
-        if event["outcome"] in AUDITED_OUTCOMES:
-            said = {name: event[name] for name in ("host", "task", "outcome")}
-            work_ended(
-                operation,
-                Outcome(
-                    message=f"{event['host']}: {event['task']} {event['outcome']}",
-                    ok=event["outcome"] == "changed",
-                    detail={"event": said},
-                ),
-            )
     return {"ok": True, "operation": serialize_operation(operation)}
 
 

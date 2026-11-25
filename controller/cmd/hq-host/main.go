@@ -17,6 +17,7 @@
 //	hq-host check            the deploy host's half of a preflight, as any account
 //	hq-host edge-receiver    the tree's edge receiver, for an edge, as any account
 //	hq-host dry-run          read what a unit's run reads of the host, and nothing else
+//	hq-host verified DIR     the units in DIR install verifies, one per line, as any account
 package main
 
 import (
@@ -44,7 +45,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | unit --serve | check --release DIR --main DIR | edge-receiver | dry-run"
+const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | unit --serve | check --release DIR | edge-receiver | dry-run | verified DIR"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
 var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance}
@@ -79,6 +80,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	}
 	if args[0] == "edge-receiver" {
 		return edgeReceiver(ctx, args[1:], stdout, stderr)
+	}
+	// CI's lint:units verifies the set install verifies, from this list.
+	if args[0] == "verified" {
+		return verified(args[1:], stdout, stderr)
 	}
 	if euid != 0 {
 		fmt.Fprintln(stderr, "hq-host must run as root.")
@@ -197,19 +202,18 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 	return runner.Run(ctx)
 }
 
-// check is the deploy host's half of a preflight: --release and --main are
-// the unit directories this release and main ship.
+// check is the deploy host's half of a preflight: --release is the unit
+// directory this release ships.
 func check(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	options := flag.NewFlagSet("check", flag.ContinueOnError)
 	options.SetOutput(stderr)
 	release := options.String("release", "", "the unit directory this release ships")
-	main := options.String("main", "", "the unit directory main ships")
-	if err := options.Parse(args); err != nil || options.NArg() != 0 || *release == "" || *main == "" {
+	if err := options.Parse(args); err != nil || options.NArg() != 0 || *release == "" {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
 	checker := hostChecker(stdout)
-	checker.Release, checker.Main = *release, *main
+	checker.Release = *release
 	return checker.Check(ctx)
 }
 
@@ -219,6 +223,23 @@ func hostChecker(out io.Writer) *host.Checker {
 		FreeBytes: host.DeployFreeBytes, Free: host.Free,
 		Command: hostcore.Command, Out: out,
 	}
+}
+
+// verified prints each unit path host.Verified gives for the directory named.
+func verified(args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, usage)
+		return 2
+	}
+	shipped, err := host.Shipped(args[0])
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	for _, path := range host.Verified(args[0], shipped) {
+		fmt.Fprintln(stdout, path)
+	}
+	return 0
 }
 
 // edgeReceiver writes the tree's edge receiver to stdout, which is never a

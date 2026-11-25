@@ -4,6 +4,7 @@ its family folded under a row of its own, each said once by its decision
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from typing import Any
 
 from django.utils.text import slugify
@@ -11,6 +12,7 @@ from django.utils.text import slugify
 from hq.platform.application import action_items
 from hq.platform.application.asks import following
 from hq.platform.application.decisions import decision
+from hq.platform.application.moments import duration
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, StatusMark, TableColumn
 from hq.platform.application.tone import Tone
 from hq.platform.core.included_queue import ICON_LINKS, INSIGHT_FACTS, OPERATOR_STEPS, ORIGIN_PANEL
@@ -143,11 +145,24 @@ def _said(item: Mapping[str, Any], title: Cell, where: Where) -> Cell:
     said = [] if where.grouped else [Cell(item["source"])]
     if late := item.get("late"):
         said.append(Cell.reading(reading=late))
-    lines = ()
+    lines: tuple[Cell, ...] = (_under_way(under),) if (under := item.get("under_way")) else ()
     if said:
         first, *rest = said
-        lines = (replace(first, muted=True, parts=tuple(replace(each, dot=True) for each in rest)),)
+        lines = (
+            *lines,
+            replace(first, muted=True, parts=tuple(replace(each, dot=True) for each in rest)),
+        )
     return replace(title, parts=tuple(line), lines=lines, below=_below(item))
+
+
+def _under_way(standing: Mapping[str, Any]) -> Cell:
+    """How the work HQ does on it now stands, as every follower of it says
+    it (``asks.Standing``): its state's word in its tone, linked to its page,
+    then what it does and how long since it was asked."""
+
+    since = duration(timedelta(seconds=standing["seconds"]), short=True) if standing["seconds"] else ""
+    rest = tuple(Cell(said, dot=True) for said in (standing["note"], since) if said)
+    return Cell(standing["label"], standing["url"], tone=standing["tone"], parts=rest)
 
 
 def _below(item: Mapping[str, Any]) -> tuple[Below, ...]:

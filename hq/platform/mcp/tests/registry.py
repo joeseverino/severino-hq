@@ -12,6 +12,7 @@ from typing import Any, TypedDict
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import held_graph
+from hq.platform.application.projection import page_of
 from hq.platform.application.resources import EmptyQuery, resource_registry
 
 from ..binding import bind_tools
@@ -41,7 +42,7 @@ def example_kind(seen: list[str] | None = None) -> ResourceSpec:
         "Example records",
         "Records an extension declares.",
         "example_read",
-        listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, ExampleRecord),
+        listing=ListRead(lambda: page_of([]), EmptyQuery, ExampleRecord),
         detail_handler=detail,
         identifier="name",
     )

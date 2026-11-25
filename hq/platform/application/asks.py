@@ -86,6 +86,7 @@ class StandingAnswer(TypedDict):
     note: Annotated[str, Describe("What the work is doing, or how it ended, in a sentence.")]
     seconds: Annotated[int, Describe("How long ago the work was asked for, in whole seconds; 0 when it was not.")]
     percent: Annotated[int | None, Describe("How far along the work is, where it knows; null where it does not.")]
+    url: Annotated[str, Describe("The work's own page: a playbook run's or a scan's; empty where it has none.")]
 
 
 def _bare(said: str) -> str:
@@ -112,6 +113,8 @@ class Standing:
     # The state in words, where the work's own record has them; else the
     # words its job state is said in (``work_runs.standing_word``).
     word: str = ""
+    # The work's own page, where it has one.
+    url: str = ""
 
     def __post_init__(self) -> None:
         # Every caller says how its work stands through here, so a sentence
@@ -135,6 +138,12 @@ class Standing:
         return standing_tone(self.state, self.label)
 
     @property
+    def said(self) -> str:
+        """Its label and its sentence, as one line says them."""
+
+        return f"{self.label}: {self.note}" if self.note else self.label
+
+    @property
     def seconds(self) -> int:
         if self.since is None:
             return 0
@@ -145,7 +154,9 @@ class Standing:
         """The standing a command answered with ``as_json``."""
 
         since = timezone.now() - timedelta(seconds=said["seconds"]) if said["seconds"] else None
-        return cls(said["state"], said["note"], since=since, percent=said["percent"], word=said["label"])
+        return cls(
+            said["state"], said["note"], since=since, percent=said["percent"], word=said["label"], url=said["url"]
+        )
 
     def as_json(self) -> StandingAnswer:
         return {
@@ -156,6 +167,7 @@ class Standing:
             "note": self.note,
             "seconds": self.seconds,
             "percent": self.percent,
+            "url": self.url,
         }
 
 

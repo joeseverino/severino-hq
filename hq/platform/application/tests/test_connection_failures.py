@@ -3,11 +3,10 @@ fix follows the cause."""
 
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import select, within
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 
 from ..credential_mint import address_fields
 from ..findings import findings
@@ -107,16 +106,8 @@ class FixFollowsCauseTests(TestCase):
 
 class SshTransportTests(TestCase):
     def test_a_host_and_port_endpoint_names_the_host(self):
-        ProviderConnection.objects.create(
-            connection_ref="example-ssh",
-            controller_id="example-controller",
-            provider="ssh",
-            endpoint="192.0.2.9:22",
-            reachable=False,
-            probed=True,
-            detail="Timed out",
-            failure="network",
-            observed_at=timezone.now(),
+        connection(
+            "ssh", "example-ssh", endpoint="192.0.2.9:22", reachable=False, detail="Timed out", failure="network"
         )
 
         (step,) = finding()["steps"]

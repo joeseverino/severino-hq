@@ -1,0 +1,10 @@
+id: work-end-recorded-by-work-ended
+valid:
+  - 'record_event(action=AuditLog.Action.FAILED, type_label="Example")'
+  - 'record_event(action=AuditLog.Action.OBSERVED, obj=row)'
+  - 'record_event(action=AuditLog.Action.VIEWED if seen else AuditLog.Action.OBSERVED, obj=row)'
+invalid:
+  - 'record_event(action=AuditLog.Action.DONE, obj=job)'
+  - 'record_event(action=AuditLog.Action.DONE if ok else AuditLog.Action.FAILED, obj=job)'
+  - 'record_event(action=action, obj=job)'
+  - 'audit.record_event(obj=job, message="Finished")'

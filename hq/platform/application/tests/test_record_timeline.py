@@ -8,14 +8,13 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 from hq.domains.control_plane.tests import bridge_client
-from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability, run_capability
 from hq.platform.application.security import cli_principal, mcp_principal, web_principal
 from hq.platform.core.attribution import bound
 from hq.platform.core.audit import audited_labels
 from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import declare, managing_everything
 
 KEY = "example-rewrite"
 REWRITE = {"domain": "app.example.com", "answer": "192.0.2.10"}
@@ -161,6 +160,8 @@ class ChainTests(TestCase):
                 if row.operation_id in requests:
                     # The controller's work leads back to whoever queued it.
                     self.assertEqual(row.cause, queued[row.operation_id].operation_id)
+                    # And is part of the chain that queued it.
+                    self.assertEqual(row.trace, queued[row.operation_id].trace)
                 else:
                     self.assertIn(row.operation_id, asks)
 
@@ -203,6 +204,11 @@ class ChainTests(TestCase):
         self.assertTrue(work)
         # Queued by the approval, so the controller's work leads back to it.
         self.assertEqual({row.cause for row in work}, {str(approval.pk)})
+        # And every row from the agent's ask to the controller's report is one chain.
+        asked = AuditLog.objects.get(object_id=str(approval.pk), action=AuditLog.Action.CREATED)
+        self.assertEqual(
+            {row.trace for row in story if row.operation_id in {str(approval.pk), claimed["id"]}}, {asked.trace}
+        )
 
     def test_rows_written_before_rows_named_their_record_are_still_in_its_story(self):
         resource = declare(KEY, "adguard.rewrite", dict(REWRITE))
@@ -268,3 +274,5 @@ class CauseTests(SimpleTestCase):
         # A step inside an operation is that operation, and keeps its cause.
         self.assertEqual((step.operation_id, step.cause), ("example-inner", outer.operation_id))
         self.assertEqual(outer.cause, "")
+        # All three are one chain, the outermost's.
+        self.assertEqual({outer.chain, inner.chain, step.chain}, {outer.operation_id})

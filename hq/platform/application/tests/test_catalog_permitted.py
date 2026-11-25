@@ -10,6 +10,8 @@ from typing import TypedDict
 
 from django.test import TestCase
 
+from hq.platform.application.projection import page_of
+
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
 from ..connections import ConnectionSpec, describe_connections
 from ..integration_specs import ListRead
@@ -44,7 +46,7 @@ def _resource(name: str, capability: str) -> ResourceSpec:
         "Example records",
         "Example records.",
         capability,
-        listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, _ExampleRecord),
+        listing=ListRead(lambda: page_of([]), EmptyQuery, _ExampleRecord),
     )
 
 

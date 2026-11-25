@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.platform.application.markup_testing import links, text
-from hq.platform.core.testing import SignedInTestCase
+from hq.platform.core.testing import SignedInTestCase, connection
 
 from ..connection_catalog import connection_catalog
 from ..inventory_testing import store
@@ -20,7 +20,6 @@ from ..posture import STANDARD, estate_posture
 from ..report_testing import bridged
 from ..security import cli_principal
 from ..standards import CheckResult, Reading, Standing
-from .test_tailnet_posture import tailnet_connection
 
 PASSWORDS = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend", "django.contrib.auth.backends.ModelBackend"]
 SSO_ONLY = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend"]
@@ -107,15 +106,7 @@ class ReadingTests(TestCase):
 
     def test_once_connected_an_unread_check_only_waits(self):
 
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-tailnet",
-            provider="tailscale",
-            endpoint="https://api.example.com",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
-        )
+        connection("tailscale", "example-tailnet", endpoint="https://api.example.com")
 
         found = standing("tailnet-policy")
 
@@ -165,7 +156,7 @@ class ReadingTests(TestCase):
     # No heartbeat: only the readings say whether a controller has run.
     @override_settings(SEVERINO_CONTROLLER_HEARTBEAT="/nonexistent/example-heartbeat")
     def test_an_unread_check_says_which_cause_holds_it(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         cases = (
             ("no controller has run", lambda: None, "HQ has not read it"),
             (
@@ -198,8 +189,8 @@ class ReadingTests(TestCase):
     def test_no_unread_check_lacks_its_cause(self):
         for estate, arrange in (
             ("nothing connected", lambda: None),
-            ("connected, no controller", tailnet_connection),
-            ("connected and read", lambda: (tailnet_connection(), store("example.other"))),
+            ("connected, no controller", lambda: connection("tailscale", "example-tailnet")),
+            ("connected and read", lambda: (connection("tailscale", "example-tailnet"), store("example.other"))),
         ):
             with self.subTest(estate=estate):
                 ProviderConnection.objects.all().delete()

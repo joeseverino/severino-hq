@@ -10,10 +10,10 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.domains.control_plane.reading_parts import clean_refused_parts, parts_of
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
 from ..credential_sight import PARTIAL, credential_sight
 from ..facts import unreadable_labels
@@ -76,13 +76,7 @@ class PartlyRefusedReadingTests(TestCase):
             ],
             observed_at=timezone.now(),
         )
-        ProviderConnection.objects.create(
-            connection_ref="example-api",
-            controller_id="example-controller",
-            provider="cloudflare_api",
-            observed_at=timezone.now(),
-            store={"vault": "Example Vault", "item": "exampleitem01"},
-        )
+        connection("cloudflare_api", "example-api", store={"vault": "Example Vault", "item": "exampleitem01"})
         self.summary = refused_on_every_zone()
 
     def sight(self):

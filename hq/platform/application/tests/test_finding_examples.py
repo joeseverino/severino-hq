@@ -12,6 +12,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.platform.core.testing import connection
 
 from .. import hq_self
 from ..action_items import item_key
@@ -27,7 +28,7 @@ from ..projection import projection_scope
 from ..security import Capability, Principal
 from ..tone import Tone
 from ..topology import derive_topology
-from .finding_examples import AT, Ago, Example, Examples, Raised, Stored, connection
+from .finding_examples import AT, Ago, Example, Examples, Raised, Stored
 
 try:
     import time_machine
@@ -81,7 +82,7 @@ def _store(readings, *, failed: bool = False) -> None:
 def a_controller() -> None:
     """The controller every example's estate is read by, on its own machine."""
 
-    connection("example-tailnet", "tailscale")
+    connection("tailscale", "example-tailnet")
 
 
 class Walked:

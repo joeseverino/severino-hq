@@ -15,10 +15,9 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError as Djan
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
-from pydantic import Field, StrictStr, StringConstraints
+from pydantic import Field, StrictBool, StrictStr, StringConstraints
 
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
-from hq.platform.application.url_query import with_query
 from hq.platform.core.digests import digest
 lazy from hq.domains.control_plane.models import (
     ApprovalRequest,
@@ -36,30 +35,25 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
-from .integration_specs import CapabilitySpec, CommandAbout, CommandFact, command_adapter
+from .integration_specs import CapabilitySpec, command_adapter
 from .process_caches import kept
 from .quoted import Quoted
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
-from .tone import Tone
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
-lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
-lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
+lazy from .automation_sources import PLAYBOOKS
 lazy from .cadence import ask, automation_standing
 lazy from .capabilities import Consented, consent
 lazy from .controller import release_lapsed
-lazy from .doors import NOBODY
-lazy from .entity_links import entity_link, kind_label
-lazy from .findings import rule_for
-lazy from .history import asked_by
+lazy from .entity_links import kind_label
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
-lazy from .json_schemas import fields as whole_fields, json_schema
+lazy from .json_schemas import json_schema
 lazy from .labels import lower_first
 lazy from .machines import machine_catalog
-lazy from .moments import moment, since_when, when
-lazy from .payload_words import ChangeRow, field_words, value_words
+lazy from .moments import moment, since_when
+lazy from .playbook_about import about, reading_words, run_preview
 lazy from .resource_operations import (
     Prepared,
     RunAsked,
@@ -69,11 +63,9 @@ lazy from .resource_operations import (
     operation_asked,
     serialize_operation,
 )
-lazy from .routes import reverse
 lazy from .run_reads import RUNS
-lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
 lazy from .ui import agreed, ended
-lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs, run_url
+lazy from .work_runs import RUN, WorkRun, operation_of, run_url
 
 if TYPE_CHECKING:
     from .pages import PageAction
@@ -99,7 +91,7 @@ def operation_registry(generation: str | None = None) -> OperationRegistry:
 # The variant of a playbook's run command that runs it again as it ran.
 AGAIN = "again"
 # The word of a run's input that makes it a preview, run in Ansible's check
-# mode (the bridge's ``RunInput.check``); no run command takes it.
+# mode (the bridge's ``RunInput.check``), written by ``queue_run`` alone.
 CHECK = "check"
 HERE = "here"
 RUN_HERE = "Run playbook"
@@ -152,6 +144,7 @@ type Hosts = Annotated[
 # What a run's hosts are titled wherever a person reads them, as every page
 # names them: on the field's own use, since an alias's title names the alias.
 MACHINES = Field(title="Machines")
+PREVIEW = Field(title="Preview")
 # The longest correlation id a run keeps, and a character of one: printable,
 # no spaces, and no comma, which separates the ids Jobs is filtered by.
 CORRELATION_LONGEST = 200
@@ -165,6 +158,16 @@ type Correlation = Annotated[
 ]
 type Reason = Annotated[
     StrictStr, Field(max_length=300), Describe("", api="Why it is run, kept with the operation it queues.")
+]
+
+type Preview = Annotated[
+    StrictBool,
+    # The label says it on the form, so the sentence is the agent's alone.
+    Describe(
+        "",
+        api="True to run it in Ansible's check mode, which reports what it would change. Only a task its "
+        "playbook marks `check_mode: false` acts, with the access a run has.",
+    ),
 ]
 
 
@@ -182,6 +185,10 @@ class RunCommand:
     parameters: Any
     correlation: Correlation = ""
     reason: Reason = ""
+    # A preview is the run itself in check mode, as AWX's job type and
+    # ansible-playbook's ``--check`` are, so it is granted, approved and logged
+    # in as the run is (docs/Architecture.md, "Previewing a run").
+    check: Annotated[Preview, PREVIEW] = False
 
 
 def command_type(manifest: OperationManifest) -> type[RunCommand]:
@@ -221,8 +228,8 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
 
     Every field but the input type, which its schema's digest stands for, so a
     new revision or a changed input moves the spec and with it what a held run
-    is measured against, and but its finding rules, which say where it is
-    offered and nothing of what a run does.
+    is measured against, and but its finding rules and readings, which say
+    where it is offered and what to read back, and nothing of what a run does.
     """
 
     return validate_spec(
@@ -230,7 +237,7 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
         {
             **manifest.model_dump(
                 mode="json",
-                exclude={"id", "input_type", "privilege", "fixes", "investigates"},
+                exclude={"id", "input_type", "privilege", "fixes", "investigates", "readings"},
             ),
             "operation": manifest.id,
             "privilege": manifest.privilege or "",
@@ -343,13 +350,14 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
     catalog adopted now pins it, the parameters as validated and the hosts as
     they resolve now. Read from the catalog rather than the procedure's record,
     which a run writes only when it is asked for, so an approval of one
-    revision never applies another and a new adoption stales it."""
+    revision never applies another and a new adoption stales it. A preview's
+    approval never runs one that acts, since ``check`` is measured too."""
 
     bound = _bound(manifest, command)
     return ApprovalSubject(
         OPERATION_KIND,
         resource_key(manifest.id),
-        {"spec": pinned(manifest), "parameters": bound["parameters"], "hosts": bound["hosts"]},
+        {"spec": pinned(manifest), "parameters": bound["parameters"], "hosts": bound["hosts"], CHECK: command.check},
     )
 
 
@@ -475,15 +483,22 @@ def request_run(manifest: OperationManifest, command: RunCommand, *, consented: 
     procedure's one active run refuses the second.
     """
 
-    return queue_run(manifest, _bound(manifest, command), reason=command.reason, consented=consented)
+    return queue_run(
+        manifest, _bound(manifest, command), reason=command.reason, consented=consented, check=command.check
+    )
 
 
 @transaction.atomic
-def queue_run(manifest: OperationManifest, bound: dict[str, Any], *, reason: str, consented: Consented) -> RunAsked:
-    """Queue a bound request through the same machine locks and audit trail."""
+def queue_run(
+    manifest: OperationManifest, bound: dict[str, Any], *, reason: str, consented: Consented, check: bool = False
+) -> RunAsked:
+    """Queue a bound request through the same machine locks and audit trail,
+    as a preview where ``check`` says so: the one place a run's input is made
+    one, so a run asked any way previews only through this."""
 
+    asked = {**bound, CHECK: True} if check else bound
     operation, queued = _enqueue_run(
-        partial(record_of, manifest, consented=consented), bound, consent(consented).principal, reason=reason
+        partial(record_of, manifest, consented=consented), asked, consent(consented).principal, reason=reason
     )
     return operation_asked(operation, queued=queued)
 
@@ -707,13 +722,6 @@ def playbooks_for(rule: str, machine: str) -> Iterable[OperationManifest]:
     )
 
 
-def _rule_fact(label: str, rules: tuple[str, ...]) -> tuple[CommandFact, ...]:
-    """The findings a playbook names, in those rules' words."""
-
-    titles = "; ".join(found.title for rule in rules if (found := rule_for(rule)))
-    return (CommandFact(label, titles),) if titles else ()
-
-
 def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[WorkRun]:
     """``runs`` each with what ``principal`` may do to it where it is listed."""
 
@@ -735,7 +743,7 @@ RETRY_WORDS = {
 }
 
 
-def _statements(statements: tuple[str, ...]) -> Quoted:
+def stated_words(statements: tuple[str, ...]) -> Quoted:
     """An author's statements as one text, each a sentence: still theirs."""
 
     return Quoted(" ".join(ended(statement) for statement in statements))
@@ -745,15 +753,6 @@ def anywhere(target_kinds: Iterable[str]) -> str:
     """Where a playbook that names no machine may run, in every page's words: "Any machine"."""
 
     return f"Any {' or '.join(lower_first(kind_label(kind)) for kind in target_kinds)}"
-
-
-def _runs_on(manifest: OperationManifest) -> CommandFact:
-    """The machines a procedure runs on: each it names by its link, else any
-    of the kinds it is written for."""
-
-    if manifest.hosts:
-        return CommandFact("Runs on", links=tuple(entity_link("machine", host) for host in manifest.hosts))
-    return CommandFact("Runs on", anywhere(manifest.target_kinds))
 
 
 def timeout_words(timeout_seconds: object) -> str:
@@ -767,87 +766,6 @@ def access_words(privilege: str | None) -> str:
     sudo as the profile ``privilege`` names, or none."""
 
     return f"sudo ({privilege})" if privilege else "No sudo"
-
-
-def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSection | None:
-    """The runs of ``manifest`` waiting for a person's approval that
-    ``principal`` may read, each linked to the request it is decided on; None
-    when none waits."""
-
-    waiting = approvals.pending(principal=principal, capability=capability_name(manifest.id))
-    who = asked_by(ApprovalRequest, waiting)
-    records = tuple(
-        (
-            machines_cell([str(host) for host in held.baseline.get("hosts") or ()]),
-            Cell(
-                "Waiting for approval",
-                reverse("core:approval_entry", kwargs={"approval_id": held.id}),
-                tone=Tone.ATTENTION,
-            ),
-            Cell(when(held.created_at), muted=True),
-            Cell(who.get(str(held.pk), NOBODY).words),
-        )
-        for held in waiting
-    )
-    if not records:
-        return None
-    return ServiceSection(
-        id="held-runs", label="Waiting for approval", columns=("Machines", "State", "Asked", "By"), records=records
-    )
-
-
-def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
-    """What a procedure's command page says of it to ``principal``: what its
-    adopted catalog declares, its runs waiting for approval, and how its
-    latest runs went, with their evidence where they may read Jobs. Its
-    inputs are the form's own fields."""
-
-    facts = (
-        _runs_on(manifest),
-        CommandFact("Effect", manifest.effect.label),
-        CommandFact("Access", access_words(manifest.privilege)),
-        CommandFact("Timeout", timeout_words(manifest.timeout_seconds)),
-        CommandFact("Preconditions", _statements(manifest.preconditions)),
-        CommandFact("Verification", _statements(manifest.verification)),
-        CommandFact("Recovery", _statements(manifest.recovery)),
-        CommandFact("Retry", RETRY_WORDS[manifest.retry]),
-        *_rule_fact("Fixes", manifest.fixes),
-        *_rule_fact("Investigates", manifest.investigates),
-        CommandFact("Adopted commit", manifest.revision[:SHORT_REVISION]),
-        CommandFact("Playbook file", manifest.playbook),
-    )
-    every = with_query(reverse("jobs:list"), {"kind": capability_name(manifest.id)})
-    sections = (
-        _held_runs(manifest, principal),
-        recent_work(recent_runs(manifest.id), by_machine=False, more_url=every, principal=principal),
-    )
-    return CommandAbout(label="Playbook", facts=facts, sections=tuple(section for section in sections if section))
-
-
-def run_preview(manifest: OperationManifest, held: ApprovalRequest) -> ChangePreview:
-    """What a held run would do, as its card shows it: its machines and its
-    inputs, each by its form's label, then what it does, its access and the
-    commit adopted. Read from what the run was measured against
-    (``run_subject``), so it shows what approving it applies; only the
-    inputs' labels come from ``manifest``, the catalog adopted now."""
-
-    pinned = dict(held.baseline.get("spec") or {})
-    inputs = whole_fields(json_schema(manifest.input_type))
-    hosts = [str(host) for host in held.baseline.get("hosts") or ()]
-    said = (
-        ("Playbook", run_title(manifest.id, automation_adoption.playbook_titles())),
-        (str(MACHINES.title), get_text_list(hosts, "and")),
-        *(
-            (field_words(name, inputs.get(name)), value_words(value, inputs.get(name)))
-            for name, value in dict(held.baseline.get("parameters") or {}).items()
-        ),
-        ("Effect", Effect(pinned["effect"]).label if pinned.get("effect") in Effect else ""),
-        ("Access", access_words(str(pinned.get("privilege", "")))),
-        ("Adopted commit", str(pinned.get("revision", ""))[:SHORT_REVISION]),
-        (field_words("correlation"), str(held.payload.get("correlation") or "")),
-    )
-    rows = tuple(ChangeRow(label=label, before="", after=value, change="added") for label, value in said if value)
-    return ChangePreview(label="Asked with", rows=rows, lines=())
 
 
 def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
@@ -864,12 +782,25 @@ def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
     return (
         ended(f"Access: {access_words(manifest.privilege)}"),
         ended(f"Timeout: {timeout_words(manifest.timeout_seconds)}"),
-        *(f"{lead} {_statements(statements)}" for lead, statements in said if statements),
+        *(f"{lead} {stated_words(statements)}" for lead, statements in said if statements),
         ended(f"Retry: {RETRY_WORDS[manifest.retry]}"),
     )
 
 
 WAITS_FOR_APPROVAL = "When an agent asks, the run waits for an operator's approval."
+PREVIEW_NOTE = (
+    "With `check` true it is a preview, Ansible's check mode: granted, approved and logged in as a run that acts, "
+    "where only a task its playbook marks `check_mode: false` acts."
+)
+
+
+def _reading_notes(manifest: OperationManifest) -> tuple[str, ...]:
+    """Which reading a run of ``manifest`` states, for an agent to read back once it ends."""
+
+    return tuple(
+        f"It states the reading `{kind}` ({reading_words(kind)}), in its run's `stated` on `{RUNS}`."
+        for kind in manifest.readings
+    )
 
 
 def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> CapabilitySpec:
@@ -906,6 +837,8 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
             # What ``waits_for_a_person`` above holds, for an agent to read before it asks.
             *((WAITS_FOR_APPROVAL,) if manifest.effect.changes else (asked_again,)),
             f"Read how it went from `{RUNS}`, by the `operation.id` this answers.",
+            *_reading_notes(manifest),
+            PREVIEW_NOTE,
             *_reviewed_notes(manifest),
         ),
         label=run_title(manifest.id, titles),

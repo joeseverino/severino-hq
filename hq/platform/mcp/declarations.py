@@ -24,8 +24,6 @@ HANDLERS: tuple[Callable[..., Any], ...] = (
     services.get_resource,
     services.audit_registry,
     services.export_year_summary,
-    services.documentation_status,
-    services.recent_activity,
     services.system_health,
     services.dashboard_snapshot,
 )

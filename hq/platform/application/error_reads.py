@@ -64,8 +64,7 @@ def _item(error: ServerError) -> dict[str, Any]:
 def list_errors(*, limit: int = 50) -> dict[str, Any]:
     """The errors kept, newest first."""
 
-    page = page_of(guarded(ServerError.objects.select_related("user")), limit)
-    return {**page, "items": [_item(error) for error in page["items"]]}
+    return page_of(guarded(ServerError.objects.select_related("user")), limit, each=_item)
 
 
 def get_error(request_id: str) -> dict[str, Any]:

@@ -28,6 +28,8 @@ lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 
 from .cadence import sweep_interval
 from .moments import stamp_day
+from .projection import page_of
+lazy from .projection import iso
 
 # The window the analytics page opens on. A day, because the question that
 # brings someone to this page is "what is happening", and a four-week average is
@@ -207,7 +209,7 @@ def record_analytics(
         recorded["rows"] += _restate_rows(site, entry["rows"])
         recorded["vitals"] += _restate_vitals(site, entry["vitals"])
 
-    return {"ok": True, "recorded": recorded, "observed_at": timezone.now().isoformat()}
+    return {"ok": True, "recorded": recorded, "observed_at": iso(timezone.now())}
 
 
 # ----- Reading ---------------------------------------------------------------
@@ -259,8 +261,8 @@ def analytics_plan(sites: list[dict[str, Any]]) -> dict[str, Any]:
             {
                 "connection_ref": connection_ref,
                 "site_tag": site_tag,
-                "start": start.isoformat(),
-                "end": end.isoformat(),
+                "start": iso(start),
+                "end": iso(end),
                 "reason": "backfill" if missing else "refresh",
             }
         )
@@ -286,8 +288,8 @@ def coverage_summary(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
     }
 
 
-def breakdown(dimension: str, *, days: int = DEFAULT_WINDOW_DAYS, limit: int = 50) -> list[dict[str, Any]]:
-    """One breakdown over a window, biggest first.
+def breakdown(dimension: str, *, days: int = DEFAULT_WINDOW_DAYS, limit: int | None = 50) -> list[dict[str, Any]]:
+    """One breakdown over a window, biggest first, every row of it with no ``limit``.
 
     Summed across days rather than read per day, because a window is the
     question: "which pages did well this month" is not answered by twenty-eight
@@ -642,29 +644,27 @@ def list_analytics(*, dimension: str | None = None, days: int = DEFAULT_WINDOW_D
         raise ValueError(
             f"Unknown dimension {dimension!r}; expected one of {', '.join(sorted(RumDaily.Dimension.values))}."
         )
-    rows = breakdown(dimension, days=days, limit=limit)
     window = site_totals(days=days)
     coverage = coverage_summary(days=days)
-    items = [
-        {
-            "dimension": dimension,
-            "value": row["value"],
-            "pageviews": row["pageviews"],
-            "visits": row["visits"],
-        }
-        for row in rows
-    ]
     return {
-        "items": items,
-        "count": len(items),
+        **page_of(
+            breakdown(dimension, days=days, limit=None),
+            limit,
+            each=lambda row: {
+                "dimension": dimension,
+                "value": row["value"],
+                "pageviews": row["pageviews"],
+                "visits": row["visits"],
+            },
+        ),
         "days": days,
-        "start": window["start"].isoformat(),
-        "end": window["end"].isoformat(),
+        "start": iso(window["start"]),
+        "end": iso(window["end"]),
         # Carried into the machine surface for the same reason it is on the
         # page: a consumer that treats an extrapolation as a count will
         # eventually publish it as one.
         "sample_interval": window["sample_interval"],
-        "coverage": {key: value.isoformat() if isinstance(value, date) else value for key, value in coverage.items()},
+        "coverage": {key: iso(value) if isinstance(value, date) else value for key, value in coverage.items()},
     }
 
 

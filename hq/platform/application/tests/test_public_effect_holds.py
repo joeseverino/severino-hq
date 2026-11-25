@@ -109,7 +109,7 @@ def reaching_a_record() -> list[tuple[str, object, set[str]]]:
 )
 class HoldTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
 
@@ -166,7 +166,7 @@ class FloorTests(TestCase):
     """The write refuses what the hold would have held, by the same rule."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
 

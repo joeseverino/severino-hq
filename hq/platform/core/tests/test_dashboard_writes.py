@@ -11,7 +11,6 @@ from hq.domains.control_plane.models import (
     DashboardConfiguration,
     DashboardMachine,
     DashboardRefreshRequest,
-    ProviderConnection,
 )
 from hq.platform.application import readings
 from hq.platform.application.capabilities import execute_capability
@@ -22,7 +21,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from hq.platform.application.tests.glance_readings import HOST
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 GRANTED = frozenset(Capability)
 CREDENTIALS = (
@@ -99,14 +98,7 @@ class DashboardRefreshTests(TestCase):
     def setUp(self):
         operator(self.client, "op")
         machine = declare("app-server", "machine", {"name": "app"})
-        ProviderConnection.objects.create(
-            connection_ref="app-ssh",
-            controller_id="app-server",
-            provider="ssh",
-            endpoint="100.64.0.10",
-            reaches=["app"],
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "app-ssh", controller_id="app-server", endpoint="100.64.0.10", reaches=["app"])
         DashboardMachine.objects.create(machine=machine)
         readings.record(
             readings.machine_telemetry(machine.key),

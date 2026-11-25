@@ -2,10 +2,12 @@
 What a piece of work shows for itself, drawn by {% run_evidence row.evidence %}
 from a work_runs.RunEvidence, or from a run's record (run_reads.RunRecord),
 which names each piece alike: its machines, its correlation id, its claim
-while a worker holds it, its tries past the first, the kinds of reading its
-playbook stated, each task's outcome, what each name served of the
-certificate it checked, and the result of an operation with no page of its
-own. Each piece is a labeled row-below block its row's open line shows
+while a worker holds it, its tries past the first, the tasks under way while
+a worker holds it, each task's outcome and what it said (``told``), each reading its playbook stated in
+the words and tone its kind declares (a kind HQ declares none for, named
+and counted), what each name served of the certificate it checked, and the
+result of an operation with no page of its own. Each piece is a labeled
+row-below block its row's open line shows
 (docs/Design.md, "Opening a row moves nothing"), or with layout="facts" a
 fact of the run's own page, inside its {% facts %}. Nothing for work with no
 evidence.
@@ -14,8 +16,9 @@ evidence.
   {% if evidence.correlation %}{% include "partials/_run_evidence.html#piece" with label="Correlation" part="partials/_run_evidence.html#correlation" %}{% endif %}
   {% if evidence.worker %}{% include "partials/_run_evidence.html#piece" with label="Claimed by" part="partials/_run_evidence.html#lease" %}{% endif %}
   {% if evidence.attempts > 1 %}{% include "partials/_run_evidence.html#piece" with label="Attempts" part="partials/_run_evidence.html#attempts" %}{% endif %}
-  {% if evidence.stated %}{% include "partials/_run_evidence.html#piece" with label="Readings" part="partials/_run_evidence.html#readings" %}{% endif %}
+  {% if evidence.under_way %}{% include "partials/_run_evidence.html#piece" with label="Now" part="partials/_run_evidence.html#now" %}{% endif %}
   {% if evidence.events %}{% include "partials/_run_evidence.html#piece" with label="Tasks" part="partials/_run_evidence.html#tasks" %}{% endif %}
+  {% if evidence.stated %}{% include "partials/_run_evidence.html#piece" with label="Readings" part="partials/_run_evidence.html#readings" %}{% endif %}
   {% if evidence.affected or evidence.matched %}{% include "partials/_run_evidence.html#piece" with label="Certificate" part="partials/_run_evidence.html#certificate" %}{% endif %}
   {% if evidence.raw %}{% include "partials/_run_evidence.html#piece" with label="Raw result" part="partials/_run_evidence.html#raw" %}{% endif %}
 {% endif %}
@@ -24,7 +27,8 @@ evidence.
 {% partialdef correlation %}<code>{{ evidence.correlation }}</code>{% endpartialdef %}
 {% partialdef lease %}{{ evidence.worker }}, until {{ evidence.lease_until|when:"at" }}{% endpartialdef %}
 {% partialdef attempts %}{{ evidence.attempts }}{% endpartialdef %}
-{% partialdef readings %}{% for kind in evidence.stated %}<code>{{ kind }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endpartialdef %}
-{% partialdef tasks %}{% list %}{% for event in evidence.events %}<li class="prose">{% status event.outcome tone=event.tone %} <strong>{{ event.task }}</strong>{% if event.host %}{% dot %}{% entity "machine"|entity_of:event.host %}{% endif %}{% if event.message %}{% dot %}{{ event.message }}{% endif %}</li>{% endfor %}{% endlist %}{% endpartialdef %}
+{% partialdef now %}{% list %}{% for event in evidence.under_way %}<li class="prose"><strong>{{ event.task }}</strong>{% if event.host %}{% dot %}{% entity "machine"|entity_of:event.host %}{% endif %}{% if event.message %}{% dot %}{{ event.message }}{% endif %}</li>{% endfor %}{% endlist %}{% endpartialdef %}
+{% partialdef readings %}{% for reading in evidence.readings %}<div class="prose">{% if reading.label %}<strong>{{ reading.label }}</strong>{% dot %}{% else %}<code>{{ reading.kind|breakable:"·" }}</code>{% endif %}{% entity "machine"|entity_of:reading.host %}{% if not reading.records %}{% dot %}{{ reading.count|counted:"record" }}{% endif %}</div>{% if reading.records %}{% list %}{% for title, said, tone in reading.records %}<li>{% if tone %}{% cell_line %}{{ title|breakable }}{% detail %}{% status said tone=tone pill=False %}{% endcell_line %}{% else %}{% cell_line text=title detail=said %}{% endif %}</li>{% endfor %}{% endlist %}{% endif %}{% endfor %}{% endpartialdef %}
+{% partialdef tasks %}{% list %}{% for event in evidence.tasks %}<li class="prose">{% status event.outcome tone=event.tone %} <strong>{{ event.task }}</strong>{% if event.host %}{% dot %}{% entity "machine"|entity_of:event.host %}{% endif %}{% if event.message %}{% dot %}{{ event.message }}{% endif %}</li>{% endfor %}{% endlist %}{% endpartialdef %}
 {% partialdef certificate %}{% if evidence.affected %}{{ evidence.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}{% list %}{% for item in evidence.affected %}<li>{% cell_line %}<strong>{{ item.consumer }}</strong>{% dot %}{{ item.domain }}{% detail %}Expected <code title="{{ evidence.expected }}">{{ evidence.expected|slice:":12" }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12" }}…</code>{% endcell_line %}</li>{% endfor %}{% endlist %}{% else %}{{ evidence.matched|counted:"name serves,names serve" }} this certificate<span title="{{ evidence.expected }}"> ({{ evidence.expected|slice:":8" }}…)</span>.{% endif %}{% endpartialdef %}
 {% partialdef raw %}<pre tabindex="0">{{ evidence.raw }}</pre>{% endpartialdef %}

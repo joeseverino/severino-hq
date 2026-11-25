@@ -1,10 +1,8 @@
 """Canonical search use case shared by web, CLI, TUI, and MCP adapters."""
 
-import threading
 from typing import Annotated
 
-from django.db import connection
-from django.db.models import CharField, F, IntegerField, Q, QuerySet, Value
+from django.db.models import CharField, F, IntegerField, QuerySet, Value
 from django.db.models.functions import Cast
 from pydantic import Field
 
@@ -26,25 +24,6 @@ class UnknownSearchScope(ValueError):
     pass
 
 
-# Set once the FTS table has been seen.
-_FTS5_READY = threading.Event()
-
-
-def _fts5_available() -> bool:
-    """Cache only a positive probe.
-
-    A negative result must be re-checked: if the first call in a process ever
-    lands before the FTS table exists (fresh database, mid-migrate), a cached
-    False would silently pin that process to the icontains fallback until
-    restart.
-    """
-    if not _FTS5_READY.is_set() and (
-        connection.vendor == "sqlite" and "search_index_fts" in connection.introspection.table_names()
-    ):
-        _FTS5_READY.set()
-    return _FTS5_READY.is_set()
-
-
 def _authorize(scope: str, principal: Principal) -> None:
     if scope not in by_scope():
         raise UnknownSearchScope(f"Unknown search scope {scope!r}.")
@@ -53,8 +32,7 @@ def _authorize(scope: str, principal: Principal) -> None:
 
 def _required(scope: str) -> tuple[Capability | str, ...]:
     # Every scope is readable with the baseline READ capability except the audit
-    # trail: it is a security log, and free-text search over it is strictly more
-    # revealing than the bounded recent_activity projection MCP already gets.
+    # trail, a security log, which its resource gates behind its own.
     return resource_search_capabilities().get(scope, (Capability.READ,))
 
 
@@ -64,10 +42,7 @@ def search_ids(scope: str, query: str, *, principal: Principal, limit: int = 100
     # Its own ceiling, the shared rule. Search caps lower than a listing does
     # because relevance past a hundred hits is noise, but "a page must be at
     # least one row" is not a different rule here than anywhere else.
-    capped_limit = page_size(limit, maximum=MAX_SEARCH_RESULTS)
-    if _fts5_available():
-        return search_backend.search(scope=scope, query=query, limit=capped_limit)
-    return _fallback_ids(by_scope()[scope], query, capped_limit)
+    return search_backend.search(scope=scope, query=query, limit=page_size(limit, maximum=MAX_SEARCH_RESULTS))
 
 
 def apply_search(queryset: QuerySet, *, scope: str, query: str, principal: Principal) -> QuerySet:
@@ -80,8 +55,6 @@ def apply_search(queryset: QuerySet, *, scope: str, query: str, principal: Princ
     """
     _authorize(scope, principal)
     identifier_field = by_scope()[scope].identifier_field
-    if not _fts5_available():
-        return _apply_fallback_search(queryset, scope, query, principal)
     position = search_backend.position(
         scope=scope,
         query=query,
@@ -103,29 +76,10 @@ def _no_matches(queryset: QuerySet) -> QuerySet:
     return queryset.none().annotate(_search_rank=Value(0, output_field=IntegerField()))
 
 
-def _apply_fallback_search(queryset: QuerySet, scope: str, query: str, principal: Principal) -> QuerySet:
-    """Without an index there is no rank: every match ties, and the caller's
-    tie-break (the table layer's primary key) is the whole order."""
-    ids = search_ids(scope, query, principal=principal, limit=MAX_SEARCH_RESULTS)
-    if not ids:
-        return _no_matches(queryset)
-    identifier_field = by_scope()[scope].identifier_field
-    return queryset.filter(**{f"{identifier_field}__in": ids}).annotate(
-        _search_rank=Value(0, output_field=IntegerField())
-    )
-
-
-def _fallback_snippet(definition: SearchDefinition, instance, query: str) -> SnippetParts:
-    """Portable snippet: a window around the first matched term, term marked."""
-    return _marked(definition.body(instance), query)
-
-
-def _snippet(definition: SearchDefinition, instance, query: str, indexed: SnippetParts | None) -> SnippetParts:
+def _snippet(definition: SearchDefinition, instance, query: str, indexed: SnippetParts) -> SnippetParts:
     """The record's own readable text when it has some, else the index's snippet."""
     text = definition.snippet_text(instance)
-    if text:
-        return _marked(text, query)
-    return indexed if indexed is not None else _fallback_snippet(definition, instance, query)
+    return _marked(text, query) if text else indexed
 
 
 def _marked(text: str, query: str) -> SnippetParts:
@@ -149,33 +103,6 @@ def _marked(text: str, query: str) -> SnippetParts:
             parts.append((" …", False))
         return parts
     return [(body[:150], False)] if body else []
-
-
-def _hits_by_scope(scopes: list[str], query: str, limit: int) -> dict[str, list[tuple[str, SnippetParts | None]]]:
-    """Ranked (object_id, snippet) hits per scope from whichever backend is active.
-
-    The index answers every scope in one statement. A scope with no hit is
-    absent, so it costs its caller no record fetch.
-    """
-    if _fts5_available():
-        return search_backend.search_scopes(scopes=scopes, query=query, limit=limit)
-    hits = {}
-    for scope in scopes:
-        object_ids = _fallback_ids(by_scope()[scope], query, limit)
-        if object_ids:
-            hits[scope] = [(object_id, None) for object_id in object_ids]
-    return hits
-
-
-def _fallback_ids(definition: SearchDefinition, query: str, limit: int) -> list[str]:
-    terms = query.split()[:8]
-    queryset = definition.model.objects.all()
-    for term in terms:
-        predicate = Q()
-        for field in definition.fields:
-            predicate |= Q(**{f"{field}__icontains": term})
-        queryset = queryset.filter(predicate)
-    return [str(identifier) for identifier in queryset.values_list(definition.identifier_field, flat=True)[:limit]]
 
 
 def _fetch_records(definition: SearchDefinition, object_ids: list[str]) -> dict:
@@ -216,7 +143,7 @@ def _global_search(query: str, *, principal: Principal, limit_per_scope: int) ->
     # the principal may not search is never read, not read and then dropped.
     definitions = by_scope()
     permitted = [scope for scope in definitions if _may_search(scope, principal)]
-    hits_by_scope = _hits_by_scope(permitted, query, limit_per_scope)
+    hits_by_scope = search_backend.search_scopes(scopes=permitted, query=query, limit=limit_per_scope)
     groups = []
     for scope in permitted:
         definition = definitions[scope]
@@ -239,7 +166,7 @@ def _global_search(query: str, *, principal: Principal, limit_per_scope: int) ->
 def _global_items(
     definition: SearchDefinition,
     query: str,
-    hits: list[tuple[str, SnippetParts | None]],
+    hits: list[tuple[str, SnippetParts]],
 ) -> list[dict]:
     if not hits:
         return []
@@ -256,29 +183,6 @@ def _global_items(
         for object_id, snippet in hits
         if (record := records.get(object_id)) is not None
     ]
-
-
-def search_records(scope: str, query: str, *, principal: Principal, limit: int = 50) -> dict:
-    """Adapter-neutral JSON result for CLI, TUI, and remote delivery surfaces."""
-    _authorize(scope, principal)
-    definition = by_scope()[scope]
-    hits = _hits_by_scope([scope], query, limit).get(scope, [])
-    records = _fetch_records(definition, [object_id for object_id, _ in hits])
-    items = []
-    for object_id, matched in hits:
-        record = records.get(object_id)
-        if record is None:
-            continue
-        snippet = _snippet(definition, record, query, matched)
-        items.append(
-            {
-                "id": object_id,
-                "label": str(record),
-                "title": definition.title(record),
-                "snippet": "".join(text for text, _ in snippet),
-            }
-        )
-    return {"scope": scope, "query": query, "items": items}
 
 
 # Search's, which answers fewer unless asked for more.
@@ -305,7 +209,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Search",
             "Machines, services and domains, then records, matching a query.",
             Capability.READ,
-            listing=ListRead(derived_reads.search, SearchQuery, Match),
+            listing=ListRead(derived_reads.search, SearchQuery, Match, counted=False),
             web_route="search",
             pass_principal=True,
         ),

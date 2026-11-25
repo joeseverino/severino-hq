@@ -82,9 +82,9 @@ func (r *WebRunner) Run(ctx context.Context) error {
 	}
 	// A container left by a crash, or by the compose deployment this
 	// replaces, holds the name. It is stopped as a deploy would stop it,
-	// then removed. Nothing else may run as HQ.
+	// then removed with its own temporary space. Nothing else may run as HQ.
 	_ = r.Docker(ctx, stopping...).Run()
-	_ = r.Docker(ctx, "rm", "--force", hostcore.Container).Run()
+	_ = r.Docker(ctx, "rm", "--force", "--volumes", hostcore.Container).Run()
 
 	// Not ctx: cancelling it would kill the client; the stop below ends HQ.
 	web := Web{Image: image, StartPeriod: r.StartPeriod}

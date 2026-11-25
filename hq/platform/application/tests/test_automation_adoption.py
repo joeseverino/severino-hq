@@ -197,6 +197,16 @@ class AdoptTests(AdoptionTestCase):
 
         self.assertIn("cache says nothing", self.refused(self.adopt(self.proposed(catalog(unsaid)))))
 
+    def test_a_sidecar_names_only_a_reading_hq_declares_and_its_command_says_which(self):
+        unknown = procedure("check", readings=["example.unknown_reading"])
+
+        said = self.refused(self.adopt(self.proposed(catalog(unknown)), key="example-adopt-unknown"))
+
+        self.assertIn("example.unknown_reading", said)
+        self.assertTrue(self.adopt(self.proposed(catalog(procedure("check", readings=["apps.pull"]))))["adopted"])
+        notes = " ".join(capability_spec("automation.example.check.run").execution_notes)
+        self.assertIn("`apps.pull`", notes)
+
     def test_a_procedure_s_inputs_are_its_role_s_argument_spec_bounded_by_its_sidecar(self):
         bounded = procedure("check", inputs={"unit": {"pattern": "^[a-z]+$", "max_length": 8}})
         bounded["roles"][0]["argument_spec"]["options"] = {
@@ -313,7 +323,8 @@ class ReviewTests(AdoptionTestCase):
         return reviewed(SourceProposal.objects.get(pk=proposal))
 
     def test_a_new_playbook_s_rows_say_what_its_command_page_says_and_name_its_inputs(self):
-        from ..automation_runs import about, operation_registry
+        from ..automation_runs import operation_registry
+        from ..playbook_about import about
 
         proposal = self.proposed(catalog(procedure("check", effect="infrastructure_change")))
         (group,) = [group for group in self.review(proposal).preview.groups if group.whole == "added"]

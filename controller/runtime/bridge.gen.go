@@ -893,6 +893,7 @@ const (
 	Failed      RunEventOutcome = "failed"
 	OK          RunEventOutcome = "ok"
 	Skipped     RunEventOutcome = "skipped"
+	Started     RunEventOutcome = "started"
 	Unreachable RunEventOutcome = "unreachable"
 )
 
@@ -906,6 +907,8 @@ func (e RunEventOutcome) Valid() bool {
 	case OK:
 		return true
 	case Skipped:
+		return true
+	case Started:
 		return true
 	case Unreachable:
 		return true
@@ -1579,13 +1582,10 @@ type ControllerRegistry struct {
 // ControllerReport defines model for ControllerReport.
 type ControllerReport struct {
 	// Catalog What a scan of an automation source found; an operation other than a scan reports none.
-	Catalog    *SourceCatalog `json:"catalog,omitempty"`
-	Conditions []Condition    `json:"conditions,omitempty"`
-
-	// Events A run's task outcomes; an operation other than a run reports none.
-	Events             []RunEvent `json:"events,omitempty"`
-	Message            string     `json:"message,omitempty"`
-	ObservedGeneration int64      `json:"observed_generation"`
+	Catalog            *SourceCatalog `json:"catalog,omitempty"`
+	Conditions         []Condition    `json:"conditions,omitempty"`
+	Message            string         `json:"message,omitempty"`
+	ObservedGeneration int64          `json:"observed_generation"`
 
 	// Stated What a run's playbook stated beside its result; an operation other than a run reports none.
 	Stated *RunStated `json:"stated,omitempty"`
@@ -2636,7 +2636,7 @@ type Resource struct {
 // ResourceKind Every kind of resource or reading HQ's provider registry declares.
 type ResourceKind string
 
-// RunEvent One task's outcome on one machine, in a run's report.
+// RunEvent One task on one machine: started while it is under way, else how it ended.
 type RunEvent struct {
 	Host    string          `json:"host"`
 	Message string          `json:"message"`
@@ -2672,6 +2672,12 @@ type RunInput struct {
 
 	// Revision The reviewed commit the run was asked of.
 	Revision string `json:"revision"`
+}
+
+// RunProgress What a claimant says of its work as it renews the lease: a run's tasks so far.
+type RunProgress struct {
+	// Events A run's tasks so far, in the order they started, replacing what HQ held of them; left out, what HQ holds stands. An operation other than a run sends none.
+	Events []RunEvent `json:"events,omitempty"`
 }
 
 // RunStated What a playbook stated with set_stats beside its result, keyed by the machines of its run alone. Its compact JSON is at most StatedBytes' maxLength bytes.
@@ -2965,6 +2971,9 @@ type GlanceJSONRequestBody = GlanceObservations
 // InventoryJSONRequestBody defines body for Inventory for application/json ContentType.
 type InventoryJSONRequestBody = Inventory
 
+// RenewJSONRequestBody defines body for Renew for application/json ContentType.
+type RenewJSONRequestBody = RunProgress
+
 // ReportJSONRequestBody defines body for Report for application/json ContentType.
 type ReportJSONRequestBody = ControllerReport
 
@@ -3216,10 +3225,19 @@ type ClientInterface interface {
 	// Corresponds with POST /registry (the `Registry` operationId).
 	Registry(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// Renew Extend a claimed operation's lease, and say whether to go on.
+	// RenewWithBody Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.
+	//
+	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /renew (the `Renew` operationId).
-	Renew(ctx context.Context, params *RenewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	RenewWithBody(ctx context.Context, params *RenewParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Renew Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /renew (the `Renew` operationId).
+	Renew(ctx context.Context, params *RenewParams, body RenewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReportWithBody Report an operation's result.
 	//
@@ -3535,11 +3553,30 @@ func (c *Client) Registry(ctx context.Context, reqEditors ...RequestEditorFn) (*
 	return c.Client.Do(req)
 }
 
-// Renew Extend a claimed operation's lease, and say whether to go on.
+// RenewWithBody Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.
+//
+// Takes any type of body and a specified content type.
 //
 // Corresponds with POST /renew (the `Renew` operationId).
-func (c *Client) Renew(ctx context.Context, params *RenewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRenewRequest(c.Server, params)
+func (c *Client) RenewWithBody(ctx context.Context, params *RenewParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRenewRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Renew Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /renew (the `Renew` operationId).
+func (c *Client) Renew(ctx context.Context, params *RenewParams, body RenewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRenewRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4299,8 +4336,19 @@ func NewRegistryRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
-// NewRenewRequest constructs an http.Request for the Renew method
-func NewRenewRequest(server string, params *RenewParams) (*http.Request, error) {
+// NewRenewRequest calls the generic Renew builder with application/json body
+func NewRenewRequest(server string, params *RenewParams, body RenewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRenewRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewRenewRequestWithBody constructs an http.Request for the Renew method, with any body, and a specified content type
+func NewRenewRequestWithBody(server string, params *RenewParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -4357,10 +4405,12 @@ func NewRenewRequest(server string, params *RenewParams) (*http.Request, error) 
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -4762,12 +4812,19 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /registry (the `Registry` operationId).
 	RegistryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*RegistryResponse, error)
 
-	// RenewWithResponse Extend a claimed operation's lease, and say whether to go on.
+	// RenewWithBodyWithResponse Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.
 	//
-	// Returns a wrapper object for the known response body format(s).
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /renew (the `Renew` operationId).
-	RenewWithResponse(ctx context.Context, params *RenewParams, reqEditors ...RequestEditorFn) (*RenewResponse, error)
+	RenewWithBodyWithResponse(ctx context.Context, params *RenewParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RenewResponse, error)
+
+	// RenewWithResponse Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /renew (the `Renew` operationId).
+	RenewWithResponse(ctx context.Context, params *RenewParams, body RenewJSONRequestBody, reqEditors ...RequestEditorFn) (*RenewResponse, error)
 
 	// ReportWithBodyWithResponse Report an operation's result.
 	//
@@ -5849,13 +5906,26 @@ func (c *ClientWithResponses) RegistryWithResponse(ctx context.Context, reqEdito
 	return ParseRegistryResponse(rsp)
 }
 
-// RenewWithResponse Extend a claimed operation's lease, and say whether to go on.
+// RenewWithBodyWithResponse Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.
 //
-// Returns a wrapper object for the known response body format(s).
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /renew (the `Renew` operationId).
-func (c *ClientWithResponses) RenewWithResponse(ctx context.Context, params *RenewParams, reqEditors ...RequestEditorFn) (*RenewResponse, error) {
-	rsp, err := c.Renew(ctx, params, reqEditors...)
+func (c *ClientWithResponses) RenewWithBodyWithResponse(ctx context.Context, params *RenewParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RenewResponse, error) {
+	rsp, err := c.RenewWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRenewResponse(rsp)
+}
+
+// RenewWithResponse Extend a claimed operation's lease, say whether to go on, and hold a run's tasks so far.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /renew (the `Renew` operationId).
+func (c *ClientWithResponses) RenewWithResponse(ctx context.Context, params *RenewParams, body RenewJSONRequestBody, reqEditors ...RequestEditorFn) (*RenewResponse, error) {
+	rsp, err := c.Renew(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

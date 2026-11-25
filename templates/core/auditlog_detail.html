@@ -10,7 +10,6 @@
     {% fact "Who" value=event.who.words %}
     {% if event.object_type %}{% fact "Object" %}{{ event.object_repr|default:event.type_label|or_empty }}{% if event.object_id %} {% muted %}#{{ event.object_id }}{% endmuted %}{% endif %}{% endfact %}{% endif %}
     {% if about %}{% fact "About" %}<a href="{{ about.1 }}">{{ about.0 }}</a>{% endfact %}{% endif %}
-    {% if cause %}{% fact "Started by" %}<a href="{{ cause.1 }}">{{ cause.0 }}</a>{% endfact %}{% endif %}
     {% if operation or operation_id %}{% fact "Operation" %}{{ operation }}{% if operation and operation_id %} {% endif %}{% if operation_id %}<code>{{ operation_id }}</code>{% endif %}{% endfact %}{% endif %}
     {% if event.message %}{% fact "Message" value=event.message %}{% endif %}
     {% if scan %}
@@ -52,9 +51,8 @@
 {% endif %}
 
 {% if other_events %}
-{% section "Other events" id=operation_list %}
+{% section "Other events" %}
   {% history_table "Other events" other_events %}
-  {% include "partials/_pagination.html" %}
 {% endsection %}
 {% endif %}
 {% endblock %}

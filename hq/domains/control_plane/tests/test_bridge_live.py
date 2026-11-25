@@ -20,7 +20,6 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.test import TransactionTestCase
-from django.utils import timezone
 
 from hq.domains.control_plane.bridge_application import application
 from hq.domains.control_plane.models import (
@@ -28,7 +27,6 @@ from hq.domains.control_plane.models import (
     DashboardRefreshRequest,
     ManagedResource,
     OperationRequest,
-    ProviderConnection,
 )
 from hq.platform.application import cadence
 from hq.platform.application.capabilities import execute_capability
@@ -37,7 +35,7 @@ from hq.platform.application.infrastructure import ManagedResourceCommand, save_
 from hq.platform.application.resource_operations import OperationCommand, request_reconcile
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.consent import consented
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 from hq.platform.core.tests.unix_serving import post, served, socket_directory
 
 from .certificate_cases import certificate_spec, declare_targets
@@ -64,7 +62,7 @@ class LiveBridge(TransactionTestCase):
 
 class ConcurrentCallTests(LiveBridge):
     def queue_one_operation(self) -> str:
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare_targets()
@@ -254,13 +252,7 @@ class ControllerPassTests(TransactionTestCase):
 
         self.bridge.held = "sweep-due"
         machine = declare("example-controller", "machine", {"name": "example"})
-        ProviderConnection.objects.create(
-            connection_ref="example-ssh",
-            controller_id=machine.key,
-            provider="ssh",
-            endpoint="192.0.2.10",
-            observed_at=timezone.now(),
-        )
+        connection("ssh", "example-ssh", controller_id=machine.key, endpoint="192.0.2.10")
         DashboardMachine.objects.create(machine=machine)
         sweep = subprocess.Popen(
             [str(controller_binary()), "--apply"],

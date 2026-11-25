@@ -7,10 +7,9 @@ from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import text
 from hq.platform.application.pages import runs_at
-from hq.platform.core.testing import NOBODY, OPERATOR, READER, SignedInTestCase
+from hq.platform.core.testing import NOBODY, OPERATOR, READER, SignedInTestCase, connection
 
 from ..command_center import command_center
 from ..connection_catalog import connection_catalog
@@ -109,30 +108,25 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             self.assertIn(spec, held_graph().connections.values())
 
     def test_core_spec_derives_controller_abilities_and_carries_no_credential(self):
-        from django.utils import timezone
-
         plant_credentials()
-        ProviderConnection.objects.create(
-            connection_ref="example-cloudflare",
+        connection(
+            "cloudflare_dns",
+            "example-cloudflare",
             controller_id="controller",
-            provider="cloudflare_dns",
             endpoint="https://api.cloudflare.com/client/v4",
             reaches=["example.com"],
-            reachable=True,
-            probed=True,
             detail="1 zone.",
-            observed_at=timezone.now(),
         )
 
         outcome = _standing(READER)
         core = [item for item in outcome if item["family"] == "infrastructure.controllers"]
-        connection = next(item for item in core if item["label"] == "example-cloudflare")
+        listed = next(item for item in core if item["label"] == "example-cloudflare")
 
         self.assertIn(
             "cloudflare.dns_record",
-            {ability["name"] for ability in _abilities(connection)},
+            {ability["name"] for ability in _abilities(listed)},
         )
-        self.assertEqual(connection["controller_id"], "controller")
+        self.assertEqual(listed["controller_id"], "controller")
         self.assertIn(SENTINEL_CONNECTION, {instance["label"] for instance in core})
         self.assertNoSentinel(outcome)
 
@@ -693,18 +687,8 @@ class GrantEvidenceTests(TestCase):
             connection_catalog(principal=READER)
 
     def test_controller_connections_carry_their_providers_credential_model(self):
-        from django.utils import timezone
-
         for provider in ("ssh", "cloudflare_dns"):
-            ProviderConnection.objects.create(
-                connection_ref=f"a-{provider}",
-                controller_id="controller",
-                provider=provider,
-                reaches=["example.test"],
-                reachable=True,
-                probed=True,
-                observed_at=timezone.now(),
-            )
+            connection(provider, f"a-{provider}", controller_id="controller", reaches=["example.test"])
 
         by_ref = {item["label"]: item for item in _standing(READER) if item["family"] == "infrastructure.controllers"}
 

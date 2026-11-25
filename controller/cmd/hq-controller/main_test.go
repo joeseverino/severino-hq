@@ -312,6 +312,21 @@ func TestReady(t *testing.T) {
 	closed := httptest.NewServer(mux)
 	closed.Close()
 	defer server.Close()
+	// On a socket, as the image's probe is; a path short enough for one.
+	dir, err := os.MkdirTemp("", "hqr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	probe := filepath.Join(dir, "ready.sock")
+	listener, err := new(net.ListenConfig).Listen(t.Context(), "unix", probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	onSocket := httptest.NewUnstartedServer(mux)
+	onSocket.Listener = listener
+	onSocket.Start()
+	defer onSocket.Close()
 	for _, tc := range []struct {
 		args []string
 		code int
@@ -320,8 +335,14 @@ func TestReady(t *testing.T) {
 		{[]string{"ready", server.URL + "/starting/"}, 1},
 		{[]string{"ready", server.URL + "/moved/"}, 1},
 		{[]string{"ready", closed.URL + "/health/ready/"}, 1},
+		// The URL names a closed server: only the socket can answer.
+		{[]string{"ready", "unix:" + probe, closed.URL + "/health/ready/"}, 0},
+		{[]string{"ready", "unix:" + probe, closed.URL + "/starting/"}, 1},
+		{[]string{"ready", "unix:" + filepath.Join(dir, "absent.sock"), server.URL + "/health/ready/"}, 1},
 		{[]string{"ready"}, 2},
 		{[]string{"ready", "::not a url"}, 2},
+		{[]string{"ready", "unix:", server.URL + "/health/ready/"}, 2},
+		{[]string{"ready", server.URL, server.URL + "/health/ready/"}, 2},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			code, calls, lines := runBinary(t, binary, bridge, tc.args...)

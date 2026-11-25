@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("severino.composition")
 
-PLUGIN_API_VERSION = 25
+PLUGIN_API_VERSION = 26
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

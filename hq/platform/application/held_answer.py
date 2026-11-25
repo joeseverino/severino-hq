@@ -10,6 +10,7 @@ from .command_fields import Describe
 from .describe import listed
 from .hq_self import site_url
 from .record_saves import row
+lazy from .projection import iso
 
 # The resource a held request is read by, which a held answer names for a
 # caller whose client cannot wait on it as a task.
@@ -95,7 +96,7 @@ def serialize_approval(held: ApprovalRequest) -> HeldRequest:
         held,
         HeldRequest,
         id=str(held.id),
-        requested_at=held.created_at.isoformat(),
+        requested_at=iso(held.created_at),
         review_url=site_url(reverse("core:approval_entry", kwargs={"approval_id": held.id})),
     )
 

@@ -120,7 +120,7 @@ class RenderTests(SimpleTestCase):
 
     def test_a_failed_reading_is_a_row_and_counted_in_the_verdict(self):
         made = self.made()
-        release_report.production_rows(made, {"error": "RuntimeError: no process runs hq.config.asgi:application"})
+        release_report.production_rows(made, {"error": "RuntimeError: no process runs hq.config.serve"})
         release_report.host_rows(
             made,
             {
@@ -130,7 +130,7 @@ class RenderTests(SimpleTestCase):
             },
         )
         written = release_report.render(made, None)
-        self.assertIn("no process runs hq.config.asgi:application", written)
+        self.assertIn("no process runs hq.config.serve", written)
         self.assertIn("no run recorded", written)
         closing = written.strip().splitlines()[-1]
         self.assertIn("2 readings failed", closing)

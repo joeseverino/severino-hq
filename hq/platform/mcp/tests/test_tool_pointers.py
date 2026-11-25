@@ -9,9 +9,6 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client
 
-from hq.platform.application.security import Capability
-from hq.platform.core.testing import MCP_READER
-
 from ..identity import set_principal
 from ..listing import widest_caller
 from ..server import mcp
@@ -22,9 +19,7 @@ POINTERS = {
     "dashboard_snapshot": {"system_health", "get_findings", "status-brief"},
     "get_findings": {"system_health", "status-brief"},
     "hq://hq": {"system_health", "status-brief"},
-    "audit_registry": {"documentation_status"},
-    "documentation_status": {"audit_registry"},
-    "recent_activity": {"dashboard_snapshot"},
+    "audit_registry": {"list_resource"},
     "export_year_summary": {"dashboard_snapshot"},
 }
 
@@ -56,17 +51,3 @@ class PointerTests(TestCase):
                 with self.subTest(source=source, target=target):
                     self.assertIn(target, listing)
                     self.assertIn(target, listing[source])
-
-    def test_recent_activity_names_the_permission_whose_lack_refuses_it(self):
-        async def called():
-            async with Client(mcp.server) as client:
-                return await client.call_tool("recent_activity", {})
-
-        with set_principal(MCP_READER):
-            refused = async_to_sync(called)()
-
-        self.assertEqual(refused.structured_content["error"]["code"], "forbidden")
-        self.assertIn(Capability.READ_AUDIT_LOG.value, refused.structured_content["error"]["message"])
-        self.assertIn(Capability.READ_AUDIT_LOG.value, _listing(widest_caller())["recent_activity"])
-        # Listed only to a caller it would not refuse.
-        self.assertNotIn("recent_activity", _listing(MCP_READER))

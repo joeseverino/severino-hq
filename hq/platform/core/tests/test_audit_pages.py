@@ -1,18 +1,13 @@
 """The audit pages: the log, a change, one entry, and the registry command."""
 
-import json
 from decimal import Decimal
-from io import StringIO
 
-from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.assets.models import Asset
 from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import hrefs, text, with_class, within
@@ -171,12 +166,11 @@ class AuditDetailPageTests(SignedInTestCase):
         inside = within(page, "class", "table-scroll")
         self.assertEqual(len([each for each in inside if each.tag == "table"]), 1)
         self.assertEqual(len([each for each in inside if each.attrs.get("scope") == "rowgroup"]), 2)
-        (group,) = [each for each in inside if "data-folds" in each.attrs]
-        (folded,) = [each for each in inside if "data-folded" in each.attrs]
-        self.assertEqual(folded.attrs["data-folded"], group.attrs["id"])
-        # The object's own history is what folds; the rest of the operation stays open.
+        folds = {each.attrs["id"] for each in inside if "data-folds" in each.attrs}
+        # The object's own history folds away under its heading, as each step of the chain folds what it changed.
         (link,) = [each for each in inside if each.attrs.get("href") == reverse("core:audit_detail", args=[updated.pk])]
-        self.assertTrue(any(ancestor is folded for ancestor in link.ancestors))
+        (row,) = [ancestor for ancestor in link.ancestors if "data-folded" in ancestor.attrs]
+        self.assertIn(row.attrs["data-folded"], folds)
 
     def test_a_row_written_before_rows_named_their_record_still_names_it(self):
         resource = declare("example-older", "example.record")
@@ -238,39 +232,3 @@ class AuditDetailPageTests(SignedInTestCase):
 
         self.assertEqual([change.label for change in page.context["changes"].rows], ["Token"])
         self.assertNotIn("«redacted»", text(page))
-
-
-class AuditRegistryCommandTests(TestCase):
-    """`manage.py audit_registry` reports registry rows no doc references."""
-
-    def test_reports_orphans_and_clean_state(self):
-        referenced = Project.objects.create(slug="referenced", name="Referenced")
-        Project.objects.create(slug="orphan-proj", name="Orphan Project")
-        Asset.objects.create(slug="orphan-asset", item_name="Orphan Asset")
-        doc = DocumentationRecord.objects.create(doc_id="rb-x", title="X")
-        doc.related_projects.add(referenced)
-
-        out = StringIO()
-        call_command("audit_registry", "--json", stdout=out)
-        stats = json.loads(out.getvalue())
-
-        self.assertEqual(stats["orphan_projects"], ["orphan-proj"])
-        self.assertEqual(stats["orphan_assets"], ["orphan-asset"])
-        self.assertEqual(stats["projects_total"], 2)
-        self.assertEqual(stats["assets_total"], 1)
-
-        # Human output names the orphans and does not claim "ok".
-        human = StringIO()
-        call_command("audit_registry", stdout=human)
-        text = human.getvalue()
-        self.assertIn("orphan: orphan-proj", text)
-        self.assertNotIn("Registry  ok", text)
-
-    def test_clean_when_everything_referenced(self):
-        project = Project.objects.create(slug="p", name="P")
-        doc = DocumentationRecord.objects.create(doc_id="rb-y", title="Y")
-        doc.related_projects.add(project)
-
-        out = StringIO()
-        call_command("audit_registry", stdout=out)
-        self.assertIn("Registry  ok", out.getvalue())

@@ -12,7 +12,7 @@ from hq.domains.jobs.runner import run
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.domains import domain_attention_items
 from hq.platform.application.markup_testing import select, within
-from hq.platform.application.read_models import recent_activity
+from hq.platform.application.resources import list_resource
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.tests.writers import keyed, runbook
 from hq.platform.core import append_only
@@ -163,7 +163,7 @@ class EventPageTests(TestCase):
         self.assertFalse(within(html, "aria-label", "Metadata"))
 
 
-class RecentActivityTests(TestCase):
+class EventListTests(TestCase):
     def setUp(self):
         with append_only.lifted():
             AuditLog.objects.all().delete()
@@ -172,10 +172,12 @@ class RecentActivityTests(TestCase):
         run("example.sweep", "Sweep the examples", _changes_two, actor=SCHEDULER)
         run("example.check", "Check the examples", lambda progress: {}, actor=SCHEDULER)
 
-        (event,) = recent_activity()["items"]
+        (event,) = list_resource("audit", {"events": True}, principal=cli_principal())["items"]
 
         self.assertEqual((event["title"], event["actor"], event["action"]), ("Sweep the examples", SCHEDULER, "done"))
-        self.assertEqual(sorted(item["message"] for item in event["items"]), ["Changed example-a", "Changed example-b"])
+        self.assertEqual(
+            sorted(item["message"] for item in event["changed"]), ["Changed example-a", "Changed example-b"]
+        )
 
 
 class HeldChangeGroupTests(TestCase):

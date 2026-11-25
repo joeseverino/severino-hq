@@ -19,6 +19,8 @@ lazy from hq.platform.core.templatetags import status_tags
 
 from .describe import Describe
 from .display_words import QUOTED, display, quoted_when
+from .figured import Figure
+from .moments import epoch
 lazy from .freshness import reading_age
 
 if TYPE_CHECKING:
@@ -280,7 +282,10 @@ class Cell:
         """A reading's age as every page words it (``partials/_reading_age.html``):
         of its ``Freshness``, of the moment ``at`` it was taken, else why there is none."""
 
-        return cls(piece=reading_age(reading, at=at, unread=unread), muted=muted)
+        taken = at or (reading.observed_at if reading else None)
+        return cls(
+            piece=reading_age(reading, at=at, unread=unread), muted=muted, sort=str(epoch(taken)) if taken else ""
+        )
 
     @classmethod
     def meter(cls, marks: Iterable[Any], label: str) -> Cell:
@@ -303,6 +308,25 @@ class Cell:
             and not (self.fold or self.field is not None or self.editor is not None)
             and all(part.says_nothing for part in (*self.parts, *self.lines))
         )
+
+    @property
+    def sort_value(self) -> str:
+        """What it sorts by on the page (``data-sort``) where that is not its
+        words: its declared ``sort``, else a moment's instant, an amount, or the
+        number its words say (``Figure``). A cell that says only words sorts by
+        them as drawn, so it writes nothing."""
+
+        if self.sort or self.says_nothing:
+            return self.sort
+        if self.moment is not None:
+            return str(epoch(self.moment))
+        if self.amount is not None:
+            return str(self.amount)
+        words = self.text or self.quoted or (self.status.words if self.status else "")
+        words = words or (self.piece.words if self.piece else "")
+        if isinstance(words, Figure):
+            return str(words.figure)
+        return "" if words else next((said for each in (*self.parts, *self.lines) if (said := each.sort_value)), "")
 
 
 @display

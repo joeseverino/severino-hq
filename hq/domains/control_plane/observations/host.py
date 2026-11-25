@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 from pydantic import ConfigDict, Field
 
 from hq.platform.application.reasons import Checked
+lazy from hq.platform.application.labels import human_bytes
 
 from .contract import ObservationRecord, ObservationSpec, Stamp
 
@@ -385,6 +386,9 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Disk space",
         HostFilesystemRecord,
         title=lambda record: str(record.get("mount", "")),
+        describe=lambda record: (
+            f"{human_bytes(record.get('free_bytes', 0))} free of {human_bytes(record.get('total_bytes', 0))}"
+        ),
         relation="Disk space on",
     ),
     ObservationSpec(

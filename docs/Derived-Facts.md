@@ -1029,15 +1029,16 @@ kept.
 Facts no connection knows (costs, purchase dates, notes) enter through a single
 import: atomic, audited per record, idempotent by slug, with a dry run.
 
-The `hq.import` capability, or `manage.py import_registry`, takes
+The `hq.import` capability (from a shell, through `manage.py hq_call`) takes
 `{"projects": [...], "assets": [...]}`. Each record carries the fields of
-`project.upsert` or `asset.upsert` and a slug. The whole document is validated
-before anything is written, every record is upserted through those use cases in
-one transaction, and a record refused while writing rolls back the rest.
-`--check-only` runs the import and rolls it back. A field a record leaves out
+`project.create` or `asset.create` and a slug. The whole document is validated
+before anything is written, each record is created or updated through the save
+those capabilities use, in one transaction, and a record refused while writing
+rolls back the rest.
+`check_only` runs the import and rolls it back. A field a record leaves out
 keeps its stored value; an unchanged record is not saved. Each record gets one
 `imported` audit event, and the import one more with the counts. It requires
-what both upserts require.
+what creating both requires.
 
 A derived value wins over an imported one. `Project.public_url` is the case:
 it is how `hq.platform.application.published_sites.projects_by_hostname` ties a

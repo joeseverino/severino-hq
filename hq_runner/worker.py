@@ -17,9 +17,11 @@ from .events import (
     ELSEWHERE,
     MISSHAPEN,
     PAST_BOUNDS,
+    STARTED,
     Event,
     Stated,
     Stopped,
+    Tasks,
     bounded,
     from_ansible,
     learned,
@@ -33,6 +35,8 @@ from .journal import Journal
 # renewals fit in one lease, so one lost renewal never lets it lapse.
 LEASE_SECONDS = 120
 RENEW_EVERY_SECONDS = 40
+# Why a run stopped whose lease could not be renewed.
+LEASE_LOST = "LeaseLost"
 
 UNKNOWN = (
     "The worker stopped during this run before it reported, so whether it changed the machines is unknown. "
@@ -46,11 +50,13 @@ class Bridge(Protocol):
     ) -> dict[str, Any]:
         """Claim the next queued run this worker can do, under a lease."""
 
-    def renew(self, controller_id: str, operation: str, *, lease_seconds: int) -> dict[str, Any]:
-        """Extend the lease on a claimed run."""
+    def renew(
+        self, controller_id: str, operation: str, *, lease_seconds: int, progress: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Extend the lease on a claimed run, with its tasks so far (``RunProgress``)."""
 
     def report(self, controller_id: str, operation: str, report: Mapping[str, Any]) -> dict[str, Any]:
-        """Send what a claimed run did so far, or how it ended."""
+        """Send how a claimed run or scan ended."""
 
 
 class Runner(Protocol):
@@ -79,7 +85,12 @@ class Outcome:
 
 
 class _Hold:
-    """The run's lease, renewed as it runs, and why it was told to stop."""
+    """The run's lease, renewed as it runs with its tasks so far, and why it was told to stop.
+
+    ansible-runner asks ``should_stop`` every few seconds on the thread that
+    passes each event, so a task's start or outcome reaches HQ by the next
+    ask, carried by a renewal: the one call a worker makes about a run under way.
+    """
 
     def __init__(
         self, bridge: Bridge, controller_id: str, run: Run, clock: Callable[[], float], secrets: frozenset[str]
@@ -90,6 +101,7 @@ class _Hold:
         self._clock = clock
         self._secrets = secrets
         self._renewed = clock()
+        self.tasks = Tasks()
         self.stopped: tuple[str, str] | None = None
         # The run's span, which ansible-runner's thread asks this on.
         self.span: Any = None
@@ -98,21 +110,30 @@ class _Hold:
         if self.stopped is not None:
             return True
         now = self._clock()
-        if now - self._renewed >= RENEW_EVERY_SECONDS:
+        if self.tasks.changed or now - self._renewed >= RENEW_EVERY_SECONDS:
             self._renew(now)
         return self.stopped is not None
 
-    def _renew(self, now: float) -> None:
+    def told(self) -> None:
+        """Tell HQ the tasks it has yet to hear once the playbook has ended,
+        unless the lease is lost; whether it may go on no longer matters."""
+
+        if self.tasks.changed and (self.stopped is None or self.stopped[0] != LEASE_LOST):
+            self._renew(self._clock(), ended=True)
+
+    def _renew(self, now: float, *, ended: bool = False) -> None:
         try:
-            answer = self._bridge.renew(self._controller_id, self._run.operation, lease_seconds=LEASE_SECONDS)
+            answer = self._bridge.renew(
+                self._controller_id, self._run.operation, lease_seconds=LEASE_SECONDS, progress=self.tasks.progress()
+            )
         except BridgeError as exc:
             # A lease that cannot be held lapses, and HQ then treats the run
             # as unknown; stopping now keeps what it did as small as it can be.
-            self.stopped = ("LeaseLost", strike(f"Its lease could not be renewed: {exc}", self._secrets))
+            self.stopped = (LEASE_LOST, strike(f"Its lease could not be renewed: {exc}", self._secrets))
             return
         self._renewed = now
         tracing.event(self.span, "lease renewed")
-        if answer.get("continue") is not True:
+        if not ended and answer.get("continue") is not True:
             reason = answer.get("reason")
             if reason == "Cancelled":
                 self.stopped = ("Cancelled", "It was cancelled in HQ.")
@@ -130,15 +151,9 @@ def _report(
     success: bool,
     message: str,
     reason: str = "",
-    events: Sequence[Event] = (),
     stated: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    report: dict[str, Any] = {
-        "success": success,
-        "observed_generation": generation,
-        "message": message,
-        "events": [event.as_report() for event in events],
-    }
+    report: dict[str, Any] = {"success": success, "observed_generation": generation, "message": message}
     if stated:
         report["stated"] = dict(stated)
     if not success:
@@ -185,10 +200,10 @@ def _ended(
     return False, "Failed", f"ansible-runner ended it as {status}."
 
 
-def _finish(
-    run: Run, status: str, hold: _Hold, events: list[Event], said: Stated | None, stopped: str | None
-) -> dict[str, Any]:
-    kept, left_out = bounded(events)
+def _finish(run: Run, status: str, hold: _Hold, said: Stated | None, stopped: str | None) -> dict[str, Any]:
+    hold.told()
+    events = hold.tasks.every
+    left_out = bounded(events)[1]
     if hold.stopped is not None:
         reason, message = hold.stopped
         success = False
@@ -203,7 +218,6 @@ def _finish(
         success=success,
         message=message,
         reason=reason,
-        events=kept,
         stated=said.as_report() if said else None,
     )
 
@@ -222,7 +236,6 @@ def run_claimed(
 
     secrets = learned(run.parameters) | frozenset(secrets) | {str(target.identity) for target in run.targets}
     hold = _Hold(bridge, controller_id, run, clock, secrets)
-    events: list[Event] = []
     said: list[Stated] = []
     stopped = Stopped(run.procedure.project_dir, secrets)
 
@@ -232,15 +245,16 @@ def run_claimed(
             said.append(found_stated)
         found = from_ansible(event, secrets)
         if found is not None:
-            events.append(found)
-            # The struck event's host, task and outcome; never its message.
-            tracing.event(hold.span, found.outcome, **{"ansible.host": found.host, "ansible.task": found.task})
+            hold.tasks.add(found)
+            # The struck outcome's host, task and outcome; never its message.
+            if found.outcome != STARTED:
+                tracing.event(hold.span, found.outcome, **{"ansible.host": found.host, "ansible.task": found.task})
 
     with tracing.span("ansible-runner", **{"hq.procedure": run.procedure_id, "hq.hosts": len(run.hosts)}) as ran:
         hold.span = ran
         status = runner(run, on_event=on_event, should_stop=hold.should_stop)
         tracing.note(**{"ansible.status": status})
-    report = _finish(run, status, hold, events, said[-1] if said else None, stopped.message)
+    report = _finish(run, status, hold, said[-1] if said else None, stopped.message)
     if hold.stopped is not None:
         tracing.note(**{"hq.stopped": hold.stopped[0]})
     return report

@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+lazy from django.utils import timezone
+
 from hq.domains.control_plane.observations.portainer import (
     IMAGE_KIND as PULLED_KIND,
     RUNTIME_KIND,
@@ -30,6 +32,7 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from .container_state import ContainerCount, ContainerState, HealthCheck, uptime_of
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
 from .display_words import as_members, display
+from .figured import Figure
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
 from .moments import moment
@@ -89,7 +92,8 @@ def up_for(status: str, started_at: object, *, running: bool) -> str:
     if started is None or not running:
         return uptime_of(status)
     age = when(started)
-    return "Just started" if age == "just now" else f"Up {age.removesuffix(' ago')}"
+    up = (timezone.now() - started).total_seconds()
+    return Figure("Just started" if age == "just now" else f"Up {age.removesuffix(' ago')}", up)
 
 
 def started_at(machine: str, container: str) -> str:

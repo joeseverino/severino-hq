@@ -49,6 +49,18 @@ extends = "hk"
 vars = { step = "ast-grep" }
 usage = 'flag "--fix" help="Write the fixes the tool makes instead of checking: fast runs it first"'
 
+["lint:sentence-ends"]
+description = "A sentence the host's page text builds closes on a value through ended, never a hand-written period, by the rule extensions are held to (hq.platform.application.plugin_validation)"
+hide = true
+extends = "hk"
+vars = { step = "sentence-ends" }
+
+["lint:source-scans"]
+description = "No tracked text file holds a command form tools/source_scans.py refuses: a git file list read by line, a mise trust that leaves its records in the Mac's state"
+hide = true
+extends = "hk"
+vars = { step = "source-scans" }
+
 ["lint:spelling"]
 description = "typos holds every file of the checkout to American English and its spelling, as _typos.toml says"
 hide = true

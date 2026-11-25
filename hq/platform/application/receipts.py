@@ -33,6 +33,7 @@ from .record_fields import Notes, RecordId
 from .record_saves import Held, as_sent, found, held, row, written
 from .references import Kind
 from .security import Principal
+lazy from .projection import iso
 lazy from .record_answers import ReceiptSaved, ReceiptUploaded
 lazy from .ui import ended
 
@@ -157,7 +158,7 @@ def get_receipt(identifier: int) -> ReceiptRecord:
         "file": "stored" if stored_file(receipt) else "missing" if receipt.file else "none",
         "file_type_label": receipt.file_type,
         "expense_label": expense.label if expense else "",
-        "expense_date": expense.date.isoformat() if expense else None,
+        "expense_date": iso(expense.date) if expense else None,
     }
 
 

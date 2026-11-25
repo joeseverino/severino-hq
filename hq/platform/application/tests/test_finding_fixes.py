@@ -11,7 +11,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.markup_testing import elements, links, with_class
 from hq.platform.application.tests.consent import consented
-from hq.platform.core.testing import SignedInTestCase, declare, operator
+from hq.platform.core.testing import SignedInTestCase, connection, declare, operator
 from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
@@ -22,7 +22,7 @@ from ..policy_fixes import policy_without_empty_groups, request_empty_groups_rem
 from ..record_errors import PolicyError, RecordNotFound
 from ..security import cli_principal, mcp_principal
 from .test_approvals import POLICY_KEY, an_operator, declare_policy
-from .test_tailnet_posture import policy, raised, tailnet_connection
+from .test_tailnet_posture import policy, raised
 
 
 def steps_text(finding) -> str:
@@ -71,7 +71,7 @@ class EveryRuleSaysHowTests(TestCase):
                 )
 
     def test_a_finding_without_its_own_action_carries_the_rules(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         policy(settings={"devicesApprovalOn": False})
 
         (finding,) = raised("devices-join-without-approval")
@@ -122,7 +122,7 @@ class PolicyAmendmentTests(TestCase):
 
 class RemoveEmptyGroupsCapabilityTests(TestCase):
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare_policy(document())
@@ -176,7 +176,7 @@ class RemoveEmptyGroupsCapabilityTests(TestCase):
 
 class ProductionFindingsTests(TestCase):
     def test_an_empty_group_offers_the_policy_change_when_a_policy_is_declared(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         policy(
             groups=[{"name": "group:empty", "members": []}],
             grants=[{"src": ["group:empty"], "dst": ["tag:server"], "ip": ["tcp:22"]}],
@@ -194,7 +194,7 @@ class ProductionFindingsTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["100.64.0.0/10", "fd7a:115c:a1e0::/48"])
     def test_trusted_wider_says_the_exact_value_to_set(self):
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         store(
             "tailscale.device",
             {"name": "example-host", "addresses": ["100.64.0.9"], "enabled_routes": ["192.0.2.0/24"]},
@@ -208,17 +208,7 @@ class ProductionFindingsTests(TestCase):
         )
 
     def test_a_stray_container_says_how_to_remove_it(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderConnection
-
-        ProviderConnection.objects.create(
-            connection_ref="example-portainer",
-            controller_id="example-controller",
-            provider="portainer",
-            endpoint="",
-            observed_at=timezone.now(),
-        )
+        connection("portainer", "example-portainer")
         store(
             CONTAINER_KIND,
             {
@@ -246,7 +236,7 @@ class FindingsPageTests(TestCase):
         from django.urls import reverse
 
         operator(self.client)
-        tailnet_connection()
+        connection("tailscale", "example-tailnet")
         policy(settings={"devicesApprovalOn": False})
 
         response = self.client.get(reverse("control_plane:findings"))
@@ -298,7 +288,7 @@ class KeepTheLiveVersionPageTests(TestCase):
 
     def setUp(self):
 
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare_policy(document())

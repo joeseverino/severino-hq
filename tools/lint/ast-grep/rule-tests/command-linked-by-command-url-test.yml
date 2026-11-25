@@ -1,0 +1,8 @@
+id: command-linked-by-command-url
+valid:
+  - 'url = command_url("example.run", target)'
+  - 'url = reverse("commands", args=[name])'
+invalid:
+  - 'url = reverse("command", args=[name]) + f"?target={target}"'
+  - 'url = reverse("command")'
+  - url = routes.reverse("command", args=[name])

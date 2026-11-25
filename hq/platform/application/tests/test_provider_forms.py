@@ -118,7 +118,7 @@ class ResourceFormViewTests(TestCase):
     """The web write goes through the same use case the API and MCP call."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         self.user = operator(self.client)
@@ -280,7 +280,7 @@ class ResourceFormViewTests(TestCase):
 
     def test_a_refused_save_rerenders_the_form_with_the_reason(self):
         from hq.platform.application.adoption import write_gap
-        from hq.platform.application.adoption_testing import connection
+        from hq.platform.core.testing import connection
 
         connection("adguard", manages=False)
         gap = write_gap("adguard.rewrite", {})

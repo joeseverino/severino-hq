@@ -1,0 +1,10 @@
+id: row-change-recorded-by-its-signal
+valid:
+  - 'record_event(action=AuditLog.Action.VIEWED)'
+  - 'record_event(action=AuditLog.Action.DONE if ok else AuditLog.Action.FAILED)'
+  - 'record_event(obj=row, message="Seen")'
+invalid:
+  - 'record_event(action=AuditLog.Action.UPDATED, obj=row, message="Renamed")'
+  - 'audit.record_event(action=AuditLog.Action.CREATED if request else AuditLog.Action.DELETED)'
+  - 'record_event(action=action)'
+  - 'record_event(action=AuditLog.Action.DONE if ok else action)'

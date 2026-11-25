@@ -5,9 +5,8 @@ from django.test import TestCase
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.tests.consent import consented
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
-from ..adoption_testing import connection
 from ..resource_capabilities import resource_capabilities
 
 

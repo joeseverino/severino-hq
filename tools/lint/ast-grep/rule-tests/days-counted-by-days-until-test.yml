@@ -1,0 +1,15 @@
+id: days-counted-by-days-until
+valid:
+  - |
+    left = days_until(certificate.not_after)
+  - |
+    span = (end - start).days
+  - |
+    expires = record.expires_at
+    weeks = seconds // 86400
+invalid:
+  - |
+    left = (certificate.not_after - now).days
+  - |
+    expires = record.expires_at
+    left = (expires - now).total_seconds() / 86400

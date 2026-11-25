@@ -38,7 +38,7 @@ class BridgeSocketDeliveryTests(SimpleTestCase):
         directory = self.directory()
         dockerfile = DOCKERFILE.read_text()
         self.assertRegex(dockerfile, rf"chown -R severino:severino [^\n]*{re.escape(directory)}\b")
-        self.assertIn(f"chmod 0700 {directory}", dockerfile)
+        self.assertRegex(dockerfile, rf"chmod 0700 [^\n]*{re.escape(directory)}\b")
 
     def test_the_web_listener_is_not_the_socket(self):
         command = re.search(r"^CMD \[(.+?)\]$", DOCKERFILE.read_text(), re.MULTILINE | re.DOTALL).group(1)

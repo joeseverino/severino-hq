@@ -63,6 +63,27 @@ hooks {
         glob = List("tools/lint/vale/**", "hq/platform/core/plain_words.py", "hq/platform/core/interface_text.py") + toolchain
         check = "uv run python -m hq.platform.core.plain_words --whole"
       }
+      // The sentence rule extensions are held to (plugin_validation), over
+      // the host's code that builds page text; the rule leaves out tests,
+      // migrations and management commands itself.
+      ["sentence-ends"] {
+        glob = List("hq/platform/application/**/*.py", "hq/domains/**/*.py")
+        check = "uv run python -m hq.platform.application.plugin_validation . {{files}}"
+      }
+      ["sentence-ends-whole"] {
+        glob = List("hq/platform/application/plugin_validation.py") + toolchain
+        check = "uv run python -m hq.platform.application.plugin_validation . hq/platform/application hq/domains"
+      }
+      // The scans read every language a command line sits in, so the step
+      // is handed every file and reads those that are text.
+      ["source-scans"] {
+        glob = List("**/*")
+        check = "uv run python -m tools.source_scans {{files}}"
+      }
+      ["source-scans-whole"] {
+        glob = List("tools/source_scans.py") + toolchain
+        check = "uv run python -m tools.source_scans"
+      }
       // mise.toml's SEVERINO_FILE_LINE_* say which files the ceiling holds, so
       // the step is handed every file and keeps those.
       ["file-lines"] {

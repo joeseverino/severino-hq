@@ -19,7 +19,7 @@ word and sentence, the line a row opens to, and the offer of a newer reading.
   {% if ask.standing.state != "idle" and ask.standing.note %}{% partial why %}{% endif %}
 </span>
 {% partialdef said %}<span class="ask-word">{{ ask.standing.label }}</span><span class="ask-sentence">{{ ask.standing.note }}</span>{% endpartialdef %}
-{% partialdef why %}<span class="ask-why row-below" data-label="{{ ask.label }}" data-ask-why="{{ ask.url }}">{% if ask %}{{ ask.standing.label }}: {{ ask.standing.note }}{% endif %}</span>{% endpartialdef %}
+{% partialdef why %}<span class="ask-why row-below" data-label="{{ ask.label }}" data-ask-why="{{ ask.url }}">{% if ask %}{{ ask.standing.said }}{% endif %}</span>{% endpartialdef %}
 {% partialdef frames %}<template data-ask-said>{% partial said %}</template>
 <template data-ask-below>{% open_line %}{% partial why %}{% endopen_line %}</template>
 <template data-ask-newer><span class="ask-sentence">{% newer_reading %} </span><a href="">{% show_newer %}</a></template>{% endpartialdef %}

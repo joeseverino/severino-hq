@@ -118,47 +118,6 @@ class CapabilityTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertTrue(Project.objects.filter(slug="json-project").exists())
 
-    def test_upsert_capability_is_idempotent_and_server_owned(self):
-        created = execute_capability(
-            "project.upsert",
-            {"name": "First", "slug": "same-project"},
-            principal=cli_principal(),
-        )
-        updated = execute_capability(
-            "project.upsert",
-            {"name": "Second", "slug": "same-project"},
-            principal=cli_principal(),
-        )
-
-        self.assertTrue(created["created"])
-        self.assertFalse(updated["created"])
-        self.assertEqual(Project.objects.get().name, "Second")
-
-    def test_hq_sync_refuses_a_payload_it_no_longer_understands(self):
-        """A topology in the payload is refused: HQ derives its own."""
-
-        result = execute_capability(
-            "hq.sync",
-            {
-                "manifest": [
-                    {
-                        "doc_id": "rb-atomic-sync",
-                        "title": "Atomic sync",
-                        "doc_type": "runbook",
-                        "status": "active",
-                        "system": "Example service",
-                        "environment": "other",
-                        "sensitivity": "internal",
-                    }
-                ],
-                "topology": {"version": 3},
-            },
-            principal=cli_principal(),
-        )
-
-        self.assertFalse(result["ok"])
-        self.assertFalse(DocumentationRecord.objects.filter(doc_id="rb-atomic-sync").exists())
-
     def test_syncing_docs_does_not_require_the_whole_control_plane(self):
         """A service account allowed to sync docs and nothing else can.
 
@@ -169,7 +128,7 @@ class CapabilityTests(TestCase):
         docs_only = Principal("docs-bot", "mcp", frozenset({Capability.SYNC_DOCUMENTATION}))
 
         result = execute_capability(
-            "hq.sync",
+            "documentation.sync",
             keyed(
                 {
                     "manifest": [

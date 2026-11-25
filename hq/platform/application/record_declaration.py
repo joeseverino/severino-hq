@@ -26,7 +26,6 @@ class Records:
     command: str
     # Creates when given no target, updates when given one.
     save: str
-    upsert: str = ""
     create: bool = True
     # What a person calls one record, where the noun reads wrong.
     title: str = ""

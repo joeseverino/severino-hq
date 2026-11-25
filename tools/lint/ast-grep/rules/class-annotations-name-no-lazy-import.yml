@@ -1,0 +1,48 @@
+# A dataclass, a pydantic model or a NamedTuple reads its annotations' values
+# as the class is made, and a base in another module can make any class one,
+# so a class-body field whose annotation names one of its module's lazy
+# imports loads that import with the module. A lazy import's keyword parses
+# as an ERROR leaf just before it (tree-sitter-python reads no `lazy`), and a
+# plain `lazy import a.b` binds `a`.
+id: class-annotations-name-no-lazy-import
+language: python
+severity: error
+message: A class-body annotation names a lazy import, which the class loads as it is made.
+note: Import an annotation-only name under `if TYPE_CHECKING:`; one also used at run time, by its module.
+rule:
+  kind: identifier
+  pattern: $NAME
+  not:
+    any:
+      - inside: {kind: attribute, field: attribute}
+      - inside: {kind: keyword_argument, field: name}
+  all:
+    - inside:
+        stopBy: end
+        kind: type
+        inside:
+          field: type
+          kind: assignment
+          inside:
+            kind: expression_statement
+            inside:
+              kind: block
+              inside: {field: body, kind: class_definition}
+    - inside:
+        stopBy: end
+        kind: module
+        has:
+          follows: {kind: ERROR, regex: ^lazy$}
+          any:
+            - kind: import_from_statement
+              has:
+                field: name
+                any:
+                  - {kind: dotted_name, pattern: $NAME}
+                  - {kind: aliased_import, has: {field: alias, pattern: $NAME}}
+            - kind: import_statement
+              has:
+                field: name
+                any:
+                  - {kind: dotted_name, has: {kind: identifier, nthChild: 1, pattern: $NAME}}
+                  - {kind: aliased_import, has: {field: alias, pattern: $NAME}}

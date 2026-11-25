@@ -176,6 +176,10 @@ class ProcedureTerms(Closed):
     fixes: Annotated[tuple[RuleName, ...], Checked(sorted_unique)] = ()
     # Read-only playbooks can offer evidence for a finding without claiming to clear it.
     investigates: Annotated[tuple[RuleName, ...], Checked(sorted_unique)] = ()
+    # The kinds of reading a run of it states (``set_stats`` ``readings``), each
+    # one HQ declares the words of, so whoever asks for a run knows what to read
+    # back. Empty: it states its result alone.
+    readings: Annotated[tuple[DottedName, ...], Checked(sorted_unique)] = ()
 
     @model_validator(mode="after")
     @checked

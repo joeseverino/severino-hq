@@ -12,18 +12,4 @@
     {% muted %}Next{% arrow %}{% endmuted %}
   {% endif %}
 </nav>
-{% elif is_paginated %}
-<nav class="pagination" aria-label="Pages">
-  {% if page_obj.has_previous %}
-    <a data-hit href="{% querystring page=page_obj.previous_page_number %}"><span aria-hidden="true">←</span>&nbsp;Prev</a>
-  {% else %}
-    {% muted %}<span aria-hidden="true">←</span>&nbsp;Prev{% endmuted %}
-  {% endif %}
-  {% muted %}Page {{ page_obj.number }} of {{ paginator.num_pages }}{% endmuted %}
-  {% if page_obj.has_next %}
-    <a data-hit href="{% querystring page=page_obj.next_page_number %}">Next{% arrow %}</a>
-  {% else %}
-    {% muted %}Next{% arrow %}{% endmuted %}
-  {% endif %}
-</nav>
 {% endif %}

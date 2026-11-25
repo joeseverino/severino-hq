@@ -9,8 +9,9 @@
 // "hq-controller job NAME" is the other thing a timer asks of HQ: one piece of
 // scheduled work, done by the running process. It reads no connection.
 //
-// "hq-controller ready URL" is the image's healthcheck: exit 0 when URL
-// answers 200, with no interpreter started per probe.
+// "hq-controller ready [unix:PATH] URL" is the image's healthcheck: exit 0
+// when URL answers 200, asked on the socket at PATH when one is given, with
+// no interpreter started per probe.
 package main
 
 import (
@@ -20,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -114,10 +116,24 @@ func job(ctx context.Context, args []string, socket string, stdout io.Writer) in
 const readyTimeout = 3 * time.Second
 
 // ready is exit 0 when the address answers 200 itself. A redirect is not
-// followed, no proxy is consulted, and the body is not read.
+// followed, no proxy is consulted, and the body is not read. Given a
+// unix:PATH first, the request goes to the socket at PATH, whatever host the
+// URL names.
 func ready(ctx context.Context, args []string, stdout io.Writer) int {
+	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true}
+	if len(args) == 2 {
+		socket, ok := strings.CutPrefix(args[0], "unix:")
+		if !ok || socket == "" {
+			args = nil
+		} else {
+			args = args[1:]
+			transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+			}
+		}
+	}
 	if len(args) != 1 || args[0] == "" {
-		_ = json.NewEncoder(stdout).Encode(failure{Message: "usage: hq-controller ready URL"})
+		_ = json.NewEncoder(stdout).Encode(failure{Message: "usage: hq-controller ready [unix:PATH] URL"})
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
@@ -128,7 +144,7 @@ func ready(ctx context.Context, args []string, stdout io.Writer) int {
 		return 2
 	}
 	client := &http.Client{
-		Transport:     &http.Transport{Proxy: nil, DisableKeepAlives: true},
+		Transport:     transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	response, err := client.Do(request) //nolint:gosec // G704: the request built above, to the healthcheck's own loopback URL

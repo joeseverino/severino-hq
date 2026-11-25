@@ -1,7 +1,11 @@
-"""Questions asked in many places, each answered by one primitive or one definition."""
+"""Questions asked in many places, each answered by one primitive or one definition.
+
+The per-module ones are ast-grep rules: hostname-spelled-by-normalized-hostname,
+command-linked-by-command-url, zone-membership-asked-by-in-zone,
+entity-page-linked-by-entity-link and routes-reversed-through-their-owner.
+"""
 
 import re
-from pathlib import Path
 
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
@@ -9,104 +13,8 @@ from django.test import SimpleTestCase, tag
 from .source import template_files
 
 
-@tag("source", "tree")
-class OnePrimitiveTests(SimpleTestCase):
-    """Questions asked in many places are answered by one function."""
-
-    ROOT = Path(__file__).resolve().parents[4]
-    # Modules another pass routes through the primitives.
-    PENDING: set[str] = set()
-
-    def sources(self, *packages):
-        for package in packages:
-            for path in sorted((self.ROOT / package).rglob("*.py")):
-                relative = path.relative_to(self.ROOT).as_posix()
-                if path.name.startswith("test") or relative in self.PENDING:
-                    continue
-                yield relative, path.read_text(encoding="utf-8")
-
-    def test_hostnames_are_spelled_by_normalized_hostname(self):
-
-        inline = re.compile(r'lower\(\)\s*\.rstrip\("\."\)|rstrip\("\."\)\s*\.lower\(\)')
-        found = [
-            relative
-            for relative, text in self.sources(
-                "hq/platform/application", "hq/domains/control_plane", "hq/platform/core"
-            )
-            if relative != "hq/domains/control_plane/names.py" and inline.search(text)
-        ]
-        self.assertEqual(found, [])
-
-    def test_a_command_is_linked_through_command_url(self):
-        """One builder, so a target is always encoded the way the form reads
-        it: a hand-built ``?target=`` opened a form with nothing chosen."""
-
-        inline = re.compile(r"""reverse\(\s*["']command["']""")
-        scanned = list(
-            self.sources(
-                "hq/platform/application",
-                "hq/domains/control_plane",
-                "hq/platform/core",
-                "hq/platform/api",
-                "hq/platform/mcp",
-            )
-        )
-        found = [
-            relative
-            for relative, text in scanned
-            if relative != "hq/platform/application/action_links.py" and inline.search(text)
-        ]
-        self.assertIn("hq/platform/application/action_links.py", {relative for relative, _ in scanned})
-        self.assertEqual(found, [])
-
-    def test_zone_membership_is_asked_of_in_zone(self):
-
-        inline = re.compile(r'endswith\(f"\.\{')
-        found = [
-            relative
-            for relative, text in self.sources(
-                "hq/platform/application", "hq/domains/control_plane", "hq/platform/core"
-            )
-            if relative != "hq/domains/control_plane/names.py" and inline.search(text)
-        ]
-        self.assertEqual(found, [])
-
-    def test_entity_pages_are_addressed_by_entity_link(self):
-
-        page = re.compile(
-            r'reverse\(\s*"(control_plane:machine|control_plane:service|zones:detail|'
-            r'projects:detail|control_plane:detail)"'
-        )
-        found = [
-            relative
-            for relative, text in self.sources("hq/platform/application")
-            if relative != "hq/platform/application/entity_links.py"
-            and not relative.endswith("views.py")
-            and page.search(text)
-        ]
-        self.assertEqual(found, [])
-
-
 class RouteOwnerTests(SimpleTestCase):
     """Routes are resolved in one place, so the answer can be remembered."""
-
-    @tag("source", "tree")
-    def test_the_application_resolves_routes_through_its_one_owner(self):
-        root = Path(__file__).resolve().parents[4]
-        modules = [
-            path
-            for package in ("hq/platform/application", "hq/domains/control_plane")
-            for path in (root / package).rglob("*.py")
-            if "tests" not in path.parts and path.name != "routes.py"
-        ]
-        self.assertGreater(len(modules), 50, "the walk found almost nothing; its packages are not where it looks")
-        offenders = [
-            str(path.relative_to(root))
-            for path in modules
-            if re.search(r"django\.urls import[^\n]*\breverse\b", path.read_text(encoding="utf-8"))
-        ]
-
-        self.assertEqual(offenders, [], "import reverse from application.routes")
 
     def test_a_remembered_route_is_djangos_and_follows_the_url_configuration(self):
         from django.urls import reverse as django_reverse
@@ -135,7 +43,6 @@ class FragmentPrimitiveTests(SimpleTestCase):
     and name its parts.
     """
 
-    ROOT = Path(__file__).resolve().parents[4]
     PRIMITIVE = "fragment.js"
 
     def test_the_primitive_loads_before_the_scripts_that_use_it(self):

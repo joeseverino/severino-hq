@@ -991,6 +991,9 @@ hand.
 `PLUGIN_API_VERSION` 25 retires `hq_sdk.plugin.Finding`'s `compose_target`,
 `compose_targets`, `deployment`, `deployments`, `update_targets` and
 `reviewed_updates`: a finding offers no Compose deployment of its own.
+`PLUGIN_API_VERSION` 26 makes `Finding`'s `under_way` the `Standing` of the
+work under way on it, or None, in place of a bool: its row says where that
+work stands and links to its page.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body

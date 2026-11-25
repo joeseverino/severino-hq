@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 from hq.domains.control_plane.providers import PROVIDERS
-from hq.platform.core.testing import READER, declare
+from hq.platform.core.testing import READER, connection, declare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import ConnectionInstance, ConnectionLink, ConnectionSpec
@@ -29,15 +29,11 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
         self.resource = declare(
             "example-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-cloudflare"}
         )
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-cloudflare",
-            provider="cloudflare_dns",
+        connection(
+            "cloudflare_dns",
+            "example-cloudflare",
             endpoint="https://api.example.test/client/v4",
             reaches=["example.com"],
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
         )
 
     def project(self, principal=READER):
@@ -162,7 +158,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
         self.assertEqual(remove.method, "GET")
 
     def test_unrelated_controller_tools_do_not_gate_resource_manipulation(self):
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         resource = declare("internal-name", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
@@ -428,14 +424,8 @@ class HolderEdgeTests(TestCase):
         provider = PROVIDERS[kind]
         declare("example-declared", kind, declared)
         ProviderInventory.objects.create(kind=kind, observed_at=timezone.now(), records=[record])
-        ProviderConnection.objects.create(
-            controller_id="example-controller",
-            connection_ref="example-holder",
-            provider=(provider.connection_providers or ("example",))[0],
-            endpoint="https://api.example.test/",
-            reachable=True,
-            probed=True,
-            observed_at=timezone.now(),
+        connection(
+            (provider.connection_providers or ("example",))[0], "example-holder", endpoint="https://api.example.test/"
         )
         with host_only():
             topology = derive_topology(principal=READER)

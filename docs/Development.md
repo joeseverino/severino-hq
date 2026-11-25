@@ -484,7 +484,7 @@ cache rechecks only a changed module and those whose imports' interfaces
 changed.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
-`lint:spelling`, `lint:prose`) runs through hk, as `hk.pkl` declares it, and
+`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
 fast hands it the files the change touched: its step reads those its glob
 matches, and its `-whole` step reads the whole tree when one of them is a file
 that step names (the tool's config, the pins). Run alone, with no files, as
@@ -1553,7 +1553,14 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 mise run dev:scratch
 The same variable on `mise run smoke:runner` sends the worker's pass. A web
 or MCP request is one trace whose id is its request id, the operation id of
 every audit row it writes, with a span for each capability it runs
-(`hq/platform/core/tracing.py`). A worker's pass is a trace of its own: its
+(`hq/platform/core/tracing.py`). Work it queues carries that trace on its
+record as a W3C `traceparent`, as OpenTelemetry's messaging conventions
+attach a creation context to a message, and the claim and report that take
+it up continue it: a press, the merge it queued and the Apply after it are one
+trace, as they are one chain in the audit log (`AuditLog.trace`). A job a
+press asks for and a read it asks the controller for carry it the same way,
+and the job's rows and what the sweep that answers the read found join the
+chain. A worker's pass is a trace of its own: its
 claim to its report, with each task outcome and lease renewal as an event
 (`hq_runner/tracing.py`). No span carries who acted.
 

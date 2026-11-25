@@ -2,12 +2,12 @@ from collections.abc import Callable
 from datetime import timedelta
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
 from ...refused_reports import note
 from ..inventory_records import kind_read
 from ..test_findings import observed
-from . import AT, NOW, Ago, Example, Examples, Raised, ago, connection, stored
+from . import AT, NOW, Ago, Example, Examples, Raised, ago, stored
 
 REWRITE, CONTAINER, MACHINE = "adguard.rewrite", "portainer.container", "machine"
 DEGRADED = [{"type": "Degraded", "status": True, "reason": "Failed", "message": "The provider refused it."}]
@@ -104,7 +104,7 @@ EXAMPLES = (
         fires=(
             Example(
                 given=lambda: connection(
-                    "example-dns", "cloudflare_dns", reachable=False, unreported_at=AT - timedelta(hours=1)
+                    "cloudflare_dns", "example-dns", reachable=False, unreported_at=AT - timedelta(hours=1)
                 ),
                 raises=offering("The controller on example-controller reports no connections", REFRESH),
             ),
@@ -115,18 +115,18 @@ EXAMPLES = (
         "work-that-keeps-failing",
         fires=(
             Example(
-                given=lambda: connection("example-ssh", "ssh", failing_steps=[{"step": "Deploy", "reason": "exit 1"}]),
+                given=lambda: connection("ssh", "example-ssh", failing_steps=[{"step": "Deploy", "reason": "exit 1"}]),
                 raises=("Work through example-ssh keeps failing",),
             ),
         ),
-        quiet=(Example(given=lambda: connection("example-ssh", "ssh")),),
+        quiet=(Example(given=lambda: connection("ssh", "example-ssh")),),
     ),
     Examples(
         "controller-sweep-stale",
         fires=(
             estate(
-                lambda: connection("example-dns", "cloudflare_dns"),
-                lambda: connection("example-adguard", "adguard"),
+                lambda: connection("cloudflare_dns", "example-dns"),
+                lambda: connection("adguard", "example-adguard"),
                 held("old", seen=STALE),
                 zone("old-zone", seen=STALE),
                 raises=offering("The controller on example-controller stopped reading", REFRESH),

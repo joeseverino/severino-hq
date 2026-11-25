@@ -6,14 +6,6 @@
 
 set -eu
 
-# Temporary files outlive only the process that made them; whatever a killed
-# process left is removed before anything can mistake it for current.
-if [ -n "${TMPDIR:-}" ] && [ "${TMPDIR}" != /tmp ]; then
-    mkdir -p "${TMPDIR}"
-    chmod 700 "${TMPDIR}"
-    find "${TMPDIR}" -mindepth 1 -delete
-fi
-
 echo "[severino-hq] applying migrations…"
 python manage.py boot
 

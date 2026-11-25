@@ -98,7 +98,6 @@ urlpatterns = [
     # Before <slug:key>, which would otherwise swallow "playbooks" as a resource key.
     path("playbooks/", playbook_views.PlaybooksView.as_view(), name="playbooks"),
     path("playbooks/refresh/", playbook_views.RefreshView.as_view(), name="playbooks_refresh"),
-    path("playbooks/refresh/status/", playbook_views.ScanStatusView.as_view(), name="playbooks_status"),
     path("playbooks/proposals/<int:pk>/adopt/", playbook_views.ProposalAdoptView.as_view(), name="playbooks_adopt"),
     path("playbooks/proposals/<int:pk>/reject/", playbook_views.ProposalRejectView.as_view(), name="playbooks_reject"),
     path("<slug:key>/", views.InfrastructureDetailView.as_view(), name="detail"),

@@ -1,9 +1,8 @@
 """A sentence a page shows closes through ``ended``, never on a bare period after a value.
 
 One rule for the host and its extensions, kept in ``hq.platform.application.plugin_validation``, which
-says what it refuses and what it leaves bare. This holds the host's code that
-builds page text to it: ``hq/platform/application`` and ``hq/domains``, less
-their tests, migrations and management commands.
+says what it refuses and what it leaves bare. ``lint:sentence-ends`` holds the
+host's code that builds page text to it.
 """
 
 import ast
@@ -13,27 +12,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from hq.platform.application import plugin_validation as validation
 from hq.platform.application.plugin_validation import _closes_by_hand, sentence_closes
-
-from .apart import apart
-
-ROOT = Path(__file__).resolve().parents[4]
-COVERED = ("hq/platform/application", "hq/domains")
-
-
-@tag("source", "tree")
-class SentenceEndTests(SimpleTestCase):
-    def test_a_page_sentence_closes_on_a_value_through_ended(self):
-        """Write ``ended(f"... {value}")``: a value that ends in its own period keeps only that one."""
-
-        for covered in COVERED:
-            self.assertTrue((ROOT / covered / "__init__.py").is_file(), f"{covered} is no package to read")
-        # The rule extensions are held to, run apart, since it parses every module it reads.
-        found = [f"{covered}/{close}" for covered in COVERED for close in apart(sentence_closes, ROOT / covered)]
-        self.assertEqual(found, [])
 
 
 class SentenceEndRuleTests(SimpleTestCase):
@@ -117,6 +99,10 @@ class ExtensionSentenceTests(SimpleTestCase):
             )
 
             self.assertEqual(sentence_closes(root), ["example/views.py:1: device"])
+            # Handed modules, as the host's gate hands those a change touched, it reads those alone.
+            self.assertEqual(
+                sentence_closes(root, root / "example/tests", root / "example/management/commands/load.py"), []
+            )
 
     def test_the_plugin_check_refuses_a_tree_that_closes_one_by_hand(self):
         with tempfile.TemporaryDirectory() as directory:

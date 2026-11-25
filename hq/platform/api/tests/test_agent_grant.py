@@ -232,9 +232,9 @@ class DeviceActsAsItsPersonTests(TestCase):
     """What only a person may do, a device does as that person, and the audit names the device."""
 
     def setUp(self):
-        from hq.platform.application.adoption_testing import managing_everything
         from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
         from hq.platform.application.tests.test_approvals import declare_policy
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         declare_policy()

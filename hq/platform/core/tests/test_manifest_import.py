@@ -1,14 +1,9 @@
 """The manifest importer and the export it reads back."""
 
 import json
-import tempfile
 from decimal import Decimal
-from io import StringIO
-from pathlib import Path
 from unittest.mock import patch
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -272,24 +267,6 @@ class ManifestImportTests(TestCase):
         self.assertEqual(validate_manifest_data(manifest), [])
         stats = import_manifest_data(manifest)
         self.assertEqual(stats["created"], 1)
-
-    def test_check_only_command_gates_an_invalid_manifest(self):
-        bad = json.dumps([{**self.STANDARD_DOC, "status": "open"}])
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-            f.write(bad)
-            bad_path = f.name
-        ok = json.dumps([self.STANDARD_DOC])
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-            f.write(ok)
-            ok_path = f.name
-        try:
-            with self.assertRaises(CommandError):
-                call_command("import_docs_manifest", bad_path, "--check-only", stdout=StringIO())
-            call_command("import_docs_manifest", ok_path, "--check-only", stdout=StringIO())  # no raise
-            self.assertEqual(DocumentationRecord.objects.count(), 0)  # read-only either way
-        finally:
-            Path(bad_path).unlink()
-            Path(ok_path).unlink()
 
     def test_public_article_content_item_uses_manifest_slug(self):
         import_manifest_data(

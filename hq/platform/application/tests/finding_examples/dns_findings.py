@@ -1,6 +1,6 @@
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
-from . import Example, Examples, Raised, connection
+from . import Example, Examples, Raised
 
 DNS = "adguard.dns"
 QUERIES = "adguard.query_summary"
@@ -8,7 +8,7 @@ ADGUARD = "example-adguard"
 
 
 def adguard(ref: str = ADGUARD) -> None:
-    connection(ref, "adguard")
+    connection("adguard", ref)
 
 
 def two_resolvers() -> None:

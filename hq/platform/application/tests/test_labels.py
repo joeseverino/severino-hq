@@ -1,5 +1,5 @@
 from django.template import engines
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.markup_testing import elements, links, text
@@ -64,24 +64,3 @@ class DottedTests(SimpleTestCase):
         drawn = engines["django"].from_string("{% load value_tags %}a{% dot %}b").render()
 
         self.assertEqual(drawn, dotted_html("a", "b"))
-
-
-@tag("source", "tree")
-class LowerFirstSourceTests(SimpleTestCase):
-    """One definition of lower_first in the source."""
-
-    def test_there_is_one_definition(self):
-        """The rule lived in four places, and only one of them knew about acronyms."""
-
-        from pathlib import Path
-
-        hq = Path(__file__).resolve().parents[3]
-        sources = [
-            path
-            for path in hq.rglob("*.py")
-            if "tests" not in path.parts and not path.name.startswith("test") and path.name != "labels.py"
-        ]
-        self.assertTrue(sources)
-        copies = [str(path.relative_to(hq)) for path in sources if "[:1].lower()" in path.read_text()]
-        # fragments.py camel-cases an identifier, which is no label.
-        self.assertEqual(copies, ["platform/api/fragments.py"])

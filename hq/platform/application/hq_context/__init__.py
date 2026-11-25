@@ -13,7 +13,7 @@ from typing import Any
 from hq.platform.application.labels import dotted
 
 from ..integration_specs import ListRead, ResourceSpec
-from ..projection import complete, projection_scope
+from ..projection import page_of, projection_scope
 from ..references import Kind
 from ..resources import EmptyQuery
 from ..tone import Tone
@@ -236,7 +236,7 @@ def serialize_hq(found: HQContext) -> dict[str, Any]:
         for item in found.problems
     ]
     return {
-        **complete(problems),
+        **page_of(problems),
         "label": found.label,
         "status": found.status[0],
         "summary": found.status[1],

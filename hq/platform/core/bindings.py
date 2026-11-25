@@ -40,10 +40,13 @@ def operation_context(
     cause: str = "",
     approved_by: str = "",
     person: Callable[[], Any] | None = None,
+    trace: str = "",
 ) -> Iterator[None]:
     """Attach adapter-neutral attribution to audit events in this operation.
 
-    Every row inside one operation carries its one id. Once an actor is bound,
+    Every row inside one operation carries its one id, and the chain it is
+    part of: ``trace``, else the chain of the operation it runs inside, else
+    its own. Once an actor is bound,
     a nested binding naming another is refused, so no code inside can write its
     rows as someone else's, but a held approval's (``own_operation``).
     """
@@ -60,7 +63,9 @@ def operation_context(
         cause = cause or within
     elif not cause and outer is not None:
         cause = outer.cause
-    operation_id = operation_id or within or str(uuid7())
+    operation_id = operation_id or within or uuid7().hex
+    if not trace and outer is not None and outer.operation_id:
+        trace = outer.chain
     # A nested binding of the same caller keeps the device the outer one
     # placed, and the consent the outer one carried.
     same_caller = outer is not None and outer.actor == actor
@@ -77,6 +82,7 @@ def operation_context(
             cause=cause,
             approved_by=approved_by,
             person=person,
+            trace=trace,
         )
     ):
         yield
@@ -89,13 +95,14 @@ def audit_operation(
     principal: object | None = None,
     operation_id: str = "",
     cause: str = "",
+    trace: str = "",
 ) -> Iterator[None]:
     """Attribute an operation to the principal that made it: the one way a
     host service or a plugin binds a principal's interface and actor.
 
     Without a principal the operation is the bound caller's, and with nobody
     bound it is refused, so no operation is written down as nobody's.
-    ``cause`` is ``operation_context``'s.
+    ``cause`` and ``trace`` are ``operation_context``'s.
     """
 
     # A plugin hands whatever principal it holds, or none.
@@ -109,6 +116,7 @@ def audit_operation(
         cause=cause,
         approved_by=getattr(principal, "approved_by", None) or "",
         person=_acted_for(principal),
+        trace=trace,
     ):
         yield
 

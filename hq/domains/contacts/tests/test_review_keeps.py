@@ -10,9 +10,10 @@ from hq.platform.application.contact_submissions import ASSIGNEE_LENGTH, REVIEW
 from hq.platform.application.integration_specs import capability_schema
 from hq.platform.application.json_schemas import fields
 from hq.platform.application.tests.writers import keyed
+from hq.platform.core.testing import connection
 
 from .. import inbox
-from .test_contacts import OPERATOR, _manages, _read, _row
+from .test_contacts import OPERATOR, REF, _read, _row
 
 
 def _reviews():
@@ -22,7 +23,7 @@ def _reviews():
 class AReviewKeepsWhatItWasNotSentTests(TestCase):
     def setUp(self):
         _read(_row(2, status="read", assigned_to="example-assignee", admin_notes="Kept."))
-        _manages()
+        connection("cloudflare_api", REF, manages=True)
 
     def test_a_review_sent_only_its_status_keeps_who_has_it_and_its_notes(self):
         result = execute_capability(REVIEW, keyed({"status": "replied"}), principal=OPERATOR, target=2)

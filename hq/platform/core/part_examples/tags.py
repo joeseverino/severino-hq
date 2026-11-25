@@ -2,7 +2,7 @@
 
 lazy import json
 lazy from dataclasses import replace
-lazy from datetime import UTC, datetime, timedelta
+lazy from datetime import timedelta
 lazy from decimal import Decimal
 lazy from uuid import UUID
 
@@ -13,7 +13,6 @@ lazy from django.test import RequestFactory
 from hq.platform.core.part_examples import DRAWN_AT, table
 from hq.platform.core.template_parts import Example
 lazy from hq.domains.control_plane.models import ApprovalRequest
-lazy from hq.domains.jobs.models import JobState
 lazy from hq.platform.application import capability_policy, tables
 lazy from hq.platform.application.adoption import ONLY_READS, WriteGap
 lazy from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
@@ -30,7 +29,6 @@ lazy from hq.platform.application.pages import PageAction, RowMark, RowOrder
 lazy from hq.platform.application.payload_words import ChangeRow
 lazy from hq.platform.application.security import MCP_INTERFACE
 lazy from hq.platform.application.tables import Cell, DataTable, TableColumn
-lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
 lazy from hq.platform.core.models import AgentIdentity
 
 # The fields of an example record, as a change sets them and as two records hold them.
@@ -191,76 +189,7 @@ def _edited_rows(name, first, second):
     return f'{{% section "{name}" %}}{{% data_table table %}}{{% endsection %}}', context
 
 
-def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "") -> dict:
-    """A task's outcome as a run reports it (the bridge's ``RunEvent``), with its tone."""
-
-    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": outcome_tone(outcome)}
-
-
-_LONG_HOST = "example-machine-with-a-long-name-01.example.com"
-
-
-def _example_runs():
-    return (
-        (
-            "Run example.clear_cache",
-            "Running",
-            JobState.RUNNING.tone,
-            "Applying the example playbook.",
-            RunEvidence(
-                hosts=("example-01", "example-02"),
-                correlation="example-investigation-7",
-                worker="example-automation-worker",
-                lease_until=datetime(2026, 3, 2, 9, 35, tzinfo=UTC),
-                events=(
-                    _event("Flush the example cache", "changed"),
-                    _event("Check the example cache", "ok", host="example-02"),
-                ),
-            ),
-        ),
-        ("Refresh playbooks", "Queued", JobState.QUEUED.tone, "Waiting for HQ to start it.", RunEvidence()),
-        (
-            "Run example.upgrade_packages",
-            "Failed",
-            JobState.FAILED.tone,
-            "The example upgrade failed on one machine.",
-            RunEvidence(
-                hosts=(_LONG_HOST,),
-                correlation="example-investigation-with-a-correlation-id-longer-than-a-phone-is-wide-0123456789",
-                events=(
-                    _event(
-                        "Upgrade every example package to the release the example repository pins",
-                        "failed",
-                        host=_LONG_HOST,
-                        message="example-package-with-a-long-name 2.0.1 conflicts with "
-                        "example-other-package-with-a-long-name 1.4.0, which the example machine also holds.",
-                    ),
-                ),
-            ),
-        ),
-        (
-            "Run example.report_disks",
-            "Done",
-            JobState.SUCCEEDED.tone,
-            "Reported every example disk.",
-            RunEvidence(
-                hosts=("example-01",),
-                stated=("example.filesystem", "example.reading_with_a_longer_name"),
-                events=tuple(
-                    _event(f"Example task {number}", outcome)
-                    for number, outcome in enumerate(("ok", "changed", "skipped", "unreachable") * 3, start=1)
-                ),
-            ),
-        ),
-    )
-
-
 # What each part's default entry, its Part.example, is given (catalog.default_name).
-# A viewer signed in with no role, for a part that asks what its viewer may see.
-def _signed_in_request():
-    return RequestFactory().get("/example/")
-
-
 def _signed_in_request():
     """A viewer signed in with no role, for a part that asks what its viewer may see."""
 
@@ -485,31 +414,6 @@ APPROVAL_CARD_STATES = {
         ),
     ),
 }
-
-
-# A run's evidence ({% run_evidence %}) in its row's open line, as Jobs,
-# a machine's page and a procedure's page draw it: a run with every field,
-# one with none, one whose names and messages run long, and one with many
-# tasks that stated readings.
-# A run's own page: its evidence as its facts.
-RUN_EVIDENCE = Example(
-    '{% facts %}{% run_evidence evidence layout="facts" %}{% endfacts %}',
-    context=lambda: {"evidence": _example_runs()[0][4]},
-)
-# In each run's row of a declared table, its open line.
-RUN_EVIDENCE_IN_ROWS = Example(
-    '{% section "Example runs" %}{% data_table table %}{% endsection %}',
-    context=lambda: {
-        "table": DataTable(
-            "Example runs",
-            (TableColumn("Playbook"), TableColumn("State", kind="status"), TableColumn("Result")),
-            tuple(
-                tables.Row((Cell(title), Cell(word, tone=tone), Cell(note)), evidence=evidence)
-                for title, word, tone, note, evidence in _example_runs()
-            ),
-        )
-    },
-)
 
 
 CARD_STATES = {

@@ -9,6 +9,8 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from typing import Any
 
+lazy from django.db import models
+
 lazy from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 lazy from hq.platform.application import request_context
 lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE, WEB_INTERFACE
@@ -27,6 +29,8 @@ class OperationContext:
     An empty ``actor`` is a request's binding before it knows who is asking.
     ``person`` finds the account an agent acts for, asked when a row is
     written, since a binding may open on an event loop where no query runs.
+    ``trace`` is the chain the operation is part of (``tracing.chain_id`` of
+    its root); "" for an operation that is its own root.
     """
 
     interface: str
@@ -37,12 +41,52 @@ class OperationContext:
     cause: str = ""
     approved_by: str = ""
     person: Callable[[], Any] | None = None
+    trace: str = ""
+
+    @property
+    def chain(self) -> str:
+        """The trace id every row of this operation carries."""
+
+        return self.trace or tracing.chain_id(self.operation_id)
 
 
 def bound() -> OperationContext | None:
     """The operation this code runs inside, or None outside every door."""
 
     return bindings.OPERATION.get()
+
+
+def queued_in() -> str:
+    """The creation context work queued now carries (``tracing.traceparent``
+    of the bound chain), so the work that takes it up continues the chain;
+    "" outside every door."""
+
+    context = bound()
+    return tracing.traceparent(context.chain) if context is not None else ""
+
+
+def queued_chain() -> models.CharField:
+    """The field queued work keeps its creation context in (``queued_in``),
+    filled wherever the work is made, which the work continues when it is
+    taken up (``own_operation``, ``continuing``)."""
+
+    return models.CharField(max_length=55, blank=True, default=queued_in, editable=False)
+
+
+@contextmanager
+def continuing(carried: str) -> Iterator[None]:
+    """The block's rows, under the operation bound, in the chain the creation
+    context ``carried`` names: work that answers queued work (a sweep that
+    reads what a run asked) joins the asker's chain. Unchanged where nothing
+    is bound or ``carried`` names no chain."""
+
+    outer = bound()
+    chain = tracing.chain_of(carried)
+    if outer is None or not chain:
+        yield
+        return
+    with tracing.continued(carried, outer.operation), bindings.OPERATION.set(replace(outer, trace=chain)):
+        yield
 
 
 @contextmanager
@@ -70,19 +114,31 @@ def own_operation(
     name its own requester, for the step it carries that runs as them.
     """
 
+    # Queued work carries the chain it was queued in (``tracing.traceparent``).
+    carried = getattr(record, "traceparent", "")
     if requester is not None:
-        return _door_of_its_own(replace(requester, operation_id=str(record.pk)))
+        door = replace(requester, operation_id=str(record.pk), trace=tracing.chain_of(carried))
+        return _continued(carried, requester.operation, _door_of_its_own(door))
     outer = bound()
+    named = operation or (outer.operation if outer is not None else "")
+    cause, chain = made_in(record)
     binding = bindings.audit_operation(
-        operation=operation or (outer.operation if outer is not None else ""),
+        operation=named,
         principal=principal,
         operation_id=str(record.pk),
-        cause=made_in(record),
+        cause=cause,
+        trace=tracing.chain_of(carried) or chain,
     )
     rebinds = isinstance(record, ApprovalRequest) or (
         isinstance(record, OperationRequest) and getattr(principal, "actor", None) == record.requested_actor
     )
-    return _rebound(binding) if rebinds else binding
+    return _continued(carried, named, _rebound(binding) if rebinds else binding)
+
+
+@contextmanager
+def _continued(carried: str, name: str, binding: AbstractContextManager[None]) -> Iterator[None]:
+    with tracing.continued(carried, name), binding:
+        yield
 
 
 @contextmanager

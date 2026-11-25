@@ -119,7 +119,6 @@ MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
     hq.platform.core.tests.test_table_contract.TableContractTests \
     hq.platform.application.tests.test_reading_age.OneWordingTests \
     hq.platform.application.tests.test_script_loading hq.platform.application.tests.test_action_words.DeclaredWordsTests \
-    hq.platform.application.tests.test_architecture_primitives.OnePrimitiveTests \
     hq.platform.application.tests.test_architecture_primitives.FragmentPrimitiveTests \
     hq.platform.application.tests.test_shared_markup.SharedMarkupTemplateTests \
     hq.platform.core.tests.test_template_separators.TemplateSeparatorTests \

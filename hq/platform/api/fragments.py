@@ -25,6 +25,8 @@ def camel(name: str) -> str:
     """``name`` as ``pascal`` writes it, its first letter lowercased: ``asset.create`` is ``assetCreate``."""
 
     said = pascal(name)
+    # An identifier, camel-cased, is no label.
+    # ast-grep-ignore: first-letter-lowered-by-lower-first
     return said[:1].lower() + said[1:]
 
 

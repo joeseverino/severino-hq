@@ -23,8 +23,6 @@ from hq.platform.application.automation_sources import (
     decisions,
     entry_url,
     playbook_table,
-    scan_standing,
-    scan_status_url,
     standing,
 )
 from hq.platform.application.pages import PageMixin
@@ -33,10 +31,10 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
 lazy from hq.domains.jobs.models import JobState
-lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing, WatchView
+lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing
 lazy from hq.platform.application.cadence import automation_standing
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
-lazy from hq.platform.application.work_runs import UNENDED
+lazy from hq.platform.application.work_runs import UNENDED, run_status_url
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 
 
@@ -74,7 +72,7 @@ class PlaybooksView(PageMixin, TemplateView):
                 refresh.label,
                 reverse("control_plane:playbooks_refresh"),
                 standing=scanned if unended else Standing(),
-                status_url=scan_status_url(str(scan.pk)) if live else "",
+                status_url=run_status_url(str(scan.pk)) if live else "",
                 title=self.untaken or "Read your repository for a newer commit.",
                 # Refused while no worker would take it: the problem drawn on
                 # the page says how to set one up.
@@ -114,14 +112,6 @@ class RefreshView(AskMixin, View):
 
     capability = REFRESH
     back_to = "control_plane:playbooks"
-
-
-class ScanStatusView(WatchView):
-    """How a scan stands."""
-
-    @override
-    def standing(self, subject):
-        return scan_standing(subject["scan"]) if isinstance(subject.get("scan"), str) else None
 
 
 class ProposalDecisionView(View):

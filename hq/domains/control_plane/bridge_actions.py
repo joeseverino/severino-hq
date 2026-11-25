@@ -111,11 +111,12 @@ def _claim(lane: Lane) -> Run:
 
 def _renew(lane: Lane) -> Run:
     def run(parameters: Parameters, payload: Any) -> Any:
-        del payload
+        # Held to the contract's ``RunProgress`` before it arrives here.
         return renew_operation(
             lane.operation(parameters["operation"]),
             controller_id=parameters["controller-id"],
             lease_seconds=parameters["lease-seconds"],
+            events=payload.get("events"),
         )
 
     return run
@@ -245,7 +246,7 @@ def _queue(lane: Lane) -> tuple[Action, ...]:
 
     return (
         Action("claim", "The controller took the next queued work", _claim(lane)),
-        Action("renew", "A worker said it is still on queued work", _renew(lane)),
+        Action("renew", "A worker said how far it is on queued work", _renew(lane)),
         Action("report", "The controller said how queued work ended", _report(lane)),
     )
 

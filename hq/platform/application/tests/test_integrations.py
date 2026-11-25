@@ -9,6 +9,7 @@ from django.test import TestCase
 
 from hq.domains.projects.models import Project
 from hq.domains.projects.specs import ProjectQuery
+from hq.platform.application.projection import page_of
 
 from ..capabilities import CapabilitySpec, describe_capabilities
 from ..command_center import command_center
@@ -96,7 +97,7 @@ class IntegrationGraphTests(TestCase):
             "Records",
             "Synthetic records.",
             Capability.READ,
-            listing=ListRead(lambda **kwargs: {"items": [], "count": 0}, ProjectQuery, SyntheticRecord),
+            listing=ListRead(lambda **kwargs: page_of([]), ProjectQuery, SyntheticRecord),
         )
         capabilities = (
             CapabilitySpec(
@@ -361,7 +362,7 @@ class IntegrationGraphTests(TestCase):
             "Synthetic records",
             "Synthetic extension records.",
             Capability.READ,
-            listing=ListRead(lambda: {"items": [], "count": 0}, EmptyQuery, SyntheticRecord),
+            listing=ListRead(lambda: page_of([]), EmptyQuery, SyntheticRecord),
         )
         capability = CapabilitySpec(
             "example.records.refresh",

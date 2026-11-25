@@ -9,9 +9,8 @@ from django.test import TestCase
 from hq.domains.control_plane.models import CapabilityRule, OperationRequest, ReadRequest
 from hq.domains.projects.models import Project
 from hq.platform.core.models import IdempotencyRecord
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import declare, managing_everything
 
-from ..adoption_testing import managing_everything
 from ..capabilities import describe_capabilities, execute_capability
 from ..integration_specs import IDEMPOTENCY_FIELD
 from ..security import Capability, Principal, cli_principal

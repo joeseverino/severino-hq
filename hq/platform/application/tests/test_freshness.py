@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import elements, links, select, text
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import connection, operator
 
 from ..entity_links import entity_link
 from ..freshness import (
@@ -223,14 +223,7 @@ class OldestReadingTests(TestCase):
         operator(self.client)
         now = timezone.now()
         for ref, age in (("example-fresh", 1), ("example-old", 300)):
-            ProviderConnection.objects.create(
-                connection_ref=ref,
-                controller_id="example-controller",
-                provider="ssh",
-                endpoint="",
-                observed_at=now - timedelta(minutes=age),
-                reported_at=now - timedelta(minutes=age),
-            )
+            connection("ssh", ref, observed_at=now - timedelta(minutes=age), reported_at=now - timedelta(minutes=age))
 
     def test_the_oldest_reading_is_named_and_linked(self):
         response = self.client.get(reverse("control_plane:connections"))

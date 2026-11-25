@@ -1,10 +1,12 @@
 package host
 
 import (
+	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -61,6 +63,56 @@ func TestEveryVolumeIsMountedAndNoBindIsCreated(t *testing.T) {
 	env := "type=bind,source=" + filepath.Join(WebSecretDir, hostcore.AppEnvName) + ",target=/run/secrets/" + hostcore.AppEnvName + ",readonly"
 	if !slices.Contains(mounts, env) {
 		t.Errorf("the environment is not bound read-only: %v", mounts)
+	}
+}
+
+func TestTheTemporarySpaceIsTheContainersOwnAndNoBackupsVolume(t *testing.T) {
+	args := Web{Image: "ghcr.io/example/hq@" + digest}.Args()
+
+	spool := ""
+	for i, arg := range args {
+		if arg == "--env" && strings.HasPrefix(args[i+1], "TMPDIR=") {
+			spool = strings.TrimPrefix(args[i+1], "TMPDIR=")
+		}
+	}
+	// A volume with no source is the container's alone, and --rm removes it.
+	if !slices.Contains(args, "type=volume,target="+spool) || !slices.Contains(args, "--rm") {
+		t.Errorf("TMPDIR %q is not on a volume of the container's own: %v", spool, args)
+	}
+	for _, volume := range Volumes {
+		if volume.Target == spool {
+			t.Errorf("the backup's volume %s holds the temporary space", volume.Name)
+		}
+	}
+}
+
+// The image's healthcheck asks the probe hq/config/serve.py declares, in the
+// directory the container is given for the web's sockets.
+func TestTheHealthcheckAsksTheProbeTheWebIsGivenRoomFor(t *testing.T) {
+	serve, err := os.ReadFile(filepath.Join("..", "..", "hq", "config", "serve.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := regexp.MustCompile(`(?m)^PROBE_SOCKET = "([^"]+)"$`).FindSubmatch(serve)
+	if found == nil {
+		t.Fatal("hq/config/serve.py declares no PROBE_SOCKET")
+	}
+	probe := string(found[1])
+	if filepath.Dir(probe) != WebSocketDir {
+		t.Errorf("the probe %s is not in %s", probe, WebSocketDir)
+	}
+	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := regexp.MustCompile(`(?m)^HEALTHCHECK [^\n]*\\\n\s+CMD (\[[^\n]+\])$`).FindSubmatch(dockerfile)
+	if len(check) < 2 || !strings.Contains(string(check[1]), `"unix:`+probe+`"`) {
+		t.Errorf("the HEALTHCHECK does not ask the probe at %s", probe)
+	}
+	args := Web{Image: "ghcr.io/example/hq@" + digest}.Args()
+	want := fmt.Sprintf("%s:uid=%d,gid=%d,mode=0700", WebSocketDir, hostcore.WebUID, hostcore.WebGID)
+	if i := slices.Index(args, want); i < 1 || args[i-1] != "--tmpfs" {
+		t.Errorf("the web is given no private %s: %v", WebSocketDir, args)
 	}
 }
 

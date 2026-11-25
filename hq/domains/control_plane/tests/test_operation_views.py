@@ -6,7 +6,6 @@ from django.urls import NoReverseMatch, reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.approval_review import asked, preview
 from hq.platform.application.approvals import ApproveCommand, approve
 from hq.platform.application.capabilities import command_spec, execute_capability
@@ -18,7 +17,7 @@ from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal, web_principal
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import declare, managing_everything, operator
 
 CONTAINER = {"connection_ref": "example-portainer", "host": "example-host", "name": "example-web"}
 LIFECYCLE = (OperationRequest.Action.RESTART, OperationRequest.Action.START, OperationRequest.Action.STOP)

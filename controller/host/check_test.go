@@ -44,7 +44,7 @@ func newCheckHost(t *testing.T) *checkHost {
 	lib := filepath.Join(root, "lib")
 	h.checker = &Checker{
 		Lib: lib, Systemd: filepath.Join(root, "systemd"), RootUID: uint32(os.Getuid()),
-		Release: filepath.Join(root, "release"), Main: filepath.Join(root, "main"),
+		Release:   filepath.Join(root, "release"),
 		FreeBytes: DeployFreeBytes, Free: func(string) (uint64, error) { return h.free, nil },
 		Command: h.command, Out: &h.out,
 	}
@@ -52,11 +52,11 @@ func newCheckHost(t *testing.T) *checkHost {
 		h.file(filepath.Join(lib, path), 0o755)
 	}
 	for _, unit := range []string{"severino-hq-web.service", "severino-hq-backup.timer"} {
-		h.file(filepath.Join(h.checker.Main, unit), 0o644)
+		h.file(filepath.Join(lib, "deploy", "systemd", unit), 0o644)
 		h.file(filepath.Join(h.checker.Release, unit), 0o644)
 		h.file(filepath.Join(h.checker.Systemd, unit), 0o644)
 	}
-	// The release adds a unit main does not ship: the release installs it.
+	// The release adds a unit the installed release does not ship: the deploy installs it.
 	h.file(filepath.Join(h.checker.Release, "severino-hq-example.timer"), 0o644)
 	return h
 }

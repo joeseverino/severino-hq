@@ -2,35 +2,42 @@
 {% comment %}
 One run of a playbook, or one scan of its source, from its record
 (`run_reads.RunRecord`, with `run_pages.run_context`): what it ran, who
-asked and who approved it (linking the approval it ran under), when, the
-pull request an approved merge asked it to apply (`merged_from`), and
-how it ended, then what it shows for itself (its machines, lease, tasks'
-outcomes) drawn as every row of work draws it, as facts here
-({% run_evidence %}). Its state is the badge beside its title.
+asked and who approved it, when, and how it ended, each reading its playbook declares that it has not stated
+("Not stated" once it ended), then what it shows for itself (its machines, lease, the
+task under way, each task so far, its readings in the words their kinds
+declare) drawn as every row of work draws it, as facts here
+({% run_evidence %}), and the readings as stated folded under Raw data.
+Its state is the badge beside its title. While it waits or runs, the region asks its page again
+(``asks.following``), so each task's start and outcome shows as its worker
+renews, and the duration counts up.
 While it has not started because no worker reports, the problem that says
-so, with how to set one up, stands above it (`problems`).
+so, with how to set one up, stands above it (`problems`). Below it, folded,
+the chain of the audit log it ran in (`steps`, `history.chain_made`): the
+press, approval and merge that set it going, linking the whole chain.
 {% endcomment %}
 {% block content %}
 {% partialdef run_status inline %}
-<div data-fragment="" data-fragment-name="run_status"{% if following_run %} data-fragment-poll="2"{% endif %}>
+<div data-fragment="" data-fragment-name="run_status"{% if following_run %} data-fragment-poll="{{ following_run|follow_every }}"{% endif %}>
 {% include "partials/_page_head.html" %}
 {% include "partials/_problems.html" with problems=problems %}
 {% layout %}
 {% section "Run" %}
   {% facts label="Run" %}
     {% if playbook_url %}{% fact ran_label value=run.title url=playbook_url %}{% else %}{% fact ran_label value=run.title %}{% endif %}
-    {% if approval_url %}{% fact "Asked by" value=run.by url=approval_url %}{% else %}{% fact "Asked by" value=run.by|or_empty %}{% endif %}
+    {% fact "Asked by" value=run.by|or_empty %}
     {% fact "Asked" %}{{ run.created_at|when }}{% endfact %}
-    {% if merged_from %}{% fact "Applies" value=merged_from.label url=merged_from.url %}{% endif %}
     {% if run.reason %}{% fact "Reason" value=run.reason %}{% endif %}
     {% if run.started_at %}{% fact "Started" %}{{ run.started_at|when }}{% endfact %}{% endif %}
     {% if run.finished_at %}{% fact "Finished" %}{{ run.finished_at|when }}{% endfact %}{% endif %}
-    {% if run.duration_seconds is not None %}{% fact "Duration" value=run.duration_seconds|seconds %}{% endif %}
+    {% if duration is not None %}{% fact "Duration" value=duration|seconds %}{% endif %}
     {% if run.headline %}{% fact "Result" value=run.headline %}{% endif %}
-    {% run_evidence run layout="facts" %}
+    {% if reading %}{% fact "Reading" value=reading.words detail=reading.ended|yesno:"Not stated," %}{% endif %}
+    {% run_evidence evidence layout="facts" %}
   {% endfacts %}
 {% endsection %}
 {% endlayout %}
+{% if evidence.raw_readings %}{% section "Raw data" fold=True %}<pre tabindex="0">{{ evidence.raw_readings }}</pre>{% endsection %}{% endif %}
 </div>
 {% endpartialdef %}
+{% if steps %}{% section steps_heading count=steps.0.lines|length fold=True %}{% history_table steps_heading steps %}{% foot %}Every row in the <a href="{{ steps_url }}">audit log</a>{% endsection %}{% endif %}
 {% endblock %}

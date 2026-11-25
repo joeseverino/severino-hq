@@ -169,7 +169,7 @@ func TestHQIsReadyOnlyWhenHealthyAndStopsCleanly(t *testing.T) {
 		t.Fatalf("a requested stop is not a failure: %v", err)
 	}
 	calls := h.calls()
-	if !strings.HasPrefix(calls, strings.Join(stopping, " ")+"\nrm --force "+hostcore.Container+"\n") {
+	if !strings.HasPrefix(calls, strings.Join(stopping, " ")+"\nrm --force --volumes "+hostcore.Container+"\n") {
 		t.Errorf("a stale container is not stopped and removed first:\n%s", calls)
 	}
 	if strings.Count(calls, strings.Join(stopping, " ")) != 2 {

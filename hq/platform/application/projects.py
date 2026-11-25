@@ -34,13 +34,12 @@ from .projection import addressable, iso, listing, projection_scope, read_once
 from .record_errors import RecordConflict, RecordNotFound
 from .record_fields import Notes, PublishedUrl, Slug, one_of
 from .record_links import linked
-from .record_saves import Held, held, linked_saver, row, saved_type
+from .record_saves import Held, held, linked_saver, row
 from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refusal_of, refuse
 from .security import Principal
 from .standards import Standing
 from .ui import counted
-from .upserts import upsert_by_slug
 lazy from . import capabilities
 lazy from .action_links import READ_NOW_CAPABILITY
 lazy from .dependency_updates import last_run
@@ -245,6 +244,8 @@ def refresh_project(
     if slug == settings.CONTENT_INDEX_PROJECT_SLUG:
         try:
             stats = content_sync()
+            # The sum of a content sync over many rows, which no one row's signal writes.
+            # ast-grep-ignore: row-change-recorded-by-its-signal
             record_event(
                 action=AuditLog.Action.UPDATED,
                 obj=project,
@@ -337,7 +338,7 @@ def _record_push(project: Project, pushed_at: datetime) -> dict[str, Any]:
         # `expected_updated_at` token, which a refresh must not invalidate
         # mid-edit.
         project.save(update_fields=["last_push_at"])
-    return {"ok": True, "last_push_at": pushed_at.isoformat()}
+    return {"ok": True, "last_push_at": iso(pushed_at)}
 
 
 REFRESH = "project.refresh"
@@ -471,29 +472,6 @@ def _updates_refusal(project: Project, *, enabling: bool) -> str:
         return ""
     check = next(check for check in STANDARD if check.id == UPDATES_NEED)
     return f'Dependency updates need the repository check "{check.label}" ({check.id}) to pass first. {check.fix}'
-
-
-# What a project's save answers, read off its record type (``saved_type``).
-type ProjectSaved = saved_type("projects")
-
-
-def upsert_project(
-    command: ProjectCommand,
-    *,
-    principal: Principal,
-    expected_updated_at: str | None = None,
-    sent: frozenset[str] | None = None,
-) -> ProjectSaved:
-    """Idempotently create or update a project by its command slug."""
-
-    return upsert_by_slug(
-        Project,
-        command,
-        save_project,
-        principal=principal,
-        expected_updated_at=expected_updated_at,
-        sent=sent,
-    )
 
 
 def sync_repositories(*, principal: Principal) -> dict[str, Any]:

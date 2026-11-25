@@ -123,6 +123,10 @@ STATED: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_stats_eve
 # elsewhere.example.com, outside its inventory, and a stat of no name a
 # report carries (``extra``).
 READINGS: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_readings_event.json").read_text("utf-8"))
+# One pass ansible-runner 2.4.3 recorded of a command task polling with
+# ``until:`` that went again, its stdout the line it printed of how far it had
+# got; the run's directory is rewritten to ``PROCEDURES``' project directory.
+RETRY: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_retry_event.json").read_text("utf-8"))
 # Its task outcomes alone, one per task, so a test counts the tasks that ran.
 OUTCOMES = [event for event in RECORDED if event["event"] in ("runner_on_ok", "runner_on_failed", "runner_on_skipped")]
 
@@ -319,13 +323,18 @@ def pending(
 
 
 class Bridge:
-    """HQ's side of the bridge: answers claims from a queue and renewals as told."""
+    """HQ's side of the bridge: answers claims from a queue and renewals as
+    told, and holds a run's tasks as its renewals last said them (``events``)."""
 
     def __init__(self, *claims: dict[str, Any], renewals: Iterable[dict[str, Any]] = ()) -> None:
         self.claims = list(claims)
         self.renewals = list(renewals)
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.reports: list[dict[str, Any]] = []
+        self.progress: list[dict[str, Any]] = []
+        self.events: list[dict[str, Any]] = []
+        # Each run's tasks as its renewals last said them, by its operation.
+        self.tasks: dict[str, list[dict[str, Any]]] = {}
         self.fail_report = False
 
     def claim(
@@ -336,8 +345,13 @@ class Bridge:
         )
         return self.claims.pop(0) if self.claims else {"ok": True, "operation": None}
 
-    def renew(self, controller_id: str, operation: str, *, lease_seconds: int) -> dict[str, Any]:
+    def renew(
+        self, controller_id: str, operation: str, *, lease_seconds: int, progress: Mapping[str, Any]
+    ) -> dict[str, Any]:
         self.calls.append(("renew", {"controller_id": controller_id, "operation": operation}))
+        self.progress.append(dict(progress))
+        if "events" in progress:
+            self.events = self.tasks[operation] = list(progress["events"])
         if self.renewals:
             return self.renewals.pop(0)
         return {"ok": True, "continue": True, "reason": "", "lease_expires_at": "2026-10-03T12:04:00+00:00"}

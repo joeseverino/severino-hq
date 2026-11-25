@@ -140,22 +140,102 @@ class ApprovedRunPageTests(TestCase):
 
         Supply(self, manifest())
 
-    def test_a_run_a_person_approved_links_the_approval_it_ran_under(self):
+    def test_a_run_a_person_approved_folds_the_chain_it_ran_in_with_its_approval(self):
         from hq.domains.control_plane.models import ApprovalRequest
+        from hq.platform.application.markup_testing import hrefs
         from hq.platform.application.tests.procedures import APPROVER, approved_run, run_payload
+        from hq.platform.core.models import AuditLog
 
-        agent = AGENT
-        answer = approved_run(self, run_payload(), principal=agent, key="example-held")
+        answer = approved_run(self, run_payload(), principal=AGENT, key="example-held")
         held = ApprovalRequest.objects.get(state=ApprovalRequest.State.APPROVED)
         operator(self.client)
 
         response = self.client.get(run_page(answer["operation"]["id"]))
 
         self.assertEqual(response.status_code, 200)
-        entry = reverse("core:approval_entry", kwargs={"approval_id": held.pk})
-        said, url = facts(response.content.decode())["Asked by"]
-        self.assertEqual(url, entry)
+        html = response.content.decode()
+        said, _ = facts(html)["Asked by"]
         self.assertIn(f"approved by {APPROVER}", said)
+        # The approval is a step of the fold, which links the whole chain on the audit log.
+        asked = AuditLog.objects.get(object_id=str(held.pk), action=AuditLog.Action.CREATED)
+        (steps,) = response.context["steps"]
+        (approving,) = [step for step in steps.lines if asked in step.events]
+        self.assertIn(approving.url, hrefs(html))
+        self.assertIn(f"{reverse('core:audit_list')}?chain={asked.trace}", hrefs(html))
+
+
+class LiveRunPageTests(TestCase):
+    """While a run runs, its page's run_status region shows the task under way
+        and each task so far as its worker's renewals say them, and asks its page
+        again until the run ends; then each record of what its playbook stated, in
+    the words its kind declares, with the records as stated under Raw data."""
+
+    WORKER = "example-worker"
+
+    def setUp(self):
+        from hq.platform.application.tests.procedures import Supply, manifest
+
+        Supply(self, manifest())
+
+    def worker(self, action: str, payload=None, **query):
+        """One call of the playbook worker, on its own socket."""
+
+        from hq.domains.control_plane.tests import bridge_client
+
+        return bridge_client.call(action, payload, app=bridge_client.worker(), controller_id=self.WORKER, **query)
+
+    def region(self, pk) -> tuple[dict[str, tuple[str, str]], dict[str, str]]:
+        """The facts the run_status region states, and its attributes."""
+
+        response = self.client.get(run_page(pk))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        (region,) = (
+            element for element in all_elements(html) if element.attrs.get("data-fragment-name") == "run_status"
+        )
+        return facts(html), region.attrs
+
+    def test_the_task_under_way_and_each_task_so_far_show_as_the_worker_says_them(self):
+        from hq.platform.application.tests.procedures import APP, approved_run, run_payload
+
+        operation = approved_run(self, run_payload(), principal=AGENT, key="example-live")["operation"]["id"]
+        claimed = self.worker("claim", capability=["automation.operation:run"], lease_seconds=120, attempt="example-1")
+        self.assertEqual(claimed["operation"]["id"], operation)
+        hello = {"host": APP, "task": "Say hello", "outcome": "ok", "message": "Hello."}
+        touching = {"host": APP, "task": "Touch a file", "outcome": "started", "message": ""}
+        self.worker("renew", {"events": [hello, touching]}, operation=operation, lease_seconds=120)
+        operator(self.client)
+
+        running, attributes = self.region(operation)
+
+        self.assertIn("Touch a file", running["Now"][0])
+        self.assertIn("Say hello", running["Tasks"][0])
+        self.assertIn("Duration", running)
+        self.assertTrue(attributes.get("data-fragment-poll"))
+
+        touched = {**touching, "outcome": "changed", "message": "Touched."}
+        self.worker("renew", {"events": [hello, touched]}, operation=operation, lease_seconds=120)
+        pulled = {"project": "example-app", "result": "rolled_back", "health": "unhealthy"}
+        report = {
+            "success": True,
+            "observed_generation": claimed["input"]["generation"],
+            "message": "Done.",
+            "stated": {"readings": {APP: {"apps.pull": [pulled]}}},
+        }
+        self.worker("report", report, operation=operation)
+
+        ended, attributes = self.region(operation)
+
+        self.assertNotIn("Now", ended)
+        self.assertIn("Touched.", ended["Tasks"][0])
+        readings = ended["Readings"][0]
+        self.assertIn("example-app", readings)
+        self.assertIn("Rolled back", readings)
+        self.assertNotIn("rolled_back", readings)
+        html = self.client.get(run_page(operation)).content.decode()
+        raw = [element.text for element in all_elements(html) if element.tag == "pre"]
+        self.assertTrue(any('"rolled_back"' in text for text in raw), raw)
+        self.assertNotIn("data-fragment-poll", attributes)
 
 
 class RunHereTests(TestCase):

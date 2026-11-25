@@ -5,8 +5,8 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.platform.core.models import AuditLog
+from hq.platform.core.testing import managing_everything
 
-from ..adoption_testing import managing_everything
 from ..capabilities import execute_capability
 from ..report_testing import bridged
 from ..security import cli_principal

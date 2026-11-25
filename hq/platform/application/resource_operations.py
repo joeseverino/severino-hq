@@ -71,7 +71,7 @@ lazy from .machines import Machine, container_context
 lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
-lazy from .work_runs import WorkRun, run_rows, seen_as_runs, shown_result, standing_of
+lazy from .work_runs import WorkRun, run_row, run_rows, run_status_url, seen_as_runs, shown_result, standing_of
 
 
 @stored_in(OperationRequest)
@@ -135,21 +135,16 @@ class RunAsked(OperationAsked):
 
 
 def operation_asked(
-    operation: OperationRequest,
-    *,
-    queued: bool,
-    message: str = "",
-    standing: Standing | None = None,
-    status_url: str = "",
+    operation: OperationRequest, *, queued: bool, message: str = "", standing: Standing | None = None
 ) -> OperationAsked:
     """What asking for ``operation`` answers: how it stands as a list of work
-    says it (``work_runs.standing_of``) unless the caller words it, and
-    ``status_url`` where a page can follow it."""
+    says it (``work_runs.standing_of``) unless the caller words it, and,
+    while it is under way, where a page follows a run or a scan."""
 
-    if standing is None:
-        seen = seen_as_runs(OperationRequest.objects.filter(pk=operation.pk).select_related("resource")).get()
-        standing = standing_of(run_rows((seen,))[0])
-    asked = Asked(standing, status_url, message).answer()
+    run = run_row(operation)
+    standing = standing or standing_of(run)
+    following = run_status_url(run.id) if standing.live and run.url else ""
+    asked = Asked(standing, following, message).answer()
     return {**asked, "queued": queued, "operation": serialize_operation(operation)}
 
 
@@ -212,7 +207,7 @@ def operation_summary(run: WorkRun, operation: OperationRequest) -> OperationSum
         # Blank for almost everything, and the point when it is not: this is the
         # person who agreed to a change a credential asked for.
         "approved_by": who.approved_by,
-        "created_at": run.created_at.isoformat(),
+        "created_at": iso(run.created_at),
         "completed_at": iso(run.finished),
         "attempt_count": operation.attempt_count,
         "reason": operation.reason,

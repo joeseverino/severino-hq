@@ -10,10 +10,10 @@ from mcp import Client, types
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application.approvals import ApproveCommand, approve
-from hq.platform.application.controller import ControllerReport, claim_next_operation, report_operation
+from hq.platform.application.controller import claim_next_operation
 from hq.platform.application.security import web_principal
 from hq.platform.application.tests.procedures import APP, RESTART, RESTART_RUN, Supply, manifest, run_payload
-from hq.platform.core.testing import AGENT, operator
+from hq.platform.core.testing import AGENT, operator, run_ended
 
 from ..identity import set_principal
 from ..server import mcp
@@ -51,10 +51,7 @@ class AutomationLoopTests(TestCase):
         approve(ApproveCommand(created.task_id), principal=web_principal(operator()))
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
         operation = OperationRequest.objects.get(pk=claimed["operation"]["id"])
-        report = ControllerReport(
-            success=True, observed_generation=operation.input["generation"], message="Restarted.", events=[TASK]
-        )
-        report_operation(str(operation.pk), report, controller_id=WORKER)
+        run_ended(str(operation.pk), WORKER, events=[TASK], success=True, message="Restarted.")
 
         async def read(client):
             done = await _task(client, "tasks/get", created.task_id)

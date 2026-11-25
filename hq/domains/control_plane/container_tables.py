@@ -10,6 +10,7 @@ from django.utils.text import capfirst, slugify
 
 from hq.platform.application.display_words import Code
 from hq.platform.application.entity_links import declared_link, entity_link, web_url
+from hq.platform.application.figured import Figure
 from hq.platform.application.moments import when
 from hq.platform.application.tables import Below, Cell, DataTable, Row, StatusMark, TableColumn
 from hq.platform.application.ui import counted, ended, measured, severity_tone
@@ -56,7 +57,10 @@ def status_cell(container: Any, up: str) -> Cell:
 
     check = container.check
     up = up or container.status
-    said = Cell(f"{up},", parts=(Cell(str(check), muted=True, title=capfirst(check.said)),)) if check else Cell(up)
+    # How long it has been up orders the column, where HQ counted it (``up_for``).
+    lasted = str(up.figure) if isinstance(up, Figure) else ""
+    checked = (Cell(str(check), muted=True, title=capfirst(check.said)),) if check else ()
+    said = Cell(f"{up},", parts=checked, sort=lasted) if check else Cell(up)
     return replace(Cell(status=StatusMark(container.state)), lines=(said,)) if not container.state.running else said
 
 
@@ -168,10 +172,15 @@ def _hardening(posture: Any) -> Cell:
     if posture.serious:
         return Cell(status=StatusMark("Can control its machine", tone="serious", pill=False, tip=posture.serious_unmet))
     if posture.unmet:
-        return Cell(f"{len(posture.unmet)} to fix", tip="\n".join(result.check.unmet for result in posture.unmet))
+        return Cell(
+            f"{len(posture.unmet)} to fix",
+            tip="\n".join(result.check.unmet for result in posture.unmet),
+            sort=str(posture.met),
+        )
     if posture.measured:
         passing = measured(posture.measured, "pass")
-        return Cell(f"All {passing}" if posture.met == posture.measured else f"{posture.met} of {passing}", muted=True)
+        said = f"All {passing}" if posture.met == posture.measured else f"{posture.met} of {passing}"
+        return Cell(said, muted=True, sort=str(posture.met))
     return Cell()
 
 

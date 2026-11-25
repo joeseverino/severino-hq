@@ -112,8 +112,8 @@ derives from its adapter's `DEFINITIONS`, `CONNECTIONS` and `OBSERVATIONS`
 ([Providers](docs/Architecture.md#providers)).
 
 Tests live in each package's `tests/` directory, and what one arranges (a
-person, a signed-in client, a declared resource, the standard principals, a
-drawn template) comes from `hq/platform/core/testing.py`. When a definition moves,
+person, a signed-in client, a declared resource, a provider connection, the
+standard principals, a drawn template) comes from `hq/platform/core/testing.py`. When a definition moves,
 retarget every `mock.patch` that named its old home, since a patch of a name
 no longer looked up there patches nothing. A check that walks a path (an
 architecture test, a glob) fails when its path matches nothing.

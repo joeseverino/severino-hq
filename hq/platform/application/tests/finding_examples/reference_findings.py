@@ -1,7 +1,7 @@
 from hq.domains.control_plane.names import normalized_hostname
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
-from . import Example, Examples, Raised, connection, stored
+from . import Example, Examples, Raised, stored
 
 ZONE, RECORD, TARGET = "cloudflare.zone", "cloudflare.dns_record", "tls.delivery_target"
 
@@ -27,7 +27,7 @@ def in_zones(*records: dict, read=LISTED, raises: tuple[Raised | str, ...] = ())
     ``read`` says otherwise (None: never read)."""
 
     def given() -> None:
-        connection("example-dns", "cloudflare_dns")
+        connection("cloudflare_dns", "example-dns")
         for each in records:
             if each.get("expected"):
                 declare("expected", ZONE, {"zone": each["expected"]})
@@ -39,7 +39,7 @@ def in_zones(*records: dict, read=LISTED, raises: tuple[Raised | str, ...] = ())
 
 def targets(*pairs: tuple[str, str], raises: tuple[Raised | str, ...] = ()) -> Example:
     def given() -> None:
-        connection("example-edge", "ssh")
+        connection("ssh", "example-edge")
         for key, ref in pairs:
             target(key, ref)
 
@@ -47,7 +47,7 @@ def targets(*pairs: tuple[str, str], raises: tuple[Raised | str, ...] = ()) -> E
 
 
 def unconnected() -> None:
-    connection("example-edge", "ssh")
+    connection("ssh", "example-edge")
     declare("unconnected", "machine", {"name": "example"})
 
 

@@ -11,11 +11,11 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
+from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import READER, operator
+from hq.platform.core.testing import READER, connection, operator
 
 from ..action_links import read_now_link, read_now_payload
 from ..cadence import forced_reads, settle_read_requests, sweep_due
@@ -37,19 +37,11 @@ def store(kind: str, *, at=None) -> None:
     )
 
 
-def connect(ref: str, provider: str, *, at=None) -> None:
-    ProviderConnection.objects.update_or_create(
-        controller_id="example-controller",
-        connection_ref=ref,
-        defaults={"provider": provider, "observed_at": at or timezone.now()},
-    )
-
-
 @SWEEPS
 class ForcedKindsTests(TestCase):
     def setUp(self):
-        connect("example-tailnet", "tailscale")
-        connect("example-dns", "cloudflare_api")
+        connection("tailscale", "example-tailnet")
+        connection("cloudflare_api", "example-dns")
         # Everything fresh: the cadence alone says nothing is due.
         for kind in (*fed_kinds("tailscale"), *fed_kinds("cloudflare_api")):
             store(kind)
@@ -94,7 +86,7 @@ class ForcedKindsTests(TestCase):
         self.assertEqual(len(forced_reads()), 1)
 
         later = timezone.now() + timedelta(seconds=5)
-        connect("example-tailnet", "tailscale", at=later)
+        connection("tailscale", "example-tailnet", observed_at=later)
         for kind in fed_kinds("tailscale"):
             store(kind, at=later)
 
@@ -120,7 +112,7 @@ class ForcedKindsTests(TestCase):
 @SWEEPS
 class RefusalTests(TestCase):
     def setUp(self):
-        connect("example-tailnet", "tailscale")
+        connection("tailscale", "example-tailnet")
 
     def test_an_unknown_connection_is_not_found(self):
         result = execute_capability(READ_NOW, {"connection_ref": "no-such-connection"}, principal=cli_principal())
@@ -158,7 +150,7 @@ class RefusalTests(TestCase):
 @SWEEPS
 class WebTests(TestCase):
     def setUp(self):
-        connect("example-tailnet", "tailscale")
+        connection("tailscale", "example-tailnet")
         operator(self.client)
 
     def test_the_link_posts_what_it_names_and_returns_with_the_result(self):

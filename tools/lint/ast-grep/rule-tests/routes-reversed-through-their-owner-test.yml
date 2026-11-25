@@ -1,0 +1,13 @@
+id: routes-reversed-through-their-owner
+valid:
+  - 'from hq.platform.application.routes import reverse'
+  - 'from django.urls import NoReverseMatch, reverse_lazy'
+invalid:
+  - 'from django.urls import reverse'
+  - 'from django.urls import NoReverseMatch, reverse'
+  - 'lazy from django.urls import reverse as resolve'
+  - |
+    from django.urls import (
+        NoReverseMatch,
+        reverse,
+    )

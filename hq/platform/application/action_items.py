@@ -313,6 +313,8 @@ def filter_items(
 
 
 def _audit(user, message: str, count: int) -> None:
+    # One act on many queue items at once, which no one row's signal writes.
+    # ast-grep-ignore: row-change-recorded-by-its-signal
     record_event(
         action=AuditLog.Action.UPDATED,
         type_label=AUDIT_LABEL,

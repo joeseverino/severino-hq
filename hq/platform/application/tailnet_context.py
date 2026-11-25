@@ -21,7 +21,7 @@ from .findings import estate_findings, serialize_finding
 from .integration_specs import ListRead, ResourceSpec
 from .json_schemas import as_written
 from .policy_links import PolicyName, PolicyNames, tagged
-from .projection import complete, projection_scope
+from .projection import page_of, projection_scope
 from .resources import EmptyQuery
 from .routes import reverse
 from .security import Capability, Principal
@@ -289,7 +289,7 @@ def get_tailnet(*, principal: Principal) -> dict[str, Any]:
     """The tailnet as one item, for the registered read."""
 
     found = tailnet_context(principal=principal).as_dict()
-    return complete([found])
+    return page_of([found])
 
 
 def resources() -> tuple[ResourceSpec, ...]:

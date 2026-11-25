@@ -1,0 +1,22 @@
+# A capability's handler runs in one place, capabilities._run, which records
+# the act of a write whose handler recorded no row. A handler called anywhere
+# else writes with no act on record; the runner's own call is its one
+# suppression.
+id: capability-handler-run-by-the-runner
+language: python
+severity: error
+message: A capability's handler is called outside the runner.
+note: Run the capability with execute_capability (hq.platform.application.capabilities).
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+rule:
+  kind: call
+  has:
+    field: function
+    kind: attribute
+    has:
+      field: attribute
+      regex: ^handler$

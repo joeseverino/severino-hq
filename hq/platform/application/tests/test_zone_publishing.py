@@ -6,9 +6,8 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.consent import consented
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import declare, managing_everything, operator
 
-from ..adoption_testing import managing_everything
 from ..report_testing import bridged
 from ..security import cli_principal
 from ..services import prospects, service_catalog
@@ -256,7 +255,7 @@ class PublishAServiceTests(TestCase):
         """Landing on each resource's own page made the next step a navigation
         problem. The service page is the thing being assembled."""
 
-        from hq.platform.application.adoption_testing import managing_everything
+        from hq.platform.core.testing import managing_everything
 
         managing_everything()
         response = self.client.post(

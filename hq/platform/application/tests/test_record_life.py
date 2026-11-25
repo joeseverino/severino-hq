@@ -18,9 +18,9 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 from hq.platform.application.tests.consent import consented
+from hq.platform.core.testing import managing_everything
 
 from ..adoption import AdoptCommand, adopt
-from ..adoption_testing import managing_everything
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..findings import derive_findings
 from ..infrastructure import ManagedResourceCommand, save_managed_resource

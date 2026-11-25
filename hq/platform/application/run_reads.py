@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from hq.domains.jobs.models import Job, JobState
 
+from .answer_fields import AsRead
 from .automation_runs import CORRELATION_CHARACTER, CORRELATION_LONGEST
 from .describe import Describe, listed
 from .integration_specs import ListFilter, ListRead, ListSort, ResourceSpec
@@ -29,6 +30,7 @@ from .tone import Tone
 from .ui import ended
 from .work_runs import (
     RunEvidence,
+    TaskOutcome,
     WorkRun,
     asked_with,
     hydrated,
@@ -60,7 +62,9 @@ class RunTask(TypedDict):
 
     host: Annotated[str, Describe("The machine the task ran on, as the playbook's inventory names it.")]
     task: Annotated[str, Describe("The task, by its name in the playbook.")]
-    outcome: Annotated[str, Describe("How it ended: `ok`, `changed`, `skipped`, `failed` or `unreachable`.")]
+    outcome: Annotated[
+        str, Describe(ended(f"How it ended, or `{TaskOutcome.STARTED}` while it is under way: {listed(TaskOutcome)}"))
+    ]
     message: Annotated[str, Describe("What the task said; empty when it said nothing.")]
     tone: Annotated[str, Describe(ended(f"How its outcome is colored: {listed(Tone)}"))]
 
@@ -71,6 +75,14 @@ class ServedPart(TypedDict):
     consumer: Annotated[str, Describe("What serves the name, as the check names it.")]
     domain: Annotated[str, Describe("The name it serves.")]
     fingerprint_sha256: Annotated[str, Describe("The SHA-256 fingerprint of the certificate it serves.")]
+
+
+class StatedReading(TypedDict):
+    """One kind of reading a run's playbook stated of one machine."""
+
+    host: Annotated[str, Describe("The machine it read.")]
+    kind: Annotated[str, Describe("The kind of reading.")]
+    records: Annotated[list[AsRead], Describe("Its records, each shaped as its kind's.")]
 
 
 class _Work(TypedDict):
@@ -97,7 +109,8 @@ class _Work(TypedDict):
     finished_at: Annotated[str | None, Describe("When it ended; null while it waits or works.")]
     duration_seconds: Annotated[float | None, Describe("How long it worked for; null until it ends.")]
     stated: Annotated[
-        list[str], Describe("The kinds of reading its playbook stated, each once; empty when it stated none.")
+        list[StatedReading],
+        Describe("Each reading its playbook stated, by machine then kind; empty when it stated none."),
     ]
 
 
@@ -113,7 +126,10 @@ class _Evidence(TypedDict):
         str | None,
         Describe("When that worker must next report, or HQ reads the run as stopped; null unless one runs it."),
     ]
-    events: Annotated[list[RunTask], Describe("Each task's outcome on each machine, in the order the worker ran them.")]
+    events: Annotated[
+        list[RunTask],
+        Describe("Each task on each machine so far, in the order the worker started them, live while it runs."),
+    ]
     expected: Annotated[
         str,
         Describe("The SHA-256 fingerprint of the certificate it checked each name for; empty when it checked none."),

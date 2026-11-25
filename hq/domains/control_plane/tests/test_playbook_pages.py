@@ -520,11 +520,9 @@ class PlaybooksPageTests(TestCase):
         for ask in asks:
             self.assertEqual(self.client.get(ask.attrs["data-ask-status"]).status_code, 200)
 
-    def test_a_status_hq_did_not_sign_is_not_found(self):
-        status = reverse("control_plane:playbooks_status")
-        for watch in ("", "forged", json.dumps({"scan": "x"})):
-            with self.subTest(watch=watch):
-                self.assertEqual(self.client.get(status, {"watch": watch}).status_code, 404)
+    def test_the_status_of_a_run_hq_never_queued_is_not_found(self):
+        status = reverse("jobs:run_status", args=["00000000-0000-0000-0000-000000000000"])
+        self.assertEqual(self.client.get(status).status_code, 404)
 
     def test_a_scan_of_the_commit_adopted_offers_only_refresh_and_a_scan_under_way_is_followed(self):
         from hq.platform.core.example_estate import automation

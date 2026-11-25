@@ -281,7 +281,7 @@ func (r *rehearsing) copyDatabase(ctx context.Context) bool {
 		{"docker", "volume", "create", rehearsalBridge},
 		{"docker", "run", "--rm", "--pull", "never", "--user", "0:0", "--network", "none", "--entrypoint", "sh",
 			"--mount", "type=volume,source=" + rehearsalData + ",target=/data", "--name", rehearsalCopy, r.own.label(), r.image,
-			"-c", "mkdir -p /data/tmp && chown -R " + user + " /data"},
+			"-c", "chown -R " + user + " /data"},
 		{"docker", "run", "--rm", "--pull", "never", "--user", user, "--network", "none", "--entrypoint", "python",
 			"--mount", "type=volume,source=" + r.data + ",target=/src",
 			"--mount", "type=volume,source=" + rehearsalData + ",target=/data", "--name", rehearsalCopy, r.own.label(), r.image, "-c", backupScript},
@@ -300,11 +300,12 @@ func (r *rehearsing) startWeb(ctx context.Context) bool {
 	appEnv := "/run/secrets/" + hostcore.AppEnvName
 	if _, err := r.exec(ctx, "docker", "run", "-d", "--pull", "never", "--name", rehearsalName,
 		"--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
-		"--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
+		"--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m", "--tmpfs", webSocketTmpfs(),
 		"--tmpfs", fmt.Sprintf("/media:uid=%d,gid=%d", hostcore.WebUID, hostcore.WebGID),
 		"--tmpfs", fmt.Sprintf("/exports:uid=%d,gid=%d", hostcore.WebUID, hostcore.WebGID),
 		"--pids-limit", "512", "--memory", "1g",
-		"--env", "TMPDIR=/data/tmp",
+		"--mount", "type=volume,target="+Spool,
+		"--env", "TMPDIR="+Spool,
 		"--env", "SEVERINO_CONTROLLER_DOORBELL="+hostcore.RunDir+"/controller-doorbell",
 		"--env", "SEVERINO_BRIDGE_SOCKET="+BridgeSocket,
 		"--env", "SEVERINO_APP_ENV_PATH="+appEnv,
@@ -397,7 +398,7 @@ func (r *rehearsing) liveMarks(ctx context.Context) string {
 // clear removes everything the rehearsal makes, whether or not it is there.
 func (r *rehearsing) clear() {
 	ctx := context.Background()
-	_, _ = r.exec(ctx, "docker", "rm", "--force", rehearsalName, rehearsalCopy, rehearsalPlan)
+	_, _ = r.exec(ctx, "docker", "rm", "--force", "--volumes", rehearsalName, rehearsalCopy, rehearsalPlan)
 	_, _ = r.exec(ctx, "docker", "volume", "rm", "--force", rehearsalData, rehearsalBridge)
 	if err := os.RemoveAll(r.scratch); err != nil {
 		fmt.Fprintln(r.log, err)

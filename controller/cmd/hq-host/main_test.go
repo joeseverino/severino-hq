@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -52,6 +54,25 @@ func TestEdgeReceiverIsParsedAsAnyAccount(t *testing.T) {
 	code := run(context.Background(), []string{"edge-receiver", "extra"}, func(string) string { return "" }, 1000, strings.NewReader(""), io.Discard, &stderr)
 	if code != 2 || strings.Contains(stderr.String(), "must run as root") {
 		t.Errorf("exited %d with %q", code, stderr.String())
+	}
+}
+
+// CI's lint:units verifies from this list, as a runner's own account: each
+// unit install verifies, by its path, and none of their drop-ins.
+func TestVerifiedListsTheUnitsInstallVerifiesAsAnyAccount(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"example.service", "example.service.d/10-example.conf"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stdout strings.Builder
+	code := run(context.Background(), []string{"verified", dir}, func(string) string { return "" }, 1000, strings.NewReader(""), &stdout, io.Discard)
+	if want := filepath.Join(dir, "example.service") + "\n"; code != 0 || stdout.String() != want {
+		t.Errorf("exited %d with %q, want %q", code, stdout.String(), want)
 	}
 }
 

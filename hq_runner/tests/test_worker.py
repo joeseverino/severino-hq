@@ -8,6 +8,7 @@ Every pass here runs over the fake bridge and runner (``fakes``): no host,
 socket or credential.
 """
 
+import copy
 import json
 import tempfile
 import unittest
@@ -63,7 +64,7 @@ class SuccessTests(PassTestCase):
         self.assertTrue(report["success"])
         self.assertEqual(report["observed_generation"], 2)
         self.assertEqual(
-            [(e["host"], e["task"], e["outcome"]) for e in report["events"]],
+            [(e["host"], e["task"], e["outcome"]) for e in bridge.events],
             [
                 ("localhost", "Say hello", "ok"),
                 ("localhost", "Touch a file", "changed"),
@@ -74,6 +75,47 @@ class SuccessTests(PassTestCase):
         self.assertNotIn("status", report)
         self.assertIsNone(self.journal.read())
 
+    def test_each_task_reaches_hq_as_it_starts_and_as_it_ends_while_the_run_runs(self):
+        bridge = fakes.Bridge(fakes.pending())
+        heard: list[list[tuple[str, str]]] = []
+        runner = fakes.Runner(
+            fakes.WELL, between=lambda: heard.append([(e["task"], e["outcome"]) for e in bridge.events])
+        )
+
+        self.work(bridge, runner)
+
+        # What HQ held as each event after the first arrived, which the worker's
+        # renewal on ansible-runner's ask after the one before it sent.
+        said = {
+            str(event["event"]) + ":" + str(event.get("event_data", {}).get("task")): at
+            for at, event in enumerate(fakes.WELL)
+        }
+        self.assertEqual(heard[said["runner_on_ok:Say hello"]], [("Say hello", "started")])
+        self.assertEqual(heard[said["playbook_on_task_start:Touch a file"]], [("Say hello", "ok")])
+        self.assertEqual(heard[said["runner_on_ok:Touch a file"]], [("Say hello", "ok"), ("Touch a file", "started")])
+        self.assertNotIn("events", self.only_report(bridge))
+
+    def test_a_task_that_polls_says_each_pass_s_line_while_under_way_and_no_other_stdout(self):
+        line = fakes.RETRY["event_data"]["res"]["stdout"]
+        later = copy.deepcopy(fakes.RETRY)
+        later["event_data"]["res"]["stdout"] = line.replace("immich", "jellyfin")
+        ended = copy.deepcopy(fakes.RETRY)
+        ended["event"] = "runner_on_ok"
+        ended["event_data"]["res"]["stdout"] = line.replace("immich", "ended")
+        bridge = fakes.Bridge(fakes.pending())
+        heard: list[list[tuple[str, str, str]]] = []
+        runner = fakes.Runner(
+            [fakes.RETRY, later, ended],
+            between=lambda: heard.append([(e["task"], e["outcome"], e["message"]) for e in bridge.events]),
+        )
+
+        self.work(bridge, runner)
+
+        task = fakes.RETRY["event_data"]["task"]
+        self.assertEqual(heard[1], [(task, "started", line)])
+        self.assertEqual(heard[2], [(task, "started", later["event_data"]["res"]["stdout"])])
+        self.assertEqual([(e["task"], e["outcome"], e["message"]) for e in bridge.events], [(task, "ok", "")])
+
     def test_ansibles_own_check_of_a_roles_arguments_is_reported_only_when_it_fails(self):
         bridge = fakes.Bridge(fakes.pending())
 
@@ -81,7 +123,7 @@ class SuccessTests(PassTestCase):
 
         passed, task, failed = (event["event_data"] for event in fakes.CHECKED)
         self.assertEqual(
-            [(e["task"], e["outcome"]) for e in self.only_report(bridge)["events"]],
+            [(e["task"], e["outcome"]) for e in bridge.events],
             [(task["task"], "ok"), (failed["task"], "failed")],
         )
         self.assertEqual(passed["task"], failed["task"])
@@ -306,7 +348,7 @@ class FailedRunTests(PassTestCase):
 
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
-        self.assertIn(("localhost", "Fail", "failed"), [(e["host"], e["task"], e["outcome"]) for e in report["events"]])
+        self.assertIn(("localhost", "Fail", "failed"), [(e["host"], e["task"], e["outcome"]) for e in bridge.events])
         self.assertEqual(report["conditions"][0]["type"], "Degraded")
 
 
@@ -327,7 +369,7 @@ class StoppedRunTests(PassTestCase):
 
                 report = bridge.reports[-1]
                 self.assertFalse(report["success"])
-                self.assertEqual(report["events"], [])
+                self.assertEqual(bridge.events, [])
                 self.assertIn(said, report["message"])
                 self.assertIn(where, report["message"])
                 self.assertNotIn("/srv/example/project", report["message"])
@@ -351,7 +393,7 @@ class StoppedRunTests(PassTestCase):
 
         report = bridge.reports[-1]
         self.assertNotIn("YAML parsing failed", report["message"])
-        self.assertIn("failed", [event["outcome"] for event in report["events"]])
+        self.assertIn("failed", [event["outcome"] for event in bridge.events])
 
     def test_a_place_outside_the_project_is_never_said(self):
         moved = json.loads(json.dumps(fakes.STOPPED["missing_collection"]))
@@ -379,7 +421,7 @@ class TimeoutTests(PassTestCase):
         self.assertFalse(report["success"])
         self.assertEqual(report["conditions"][0]["reason"], "TimedOut")
         self.assertIn("30 second", report["message"])
-        self.assertEqual(len(report["events"]), 2)
+        self.assertEqual(len(bridge.events), 2)
 
 
 class LeaseTests(PassTestCase):
@@ -389,7 +431,9 @@ class LeaseTests(PassTestCase):
         def later():
             self.clock.now += RENEW_EVERY_SECONDS
 
-        self.work(bridge, fakes.Runner(fakes.OUTCOMES[:4], between=later))
+        # Events that begin no task on a machine, so only time asks for a renewal.
+        quiet = [event for event in fakes.RECORDED if event["event"] == "playbook_on_task_start"][:4]
+        self.work(bridge, fakes.Runner(quiet, between=later))
 
         renewals = [call for call in bridge.calls if call[0] == "renew"]
         # One per renewal interval that passed.
@@ -412,7 +456,7 @@ class LeaseTests(PassTestCase):
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
         self.assertEqual(report["conditions"][0]["reason"], "Held")
-        self.assertEqual(len(report["events"]), 1)
+        self.assertEqual(len(bridge.events), 1)
 
     def test_a_cancelled_run_stops_at_its_next_renewal(self):
         cancelled = {"ok": True, "continue": False, "reason": "Cancelled", "lease_expires_at": None}
@@ -437,7 +481,7 @@ class InvalidClaimTests(PassTestCase):
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
         self.assertEqual(report["conditions"][0]["reason"], "RevisionMismatch")
-        self.assertEqual(report["events"], [])
+        self.assertEqual(bridge.progress, [])
 
     def test_a_claim_without_its_run_input_is_refused_before_it_runs(self):
         answer = fakes.pending()
@@ -532,17 +576,30 @@ class RedactionTests(PassTestCase):
 
         self.work(bridge, fakes.Runner([hello, leaky], status="failed"))
 
-        sent = json.dumps(self.only_report(bridge))
+        sent = json.dumps([self.only_report(bridge), bridge.progress])
         for secret in (api_key, "correct-horse-battery", "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ", "PRIVATE KEY"):
             self.assertNotIn(secret, sent)
         self.assertIn("[redacted]", sent)
+
+    def test_a_retry_s_line_is_struck_of_a_secret_parameter_and_held_to_a_message_s_length(self):
+        api_key = "example-api-key-0123456789"
+        leaky = copy.deepcopy(fakes.RETRY)
+        leaky["event_data"]["res"]["stdout"] = f"releasing with {api_key} " + "x" * 5000
+        bridge = fakes.Bridge(fakes.pending(parameters={"service": "web", "api_key": api_key}))
+
+        self.work(bridge, fakes.Runner([leaky]))
+
+        (event,) = bridge.events
+        self.assertNotIn(api_key, json.dumps([self.only_report(bridge), bridge.progress]))
+        self.assertTrue(event["message"].startswith("releasing with [redacted] x"))
+        self.assertEqual(len(event["message"]), 500)
 
     def test_a_task_marked_no_log_reports_only_that_it_was_hidden(self):
         bridge = fakes.Bridge(fakes.pending())
 
         self.work(bridge, fakes.Runner([fakes.recorded("Hidden", "runner_on_ok")]))
 
-        (event,) = self.only_report(bridge)["events"]
+        (event,) = bridge.events
         self.assertNotIn("censored", event["message"])
         self.assertIn("no_log", event["message"])
 
@@ -556,10 +613,10 @@ class RedactionTests(PassTestCase):
 
         self.work(bridge, fakes.Runner([*fine, broken], status="failed"))
 
-        report = self.only_report(bridge)
-        self.assertLessEqual(len(report["events"]), 200)
-        self.assertEqual(report["events"][-1]["outcome"], "failed")
-        self.assertTrue(all(len(e["message"]) <= 500 and len(e["task"]) <= 200 for e in report["events"]))
+        self.assertIn("are not listed", self.only_report(bridge)["message"])
+        self.assertLessEqual(len(bridge.events), 200)
+        self.assertEqual(bridge.events[-1]["outcome"], "failed")
+        self.assertTrue(all(len(e["message"]) <= 500 and len(e["task"]) <= 200 for e in bridge.events))
 
 
 class RestartTests(PassTestCase):
@@ -642,7 +699,7 @@ class ScanTests(PassTestCase):
         self.assertTrue(report["success"])
         self.assertEqual(report["observed_generation"], 3)
         self.assertEqual(report["catalog"], self.CATALOG)
-        self.assertEqual(report["events"], [])
+        self.assertEqual(bridge.progress, [])
         self.assertEqual(runner.runs, [])
         self.assertIsNone(self.journal.read())
 

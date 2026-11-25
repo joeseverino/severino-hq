@@ -7,10 +7,9 @@ from hq.domains.control_plane.models import ManagedResource, NotManaged, Provide
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import connection, declare, operator
 
 from ..adoption import AdoptCommand, adopt, unmanaged
-from ..adoption_testing import connection
 from ..record_errors import PolicyError
 from ..report_testing import bridged, report_connections
 from ..resource_operations import OperationCommand, request_removal
@@ -93,7 +92,7 @@ class ObservingConnectionTests(TestCase):
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
 class ManagingConnectionTests(TestCase):
     def test_a_managing_connection_adopts_the_zone_and_its_records(self):
-        connection("cloudflare_dns", "example-dns")
+        connection("cloudflare_dns", "example-dns", manages=True)
 
         swept()
 
@@ -104,14 +103,14 @@ class ManagingConnectionTests(TestCase):
 
     def test_a_record_follows_the_connection_it_names(self):
         connection("cloudflare_dns", "example-dns", manages=False)
-        connection("cloudflare_dns", "example-other")
+        connection("cloudflare_dns", "example-other", manages=True)
 
         swept()
 
         self.assertFalse(ManagedResource.objects.filter(kind=ZONE_KIND).exists())
 
     def test_a_record_naming_none_needs_every_connection_of_its_kind_to_manage(self):
-        connection("cloudflare_dns", "example-dns")
+        connection("cloudflare_dns", "example-dns", manages=True)
         connection("cloudflare_dns", "example-other", manages=False)
         declare("example-com", ZONE_KIND, {"zone": "example.com", "connection_ref": "example-dns"})
 
@@ -140,7 +139,7 @@ class StopManagingSticksTests(TestCase):
     """Forgetting a domain is not undone by the next sweep."""
 
     def setUp(self):
-        connection("cloudflare_dns", "example-dns")
+        connection("cloudflare_dns", "example-dns", manages=True)
         swept()
         self.user = operator(self.client)
 
@@ -211,7 +210,7 @@ class StopManagingAnyKindTests(TestCase):
         bridged("inventory", {"portainer.container": {"ok": True, "records": [self.CONTAINER]}})
 
     def test_a_forgotten_container_stays_unmanaged(self):
-        connection("portainer", "example-portainer")
+        connection("portainer", "example-portainer", manages=True)
         self.sweep()
         key = ManagedResource.objects.get(kind="portainer.container").key
 
@@ -256,7 +255,7 @@ class OperatorOwnedRouteTests(TestCase):
     ]
 
     def setUp(self):
-        connection("ssh", "example-edge")
+        connection("ssh", "example-edge", manages=True)
 
     def sweep(self):
         return bridged("inventory", {self.KIND: {"ok": True, "records": self.ROUTES}})
