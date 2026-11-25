@@ -7,24 +7,34 @@ the test runner puts back what each held as a patch began once the patch ends
 (``isolation_testing``).
 """
 
+import threading
 from collections.abc import Callable
 from typing import Any
 
 
 class Kept[T]:
-    """``function``'s answer for the arguments it was last asked with."""
+    """``function``'s answer for the arguments it was last asked with,
+    computed once however many threads ask at once."""
 
     def __init__(self, function: Callable[..., T]) -> None:
         self.function = function
         self.held: tuple[tuple[Any, ...], T] | None = None
+        # One per cache, so unrelated caches never wait on each other; their
+        # computations call one another in one order, which cannot deadlock.
+        # Reentrant, so a computation that asks its own cache again proceeds.
+        self.lock = threading.RLock()
 
     def __call__(self, *arguments: Any) -> T:
         held = self.held
         if held is not None and held[0] == arguments:
             return held[1]
-        answer = self.function(*arguments)
-        self.held = (arguments, answer)
-        return answer
+        with self.lock:
+            held = self.held
+            if held is not None and held[0] == arguments:
+                return held[1]
+            answer = self.function(*arguments)
+            self.held = (arguments, answer)
+            return answer
 
     def cache_clear(self) -> None:
         self.held = None
