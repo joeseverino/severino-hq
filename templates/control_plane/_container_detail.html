@@ -10,11 +10,13 @@ limits. Each said once; the band above has its version and standing.
 {% section "Upgrade" id="upgrade" data_fragment=state.standing.live data_fragment_poll=state.standing.live|follow_every %}
   {% facts layout="band" %}
     {% if update %}
-    {% fact "Pull request" icon="commit" tone=update.checks_said.1 %}
+    {% with checks=update.checks_said %}
+    {% fact "Pull request" icon="commit" tone=checks.tone %}
       {% entity update.url|outside label=update.label %}
     {% detail %}
-      <small>{{ update.checks_said.0 }}{% if update.checks_said.2 %}{% dot %}{{ update.checks_said.2 }}{% endif %}{% dot %}{{ update.app }}</small>
+      <small>{{ checks.badge }}{% if checks.failing %}{% dot %}{{ checks.failing }}{% endif %}{% if checks.why %}{% dot %}{{ checks.why }}{% endif %}{% dot %}{{ update.app }}</small>
     {% endfact %}
+    {% endwith %}
     {% fact "Pin" icon="deploy" %}
       {% for pin in update.pins %}{% if pin.before %}{% include "partials/_change.html" with from=pin.before.tag to=pin.after.tag code=True only %}{% else %}<code>{{ pin.after.tag }}</code>{% endif %}{% empty %}Diff too large to read{% endfor %}
     {% detail %}

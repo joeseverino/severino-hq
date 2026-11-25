@@ -175,7 +175,25 @@ def repositories():
                 "sha": hexed("older", name, length=40),
                 "created_at": iso(timedelta(days=2)),
             }
-            record["checks"] = {"state": "failure", "total": 4, "failing": ["Scan"], "running": 0}
+            # Its log names the standard library release that fixes what it found.
+            failure = {
+                "step": "govulncheck",
+                "error": "Process completed with exit code 3.",
+                "log": [
+                    "Vulnerability #1: GO-2026-6859",
+                    "  Standard library",
+                    "    Found in: net/http@go1.27.3",
+                    "    Fixed in: net/http@go1.27.4",
+                    "Your code is affected by 1 vulnerability from the Go standard library.",
+                ],
+            }
+            record["checks"] = {
+                "state": "failure",
+                "total": 4,
+                "failing": ["Scan"],
+                "running": 0,
+                "failures": {"Scan": failure},
+            }
             record["runs"], record["failing_runs"] = [scan], [scan]
         if name == APPS:
             record["pull_requests"] = [_app_update(name)]
@@ -333,7 +351,7 @@ def _app_update(name):
 
 
 def _updates(name):
-    """One update open with its checks passing, an alert no update answers
+    """One update open with its checks passing and one failing, an alert no update answers
     yet, and a serious one no version fixes yet, which the queue leaves out."""
 
     url = f"https://github.com/example/{name}"
@@ -351,6 +369,34 @@ def _updates(name):
                 "branch": "renovate/example-thumbnailer-3.x",
                 "labels": ["dependencies"],
                 "checks": {"state": "success", "total": 4, "failing": [], "running": 0, "names": ["lint", "test"]},
+            },
+            {
+                "number": 42,
+                "title": "Update dependency example-uploader to v2",
+                "url": f"{url}/pull/42",
+                "author": UPDATER,
+                "draft": False,
+                "created_at": iso(timedelta(days=2)),
+                "updated_at": iso(timedelta(days=1)),
+                "head": hexed("uploader", name, length=40),
+                "branch": "renovate/example-uploader-2.x",
+                "labels": ["dependencies"],
+                # Its lock did not move with it, as the update run said.
+                "checks": {
+                    "state": "failure",
+                    "total": 4,
+                    "failing": ["test"],
+                    "running": 0,
+                    "names": ["lint", "test"],
+                    "failures": {
+                        "test": {
+                            "step": "Install tools",
+                            "error": "The process '/home/runner/.local/bin/mise' failed with exit code 1",
+                            "log": ["mise ERROR Failed to install example-uploader@2.0.0: not in the lockfile"],
+                        }
+                    },
+                },
+                "artifact_problem": ["mise ERROR cannot lock example-uploader: not configured in this project"],
             },
             {
                 "number": 43,

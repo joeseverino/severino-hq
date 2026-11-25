@@ -239,6 +239,7 @@ class ChecksPart(TypedDict):
     total: Annotated[int, Describe("How many checks ran on the head.")]
     failing: Annotated[list[str], Describe("The name of each check that failed.")]
     running: Annotated[int, Describe("How many checks are still running.")]
+    why: Annotated[str, Describe("Why they fail, in the failing tool's own words; empty while none fail.")]
 
 
 class MergePart(TypedDict):
