@@ -127,6 +127,50 @@ class RepositoryAccess(ObservationRecord):
     security: Security | None = None
 
 
+class PullFile(ObservationRecord):
+    """One file a pull request changes."""
+
+    path: str = ""
+    status: str = ""
+    additions: int = 0
+    deletions: int = 0
+    # The app whose directory, ``compose/<app>/``, holds it at any depth, or
+    # "" for a file outside every app's.
+    app: str = ""
+
+
+class PullRequest(ObservationRecord):
+    """One open pull request. For one Renovate opened (its branch under
+    ``renovate/``), ``checks`` is the head's ``{state, total, failing,
+    running, names}``, ``files`` each file it changes, one page of them, and
+    ``changed_files`` how many GitHub says it changes; they are None and 0
+    for any other. ``apps`` is
+    ``{app, read, images: [{service, before, after}]}`` per app whose
+    directory it changes, each service whose image differs at its head, in a
+    repository opted in to updates, and None otherwise (``github_compose.go``).
+    """
+
+    number: int = 0
+    title: str = ""
+    url: str = ""
+    # The login that opened it.
+    author: str = ""
+    draft: bool = False
+    created_at: Stamp = None
+    updated_at: Stamp = None
+    head: str = ""
+    base: str = ""
+    branch: str = ""
+    labels: list[str] = []
+    # The repository its head branch lives in, owner/name: another
+    # repository's for a fork, "" once that fork is gone.
+    head_repository: str = ""
+    checks: dict[str, Any] | None = None
+    files: list[PullFile] | None = None
+    changed_files: int = 0
+    apps: list[dict[str, Any]] | None = None
+
+
 class RepositoryRecord(ObservationRecord):
     connection_ref: str
     repository: str
@@ -141,17 +185,8 @@ class RepositoryRecord(ObservationRecord):
     # Each workflow's newest run on the default branch where it failed, at
     # whatever commit, shaped as ``runs``' entries.
     failing_runs: list[dict[str, Any]] = []
-    # ``{number, title, url, author, draft, created_at, updated_at, head, base,
-    # branch, labels, checks, files, apps}`` per open pull request, newest
-    # first. For a pull request Renovate opened (its branch under
-    # ``renovate/``), ``checks`` is the head's ``{state, total, failing,
-    # running, names}`` and ``files`` is ``{path, status, additions,
-    # deletions}`` per file it changes; both are None for any other. ``apps``
-    # is ``{app, read, images: [{service, before, after}]}`` per app whose
-    # Compose files it changes, each service whose image differs at its head,
-    # in a repository opted in to updates, and None otherwise
-    # (``github_compose.go``).
-    pull_requests: list[dict[str, Any]] = []
+    # Each open pull request, newest first.
+    pull_requests: list[PullRequest] = []
     # The check names the newest pull request runs.
     pull_request_checks: list[str] = []
     runs: list[dict[str, Any]] = []
@@ -186,6 +221,9 @@ class RepositoryRecord(ObservationRecord):
     # updates: empty for any other, or where the Compose part was refused.
     compose: list[str] = Field(default=[], max_length=COMPOSE_KEPT)
     dashboard: str = ""
+    # The login HQ's dependency update run opens its pull requests and its
+    # Dashboard as, the App's bot, read with the Compose part.
+    updater: str = ""
     # ``{path, service, image}`` per service of those files as compose-go
     # loads them at the default branch's head (``head``): what a merge pins.
     compose_images: list[dict[str, Any]] = []

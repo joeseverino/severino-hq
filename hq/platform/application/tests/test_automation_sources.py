@@ -77,13 +77,16 @@ class RefreshTestCase(TestCase):
             return run_capability(REFRESH, {}, principal=principal, idempotency_key=key).answer
 
     def claim(self) -> dict:
-        return bridge_client.call("claim", controller_id=WORKER, lease_seconds=300, capability=SCANS)
+        return bridge_client.call(
+            "claim", app=bridge_client.worker(), controller_id=WORKER, lease_seconds=300, capability=SCANS
+        )
 
     def report(self, operation_id: str, generation: int, **fields) -> bridge_client.Answer:
         return bridge_client.request(
             "/report",
             query={"controller-id": WORKER, "operation": operation_id},
             body=json.dumps({"observed_generation": generation, **fields}).encode(),
+            app=bridge_client.worker(),
         )
 
     def scanned(self, catalog: dict, key: str = "example-refresh") -> OperationRequest:
@@ -138,7 +141,11 @@ class RefreshTests(RefreshTestCase):
         self.refresh()
 
         runs = bridge_client.call(
-            "claim", controller_id=WORKER, lease_seconds=300, capability=["automation.operation:run"]
+            "claim",
+            app=bridge_client.worker(),
+            controller_id=WORKER,
+            lease_seconds=300,
+            capability=["automation.operation:run"],
         )
 
         self.assertIsNone(runs["operation"])

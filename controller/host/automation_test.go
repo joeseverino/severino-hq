@@ -98,10 +98,13 @@ func newWorker(t *testing.T) *worker {
 	}
 	machine.Command = w.command
 	w.a = &Automation{
-		Machine:     machine,
-		Source:      automationSource,
-		SecretDir:   secrets,
-		Journal:     filepath.Join(root, "journal"),
+		Machine:   machine,
+		Source:    automationSource,
+		SecretDir: secrets,
+		Journal:   filepath.Join(root, "journal"),
+		Mounts: func() ([]byte, error) {
+			return []byte("/dev/sda1 " + filepath.Join(root, "journal") + " ext4 rw,nosuid,nodev,noexec,relatime 0 0\n"), nil
+		},
 		Project:     &AutomationConfig{Repository: "example/playbooks", Grant: w.grant.Name},
 		Grants:      []Grant{w.grant},
 		ID:          "example-host",
@@ -318,6 +321,9 @@ func TestTheWorkersContainerIsConfined(t *testing.T) {
 		if !strings.HasSuffix(arg, ",readonly") && arg != "type=bind,source="+w.a.Journal+",target="+automationJournal {
 			t.Errorf("the container may write %s", arg)
 		}
+		if strings.Contains(arg, "source="+volumeAt(filepath.Dir(BridgeSocket)).Name+",") {
+			t.Errorf("the container is lent the controller's bridge: %s", arg)
+		}
 	}
 	env := map[string]string{}
 	for i, arg := range args {
@@ -328,7 +334,7 @@ func TestTheWorkersContainerIsConfined(t *testing.T) {
 	}
 	for name, value := range map[string]string{
 		"HQ_AUTOMATION_REPOSITORY":    "example/playbooks",
-		"HQ_AUTOMATION_BRIDGE_SOCKET": BridgeSocket, "HQ_AUTOMATION_ID": "example-host",
+		"HQ_AUTOMATION_BRIDGE_SOCKET": AutomationBridgeSocket, "HQ_AUTOMATION_ID": "example-host",
 		"HQ_AUTOMATION_TOKEN_FILE": automationToken + "/" + automationTokenName,
 	} {
 		if env[name] != value {
@@ -427,6 +433,16 @@ func TestNoWorkerStartsWithoutWhatItNeeds(t *testing.T) {
 		"no image":            func(w *worker) bool { _ = os.Remove(filepath.Join(w.a.Lib, AutomationImage)); return false },
 		"no token yet":        func(w *worker) bool { _ = os.Remove(w.grant.Path); return true },
 		"no journal":          func(w *worker) bool { _ = os.Remove(w.a.Journal); return true },
+		"a journal that runs programs": func(w *worker) bool {
+			w.a.Mounts = func() ([]byte, error) {
+				return []byte("/dev/sda1 " + w.a.Journal + " ext4 rw,noexec 0 0\n/dev/sda1 " + w.a.Journal + " ext4 rw,relatime 0 0\n"), nil
+			}
+			return true
+		},
+		"a journal on no mount of its own": func(w *worker) bool {
+			w.a.Mounts = func() ([]byte, error) { return []byte("/dev/sda1 / ext4 rw,noexec 0 0\n"), nil }
+			return true
+		},
 		"an unpinned image": func(w *worker) bool {
 			_ = os.Remove(filepath.Join(w.a.Lib, AutomationImage))
 			_ = os.WriteFile(filepath.Join(w.a.Lib, AutomationImage), []byte("ghcr.io/example/hq/runner:latest\n"), 0o400)
@@ -479,6 +495,13 @@ func TestAHostsAutomationEntryIsReadStrictly(t *testing.T) {
 	} {
 		if _, err := ReadConfig([]byte(declared(automation))); err == nil {
 			t.Errorf("%s: accepted", name)
+		}
+	}
+	for _, permissions := range []string{`{"contents": "write"}`, `{"contents": "read", "pull_requests": "write"}`, `{"contents": "admin"}`} {
+		writes := strings.Replace(grant, `{"contents": "read"}`, permissions, 1)
+		config := strings.Replace(hostJSON, `"vault"`, `"grants": [`+writes+`], "automation": `+valid+`, "vault"`, 1)
+		if _, err := ReadConfig([]byte(config)); err == nil {
+			t.Errorf("a grant of %s is accepted", permissions)
 		}
 	}
 }

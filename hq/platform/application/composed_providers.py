@@ -17,6 +17,7 @@ import inspect
 import itertools
 import marshal
 import pickle
+import threading
 import time
 import weakref
 from collections.abc import Callable, Iterable
@@ -36,6 +37,9 @@ CALENDAR_WINDOWS = 2
 
 _PROVIDERS: dict[str, Callable[..., Any]] = {}
 _ANSWERS: dict[str, Callable[..., Any]] = {}
+# Held while a name is declared, so threads asking for a new one at once
+# declare it once.
+_DECLARING = threading.Lock()
 
 
 # This process, and each provider met in it that nothing else tells apart.
@@ -48,9 +52,8 @@ def _itself(provider: Any) -> str:
     """A provider known only as the object it is, and only in this process."""
 
     try:
-        serial = _UNNAMED.get(provider)
-        if serial is None:
-            serial = _UNNAMED[provider] = next(_SERIAL)
+        # One step, so threads meeting it at once give it one serial.
+        serial = _UNNAMED.setdefault(provider, next(_SERIAL))
     except TypeError:
         # Not weakly referable: its address names it while it lives.
         return f"{_PROCESS}:at:{id(provider)}"
@@ -134,7 +137,11 @@ def provided(name: str, provider: Callable[..., Any], *, ahead: int | None = Non
 
     _PROVIDERS[name] = provider
     answer = _ANSWERS.get(name)
-    if answer is None:
+    if answer is not None:
+        return answer
+    with _DECLARING:
+        if (answer := _ANSWERS.get(name)) is not None:
+            return answer
 
         def vary(*args: Any) -> tuple[Any, ...]:
             return (*args, showing_demo(), _identity(_PROVIDERS[name]))
@@ -151,7 +158,7 @@ def provided(name: str, provider: Callable[..., Any], *, ahead: int | None = Non
             else derivation(name, reads=(), vary=vary, learns=True, ahead=ahead)
         )
         answer = _ANSWERS[name] = declare(compute)
-    return answer
+        return answer
 
 
 def _is_source(source: Any) -> bool:

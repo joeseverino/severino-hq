@@ -180,6 +180,7 @@ def repositories():
             record["compose"] = [f"compose/{app}/compose.yaml" for app in sorted(HELD_APPS)]
             record["compose_images"] = [_built()]
             record["dashboard"] = f"https://github.com/example/{name}/issues/12"
+            record["updater"] = UPDATER
         return record
 
     store("github.repository", *(repository(name) for name in REPOSITORIES))
@@ -281,6 +282,10 @@ def _watched():
     return watched
 
 
+# The login the example estate's update run opens its pull requests as.
+UPDATER = "example-hq[bot]"
+
+
 def _app_update(name):
     """Renovate's update of one app's pin to the newer release, checks
     passing, as GitHub lists the pull request and the reading loads its
@@ -294,13 +299,14 @@ def _app_update(name):
         "number": 58,
         "title": f"Update {ref.repository} Docker tag to {NEWER[UPDATED_APP]}",
         "url": f"{url}/pull/58",
-        "author": "renovate[bot]",
+        "author": UPDATER,
         "draft": False,
         "created_at": iso(timedelta(days=2)),
         "updated_at": iso(timedelta(hours=4)),
         "head": hexed("update", name, UPDATED_APP, length=40),
         "base": hexed("head", name, length=40),
         "branch": f"renovate/{UPDATED_APP}",
+        "head_repository": f"example/{name}",
         "labels": ["dependencies"],
         "checks": {"state": "success", "total": 2, "failing": [], "running": 0, "names": ["validate", "scan"]},
         "files": [
@@ -309,8 +315,10 @@ def _app_update(name):
                 "status": "modified",
                 "additions": 1,
                 "deletions": 1,
+                "app": UPDATED_APP,
             }
         ],
+        "changed_files": 1,
         "apps": [
             {
                 "app": UPDATED_APP,
@@ -332,7 +340,7 @@ def _updates(name):
                 "number": 41,
                 "title": "Update dependency example-thumbnailer to v3.2.1",
                 "url": f"{url}/pull/41",
-                "author": "renovate[bot]",
+                "author": UPDATER,
                 "draft": False,
                 "created_at": iso(timedelta(days=3)),
                 "updated_at": iso(timedelta(days=1)),

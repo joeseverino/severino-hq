@@ -18,7 +18,7 @@ from hq.domains.control_plane.models import OperationRequest
 
 from .containers import Container, containers, published_digest, ranked, standing_of
 from .entity_links import EntityLink
-from .github_estate import UPDATE_BRANCH, pull_checks, repositories
+from .github_estate import UPDATE_BRANCH, Repository, pull_checks, repositories
 from .images import ImageRef
 from .projection import projection_scope, read_once
 from .tone import Tone
@@ -102,6 +102,14 @@ class AppUpdate:
     # Whether its Compose files loaded at base and head with every image
     # resolved: otherwise its pins are read on GitHub alone.
     readable: bool
+    # Whether HQ's update run opened it from the repository itself: its author
+    # is the login the run opens pull requests as, and its head branch is
+    # the repository's own, never a fork's.
+    renovates: bool
+    # Whether every file it changes lies in the directory of an app it names.
+    within_apps: bool
+    # Whether HQ read every file GitHub says it changes.
+    whole: bool
 
     @property
     def label(self) -> str:
@@ -254,7 +262,7 @@ def _app(path: str) -> str:
 def _app_updates() -> tuple[AppUpdate, ...]:
     running = containers()
     found = []
-    for name, repository in sorted(repositories().items()):
+    for _name, repository in sorted(repositories().items()):
         pulls = (
             pull for pull in repository.pull_requests or () if str(pull.get("branch") or "").startswith(UPDATE_BRANCH)
         )
@@ -269,12 +277,16 @@ def _app_updates() -> tuple[AppUpdate, ...]:
                     )
                     if _app(path) == app
                 }
-                found.append(_update(name, pull, change, files, running))
+                found.append(_update(repository, pull, change, files, running))
     return tuple(found)
 
 
 def _update(
-    repository: str, pull: Mapping[str, Any], change: Mapping[str, Any], files: set[str], running: list[Container]
+    repository: Repository,
+    pull: Mapping[str, Any],
+    change: Mapping[str, Any],
+    files: set[str],
+    running: list[Container],
 ) -> AppUpdate:
     pins = tuple(
         _pin(
@@ -301,8 +313,10 @@ def _update(
             fixes.setdefault(str(each.get("id", "")), each)
         for each in brought:
             brings.setdefault((str(each.get("id", "")), str(each.get("package", ""))), each)
+    changed = pull.get("files") or ()
+    named = {str(each.get("app") or "") for each in pull.get("apps") or ()}
     return AppUpdate(
-        repository=repository,
+        repository=repository.name,
         number=int(pull.get("number") or 0),
         url=str(pull.get("url") or ""),
         title=str(pull.get("title") or ""),
@@ -314,6 +328,11 @@ def _update(
         brings=ranked(brings.values()),
         checks=pull.get("checks") or {},
         readable=bool(change.get("read")),
+        renovates=bool(repository.updater)
+        and pull.get("author") == repository.updater
+        and str(pull.get("head_repository") or "").casefold() == repository.name.casefold(),
+        within_apps=all(each.get("app") in named for each in changed),
+        whole=len(changed) == int(pull.get("changed_files") or 0),
     )
 
 

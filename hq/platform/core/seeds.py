@@ -271,6 +271,9 @@ SEEDS: dict[str, Seed] = {
     "unadoptable": Seed(_unadoptable, _SET_UP),
     "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
+    # A fresh install whose playbook worker stopped reporting: the one serious
+    # item, so the dashboard's Needs you card holds it alone, with its actions.
+    "playbooks-stopped": Seed(lambda _owner: example_estate.automation.unattended()),
     "policy-change": Seed(_policy_change, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),

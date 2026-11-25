@@ -134,15 +134,14 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 		return err
 	}
 	fmt.Fprintln(d.Out, "Signature verified.")
-	// Read before the prune below, which can remove the running image when
-	// HQ is stopped.
+	// Read before the prune below, so a release image it pulls again is one
+	// the prune keeps.
 	running, err := d.runningExtensions(ctx, stage)
 	if err != nil {
 		cleanup()
 		return fmt.Errorf("refusing to deploy %s: %w", image, err)
 	}
-	// The running image is referenced and survives, so it stays the rollback.
-	_ = d.run(ctx, "docker", "image", "prune", "--all", "--force")
+	d.prune(ctx, d.standing()...)
 	if free, err := d.Free(d.FreeOn); err == nil && free < d.FreeBytes {
 		cleanup()
 		return fmt.Errorf("a deploy needs %d MiB free; %d MiB are", d.FreeBytes>>20, free>>20)
@@ -261,6 +260,50 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	fmt.Fprintf(d.Out, "Deployed %s.\n", image)
 	stands = true
 	return d.verifyRelease(ctx)
+}
+
+// prune frees the disk a pull needs: it removes every image no container
+// uses, except keep. Each kept image is held by a container that never
+// starts, made and removed by open, since docker's prune spares exactly the
+// images a container uses and none of its filters names a digest.
+func (d *Deployer) prune(ctx context.Context, keep ...string) {
+	if len(keep) == 0 {
+		_ = d.run(ctx, "docker", "image", "prune", "--all", "--force")
+		return
+	}
+	held := false
+	_ = d.open(ctx, keep[0], func(string) error {
+		held = true
+		d.prune(ctx, keep[1:]...)
+		return nil
+	})
+	if !held {
+		// Not on this host, so there is nothing of it to keep.
+		d.prune(ctx, keep[1:]...)
+	}
+}
+
+// standing is what the release on the host runs: its recorded image and the
+// worker image its tree pins. The prune keeps both, so a deploy that fails at
+// any later step (the rehearsal, the hold, the sync, HQ's health, the install,
+// the rollback) leaves that release runnable, and an image no standing
+// release names, an older worker's among them, goes. Only images a deploy
+// verified run: the worker runs its pin with --pull never, so its image is
+// kept here rather than fetched again in its place. A record or pin of the
+// wrong shape names nothing to keep.
+func (d *Deployer) standing() []string {
+	var refs []string
+	if data, err := os.ReadFile(d.ReleasePath()); err == nil {
+		if ref, err := d.Source.Deployable(strings.TrimSpace(string(data))); err == nil {
+			refs = append(refs, ref)
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(d.Lib, AutomationImage)); err == nil {
+		if ref, err := d.Source.RunnerImage(strings.TrimSpace(string(data))); err == nil {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
 }
 
 // pullRunner verifies and pulls the automation worker's image the release

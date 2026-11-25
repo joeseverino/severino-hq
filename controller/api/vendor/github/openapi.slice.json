@@ -2695,6 +2695,49 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/pulls/{pull_number}": {
+   "get": {
+    "operationId": "pulls/get",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "pull_number",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Pass the appropriate [media type](https://docs.github.com/rest/using-the-rest-api/getting-started-with-the-rest-api#media-types) to fetch diff and patch formats.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/pull-request"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/pulls/{pull_number}/files": {
    "get": {
     "operationId": "pulls/list-files",
@@ -4389,6 +4432,9 @@
       "type": "string",
       "nullable": true
      },
+     "user": {
+      "$ref": "#/components/schemas/nullable-simple-user"
+     },
      "pull_request": {
       "type": "object",
       "properties": {
@@ -4424,7 +4470,8 @@
     "required": [
      "html_url",
      "number",
-     "title"
+     "title",
+     "user"
     ],
     "x-github-breaking-changes": [
      {
@@ -4703,6 +4750,125 @@
      "created_at"
     ],
     "additionalProperties": false
+   },
+   "pull-request": {
+    "type": "object",
+    "title": "Pull Request",
+    "description": "Pull requests let you tell others about changes you've pushed to a repository on GitHub. Once a pull request is sent, interested parties can review the set of changes, discuss potential modifications, and even push follow-up commits if necessary.",
+    "properties": {
+     "changed_files": {
+      "type": "integer",
+      "example": 5
+     }
+    },
+    "required": [
+     "changed_files"
+    ],
+    "x-github-breaking-changes": [
+     {
+      "changeset": "remove_pull_request_merge_commit_sha",
+      "patch": {
+       "properties": {
+        "merge_commit_sha": null
+       },
+       "required": [
+        "_links",
+        "assignee",
+        "labels",
+        "base",
+        "body",
+        "closed_at",
+        "comments_url",
+        "commits_url",
+        "created_at",
+        "diff_url",
+        "head",
+        "html_url",
+        "id",
+        "node_id",
+        "issue_url",
+        "merged_at",
+        "milestone",
+        "number",
+        "patch_url",
+        "review_comment_url",
+        "review_comments_url",
+        "statuses_url",
+        "state",
+        "locked",
+        "title",
+        "updated_at",
+        "url",
+        "user",
+        "author_association",
+        "auto_merge",
+        "additions",
+        "changed_files",
+        "comments",
+        "commits",
+        "deletions",
+        "mergeable",
+        "mergeable_state",
+        "merged",
+        "maintainer_can_modify",
+        "merged_by",
+        "review_comments"
+       ]
+      },
+      "version": "2026-03-10"
+     },
+     {
+      "changeset": "remove_singular_assignee_from_issues_and_pull_requests",
+      "patch": {
+       "properties": {
+        "assignee": null
+       },
+       "required": [
+        "_links",
+        "labels",
+        "base",
+        "body",
+        "closed_at",
+        "comments_url",
+        "commits_url",
+        "created_at",
+        "diff_url",
+        "head",
+        "html_url",
+        "id",
+        "node_id",
+        "issue_url",
+        "merged_at",
+        "milestone",
+        "number",
+        "patch_url",
+        "review_comment_url",
+        "review_comments_url",
+        "statuses_url",
+        "state",
+        "locked",
+        "title",
+        "updated_at",
+        "url",
+        "user",
+        "author_association",
+        "auto_merge",
+        "additions",
+        "changed_files",
+        "comments",
+        "commits",
+        "deletions",
+        "mergeable",
+        "mergeable_state",
+        "merged",
+        "maintainer_can_modify",
+        "merged_by",
+        "review_comments"
+       ]
+      },
+      "version": "2026-03-10"
+     }
+    ]
    },
    "pull-request-merge-result": {
     "title": "Pull Request Merge Result",

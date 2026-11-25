@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ type AutomationConfig struct {
 
 // checkAutomation refuses an automation entry unless its repository is one
 // GitHub could name and its grant is one of the host's that reads that
-// repository.
+// repository and may do nothing but read.
 func checkAutomation(automation *AutomationConfig, grants []Grant) error {
 	if automation == nil {
 		return nil
@@ -64,6 +65,13 @@ func checkAutomation(automation *AutomationConfig, grants []Grant) error {
 		if !reads || grant.Permissions["contents"] == "" {
 			return fmt.Errorf("automation.grant %s does not read %s: it needs the repository and contents", grant.Name, automation.Repository)
 		}
+		// The worker only fetches, and a playbook's tasks can read its token,
+		// so a token that could write is refused.
+		for _, permission := range slices.Sorted(maps.Keys(grant.Permissions)) {
+			if level := grant.Permissions[permission]; level != "read" {
+				return fmt.Errorf("automation.grant %s may %s %s: the worker's grant reads and nothing more", grant.Name, level, permission)
+			}
+		}
 		return nil
 	}
 	return fmt.Errorf("automation.grant %s is none of the host's grants", automation.Grant)
@@ -80,8 +88,11 @@ type Automation struct {
 	Source Source
 	// SecretDir is the renderer's tmpfs (SecretDir on a host).
 	SecretDir string
-	// Journal is the worker's journal directory (AutomationState).
+	// Journal is the worker's journal directory (AutomationState), and
+	// Mounts reads the mount table (hostcore.MountTable), which must hold it
+	// as a noexec mount of its own.
 	Journal string
+	Mounts  func() ([]byte, error)
 	// Project is the host configuration's automation entry, nil when the
 	// host runs no worker, and Grants the host's own grants it names one of.
 	Project *AutomationConfig
@@ -125,6 +136,10 @@ func (a *Automation) Run(ctx context.Context) error {
 	}
 	if info, err := os.Lstat(a.Journal); err != nil || !info.IsDir() {
 		return fmt.Errorf("the worker's journal directory %s is not there: systemd-tmpfiles --create makes it", a.Journal)
+	}
+	// The one host path the worker writes, so nothing it writes there runs.
+	if table, err := a.Mounts(); err != nil || !noexec(table, a.Journal) {
+		return fmt.Errorf("the worker's journal directory %s is not a noexec mount: the automation unit requires the mount unit that makes it one", a.Journal)
 	}
 	a.pruneRuns()
 	run, err := os.MkdirTemp(a.SecretDir, "automation.")
@@ -184,6 +199,18 @@ func (a *Automation) work(ctx context.Context, name string, args []string, run, 
 		return fmt.Errorf("the automation worker was stopped: %w", runCtx.Err())
 	}
 	return err
+}
+
+// noexec is whether the mount on top at dir, in a mount table's fstab(5)
+// format, runs no program.
+func noexec(table []byte, dir string) bool {
+	found := false
+	for line := range strings.Lines(string(table)) {
+		if fields := strings.Fields(line); len(fields) >= 4 && hostcore.Unescape(fields[1]) == dir {
+			found = slices.Contains(strings.Split(fields[3], ","), "noexec")
+		}
+	}
+	return found
 }
 
 // reaches is whether the worker is lent a connection: a runner-role SSH
@@ -313,11 +340,11 @@ func (a *Automation) pruneRuns() {
 
 // AutomationArgs is the worker's container: the web account, which the
 // bridge's peer check requires, with no capability and no way to gain one;
-// a read-only root with only a scratch tmpfs and its journal to write; its
-// own network, from which the egress table lets it reach its runner
-// connections and public addresses alone; public resolvers; and of the
-// host's, the lent connections, identities and token, read-only, and the
-// bridge.
+// a read-only root with only a scratch tmpfs and its journal to write, both
+// noexec; its own network, from which the egress table lets it reach its
+// runner connections and public addresses alone; public resolvers; and of
+// the host's, the lent connections, identities and token, read-only, and its
+// own bridge socket's volume, never the controller's.
 func AutomationArgs(name, image, run, journal, id string, project AutomationConfig) []string {
 	args := []string{
 		"run", "--rm", "--pull", "never", "--name", name,
@@ -338,9 +365,9 @@ func AutomationArgs(name, image, run, journal, id string, project AutomationConf
 		"--mount", readOnly(filepath.Join(run, "connections.json"), automationConnections),
 		"--mount", readOnly(filepath.Join(run, "ssh"), automationSSH),
 		"--mount", "type=bind,source="+journal+",target="+automationJournal,
-		"--mount", "type=volume,source="+bridgeVolume()+",target="+filepath.Dir(BridgeSocket)+",readonly",
+		"--mount", "type=volume,source="+volumeAt(filepath.Dir(AutomationBridgeSocket)).Name+",target="+filepath.Dir(AutomationBridgeSocket)+",readonly",
 		"--env", "HQ_AUTOMATION_ID="+id,
-		"--env", "HQ_AUTOMATION_BRIDGE_SOCKET="+BridgeSocket,
+		"--env", "HQ_AUTOMATION_BRIDGE_SOCKET="+AutomationBridgeSocket,
 		"--env", "HQ_AUTOMATION_JOURNAL="+automationJournal+"/journal.json",
 		"--env", "HQ_AUTOMATION_CONNECTIONS="+automationConnections,
 		"--env", "HQ_AUTOMATION_SSH_DIR="+automationSSH,

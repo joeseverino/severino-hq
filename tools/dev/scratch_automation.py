@@ -218,7 +218,7 @@ def watch(server: int, runner_python: str) -> int:
     for stop in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(stop, _exit)
     state = State.of(os.environ["SEVERINO_DATABASE_PATH"])
-    socket = os.environ["SEVERINO_BRIDGE_SOCKET"]
+    socket = os.environ["SEVERINO_AUTOMATION_BRIDGE_SOCKET"]
     revision = state.prepare()
     print(f"automation: the worker scans {REPOSITORY} at {revision[:12]}, a commit of {PLAYBOOKS}", flush=True)
     worker: subprocess.Popen[bytes] | None = None

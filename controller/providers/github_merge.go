@@ -23,7 +23,7 @@ var githubMergeWrite = githubapi.AppPermissions{Contents: githubapi.AppPermissio
 type GitHubPullRequestSpec = runtime.GitHubPullRequestSpec
 
 // githubMerge merges the pull request at its approved head, once its head's
-// checks are read and none fails.
+// checks are read and every one has passed.
 func (r *Registry) githubMerge(ctx context.Context, spec GitHubPullRequestSpec, _ Object, apply bool) (Result, error) {
 	which := spec.Repository + "#" + strconv.Itoa(spec.Number)
 	if !apply {
@@ -54,6 +54,9 @@ func (r *Registry) githubMerge(ctx context.Context, spec GitHubPullRequestSpec, 
 	}
 	if len(checks.Failing) > 0 {
 		return Result{}, mergeRefused(runtime.GitHubMergeRefusalChecksFailing, which+" fails its checks: "+strings.Join(checks.Failing, ", ")+".")
+	}
+	if checks.State != "success" {
+		return Result{}, mergeRefused(runtime.GitHubMergeRefusalChecksPending, which+" has no passing checks at "+short(spec.HeadSha, 7)+" yet.")
 	}
 	body := githubapi.PullsMergeJSONRequestBody{MergeMethod: githubapi.PullsMergeJSONBodyMergeMethodSquash, Sha: spec.HeadSha}
 	merged, err := json200(r.githubAs(ctx, c, []string{spec.Repository}, githubMergeWrite).PullsMergeWithResponse(ctx, owner, repo, strconv.Itoa(spec.Number), body))

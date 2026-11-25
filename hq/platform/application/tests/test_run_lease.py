@@ -108,15 +108,19 @@ class RenewTests(LeasedRunTestCase):
                 renew(operation_id)
 
     def test_the_bridge_refuses_a_renewal_without_its_operation_or_with_a_lease_out_of_range(self):
-        missing = bridge_client.request("/renew", query={"controller-id": WORKER})
+        missing = bridge_client.request("/renew", query={"controller-id": WORKER}, app=bridge_client.worker())
         self.assertEqual(missing.status, 400, missing.body)
         self.claim()
         too_long = bridge_client.request(
-            "/renew", query={"controller-id": WORKER, "operation": self.operation_id, "lease-seconds": 3601}
+            "/renew",
+            query={"controller-id": WORKER, "operation": self.operation_id, "lease-seconds": 3601},
+            app=bridge_client.worker(),
         )
         self.assertEqual(too_long.status, 400, too_long.body)
 
-        answer = bridge_client.call("renew", controller_id=WORKER, operation=self.operation_id)
+        answer = bridge_client.call(
+            "renew", app=bridge_client.worker(), controller_id=WORKER, operation=self.operation_id
+        )
 
         self.assertTrue(answer["continue"], answer)
 
@@ -151,7 +155,7 @@ class ClaimTests(LeasedRunTestCase):
 
         self.assertIsNone(claim_next_operation(WORKER, capabilities=())["operation"])
         self.assertIsNone(peek_next_operation(capabilities=())["operation"])
-        self.assertIsNone(bridge_client.call("claim", controller_id=WORKER)["operation"])
+        self.assertIsNone(bridge_client.call("claim", app=bridge_client.worker(), controller_id=WORKER)["operation"])
         self.assertEqual(self.operation().state, OperationRequest.State.QUEUED)
 
     def test_a_claim_retried_under_its_attempt_is_the_same_lease(self):
@@ -175,10 +179,18 @@ class ClaimTests(LeasedRunTestCase):
         self.assertNotIn("input", peek_next_operation(capabilities=RUNS))
 
         claimed = bridge_client.call(
-            "claim", controller_id=WORKER, capability=["automation.operation:run"], attempt="example-attempt-1"
+            "claim",
+            app=bridge_client.worker(),
+            controller_id=WORKER,
+            capability=["automation.operation:run"],
+            attempt="example-attempt-1",
         )
         again = bridge_client.call(
-            "claim", controller_id=WORKER, capability=["automation.operation:run"], attempt="example-attempt-1"
+            "claim",
+            app=bridge_client.worker(),
+            controller_id=WORKER,
+            capability=["automation.operation:run"],
+            attempt="example-attempt-1",
         )
 
         for answer in (claimed, again):
@@ -365,6 +377,7 @@ class RunReportTests(LeasedRunTestCase):
             "/report",
             query={"controller-id": WORKER, "operation": self.operation_id},
             body=json.dumps(body).encode(),
+            app=bridge_client.worker(),
         )
 
         self.assertEqual(answer.status, 422, answer.body)

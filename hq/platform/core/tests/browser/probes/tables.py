@@ -2,6 +2,7 @@
 
 import json
 
+from hq.platform.application.pages import PageAction
 from hq.platform.application.tables import Below, Cell, DataTable, Piece, Row, TableColumn
 from hq.platform.core import included_parts
 from hq.platform.core.templatetags.table_tags import DATA_TABLE
@@ -846,6 +847,75 @@ OPEN_LINES_OUTDENTED = (
 )
 
 
+# A row's toggle stands centered on the first line of the words it heads: the
+# first line of text its cell shows after it, however that line is set (a
+# taller mark beside it, the cell's padding moved by a control's rise).
+TOGGLES_OFF_THEIR_LINE = (
+    "() => {"
+    + DESCRIBE
+    + """
+  // The first line box is read from the box that sets the words (their
+  // nearest block): it starts at that box's content edge and is one of its
+  // lines tall. A glyph's own box is no measure of it, as a face's ascent
+  // and descent differ.
+  const found = new Set();
+  const range = document.createRange();
+  for (const toggle of document.querySelectorAll('main tr > :is(td, th) > [data-row-toggle]')) {
+    const cell = toggle.parentElement;
+    const at = toggle.getBoundingClientRect();
+    if (!toggle.checkVisibility() || at.height < 2) continue;
+    // Words are shown where the box that sets them is: a box of words kept
+    // for a screen reader is a pixel, and an element drawn as its contents
+    // has no box of its own to be visible by. A box that stands in a line as
+    // one piece (an inline-flex, an inline-block), and what it holds, sit in
+    // the line of the box around it, which is the line read.
+    const flows = (el) => /^(inline|contents)$|^inline-/.test(getComputedStyle(el).display);
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+    let block = null;
+    for (let node = walker.nextNode(); node && !block; node = walker.nextNode()) {
+      if (!node.data.trim() || toggle.contains(node)) continue;
+      let up = node.parentElement;
+      while (up !== cell && (flows(up) || /^inline-/.test(getComputedStyle(up.parentElement).display))) up = up.parentElement;
+      const r = up.getBoundingClientRect();
+      range.selectNodeContents(node);
+      if (up.checkVisibility({visibilityProperty: true}) && r.width >= 2 && r.height >= 2 && [...range.getClientRects()].some((each) => each.width >= 2)) block = up;
+    }
+    if (!block) continue;
+    const style = getComputedStyle(block);
+    const top = block.getBoundingClientRect().top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
+    // A line `normal` tall is as tall as its face says, which the block's
+    // own height is while it holds the one line.
+    const line = parseFloat(style.lineHeight) || block.getBoundingClientRect().height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    const middle = top + line / 2;
+    const off = (at.top + at.height / 2) - middle;
+    if (Math.abs(off) > 1) {
+      found.add(`${describe(toggle)} stands ${Math.abs(off).toFixed(1)}px ${off > 0 ? 'below' : 'above'} the middle of its row's first line: ${cell.innerText.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
+    }
+  }
+  return [...found];
+}"""
+)
+
+
+# A table with no headings whose rows open and hold controls, as the
+# dashboard's queue draws them: its first row's words are moved down by the
+# controls' rise, which the toggle follows.
+def _toggles_beside_controls() -> DataTable:
+    rows = tuple(
+        Row(
+            (Cell(f"Example finding {at}", below=(Below("", (Cell("Example note under the finding."),)),)),),
+            actions=(PageAction("Open example", f"/example/{at}/"), PageAction("Check again", f"/example/{at}/check/")),
+        )
+        for at in (1, 2)
+    )
+    return DataTable("Example findings", (TableColumn("Finding"),), rows, headed=False, controls_per_row=True)
+
+
+_TOGGLES_BESIDE_CONTROLS = Example("{% data_table findings %}", values={"findings": _toggles_beside_controls()})
+# Every toggle moved off its line.
+_LIFT_THE_TOGGLES = "() => document.querySelectorAll('main [data-row-toggle]').forEach((toggle) => { toggle.style.translate = '0 -80%'; })"
+
+
 # A row whose words hold a block for its open line.
 def _open_lines() -> DataTable:
     item = Cell("Example item", below=(Below("", (Cell("Example note under the item."),)),))
@@ -1342,6 +1412,20 @@ CHECKS = {
         clear=(
             Example("{% data_table lines %}", scripted=True, values={"lines": _open_lines()}, setup=_OPEN_EVERY_ROW),
         ),
+    ),
+    "toggles off their line": Check(
+        TOGGLES_OFF_THEIR_LINE,
+        table=True,
+        reader_sees="a row's toggle above or below the line it opens",
+        plants=(
+            Plant(
+                _TOGGLES_BESIDE_CONTROLS.markup,
+                values=_TOGGLES_BESIDE_CONTROLS.values,
+                setup=_LIFT_THE_TOGGLES,
+                finds=("Example finding 1", "Example finding 2"),
+            ),
+        ),
+        clear=(_TOGGLES_BESIDE_CONTROLS,),
     ),
     # Every box and every line of text, not only a card's or code's.
     "gutter": Check((PAST_THE_GUTTER, ["*", True]), reader_sees="content past the page's gutter"),

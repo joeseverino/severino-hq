@@ -197,6 +197,7 @@ func (e GitHubDeliveryProduction) Valid() bool {
 // Defines values for GitHubMergeRefusal.
 const (
 	GitHubMergeRefusalChecksFailing GitHubMergeRefusal = "checks_failing"
+	GitHubMergeRefusalChecksPending GitHubMergeRefusal = "checks_pending"
 	GitHubMergeRefusalHeadMoved     GitHubMergeRefusal = "head_moved"
 	GitHubMergeRefusalNotInstalled  GitHubMergeRefusal = "not_installed"
 	GitHubMergeRefusalNotMergeable  GitHubMergeRefusal = "not_mergeable"
@@ -206,6 +207,8 @@ const (
 func (e GitHubMergeRefusal) Valid() bool {
 	switch e {
 	case GitHubMergeRefusalChecksFailing:
+		return true
+	case GitHubMergeRefusalChecksPending:
 		return true
 	case GitHubMergeRefusalHeadMoved:
 		return true
@@ -1762,6 +1765,42 @@ type GitHubRepositoryHeld struct {
 	Repository string `json:"repository"`
 }
 
+// GitHubRepositoryPullFile One file a pull request changes.
+type GitHubRepositoryPullFile struct {
+	Additions int    `json:"additions,omitempty"`
+	App       string `json:"app,omitempty"`
+	Deletions int    `json:"deletions,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Status    string `json:"status,omitempty"`
+}
+
+// GitHubRepositoryPullRequest One open pull request. For one Renovate opened (its branch under
+// “renovate/“), “checks“ is the head's “{state, total, failing,
+// running, names}“, “files“ each file it changes, one page of them, and
+// “changed_files“ how many GitHub says it changes; they are None and 0
+// for any other. “apps“ is
+// “{app, read, images: [{service, before, after}]}“ per app whose
+// directory it changes, each service whose image differs at its head, in a
+// repository opted in to updates, and None otherwise (“github_compose.go“).
+type GitHubRepositoryPullRequest struct {
+	Apps           []map[string]any           `json:"apps,omitempty"`
+	Author         string                     `json:"author,omitempty"`
+	Base           string                     `json:"base,omitempty"`
+	Branch         string                     `json:"branch,omitempty"`
+	ChangedFiles   int                        `json:"changed_files,omitempty"`
+	Checks         map[string]any             `json:"checks,omitempty"`
+	CreatedAt      string                     `json:"created_at,omitempty"`
+	Draft          bool                       `json:"draft,omitempty"`
+	Files          []GitHubRepositoryPullFile `json:"files,omitempty"`
+	Head           string                     `json:"head,omitempty"`
+	HeadRepository string                     `json:"head_repository,omitempty"`
+	Labels         []string                   `json:"labels,omitempty"`
+	Number         int                        `json:"number,omitempty"`
+	Title          string                     `json:"title,omitempty"`
+	UpdatedAt      string                     `json:"updated_at,omitempty"`
+	URL            string                     `json:"url,omitempty"`
+}
+
 // GitHubRepositoryRecord One github.repository record: GitHub repository.
 type GitHubRepositoryRecord struct {
 	Access            GitHubRepositoryRepositoryAccess `json:"access,omitempty"`
@@ -1788,7 +1827,7 @@ type GitHubRepositoryRecord struct {
 	Pins              []map[string]any                 `json:"pins,omitempty"`
 	Private           bool                             `json:"private,omitempty"`
 	PullRequestChecks []string                         `json:"pull_request_checks,omitempty"`
-	PullRequests      []map[string]any                 `json:"pull_requests,omitempty"`
+	PullRequests      []GitHubRepositoryPullRequest    `json:"pull_requests,omitempty"`
 	PushedAt          string                           `json:"pushed_at,omitempty"`
 	ReadAt            string                           `json:"read_at,omitempty"`
 	Release           map[string]any                   `json:"release,omitempty"`
@@ -1796,6 +1835,7 @@ type GitHubRepositoryRecord struct {
 	Rules             map[string]any                   `json:"rules,omitempty"`
 	Runners           []map[string]any                 `json:"runners,omitempty"`
 	Runs              []map[string]any                 `json:"runs,omitempty"`
+	Updater           string                           `json:"updater,omitempty"`
 	URL               string                           `json:"url,omitempty"`
 	Variables         []string                         `json:"variables,omitempty"`
 	Waiting           []map[string]any                 `json:"waiting,omitempty"`

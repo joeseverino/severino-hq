@@ -316,10 +316,11 @@ def derivation[**P, T](
     """
 
     def declare(function: Callable[P, T]) -> Callable[P, T]:
-        if name in DERIVATIONS:
-            raise ImproperlyConfigured(f"Derivation {name!r} is declared twice.")
         declared = Derivation(name, tuple(sorted(set(reads))), function, vary, learns, ahead)
-        DERIVATIONS[name] = declared
+        # Checked and claimed in one step, so of two declaring one name at once
+        # the second is refused, never left answering with a declaration nobody reads.
+        if DERIVATIONS.setdefault(name, declared) is not declared:
+            raise ImproperlyConfigured(f"Derivation {name!r} is declared twice.")
 
         @wraps(function)
         def answer(*args: P.args, **kwargs: P.kwargs) -> T:

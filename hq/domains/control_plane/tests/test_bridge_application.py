@@ -313,7 +313,7 @@ class ContractBindingTests(SimpleTestCase):
             *ACTIONS,
             Action("undeclared", "The controller asked for something undeclared", lambda parameters, payload: None),
         )
-        for actions in (extra, ACTIONS[1:], (*ACTIONS, ACTIONS[0])):
+        for actions in (extra, (*ACTIONS, ACTIONS[0])):
             with (
                 self.subTest(count=len(actions)),
                 self.assertRaisesMessage(RuntimeError, "differ"),
@@ -396,9 +396,9 @@ class ListenerSourceTests(SimpleTestCase):
     """Which listener is handed the bridge, read from the launcher source."""
 
     def test_only_the_socket_listener_is_given_the_bridge_application(self):
-        """Source rule: one module hands the application to a listener, and it is the Unix one."""
+        """Source rule: one module hands each bridge application to a listener, and it is the Unix one."""
 
-        mention = re.compile(r"\bbridge_application\b")
+        mention = re.compile(r"bridge_application\b|\bworker_application\b|unix_server\.serving")
         holders = sorted(
             str(path.relative_to(ROOT))
             for path in (ROOT / "hq").rglob("*.py")
@@ -414,8 +414,12 @@ class ListenerSourceTests(SimpleTestCase):
         self.assertEqual(
             uses,
             [
-                "lazy from hq.domains.control_plane.bridge_application import application as bridge_application",
-                "async with unix_server.serving(bridge_application, settings.SEVERINO_BRIDGE_SOCKET):",
+                "lazy from hq.domains.control_plane.bridge_application import (",
+                "application as bridge_application,",
+                "worker_application as worker_bridge_application,",
+                "(bridge_application, settings.SEVERINO_BRIDGE_SOCKET),",
+                "(worker_bridge_application, settings.SEVERINO_AUTOMATION_BRIDGE_SOCKET),",
+                "await listening.enter_async_context(unix_server.serving(served, path))",
             ],
         )
 

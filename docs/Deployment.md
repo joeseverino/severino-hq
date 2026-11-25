@@ -220,7 +220,7 @@ hand-off for `severino-hq-renovate.service`. A host adds its own grants to
 The automation worker's procedures come from the repository the host's
 `automation` entry names, an Ansible project at its root, and, for a
 private one, the grant whose token fetches it, which must read that
-repository's contents:
+repository's contents and may do nothing but read:
 
 ```json
 "grants": [{"name": "automation-projects", "repositories": ["example/playbooks"], "permissions": {"contents": "read", "metadata": "read"}, "path": "/run/severino-hq-automation/github_token"}],
@@ -290,7 +290,7 @@ The security properties:
 | `/run/severino-hq-runs/` | root's, mode 0711: one empty file per hq-host run in flight that starts containers (a pass, a deploy, a worker, a dependency run), named by the nonce its containers carry as `severino-hq.run`, mounted read-only into a pass, which leaves those containers out of what it finds (`controller/host/runs.go`) | `deploy/tmpfiles/severino-hq.conf`, each such run |
 | `/run/severino-hq-renovate/` | root-only: a validated dependency handoff waiting to run, and each run's environment files, removed when it ends | `hq-host controller`, `hq-host renovate` |
 | `/run/severino-hq-secrets/automation.*/` | one automation worker's lent connections, identities and token, the web account's, removed when it ends | `hq-host automation` |
-| `/var/lib/severino-hq/automation/` | the automation worker's journal, the web account's alone, mode 0700 | `deploy/tmpfiles/severino-hq.conf`, the worker |
+| `/var/lib/severino-hq/automation/` | the automation worker's journal, the web account's alone, mode 0700, a `noexec` mount of its own | `deploy/tmpfiles/severino-hq.conf`, `var-lib-severino\x2dhq-automation.mount`, the worker |
 | `/var/lib/severino-hq/renovate/dependency-run.json` | the last dependency run's outcome, given read-only to the next controller pass | `hq-host renovate` |
 | `/opt/apps/severino-hq/secrets/` | the renderer's lock, the controller's ACME state, and in `seal/` the controller's sealing seed, its account's, mode 0400, lent to a pass read-only ([Secrets](Secrets.md#sealing-to-the-controller)) | `hq-secrets`, the controller, `hq-host controller` and `hq-host release` |
 | `/var/lib/severino-hq/seal/public.key` | root's copy of the sealing key's public half, bound read-only into the web container | `hq-host controller` and `hq-host release` |
@@ -307,7 +307,7 @@ from the tree, and every unit and the deploy call it.
 | `run-web` | runs the web container (`severino-hq-web.service`); waits for the rendered environment, notifies systemd once HQ is healthy |
 | `controller [--apply \| --glance]` | one controller pass: plan, claim and apply queued work, or (`--glance`) read only the dashboard panels HQ is waiting on. A glance's container is given the Portainer and SSH connections from the connections document and their identities, the host's roots, the bridge and the registry of runs, and nothing else a controller pass is given. It gets no certificate state, unit socket, host reading or out directory. A pass is told which of the host's grants are due, and an applying pass may leave a hand-off for each, and for a due dependency run, in its own out directory. Root opens each one without following links and validates it against its grant (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key). It moves a dependency run's hand-off to `/run/severino-hq-renovate/` and writes a host grant's token to the grant's path ([Tokens on the host](#tokens-on-the-host)), or logs and drops the hand-off |
 | `renovate` | runs the spooled handoff: Renovate once per owner, in a container with no capability, a read-only root, no host path but `deploy/renovate/config.json`, and the token in an environment file; records each owner's outcome for the next pass. The container reaches public IPv4 addresses and nothing else: not the host, the LAN, the tailnet, link-local, multicast or another container. It runs on its own bridge, `severino-hq-renovate` (10.231.0.0/24, interface `hq-renovate0`, no IPv6), made if absent and refused unless it is exactly that, with public resolvers. Before each run root loads the nftables table `inet severino_hq_renovate` (`controller/host/egress.go`) in one transaction. The table drops everything the bridge sends to a private, reserved or IPv6 destination and everything it sends to the host itself. A run that cannot load the table never starts |
-| `automation` | runs the automation worker until no run is queued, when `host.json` has an `automation` entry and the release pins the worker's image (`AutomationImage` in `controller/host/layout.go`), and otherwise says which is missing and exits 0. It runs only the image the deploy verified and pulled, with `--pull never`, and refuses when the host does not hold it. It copies into a run directory on the renderer's tmpfs the runner-role SSH connections whose host is an IPv4 address, with their identities and pinned host keys. The grant's token goes beside them, kept current while the worker runs. It names each runner connection it leaves out. Root loads the egress table `inet severino_hq_automation` (`controller/host/egress.go`) before the container starts, and removes the container at `AutomationBound`. What the container is given, and why: [The automation worker on the host](Architecture.md#the-automation-worker-on-the-host) |
+| `automation` | runs the automation worker until no run is queued, when `host.json` has an `automation` entry and the release pins the worker's image (`AutomationImage` in `controller/host/layout.go`), and otherwise says which is missing and exits 0. It runs only the image the deploy verified and pulled, with `--pull never`, and refuses when the host does not hold it. It copies into a run directory on the renderer's tmpfs the runner-role SSH connections whose host is an IPv4 address, with their identities and pinned host keys. The grant's token goes beside them, kept current while the worker runs. It names each runner connection it leaves out. It lends the worker its own bridge socket's volume, never the controller's, and refuses to start it unless the journal is a `noexec` mount. Root loads the egress table `inet severino_hq_automation` (`controller/host/egress.go`) before the container starts, and removes the container at `AutomationBound`. What the container is given, and why: [The automation worker on the host](Architecture.md#the-automation-worker-on-the-host) |
 | `deploy IMAGE` | verifies the signature, refuses an image that drops an extension production runs, pulls, and hands over to the image's own `hq-host release` |
 | `release IMAGE` | verifies the worker image the release pins against the compose workflow's identity and pulls it, before anything live is held. A pin that is not the source's signed runner image refuses the release. Then it syncs the tree, installs the web unit, restarts HQ on the image and runs `install`. Any failure rolls back, the database too when the release migrated it. Once the release stands it runs `severino-hq-script-drift.service`, so the release is verified at once. Drift fails the deploy without rolling it back, since what verify finds is the host's, and `journalctl -u severino-hq-script-drift.service` there names it |
 | `install` | installs every shipped unit, renders secrets, preflights the controller and the content index, enables every timer and path |
@@ -337,6 +337,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
 | `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a Refresh queued), at `hq-host bootstrap` on a host with an `automation` entry, else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
+| `var-lib-severino\x2dhq-automation.mount` | the worker's journal over itself, `noexec`, `nosuid`, `nodev`, when the worker's unit starts (`RequiresMountsFor`) |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
 | `severino-hq-unit.socket` / `severino-hq-unit@.service` | `hq-host unit --serve`, one instance per connection from the controller |
@@ -408,9 +409,11 @@ nothing. `hq-host deploy`:
    identity).
 2. Reads the extensions the running release carries, from the lock in its
    image (pulled again by digest if the host no longer has it).
-3. Prunes unused images, checks free space, pulls, and refuses the image if it
-   drops an extension the running release carries that its composition does
-   not declare retired ([Extensions](Plugins.md#composition)). The public log
+3. Prunes every image no container uses except the running release's image
+   and the automation worker image its tree pins, so a deploy that fails
+   later leaves both to run on. Then it checks free space, pulls, and refuses
+   the image if it drops an extension the running release carries that its
+   composition does not declare retired ([Extensions](Plugins.md#composition)). The public log
    says how many; `/var/log/severino-hq/extensions.log` says which.
 4. Copies the image's own `hq-host` out, so every step after the pull is the
    new release's code.
@@ -470,10 +473,13 @@ is the run perf's closing line names, wherever perf ran.
 ### The bridge
 
 The controller reaches HQ over a Unix socket the web container serves
-(`/run/hq-bridge/bridge.sock`, in the `severino_bridge` volume). The socket
+(`/run/hq-bridge/bridge.sock`, in the `severino_bridge` volume), and the
+automation worker over one of its own
+(`/run/hq-automation-bridge/bridge.sock`, in the `severino_automation_bridge`
+volume), which serves its claim, renewal and report alone. Each socket
 exists once the web process starts and is gone while the container is
-replaced; a pass in that gap fails with the reason and the next one runs. The
-volume takes its owner and mode from the image, and HQ refuses to start if the
+replaced; a pass in that gap fails with the reason and the next one runs. Each
+volume takes its owner and mode from the image, and HQ refuses to start if a
 directory is not its account's alone. The design is in
 [Architecture](Architecture.md#infrastructure-control-plane).
 
@@ -549,6 +555,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_HQ_PLUGIN_POLICY_SHA256` | platform | the digest of the admission policy the lock was made under |
 | `SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION` | platform | whether extensions must be admitted; on unless `DJANGO_DEBUG` when unset |
 | `SEVERINO_BRIDGE_SOCKET` | platform | the Unix socket the controller bridge is served on; unset serves none |
+| `SEVERINO_AUTOMATION_BRIDGE_SOCKET` | platform | the Unix socket the automation worker's bridge is served on, its claim, renewal and report alone; unset serves none |
 | `SEVERINO_TAILSCALED_SOCKET` | platform | tailscaled's local API socket, which places each agent call on the tailnet device that sent it. Set by `hq-host run-web` to `/var/run/tailscale/tailscaled.sock` on a host where tailscaled is enabled, which binds `/var/run/tailscale` read-only at the same path; a socket missing or unanswering there makes a call wait (503). Empty, the default, is a deployment with no tailnet: a call is placed on no device and the client is the finest unit |
 | `SEVERINO_CONTROLLER_DOORBELL` | platform | the file HQ touches when it queues controller work |
 | `SEVERINO_SCHEMA_SNAPSHOT` | platform | where boot keeps a copy of the database before migrating it |

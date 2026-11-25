@@ -38,7 +38,11 @@ class ArrivalTests(TestCase):
     def test_a_claim_of_scans_and_runs_notes_the_worker_and_not_the_controller(self):
         from ..cadence import automation_standing, controller_standing
 
-        self.assertIsNone(bridge_client.call("claim", controller_id="example-worker", capability=RUNS)["operation"])
+        self.assertIsNone(
+            bridge_client.call("claim", app=bridge_client.worker(), controller_id="example-worker", capability=RUNS)[
+                "operation"
+            ]
+        )
 
         self.assertIsNotNone(automation_standing().seen_at)
         self.assertFalse(controller_standing().known)

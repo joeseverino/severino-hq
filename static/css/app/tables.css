@@ -417,13 +417,13 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* What a row shows only on its open line is never drawn on the row. */
 .data-table [data-kind] :is(.row-more, .line-rest) { display: none; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row can open, so names share one edge. */
-.data-table > tbody > tr > .row-gutter { position: relative; --row-line: 1lh; }
+.data-table > tbody > tr > .row-gutter { position: relative; --row-first-line: calc(var(--row-content-start, var(--row-pad)) + 0.5lh); }
 /* A table says a row of it can open (`data-rows-can-open`, table_layout), since a row's open line is drawn only as it opens unless it holds a block the server moved there. */
 .data-table:is([data-rows-can-open], :has(> tbody > tr.row-detail, .row-fold, .cell-clamp, .row-gist)) { --row-inset: var(--row-gutter); }
 .data-table > * > tr > .row-gutter { padding-inline-start: var(--row-inset, var(--cell-pad)); }
-/* The toggle is centered on its cell's first line: the line's height is taken where the cell sets its words (`--row-line`, registered so it computes there), and the toggle's own half height is taken back off. */
-@property --row-line { syntax: "<length>"; inherits: true; initial-value: 0px; }
-.data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--row-edge); inset-block-start: calc(var(--row-content-start, var(--row-pad)) + var(--row-line) / 2); translate: 0 -50%; }
+/* The toggle is centered on its cell's first line, whose middle (`--row-first-line`) is reckoned where the cell sets its words: registered, it computes there, so every length in it (a control's rise, a line) is the cell's, never the toggle's own smaller line. */
+@property --row-first-line { syntax: "<length>"; inherits: true; initial-value: 0px; }
+.data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--row-edge); inset-block-start: var(--row-first-line); translate: 0 -50%; }
 /* A column of a row's controls (`actions-col`, a public class) holds them on one line. */
 .actions-col { white-space: nowrap; }
 /* The line the server draws under a row (`table_tags._detail_row`), shown while the row is open: what the row moves there, then an entry for each cell that holds something back, under its column's name. Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or on the open line (`open`). */

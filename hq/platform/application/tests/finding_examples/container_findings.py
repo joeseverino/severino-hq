@@ -10,7 +10,7 @@ from ...finding_steps import Do
 from ...machines import Machine
 from ...tone import Tone
 from ..test_app_update_approval import applies
-from ..test_app_updates import arranged, moved, pull
+from ..test_app_updates import UPDATER, arranged, moved, pull
 from ..test_container_standard import KEPT, runtime
 from ..test_containers import HIGH, built, estate, exposed, inventory, running
 from ..test_github_estate import store
@@ -92,7 +92,7 @@ APPROVE, APPLY, OPEN_PR = "app_update.approve", "app_update.apply", "app_update.
 KUMA = "kuma has an update, 1 to 2"
 # What the pull request and the default branch pin: one release past what runs.
 MOVED = "app has an update, v1.2.0 to v1.2.1"
-REPOSITORY = {"compose": ["compose/app/compose.yaml"]}
+REPOSITORY = {"compose": ["compose/app/compose.yaml"], "updater": UPDATER}
 # The digest the new pin names, as its publisher attached nothing to it.
 UNLISTED = {"digest": f"ghcr.io/example/app@{TARGET}", "image": "ghcr.io/example/app", "packages": [], "sbom": ""}
 
@@ -149,7 +149,7 @@ def local(*pulls) -> Example:
     """thumb, built on example-box from example/alpha's Compose files, with ``pulls`` open."""
 
     def given():
-        built(pull_requests=list(pulls))
+        built(updater=UPDATER, pull_requests=list(pulls))
         return applied_on(BOX)
 
     return Example(given=given, raises=(*((LOCAL,) if pulls else ()),))

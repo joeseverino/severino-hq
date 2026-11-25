@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass, fields, replace
@@ -397,6 +398,8 @@ class Composition:
 
 
 _COMPOSED: list[Composition] = []
+# Held while the set is admitted, so threads asking at once compose it once.
+_COMPOSING = threading.Lock()
 
 
 def composition() -> Composition:
@@ -404,12 +407,15 @@ def composition() -> Composition:
 
     if _COMPOSED and _COMPOSED[0].read_from == _read_from():
         return _COMPOSED[0]
-    plugins = _admitted()
-    # Read after admitting, which imports what the references name.
-    _COMPOSED[:] = [Composition(_read_from(), plugins)]
-    # A question asked of the composition that was is not asked of this one.
-    forget()
-    return _COMPOSED[0]
+    with _COMPOSING:
+        if _COMPOSED and _COMPOSED[0].read_from == _read_from():
+            return _COMPOSED[0]
+        plugins = _admitted()
+        # Read after admitting, which imports what the references name.
+        _COMPOSED[:] = [Composition(_read_from(), plugins)]
+        # A question asked of the composition that was is not asked of this one.
+        forget()
+        return _COMPOSED[0]
 
 
 def installed_plugins() -> tuple[PluginManifest, ...]:
