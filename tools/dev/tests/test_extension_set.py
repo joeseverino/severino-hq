@@ -191,6 +191,20 @@ class CoordinatedBranchTests(SimpleTestCase):
         self.assertEqual(picked.sources, (str(self.extensions / "packages/alpha/src"),))
         self.assertEqual(picked.plugins, ("example_alpha.plugin:plugin",))
 
+    def test_a_pushed_branch_composes_the_branch_of_its_own_name_or_the_default(self):
+        # A pull request's head made from pass/x, so pass/x is the host branch it is nearest.
+        self.git(self.host, "switch", "-q", "-c", "fix/y", "pass/x")
+        self.git(self.host, "remote", "add", "origin", str(self.work / "remote"))
+        self.git(self.host, "update-ref", "refs/remotes/origin/fix/y", "HEAD")
+        self.git(self.host, "branch", "-q", "--set-upstream-to=origin/fix/y")
+        picked = self.picked()
+        self.assertNotIn("pass/x", picked.said)
+        self.assertFalse(any(source.startswith(str(self.coordinated)) for source in picked.sources))
+        self.git(self.extensions, "branch", "fix/y", "pass/x")
+        picked = self.picked()
+        self.assertIn("fix/y", picked.said)
+        self.assertEqual(picked.at, ((str(self.extensions), self.git(self.extensions, "rev-parse", "fix/y")),))
+
     def test_a_tree_landing_on_the_default_branch_or_detached_keeps_the_named_set(self):
         for switch in (("-c", "from-main", "main"), ("--detach", "pass/x")):
             with self.subTest(switch=switch):

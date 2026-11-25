@@ -36,9 +36,10 @@ type Checker struct {
 	// RootUID owns every program a sudo rule names, and the directories
 	// above it.
 	RootUID uint32
-	// Release and Main are the unit directories this release and main ship:
-	// a unit both ship is already installed, if the host is current.
-	Release, Main string
+	// Release is the unit directory this release ships. A unit it shares
+	// with the release installed in Lib is already installed; one new to it
+	// is the deploy's to install.
+	Release string
 	// FreeBytes is the free space a deploy needs on /, as Free reads it.
 	FreeBytes uint64
 	Free      func(path string) (uint64, error)
@@ -215,13 +216,15 @@ func (c *Checker) rootsAlone(relative, runs string) {
 	}
 }
 
-// units: every unit the release expects to find already installed.
+// units: every unit the release expects to find already installed, which is
+// each one the host's installed release ships too. Main is no stand-in for
+// that, since a merge whose deploy failed puts on main a unit no host has.
 func (c *Checker) units() {
 	release, err := Shipped(c.Release)
 	if err == nil {
-		var main []string
-		if main, err = Shipped(c.Main); err == nil {
-			release = slices.DeleteFunc(release, func(unit string) bool { return !slices.Contains(main, unit) })
+		var installed []string
+		if installed, err = Shipped(filepath.Join(c.Lib, "deploy", "systemd")); err == nil {
+			release = slices.DeleteFunc(release, func(unit string) bool { return !slices.Contains(installed, unit) })
 		}
 	}
 	if err != nil {

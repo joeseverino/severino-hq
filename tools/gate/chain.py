@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from hq.platform.core.tests.task import RefError, git
+from tools.gate.landing import landing
 from tools.gate.verdict import TREE_LINE
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -65,33 +66,14 @@ def merge_base(base: str | None) -> str:
     quietly test a different change.
     """
 
-    for candidate in (base,) if base else (*landing(), *RELEASED):
+    lands = landing(ROOT)
+    for candidate in (base,) if base else (*([lands.ref] if lands else []), *RELEASED):
         try:
             return git("merge-base", "HEAD", candidate)[0]
         except RefError, IndexError:
             if base:
                 sys.exit(f"fast: {base} has no merge base with HEAD; pass a ref that exists")
     sys.exit("fast: no base found; pass one (mise run fast <ref>)")
-
-
-def landing(root: Path = ROOT) -> list[str]:
-    """The branch HEAD lands on: its own branch's upstream, or else the local
-    branch tracking a remote one whose history HEAD left most recently. A
-    worktree's branch tracks nothing and is made from the branch it lands on,
-    which may be far ahead of main, so main would select most of the suite."""
-
-    if upstream := answered("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}", root=root):
-        return upstream
-    current = git("branch", "--show-current", root=root)
-    own = f"refs/heads/{current[0]}" if current else ""
-    listed = git("for-each-ref", "--format=%(refname) %(upstream)", "refs/heads", root=root)
-    tracking = [ref for ref, _, upstream in (line.partition(" ") for line in listed) if upstream and ref != own]
-    left = {
-        ref: int(git("rev-list", "--count", f"{fork[0]}..HEAD", root=root)[0])
-        for ref in tracking
-        if (fork := answered("merge-base", "HEAD", ref, root=root))
-    }
-    return sorted(left, key=left.__getitem__)[:1]
 
 
 def answered(*args: str, root: Path = ROOT) -> list[str]:

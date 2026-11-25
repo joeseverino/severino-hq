@@ -20,6 +20,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tools.gate.landing import git, landing
 from tools.gate.tree import working_tree
 from tools.pipeline.plugin_identity import PLUGINS, identity, manifest_file, plugin_api_version, required_api, spoken
 
@@ -114,15 +115,10 @@ class Pick:
         }
 
 
-def _git(top: Path, *args: str) -> str | None:
-    done = subprocess.run(["git", "-C", str(top), *args], capture_output=True, text=True, check=False)
-    return done.stdout if done.returncode == 0 else None
-
-
 def _required_at(top: Path, commit: str, manifest: str) -> int | None:
     """The API the manifest at ``manifest`` in ``top`` requires at ``commit``, or None where it holds none."""
 
-    if (source := _git(top, "show", f"{commit}:{manifest}")) is None:
+    if (source := git(top, "show", f"{commit}:{manifest}")) is None:
         return None
     try:
         return required_api(source)
@@ -140,22 +136,22 @@ def moved_past(repository: Path, commit: str) -> int | None:
     included). A tree's ``HEAD`` is read from the shared history it stands on, the newest of its
     commits on a branch or remote but its own branch, past which the rest are its own work."""
 
-    sha = (_git(repository, "rev-parse", "--verify", f"{commit}^{{commit}}") or "").strip()
+    sha = (git(repository, "rev-parse", "--verify", f"{commit}^{{commit}}") or "").strip()
     if not sha:
         return None
     unshared: list[str] = []
-    line = "HEAD" if _git(repository, "merge-base", "--is-ancestor", sha, "HEAD") is not None else "--all"
+    line = "HEAD" if git(repository, "merge-base", "--is-ancestor", sha, "HEAD") is not None else "--all"
     if commit == "HEAD":
         line = "--all"
-        own = (_git(repository, "symbolic-ref", "-q", "--short", "HEAD") or "").strip()
+        own = (git(repository, "symbolic-ref", "-q", "--short", "HEAD") or "").strip()
         others = [*([f"--exclude={own}"] if own else []), "--branches", "--remotes"]
-        unshared = (_git(repository, "rev-list", "--topo-order", sha, "--not", *others) or "").split()
+        unshared = (git(repository, "rev-list", "--topo-order", sha, "--not", *others) or "").split()
         if unshared:
-            parents = (_git(repository, "rev-list", "--parents", "-n", "1", unshared[-1]) or "").split()[1:2]
+            parents = (git(repository, "rev-list", "--parents", "-n", "1", unshared[-1]) or "").split()[1:2]
             if not parents:
                 return None
             sha = parents[0]
-    children = _git(repository, "log", "--ancestry-path", "--format=%H %P %ct", line, f"^{sha}") or ""
+    children = git(repository, "log", "--ancestry-path", "--format=%H %P %ct", line, f"^{sha}") or ""
     times = [
         int(fields[-1])
         for fields in map(str.split, children.splitlines())
@@ -172,15 +168,15 @@ def matching_commit(top: Path, manifests: list[str], api: int, before: int | Non
     commits worth asking are the newest and, for each such change, the commit before it and the change."""
 
     bounded = () if before is None else (f"--before={before - 1}",)
-    if not (newest := (_git(top, "rev-list", "-1", *bounded, "HEAD") or "").strip()):
+    if not (newest := (git(top, "rev-list", "-1", *bounded, "HEAD") or "").strip()):
         return None
-    changes = _git(top, "log", "--format=%H", "-G", "api_version", newest, "--", *manifests)
+    changes = git(top, "log", "--format=%H", "-G", "api_version", newest, "--", *manifests)
     if changes is None:
         return None
     asked = [newest, *(each for change in changes.split() for each in (f"{change}^", change))]
     for commit in dict.fromkeys(asked):
         if all(_required_at(top, commit, manifest) == api for manifest in manifests):
-            return (_git(top, "rev-parse", "--verify", f"{commit}^{{commit}}") or "").strip() or None
+            return (git(top, "rev-parse", "--verify", f"{commit}^{{commit}}") or "").strip() or None
     return None
 
 
@@ -215,49 +211,21 @@ def branches(top: Path) -> dict[str, Path | None]:
 
     trees: dict[str, Path] = {}
     tree = None
-    for line in (_git(top, "worktree", "list", "--porcelain") or "").splitlines():
+    for line in (git(top, "worktree", "list", "--porcelain") or "").splitlines():
         if line.startswith("worktree "):
             tree = Path(line.removeprefix("worktree "))
         elif line.startswith("branch refs/heads/") and tree is not None and tree.is_dir():
             trees[line.removeprefix("branch refs/heads/")] = tree
-    names = (_git(top, "for-each-ref", "--format=%(refname)", "refs/heads") or "").split()
+    names = (git(top, "for-each-ref", "--format=%(refname)", "refs/heads") or "").split()
     return {name.removeprefix("refs/heads/"): trees.get(name.removeprefix("refs/heads/")) for name in names}
 
 
 def default_branch(top: Path) -> str:
     """The branch ``top``'s repository merges into: its remote's HEAD, else the one git names a new repository's."""
 
-    if head := (_git(top, "symbolic-ref", "--short", "refs/remotes/origin/HEAD") or "").strip():
+    if head := (git(top, "symbolic-ref", "--short", "refs/remotes/origin/HEAD") or "").strip():
         return head.split("/", 1)[-1]
-    return (_git(top, "config", "--get", "init.defaultBranch") or "").strip() or "master"
-
-
-def landing(host: Path, carried: set[str], default: str) -> str | None:
-    """The branch of ``carried`` the host tree at ``host`` lands on, or None where it is ``default`` or unsure.
-
-    Its own branch where ``carried`` holds it, else the host branch it is nearest (fewest commits of its own
-    off it, then fewest of the branch's it lacks), as a worktree made from that branch is. A tie with
-    ``default``, or between two, is no landing: CI composes a branch only for a pull request into the default.
-    A detached tree lands nowhere: it is a gate's copy of one commit (test --at, the second machine's), whose
-    set was picked where it was sent from."""
-
-    if not (own := (_git(host, "symbolic-ref", "-q", "--short", "HEAD") or "").strip()):
-        return None
-    if own in carried:
-        return None if own == default else own
-    hosts = {
-        name.removeprefix("refs/heads/")
-        for name in (_git(host, "for-each-ref", "--format=%(refname)", "refs/heads") or "").split()
-    }
-    apart: dict[str, tuple[int, ...]] = {}
-    for name in sorted((carried | {default}) & hosts):
-        counts = (_git(host, "rev-list", "--left-right", "--count", f"HEAD...refs/heads/{name}") or "").split()
-        if len(counts) == 2:
-            apart[name] = tuple(map(int, counts))
-    if not apart:
-        return None
-    nearest = [name for name, distance in apart.items() if distance == min(apart.values())]
-    return nearest[0] if len(nearest) == 1 and nearest[0] != default else None
+    return (git(top, "config", "--get", "init.defaultBranch") or "").strip() or "master"
 
 
 @dataclass(frozen=True)
@@ -275,7 +243,7 @@ def _package(source: str) -> _Package | None:
     root = Path(source).resolve().parent
     if not (root / "pyproject.toml").is_file() or not manifest_file(root).is_file():
         return None
-    top = _git(root, "rev-parse", "--show-toplevel")
+    top = git(root, "rev-parse", "--show-toplevel")
     return _Package(source, root, Path(top.strip()) if top else root, required_api(manifest_file(root).read_text()))
 
 
@@ -302,16 +270,21 @@ def _coordinated(host: Path, top: Path, mine: list[_Package], api: int) -> _Coor
     (tools/pipeline/coordinated-branches.sh); None where the repository carries no such branch, or where
     ``top`` is a linked worktree, which whoever named it chose over the main checkout's default."""
 
-    common = (_git(top, "rev-parse", "--path-format=absolute", "--git-common-dir") or "").strip()
+    common = (git(top, "rev-parse", "--path-format=absolute", "--git-common-dir") or "").strip()
     if common and Path(common).parent.resolve() != top.resolve():
         return None
     known = branches(top)
-    if (branch := landing(host, set(known), default_branch(top))) is None:
+    # The default is among them, so a tree nearest it, or pushed under a name the repository lacks,
+    # composes the set as named, as CI composes the default's.
+    default = default_branch(top)
+    lands = landing(host, {*known, default})
+    if lands is None or lands.branch == default or lands.branch not in known:
         return None
+    branch = lands.branch
     relative = [package.root.relative_to(top).as_posix() for package in mine]
     named = f"branch {branch} of {Path(common).parent.name if common else top.name}"
     if (tree := known[branch]) is None:
-        commit = (_git(top, "rev-parse", "--verify", f"refs/heads/{branch}^{{commit}}") or "").strip()
+        commit = (git(top, "rev-parse", "--verify", f"refs/heads/{branch}^{{commit}}") or "").strip()
         base = snapshot(top, commit, relative)
         whence = f"{named} at {commit[:12]}"
     else:
@@ -436,7 +409,7 @@ def at_commit(commit: str, environ: Mapping[str, str] = os.environ) -> Pick:
     the host added since at the same plugin API."""
 
     def speaks() -> int:
-        if (source := _git(ROOT, "show", f"{commit}:{PLUGINS.as_posix()}")) is None:
+        if (source := git(ROOT, "show", f"{commit}:{PLUGINS.as_posix()}")) is None:
             raise Unspoken(f"No extension composed: {commit[:12]} has no {PLUGINS}, so it names no plugin API.")
         return int(spoken(f"{commit[:12]}:{PLUGINS}", source))
 

@@ -368,9 +368,10 @@ call allow list. A unit that needs more widens it in its own
 | secrets | IPv4 loopback for Connect (`CAP_CHOWN`, `CAP_FOWNER`, `CAP_DAC_OVERRIDE`) |
 | script-drift | sudo-rs, with no-new-privileges off |
 
-`lint:units` scores each service with `systemd-analyze security --offline`
-over this directory and fails one above the bar `mise-tasks/lint/units` gives
-it. An install and a deploy put every drop-in in place with the first unit
+`lint:units` runs `systemd-analyze verify` over the units an install verifies
+(`hq-host verified`), beside the runner's own systemd units, and scores each
+service with `systemd-analyze security --offline` over this directory,
+failing one above the bar `mise-tasks/lint/units` gives it. An install and a deploy put every drop-in in place with the first unit
 they install.
 
 ### Reading one dashboard refresh

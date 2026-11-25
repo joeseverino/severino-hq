@@ -1,7 +1,10 @@
 [Unit]
 Description=Severino HQ automation journal
 Documentation=https://github.com/joeseverino/severino-hq/blob/main/docs/Architecture.md#the-automation-worker-on-the-host
-After=systemd-tmpfiles-setup.service
+# No order after systemd-tmpfiles-setup.service: a local mount comes before
+# local-fs.target, which that service follows, so the order is a cycle that
+# fails the unit's start. systemd makes a missing mount point itself, and the
+# tmpfiles rule sets the owner and mode on the directory under the mount.
 
 [Mount]
 # The journal directory over itself, so a mount of it is noexec: Docker's bind

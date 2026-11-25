@@ -30,13 +30,7 @@ func (m *Machine) Install(ctx context.Context, connections func() error) (err er
 	if err := m.Verifier(ctx); err != nil {
 		return err
 	}
-	var units []string
-	for _, name := range shipped {
-		if !strings.Contains(name, "/") {
-			units = append(units, filepath.Join(dir, name))
-		}
-	}
-	if err := m.private(ctx, "Unit verification", "unit-verify", "systemd-analyze", append([]string{"verify"}, units...)...); err != nil {
+	if err := m.private(ctx, "Unit verification", "unit-verify", "systemd-analyze", append([]string{"verify"}, Verified(dir, shipped)...)...); err != nil {
 		return err
 	}
 

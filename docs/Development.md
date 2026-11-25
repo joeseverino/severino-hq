@@ -345,10 +345,14 @@ base is the nearest commit on HEAD's first-parent history (as far back as
 `PASSED_REACH` in `tools/gate/chain.py`) whose tree passed fast (the record
 below), so the change is only what came after a proven tree. Without one,
 it is the merge base with the branch HEAD lands on, then `origin/main`,
-`main`. The branch HEAD lands on is its own branch's
-upstream, or else the local branch tracking a remote one whose history HEAD
-left most recently: a worktree's branch tracks nothing and is made from the
-branch it lands on. The line that counts the selection names the base and
+`main`. The branch a tree lands on is one answer, `landing` in
+`tools/gate/landing.py`, which the composed set reads too. A branch with an
+upstream is a pull request's head, so it lands as itself, as CI reads it.
+One without, as a worktree's branch is, lands on its own name where that is
+among the branches asked about, else on the nearest of them (fewest commits
+of its own off it, then fewest it lacks), the one a worktree was made from; a
+tie or a detached tree lands nowhere. Here the branches asked about are those
+tracking a remote one. The line that counts the selection names the base and
 why it is the one. `--list` prints the selection.
 
 Before anything judges the tree, each selected quick gate whose tool fixes
@@ -684,10 +688,10 @@ Every step that composes the set (the composed suite, the dev servers and
 `image:compose`, `audit:mcp`, `audit:memory`, `audit:registry --composed` and
 `wire-pocket-id`) loads the set as one host tree can load it, picked in one
 place, `pick` in `tools/dev/extension_set.py`. A file task reaches it through
-`tools/lib/extension-set.sh`. A host tree lands on its own branch, or else on
-the host branch it is nearest (the one a worktree was made from). Where a
-named checkout's repository carries a branch of that name, other than its
-default branch, that branch is composed, as CI composes a coordinated change:
+`tools/lib/extension-set.sh`. A host tree lands where `landing` says (What
+`fast` runs), asked about the branches a named checkout's repository carries
+and its default. Where it lands on one of them other than the default, that
+branch is composed, as CI composes a coordinated change:
 the worktree checked out on it as it stands, else the branch's commit,
 unpacked under `var/extensions/`. So a worktree of a host branch composes the
 extensions' branch of the same name whatever `mise.local.toml` names. Each
