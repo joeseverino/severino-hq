@@ -94,11 +94,8 @@ pre code { background: transparent; padding: 0; color: inherit; }
    table lays out its own identifiers, a stack list's items included, which
    are the cell's own lines (figures.css); code in a sentence in a cell (a `p`
    or `li`, or a part of free text, `data-cell` data or prose) is laid out as
-   here, and so is a hyphenated part of words in a cell, a link's included,
-   but in the row's own name, whose words break where its column lacks room,
-   and in a chip or a gist, each cut on its one line (cuts.css). */
+   here. */
 :is(code, .token, .whole):not(pre *, td *, th *),
-:is(td, th) .whole:not(pre *, code *, [data-cell=name] *, .row-gist *),
 :is(:is(td, th) :is(p, li:not(:is(.stack-list, .code-list) > li)), [data-cell~=data], [data-cell~=prose]) :is(code, code .token, code .whole):not(pre *) {
   display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
   /* As wide as what it says: a sized item is not stretched to its column,
@@ -116,7 +113,7 @@ pre code { background: transparent; padding: 0; color: inherit; }
    WebKit leaves an inline chip's padding out of the width its column asks
    for, so the name would run into the cell's padding. */
 th[scope=row] > code { display: inline-block; max-width: 100%; }
-:is(td, th) [data-entity] > .token { display: contents; }
+:is(td, th) [data-entity] > .token, :is(td, th) [data-entity] > .token > .whole { display: contents; }
 /* Where the filter lets a token break (line_breaks._SEAM): a zero-width space,
    so `white-space` governs it as it does any text, kept out of the name a
    reader hears. */

@@ -137,10 +137,9 @@ BROKEN_WORDS_IN_TEXT = (
 # line that holds only marks (an icon, an asterisk) apart from the words they
 # belong to, or one word alone that the line before cut from its number ("12"
 # above "days"; a number holds a digit and no letter, so a name that ends in
-# one, "host-01", is none) or, in a cell, that a box of words set whole after it
-# left behind, where the break between them is a wrap and not a `br`. A word
-# that ends its line before a name (`identifier`) opening the next is ordinary
-# wrap: a name moves to its line whole (base.css). A value of a list
+# one, "host-01", is none) or, in a cell, that a box set whole after it left behind
+# ("on" above a name), where the break between them is a wrap and not a `br`:
+# a cell cuts a name, so one never needs a line of its own. A value of a list
 # (a user's code before the next) is no running word, so a list wrapping
 # between its values leaves none behind. Each block's
 # lines are read from what it lays out in them: its own text, and each box set
@@ -255,7 +254,7 @@ STRAYS_OPENING_A_LINE = (
       else if (MARKS_ONLY.test(text) && !(opening.opens ?? opening.el).closest(identifier)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
       else if (index && !line.forced && /^\p{L}+[.,;:]?$/u.test(text) && /(?:^|\s)[^\p{L}\s]*\p{N}[^\p{L}\s]*$/u.test(lines[index - 1].text.trim())) {
         found.push(`${name} cuts "${text}" from its number "${lines[index - 1].text.trim().split(/\s/).at(-1).slice(-30)}"`);
-      } else if (inCell && (!index || line.forced) && !line.pieces.some((piece) => piece.whole || piece.el?.closest(identifier)) && /^\p{L}+$/u.test(text) && lines[index + 1] && !lines[index + 1].forced && lines[index + 1].pieces[0].whole && !lines[index + 1].pieces[0].el.closest(identifier)) {
+      } else if (inCell && (!index || line.forced) && !line.pieces.some((piece) => piece.whole || piece.el?.closest(identifier)) && /^\p{L}+$/u.test(text) && lines[index + 1] && !lines[index + 1].forced && lines[index + 1].pieces[0].whole) {
         found.push(`${name} cuts "${text}" from "${lines[index + 1].text.trim().slice(0, 30)}" after it`);
       }
     });
@@ -946,22 +945,6 @@ CHECKS = {
                     for words, name in (("c-d", ""), ("a-b", ' class="token"'))
                 ),
                 finds=('holds "-"',),
-            ),
-            # A word a box of words set whole leaves behind in a cell is cut
-            # from it; one that ends its line before a name opening the next
-            # is ordinary wrap.
-            Plant(
-                "<table><tbody><tr>"
-                + "".join(
-                    f'<td style="{_MONO}; inline-size: 20ch; white-space: normal">{word} '
-                    f'<span{name} style="display: inline-block; max-inline-size: 100%">{box}</span></td>'
-                    for word, name, box in (
-                        ("Kept", "", "example words moved"),
-                        ("Created", ' class="token"', "example-moved-name"),
-                    )
-                )
-                + "</tr></tbody></table>",
-                finds=('cuts "Kept"',),
             ),
         ),
     ),

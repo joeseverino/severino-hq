@@ -5,7 +5,6 @@ template draws the element it belongs to. No markup is read back."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from itertools import pairwise
 from typing import Any
 
 from django.utils.html import escape
@@ -18,7 +17,7 @@ from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece,
 from hq.platform.core.held_values import format_html
 from hq.platform.core.template_parts import enclosed
 from hq.platform.core.templatetags.frame_tags import muted
-from hq.platform.core.templatetags.line_breaks import DOT_MARK, breakable, code_spans
+from hq.platform.core.templatetags.line_breaks import breakable, code_spans
 from hq.platform.core.templatetags.list_tags import LINE_LEAD, LIST, line_run
 from hq.platform.core.templatetags.status_tags import status
 from hq.platform.core.templatetags.table_tags import LINE_FRAME, data_attributes, table_heading
@@ -498,11 +497,12 @@ def _content(cell: DrawnCell, drawing: _Drawing) -> SafeString:
     dot, and its lines beneath."""
 
     value = cell.cell
+    drawn = [_value(value, cell, drawing)]
     if value.fit:
         parts = [_safe("<li>", _value(part, cell, drawing, own=False), "</li>") for part in value.parts]
-        drawn = [_value(value, cell, drawing), line_run(parts, kind="dots")]
+        drawn.append(line_run(parts, kind="dots"))
     else:
-        drawn = _sentence(value, cell, drawing)
+        drawn += [_after(part, cell, drawing) for part in value.parts]
     # A gist takes the room its line leaves (cuts.css), so the line is a box of its own.
     if value.lead or any(each.shows == "gist" for each in (value, *value.parts)):
         drawn = [_safe('<div class="row-line">', *drawn, "</div>")]
@@ -528,7 +528,8 @@ def _block(lines: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing) -
             blocks.append(enclosed(LIST, run, kind="dots", muted=line.muted))
             continue
         shown = f' class="{SHOWN[line.shows]}"' if line.shows else ""
-        drawn = _safe(*_sentence(line, cell, drawing, own=False, whole=True, hushed=line.muted))
+        drawn = _value(line, cell, drawing, own=False, whole=True, hushed=line.muted)
+        drawn = _safe(drawn, *(_after(part, cell, drawing, hushed=line.muted) for part in line.parts))
         items.append(
             _safe("<li", shown, data_attributes(line.data), ">", muted(drawn) if line.muted else drawn, "</li>")
         )
@@ -537,32 +538,11 @@ def _block(lines: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing) -
     return _safe(*blocks)
 
 
-def _sentence(value: Cell, cell: DrawnCell | None, drawing: _Drawing, **options: Any) -> list[SafeString]:
-    """A value and the parts after it on its line, each after a space or its
-    dot. A dot is held inside the last box of what stands before it where
-    that ends in words of ``breakable``'s, as ``line_breaks.DOT_MARK`` says,
-    since a line may break after a box even before a no-break space: drawn
-    as a mark, so a link draws no line under it (base.css)."""
+def _after(part: Cell, cell: DrawnCell | None, drawing: _Drawing, *, hushed: bool = False) -> SafeString:
+    """A part after what stands before it on its line: a space, unless its dot joins it."""
 
-    hushed = bool(options.get("hushed"))
-    said = (value, *value.parts)
-    holds = [after.dot and _holds_mark(each) for each, after in pairwise(said)]
-    drawn = [_value(value, cell, drawing, mark=holds[0] if holds else False, **options)]
-    for at, part in enumerate(value.parts):
-        held, mark = holds[at], at + 1 < len(holds) and holds[at + 1]
-        shown = _value(part, cell, drawing, own=False, hushed=hushed, mark=mark, held=held)
-        drawn.append(shown if part.dot and not held else _safe(" ", shown))
-    return drawn
-
-
-def _holds_mark(value: Cell) -> bool:
-    """Whether a value's words end in ``breakable``'s box, the one place a mark after them is held (``_words``)."""
-
-    drawn_otherwise = value.status, value.piece, value.moment, value.amount, value.count
-    ended_otherwise = value.tone or value.cut or value.readout or value.external or value.quoted or value.after
-    if any(each is not None for each in drawn_otherwise) or ended_otherwise:
-        return False
-    return bool(value.link or value.text)
+    drawn = _value(part, cell, drawing, own=False, hushed=hushed)
+    return drawn if part.dot else _safe(" ", drawn)
 
 
 def _value(
@@ -573,19 +553,15 @@ def _value(
     own: bool = True,
     whole: bool = False,
     hushed: bool = False,
-    mark: bool = False,
-    held: bool = False,
 ) -> SafeString:
     """One value as its declaration says it: around its words, from the
     inside out, its kind's markup, its bold or link, what a reader hears, its
     tip or muted voice, its box, its dot, its span when it shows only part
     of the time, its count, and its hooks. ``own`` is the cell's own value,
     whose bold names its row; ``whole`` a line, whose own box is its item;
-    ``hushed`` a value on a line muted whole; ``mark`` holds the dot of
-    the part after it inside its last box, and ``held`` is a value whose dot
-    the one before it holds (``_sentence``)."""
+    ``hushed`` a value on a line muted whole."""
 
-    drawn = _named(value, cell, drawing, own=own, mark=f"\xa0{DOT_MARK}" if mark else "")
+    drawn = _named(value, cell, drawing, own=own)
     gist = value.shows == "gist"
     if value.aloud:
         drawn = format_html(
@@ -602,7 +578,7 @@ def _value(
         drawn = _safe("<span", tipped, ">", drawn, "</span>")
     if cell is not None and cell.whole_parts:
         drawn = _safe('<span class="cell-part">', drawn, "</span>")
-    if value.dot and not held:
+    if value.dot:
         drawn = _safe(dot(), drawn)
     if value.shows and not (whole or gist):
         drawn = _safe('<span class="', SHOWN[value.shows], '">', drawn, "</span>")
@@ -613,25 +589,25 @@ def _value(
     return drawn
 
 
-def _named(value: Cell, cell: DrawnCell | None, drawing: _Drawing, *, own: bool, mark: str = "") -> SafeString:
+def _named(value: Cell, cell: DrawnCell | None, drawing: _Drawing, *, own: bool) -> SafeString:
     """A value in bold where it is a name, a link round the bold of a name
     that only links, and in a span its role marks where it is one of a cell's parts."""
 
     names = ' data-cell="name"' if own and cell is not None and cell.named else ""
     if value.name and value.url and not (value.link or value.external or value.tone or value.cut):
         opened = _safe(format_html('<a href="{}"', value.url), data_attributes(value.data), ">")
-        return _safe(opened, "<strong", names, ">", _text(value, mark), "</strong></a>")
+        return _safe(opened, "<strong", names, ">", _text(value), "</strong></a>")
     if value.name:
-        return _safe("<strong", names, ">", _words(value, cell, drawing, mark), "</strong>")
+        return _safe("<strong", names, ">", _words(value, cell, drawing), "</strong>")
     if value.role and _linked(value):
         opened = format_html('<a data-cell="{}" href="{}"', value.role, value.url)
-        return _safe(opened, data_attributes(value.data), ">", _text(value, mark), "</a>")
+        return _safe(opened, data_attributes(value.data), ">", _text(value), "</a>")
     if value.role and not own:
-        return _safe(format_html('<span data-cell="{}">', value.role), _words(value, cell, drawing, mark), "</span>")
-    return _words(value, cell, drawing, mark)
+        return _safe(format_html('<span data-cell="{}">', value.role), _words(value, cell, drawing), "</span>")
+    return _words(value, cell, drawing)
 
 
-def _words(value: Cell, cell: DrawnCell | None, drawing: _Drawing, mark: str = "") -> SafeString:
+def _words(value: Cell, cell: DrawnCell | None, drawing: _Drawing) -> SafeString:
     """A value's words as what it is draws them: a state, a piece, an entity,
     a link, a cut line, a moment, an amount, text, or the empty value's mark."""
 
@@ -645,25 +621,24 @@ def _words(value: Cell, cell: DrawnCell | None, drawing: _Drawing, mark: str = "
     if value.tone:
         return status(value.text, tone=value.tone, href=value.url)
     if value.link:
-        return entity(context, value.link, code=value.readout, mark=mark)
+        return entity(context, value.link, code=value.readout)
     if value.url and value.external:
-        return entity(context, outside(value.url), label=value.text, mark=mark)
+        return entity(context, outside(value.url), label=value.text)
     if value.cut:
         return cell_line(value.text, value.url)
     if value.url:
-        return _safe(format_html('<a href="{}">', value.url), _text(value, mark), "</a>")
+        return _safe(format_html('<a href="{}">', value.url), _text(value), "</a>")
     if value.moment is not None:
         return when(value.moment, value.form)
     if value.amount is not None:
         return breakable(money(value.amount))
     if value.text or value.quoted:
-        return _text(value, mark)
+        return _text(value)
     if cell is not None and cell.cell.says_nothing and not cell.quiet:
         return empty_value()
     return SafeString()
 
 
-def _text(value: Cell, mark: str = "") -> SafeString:
-    if value.quoted or value.readout:
-        return _safe(code_spans(value.quoted) if value.quoted else readout(value.text), breakable(value.after))
-    return breakable(value.text, mark) if mark else _safe(breakable(value.text), breakable(value.after))
+def _text(value: Cell) -> SafeString:
+    said = code_spans(value.quoted) if value.quoted else readout(value.text) if value.readout else breakable(value.text)
+    return _safe(said, breakable(value.after))

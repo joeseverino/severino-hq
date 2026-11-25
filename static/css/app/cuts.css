@@ -126,7 +126,7 @@
    than its column breaks inside it: a piece of any length would otherwise
    hold its column, and the table, past the box. So its column asks for no
    more than a letter of it, and gives way as a column of words does. */
-.data-table > tbody > tr > * :is(code:not(.cell-whole), .token, .whole) { overflow-wrap: anywhere; }
+.data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
 /* An identifier's chip longer than a short value in a row that links its
    record (`data-chip`, table_layout), standing as a value of its own (not
    code in a sentence, base.css), is one line on its row's line, cut at its
