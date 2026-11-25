@@ -46,6 +46,7 @@ lazy from .automation_runs import (
     queue_follow_up,
     queue_run,
     reached,
+    run_in_way,
 )
 lazy from .cadence import controller_standing
 lazy from .capabilities import Consented, command_spec, consent
@@ -687,4 +688,7 @@ def _approval(standing: MergeStanding | None, items: tuple[Container, ...], refu
         hosts = applied_on(manifest, items)
     except PolicyError as refusal:
         return Approval(standing, str(refusal))
+    # A press while another run holds the playbook or its machines is refused (``queue_run``).
+    if busy := run_in_way(manifest, hosts):
+        return Approval(standing, busy)
     return Approval(standing, said=ended(f"{does} on {get_text_list(list(hosts), 'and')}"))

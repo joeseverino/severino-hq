@@ -407,6 +407,17 @@ def _held_by(holder: OperationRequest, resource: ManagedResource, hosts: list[st
     }
 
 
+def run_in_way(manifest: OperationManifest, hosts: Iterable[str]) -> str:
+    """Why a run of ``manifest`` on ``hosts`` asked now would be refused for
+    another run waiting or working (``_holding``), as a page says it; "" when
+    none is in its way, so a page offers no press it refuses."""
+
+    resource = ManagedResource.objects.filter(key=resource_key(manifest.id)).first()
+    holder = _holding(resource, list(hosts)) if resource is not None else None
+    words = held_words(_held_by(holder, resource, list(hosts))) if holder is not None and resource else None
+    return words.sentence if words else ""
+
+
 @dataclass(frozen=True, slots=True)
 class HeldWords:
     """A refused run's reason in a page's words, and where the run in its way is shown."""
