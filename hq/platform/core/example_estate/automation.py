@@ -400,7 +400,7 @@ def unattended() -> None:
     reads as not started, and Refresh and each run are refused."""
 
     then = timezone.now() - timedelta(hours=3)
-    UpstreamReading.objects.filter(key=AUTOMATION_HEARTBEAT).update(observed_at=then)
+    UpstreamReading.objects.update_or_create(key=AUTOMATION_HEARTBEAT, defaults={"value": {}, "observed_at": then})
     work = OperationRequest.objects.filter(action__in=AUTOMATION_WORK, claimed_at__gt=then)
     work.update(claimed_at=then, lease_expires_at=then)
 
