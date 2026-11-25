@@ -9,6 +9,7 @@ from typing import Any
 from django.utils.text import slugify
 
 from hq.platform.application import action_items
+from hq.platform.application.asks import following
 from hq.platform.application.decisions import decision
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, StatusMark, TableColumn
 from hq.platform.application.tone import Tone
@@ -102,14 +103,16 @@ def _rows(context: Any, items: Iterable[Mapping[str, Any]], where: Where, *, fol
             actions=tuple(remedies(context, item["actions"])),
             put_away=away,
             id=_id(item, where),
-            data={"attention-item": ""},
+            # A row HQ is acting on asks again until that work ends.
+            data={"attention-item": "", **following(bool(item.get("under_way")))},
             folded=folded,
         )
 
 
 def _id(item: Mapping[str, Any], where: Where) -> str:
-    return item["anchor"] if where.triage else ""
-
+    # A row that follows its work is found by its id in each answer, the
+    # one that ends it included; a page holding several queues keeps them apart.
+    return item["anchor"] if where.triage or not where.prefix else f"{where.prefix}-{item['anchor']}"
 
 def _title(item: Mapping[str, Any], where: Where) -> Cell:
     """What is wrong, linked to the thing it is about, or to the row's own

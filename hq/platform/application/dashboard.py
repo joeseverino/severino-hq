@@ -142,6 +142,8 @@ class QueueItem(TypedDict):
     notice: bool
     # A request a person decides, never set aside (``Finding.held``).
     held: bool
+    # HQ is acting on it now, so its row asks again (``Finding.under_way``).
+    under_way: bool
     family: str
     # Why it is as urgent as its status says (``attention.finding_why``).
     why: str
@@ -199,6 +201,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "subject": as_written(finding.subject_link) if finding.subject_link else None,
         "notice": finding.notice,
         "held": finding.held,
+        "under_way": finding.under_way,
         # A rule's findings are one kind of matter, named as the rule names itself.
         "family": rule.title if rule is not None else finding.family,
         "why": finding_why(finding, rule),

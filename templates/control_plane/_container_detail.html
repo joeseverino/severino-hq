@@ -7,7 +7,7 @@ how it is run against the container standard, with what it uses beside its
 limits. Each said once; the band above has its version and standing.
 {% endcomment %}
 {% if plan or readiness or state %}
-{% section "Upgrade" id="upgrade" %}
+{% section "Upgrade" id="upgrade" data_fragment=state.standing.live data_fragment_poll=state.standing.live|follow_every %}
   {% facts layout="band" %}
     {% if update %}
     {% fact "Pull request" icon="commit" tone=update.checks_said.1 %}
@@ -43,7 +43,7 @@ limits. Each said once; the band above has its version and standing.
     {% endfact %}
     {% endif %}
     {% if state and not update %}{% fact "Update" icon="deploy" value=state.words %}{% endif %}
-    {% with merge=state.standing %}{% if merge %}{% fact update|yesno:"Approval,Apply" icon="commit" value=merge.words url=merge.run_url tone=merge.tone detail=merge.lines %}{% endif %}{% endwith %}
+    {% with merge=state.standing %}{% if merge %}{% fact state.standing_label icon="commit" value=merge.words url=merge.run_url tone=merge.tone detail=merge.lines %}{% endif %}{% endwith %}
     {% if plan %}
     {% fact "Data" icon="layers" tone=plan.data_tone %}
       {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }}{% else %}Keeps no data{% endif %}

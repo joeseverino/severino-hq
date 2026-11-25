@@ -26,6 +26,7 @@ from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     CONTAINERS_CARD,
+    Fact,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -96,11 +97,14 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
     if standing.state == VULNERABLE:
         if needs_you(standing, running):
             yield _advisory(running, subject, plan)
-    elif _moves(standing, plan) and not (state := update_state(_lead(running))).at_work and _offered(standing, state):
+    elif _moves(standing, plan) and _offered(standing, state := update_state(_lead(running))):
         title = f"{_names(running)} has an update" + (f", {state.move}" if state.move else "")
         upgrade = _upgrade(running, plan, state)
+        # Once a press is asked, its card says where that stands, in the words its page does.
+        pressed = state.standing
+        explanation = ended(pressed.words) if pressed else state.words
         # What the title and its line say is not said again among its facts.
-        said = f"{title} {state.words}".casefold()
+        said = f"{title} {explanation}".casefold()
         upgrade["evidence"] = tuple(fact for fact in upgrade["evidence"] if str(fact[1]).casefold() not in said)
         yield _found(
             running,
@@ -108,7 +112,8 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
             rule=UPDATE,
             severity=Tone.ATTENTION,
             title=title,
-            explanation=state.words,
+            explanation=explanation,
+            under_way=bool(pressed and pressed.live),
             **upgrade,
         )
     if by_tag := [item for item in running if _unpinned(item.standing)]:
@@ -205,7 +210,11 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
     if not _moves(lead.standing, plan):
         return {"primary": page, "steps": ()}
     state = state or update_state(lead)
-    evidence = (*(state.update.evidence if state.update else ()), *(_risk(plan) if plan else ()))
+    evidence = (
+        *(state.update.evidence if state.update else ()),
+        *(_risk(plan) if plan else ()),
+        *_standing(state),
+    )
     if state.kind == UpdateKind.BY_HAND and plan is not None:
         said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
         label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
@@ -214,6 +223,16 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
         # What holds it back is what to clear, so it is the one step, said once.
         return {"steps": (Do(state.reason),), "evidence": evidence, "no_help_reason": state.reason}
     return {"steps": (), "evidence": evidence, "remedies": (state.action.remedy,)}
+
+
+def _standing(state: UpdateState) -> tuple[Fact, ...]:
+    """Where its last press stands, with what it waits on or the step it
+    stopped on and what that said, under the label its page says it under."""
+
+    standing = state.standing
+    if standing is None:
+        return ()
+    return ((state.standing_label, " ".join((ended(standing.words), *map(ended, standing.lines)))),)
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:

@@ -32,7 +32,7 @@ lazy from .app_update_approval import (
     approval_of,
     approve_target,
 )
-lazy from .app_update_open import OPEN, open_target
+lazy from .app_update_open import OPEN, open_standing, open_target
 lazy from .container_findings import BY_HAND
 lazy from .finding_model import Fact, FindingRemedy
 lazy from .labels import lower_first
@@ -389,6 +389,13 @@ class MergeStanding:
 
         return tuple(line for line in (self.step, self.said) if line)
 
+    @property
+    def live(self) -> bool:
+        """Whether a step of it is under way, so its card asks again until it ends:
+        taken and not yet ended, which is the one standing said in attention."""
+
+        return self.taken and self.tone == Tone.ATTENTION
+
 
 @dataclass(frozen=True, slots=True)
 class UpdateState:
@@ -416,6 +423,12 @@ class UpdateState:
         """Whether HQ is moving it now, or moved it: nothing is asked of anyone."""
 
         return self.standing is not None and self.standing.taken
+
+    @property
+    def standing_label(self) -> str:
+        """The label its standing is said under, on every page: the press it stands on."""
+
+        return {UpdateKind.OPEN: "Approval", UpdateKind.MERGED: "Apply"}.get(self.kind, "Pull request")
 
 
 UNOPENED = "Renovate has not seen the release yet."
@@ -466,12 +479,18 @@ def update_state(item: Container) -> UpdateState:
             managed=managed,
         )
     action = UpdateAction(OPEN, open_target(managed.repository, managed.app))
-    if held := held_branch(repository, managed.app):
+    held = held_branch(repository, managed.app)
+    standing = open_standing(managed.repository, held)
+    # While an Open PR is under way it is held back, as an approval is (``_decided``).
+    offered = {"action": action} if standing is None or not standing.taken else {"reason": standing.words}
+    if held:
         until = UNTIL.get(str(held.get("marker", "")), "")
         words = ended(" ".join(("Renovate is holding its branch", until)).strip())
         said = f"Ticks {held.get('branch', '')} on the Dependency Dashboard, then asks Renovate to run."
-        return UpdateState(UpdateKind.HELD, latest, words, action, said=said, managed=managed)
-    return UpdateState(UpdateKind.UNOPENED, latest, UNOPENED, action, said="Asks Renovate to run.", managed=managed)
+        return UpdateState(UpdateKind.HELD, latest, words, said=said, standing=standing, managed=managed, **offered)
+    return UpdateState(
+        UpdateKind.UNOPENED, latest, UNOPENED, said="Asks Renovate to run.", standing=standing, managed=managed, **offered
+    )
 
 
 def _decided(

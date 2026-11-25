@@ -439,6 +439,14 @@ def newer_reading():
     return asks.NEWER_READING
 
 
+@register.filter
+def follow_every(live):
+    """``{{ live|follow_every }}``: the ``data-fragment-poll`` of a part
+    whose work is under way (``asks.following``), "" once it is not."""
+
+    return asks.following(bool(live)).get("fragment-poll", "")
+
+
 @answers(register)
 def show_newer():
     """``{% show_newer %}``: the link that loads a newer reading."""
