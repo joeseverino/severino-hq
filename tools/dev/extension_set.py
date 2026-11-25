@@ -20,6 +20,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tools.gate.landing import landing
 from tools.gate.tree import working_tree
 from tools.pipeline.plugin_identity import PLUGINS, identity, manifest_file, plugin_api_version, required_api, spoken
 
@@ -232,34 +233,6 @@ def default_branch(top: Path) -> str:
     return (_git(top, "config", "--get", "init.defaultBranch") or "").strip() or "master"
 
 
-def landing(host: Path, carried: set[str], default: str) -> str | None:
-    """The branch of ``carried`` the host tree at ``host`` lands on, or None where it is ``default`` or unsure.
-
-    Its own branch where ``carried`` holds it, else the host branch it is nearest (fewest commits of its own
-    off it, then fewest of the branch's it lacks), as a worktree made from that branch is. A tie with
-    ``default``, or between two, is no landing: CI composes a branch only for a pull request into the default.
-    A detached tree lands nowhere: it is a gate's copy of one commit (test --at, the second machine's), whose
-    set was picked where it was sent from."""
-
-    if not (own := (_git(host, "symbolic-ref", "-q", "--short", "HEAD") or "").strip()):
-        return None
-    if own in carried:
-        return None if own == default else own
-    hosts = {
-        name.removeprefix("refs/heads/")
-        for name in (_git(host, "for-each-ref", "--format=%(refname)", "refs/heads") or "").split()
-    }
-    apart: dict[str, tuple[int, ...]] = {}
-    for name in sorted((carried | {default}) & hosts):
-        counts = (_git(host, "rev-list", "--left-right", "--count", f"HEAD...refs/heads/{name}") or "").split()
-        if len(counts) == 2:
-            apart[name] = tuple(map(int, counts))
-    if not apart:
-        return None
-    nearest = [name for name, distance in apart.items() if distance == min(apart.values())]
-    return nearest[0] if len(nearest) == 1 and nearest[0] != default else None
-
-
 @dataclass(frozen=True)
 class _Package:
     source: str
@@ -306,8 +279,13 @@ def _coordinated(host: Path, top: Path, mine: list[_Package], api: int) -> _Coor
     if common and Path(common).parent.resolve() != top.resolve():
         return None
     known = branches(top)
-    if (branch := landing(host, set(known), default_branch(top))) is None:
+    # The default is among them, so a tree nearest it, or pushed under a name the repository lacks,
+    # composes the set as named, as CI composes the default's.
+    default = default_branch(top)
+    lands = landing(host, {*known, default})
+    if lands is None or lands.branch == default or lands.branch not in known:
         return None
+    branch = lands.branch
     relative = [package.root.relative_to(top).as_posix() for package in mine]
     named = f"branch {branch} of {Path(common).parent.name if common else top.name}"
     if (tree := known[branch]) is None:
