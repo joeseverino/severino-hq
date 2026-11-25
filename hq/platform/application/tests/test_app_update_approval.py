@@ -143,7 +143,9 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(preview.input["parameters"], {"revision": HEAD})
         self.assertEqual(preview.input["hosts"], [APP])
         self.assertEqual(preview.requested_actor, PERSON.actor)
-        self.assertEqual((self.standing().words, self.standing().taken), ("Previewing", True))
+        # Under way, said with the machine it runs on.
+        self.assertTrue(self.standing().live)
+        self.assertIn(APP, self.standing().words)
         # The worker is told to preview and nothing of the steps after it.
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
         self.assertIs(claimed["input"]["check"], True)
@@ -152,7 +154,8 @@ class ApproveUpdateTests(TestCase):
         from ..container_reads import get_app_update
 
         record = get_app_update("example:alpha:7:app")
-        self.assertEqual((record["merge"]["words"], record["held"]), ("Previewing", "Previewing"))
+        self.assertEqual(record["merge"]["words"], self.standing().words)
+        self.assertEqual(record["held"], self.standing().words)
         self.assertEqual(record["checks"]["state"], "success")
 
     def test_a_preview_that_fails_merges_nothing_and_the_update_says_where_it_stopped(self):
@@ -166,7 +169,9 @@ class ApproveUpdateTests(TestCase):
 
         self.assertFalse(self.merges().exists())
         standing = self.standing()
-        self.assertEqual((standing.words, standing.tone), ("Preview failed", "serious"))
+        # It names the task it stopped on, in its own words as in its detail.
+        self.assertEqual((standing.tone, standing.live), ("serious", False))
+        self.assertIn(REFUSED_TASK, standing.words)
         self.assertEqual((standing.step, standing.said), (REFUSED_TASK, REFUSED_SAID))
         self.assertEqual(standing.run_url, run_url(str(preview.pk)))
         # Once the host is fixed it is approved again, which previews again.
@@ -182,7 +187,12 @@ class ApproveUpdateTests(TestCase):
 
         self.assertTrue(self.press()["ok"])
         self.assertTrue(self.press()["ok"])
-        self.assertFalse(self.press(key="example-approve-2")["ok"])
+        # A second press of its own, while the first is under way, is answered
+        # with where that one stands: never a refusal, and never a second run.
+        again = self.press(key="example-approve-2")
+        self.assertTrue(again["ok"], again)
+        self.assertTrue(again["standing"]["live"])
+        self.assertIn(APP, again["standing"]["note"])
         self.assertEqual(self.runs().count(), 1)
 
         preview = self.worked()
@@ -324,7 +334,8 @@ class ApproveUpdateTests(TestCase):
         from ..work_runs import run_url
 
         self.assertEqual(self.standing().run_url, run_url(str(run.pk)))
-        self.assertEqual(self.standing().words, "Merged, applying")
+        self.assertTrue(self.standing().live)
+        self.assertIn(APP, self.standing().words)
         context = run_context(
             {"operation_id": run.pk, "approved_by": "", "capability": "", "playbook": "", "state_label": ""}, user=None
         )
@@ -342,7 +353,8 @@ class ApproveUpdateTests(TestCase):
         self.worked(success=False, events=stopped("Start the pull unit", "The pull unit failed."))
 
         standing = self.standing()
-        self.assertEqual((standing.words, standing.tone, standing.taken), ("Merged, not applied", "serious", True))
+        self.assertEqual((standing.tone, standing.taken, standing.live), ("serious", True, False))
+        self.assertIn("Start the pull unit", standing.words)
         self.assertEqual((standing.step, standing.said), ("Start the pull unit", "The pull unit failed."))
         self.merged_on_main()
         apply = self.container_page().context["container"]["act"]
@@ -355,6 +367,23 @@ class ApproveUpdateTests(TestCase):
         from .test_containers import named, queued
 
         self.assertEqual([item for item in queued("container-image-update") if "app" in named(item, "Container")], [])
+
+    def test_a_second_apply_while_one_runs_is_answered_with_where_it_stands(self):
+        from ..app_update_approval import APPLY as APPLY_UPDATE
+
+        self.merged()
+        self.worked(success=False, events=stopped("Start the pull unit", "The pull unit failed."))
+        self.merged_on_main()
+        payload = {"repository": "example/alpha", "app": "app", "head_sha": MERGED}
+
+        first = run_capability(APPLY_UPDATE, payload, principal=PERSON, idempotency_key="example-apply-1").answer
+        again = run_capability(APPLY_UPDATE, payload, principal=PERSON, idempotency_key="example-apply-2").answer
+
+        self.assertTrue(first["ok"], first)
+        self.assertTrue(again["ok"], again)
+        self.assertTrue(again["standing"]["live"])
+        self.assertIn(APP, again["standing"]["note"])
+        self.assertEqual(self.applies().count(), 2)
 
     def built_after(self, *commits):
         """The container page of thumb, built on example-box and released

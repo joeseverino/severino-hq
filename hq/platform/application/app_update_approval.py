@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from typing import Annotated, Any
 
 from django.db import transaction
+from django.utils import timezone
 from django.utils.text import get_text_list
 from pydantic import Field, ValidationError
 
@@ -36,6 +37,7 @@ lazy from .app_update_open import ticked
 lazy from .app_updates import AppUpdate, app_updates, merged_of
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
+lazy from .asks import AskedAnswer
 lazy from .automation_manifest import OperationManifest
 lazy from .automation_runs import (
     CHECK,
@@ -45,6 +47,7 @@ lazy from .automation_runs import (
     queue_run,
     reached,
 )
+lazy from .cadence import controller_standing
 lazy from .capabilities import Consented, command_spec, consent
 lazy from .capability_policy import Rule, decide
 lazy from .container_findings import UPDATE
@@ -55,7 +58,7 @@ lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, 
 lazy from .labels import lower_first
 lazy from .payload_words import ChangeRow
 lazy from .resource_operations import ACTION_CAPABILITY, THEN, OperationAsked, queue_carried_merge
-lazy from .work_runs import run_url, stopped_at
+lazy from .work_runs import run_url, stopped_at, untaken
 
 # The input of the playbook that applies a merge: the commit it applies.
 REVISION = "revision"
@@ -221,7 +224,7 @@ def _parameters(manifest: OperationManifest, revision: str) -> dict[str, Any]:
 
 
 @transaction.atomic
-def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> OperationAsked:
+def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> OperationAsked | AskedAnswer:
     """Preview the apply of the update at the head reviewed where it runs,
     carrying the merge to queue once the preview passes, and the run that
     applies the merge once it is made."""
@@ -240,7 +243,7 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
             raise PolicyError(reason)
     standing = merge_standing(updates[0])
     if standing is not None and standing.taken:
-        raise PolicyError("This update is already approved, and its card says where it stands.")
+        return standing.asked()
     hosts = applied_on(manifest, tuple(item for update in updates for item in update.containers))
     reached(manifest, hosts)
     pull = _declared(command, consented=consented)
@@ -315,7 +318,7 @@ class ApplyUpdateCommand:
 
 
 @transaction.atomic
-def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> OperationAsked:
+def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> OperationAsked | AskedAnswer:
     """Run the playbook that applies app updates at the default branch's head,
     where a container of the app still runs a pin from before it."""
 
@@ -329,7 +332,7 @@ def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> Operat
         raise PolicyError("Its default branch has a new head since you looked. Look again.")
     standing = _apply_standing(manifest.id, command.head_sha, items)
     if standing is not None and standing.taken:
-        raise PolicyError("This update is already applied at that head, and its card says where it stands.")
+        return standing.asked()
     hosts = applied_on(manifest, items)
     reached(manifest, hosts)
     return queue_run(
@@ -508,18 +511,18 @@ def merge_standing(update: AppUpdate) -> MergeStanding | None:
 def _previewed(preview: OperationRequest) -> MergeStanding:
     url = run_url(str(preview.pk))
     if preview.state in _ACTIVE:
-        return MergeStanding("Previewing", Tone.ATTENTION, url, taken=True)
+        return MergeStanding(_working("Previewing", preview), Tone.ATTENTION, url, taken=True, said=waits_on(preview))
     if preview.state == OperationRequest.State.SUCCEEDED:
         refused = str(((preview.result or {}).get(THEN) or {}).get("refused") or "")
         return MergeStanding(ended(f"Previewed. {refused}".strip()), Tone.SERIOUS, url)
     step, said = stopped_at(preview)
-    return MergeStanding("Preview failed", Tone.SERIOUS, url, step=step, said=said)
+    return MergeStanding(_failed("Preview failed", step, "approve"), Tone.SERIOUS, url, step=step, said=said)
 
 
 def _merged(merge: OperationRequest) -> MergeStanding:
     result = merge.result or {}
     if merge.state in _ACTIVE:
-        return MergeStanding("Merging", Tone.ATTENTION, taken=True)
+        return MergeStanding("Merging", Tone.ATTENTION, taken=True, said=waits_on(merge))
     if merge.state == OperationRequest.State.SUCCEEDED:
         then = result.get(THEN) or {}
         if then.get("run"):
@@ -563,14 +566,40 @@ def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] 
         return None
     url = run_url(str(apply.pk))
     if apply.state in _ACTIVE:
-        return MergeStanding("Applying", Tone.ATTENTION, url, taken=True)
+        return MergeStanding(_working("Applying", apply), Tone.ATTENTION, url, taken=True, said=waits_on(apply))
     if apply.state == OperationRequest.State.SUCCEEDED:
         done = apply.completed_at
         if done is not None and any(item.running.observed_at > done for item in items):
             return None
         return MergeStanding("Applied", Tone.GOOD, url, taken=True)
     step, said = stopped_at(apply)
-    return MergeStanding("Not applied", Tone.SERIOUS, url, step=step, said=said)
+    return MergeStanding(_failed("Apply failed", step, "apply"), Tone.SERIOUS, url, step=step, said=said)
+
+
+def _working(doing: str, run: OperationRequest) -> str:
+    """A run under way, said with the machines it runs on."""
+
+    hosts = [str(host) for host in (run.input or {}).get("hosts") or ()]
+    return f"{doing} on {get_text_list(hosts, 'and')}" if hosts else doing
+
+
+def _failed(what: str, step: str, again: str) -> str:
+    """A step that ended badly, with the task it stopped on and the press that asks it again."""
+
+    at = f" at “{step}”" if step else ""
+    return f"{what}{at}. Fix what stopped it, then {again} again."
+
+
+def waits_on(operation: OperationRequest) -> str:
+    """What a queued step waits for while no worker reports to take it, "" once
+    one does: a playbook's run waits on the playbook worker, any other step on
+    the controller."""
+
+    if operation.state != OperationRequest.State.QUEUED:
+        return ""
+    if operation.action == OperationRequest.Action.RUN:
+        return untaken()
+    return controller_standing().cannot("", now=timezone.now())
 
 
 # The reading the applier states of each machine it released apps on: one

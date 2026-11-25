@@ -33,6 +33,7 @@ lazy from .app_update_approval import (
     approve_target,
 )
 lazy from .app_update_open import OPEN, open_standing, open_target
+lazy from .asks import DONE, RUNNING, Asked, AskedAnswer, Standing
 lazy from .container_findings import BY_HAND
 lazy from .finding_model import Fact, FindingRemedy
 lazy from .labels import lower_first
@@ -385,9 +386,10 @@ class MergeStanding:
 
     @property
     def lines(self) -> tuple[str, ...]:
-        """Its fact's detail: the step it stopped on, then what it said."""
+        """Its fact's detail: the step it stopped on, then what it said, each
+        left out where its words already say it."""
 
-        return tuple(line for line in (self.step, self.said) if line)
+        return tuple(line for line in (self.step, self.said) if line and line not in self.words)
 
     @property
     def live(self) -> bool:
@@ -395,6 +397,14 @@ class MergeStanding:
         taken and not yet ended, which is the one standing said in attention."""
 
         return self.taken and self.tone == Tone.ATTENTION
+
+    def asked(self) -> AskedAnswer:
+        """What pressing it again answers while it stands taken: where it
+        stands, never a refusal, since the first press is still its request."""
+
+        if self.live:
+            return Asked(Standing(RUNNING, self.words), message=ended(f"Already asked. {self.words}")).answer()
+        return Asked(Standing(DONE, self.words), message=ended(self.words)).answer()
 
 
 @dataclass(frozen=True, slots=True)
@@ -489,7 +499,13 @@ def update_state(item: Container) -> UpdateState:
         said = f"Ticks {held.get('branch', '')} on the Dependency Dashboard, then asks Renovate to run."
         return UpdateState(UpdateKind.HELD, latest, words, said=said, standing=standing, managed=managed, **offered)
     return UpdateState(
-        UpdateKind.UNOPENED, latest, UNOPENED, said="Asks Renovate to run.", standing=standing, managed=managed, **offered
+        UpdateKind.UNOPENED,
+        latest,
+        UNOPENED,
+        said="Asks Renovate to run.",
+        standing=standing,
+        managed=managed,
+        **offered,
     )
 
 

@@ -24,7 +24,7 @@ from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import DASHBOARD_BOX_KIND
 from hq.domains.jobs.models import JobState
 
-from .app_update_approval import App, Holder
+from .app_update_approval import App, Holder, waits_on
 from .app_updates import MergeStanding
 from .contracts import Effect
 from .integration_specs import CapabilitySpec
@@ -32,8 +32,7 @@ from .record_errors import RecordNotFound
 from .security import Capability
 from .tone import Tone
 lazy from .app_updates import UpdateKind, held_branch, of_app, update_state
-lazy from .asks import DONE, RUNNING, Asked, AskedAnswer, Standing
-lazy from .ui import ended
+lazy from .asks import DONE, Asked, AskedAnswer, Standing
 lazy from .cadence import controller_standing
 lazy from .capabilities import Consented, consent
 lazy from .dependency_updates import DependencyRunCommand, asked_at, last_run, request_run
@@ -73,7 +72,7 @@ def open_update(command: OpenUpdateCommand, *, consented: Consented) -> Operatio
     # the same request: answered with where it stands, never refused.
     opening = (UpdateKind.HELD, UpdateKind.UNOPENED)
     if under_way := next((state.standing for state in states if state.at_work and state.kind in opening), None):
-        return Asked(Standing(RUNNING, under_way.words), message=ended(f"Already asked. {under_way.words}")).answer()
+        return under_way.asked()
     if not kinds & set(opening):
         if kinds & {UpdateKind.OPEN, UpdateKind.MERGED}:
             return Asked(Standing(DONE, OPENED), message=OPENED).answer()
@@ -121,7 +120,7 @@ def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStand
         if tick is None:
             return None
         if tick.state in _ACTIVE:
-            return MergeStanding(TICKING, Tone.ATTENTION, taken=True, said=_waits_on_controller(tick))
+            return MergeStanding(TICKING, Tone.ATTENTION, taken=True, said=waits_on(tick))
         result = tick.result or {}
         if tick.state != OperationRequest.State.SUCCEEDED:
             return MergeStanding(NOT_TICKED, Tone.SERIOUS, said=str(result.get("message") or ""))
@@ -133,20 +132,12 @@ def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStand
 
 # How an Open PR stands, as its card says it.
 TICKING = "Ticking its box on the Dependency Dashboard"
-NOT_TICKED = "Its box on the Dependency Dashboard was not ticked"
-NOT_ASKED = "Ticked; Renovate was not asked to run"
+NOT_TICKED = "Its box on the Dependency Dashboard was not ticked; Open PR tries again"
+NOT_ASKED = "Ticked, but Renovate was not asked to run; Open PR asks again"
 RUN_WAITS = "Waiting for Renovate's run"
 RUN_GOES = "Renovate is running"
-RUN_FAILED = "Renovate's run failed"
+RUN_FAILED = "Renovate's run failed; Open PR asks again"
 OPENED = "Renovate has opened its pull request."
-
-
-def _waits_on_controller(operation: OperationRequest) -> str:
-    """What a queued step waits for while no controller reports, "" once one takes it."""
-
-    if operation.state != OperationRequest.State.QUEUED:
-        return ""
-    return controller_standing().cannot("", now=timezone.now())
 
 
 def _run_standing(repository: str, since: datetime | None) -> MergeStanding | None:
