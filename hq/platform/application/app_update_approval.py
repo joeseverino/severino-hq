@@ -462,6 +462,12 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
 def _unapprovable(update: AppUpdate) -> Sentence:
     """Why ``update`` cannot be approved as it stands, or ""."""
 
+    if not update.renovates:
+        return "HQ's Renovate run did not open it from this repository. Review it on GitHub."
+    if not update.whole:
+        return "HQ could not read every file it changes. Review it on GitHub."
+    if not update.within_apps:
+        return "It changes files outside the apps it names. Review it on GitHub."
     if not update.readable:
         return "HQ could not read the images this update moves from its Compose files. Review it on GitHub."
     if (update.checks or {}).get("state") != "success":
@@ -474,6 +480,7 @@ REFUSED = {
     "head_moved": "GitHub refused the merge: the head moved after the approval.",
     "not_mergeable": "GitHub refused the merge: it cannot merge it as it stands.",
     "checks_failing": "GitHub refused the merge: its checks fail.",
+    "checks_pending": "HQ held the merge: its checks have not all passed.",
     "not_installed": "GitHub refused the merge: HQ's GitHub App is not installed on its repository.",
 }
 

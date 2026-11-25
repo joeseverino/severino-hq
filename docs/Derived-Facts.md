@@ -794,11 +794,15 @@ this one answer.
 The controller reads `github.repository` through HQ's GitHub App: one
 installation token per repository, read-only permissions only, minted for each
 read. A record is a repository's head and its checks, open pull requests
-(for each Renovate opened, its head's checks and the files it changes),
+(for each Renovate opened, its author, the repository its head lives in,
+its head's checks, the files it changes with the app directory each lies in,
+and how many GitHub says it changes),
 workflows waiting on an approval, and deployments with the steps each ran
 before deploying whose names begin "Verify". A repository a project opts in
 to updates also holds each app's Compose files under `compose/<app>/` on its
-default branch, its open Dependency Dashboard, and for each update every
+default branch, its open Dependency Dashboard (the issue under that title
+the App's bot opened, the login its update run opens pull requests as, held
+as `updater`), and for each update every
 service whose image differs between the pull request's base and head, read
 by compose-go, the loader Docker Compose uses, from those files alone. An
 image that needs a variable only the host sets leaves its app unread, never
@@ -810,11 +814,12 @@ its Actions variables. Each part is refused on its own where the repository's
 plan offers none, and says so.
 
 A `github.pull_request` record is one pull request at the head commit a person
-approved. Its `merge` reads that head's checks, then squash-merges it naming
-the head, under a token for that one repository with Contents and Pull
-requests write. GitHub refuses once the head moves. The record's status is the
-merge commit (`merge_sha`), or a refused merge's reason (`refused`):
-`head_moved`, `not_mergeable`, `checks_failing` or `not_installed`.
+approved. Its `merge` reads that head's checks and merges only once every one
+has passed, then squash-merges it naming the head, under a token for that one
+repository with Contents and Pull requests write. GitHub refuses once the head
+moves. The record's status is the merge commit (`merge_sha`), or a refused
+merge's reason (`refused`): `head_moved`, `not_mergeable`, `checks_failing`,
+`checks_pending` or `not_installed`.
 
 `hq.platform.application.github_estate` joins a project to its repository by
 URL and queues what waits on a person: a deploy held for approval, a failing

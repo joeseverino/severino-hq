@@ -16,6 +16,8 @@ from .test_upgrades import TARGET, published
 
 RUNNING = "ghcr.io/example/app:v1.2.0@sha256:aaa"
 PINNED = f"ghcr.io/example/app:v1.2.1@{TARGET}"
+# The login the reading says HQ's update run opens pull requests as.
+UPDATER = "hq-example[bot]"
 SERIOUS = {"id": "CVE-new", "package": "libexample", "severity": "critical", "fixed": ["2.0"], "url": "u"}
 
 
@@ -26,15 +28,20 @@ def moved(before=RUNNING, after=PINNED, service="app"):
 
 
 def pull(number=7, app="app", moves=(), read=True):
-    file = {"path": f"compose/{app}/compose.yaml", "status": "modified", "additions": 1, "deletions": 1}
+    """Renovate's own pull request from the repository itself, changing ``app``'s Compose file alone."""
+
+    file = {"path": f"compose/{app}/compose.yaml", "status": "modified", "additions": 1, "deletions": 1, "app": app}
     return {
         "number": number,
         "title": f"Update ghcr.io/example/app Docker tag to v1.2.1 ({number})",
         "url": f"https://github.com/example/alpha/pull/{number}",
+        "author": UPDATER,
         "head": "f" * 40,
+        "head_repository": "example/alpha",
         "branch": f"renovate/app-{number}",
         "checks": {"state": "success", "total": 1, "failing": [], "running": 0},
         "files": [file],
+        "changed_files": 1,
         "apps": [{"app": app, "read": read, "images": list(moves)}],
     }
 
@@ -57,7 +64,7 @@ def arranged(*pulls, scanned=(TARGET,), target_findings=(), advisories=(HIGH,)):
         "registry.vulnerabilities",
         [checked("sha256:aaa"), *(checked(digest, target_findings) for digest in scanned)],
     )
-    store(compose=["compose/app/compose.yaml"], pull_requests=list(pulls))
+    store(compose=["compose/app/compose.yaml"], updater=UPDATER, pull_requests=list(pulls))
 
 
 class AppUpdateTests(TestCase):

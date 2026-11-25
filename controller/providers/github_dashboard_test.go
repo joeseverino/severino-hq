@@ -15,10 +15,15 @@ const dashboardRoute = "/repos/example/app/issues/1"
 var dashboardSpec = Object{"repository": "example/app", "branch": "renovate/example-app-2.x", "marker": "unpend"}
 
 // dashboardRoutes is a repository whose open Dashboard has the given body,
-// as Renovate writes its boxes.
+// as Renovate writes its boxes, below a newer issue someone else opened under
+// its title with the same body.
 func dashboardRoutes(body string) map[string]string {
-	issues, _ := json.Marshal([]map[string]any{{"number": 1, "title": "Dependency Dashboard", "html_url": "https://github.com/example/app/issues/1", "body": body}})
+	issues, _ := json.Marshal([]map[string]any{
+		{"number": 2, "title": "Dependency Dashboard", "html_url": "https://github.com/example/app/issues/2", "body": body, "user": map[string]string{"login": "octo"}},
+		{"number": 1, "title": "Dependency Dashboard", "html_url": "https://github.com/example/app/issues/1", "body": body, "user": map[string]string{"login": "hq-example[bot]"}},
+	})
 	return map[string]string{
+		githubFakeAPI + " /app": `{"slug":"hq-example"}`,
 		githubFakeAPI + " /repos/example/app/issues?state=open&sort=updated&per_page=100": string(issues),
 		githubFakeAPI + " PATCH " + dashboardRoute:                                        `{"number":1,"title":"Dependency Dashboard","html_url":"https://github.com/example/app/issues/1"}`,
 	}

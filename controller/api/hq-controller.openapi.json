@@ -3730,12 +3730,14 @@
           "head_moved",
           "not_mergeable",
           "checks_failing",
+          "checks_pending",
           "not_installed"
         ],
         "x-enum-varnames": [
           "GitHubMergeRefusalHeadMoved",
           "GitHubMergeRefusalNotMergeable",
           "GitHubMergeRefusalChecksFailing",
+          "GitHubMergeRefusalChecksPending",
           "GitHubMergeRefusalNotInstalled"
         ]
       },
@@ -3910,6 +3912,126 @@
         },
         "type": "object"
       },
+      "GitHubRepositoryPullFile": {
+        "description": "One file a pull request changes.",
+        "properties": {
+          "path": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "additions": {
+            "default": 0,
+            "type": "integer"
+          },
+          "deletions": {
+            "default": 0,
+            "type": "integer"
+          },
+          "app": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubRepositoryPullRequest": {
+        "description": "One open pull request. For one Renovate opened (its branch under\n``renovate/``), ``checks`` is the head's ``{state, total, failing,\nrunning, names}``, ``files`` each file it changes, one page of them, and\n``changed_files`` how many GitHub says it changes; they are None and 0\nfor any other. ``apps`` is\n``{app, read, images: [{service, before, after}]}`` per app whose\ndirectory it changes, each service whose image differs at its head, in a\nrepository opted in to updates, and None otherwise (``github_compose.go``).",
+        "properties": {
+          "number": {
+            "default": 0,
+            "type": "integer"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "type": "string"
+          },
+          "author": {
+            "default": "",
+            "type": "string"
+          },
+          "draft": {
+            "default": false,
+            "type": "boolean"
+          },
+          "created_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head": {
+            "default": "",
+            "type": "string"
+          },
+          "base": {
+            "default": "",
+            "type": "string"
+          },
+          "branch": {
+            "default": "",
+            "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "head_repository": {
+            "default": "",
+            "type": "string"
+          },
+          "checks": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "default": null
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepositoryPullFile"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          },
+          "changed_files": {
+            "default": 0,
+            "type": "integer"
+          },
+          "apps": {
+            "items": {
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
+      },
       "GitHubRepositoryRecord": {
         "properties": {
           "connection_ref": {
@@ -3959,7 +4081,7 @@
           "pull_requests": {
             "default": [],
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/GitHubRepositoryPullRequest"
             },
             "type": "array"
           },
@@ -4111,6 +4233,10 @@
             "type": "array"
           },
           "dashboard": {
+            "default": "",
+            "type": "string"
+          },
+          "updater": {
             "default": "",
             "type": "string"
           },

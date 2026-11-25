@@ -1880,6 +1880,9 @@ type Issue struct {
 
 	// Title Title of the issue
 	Title string `json:"title"`
+
+	// User A GitHub user.
+	User NullableSimpleUser `json:"user"`
 }
 
 // IssueComment Comments provide a way for people to collaborate on an issue.
@@ -1956,6 +1959,11 @@ type PublicUser struct {
 	PublicGists     int    `json:"public_gists"`
 	PublicRepos     int    `json:"public_repos"`
 	TwitterUsername string `json:"twitter_username,omitempty"`
+}
+
+// PullRequest Pull requests let you tell others about changes you've pushed to a repository on GitHub. Once a pull request is sent, interested parties can review the set of changes, discuss potential modifications, and even push follow-up commits if necessary.
+type PullRequest struct {
+	ChangedFiles int `json:"changed_files"`
 }
 
 // PullRequestMergeResult Pull Request Merge Result
@@ -3550,6 +3558,9 @@ type ClientInterface interface {
 	// PullsList performs a GET /repos/{owner}/{repo}/pulls (the `PullsList` operationId) request.
 	PullsList(ctx context.Context, owner string, repo string, params *PullsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PullsGet performs a GET /repos/{owner}/{repo}/pulls/{pull_number} (the `PullsGet` operationId) request.
+	PullsGet(ctx context.Context, owner string, repo string, pullNumber string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PullsListFiles performs a GET /repos/{owner}/{repo}/pulls/{pull_number}/files (the `PullsListFiles` operationId) request.
 	PullsListFiles(ctx context.Context, owner string, repo string, pullNumber string, params *PullsListFilesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -4145,6 +4156,19 @@ func (c *Client) ReposListDeployKeys(ctx context.Context, owner string, repo str
 // PullsList performs a GET /repos/{owner}/{repo}/pulls (the `PullsList` operationId) request.
 func (c *Client) PullsList(ctx context.Context, owner string, repo string, params *PullsListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPullsListRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PullsGet performs a GET /repos/{owner}/{repo}/pulls/{pull_number} (the `PullsGet` operationId) request.
+func (c *Client) PullsGet(ctx context.Context, owner string, repo string, pullNumber string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPullsGetRequest(c.Server, owner, repo, pullNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -6717,6 +6741,54 @@ func NewPullsListRequest(server string, owner string, repo string, params *Pulls
 	return req, nil
 }
 
+// NewPullsGetRequest constructs an http.Request for the PullsGet method
+func NewPullsGetRequest(server string, owner string, repo string, pullNumber string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "pull_number", pullNumber, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/pulls/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPullsListFilesRequest constructs an http.Request for the PullsListFiles method
 func NewPullsListFilesRequest(server string, owner string, repo string, pullNumber string, params *PullsListFilesParams) (*http.Request, error) {
 	var err error
@@ -7588,6 +7660,11 @@ type ClientWithResponsesInterface interface {
 	//
 	// Returns a wrapper object for the known response body format(s).
 	PullsListWithResponse(ctx context.Context, owner string, repo string, params *PullsListParams, reqEditors ...RequestEditorFn) (*PullsListReply, error)
+
+	// PullsGetWithResponse performs a GET /repos/{owner}/{repo}/pulls/{pull_number} (the `PullsGet` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	PullsGetWithResponse(ctx context.Context, owner string, repo string, pullNumber string, reqEditors ...RequestEditorFn) (*PullsGetReply, error)
 
 	// PullsListFilesWithResponse performs a GET /repos/{owner}/{repo}/pulls/{pull_number}/files (the `PullsListFiles` operationId) request.
 	//
@@ -9153,6 +9230,9 @@ type IssuesUpdateReply struct {
 
 		// Title Title of the issue
 		Title string `json:"title"`
+
+		// User A GitHub user.
+		User NullableSimpleUser `json:"user"`
 	}
 }
 
@@ -9226,6 +9306,9 @@ func (r IssuesUpdateReply) GetJSON200() *struct {
 
 	// Title Title of the issue
 	Title string `json:"title"`
+
+	// User A GitHub user.
+	User NullableSimpleUser `json:"user"`
 } {
 	return r.JSON200
 }
@@ -9417,6 +9500,47 @@ func (r PullsListReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PullsListReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PullsGetReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PullRequest
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PullsGetReply) GetJSON200() *PullRequest {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r PullsGetReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PullsGetReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PullsGetReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PullsGetReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -10297,6 +10421,17 @@ func (c *ClientWithResponses) PullsListWithResponse(ctx context.Context, owner s
 		return nil, err
 	}
 	return ParsePullsListReply(rsp)
+}
+
+// PullsGetWithResponse performs a GET /repos/{owner}/{repo}/pulls/{pull_number} (the `PullsGet` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) PullsGetWithResponse(ctx context.Context, owner string, repo string, pullNumber string, reqEditors ...RequestEditorFn) (*PullsGetReply, error) {
+	rsp, err := c.PullsGet(ctx, owner, repo, pullNumber, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePullsGetReply(rsp)
 }
 
 // PullsListFilesWithResponse performs a GET /repos/{owner}/{repo}/pulls/{pull_number}/files (the `PullsListFiles` operationId) request.
@@ -11403,6 +11538,9 @@ func ParseIssuesUpdateReply(rsp *http.Response) (*IssuesUpdateReply, error) {
 
 			// Title Title of the issue
 			Title string `json:"title"`
+
+			// User A GitHub user.
+			User NullableSimpleUser `json:"user"`
 		}
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -11508,6 +11646,32 @@ func ParsePullsListReply(rsp *http.Response) (*PullsListReply, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []PullRequestSimple
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePullsGetReply parses an HTTP response from a PullsGetWithResponse call
+func ParsePullsGetReply(rsp *http.Response) (*PullsGetReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PullsGetReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PullRequest
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

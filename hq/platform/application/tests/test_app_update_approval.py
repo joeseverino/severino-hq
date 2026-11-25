@@ -21,7 +21,7 @@ from ..machines import Machine
 from ..resource_operations import serialize_operation
 from ..security import Capability, PolicyDenied, Principal
 from .procedures import APPROVER, Supply, manifest
-from .test_app_updates import PINNED, arranged, moved, pull
+from .test_app_updates import PINNED, UPDATER, arranged, moved, pull
 from .test_github_estate import store
 
 APPROVE = "app_update.approve"
@@ -258,7 +258,7 @@ class ApproveUpdateTests(TestCase):
         from ..security import web_principal
 
         self.press(principal=AGENT)
-        store(pull_requests=[pull(moves=[moved()]) | {"head": "e" * 40}])
+        store(updater=UPDATER, pull_requests=[pull(moves=[moved()]) | {"head": "e" * 40}])
 
         approver, _ = get_user_model().objects.get_or_create(username=APPROVER)
         with self.assertRaises(Settled):
@@ -270,6 +270,29 @@ class ApproveUpdateTests(TestCase):
 
         self.assertFalse(answer["ok"], answer)
         self.assertFalse(OperationRequest.objects.exists())
+
+    def test_only_renovates_own_change_to_the_apps_it_names_is_offered_approve(self):
+        from ..app_update_approval import approval_of
+        from ..app_updates import app_updates
+
+        outside = {"path": ".github/workflows/ci.yml", "status": "modified", "additions": 1, "deletions": 1, "app": ""}
+        renovates = pull(moves=[moved()])
+        cases = (
+            ("opened by another login", {"author": "example-writer"}),
+            ("its head in a fork", {"head_repository": "example-fork/alpha"}),
+            ("a file outside its apps", {"files": [*renovates["files"], outside], "changed_files": 2}),
+            ("more files than HQ read", {"changed_files": 101}),
+        )
+        for n, (case, changed) in enumerate(cases):
+            with self.subTest(case):
+                store(compose=["compose/app/compose.yaml"], updater=UPDATER, pull_requests=[renovates | changed])
+
+                answer = self.press(key=f"example-refused-{n}")
+
+                self.assertFalse(answer["ok"], answer)
+                # The card holds Approve back for the reason the press is refused.
+                self.assertEqual(approval_of(app_updates()[0]).held, answer["error"]["message"])
+                self.assertFalse(OperationRequest.objects.exists())
 
     def test_no_playbook_adopted_to_apply_it_is_refused_with_the_next_step(self):
         self.supply()

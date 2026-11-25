@@ -137,9 +137,9 @@ type Repository = Annotated[
 # The action that merges one, ``OperationRequest.Action.MERGE``.
 MERGE = "merge"
 # Why GitHub would not merge one: the head moved after the approval (409),
-# GitHub refused it as it stands (405), its head's checks fail, or the App is
-# not installed on its repository.
-MergeRefusal = Literal["head_moved", "not_mergeable", "checks_failing", "not_installed"]
+# GitHub refused it as it stands (405), its head's checks fail or have not all
+# passed yet, or the App is not installed on its repository.
+MergeRefusal = Literal["head_moved", "not_mergeable", "checks_failing", "checks_pending", "not_installed"]
 
 
 class GitHubPullRequestSpec(ProviderModel):

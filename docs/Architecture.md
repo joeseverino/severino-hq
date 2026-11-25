@@ -1613,6 +1613,12 @@ the `revision` of the newest run that succeeded on the machine whose
 
 Its security properties:
 
+- Approve merges only what the card shows: Renovate's own change to the apps
+  it names. An update is offered it only when its author is the reading's
+  `updater` and its head lives in the repository itself, every file it
+  changes lies under `compose/<app>/` of an app it names, and HQ read as many
+  files as GitHub says it changes (`app_update_approval._unapprovable`).
+  Anything else reads "Review it on GitHub".
 - Nothing merges before the host shows it can apply. Only a preview that
   succeeded queues a merge, and only a run whose `input` carries `check`
   counts as one, so no run that acted, and no run a person asks for by hand,
@@ -1638,7 +1644,7 @@ Its security properties:
   says why.
 - Every check a run passes still applies: a worker must take runs, one run
   per playbook, one writer per machine (`_holding`), and a login for each
-  machine (`reached`). A refused merge (`head_moved`, `checks_failing`) queues
+  machine (`reached`). A refused merge (`head_moved`, `checks_failing`, `checks_pending`) queues
   no run.
 
 The press is the update finding's one remedy and the container page's Upgrade

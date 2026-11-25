@@ -59,6 +59,7 @@ func TestGitHubMergeSquashesTheApprovedHead(t *testing.T) {
 
 func TestGitHubMergeRefusalsSayWhy(t *testing.T) {
 	failing := `{"check_runs":[{"id":9,"name":"build","status":"completed","conclusion":"failure"}]}`
+	running := `{"check_runs":[{"id":9,"name":"build","status":"in_progress","conclusion":null}]}`
 	for _, test := range []struct {
 		name   string
 		checks string
@@ -69,6 +70,8 @@ func TestGitHubMergeRefusalsSayWhy(t *testing.T) {
 		{"the head moved after the approval", mergeChecksPass, map[string]int{mergeRoute: http.StatusConflict}, runtime.GitHubMergeRefusalHeadMoved, true},
 		{"GitHub cannot merge it as it stands", mergeChecksPass, map[string]int{mergeRoute: http.StatusMethodNotAllowed}, runtime.GitHubMergeRefusalNotMergeable, true},
 		{"its head fails its checks", failing, nil, runtime.GitHubMergeRefusalChecksFailing, false},
+		{"its head's checks still run", running, nil, "checks_pending", false},
+		{"its head has no checks", `{"check_runs":[]}`, nil, "checks_pending", false},
 		{"the App is not installed on it", mergeChecksPass, map[string]int{"/repos/example/app/installation": http.StatusNotFound}, runtime.GitHubMergeRefusalNotInstalled, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

@@ -34,8 +34,9 @@ func TestAnOptedInRepositoryReadsItsApps(t *testing.T) {
 		{"path":"web/compose.yaml","mode":"100644","type":"blob","sha":"b4"},
 		{"path":"web/deep/compose.yml","mode":"100644","type":"blob","sha":"b5"}]}`
 	routes[api("/issues?state=open&sort=updated&per_page=100")] = `[
-		{"title":"Dependency Dashboard","html_url":"https://github.com/example/app/pull/9","pull_request":{"url":"https://api.github.com/repos/example/app/pulls/9"}},
-		{"title":"Dependency Dashboard","html_url":"https://github.com/example/app/issues/1","body":"## Pending Status Checks\n\n - [ ] <!-- unpend-branch=renovate/example-app-2.x -->Update example/app Docker tag to v2\n - [ ] <!-- approve-branch=renovate/example-worker-5.x -->Update dependency (` + "`example/worker`, `example/cache`" + `)\n - [ ] <!-- rebase-branch=renovate/open -->[Update example/app](../pull/8)\n - [ ] <!-- unschedule-branch=renovate/other -->Update example/app-extra Docker tag to v9\n"}]`
+		{"title":"Dependency Dashboard","html_url":"https://github.com/example/app/pull/9","user":{"login":"hq-example[bot]"},"pull_request":{"url":"https://api.github.com/repos/example/app/pulls/9"}},
+		{"title":"Dependency Dashboard","html_url":"https://github.com/example/app/issues/2","user":{"login":"octo"},"body":" - [ ] <!-- approve-branch=renovate/planted -->Update example/app Docker tag to v9\n"},
+		{"title":"Dependency Dashboard","html_url":"https://github.com/example/app/issues/1","user":{"login":"hq-example[bot]"},"body":"## Pending Status Checks\n\n - [ ] <!-- unpend-branch=renovate/example-app-2.x -->Update example/app Docker tag to v2\n - [ ] <!-- approve-branch=renovate/example-worker-5.x -->Update dependency (` + "`example/worker`, `example/cache`" + `)\n - [ ] <!-- rebase-branch=renovate/open -->[Update example/app](../pull/8)\n - [ ] <!-- unschedule-branch=renovate/other -->Update example/app-extra Docker tag to v9\n"}]`
 	head := "/contents/compose/%s?ref=aaaa000000000000000000000000000000000000"
 	routes[api(fmt.Sprintf(head, "example/compose.yml"))] = githubContent("services:\n  web:\n    image: example/app:1\n  worker:\n    image: example/worker:${TAG:-3}@sha256:" + strings.Repeat("a", 64) + "\n  viewer:\n    build: ./viewer\n    image: example-viewer:local\n  reader:\n    build:\n      context: ./reader\n")
 	routes[api(fmt.Sprintf(head, "example/docker-compose.override.yml"))] = githubContent("services:\n  worker:\n    environment:\n      LEVEL: info\n")
@@ -61,13 +62,17 @@ func TestAnOptedInRepositoryReadsItsApps(t *testing.T) {
 		t.Fatalf("report %+v", report)
 	}
 	record := report.Records[0].(GitHubRepositoryRecord)
+	encoded, _ := json.Marshal(record)
+	var view map[string]any
+	_ = json.Unmarshal(encoded, &view)
 	for _, test := range []struct {
 		name string
 		got  any
 		want string
 	}{
 		{"each app's Compose files, by the names Compose finds in a directory", record.Compose, `["compose/example/compose.yml","compose/example/docker-compose.override.yml","compose/web/compose.yaml"]`},
-		{"the open Dashboard issue, never a pull request", record.Dashboard, `"https://github.com/example/app/issues/1"`},
+		{"the open Dashboard issue the update run opened, never a pull request or another's issue", record.Dashboard, `"https://github.com/example/app/issues/1"`},
+		{"the login the update run opens them as, the App's bot", view["updater"], `"hq-example[bot]"`},
 		{"each service's image at the head, and whether it builds it, an app that needs the host's variables left out", record.ComposeImages, `[{"path":"compose/example/compose.yml","service":"reader","image":"","build":true},{"path":"compose/example/compose.yml","service":"viewer","image":"example-viewer:local","build":true},{"path":"compose/example/compose.yml","service":"web","image":"example/app:1","build":false},{"path":"compose/example/compose.yml","service":"worker","image":"example/worker:3@sha256:` + strings.Repeat("a", 64) + `","build":false}]`},
 		{"each app built on its host, and the commits from the last that changed its directory to the head", record.Builds, `[{"app":"example","commits":["aaaa000000000000000000000000000000000000","c2","c1"]}]`},
 		{"each branch held with no pull request, and the apps whose image its line names whole", record.HeldBranches, `[{"branch":"renovate/example-app-2.x","marker":"unpend","apps":["example"]},{"branch":"renovate/example-worker-5.x","marker":"approve","apps":["example"]},{"branch":"renovate/other","marker":"unschedule","apps":[]}]`},

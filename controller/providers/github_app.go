@@ -423,6 +423,20 @@ func sshKeyFingerprint(authorized string) (string, error) {
 	return "SHA256:" + base64.StdEncoding.EncodeToString(digest[:]), nil
 }
 
+// githubBot is the login GitHub gives the app's bot user, whose name its
+// installation tokens act under: its slug with "[bot]" appended, as
+// Renovate's GitHub platform documents its username.
+func (r *Registry) githubBot(ctx context.Context, c githubConnection) (string, error) {
+	app, err := json200(r.githubAsApp(ctx, c).AppsGetAuthenticatedWithResponse(ctx))
+	if err != nil {
+		return "", err
+	}
+	if app.Slug == "" {
+		return "", &ProviderError{Message: "GitHub named no slug for the app"}
+	}
+	return app.Slug + "[bot]", nil
+}
+
 // githubProbe is whether the key still signs for the app, and which accounts
 // it is installed on.
 func (r *Registry) githubProbe(ctx context.Context, ref string) (ProbeResult, error) {

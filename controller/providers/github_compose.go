@@ -103,6 +103,7 @@ type githubLayout struct {
 	builds    []GitHubBuild
 	dashboard string
 	held      []GitHubHeldBranch
+	updater   string
 }
 
 func (g *githubRepository) apps(ctx context.Context, branch, head string) (githubLayout, error) {
@@ -136,6 +137,9 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 		}
 	}
 	if layout.builds, err = g.builds(ctx, head, built); err != nil {
+		return githubLayout{}, err
+	}
+	if layout.updater, err = g.updater(); err != nil {
 		return githubLayout{}, err
 	}
 	issue, err := g.dashboard(ctx)
@@ -241,14 +245,20 @@ func (g *githubRepository) composeFiles(ctx context.Context, branch string) ([]s
 	return found[:min(len(found), githubComposeKept)], nil
 }
 
-// dashboard is the open Dependency Dashboard, or the zero issue: Renovate
-// edits it every run, so it is among the issues updated last.
+// dashboard is the open Dependency Dashboard the update run opened, or the
+// zero issue: Renovate edits it every run, so it is among the issues updated
+// last. An issue anyone else opened under its title is not it, since HQ ticks
+// its boxes.
 func (g *githubRepository) dashboard(ctx context.Context) (githubapi.Issue, error) {
+	updater, err := g.updater()
+	if err != nil {
+		return githubapi.Issue{}, err
+	}
 	issues, err := json200(g.api.IssuesListForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.IssuesListForRepoParams{
 		State: new(githubapi.IssuesListForRepoParamsStateOpen), Sort: new(githubapi.IssuesListForRepoParamsSortUpdated), PerPage: new(githubListPage),
 	}))
 	for _, issue := range issues {
-		if issue.PullRequest.URL == "" && issue.Title == githubDashboard {
+		if issue.PullRequest.URL == "" && issue.Title == githubDashboard && issue.User.Login == updater {
 			return issue, err
 		}
 	}
@@ -256,10 +266,13 @@ func (g *githubRepository) dashboard(ctx context.Context) (githubapi.Issue, erro
 }
 
 // appDirectory is the app whose directory, compose/<app>/, holds a path at
-// any depth.
+// any depth, or "" and false for a path outside every app's.
 func appDirectory(file string) (string, bool) {
 	app, rest, nested := strings.Cut(strings.TrimPrefix(file, githubApps+"/"), "/")
-	return app, strings.HasPrefix(file, githubApps+"/") && nested && app != "" && rest != ""
+	if !strings.HasPrefix(file, githubApps+"/") || !nested || app == "" || rest == "" {
+		return "", false
+	}
+	return app, true
 }
 
 // appChanges is each app whose directory an update's pull request changes,

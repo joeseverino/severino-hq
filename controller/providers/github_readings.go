@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -96,6 +97,9 @@ type GitHubRepositoryRecord struct {
 	// to updates (github_compose.go).
 	Compose   []string `json:"compose"`
 	Dashboard string   `json:"dashboard"`
+	// Updater is the login HQ's dependency update run opens its pull
+	// requests and its Dashboard as: the App's bot (githubBot).
+	Updater string `json:"updater"`
 	// ComposeImages is each service's image those files pin at the head, and
 	// HeldBranches each branch the Dashboard holds with no pull request.
 	ComposeImages []GitHubComposeImage `json:"compose_images"`
@@ -140,21 +144,28 @@ type GitHubPull struct {
 	Base      string   `json:"base"`
 	Branch    string   `json:"branch"`
 	Labels    []string `json:"labels"`
-	// Checks is the head commit's checks, Files what it changes and Apps the
-	// images it moves, read for an update's pull request (its branch under
-	// githubUpdateBranch) and nil for any other; Apps is read in a repository
-	// opted in to updates.
-	Checks *GitHubChecks     `json:"checks"`
-	Files  []GitHubPullFile  `json:"files"`
-	Apps   []GitHubAppChange `json:"apps"`
+	// HeadRepository is the repository its head branch lives in, as
+	// owner/name: another repository's for a fork, "" once the fork is gone.
+	HeadRepository string `json:"head_repository"`
+	// Checks is the head commit's checks, Files what it changes (one page of
+	// githubPullFilesPage) and ChangedFiles how many files GitHub says it
+	// changes, and Apps the images it moves, read for an update's pull
+	// request (its branch under githubUpdateBranch) and nil or 0 for any
+	// other; Apps is read in a repository opted in to updates.
+	Checks       *GitHubChecks     `json:"checks"`
+	Files        []GitHubPullFile  `json:"files"`
+	ChangedFiles int               `json:"changed_files"`
+	Apps         []GitHubAppChange `json:"apps"`
 }
 
-// GitHubPullFile is one file a pull request changes.
+// GitHubPullFile is one file a pull request changes, and App the app whose
+// directory holds it (appDirectory), "" for a file outside every app's.
 type GitHubPullFile struct {
 	Path      string `json:"path"`
 	Status    string `json:"status"`
 	Additions int    `json:"additions"`
 	Deletions int    `json:"deletions"`
+	App       string `json:"app"`
 }
 
 // githubUpdateBranch is the prefix of the branches Renovate opens its pull
@@ -234,13 +245,16 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 	// A query that failed leaves every repository unknown, so each is read
 	// in full, as far as the fuse allows.
 	fingerprints, _ := r.githubFingerprints(ctx, c, names)
+	updater := sync.OnceValues(func() (string, error) { return r.githubBot(ctx, c) })
 	records := make([]any, len(names))
 	failures := make([]error, len(names))
 	read := func(i int) {
 		if failures[i] = ctx.Err(); failures[i] != nil {
 			return
 		}
-		record, err := r.githubRepository(ctx, c, names[i]).read(ctx)
+		g := r.githubRepository(ctx, c, names[i])
+		g.updater = updater
+		record, err := g.read(ctx)
 		record.Fingerprint, record.ReadAt = fingerprints[names[i]], r.Now().UTC().Format(time.RFC3339)
 		records[i], failures[i] = record, err
 	}
@@ -308,10 +322,13 @@ type githubRepository struct {
 	name        string
 	owner, repo string
 	api         *githubapi.ClientWithResponses
+	// updater is githubBot, read once: a sweep shares one across every
+	// repository it reads.
+	updater func() (string, error)
 }
 
 func (r *Registry) githubRepository(ctx context.Context, c githubConnection, name string) *githubRepository {
-	g := &githubRepository{r: r, c: c, name: name}
+	g := &githubRepository{r: r, c: c, name: name, updater: sync.OnceValues(func() (string, error) { return r.githubBot(ctx, c) })}
 	var err error
 	if g.owner, g.repo, err = githubRepositoryName(name); err != nil {
 		g.api = r.githubClient("", false, err)
@@ -373,7 +390,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	var layout []string
 	if g.optedIn() {
 		if apps, ok := part(ctx, g, runtime.PartCompose, func() (githubLayout, error) { return g.apps(ctx, branch, commit.Sha) }); ok {
-			record.Compose, record.Dashboard, layout = apps.compose, apps.dashboard, apps.compose
+			record.Compose, record.Dashboard, record.Updater, layout = apps.compose, apps.dashboard, apps.updater, apps.compose
 			record.ComposeImages, record.HeldBranches, record.Builds = apps.images, apps.held, apps.builds
 		}
 	}
@@ -641,7 +658,7 @@ func githubPulls(pulls []githubapi.PullRequestSimple) []GitHubPull {
 		found = append(found, GitHubPull{
 			Number: pull.Number, Title: pull.Title, URL: pull.HTMLURL, Author: pull.User.Login,
 			Draft: pull.Draft, CreatedAt: pull.CreatedAt, UpdatedAt: pull.UpdatedAt, Head: pull.Head.Sha, Base: pull.Base.Sha,
-			Branch: pull.Head.Ref, Labels: labels,
+			Branch: pull.Head.Ref, Labels: labels, HeadRepository: pull.Head.Repo.FullName,
 		})
 	}
 	return found
@@ -666,6 +683,11 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, g
 			return nil, err
 		}
 		pulls[i].Files = pullFiles(files)
+		whole, err := json200(g.api.PullsGetWithResponse(ctx, g.owner, g.repo, strconv.Itoa(pulls[i].Number)))
+		if err != nil {
+			return nil, err
+		}
+		pulls[i].ChangedFiles = whole.ChangedFiles
 		if compose != nil {
 			pulls[i].Apps = g.appChanges(ctx, pulls[i], compose)
 		}
@@ -683,7 +705,8 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, g
 func pullFiles(entries []githubapi.DiffEntry) []GitHubPullFile {
 	found := []GitHubPullFile{}
 	for _, entry := range entries {
-		found = append(found, GitHubPullFile{Path: entry.Filename, Status: string(entry.Status), Additions: entry.Additions, Deletions: entry.Deletions})
+		app, _ := appDirectory(entry.Filename)
+		found = append(found, GitHubPullFile{Path: entry.Filename, Status: string(entry.Status), Additions: entry.Additions, Deletions: entry.Deletions, App: app})
 	}
 	return found
 }

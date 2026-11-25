@@ -407,6 +407,7 @@
           "labels": [
             "example"
           ],
+          "head_repository": "example",
           "checks": {
             "state": "example",
             "total": 1,
@@ -423,9 +424,11 @@
               "path": "example",
               "status": "example",
               "additions": 1,
-              "deletions": 1
+              "deletions": 1,
+              "app": "example"
             }
           ],
+          "changed_files": 1,
           "apps": [
             {
               "app": "example",
@@ -608,6 +611,7 @@
         "example"
       ],
       "dashboard": "example",
+      "updater": "example",
       "compose_images": [
         {
           "path": "example",
