@@ -4128,6 +4128,13 @@
             },
             "type": "array"
           },
+          "builds": {
+            "default": [],
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
           "fingerprint": {
             "default": "",
             "type": "string"

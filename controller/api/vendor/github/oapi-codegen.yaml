@@ -58,6 +58,7 @@ output-options:
     - repos/get-content
     - repos/get-latest-release
     - repos/list-collaborators
+    - repos/list-commits
     - repos/list-deploy-keys
     - repos/list-deployment-statuses
     - repos/list-deployments

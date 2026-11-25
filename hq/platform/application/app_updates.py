@@ -26,6 +26,7 @@ lazy from .app_update_approval import (
     APPLY,
     APPROVE,
     Approval,
+    applied_at,
     apply_of,
     apply_target,
     approval_of,
@@ -454,11 +455,11 @@ def update_state(item: Container) -> UpdateState:
             return UpdateState(UpdateKind.UNMATCHED, latest, words, reason=why)
         return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND)
     repository = repositories()[managed.repository]
-    if (pinned := _pinned_at_head(item, repository)) is not None:
+    if (move := _behind(item, repository, managed.app)) is not None:
         head = str((repository.head or {}).get("sha") or "")
         return _decided(
             UpdateKind.MERGED,
-            f"{item.standing.tag or item.standing.image.short} to {pinned.tag}",
+            move,
             ended(f"Merged in {managed.repository}, not applied"),
             UpdateAction(APPLY, apply_target(managed, head)),
             apply_of(managed.repository, head, (item,)),
@@ -498,9 +499,25 @@ def of_app(repository: str, app: str) -> tuple[Container, ...]:
 def merged_of(repository: str, app: str) -> tuple[Container, ...]:
     """The containers of ``app`` that run a pin before the one its repository's default branch holds."""
 
-    return tuple(
-        item for item in of_app(repository, app) if _pinned_at_head(item, repositories()[repository]) is not None
-    )
+    return tuple(item for item in of_app(repository, app) if _behind(item, repositories()[repository], app) is not None)
+
+
+def _behind(item: Container, repository: Any, app: str) -> str | None:
+    """How ``item`` runs behind its repository's default branch, as its move
+    says it: to the pin the head holds, or, for an image built on its host,
+    from the revision its machine last released the app at to the head, when
+    a commit since changed the app's directory; None where it runs what a
+    merge brings."""
+
+    if (pinned := _pinned_at_head(item, repository)) is not None:
+        return f"{item.standing.tag or item.standing.image.short} to {pinned.tag}"
+    build = next((each for each in repository.builds or () if each.get("app") == app), None)
+    if not item.standing.local or build is None:
+        return None
+    applied = applied_at(item.machine.name, app)
+    if not applied or applied in (build.get("commits") or ()):
+        return None
+    return f"{applied[:7]} to {str((repository.head or {}).get('sha') or '')[:7]}"
 
 
 def _pinned_at_head(item: Container, repository: Any) -> ImageRef | None:

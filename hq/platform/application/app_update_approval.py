@@ -573,6 +573,29 @@ def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] 
     return MergeStanding("Not applied", Tone.SERIOUS, url, step=step, said=said)
 
 
+# The reading the applier states of each machine it released apps on: one
+# ``{project, result}`` record per app, ``result`` "ok" for one released.
+PULLED = "apps.pull"
+
+
+def applied_at(machine: str, app: str) -> str:
+    """The revision ``machine`` last released ``app`` at: that of the newest
+    run that succeeded there whose ``apps.pull`` reading has the app
+    released, or "" where none has."""
+
+    host = normalized_hostname(machine)
+    runs = OperationRequest.objects.filter(
+        action=OperationRequest.Action.RUN,
+        state=OperationRequest.State.SUCCEEDED,
+        **{f"result__stated__readings__{host}__has_key": PULLED},
+    ).order_by("-created_at")
+    for run in runs.only("input", "result").iterator():
+        pulled = run.result["stated"]["readings"][host][PULLED] or ()
+        if any(each.get("project") == app and each.get("result") == "ok" for each in pulled):
+            return str(((run.input or {}).get("parameters") or {}).get(REVISION) or "")
+    return ""
+
+
 def apply_target(managed: Any, head: str) -> dict[str, str]:
     """The route arguments a press applying ``managed``'s app at ``head`` posts to."""
 

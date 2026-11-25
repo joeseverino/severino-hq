@@ -625,6 +625,14 @@
           ]
         }
       ],
+      "builds": [
+        {
+          "app": "example",
+          "commits": [
+            "example"
+          ]
+        }
+      ],
       "fingerprint": "example",
       "read_at": "example",
       "carried": true

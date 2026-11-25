@@ -1768,6 +1768,7 @@ type GitHubRepositoryRecord struct {
 	Alerts            map[string]map[string]int        `json:"alerts,omitempty"`
 	Archived          bool                             `json:"archived,omitempty"`
 	Artifacts         []map[string]any                 `json:"artifacts,omitempty"`
+	Builds            []map[string]any                 `json:"builds,omitempty"`
 	CalledWorkflows   []string                         `json:"called_workflows,omitempty"`
 	Carried           bool                             `json:"carried,omitempty"`
 	Checks            map[string]any                   `json:"checks,omitempty"`

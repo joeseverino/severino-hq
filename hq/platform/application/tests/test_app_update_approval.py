@@ -82,8 +82,8 @@ class ApproveUpdateTests(TestCase):
     def applies(self):
         return self.runs().exclude(input__has_key="check")
 
-    def worked(self, *, success=True, events=(), message=""):
-        """The worker's report of the run it claims next."""
+    def worked(self, *, success=True, events=(), message="", stated=None):
+        """The worker's report of the run it claims next, and what its playbook ``stated``."""
 
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
         report_operation(
@@ -93,6 +93,7 @@ class ApproveUpdateTests(TestCase):
                 observed_generation=claimed["input"]["generation"],
                 events=list(events),
                 message=message,
+                stated=stated,
             ),
             controller_id=WORKER,
         )
@@ -125,13 +126,13 @@ class ApproveUpdateTests(TestCase):
         (update,) = app_updates()
         return merge_standing(update)
 
-    def container_page(self):
+    def container_page(self, name="app"):
         from hq.platform.core.testing import declare, operator
 
         operator(self.client)
-        spec = {"host": "example-box", "name": "app", "connection_ref": "example-portainer"}
-        declare("example-box-app", "portainer.container", spec)
-        return self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
+        spec = {"host": "example-box", "name": name, "connection_ref": "example-portainer"}
+        declare(f"example-box-{name}", "portainer.container", spec)
+        return self.client.get(reverse("control_plane:detail", args=[f"example-box-{name}"]))
 
     def test_a_persons_press_previews_the_apply_at_the_head_before_anything_merges(self):
         answer = self.press()
@@ -354,6 +355,33 @@ class ApproveUpdateTests(TestCase):
         from .test_containers import named, queued
 
         self.assertEqual([item for item in queued("container-image-update") if "app" in named(item, "Container")], [])
+
+    def built_after(self, *commits):
+        """The container page of thumb, built on example-box and released
+        there by the apply of the merge, where its repository's head is
+        ``commits[0]`` and ``commits`` are those since the last that changed
+        compose/thumb/."""
+
+        from .test_containers import built
+
+        self.merged()
+        released = {"project": "thumb", "service": "thumb", "image": "example-thumb:local", "running_digest": ""}
+        self.worked(stated={"readings": {APP: {"apps.pull": [{**released, "health": "healthy", "result": "ok"}]}}})
+        built(head={"sha": commits[0]}, builds=[{"app": "thumb", "commits": list(commits)}])
+        return self.container_page("thumb").context["container"]
+
+    def test_an_app_built_on_its_host_changed_since_its_machine_released_it_is_applied_at_main(self):
+        container = self.built_after("d" * 40, "e" * 40)
+
+        self.assertEqual(container["state"].kind, "merged")
+        self.assertEqual(self.client.post(container["act"].url, {"__retry_key": "example-apply"}).status_code, 302)
+        again = self.applies().last()
+        self.assertEqual((again.input["parameters"], again.input["hosts"]), ({"revision": "d" * 40}, [APP]))
+
+    def test_an_app_built_on_its_host_released_at_or_after_its_last_change_is_current(self):
+        container = self.built_after("d" * 40, MERGED, "e" * 40)
+
+        self.assertEqual((container["state"], container["act"]), (None, None))
 
     def test_run_again_of_a_preview_fills_no_run_that_acts(self):
         from ..finding_runs import run_again

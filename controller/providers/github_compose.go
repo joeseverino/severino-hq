@@ -87,11 +87,20 @@ type GitHubHeldBranch struct {
 // dependency-dashboard.ts writes them (getCheckbox, getListItem).
 var githubHeldLine = regexp.MustCompile(`(?m)^ - \[ \] <!-- (unpend|approve|unschedule|unlimit)-branch=(\S+) -->(.*)$`)
 
-// githubLayout is the apps part: the Compose files, the images they pin and
-// the Dashboard with the branches it holds.
+// GitHubBuild is an app with a service that builds its image on its host,
+// and each commit from the newest that changed its directory to the head,
+// newest first: a host that applied one of them builds what a merge does.
+type GitHubBuild struct {
+	App     string   `json:"app"`
+	Commits []string `json:"commits"`
+}
+
+// githubLayout is the apps part: the Compose files, the images they pin, the
+// apps built on their host and the Dashboard with the branches it holds.
 type githubLayout struct {
 	compose   []string
 	images    []GitHubComposeImage
+	builds    []GitHubBuild
 	dashboard string
 	held      []GitHubHeldBranch
 }
@@ -108,6 +117,7 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 	}
 	layout := githubLayout{compose: compose, images: []GitHubComposeImage{}, held: []GitHubHeldBranch{}}
 	named := map[string][]string{}
+	built := []string{}
 	for _, app := range sortedKeys(files) {
 		// An app that does not load pins nothing HQ can say.
 		services, err := g.composedServices(ctx, app, files[app], head)
@@ -120,7 +130,13 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 			if service.image != "" {
 				named[app] = append(named[app], imageName(service.image))
 			}
+			if service.build && !slices.Contains(built, app) {
+				built = append(built, app)
+			}
 		}
+	}
+	if layout.builds, err = g.builds(ctx, head, built); err != nil {
+		return githubLayout{}, err
 	}
 	issue, err := g.dashboard(ctx)
 	layout.dashboard = issue.HTMLURL
@@ -134,6 +150,39 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 		layout.held = append(layout.held, held)
 	}
 	return layout, err
+}
+
+// builds is each app of built with the commits from the newest that changed
+// its directory to head: the head's history, one page of it, cut at that
+// commit. The default branch takes squash merges alone, so its history is one
+// line and those commits are exactly the revisions that build what the head
+// builds. An app whose last change is past that page is left out, since HQ
+// could not say which revisions build it.
+func (g *githubRepository) builds(ctx context.Context, head string, built []string) ([]GitHubBuild, error) {
+	found := []GitHubBuild{}
+	if len(built) == 0 {
+		return found, nil
+	}
+	history, err := json200(g.api.ReposListCommitsWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListCommitsParams{Sha: &head, PerPage: new(githubListPage)}))
+	if err != nil {
+		return nil, err
+	}
+	for _, app := range built {
+		last, err := json200(g.api.ReposListCommitsWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListCommitsParams{Sha: &head, Path: new(githubApps + "/" + app), PerPage: new(1)}))
+		if err != nil {
+			return nil, err
+		}
+		at := slices.IndexFunc(history, func(commit githubapi.Commit) bool { return len(last) > 0 && commit.Sha == last[0].Sha })
+		if at < 0 {
+			continue
+		}
+		build := GitHubBuild{App: app, Commits: []string{}}
+		for _, commit := range history[:at+1] {
+			build.Commits = append(build.Commits, commit.Sha)
+		}
+		found = append(found, build)
+	}
+	return found, nil
 }
 
 // imageName is an image reference without its tag or digest, as Renovate

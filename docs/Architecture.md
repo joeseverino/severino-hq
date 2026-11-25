@@ -1594,7 +1594,13 @@ Its update is its repository's: any change under `compose/<app>/` is that
 app's change, a Dockerfile or a lock file moving no image
 (`github_compose.go`'s `appChanges`), so an open pull request that changes
 what it is built from is Approve, and what it brings is never called clean,
-since no scan reads a build's inputs.
+since no scan reads a build's inputs. Once merged, it is Apply while its
+machine last released it at a revision outside the record's `builds` for
+the app: the commits from the newest that changed its directory to the head,
+exact because the default branch takes squash merges alone. That revision is
+the `revision` of the newest run that succeeded on the machine whose
+`apps.pull` reading has a `{project, result}` record of the app with
+`result` "ok" (`app_update_approval.applied_at`).
 
 Its security properties:
 

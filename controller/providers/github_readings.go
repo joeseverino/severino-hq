@@ -100,6 +100,9 @@ type GitHubRepositoryRecord struct {
 	// HeldBranches each branch the Dashboard holds with no pull request.
 	ComposeImages []GitHubComposeImage `json:"compose_images"`
 	HeldBranches  []GitHubHeldBranch   `json:"held_branches"`
+	// Builds is each app built on its host and the revisions that build what
+	// the head does.
+	Builds []GitHubBuild `json:"builds"`
 	// Fingerprint is what GitHub's change query answered before the read,
 	// hashed, and ReadAt when the read was made: what HQ's plan sends back.
 	Fingerprint string `json:"fingerprint"`
@@ -361,7 +364,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	record := GitHubRepositoryRecord{
 		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, Archived: repo.Archived, URL: repo.HTMLURL,
 		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit), Compose: []string{},
-		ComposeImages: []GitHubComposeImage{}, HeldBranches: []GitHubHeldBranch{},
+		ComposeImages: []GitHubComposeImage{}, HeldBranches: []GitHubHeldBranch{}, Builds: []GitHubBuild{},
 	}
 	if uses, ok := part(ctx, g, runtime.PartWorkflowPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {
 		record.Pins, record.CalledWorkflows = uses.pins, uses.called
@@ -371,7 +374,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	if g.optedIn() {
 		if apps, ok := part(ctx, g, runtime.PartCompose, func() (githubLayout, error) { return g.apps(ctx, branch, commit.Sha) }); ok {
 			record.Compose, record.Dashboard, layout = apps.compose, apps.dashboard, apps.compose
-			record.ComposeImages, record.HeldBranches = apps.images, apps.held
+			record.ComposeImages, record.HeldBranches, record.Builds = apps.images, apps.held, apps.builds
 		}
 	}
 	workflows, err := json200(g.api.ActionsListRepoWorkflowsWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListRepoWorkflowsParams{PerPage: new(githubListPage)}))

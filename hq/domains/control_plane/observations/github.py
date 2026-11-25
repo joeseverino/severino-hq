@@ -194,6 +194,10 @@ class RepositoryRecord(ObservationRecord):
     # ``approve``, ``unschedule``, ``unlimit``) and the apps whose image its
     # line names.
     held_branches: list[dict[str, Any]] = []
+    # ``{app, commits}`` per app with a service built on its host: each commit
+    # from the newest that changed ``compose/<app>/`` to the head, newest
+    # first, the revisions that build what a merge does.
+    builds: list[dict[str, Any]] = []
     # What GitHub's change query answered when this record was read, hashed,
     # and when it was read in full: the plan HQ sends the controller.
     fingerprint: str = ""

@@ -1528,6 +1528,73 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/commits": {
+   "get": {
+    "operationId": "repos/list-commits",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "sha",
+      "description": "SHA or branch to start listing commits from. Default: the repository\u2019s default branch (usually `main`).",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "path",
+      "description": "Only commits containing this file path will be returned.",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/commit"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/commits/{commit_sha}/pulls": {
    "get": {
     "operationId": "repos/list-pull-requests-associated-with-commit",

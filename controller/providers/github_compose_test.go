@@ -39,6 +39,11 @@ func TestAnOptedInRepositoryReadsItsApps(t *testing.T) {
 	head := "/contents/compose/%s?ref=aaaa000000000000000000000000000000000000"
 	routes[api(fmt.Sprintf(head, "example/compose.yml"))] = githubContent("services:\n  web:\n    image: example/app:1\n  worker:\n    image: example/worker:${TAG:-3}@sha256:" + strings.Repeat("a", 64) + "\n  viewer:\n    build: ./viewer\n    image: example-viewer:local\n  reader:\n    build:\n      context: ./reader\n")
 	routes[api(fmt.Sprintf(head, "example/docker-compose.override.yml"))] = githubContent("services:\n  worker:\n    environment:\n      LEVEL: info\n")
+	commit := func(sha string) string {
+		return `{"sha":"` + sha + `","html_url":"https://github.com/example/app/commit/` + sha + `","commit":{"message":"Change"},"author":null}`
+	}
+	routes[api("/commits?sha=aaaa000000000000000000000000000000000000&per_page=100")] = "[" + commit("aaaa000000000000000000000000000000000000") + "," + commit("c2") + "," + commit("c1") + "," + commit("c0") + "]"
+	routes[api("/commits?sha=aaaa000000000000000000000000000000000000&path=compose%2Fexample&per_page=1")] = "[" + commit("c1") + "]"
 	routes[api(fmt.Sprintf(head, "web/compose.yaml"))] = githubContent("services:\n  web:\n    image: example/web:${WEB_TAG}\n")
 	routes[api("/contents/compose/example/compose.yml?ref=dddd")] = githubContent("services:\n  web:\n    image: example/app:1\n  worker:\n    image: example/worker:${TAG:-3}\n")
 	routes[api("/contents/compose/example/compose.yml?ref=eeee")] = githubContent("services:\n  web:\n    image: example/app:2\n    environment:\n      SECRET: ${SECRET}\n  worker:\n    image: example/worker:${TAG:-3}\n  cache:\n    image: example/cache:7\n    profiles: [cache]\n")
@@ -64,6 +69,7 @@ func TestAnOptedInRepositoryReadsItsApps(t *testing.T) {
 		{"each app's Compose files, by the names Compose finds in a directory", record.Compose, `["compose/example/compose.yml","compose/example/docker-compose.override.yml","compose/web/compose.yaml"]`},
 		{"the open Dashboard issue, never a pull request", record.Dashboard, `"https://github.com/example/app/issues/1"`},
 		{"each service's image at the head, and whether it builds it, an app that needs the host's variables left out", record.ComposeImages, `[{"path":"compose/example/compose.yml","service":"reader","image":"","build":true},{"path":"compose/example/compose.yml","service":"viewer","image":"example-viewer:local","build":true},{"path":"compose/example/compose.yml","service":"web","image":"example/app:1","build":false},{"path":"compose/example/compose.yml","service":"worker","image":"example/worker:3@sha256:` + strings.Repeat("a", 64) + `","build":false}]`},
+		{"each app built on its host, and the commits from the last that changed its directory to the head", record.Builds, `[{"app":"example","commits":["aaaa000000000000000000000000000000000000","c2","c1"]}]`},
 		{"each branch held with no pull request, and the apps whose image its line names whole", record.HeldBranches, `[{"branch":"renovate/example-app-2.x","marker":"unpend","apps":["example"]},{"branch":"renovate/example-worker-5.x","marker":"approve","apps":["example"]},{"branch":"renovate/other","marker":"unschedule","apps":[]}]`},
 		{"each service the update's head moves", record.PullRequests[0].Apps, `[{"app":"example","read":true,"images":[{"service":"cache","before":"","after":"example/cache:7"},{"service":"web","before":"example/app:1","after":"example/app:2"},{"service":"worker","before":"example/worker:3","after":"example/worker:4"}]},{"app":"large","read":true,"images":[]}]`},
 		{"no images for a pull request that is not an update", record.PullRequests[1].Apps, `null`},
