@@ -45,20 +45,19 @@ def build_check(work: Path, platform: tuple[str, str]) -> Path:
 
 
 def unit_trees(payload: Path) -> None:
-    """The units this release and main ship, as release/ and main/."""
+    """The units this release ships, as release/."""
 
-    for name, ref in (("release", "HEAD"), ("main", os.environ.get("CHECK_RELEASE_BASE_REF", "origin/main"))):
-        into = payload / name
-        into.mkdir(parents=True)
-        archive = subprocess.run(["git", "archive", ref, "deploy/systemd"], cwd=ROOT, check=True, capture_output=True)
-        subprocess.run(["tar", "-x", "-C", str(into)], input=archive.stdout, check=True)
+    into = payload / "release"
+    into.mkdir(parents=True)
+    archive = subprocess.run(["git", "archive", "HEAD", "deploy/systemd"], cwd=ROOT, check=True, capture_output=True)
+    subprocess.run(["tar", "-x", "-C", str(into)], input=archive.stdout, check=True)
 
 
 # Run by the login shell: unpack, check, remove, exit as the check did.
 REMOTE = (
     'dir="$(mktemp -d "${TMPDIR:-/tmp}/hq-check.XXXXXX")" || exit 1; '
-    'if tar -x -C "$dir"; then "$dir/hq-host" check --release "$dir/release/deploy/systemd" '
-    '--main "$dir/main/deploy/systemd"; status=$?; else status=1; fi; rm -rf "$dir"; exit "$status"'
+    'if tar -x -C "$dir"; then "$dir/hq-host" check --release "$dir/release/deploy/systemd"; '
+    'status=$?; else status=1; fi; rm -rf "$dir"; exit "$status"'
 )
 
 
