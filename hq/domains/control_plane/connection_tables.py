@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable
 from dataclasses import replace
+from operator import attrgetter
 from typing import Any
 
 from hq.domains.control_plane.names import normalized_hostname
@@ -85,9 +86,19 @@ def _connection_row(row: Any, request: Any, *, starts: bool) -> Row:
     return Row(
         (
             replace(_name(row, starts=starts), below=_name_below(row)),
-            replace(
-                _reads(row),
-                below=(Below("Changes", _abilities(row)),) if row.changes else (),
+            Cell(
+                parts=_pieces(row, CONNECTION_READ, "read", row.reads, attrgetter("label")),
+                fit=True,
+                below=(
+                    (
+                        Below(
+                            "Changes",
+                            _pieces(row, CONNECTION_ABILITY, "state", row.changes, attrgetter("ability.label")),
+                        ),
+                    )
+                    if row.changes
+                    else ()
+                ),
             ),
             _reaches(connection.instance),
             _state(row),
@@ -186,25 +197,10 @@ def _name_below(row: Any) -> tuple[Below, ...]:
     )
 
 
-def _reads(row: Any) -> Cell:
-    """What it reads, as many as the line holds."""
+def _pieces(row: Any, part: Any, key: str, items: Iterable[Any], label: Any) -> tuple[Cell, ...]:
+    """Each of a connection's items (what it reads, what it lets HQ change) drawn as its part."""
 
-    return Cell(
-        parts=tuple(
-            Cell(piece=Piece(CONNECTION_READ, {"read": read, "connection": row.connection}, read.label))
-            for read in row.reads
-        ),
-        fit=True,
-    )
-
-
-def _abilities(row: Any) -> tuple[Cell, ...]:
-    """Each thing its credential lets HQ change."""
-
-    return tuple(
-        Cell(piece=Piece(CONNECTION_ABILITY, {"state": state, "connection": row.connection}, state.ability.label))
-        for state in row.changes
-    )
+    return tuple(Cell(piece=Piece(part, {key: item, "connection": row.connection}, label(item))) for item in items)
 
 
 def _reaches(instance: Any) -> Cell:
