@@ -6,7 +6,7 @@ PartOf=severino-hq-web.service
 After=network-online.target docker.service severino-hq-secrets.service severino-hq-web.service
 Wants=network-online.target
 Requires=docker.service
-# Started again however often it ends.
+# Started again however often it fails.
 StartLimitIntervalSec=0
 
 [Service]
@@ -14,13 +14,15 @@ Type=simple
 User=root
 # Root executes only root-owned code, as the controller unit does.
 WorkingDirectory=/usr/local/lib/severino-hq
-# Holds the Worker's socket until stopped, reconnecting on its own. It ends
-# only when it cannot start, or when the host has no events connection, and
-# is started again within the heartbeat HQ expects of it, so a connection added
-# since is held before its channel reads as silent.
+# Holds the Worker's socket until stopped, reconnecting on its own. With no
+# events connection it exits 0, which Restart=on-failure leaves stopped
+# (systemd.service: on-failure restarts "when the process exits with a
+# non-zero exit code"), so a host without one runs nothing and raises
+# nothing; severino-hq-listener.path starts it when a render gives it one.
+# One that fails is started again after a short wait.
 ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host controller --events
-Restart=always
-RestartSec=5min
+Restart=on-failure
+RestartSec=5s
 
 # Never more than the controller unit is given, and no certificate state.
 ReadWritePaths=/run

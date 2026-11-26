@@ -506,13 +506,8 @@ and item names for you to fill in.
    before it starts: an item in the vault `host.json` names, laid out as
    [Connections](Connections.md#cloudflare-inbound-events) says, its
    `credential` the `SOCKET_TOKEN` from step 1 and its `website` the Worker's
-   socket, `wss://events.example.com/socket`. Once the renderer installs it
-   ([step 8](#8-add-the-first-connection)), the listener starts within five
-   minutes, or at once, on the host:
-
-   ```sh
-   systemctl start severino-hq-listener.service
-   ```
+   socket, `wss://events.example.com/socket`. The listener starts as the
+   renderer installs it ([step 8](#8-add-the-first-connection)).
 
 **Check:**
 

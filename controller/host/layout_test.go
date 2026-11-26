@@ -163,17 +163,22 @@ func TestThePartialPassUnitsAreGivenNoMoreThanTheControllers(t *testing.T) {
 }
 
 // The listener holds the socket for as long as HQ runs: started again
-// whenever it ends, and with HQ, so it runs the image HQ runs.
+// whenever it fails, started when a render changes the connections, and
+// with HQ, so it runs the image HQ runs. With nothing to hold it stops.
 func TestTheListenerUnitHoldsTheSocketWhileHQRuns(t *testing.T) {
 	service := filepath.Join("..", "..", "deploy", "systemd", ListenerUnit)
 	if got := unitValue(t, service, "ExecStart"); got != HostProgram+" controller --events" {
 		t.Errorf("the listener unit runs %q", got)
 	}
-	if got := unitValue(t, service, "Restart"); got != "always" {
-		t.Errorf("the listener is started again only on %q", got)
+	if got := unitValue(t, service, "Restart"); got != "on-failure" {
+		t.Errorf("the listener is started again on %q", got)
 	}
 	if got := unitValue(t, service, "PartOf"); got != hostcore.WebUnit {
 		t.Errorf("the listener is part of %q, not HQ's unit", got)
+	}
+	path := filepath.Join("..", "..", "deploy", "systemd", "severino-hq-listener.path")
+	if got := unitValue(t, path, "PathChanged"); got != filepath.Join(hostcore.SecretDir, "controller-connections.json") {
+		t.Errorf("the listener is started when %q changes, not the rendered connections", got)
 	}
 }
 
