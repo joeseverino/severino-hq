@@ -128,12 +128,18 @@ func TestARefreshDuringAGlanceStartsTheNext(t *testing.T) {
 	}
 }
 
+// The resident units, which only these tests name.
+const (
+	listenerUnit     = "severino-hq-listener.service"
+	dockerEventsUnit = "severino-hq-events-docker.service"
+)
+
 // The glance and listener units are given no more than the controller unit:
 // each setting that confines the controller confines them the same way, and
 // they write nowhere the controller cannot.
 func TestThePartialPassUnitsAreGivenNoMoreThanTheControllers(t *testing.T) {
 	systemd := filepath.Join("..", "..", "deploy", "systemd")
-	for _, unit := range []string{GlanceUnit, ListenerUnit} {
+	for _, unit := range []string{GlanceUnit, listenerUnit} {
 		for _, key := range []string{"User", "Group", "NoNewPrivileges", "PrivateTmp", "ProtectHome", "ProtectSystem", "WorkingDirectory"} {
 			want, _ := effective(t, systemd, ControllerUnit, key)
 			if got, _ := effective(t, systemd, unit, key); got != want {
@@ -165,8 +171,8 @@ func TestThePartialPassUnitsAreGivenNoMoreThanTheControllers(t *testing.T) {
 // The listener holds the socket for as long as HQ runs: started again
 // whenever it fails, started when a render changes the connections, and
 // with HQ, so it runs the image HQ runs. With nothing to hold it stops.
-func TestTheListenerUnitHoldsTheSocketWhileHQRuns(t *testing.T) {
-	service := filepath.Join("..", "..", "deploy", "systemd", ListenerUnit)
+func TestThelistenerUnitHoldsTheSocketWhileHQRuns(t *testing.T) {
+	service := filepath.Join("..", "..", "deploy", "systemd", listenerUnit)
 	if got := unitValue(t, service, "ExecStart"); got != HostProgram+" controller --events" {
 		t.Errorf("the listener unit runs %q", got)
 	}
@@ -191,12 +197,12 @@ func TestTheDockerWatcherRunsInTheSharedSandboxAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range dropInsOf(DockerEventsUnit, shipped) {
+	for _, name := range dropInsOf(dockerEventsUnit, shipped) {
 		if !strings.HasPrefix(name, "severino-hq-.service.d/") {
-			t.Errorf("%s is widened by %s", DockerEventsUnit, name)
+			t.Errorf("%s is widened by %s", dockerEventsUnit, name)
 		}
 	}
-	setting := func(key string) (string, []string) { return effective(t, shippedUnits, DockerEventsUnit, key) }
+	setting := func(key string) (string, []string) { return effective(t, shippedUnits, dockerEventsUnit, key) }
 	if net, _ := setting("PrivateNetwork"); !systemdTrue(net) {
 		t.Errorf("the watcher reaches the host's network (PrivateNetwork=%q)", net)
 	}
@@ -211,7 +217,7 @@ func TestTheDockerWatcherRunsInTheSharedSandboxAlone(t *testing.T) {
 			t.Errorf("the watcher is given %s=%s", key, value)
 		}
 	}
-	service := filepath.Join(shippedUnits, DockerEventsUnit)
+	service := filepath.Join(shippedUnits, dockerEventsUnit)
 	if got := unitValue(t, service, "ExecStart"); got != HostProgram+" events" {
 		t.Errorf("the watcher unit runs %q", got)
 	}
