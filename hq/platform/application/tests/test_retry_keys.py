@@ -63,7 +63,7 @@ class RefreshTests(TestCase):
     def test_the_same_key_for_a_different_request_is_a_conflict(self):
         self.ask(every_connection=True, idempotency_key="refresh-once")
 
-        result = self.ask(kind="tailscale.device", idempotency_key="refresh-once")
+        result = self.ask(kinds=["tailscale.device"], idempotency_key="refresh-once")
 
         self.assertEqual(result["error"]["code"], "idempotency_conflict")
 
@@ -78,7 +78,7 @@ class RefreshTests(TestCase):
         self.assertEqual(ReadRequest.objects.count(), 1)
 
     def test_a_refused_request_leaves_its_key_free_for_the_corrected_one(self):
-        refused = self.ask(connection_ref="no-such-connection", idempotency_key="refresh-once")
+        refused = self.ask(connection_refs=["no-such-connection"], idempotency_key="refresh-once")
         self.assertEqual(refused["error"]["code"], "not_found")
         self.assertFalse(IdempotencyRecord.objects.exists())
 

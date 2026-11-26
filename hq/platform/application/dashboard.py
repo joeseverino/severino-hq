@@ -144,7 +144,7 @@ class QueueItem(TypedDict):
     no_help_reason: str
     # What to read again so its check runs on fresh data, as the read's
     # payload (``Finding.read_now``); null where none is asked.
-    read_now: dict[str, str | bool] | None
+    read_now: dict[str, tuple[str, ...] | bool] | None
     actions: list[WrittenAction]
     subject: WrittenAction | None
     notice: bool

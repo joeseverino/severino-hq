@@ -26,6 +26,7 @@ lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.dashboard import gathered_rows
 lazy from hq.platform.application.page_parts import html_attributes
 lazy from hq.platform.application.pages import PageAction, offered_now
+lazy from hq.platform.application.request_identity import signed_in
 lazy from hq.platform.application.security import web_principal
 lazy from hq.platform.application.ui import button_classes
 lazy from hq.platform.core import queue_table as queue_tables
@@ -110,8 +111,8 @@ def queue_refresh(context, *lists, groups=()):
     nothing would be read."""
 
     request = _request(context)
-    user = getattr(request, "user", None)
-    if user is None or not user.is_authenticated:
+    user = signed_in(request)
+    if user is None:
         return None
     rows = [
         *(item for rows in lists for item in rows or ()),

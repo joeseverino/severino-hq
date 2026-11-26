@@ -203,48 +203,54 @@ READ_NOW_CAPABILITY = "infrastructure.controller.refresh"
 def read_now_link(
     principal: Principal,
     *,
-    connection_ref: str = "",
-    kind: str = "",
+    connection_refs: Iterable[str] = (),
+    kinds: Iterable[str] = (),
     every_connection: bool = False,
 ) -> ActionLink | None:
-    """A POST asking the controller to read a connection, a kind or everything now.
+    """A POST asking the controller to read connections, kinds or everything now.
 
-    None when ``principal`` may not ask. The subject rides in the URL so every
-    renderer posts the same request. Asked of everything, it says the
-    command's "all" words.
+    None when ``principal`` may not ask. The subjects ride in the URL, a
+    parameter each, so every renderer posts the same request. Asked of
+    everything, it says the command's "all" words.
     """
 
     spec = _permitted_spec(READ_NOW_CAPABILITY, principal)
     destination = route_url("control_plane:read_now")
     if spec is None or not destination:
         return None
-    params = {
-        key: value
-        for key, value in (
-            ("connection_ref", connection_ref),
-            ("kind", kind),
-            ("every_connection", "1" if every_connection else ""),
-        )
-        if value
-    }
+    refs, types = tuple(connection_refs), tuple(kinds)
+    params = [
+        *(("connection_ref", ref) for ref in refs),
+        *(("kind", kind) for kind in types),
+        *((("every_connection", "1"),) if every_connection else ()),
+    ]
+    named = (*refs, *types)
     return command_action(
         "read_now",
         READ_NOW_CAPABILITY,
         with_query(destination, params),
         method="POST",
-        target=connection_ref or kind,
+        target=named[0] if len(named) == 1 else "",
         variant="all" if every_connection else "",
         reason="Reads it again now.",
     )
 
 
-def read_now_payload(values) -> dict[str, object]:
-    """The command ``read_now_link``'s URL, or a form, asks for: the inverse."""
+def read_now_payload(*sources) -> dict[str, object]:
+    """The command ``read_now_link``'s URL, or a form, asks for: the inverse,
+    read from each ``QueryDict`` given."""
+
+    def every(key: str) -> list[str]:
+        return list(
+            dict.fromkeys(value.strip() for source in sources for value in source.getlist(key) if value.strip())
+        )
 
     payload: dict[str, object] = {
-        key: str(values.get(key, "")).strip() for key in ("connection_ref", "kind") if str(values.get(key, "")).strip()
+        field: found
+        for field, found in (("connection_refs", every("connection_ref")), ("kinds", every("kind")))
+        if found
     }
-    if values.get("every_connection") == "1":
+    if "1" in every("every_connection"):
         payload["every_connection"] = True
     return payload
 

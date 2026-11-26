@@ -17438,77 +17438,76 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "A wake-up request; with a subject, that subject is read on the next pull.\n\n``connection_ref`` forces every kind its credential reads, ``kind`` one\nkind, ``every_connection`` the whole sweep. At most one of the three.",
+            "description": "A wake-up request; with subjects, those are read on the next pull.\n\nEach of ``connection_refs`` forces every kind its credential reads, each of\n``kinds`` that kind, and ``every_connection`` the whole sweep, alone. A\npage's Refresh names every subject its problems rest on, in one call.",
             "oneOf": [
               {
                 "properties": {
-                  "connection_ref": {
-                    "pattern": "^\\s*$"
+                  "connection_refs": {
+                    "maxItems": 0
                   },
                   "every_connection": {
                     "const": false
                   },
-                  "kind": {
-                    "const": ""
+                  "kinds": {
+                    "maxItems": 0
                   }
-                },
-                "required": []
+                }
               },
               {
                 "properties": {
-                  "connection_ref": {
-                    "pattern": "\\S"
-                  },
-                  "every_connection": {
-                    "const": false
-                  },
-                  "kind": {
-                    "const": ""
-                  }
-                },
-                "required": [
-                  "connection_ref"
-                ]
-              },
-              {
-                "properties": {
-                  "connection_ref": {
-                    "pattern": "^\\s*$"
-                  },
-                  "every_connection": {
-                    "const": false
-                  },
-                  "kind": {
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
-              },
-              {
-                "properties": {
-                  "connection_ref": {
-                    "pattern": "^\\s*$"
+                  "connection_refs": {
+                    "maxItems": 0
                   },
                   "every_connection": {
                     "const": true
                   },
-                  "kind": {
-                    "const": ""
+                  "kinds": {
+                    "maxItems": 0
                   }
                 },
                 "required": [
                   "every_connection"
                 ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "connection_refs": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "connection_refs"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kinds": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "kinds"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "every_connection": {
+                    "const": false
+                  }
+                }
               }
             ],
             "properties": {
-              "connection_ref": {
-                "default": "",
-                "description": "The connection to read now, every type its credential reads.",
-                "title": "Connection",
-                "type": "string",
+              "connection_refs": {
+                "default": [],
+                "description": "The connections to read now, every type each one's credential reads.",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Connections",
+                "type": "array",
                 "x-hq-records": {
                   "resource": "connections"
                 }
@@ -17518,10 +17517,14 @@
                 "description": "Read every connection now.",
                 "type": "boolean"
               },
-              "kind": {
-                "$ref": "#/components/schemas/SweptKind",
-                "default": "",
-                "title": "Type of reading",
+              "kinds": {
+                "default": [],
+                "description": "The types of reading to read now, from every connection.",
+                "items": {
+                  "$ref": "#/components/schemas/SweptKind"
+                },
+                "title": "Types of reading",
+                "type": "array",
                 "x-hq-records": {
                   "resource": "readings"
                 }
@@ -29777,9 +29780,7 @@
         "type": "object"
       },
       "SweptKind": {
-        "description": "The one type of reading to read now, from every connection.",
         "enum": [
-          "",
           "adguard.client",
           "adguard.dns",
           "adguard.query_summary",
@@ -29848,7 +29849,6 @@
         ],
         "type": "string",
         "x-enumDescriptions": {
-          "": "None",
           "adguard.client": "DNS client",
           "adguard.dns": "DNS server",
           "adguard.query_summary": "DNS lookups",

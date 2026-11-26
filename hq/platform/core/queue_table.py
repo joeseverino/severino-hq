@@ -191,16 +191,23 @@ def refresh(items: Iterable[Mapping[str, Any]], principal: Principal, here: str)
     (each item's ``read_now``), then shows ``here`` anew; None when no row
     rests on a reading or its reader may not ask for one.
 
-    A row never carries its own: the press asks for every row it stands
-    over. Rows that rest on one reading ask for that one, rows on several
-    for every connection, the one request the read command takes for many.
+    A row never carries its own: the press asks, in one call, for every
+    connection and kind the rows it stands over rest on, or for every
+    connection where one of them does.
     """
 
-    asked = {tuple(sorted(item["read_now"].items())) for item in items if item.get("read_now")}
+    asked = [item["read_now"] for item in items if item.get("read_now")]
     if not asked:
         return None
-    subject = dict(asked.pop()) if len(asked) == 1 else {"every_connection": True}
-    read = read_now_link(principal, **subject)
+    every = any(read.get("every_connection") for read in asked)
+    read = read_now_link(
+        principal,
+        connection_refs=()
+        if every
+        else dict.fromkeys(ref for read in asked for ref in read.get("connection_refs", ())),
+        kinds=() if every else dict.fromkeys(kind for read in asked for kind in read.get("kinds", ())),
+        every_connection=every,
+    )
     if read is None:
         return None
     return Ask(CONTROLLER_REFRESH.words(), with_query(read.url, {"next": here}), title=read.reason, compact=True)

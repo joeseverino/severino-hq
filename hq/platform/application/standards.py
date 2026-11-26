@@ -14,7 +14,7 @@ from .labels import dotted
 from .tone import Tone, Toned
 from .ui import counted, ended
 lazy from . import dashboard
-lazy from .cadence import ControllerSweepCommand, swept
+lazy from .cadence import ControllerSweepCommand
 lazy from .finding_model import Finding
 lazy from .standard_findings import worded
 
@@ -296,7 +296,7 @@ class Measurement:
         fails by design with why."""
 
         unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
-        read = ControllerSweepCommand(kind=self.reads) if self.reads and swept(self.reads) else None
+        read = ControllerSweepCommand(kinds=(self.reads,)) if self.reads else None
         return tuple(
             replace(
                 worded(

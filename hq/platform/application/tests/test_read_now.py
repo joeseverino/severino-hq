@@ -7,6 +7,7 @@ gated capability, POST only.
 
 from datetime import timedelta
 
+from django.http import QueryDict
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -57,7 +58,7 @@ class ForcedKindsTests(TestCase):
         self.assertEqual(verdict["only_kinds"], [])
 
     def test_a_connection_asked_for_is_due_now_and_only_its_kinds(self):
-        result = self.ask(connection_ref="example-tailnet")
+        result = self.ask(connection_refs=["example-tailnet"])
 
         self.assertTrue(result["ok"], result)
         self.assertIn("example-tailnet", result["message"])
@@ -70,12 +71,13 @@ class ForcedKindsTests(TestCase):
     def test_a_kind_asked_for_is_the_only_kind_read(self):
         kind = fed_kinds("cloudflare_api")[0]
 
-        self.assertTrue(self.ask(kind=kind)["ok"])
+        self.assertTrue(self.ask(kinds=[kind])["ok"])
 
         self.assertEqual(sweep_due()["only_kinds"], [kind])
 
     def test_every_connection_reads_the_whole_sweep(self):
-        self.assertTrue(self.ask(every_connection=True)["ok"])
+        result = self.ask(every_connection=True)
+        self.assertTrue(result["ok"], result)
 
         verdict = sweep_due()
         self.assertTrue(verdict["due"])
@@ -83,7 +85,7 @@ class ForcedKindsTests(TestCase):
         self.assertEqual(verdict["only_kinds"], [])
 
     def test_a_read_is_answered_by_what_the_controller_stores_after_it(self):
-        self.ask(connection_ref="example-tailnet")
+        self.ask(connection_refs=["example-tailnet"])
         self.assertEqual(len(forced_reads()), 1)
 
         later = timezone.now() + timedelta(seconds=5)
@@ -97,14 +99,14 @@ class ForcedKindsTests(TestCase):
 
     @override_settings(SEVERINO_READ_REQUEST_SECONDS=60)
     def test_a_read_nothing_answers_stops_forcing_sweeps(self):
-        self.ask(connection_ref="example-tailnet")
+        self.ask(connection_refs=["example-tailnet"])
         ReadRequest.objects.update(requested_at=timezone.now() - timedelta(minutes=5))
 
         self.assertEqual(forced_reads(), ())
         self.assertFalse(sweep_due()["due"])
 
     def test_the_request_is_audited_against_its_connection(self):
-        self.ask(connection_ref="example-tailnet")
+        self.ask(connection_refs=["example-tailnet"])
 
         event = AuditLog.objects.filter(object_type="Read request").latest("pk")
         self.assertEqual(event.connection, "example-tailnet")
@@ -116,21 +118,21 @@ class RefusalTests(TestCase):
         connection("tailscale", "example-tailnet")
 
     def test_an_unknown_connection_is_not_found(self):
-        result = execute_capability(READ_NOW, {"connection_ref": "no-such-connection"}, principal=cli_principal())
+        result = execute_capability(READ_NOW, {"connection_refs": ["no-such-connection"]}, principal=cli_principal())
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "not_found")
         self.assertFalse(ReadRequest.objects.exists())
 
     def test_an_unknown_kind_is_refused(self):
-        result = execute_capability(READ_NOW, {"kind": "no.such.kind"}, principal=cli_principal())
+        result = execute_capability(READ_NOW, {"kinds": ["no.such.kind"]}, principal=cli_principal())
 
         self.assertEqual(result["error"]["code"], "invalid_input")
 
     def test_two_subjects_at_once_are_refused(self):
         result = execute_capability(
             READ_NOW,
-            {"connection_ref": "example-tailnet", "every_connection": True},
+            {"connection_refs": ["example-tailnet"], "every_connection": True},
             principal=cli_principal(),
         )
 
@@ -140,12 +142,12 @@ class RefusalTests(TestCase):
     def test_a_reader_may_not_ask(self):
         reader = READER
 
-        result = execute_capability(READ_NOW, {"connection_ref": "example-tailnet"}, principal=reader)
+        result = execute_capability(READ_NOW, {"connection_refs": ["example-tailnet"]}, principal=reader)
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "forbidden")
         self.assertFalse(ReadRequest.objects.exists())
-        self.assertIsNone(read_now_link(reader, connection_ref="example-tailnet"))
+        self.assertIsNone(read_now_link(reader, connection_refs=("example-tailnet",)))
 
 
 @SWEEPS
@@ -155,7 +157,7 @@ class WebTests(TestCase):
         operator(self.client)
 
     def test_the_link_posts_what_it_names_and_returns_with_the_result(self):
-        link = read_now_link(cli_principal(), connection_ref="example-tailnet")
+        link = read_now_link(cli_principal(), connection_refs=["example-tailnet"])
 
         response = self.client.post(link.url, form_keyed({"next": reverse("control_plane:connections")}), follow=True)
 
@@ -168,16 +170,18 @@ class WebTests(TestCase):
             reverse("control_plane:read_now"), form_keyed({"connection_ref": "no-such-connection"}), follow=True
         )
 
-        self.assertIn("connection_ref names nothing HQ has.", text(response.content.decode()))
+        self.assertIn("connection_refs names nothing HQ has.", text(response.content.decode()))
         self.assertFalse(ReadRequest.objects.exists())
 
     def test_the_payload_is_the_inverse_of_the_link(self):
+        asked = QueryDict("connection_ref=+example-tailnet+&kind=&kind=tailscale.device&kind=tailscale.device")
+
         self.assertEqual(
-            read_now_payload({"connection_ref": " example-tailnet ", "kind": ""}),
-            {"connection_ref": "example-tailnet"},
+            read_now_payload(asked, QueryDict("connection_ref=example-dns")),
+            {"connection_refs": ["example-tailnet", "example-dns"], "kinds": ["tailscale.device"]},
         )
-        self.assertEqual(read_now_payload({"every_connection": "1"}), {"every_connection": True})
-        self.assertEqual(read_now_payload({"every_connection": "yes"}), {})
+        self.assertEqual(read_now_payload(QueryDict("every_connection=1")), {"every_connection": True})
+        self.assertEqual(read_now_payload(QueryDict("every_connection=yes")), {})
 
 
 class QueueRefreshTests(TestCase):
@@ -217,10 +221,10 @@ class QueueRefreshTests(TestCase):
         self.assertIn("kind=tailscale.device", action.url)
         self.assertIn("next=%2Fexample%2Fpage%2F", action.url)
 
-    def test_rows_on_several_readings_ask_for_every_connection(self):
+    def test_rows_on_several_readings_ask_for_each_in_one_call(self):
         action = self.refresh(self.rows("tailscale.device", "portainer.container"))
 
-        self.assertIn("every_connection=1", action.url)
+        self.assertIn("kind=tailscale.device&kind=portainer.container", action.url)
 
     def test_nothing_is_offered_where_no_row_rests_on_a_reading(self):
         self.assertIsNone(self.refresh(self.rows("")))

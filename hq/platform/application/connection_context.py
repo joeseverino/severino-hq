@@ -446,7 +446,7 @@ def _rows(
                     else read_through(connection.instance.kind, connection.instance.label),
                     fix=fix if fix is not None and fix.needed else None,
                     last_event=events.get(ref),
-                    read_now=(read_now_link(principal, connection_ref=ref) if ref in controller_refs else None),
+                    read_now=(read_now_link(principal, connection_refs=(ref,)) if ref in controller_refs else None),
                     read_requested_at=pending.get(ref),
                     reach=reach.get(ref),
                     used_for=used_for.get(group.spec.name, ""),

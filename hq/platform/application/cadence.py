@@ -23,6 +23,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Exists, F, Max, OuterRef, Q
 from django.utils import timezone
+from django.utils.text import get_text_list
 from pydantic import Field, GetJsonSchemaHandler
 from pydantic_core import CoreSchema
 
@@ -64,65 +65,58 @@ lazy from .adoption import manages_through, observes_only
 lazy from .facts import stored_snapshots
 lazy from .inbound_events import covers
 
-# A kind HQ stores readings of, or none. Read as a schema is first built, so
-# declaring the command loads no registry.
-type SweptKind = Annotated[
-    str,
-    Choices([("", "None"), *((kind, registry_label(kind)) for kind in sorted({*OBSERVATIONS, *PROVIDERS}))]),
-    Describe("The one type of reading to read now, from every connection."),
-]
+# A kind HQ stores readings of. Read as a schema is first built, so declaring
+# the command loads no registry.
+type SweptKind = Annotated[str, Choices([(kind, registry_label(kind)) for kind in sorted({*OBSERVATIONS, *PROVIDERS})])]
 
 
 @dataclass(frozen=True, slots=True)
 class ControllerSweepCommand:
-    """A wake-up request; with a subject, that subject is read on the next pull.
+    """A wake-up request; with subjects, those are read on the next pull.
 
-    ``connection_ref`` forces every kind its credential reads, ``kind`` one
-    kind, ``every_connection`` the whole sweep. At most one of the three.
+    Each of ``connection_refs`` forces every kind its credential reads, each of
+    ``kinds`` that kind, and ``every_connection`` the whole sweep, alone. A
+    page's Refresh names every subject its problems rest on, in one call.
     """
 
-    connection_ref: Annotated[
-        str,
+    connection_refs: Annotated[
+        tuple[str, ...],
         Names("connections"),
-        Field(title="Connection"),
-        Describe("The connection to read now, every type its credential reads."),
-    ] = ""
-    kind: Annotated[
-        SweptKind,
+        Field(title="Connections"),
+        Describe("The connections to read now, every type each one's credential reads."),
+    ] = ()
+    kinds: Annotated[
+        tuple[SweptKind, ...],
         Names("readings"),
-        Field(title="Type of reading"),
-    ] = ""
+        Field(title="Types of reading"),
+        Describe("The types of reading to read now, from every connection."),
+    ] = ()
     every_connection: Annotated[bool, Describe("Read every connection now.")] = False
 
     @classmethod
     def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        # The subject each shape of the command names, said beside its fields.
+        # The shapes a sweep takes, said beside its fields: none, every
+        # connection alone, or some connections and types.
         declared: dict[str, Any] = handler(schema)
-        handler.resolve_ref_schema(declared)["oneOf"] = [_naming(subject) for subject in (None, *_UNNAMED)]
+        handler.resolve_ref_schema(declared)["oneOf"] = _SHAPES
         return declared
 
 
-# Each subject a sweep names, and what it holds when it names none: a blank
-# connection, no kind, not every connection.
-_UNNAMED: dict[str, dict[str, Any]] = {
-    "connection_ref": {"pattern": r"^\s*$"},
-    "kind": {"const": ""},
+_NONE: dict[str, dict[str, Any]] = {
+    "connection_refs": {"maxItems": 0},
+    "kinds": {"maxItems": 0},
     "every_connection": {"const": False},
 }
-_NAMED: dict[str, dict[str, Any]] = {
-    "connection_ref": {"pattern": r"\S"},
-    "kind": {"minLength": 1},
-    "every_connection": {"const": True},
-}
-
-
-def _naming(subject: str | None) -> dict[str, Any]:
-    """The shape of a sweep that names ``subject`` alone, or none."""
-
-    return {
-        "properties": {field: (_NAMED if field == subject else _UNNAMED)[field] for field in _UNNAMED},
-        "required": [subject] if subject else [],
-    }
+_SHAPES: list[dict[str, Any]] = [
+    {"properties": _NONE},
+    {"properties": {**_NONE, "every_connection": {"const": True}}, "required": ["every_connection"]},
+    {
+        "properties": {"every_connection": {"const": False}},
+        "anyOf": [
+            {"properties": {field: {"minItems": 1}}, "required": [field]} for field in ("connection_refs", "kinds")
+        ],
+    },
+]
 
 
 def _seconds(name: str) -> int:
@@ -553,23 +547,26 @@ def _asked_kinds(forced: tuple[ForcedRead, ...]) -> list[str]:
     return sorted({kind for read in forced for kind in read.kinds or ()})
 
 
-def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
-    """``(connection_ref, kind)`` the command forces, or None for a bare wake-up.
+type Subjects = tuple[tuple[str, ...], tuple[str, ...]]
 
-    Fails closed: a ref no controller reported. The command's type holds its
+
+def _read_subject(command: ControllerSweepCommand) -> Subjects | None:
+    """``(connection_refs, kinds)`` the command forces, both empty for every
+    connection, or None for a bare wake-up.
+
+    Fails closed: a ref no controller reported. The command's type holds each
     kind to one HQ stores.
     """
 
-    ref = command.connection_ref.strip()
-    kind = command.kind
-    named = [field for field, value in (("connection_ref", ref), ("kind", kind)) if value]
-    if command.every_connection:
-        named.append("every_connection")
-    if len(named) > 1:
-        raise ValidationError(dict.fromkeys(named, "Name one of connection_ref, kind or every_connection."))
-    if ref and not connection_providers(ref):
-        raise ValidationError({"connection_ref": ValidationError("No such connection.", code=Code.NOT_FOUND)})
-    return (ref, kind) if named else None
+    refs = tuple(dict.fromkeys(ref.strip() for ref in command.connection_refs if ref.strip()))
+    kinds = tuple(dict.fromkeys(command.kinds))
+    if command.every_connection and (refs or kinds):
+        raise ValidationError({"every_connection": "Name connections and types of reading, or every connection."})
+    if unknown := [ref for ref in refs if not connection_providers(ref)]:
+        raise ValidationError(
+            {"connection_refs": ValidationError(f"No such connection: {', '.join(unknown)}.", code=Code.NOT_FOUND)}
+        )
+    return (refs, kinds) if refs or kinds or command.every_connection else None
 
 
 def pass_due() -> str:
@@ -816,21 +813,27 @@ def request_controller_sweep(
     *,
     principal: Principal,
 ) -> ControllerSweepRequested:
-    """Wake the pull-based controller; with a subject, have it read that now."""
+    """Wake the pull-based controller; with subjects, have it read those now."""
 
     del principal
     subject = _read_subject(command)
-    ref, kind = subject or ("", "")
+    refs, kinds = subject or ((), ())
     # Noted before policy is read, so the active cadence (not the twelve-hour
     # idle economy) decides the sweep.
-    at = ask(reads=(kind,) if kind else (), connection=ref, every=command.every_connection, activity=True)
+    asks = [ask(connection=ref, activity=True) for ref in refs]
+    if kinds or command.every_connection or not refs:
+        asks.append(ask(reads=kinds, every=command.every_connection, activity=True))
+    at = min(asks)
     verdict = sweep_due()
     said = _sweep_message(subject, due=bool(verdict["due"]))
-    # A bare wake-up names nothing to wait for.
+    # A bare wake-up names nothing to wait for; every connection waits on every kind.
+    forced = (*kinds, *(kind for ref in refs for kind in forced_kinds(ref, "") or ()))
     asked = (
         Asked(Standing(note=said), message=said)
         if subject is None
-        else asked_read(forced_kinds(ref, kind) or (), at, connection_ref=ref, message=said)
+        else asked_read(
+            dict.fromkeys(forced), at, connection_ref=refs[0] if len(refs) == 1 and not kinds else "", message=said
+        )
     )
     return {
         **asked.answer(),
@@ -859,19 +862,19 @@ CONTROLLER_REFRESH = CapabilitySpec(
 )
 
 
-def _read_label(subject: tuple[str, str] | None) -> str:
+def _read_label(subject: Subjects | None) -> str:
     if subject is None:
         return ""
-    ref, kind = subject
-    return ref or kind or "every connection"
+    refs, kinds = subject
+    return ", ".join((*refs, *kinds)) or "every connection"
 
 
-def _sweep_message(subject: tuple[str, str] | None, *, due: bool) -> str:
+def _sweep_message(subject: Subjects | None, *, due: bool) -> str:
     """What asking says, in the refresh command's own words."""
 
-    ref, kind = subject or ("", "")
-    if ref or kind:
-        return CONTROLLER_REFRESH.requested(ref or registry_label(kind))
+    refs, kinds = subject or ((), ())
+    if refs or kinds:
+        return CONTROLLER_REFRESH.requested(get_text_list([*refs, *map(registry_label, kinds)], "and"))
     asked = requested(CONTROLLER_REFRESH.words("all"))
     return asked if due or subject is not None else f"{asked} What HQ shows is already up to date."
 

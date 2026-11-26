@@ -364,15 +364,17 @@ rings the credential-free controller doorbell, and lets the pull-based
 controller apply its usual cadence. The API process gets no provider
 authority, and the caller gets the due decision behind the request.
 
-With a subject it is "Refresh", and takes at most one of:
+With subjects it is "Refresh", and takes some connections and kinds together,
+or every connection alone:
 
 | Subject | Forces |
 |---|---|
-| `connection_ref` | every kind that connection's credential reads (derived from the observation registry through its provider) |
-| `kind` | one kind |
+| `connection_refs` | every kind each connection's credential reads (derived from the observation registry through its provider) |
+| `kinds` | each kind named |
 | `every_connection` | the whole sweep |
 
-An unknown ref or kind is `invalid_input`. It needs `manage_infrastructure`.
+An unknown ref is `not_found`, an unknown kind `invalid_input`. It needs
+`manage_infrastructure`.
 
 The request is stored as a `ReadRequest` and audited against its connection.
 It makes the controller's `sweep-due` answer due, whatever the cadence says.
@@ -384,7 +386,8 @@ provider nothing, and a page opened asks nothing for it either.
 
 A request is answered once each forced reading is stored after it, and stops
 forcing after `SEVERINO_READ_REQUEST_SECONDS`. The web form is
-`POST /infrastructure/connections/read/`; a GET is refused.
+`POST /infrastructure/connections/read/`, a `connection_ref` or `kind`
+parameter for each subject; a GET is refused.
 
 A finding names the read its check rests on as `read_now`, where one is
 involved. A page asks the reads of every finding it shows from one Refresh at

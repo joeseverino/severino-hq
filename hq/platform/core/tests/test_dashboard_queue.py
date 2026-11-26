@@ -34,7 +34,7 @@ class DashboardQueueTests(SignedInTestCase):
                 explanation="Supporting facts.",
                 primary=opens("Reconcile the bill", ""),
                 steps=(Press(read_link("remedy", "Inspect evidence", "/example/evidence/", recommended=True)),),
-                read_now=ControllerSweepCommand(kind="github.repository"),
+                read_now=ControllerSweepCommand(kinds=("github.repository",)),
             ),
             Finding(
                 rule="example-service",
@@ -64,7 +64,7 @@ class DashboardQueueTests(SignedInTestCase):
         self.assertEqual(queue[0]["steps"], [])
         self.assertEqual(queue[1]["action"], "Reconcile the bill")
         self.assertEqual(queue[1]["steps"][0]["link"]["url"], "/example/evidence/")
-        self.assertEqual(queue[1]["read_now"], {"kind": "github.repository"})
+        self.assertEqual(queue[1]["read_now"], {"kinds": ("github.repository",)})
 
     def test_queue_has_safe_actions_and_dashboard_keeps_domain_overviews_first(self):
         from hq.domains.control_plane.models import DashboardRefreshRequest

@@ -492,10 +492,10 @@ def _read_subject(finding: Finding, subject: TopologyNode | None) -> cadence.Con
     is involved."""
 
     if subject is not None and subject.kind == "connection" and subject.connection_ref:
-        return cadence.ControllerSweepCommand(connection_ref=subject.connection_ref)
+        return cadence.ControllerSweepCommand(connection_refs=(subject.connection_ref,))
     kind = finding.scope or (subject.kind_key if subject is not None else "")
     if kind in OBSERVATIONS or (kind in PROVIDERS and is_observable(kind)):
-        return cadence.ControllerSweepCommand(kind=kind)
+        return cadence.ControllerSweepCommand(kinds=(kind,))
     if finding.affected_scopes:
         return cadence.ControllerSweepCommand(every_connection=True)
     return None
