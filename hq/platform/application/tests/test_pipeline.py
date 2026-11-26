@@ -604,8 +604,11 @@ class DeployTests(SimpleTestCase):
     def needs(self, job: str) -> set[str]:
         return upstream(job, {name: needed(each) for name, each in self.jobs.items()})
 
-    def environment(self, job: str) -> Node:
-        return self.jobs[job].get("environment", {})
+    def environment(self, job: str) -> str:
+        """The environment ``job`` waits on, by name."""
+
+        declared = self.jobs[job].get("environment", "")
+        return declared.get("name", "") if isinstance(declared, dict) else declared
 
     def test_every_job_on_the_homelab_waits_for_an_approval(self):
         homelab = [name for name, job in self.jobs.items() if "self-hosted" in job.get("runs-on", [])]
@@ -613,7 +616,7 @@ class DeployTests(SimpleTestCase):
         for name in homelab:
             with self.subTest(job=name):
                 gated = {name, *self.needs(name)}
-                self.assertTrue(any(self.environment(job).get("name") == "production" for job in gated))
+                self.assertTrue(any(self.environment(job) == "release" for job in gated))
         for path in workflows():
             if path.name != "deploy.yml":
                 with self.subTest(workflow=path.name):
@@ -638,11 +641,10 @@ class DeployTests(SimpleTestCase):
     def test_the_deployment_is_recorded_for_the_commit_deployed_and_no_job_records_its_own(self):
         """A job's own deployment names the commit main was at when the run started,
         and succeeds once approved: Resolve records the one for the resolved commit."""
-        environments = [name for name in self.jobs if self.environment(name)]
-        self.assertTrue(environments)
-        for name in environments:
+        self.assertTrue(any(self.environment(name) for name in self.jobs))
+        for name in self.jobs:
             with self.subTest(job=name):
-                self.assertIs(self.environment(name).get("deployment"), False)
+                self.assertNotEqual(self.environment(name), "production")
         (record,) = [step for step in steps(self.jobs["resolve"]) if '/deployments"' in script(step)]
         self.assertEqual(record["env"]["COMMIT"], "${{ steps.find.outputs.commit }}")
         self.assertIn('--arg ref "$COMMIT"', script(record))

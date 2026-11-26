@@ -764,6 +764,38 @@ zone. A deploy with no terminal replaces any DNS record already on that
 hostname, so the name is kept for the Worker alone. Cloudflare never returns
 a Worker secret's value, so the token cannot read the Worker's secrets.
 
+## Releasing a deploy
+
+Deploy's Approve job waits on the `release` environment, whose one
+protection rule is HQ's GitHub App, a custom deployment protection rule.
+Deploy (`deploy.yml`) is started only by a dispatch on `main` and deploys only
+a commit Compose published and signed, so the rule decides when a merged
+commit ships, never what ships.
+
+- HQ never answers on its own. The `github-waiting` finding offers Approve and
+  Reject (`deployment.approve`, `deployment.reject`) for a run waiting on an
+  environment whose rule is HQ's App, at the commit the reading holds. A
+  person's press answers; an agent's waits for a person's approval, always
+  (`waits_for_a_person(every_call)`). An event from GitHub only makes the
+  repository's reading due.
+- The answer is the controller's (`controller/providers/github_review.go`):
+  it reads the run again and answers only while it still waits on that
+  environment at that commit, under a token for that one repository and
+  Deployments write. A commit production already runs is offered and allowed
+  Reject alone.
+- Whoever holds the App's key can mint a Deployments write token and answer
+  the rule: the controller, and the workflows that hold `HQ_APP_KEY` (CI's
+  Release, Compose, each extension's `admission` environment). What an answer
+  releases is still only the signed composition of a commit on `main`, which
+  root verifies before it deploys ([A deploy](Deployment.md#a-deploy)). A
+  stolen key can ship such a release without a person, an older one
+  included, and nothing that is not one.
+- With HQ down, the run waits up to 30 days, then fails; it never releases
+  itself. A repository administrator releases it without HQ by "Start all
+  waiting jobs" on the run, as long as the environment lets administrators
+  bypass its rules. The finding names that step once a run has waited past
+  `WAITING_SERIOUS_AFTER`.
+
 ## A leaked GitHub App credential
 
 The controller holds the GitHub App's private key and mints installation

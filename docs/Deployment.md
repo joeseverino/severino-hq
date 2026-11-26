@@ -19,7 +19,7 @@ waits on a schedule.
 | :--- | :--- | :--- |
 | **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image and the automation worker's image built beside it, and attest their SBOMs), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application, pinning the worker image CI built beside the host image; on `main`, published and signed with that worker image, and both SBOMs attested |
-| **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
+| **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits on the `release` environment, whose protection rule is HQ's GitHub App, then deploys on the self-hosted runner |
 
 Each CI job is named for the `mise` task it runs, so the gates are declared
 once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
@@ -137,9 +137,31 @@ ran before (`python3 -m tools.pipeline.production previous COMMIT`, the same
 reading `mise run release:report` takes). It gives the `cosign verify` command
 for the image it deployed.
 
-Resolve records the deployment itself: the environment's job sets
-`deployment: false`, since the deployment GitHub would record names the
-commit `main` was at when the run started and succeeds once approved.
+Resolve records the production deployment itself, since one a job of that
+environment recorded would name the commit `main` was at when the run started
+and succeed once approved. Approve waits on an environment of its own,
+`release`, because a custom protection rule cannot hold a job that sets
+`deployment: false`; the deployment that job records is `release`'s.
+
+### Releasing a deploy
+
+A run waiting on `release` is the `github-waiting` finding, with Approve and
+Reject. A press sends the answer through the controller, which reads the run
+again and answers only while it still waits there at the commit you saw;
+Reject alone is offered for a commit production already runs. An agent's
+press waits for your approval. With HQ down the run waits, never releases
+itself: "Start all waiting jobs" on the run releases it without HQ, which the
+finding names once the run has waited past its threshold. What each part may
+do: [Security](Security.md#releasing-a-deploy).
+
+Setting it up, once, on the repository that deploys HQ:
+
+1. Subscribe HQ's App to the "Deployment protection rule" event, on its
+   settings page (GitHub has no API for an App's events), and accept the
+   Deployments write permission on the installation.
+2. Create the `release` environment, `main` only, administrators allowed to
+   bypass its rules.
+3. Enable HQ's App as its deployment protection rule.
 
 ### When a run fails
 
@@ -177,7 +199,7 @@ use mints an hour-long token for only what it does:
 
 | Who | Holds the key as | Asks for |
 | :--- | :--- | :--- |
-| the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs; Contents and Pull requests write on one repository to merge a pull request you approved |
+| the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs; Contents and Pull requests write on one repository to merge a pull request you approved; Deployments write on one repository to answer a deploy you approved or rejected |
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
 | Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
 

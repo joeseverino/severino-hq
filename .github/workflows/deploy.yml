@@ -6,7 +6,10 @@ name: Deploy
 #
 #   Resolve  finds the signed image for the commit, and records a deployment
 #            of that commit to the production environment
-#   Approve  waits for a person. A newer release takes its place in the wait
+#   Approve  waits on the release environment, whose protection rule is HQ's
+#            GitHub App: a person's Approve in HQ releases it, and an
+#            administrator's "Start all waiting jobs" on the run releases it
+#            without HQ. A newer release takes its place in the wait
 #   Deploy   on the self-hosted runner, once approved: hands the image to
 #            root's hq-host, which verifies its signature, refuses one that
 #            drops an extension, recreates, waits for health, rolls back if
@@ -17,9 +20,12 @@ name: Deploy
 #            hq-host began, or not approved
 #
 # The deployment is GitHub's own record of where a commit stands: on the
-# commit, the merged pull request and the environment's page. It is created
-# here rather than by the environment's job, which would record the commit
-# main was at when this run started, and call it a success once approved.
+# commit, the merged pull request and the production environment's page. It
+# is created here rather than by a job of that environment, which would
+# record the commit main was at when this run started, and call it a success
+# once approved. Approve waits on an environment of its own, release, since a
+# custom protection rule cannot hold a job that sets deployment: false; the
+# deployment that job records is release's, never production's.
 #
 # Only a dispatch starts it, so no pull request, and no run of anything else,
 # can reach the self-hosted runner.
@@ -135,11 +141,9 @@ jobs:
     # step began.
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    # The environment's reviewers hold this job; the deployment it would
-    # record is Resolve's.
-    environment:
-      name: production
-      deployment: false
+    # HQ's protection rule on the release environment holds this job; the
+    # production deployment is Resolve's.
+    environment: release
     concurrency:
       group: deploy-awaiting-approval
       cancel-in-progress: true

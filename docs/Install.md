@@ -66,7 +66,8 @@ ruleset before they can publish anything.
    To take one out of production later, move its id to `retired`: a deploy
    refuses an image that drops an extension production runs unless it is named
    there. How an extension is admitted is in [Extensions](Plugins.md#composition).
-4. Create the `production` environment with yourself as a required reviewer.
+4. Create the `release` environment, `main` only, with HQ's App as its
+   deployment protection rule ([Releasing a deploy](Deployment.md#releasing-a-deploy)).
 5. Add a `main` ruleset requiring the **Ready** check, with GitHub Actions
    as its expected source.
 

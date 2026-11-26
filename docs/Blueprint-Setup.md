@@ -44,7 +44,7 @@ fork changes them in every place listed.
 | :--- | :--- | :--- |
 | `HQ_APP_KEY`, `HQ_APP_CLIENT_ID` | repository secrets, set by `mise run wire-github-app` | CI's Release and Compose: reading admissions and starting the next workflow |
 | `COMPOSITION_EXTENSIONS` | repository secret: JSON in the shape of [`composition/extensions.json`](../composition/extensions.json) | Compose: which extensions to compose, and whose signatures to trust |
-| The `production` environment, with required reviewers | repository environments | Deploy's approval |
+| The `release` environment, `main` only, with HQ's App as its deployment protection rule | repository environments | Deploy's approval |
 | The `admission` environment on each extension, `main` only, holding `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` | each extension's settings, set by `mise run wire-github-app` | an admission starting Compose |
 | HQ's GitHub App: no webhook, the permissions in [`deploy/github-apps.json`](../deploy/github-apps.json), installed on the host and every extension | the account's app settings | everything above, and the controller |
 | A `main` ruleset requiring **Ready** from GitHub Actions, with code scanning holding a merge on a CodeQL alert | repository rules | merges |

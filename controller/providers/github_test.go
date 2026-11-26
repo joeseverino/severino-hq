@@ -1179,8 +1179,8 @@ func TestGitHubDeliveryWithoutASourceRepositoryReadsNothing(t *testing.T) {
 }
 
 // The admission opens the check the controller moves on, under the same name,
-// and the Deploy runs it reads wait for approval on the production
-// environment, which is what a run's "waiting" status is.
+// and the Deploy runs it reads wait for approval on the release environment,
+// which is what a run's "waiting" status is.
 func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 	read := func(path string) string {
 		t.Helper()
@@ -1193,8 +1193,8 @@ func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 	if !strings.Contains(read(".github/actions/admit-plugin/action.yml"), githubCheckName) {
 		t.Errorf("the admission does not name the check %q", githubCheckName)
 	}
-	if !strings.Contains(read(githubDeploy), "environment:\n      name: production\n") {
-		t.Errorf("%s has no job that waits on the production environment", githubDeploy)
+	if !strings.Contains(read(githubDeploy), "    environment: release\n") {
+		t.Errorf("%s has no job that waits on the release environment", githubDeploy)
 	}
 }
 

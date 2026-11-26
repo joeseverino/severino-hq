@@ -398,8 +398,9 @@ input that names no extension.
 
 The token lasts an hour and can only start a workflow here. The app's key is
 the only credential an extension repository holds, as a secret on an `admission`
-environment limited to `main`. A deploy still waits for a person's approval in
-the `production` environment, which no app can give.
+environment limited to `main`. A deploy still waits on the host's `release`
+environment, whose rule HQ answers only on a person's press
+([Security](Security.md#releasing-a-deploy)).
 
 A dispatch that fails fails the admission, where it happened. So nothing is
 missed silently, and no schedule backs it up.
