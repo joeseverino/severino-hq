@@ -311,12 +311,14 @@ func machine(stdout io.Writer) *host.Machine {
 		Seal:       host.SealDir,
 		SealPublic: host.SealPublicKey,
 		Runtime:    runtimeDir(),
+		Backups:    host.BackupDir,
 		Runs:       host.RunsDir,
 		Sudoers:    "/etc/sudoers.d",
 		HostConfig: hostConfig,
 		Command:    hostcore.Command,
 		Own:        func(path string) error { return os.Lchown(path, 0, 0) },
 		Owner:      func(root *os.Root, name string) error { return root.Lchown(name, hostcore.WebUID, hostcore.WebGID) },
+		Lend:       func(path string) error { return os.Lchown(path, 0, hostcore.WebGID) },
 		Verifier: func(ctx context.Context) error {
 			client := &http.Client{Timeout: 3 * time.Minute}
 			return host.InstallVerifier(ctx, client, host.CosignURL, cosign)

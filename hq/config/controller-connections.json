@@ -121,6 +121,37 @@
         "optional": true
       }
     },
+    "s3_bucket": {
+      "ACCESS_KEY_ID": {
+        "source": "field",
+        "id": "username"
+      },
+      "BUCKET": {
+        "source": "field",
+        "label": "bucket"
+      },
+      "CONNECTION_REF": {
+        "source": "connection_ref"
+      },
+      "MANAGES": {
+        "source": "field",
+        "label": "manages",
+        "optional": true
+      },
+      "PROVIDER": {
+        "source": "field",
+        "label": "provider",
+        "optional": true
+      },
+      "SECRET_ACCESS_KEY": {
+        "source": "field",
+        "id": "credential"
+      },
+      "URL": {
+        "source": "field",
+        "label": "website"
+      }
+    },
     "service_account": {
       "API_TOKEN": {
         "source": "field",

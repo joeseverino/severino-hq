@@ -226,6 +226,7 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 			return err
 		}
 		args = append(args, readings...)
+		args = append(args, c.lendArchive()...)
 		grants, err := c.dueGrants(run)
 		if err != nil {
 			return err
@@ -590,4 +591,38 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 		}
 	}
 	return args, nil
+}
+
+// backupTarget is where a pass finds the archive it is lent.
+const backupTarget = "/var/lib/severino-hq/backups"
+
+// lendArchive is the newest backup archive, for its off-site copy: the
+// ciphertext alone, read-only, so the one process here that reaches a
+// network is never given what the backup encrypted.
+func (c *Controller) lendArchive() []string {
+	archive := newestArchive(c.Backups)
+	if archive == "" {
+		return nil
+	}
+	target := backupTarget + "/" + filepath.Base(archive)
+	return []string{"--mount", readOnly(archive, target), "--env", "SEVERINO_BACKUP_ARCHIVE=" + target}
+}
+
+// newestArchive is the newest archive in dir, or "" when it holds none. An
+// archive's name carries when it was made, so the greatest is the newest.
+func newestArchive(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	newest := ""
+	for _, entry := range entries {
+		if name := entry.Name(); entry.Type().IsRegular() && IsArchive(name) && name > newest {
+			newest = name
+		}
+	}
+	if newest == "" {
+		return ""
+	}
+	return filepath.Join(dir, newest)
 }

@@ -1134,6 +1134,16 @@
       ]
     }
   ],
+  "r2.backup": [
+    {
+      "bucket": "example",
+      "connection_ref": "example",
+      "copies": 1,
+      "key": "example",
+      "size_bytes": 1,
+      "uploaded_at": "example"
+    }
+  ],
   "tailscale.device": [
     {
       "name": "example",

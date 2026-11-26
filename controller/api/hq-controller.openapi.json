@@ -3665,6 +3665,7 @@
           "npm",
           "onepassword",
           "portainer",
+          "r2",
           "ssh",
           "tailscale"
         ],
@@ -3678,6 +3679,7 @@
           "ConnectionProviderNPM",
           "ConnectionProviderOnePassword",
           "ConnectionProviderPortainer",
+          "ConnectionProviderR2",
           "ConnectionProviderSSH",
           "ConnectionProviderTailscale"
         ]
@@ -6495,6 +6497,52 @@
         "type": "object",
         "description": "One portainer.volume record: Volumes and mounts."
       },
+      "R2BackupRecord": {
+        "additionalProperties": false,
+        "description": "The newest backup archive in a connection's bucket, as the bucket's own listing states it: the r2.backup reading's one record per connection. The controller uploads the host's newest archive first when the bucket lacks it, so this is the last off-site copy.",
+        "properties": {
+          "connection_ref": {
+            "description": "The connection whose bucket holds it.",
+            "type": "string"
+          },
+          "bucket": {
+            "description": "The bucket's name.",
+            "maxLength": 63,
+            "type": "string"
+          },
+          "key": {
+            "description": "The newest archive's object key, its name on the host.",
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "size_bytes": {
+            "description": "The archive's size in bytes.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "uploaded_at": {
+            "description": "When the bucket last wrote the object (LastModified).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "copies": {
+            "description": "The backup archives the bucket holds.",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "bucket",
+          "key",
+          "size_bytes",
+          "uploaded_at",
+          "copies"
+        ],
+        "type": "object"
+      },
       "ReadingPartName": {
         "type": "string",
         "description": "A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.",
@@ -6644,6 +6692,7 @@
           "portainer.network",
           "portainer.runtime",
           "portainer.volume",
+          "r2.backup",
           "registry.address",
           "registry.digest",
           "registry.domain",
@@ -6711,6 +6760,7 @@
           "ResourceKindPortainerNetwork",
           "ResourceKindPortainerRuntime",
           "ResourceKindPortainerVolume",
+          "ResourceKindR2Backup",
           "ResourceKindRegistryAddress",
           "ResourceKindRegistryDigest",
           "ResourceKindRegistryDomain",
@@ -6773,6 +6823,7 @@
           "portainer.network",
           "portainer.runtime",
           "portainer.volume",
+          "r2.backup",
           "tailscale.device",
           "tailscale.dns",
           "tailscale.policy",
@@ -6822,6 +6873,7 @@
           "SweptPortainerNetwork",
           "SweptPortainerRuntime",
           "SweptPortainerVolume",
+          "SweptR2Backup",
           "SweptTailscaleDevice",
           "SweptTailscaleDNS",
           "SweptTailscalePolicy",

@@ -199,6 +199,7 @@ func New(env runtime.Environment, held runtime.Connections, transport Transport)
 	r.admitGitHub()
 	r.admitGitHubProfile()
 	r.admitGitHubDependencyRun()
+	r.admitR2()
 	return r
 }
 

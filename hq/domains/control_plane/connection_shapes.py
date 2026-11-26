@@ -53,6 +53,17 @@ OAUTH_CLIENT: ConnectionShape = ConnectionShape(
         Setting("CLIENT_SECRET", item_field="credential"),
     ),
 )
+# An S3-compatible bucket: the endpoint, the bucket, and an access key pair
+# scoped to that bucket.
+S3_BUCKET: ConnectionShape = ConnectionShape(
+    "s3_bucket",
+    (
+        Setting("ACCESS_KEY_ID", item_field="username"),
+        Setting("BUCKET", label="bucket"),
+        Setting("SECRET_ACCESS_KEY", item_field="credential"),
+        Setting("URL", label="website"),
+    ),
+)
 SERVICE_ACCOUNT: ConnectionShape = ConnectionShape(
     "service_account",
     (Setting("API_TOKEN", item_field="credential"),),

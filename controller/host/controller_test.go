@@ -409,6 +409,41 @@ func TestAWaitingRestartIsMountedAsAReading(t *testing.T) {
 	}
 }
 
+// A pass is lent the newest archive alone, read-only: never an older one, a
+// file that is not an archive, or a link that names one.
+func TestOnlyTheNewestArchiveIsLentAndReadOnly(t *testing.T) {
+	l := newLaunch(t)
+	dir := l.controller.Backups
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	older, newest := "severino-hq-20291230T031500Z.tar.gz.age", "severino-hq-20291231T031500Z.tar.gz.age"
+	for _, name := range []string{older, newest, "severino-hq-notes.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("ciphertext"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(l.f.root, "elsewhere"), filepath.Join(dir, "severino-hq-20991231T031500Z.tar.gz.age")); err != nil {
+		t.Fatal(err)
+	}
+
+	l.run(t, Plan)
+
+	target := backupTarget + "/" + newest
+	if !slices.Contains(l.args, readOnly(filepath.Join(dir, newest), target)) || !slices.Contains(l.envs(), "SEVERINO_BACKUP_ARCHIVE="+target) {
+		t.Errorf("the newest archive was not lent read-only: %v", l.args)
+	}
+	lent := 0
+	for _, arg := range l.args {
+		if strings.Contains(arg, "source="+dir) {
+			lent++
+		}
+	}
+	if lent != 1 {
+		t.Errorf("lent %d files of the backups, want the newest alone: %v", lent, l.args)
+	}
+}
+
 func TestTheRenderersStatusIsMountedAsACopy(t *testing.T) {
 	l := newLaunch(t)
 	status := filepath.Join(l.controller.SecretDir, "status.json")
@@ -785,6 +820,12 @@ func TestAPartialPassIsGivenNothingElseOfTheControllers(t *testing.T) {
 				}
 			}
 			if err := os.WriteFile(filepath.Join(l.controller.CertStore, "example.crt"), []byte("ROOT\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(l.controller.Backups, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(l.controller.Backups, "severino-hq-20291231T031500Z.tar.gz.age"), []byte("ciphertext"), 0o640); err != nil {
 				t.Fatal(err)
 			}
 			l.controller.LookPath = func(string) (string, error) { return "/usr/bin/op", nil }

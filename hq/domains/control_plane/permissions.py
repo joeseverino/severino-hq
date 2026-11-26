@@ -61,6 +61,9 @@ class Cloudflare(Permission):
     # name the permission group listing has answered;
     # ``mint:cloudflare --list-groups`` prints the current one.
     REGISTRAR_DOMAINS_READ = "Registrar: Domains Read", "account"
+    # As R2's own token page (R2, Manage API tokens) names it, scoped to one
+    # bucket there; the token editor's name for it is the API one.
+    R2_OBJECT_WRITE = "Object Read & Write", "bucket", "Workers R2 Storage Bucket Item Write"
     DNS_WRITE = "DNS Write", "zone"
     PAGE_RULES_READ = "Page Rules Read", "zone"
     SINGLE_REDIRECT_READ = "Single Redirect Read", "zone", "Dynamic URL Redirects Read"

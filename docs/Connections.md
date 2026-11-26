@@ -255,6 +255,29 @@ Store it as an item of any type:
 | `email` | yours | A field labeled email. |
 | `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |
 
+## Cloudflare R2 backups
+
+An off-site copy of each nightly backup, in a bucket whose lock refuses overwrite and delete.
+
+An R2 API token in the Cloudflare dashboard, under R2, Manage API tokens, with Object Read & Write on the backup bucket alone: its Access Key ID, Secret Access Key and the account's S3 endpoint. [Setup page](https://developers.cloudflare.com/r2/api/tokens/)
+
+Permissions, and no others:
+
+- `Object Read & Write (bucket; API: Workers R2 Storage Bucket Item Write)`
+
+Store it as an API Credential item:
+
+| Field | Value | What it is |
+| --- | --- | --- |
+| `connection_ref` | `r2` | Any name; how HQ refers to this connection. |
+| `projection` | `s3_bucket` | The shape HQ reads the item as. |
+| `env_prefix` | `R2` | Says which service it is for. |
+| `username` | yours | The item's own username field. |
+| `bucket` | yours | A field labeled bucket. |
+| `credential` | the secret | The item's own credential field. |
+| `website` | yours | A field labeled website. |
+| `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |
+
 ## Cloudflare inbound events
 
 Your providers' events as they happen, so what changed is read in seconds.

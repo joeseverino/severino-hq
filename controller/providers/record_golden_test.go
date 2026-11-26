@@ -66,6 +66,7 @@ var recordTypes = map[runtime.ResourceKind][]any{
 	runtime.ResourceKindPortainerImage:               {PortainerImageRecord{}},
 	runtime.ResourceKindPortainerRuntime:             {PortainerRuntimeRecord{}},
 	runtime.ResourceKindPortainerComposeProject:      {PortainerComposeProject{}},
+	runtime.ResourceKindR2Backup:                     {runtime.R2BackupRecord{}},
 	runtime.ResourceKindTailscaleDevice:              {TailscaleDeviceRecord{}},
 	runtime.ResourceKindTailscalePolicy:              {TailscalePolicyRecord{}},
 	runtime.ResourceKindTailscaleDNS:                 {TailscaleDNSRecord{}},

@@ -97,6 +97,7 @@ const (
 	ConnectionProviderNPM              ConnectionProvider = "npm"
 	ConnectionProviderOnePassword      ConnectionProvider = "onepassword"
 	ConnectionProviderPortainer        ConnectionProvider = "portainer"
+	ConnectionProviderR2               ConnectionProvider = "r2"
 	ConnectionProviderSSH              ConnectionProvider = "ssh"
 	ConnectionProviderTailscale        ConnectionProvider = "tailscale"
 )
@@ -121,6 +122,8 @@ func (e ConnectionProvider) Valid() bool {
 	case ConnectionProviderOnePassword:
 		return true
 	case ConnectionProviderPortainer:
+		return true
+	case ConnectionProviderR2:
 		return true
 	case ConnectionProviderSSH:
 		return true
@@ -823,6 +826,7 @@ const (
 	ResourceKindPortainerNetwork             ResourceKind = "portainer.network"
 	ResourceKindPortainerRuntime             ResourceKind = "portainer.runtime"
 	ResourceKindPortainerVolume              ResourceKind = "portainer.volume"
+	ResourceKindR2Backup                     ResourceKind = "r2.backup"
 	ResourceKindRegistryAddress              ResourceKind = "registry.address"
 	ResourceKindRegistryDigest               ResourceKind = "registry.digest"
 	ResourceKindRegistryDomain               ResourceKind = "registry.domain"
@@ -944,6 +948,8 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindPortainerVolume:
 		return true
+	case ResourceKindR2Backup:
+		return true
 	case ResourceKindRegistryAddress:
 		return true
 	case ResourceKindRegistryDigest:
@@ -1051,6 +1057,7 @@ const (
 	SweptPortainerNetwork             SweptKind = "portainer.network"
 	SweptPortainerRuntime             SweptKind = "portainer.runtime"
 	SweptPortainerVolume              SweptKind = "portainer.volume"
+	SweptR2Backup                     SweptKind = "r2.backup"
 	SweptTailscaleDNS                 SweptKind = "tailscale.dns"
 	SweptTailscaleDevice              SweptKind = "tailscale.device"
 	SweptTailscalePolicy              SweptKind = "tailscale.policy"
@@ -1144,6 +1151,8 @@ func (e SweptKind) Valid() bool {
 	case SweptPortainerRuntime:
 		return true
 	case SweptPortainerVolume:
+		return true
+	case SweptR2Backup:
 		return true
 	case SweptTailscaleDNS:
 		return true
@@ -2756,6 +2765,27 @@ type Problem struct {
 	Status int    `json:"status"`
 	Title  string `json:"title"`
 	Type   string `json:"type,omitempty"`
+}
+
+// R2BackupRecord The newest backup archive in a connection's bucket, as the bucket's own listing states it: the r2.backup reading's one record per connection. The controller uploads the host's newest archive first when the bucket lacks it, so this is the last off-site copy.
+type R2BackupRecord struct {
+	// Bucket The bucket's name.
+	Bucket string `json:"bucket"`
+
+	// ConnectionRef The connection whose bucket holds it.
+	ConnectionRef string `json:"connection_ref"`
+
+	// Copies The backup archives the bucket holds.
+	Copies int `json:"copies"`
+
+	// Key The newest archive's object key, its name on the host.
+	Key string `json:"key"`
+
+	// SizeBytes The archive's size in bytes.
+	SizeBytes int `json:"size_bytes"`
+
+	// UploadedAt When the bucket last wrote the object (LastModified).
+	UploadedAt string `json:"uploaded_at"`
 }
 
 // ReadingPartName A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.

@@ -20,6 +20,7 @@ from . import (
     github,
     npm,
     portainer,
+    r2,
     tailscale,
     tls,
 )
@@ -38,6 +39,7 @@ ADMITTED = (
     caddy,
     adguard,
     cloudflare,
+    r2,
     automation,
     host,
     hq,

@@ -73,6 +73,9 @@ type Environment struct {
 	// DependencyRun is root's result of the last dependency update run, given
 	// read-only.
 	DependencyRun string `env:"SEVERINO_DEPENDENCY_RUN"`
+	// Backup is the host's newest backup archive, its ciphertext alone, given
+	// read-only to an applying pass for the off-site copy.
+	Backup string `env:"SEVERINO_BACKUP_ARCHIVE"`
 	// Out is the directory this run may hand files to root through; root
 	// reads it after the run exits.
 	Out string `env:"HQ_CONTROLLER_OUT"`

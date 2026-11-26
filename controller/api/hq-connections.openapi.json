@@ -49,6 +49,11 @@
             "x-go-name": "OAuthClient",
             "x-go-type-skip-optional-pointer": false
           },
+          "s3_bucket": {
+            "$ref": "#/components/schemas/S3Bucket",
+            "x-go-name": "S3Bucket",
+            "x-go-type-skip-optional-pointer": false
+          },
           "service_account": {
             "$ref": "#/components/schemas/ServiceAccount",
             "x-go-name": "ServiceAccount",
@@ -250,6 +255,51 @@
         "required": [
           "client_id",
           "client_secret"
+        ],
+        "additionalProperties": false
+      },
+      "S3Bucket": {
+        "type": "object",
+        "description": "The settings a connection of the s3_bucket shape arrives with.",
+        "properties": {
+          "access_key_id": {
+            "type": "string",
+            "x-go-name": "AccessKeyID",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "ACCESS_KEY_ID"
+            }
+          },
+          "bucket": {
+            "type": "string",
+            "x-go-name": "Bucket",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "BUCKET"
+            }
+          },
+          "secret_access_key": {
+            "type": "string",
+            "x-go-name": "SecretAccessKey",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "SECRET_ACCESS_KEY"
+            },
+            "x-go-type": "secret.Value",
+            "x-go-type-import": {
+              "path": "github.com/joeseverino/severino-hq/controller/internal/secret"
+            }
+          },
+          "url": {
+            "type": "string",
+            "x-go-name": "URL",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "URL"
+            }
+          }
+        },
+        "required": [
+          "access_key_id",
+          "bucket",
+          "secret_access_key",
+          "url"
         ],
         "additionalProperties": false
       },
