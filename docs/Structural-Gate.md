@@ -62,10 +62,11 @@ A module-level undecorated Python function has no runtime arguments and
 exactly one return statement. Its returned tree contains only constants,
 names, attribute references, tuples, and calls to an imported contract
 constructor. The constructors are read from the resource contract's modules
-(`CONTRACTS` in `tools/structural/classify.py`): each frozen dataclass they
-declare (`ResourceSpec`, `ListRead`, `ListSort`, `SearchDefinition`) and each
-classmethod one of those declares (`ListSort.both`, `SearchDefinition.of`).
-Relative imports are resolved.
+(`CONTRACTS` in `tools/structural/classify.py`, `integration_specs.py` and
+`search_contracts.py`): every class either declares with
+`@dataclass(frozen=True)`, and every classmethod such a class declares. A frozen
+dataclass added to either module is a constructor from then on. Relative
+imports are resolved.
 
 Constructor rebinding, lists and dicts, operators, control flow, starred
 arguments and computed calls do not qualify.
