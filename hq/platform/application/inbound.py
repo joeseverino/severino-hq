@@ -9,14 +9,18 @@ seconds rather than at the next sweep.
 Security: an event carries no truth, only a name. HQ never reads its body or
 acts on what it claims; it asks for readings it would take anyway and reads
 them with its own credentials. A forged event costs one read, coalesced with
-any already asked; a replayed delivery is the stored event and asks nothing;
-an event no declaration names is recorded as ignored and asks nothing; a
-reconnect asks every reading its source carries, bounded by the reconnect's
-own backoff and ``ask``'s one request per kind; a provider no declaration
-names, or a batch outside the contract's ``InboundBatch``, is refused whole. Only the bridge's action, which serves the
-controller's account alone on a 0700 socket, and the host's jobs may import
-this (``lint:imports``). The events table is the record of what was told,
-kept for the routine window; the reads an event asks are audited as asks.
+any already asked; a delivery repeated under its own ID is the stored event
+and asks nothing, but GitHub signs the body alone, so its delivery ID is
+outside the signature and a captured body sent again under a new one is a new
+event, bounded by that same coalesced read; an event no declaration names is
+recorded as ignored and asks nothing; a reconnect asks every reading its
+source carries, bounded by the reconnect's own backoff and ``ask``'s one
+request per kind; a provider no declaration names, or a batch outside the
+contract's ``InboundBatch``, is refused whole. Only the bridge's action, which
+serves the controller's account alone on a 0700 socket, and the host's jobs
+may import this (``lint:imports``). The events table is the record of what
+was told, kept for the routine window; the reads an event asks are audited
+as asks.
 """
 
 from collections.abc import Mapping
