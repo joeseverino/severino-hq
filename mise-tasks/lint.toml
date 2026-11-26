@@ -381,6 +381,12 @@ hide = true
 extends = "drift"
 vars = { command = "procedure_schema", writes = "hq/platform/application/hq-procedure.schema.json" }
 
+["lint:drift-inbound-worker"]
+description = "The inbound-events Worker's wrangler.jsonc and routes.json are what the providers' INBOUND declares"
+hide = true
+extends = "drift"
+vars = { command = "inbound_worker", writes = "worker/wrangler.jsonc worker/src/generated/routes.json" }
+
 ["lint:drift-font"]
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
 hide = true

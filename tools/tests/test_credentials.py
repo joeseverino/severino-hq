@@ -408,7 +408,7 @@ class AppWebhookTests(SimpleTestCase):
         commands, out = self.wire(webhook_secret=self.REFERENCE, webhook_host="events.example.com")
 
         routes = json.loads((ROOT / "worker" / "src" / "generated" / "routes.json").read_text())["providers"]
-        (github,) = [route for route in routes if route["provider"] == "github"]
+        (github,) = [route for route in routes if route["provider"] == "github_app"]
         (call,) = self.calls
         self.assertEqual((call.method, call.url), ("PATCH", "https://api.github.com/app/hook/config"))
         self.assertEqual(

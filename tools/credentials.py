@@ -560,7 +560,7 @@ def app_webhook(usage: Usage, programs: Programs, key: str, client_id: str, out:
     host = usage.text("webhook_host")
     if not host:
         raise UsageError("--webhook-secret needs the inbound host: --webhook-host or HQ_INBOUND_HOSTNAME.")
-    (route,) = [route for route in json.loads(ROUTES.read_text())["providers"] if route["provider"] == "github"]
+    (route,) = [route for route in json.loads(ROUTES.read_text())["providers"] if route["provider"] == "github_app"]
     url = f"https://{host}{route['path']}"
     if urlsplit(https_url(url)).netloc != host:
         raise UsageError(f"{host} is not a hostname.")

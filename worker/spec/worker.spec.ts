@@ -5,7 +5,7 @@ import { SOCKET_PATH } from "../src/hub";
 import pullRequest from "./fixtures/pull_request.opened.json";
 import push from "./fixtures/push.json";
 
-const github = routes.providers.find((route) => route.provider === "github")!;
+const github = routes.providers.find((route) => route.provider === "github_app")!;
 const ORIGIN = "https://example.com";
 
 /** A listener: each message its socket has been sent, in order. */
@@ -85,7 +85,7 @@ describe("a GitHub delivery", () => {
     for (const listener of listeners) {
       const message = await listener.next();
       expect(message).toStrictEqual({
-        provider: "github",
+        provider: github.provider,
         event: "push",
         subject: "example/hq",
         delivery_id: "delivery-push",

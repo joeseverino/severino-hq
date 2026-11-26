@@ -13,3 +13,5 @@
 /hq/platform/application/hq-procedure.schema.json linguist-generated
 /policy/plugin-admission-v1.json linguist-generated
 /static/fonts/inter/inter-variable-latin.woff2 linguist-generated
+/worker/src/generated/routes.json linguist-generated
+/worker/wrangler.jsonc linguist-generated
