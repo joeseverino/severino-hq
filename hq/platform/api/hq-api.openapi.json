@@ -12298,6 +12298,19 @@
         },
         "type": "object"
       },
+      "DeclaredGitHubDeploymentReviewSpec": {
+        "properties": {
+          "kind": {
+            "const": "github.deployment_review",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/GitHubDeploymentReviewSpec"
+          }
+        },
+        "type": "object"
+      },
       "DeclaredGitHubPullRequestSpec": {
         "properties": {
           "kind": {
@@ -15934,6 +15947,51 @@
         ],
         "type": "object"
       },
+      "GitHubDeploymentReviewSpec": {
+        "additionalProperties": false,
+        "description": "HQ's answer, as a repository's deployment protection rule, to one run waiting to deploy to one environment.",
+        "properties": {
+          "environment": {
+            "description": "The environment it waits to deploy to.",
+            "pattern": "^[^/\\s][^/]{0,254}$",
+            "title": "Environment",
+            "type": "string"
+          },
+          "head_sha": {
+            "description": "The commit the run deploys; a run at another one is refused.",
+            "pattern": "^[0-9a-f]{40}$",
+            "title": "Commit",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/Repository"
+          },
+          "run_id": {
+            "description": "The workflow run that waits.",
+            "maximum": 9223372036854775807,
+            "minimum": 1,
+            "title": "Run",
+            "type": "integer"
+          },
+          "state": {
+            "description": "The answer: release the deploy, or stop it.",
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "run_id",
+          "environment",
+          "head_sha",
+          "state"
+        ],
+        "type": "object"
+      },
       "GitHubPullRequestSpec": {
         "additionalProperties": false,
         "description": "One pull request, at the head commit a person approved merging.",
@@ -17692,6 +17750,10 @@
                 "title": "Declared git hub dashboard box spec"
               },
               {
+                "$ref": "#/components/schemas/DeclaredGitHubDeploymentReviewSpec",
+                "title": "Declared git hub deployment review spec"
+              },
+              {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
                 "title": "Declared portainer container spec"
               },
@@ -17897,6 +17959,10 @@
               {
                 "$ref": "#/components/schemas/DeclaredGitHubDashboardBoxSpec",
                 "title": "Declared git hub dashboard box spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredGitHubDeploymentReviewSpec",
+                "title": "Declared git hub deployment review spec"
               },
               {
                 "$ref": "#/components/schemas/DeclaredPortainerContainerSpec",
@@ -19469,6 +19535,7 @@
           "github.delivery",
           "github.pull_request",
           "github.dashboard_box",
+          "github.deployment_review",
           "portainer.container",
           "tailscale.device",
           "tailscale.policy",
@@ -19493,6 +19560,7 @@
           "cloudflare.zone": "Domain",
           "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
+          "github.deployment_review": "Deployment review",
           "github.pull_request": "Pull request",
           "machine": "Machine",
           "network": "Network",
@@ -29862,6 +29930,7 @@
           "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
+          "github.deployment_review",
           "github.profile",
           "github.pull_request",
           "github.repository",
@@ -29930,6 +29999,7 @@
           "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.dependency_run": "Dependency update run",
+          "github.deployment_review": "Deployment review",
           "github.profile": "GitHub profile",
           "github.pull_request": "Pull request",
           "github.repository": "GitHub repository",
@@ -41533,7 +41603,7 @@
             "required": false,
             "schema": {
               "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|github\\.deployment_review|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|github\\.deployment_review|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
               "type": "string"
             },
             "style": "form"
@@ -41552,6 +41622,7 @@
                 "github.delivery",
                 "github.pull_request",
                 "github.dashboard_box",
+                "github.deployment_review",
                 "portainer.container",
                 "tailscale.device",
                 "tailscale.policy",

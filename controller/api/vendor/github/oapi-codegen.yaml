@@ -23,12 +23,14 @@ output-options:
     - actions/get-github-actions-permissions-repository
     - actions/get-job-for-workflow-run
     - actions/get-pending-deployments-for-run
+    - actions/get-workflow-run
     - actions/list-artifacts-for-repo
     - actions/list-repo-variables
     - actions/list-repo-workflows
     - actions/list-self-hosted-runners-for-repo
     - actions/list-workflow-runs
     - actions/list-workflow-runs-for-repo
+    - actions/review-custom-gates-for-run
     - activity/list-repos-starred-by-user
     - apps/create-installation-access-token
     - apps/get-authenticated

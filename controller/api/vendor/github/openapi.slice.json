@@ -552,6 +552,102 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/actions/runs/{run_id}": {
+   "get": {
+    "operationId": "actions/get-workflow-run",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/workflow-run"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule": {
+   "post": {
+    "operationId": "actions/review-custom-gates-for-run",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Response"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/review-custom-gates-comment-required"
+         },
+         {
+          "$ref": "#/components/schemas/review-custom-gates-state-required"
+         }
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments": {
    "get": {
     "operationId": "actions/get-pending-deployments-for-run",
@@ -5728,6 +5824,48 @@
       "description": "The ID of the ruleset that includes this rule."
      }
     }
+   },
+   "review-custom-gates-comment-required": {
+    "type": "object",
+    "properties": {
+     "environment_name": {
+      "type": "string",
+      "description": "The name of the environment to approve or reject."
+     },
+     "comment": {
+      "type": "string",
+      "description": "Comment associated with the pending deployment protection rule. **Required when state is not provided.**"
+     }
+    },
+    "required": [
+     "environment_name",
+     "comment"
+    ]
+   },
+   "review-custom-gates-state-required": {
+    "type": "object",
+    "properties": {
+     "environment_name": {
+      "type": "string",
+      "description": "The name of the environment to approve or reject."
+     },
+     "state": {
+      "type": "string",
+      "description": "Whether to approve or reject deployment to the specified environments.",
+      "enum": [
+       "approved",
+       "rejected"
+      ]
+     },
+     "comment": {
+      "type": "string",
+      "description": "Optional comment to include with the review."
+     }
+    },
+    "required": [
+     "environment_name",
+     "state"
+    ]
    },
    "runner": {
     "title": "Self hosted runners",

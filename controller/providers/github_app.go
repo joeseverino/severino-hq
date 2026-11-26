@@ -58,6 +58,7 @@ func (r *Registry) admitGitHub() {
 	act(r, runtime.ResourceKindGitHubDelivery, "reconcile", r.githubDeliveryReconcile)
 	act(r, runtime.ResourceKindGitHubPullRequest, "merge", r.githubMerge)
 	act(r, runtime.ResourceKindGitHubDashboardBox, "reconcile", r.githubDashboardBox)
+	act(r, runtime.ResourceKindGitHubDeploymentReview, "reconcile", r.githubReview)
 }
 
 func (r *Registry) githubConnection(ref string) (githubConnection, error) {

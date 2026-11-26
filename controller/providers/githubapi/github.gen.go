@@ -723,6 +723,24 @@ func (e RepositoryRuleRulesetInfoRulesetSourceType) Valid() bool {
 	}
 }
 
+// Defines values for ReviewCustomGatesStateRequiredState.
+const (
+	Approved ReviewCustomGatesStateRequiredState = "approved"
+	Rejected ReviewCustomGatesStateRequiredState = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the ReviewCustomGatesStateRequiredState enum.
+func (e ReviewCustomGatesStateRequiredState) Valid() bool {
+	switch e {
+	case Approved:
+		return true
+	case Rejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WorkflowState.
 const (
 	WorkflowStateActive             WorkflowState = "active"
@@ -2286,6 +2304,30 @@ type RepositoryRuleRulesetInfo struct {
 // RepositoryRuleRulesetInfoRulesetSourceType The type of source for the ruleset that includes this rule.
 type RepositoryRuleRulesetInfoRulesetSourceType string
 
+// ReviewCustomGatesCommentRequired defines model for review-custom-gates-comment-required.
+type ReviewCustomGatesCommentRequired struct {
+	// Comment Comment associated with the pending deployment protection rule. **Required when state is not provided.**
+	Comment string `json:"comment"`
+
+	// EnvironmentName The name of the environment to approve or reject.
+	EnvironmentName string `json:"environment_name"`
+}
+
+// ReviewCustomGatesStateRequired defines model for review-custom-gates-state-required.
+type ReviewCustomGatesStateRequired struct {
+	// Comment Optional comment to include with the review.
+	Comment string `json:"comment,omitempty"`
+
+	// EnvironmentName The name of the environment to approve or reject.
+	EnvironmentName string `json:"environment_name"`
+
+	// State Whether to approve or reject deployment to the specified environments.
+	State ReviewCustomGatesStateRequiredState `json:"state"`
+}
+
+// ReviewCustomGatesStateRequiredState Whether to approve or reject deployment to the specified environments.
+type ReviewCustomGatesStateRequiredState string
+
 // Runner A self hosted runner
 type Runner struct {
 	Busy   bool          `json:"busy"`
@@ -2909,6 +2951,9 @@ type ActivityListReposStarredByUserParams struct {
 // AppsCreateInstallationAccessTokenJSONRequestBody defines body for AppsCreateInstallationAccessToken for application/json ContentType.
 type AppsCreateInstallationAccessTokenJSONRequestBody AppsCreateInstallationAccessTokenJSONBody
 
+// ActionsReviewCustomGatesForRunJSONRequestBody defines body for ActionsReviewCustomGatesForRun for application/json ContentType.
+type ActionsReviewCustomGatesForRunJSONRequestBody = ReviewCustomGatesStateRequired
+
 // ChecksCreateJSONRequestBody defines body for ChecksCreate for application/json ContentType.
 type ChecksCreateJSONRequestBody ChecksCreateJSONBody
 
@@ -3463,6 +3508,17 @@ type ClientInterface interface {
 	// ActionsListWorkflowRunsForRepo performs a GET /repos/{owner}/{repo}/actions/runs (the `ActionsListWorkflowRunsForRepo` operationId) request.
 	ActionsListWorkflowRunsForRepo(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ActionsGetWorkflowRun performs a GET /repos/{owner}/{repo}/actions/runs/{run_id} (the `ActionsGetWorkflowRun` operationId) request.
+	ActionsGetWorkflowRun(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsReviewCustomGatesForRunWithBody performs a POST /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule (the `ActionsReviewCustomGatesForRun` operationId) request,
+	// with any type of body and a specified content type.
+	ActionsReviewCustomGatesForRunWithBody(ctx context.Context, owner string, repo string, runID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ActionsReviewCustomGatesForRun performs a POST /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule (the `ActionsReviewCustomGatesForRun` operationId) request.
+	// Takes a body of the `application/json` content type.
+	ActionsReviewCustomGatesForRun(ctx context.Context, owner string, repo string, runID string, body ActionsReviewCustomGatesForRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ActionsGetPendingDeploymentsForRun performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
 	ActionsGetPendingDeploymentsForRun(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -3761,6 +3817,47 @@ func (c *Client) ActionsListSelfHostedRunnersForRepo(ctx context.Context, owner 
 // ActionsListWorkflowRunsForRepo performs a GET /repos/{owner}/{repo}/actions/runs (the `ActionsListWorkflowRunsForRepo` operationId) request.
 func (c *Client) ActionsListWorkflowRunsForRepo(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewActionsListWorkflowRunsForRepoRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsGetWorkflowRun performs a GET /repos/{owner}/{repo}/actions/runs/{run_id} (the `ActionsGetWorkflowRun` operationId) request.
+func (c *Client) ActionsGetWorkflowRun(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsGetWorkflowRunRequest(c.Server, owner, repo, runID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsReviewCustomGatesForRunWithBody performs a POST /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule (the `ActionsReviewCustomGatesForRun` operationId) request,
+// with any type of body and a specified content type.
+func (c *Client) ActionsReviewCustomGatesForRunWithBody(ctx context.Context, owner string, repo string, runID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsReviewCustomGatesForRunRequestWithBody(c.Server, owner, repo, runID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsReviewCustomGatesForRun performs a POST /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule (the `ActionsReviewCustomGatesForRun` operationId) request.
+// Takes a body of the `application/json` content type.
+func (c *Client) ActionsReviewCustomGatesForRun(ctx context.Context, owner string, repo string, runID string, body ActionsReviewCustomGatesForRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsReviewCustomGatesForRunRequest(c.Server, owner, repo, runID, body)
 	if err != nil {
 		return nil, err
 	}
@@ -4928,6 +5025,115 @@ func NewActionsListWorkflowRunsForRepoRequest(server string, owner string, repo 
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewActionsGetWorkflowRunRequest constructs an http.Request for the ActionsGetWorkflowRun method
+func NewActionsGetWorkflowRunRequest(server string, owner string, repo string, runID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "run_id", runID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/runs/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsReviewCustomGatesForRunRequest calls the generic ActionsReviewCustomGatesForRun builder with application/json body
+func NewActionsReviewCustomGatesForRunRequest(server string, owner string, repo string, runID string, body ActionsReviewCustomGatesForRunJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewActionsReviewCustomGatesForRunRequestWithBody(server, owner, repo, runID, "application/json", bodyReader)
+}
+
+// NewActionsReviewCustomGatesForRunRequestWithBody constructs an http.Request for the ActionsReviewCustomGatesForRun method, with any body, and a specified content type
+func NewActionsReviewCustomGatesForRunRequestWithBody(server string, owner string, repo string, runID string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "run_id", runID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/runs/" + pathParam2 + "/deployment_protection_rule"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -7514,6 +7720,21 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	ActionsListWorkflowRunsForRepoWithResponse(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*ActionsListWorkflowRunsForRepoReply, error)
 
+	// ActionsGetWorkflowRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id} (the `ActionsGetWorkflowRun` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsGetWorkflowRunWithResponse(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*ActionsGetWorkflowRunReply, error)
+
+	// ActionsReviewCustomGatesForRunWithBodyWithResponse performs a POST /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule (the `ActionsReviewCustomGatesForRun` operationId) request,
+	// with any type of body and a specified content type.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsReviewCustomGatesForRunWithBodyWithResponse(ctx context.Context, owner string, repo string, runID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActionsReviewCustomGatesForRunReply, error)
+
+	// ActionsReviewCustomGatesForRunWithResponse performs a POST /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule (the `ActionsReviewCustomGatesForRun` operationId) request.
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	ActionsReviewCustomGatesForRunWithResponse(ctx context.Context, owner string, repo string, runID string, body ActionsReviewCustomGatesForRunJSONRequestBody, reqEditors ...RequestEditorFn) (*ActionsReviewCustomGatesForRunReply, error)
+
 	// ActionsGetPendingDeploymentsForRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -8253,6 +8474,81 @@ func (r ActionsListWorkflowRunsForRepoReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ActionsListWorkflowRunsForRepoReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsGetWorkflowRunReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WorkflowRun
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsGetWorkflowRunReply) GetJSON200() *WorkflowRun {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsGetWorkflowRunReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsGetWorkflowRunReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsGetWorkflowRunReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsGetWorkflowRunReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsReviewCustomGatesForRunReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsReviewCustomGatesForRunReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsReviewCustomGatesForRunReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsReviewCustomGatesForRunReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsReviewCustomGatesForRunReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -10096,6 +10392,39 @@ func (c *ClientWithResponses) ActionsListWorkflowRunsForRepoWithResponse(ctx con
 	return ParseActionsListWorkflowRunsForRepoReply(rsp)
 }
 
+// ActionsGetWorkflowRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id} (the `ActionsGetWorkflowRun` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsGetWorkflowRunWithResponse(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*ActionsGetWorkflowRunReply, error) {
+	rsp, err := c.ActionsGetWorkflowRun(ctx, owner, repo, runID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsGetWorkflowRunReply(rsp)
+}
+
+// ActionsReviewCustomGatesForRunWithBodyWithResponse performs a POST /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule (the `ActionsReviewCustomGatesForRun` operationId) request,
+// with any type of body and a specified content type.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsReviewCustomGatesForRunWithBodyWithResponse(ctx context.Context, owner string, repo string, runID string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ActionsReviewCustomGatesForRunReply, error) {
+	rsp, err := c.ActionsReviewCustomGatesForRunWithBody(ctx, owner, repo, runID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsReviewCustomGatesForRunReply(rsp)
+}
+
+// ActionsReviewCustomGatesForRunWithResponse performs a POST /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule (the `ActionsReviewCustomGatesForRun` operationId) request.
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsReviewCustomGatesForRunWithResponse(ctx context.Context, owner string, repo string, runID string, body ActionsReviewCustomGatesForRunJSONRequestBody, reqEditors ...RequestEditorFn) (*ActionsReviewCustomGatesForRunReply, error) {
+	rsp, err := c.ActionsReviewCustomGatesForRun(ctx, owner, repo, runID, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsReviewCustomGatesForRunReply(rsp)
+}
+
 // ActionsGetPendingDeploymentsForRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10886,6 +11215,48 @@ func ParseActionsListWorkflowRunsForRepoReply(rsp *http.Response) (*ActionsListW
 		}
 		response.JSON200 = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseActionsGetWorkflowRunReply parses an HTTP response from a ActionsGetWorkflowRunWithResponse call
+func ParseActionsGetWorkflowRunReply(rsp *http.Response) (*ActionsGetWorkflowRunReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsGetWorkflowRunReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WorkflowRun
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsReviewCustomGatesForRunReply parses an HTTP response from a ActionsReviewCustomGatesForRunWithResponse call
+func ParseActionsReviewCustomGatesForRunReply(rsp *http.Response) (*ActionsReviewCustomGatesForRunReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsReviewCustomGatesForRunReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
 	}
 
 	return response, nil

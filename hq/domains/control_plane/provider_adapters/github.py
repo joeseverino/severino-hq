@@ -207,7 +207,43 @@ DASHBOARD_BOX = ProviderSpec(
     declaration_only=True,
     unobserved_reason="Renovate rewrites the Dashboard on every run.",
 )
-DEFINITIONS = (DEFINITION, PULL_REQUEST, DASHBOARD_BOX)
+DEPLOYMENT_REVIEW_KIND = "github.deployment_review"
+# A custom deployment protection rule's answer, as GitHub's review takes it.
+ReviewState = Literal["approved", "rejected"]
+
+
+class GitHubDeploymentReviewSpec(ProviderModel):
+    """HQ's answer, as a repository's deployment protection rule, to one run waiting to deploy to one environment."""
+
+    repository: Repository
+    run_id: Annotated[RecordId, Describe("", api="The workflow run that waits.")] = Field(title="Run")
+    environment: Annotated[str, Describe("", api="The environment it waits to deploy to.")] = Field(
+        pattern=r"^[^/\s][^/]{0,254}$", title="Environment"
+    )
+    head_sha: Annotated[str, Describe("", api="The commit the run deploys; a run at another one is refused.")] = Field(
+        pattern=COMMIT, title="Commit"
+    )
+    state: Annotated[ReviewState, Describe("", api="The answer: release the deploy, or stop it.")] = Field(
+        title="Answer"
+    )
+
+
+DEPLOYMENT_REVIEW = ProviderSpec(
+    DEPLOYMENT_REVIEW_KIND,
+    "HQ's answer to a run waiting on its deployment protection rule, given only at the commit you saw.",
+    GitHubDeploymentReviewSpec,
+    actions={"reconcile": applies()},
+    label="Deployment review",
+    name=lambda spec: f"{spec.get('repository', '')} run {spec.get('run_id', '')} to {spec.get('environment', '')}",
+    connection_providers=(PROVIDER,),
+    identity=lambda spec: (str(spec["repository"]), str(spec["run_id"]), str(spec["environment"])),
+    key_hint=lambda spec: f"{spec.get('repository', '')}-{spec.get('run_id', '')}".replace("/", "-"),
+    console=lambda spec: f"https://github.com/{spec.get('repository', '')}/actions/runs/{spec.get('run_id', '')}",
+    console_label="Open run on GitHub",
+    declaration_only=True,
+    unobserved_reason="Each review reports the answer it sent.",
+)
+DEFINITIONS = (DEFINITION, PULL_REQUEST, DASHBOARD_BOX, DEPLOYMENT_REVIEW)
 OBSERVATIONS = readings.OBSERVATIONS
 
 SHARED = (
@@ -231,6 +267,11 @@ SHARED = (
         "GitHubDashboardBoxSpec",
         GitHubDashboardBoxSpec,
         "A github.dashboard_box declaration: the box a reconcile ticks.",
+    ),
+    SharedValue(
+        "GitHubDeploymentReviewSpec",
+        GitHubDeploymentReviewSpec,
+        "A github.deployment_review declaration: the answer a reconcile sends.",
     ),
     SharedValue(
         "GitHubMergeRefusal",
@@ -267,7 +308,8 @@ CONNECTIONS = {
 INBOUND = {
     PROVIDER: InboundSpec(
         dict.fromkeys(
-            ("push", "workflow_run", "check_suite", "pull_request", "deployment_status"), (readings.REPOSITORY_KIND,)
+            ("push", "workflow_run", "check_suite", "pull_request", "deployment_status", "deployment_protection_rule"),
+            (readings.REPOSITORY_KIND,),
         ),
         path="/github",
         scheme="github-hmac-sha256",
