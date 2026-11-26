@@ -203,10 +203,16 @@ class Stopped:
 
 
 # The stats a playbook states with ``ansible.builtin.set_stats`` that a report
-# carries: its result, and its readings and preview (``RunStated``).
+# carries: its result, and its readings, preview and hand-off (``RunStated``).
 RESULT_STAT = "result"
 READINGS_STAT = "readings"
 PREVIEW_STAT = "preview"
+HANDOFF_STAT = "handoff"
+# A systemd unit's name, the contract's ``UnitName``: what a hand-off names.
+UNIT_NAME = re.compile(
+    r"^(?:[A-Za-z0-9:_.@-]|\\x[0-9a-f]{2})+\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$"
+)
+UNIT_NAME_LIMIT = 255
 
 # The bridge contract's RunStated bounds: the compact JSON of all of it, the
 # records of one machine and kind (and the lines of one machine's preview),
@@ -221,25 +227,26 @@ KIND_LIMIT = 100
 # machine's preview, or everything a stat held for a machine the run is not on.
 ELSEWHERE = "for a machine it was not run on"
 PAST_BOUNDS = "past the bridge's bounds"
-MISSHAPEN = "not shaped as a reading or a preview"
+MISSHAPEN = "not shaped as a reading, a preview or a hand-off"
 
 
 @dataclass(frozen=True, slots=True)
 class Stated:
     """What a playbook stated as its run ended: its result in a line, its
-    readings (``{machine: {kind: [record]}}``) and preview (``{machine:
-    [line]}``) on the run's machines alone, and how many parts were left out
-    and why."""
+    readings (``{machine: {kind: [record]}}``), preview (``{machine:
+    [line]}``) and hand-off (``{machine: unit}``) on the run's machines
+    alone, and how many parts were left out and why."""
 
     result: str | None
     readings: dict[str, dict[str, list[Any]]]
     preview: dict[str, list[str]]
     left_out: dict[str, int]
+    handoff: dict[str, str]
 
     def as_report(self) -> dict[str, Any]:
         """The report's ``stated``: each stat that holds anything."""
 
-        said = {READINGS_STAT: self.readings, PREVIEW_STAT: self.preview}
+        said = {READINGS_STAT: self.readings, PREVIEW_STAT: self.preview, HANDOFF_STAT: self.handoff}
         return {name: value for name, value in said.items() if value}
 
 
@@ -330,6 +337,15 @@ class _Parts:
                     found.setdefault(machine, {})[kind] = kept
         return found
 
+    def handoff(self, stat: Any) -> dict[str, str]:
+        found: dict[str, str] = {}
+        for machine, unit in self.by_machine(stat).items():
+            if isinstance(unit, str) and len(unit) <= UNIT_NAME_LIMIT and UNIT_NAME.fullmatch(unit):
+                found[machine] = unit
+            else:
+                self.leave_out(MISSHAPEN)
+        return found
+
     def preview(self, stat: Any) -> dict[str, list[str]]:
         found: dict[str, list[str]] = {}
         for machine, lines in self.by_machine(stat).items():
@@ -342,7 +358,7 @@ class _Parts:
 def stated(event: Mapping[str, Any], hosts: Collection[str] = (), secrets: Collection[str] = ()) -> Stated | None:
     """What a playbook stated as it ended, from the ``playbook_on_stats`` event, or None for any other event.
 
-    Only ``result``, ``readings`` and ``preview`` are read. A machine outside
+    Only ``result``, ``readings``, ``preview`` and ``handoff`` are read. A machine outside
     the run's ``hosts``, a misshapen part or one past ``RunStated``'s bounds is
     left out, and what is kept is struck of secrets.
     """
@@ -355,11 +371,12 @@ def stated(event: Mapping[str, Any], hosts: Collection[str] = (), secrets: Colle
     parts = _Parts(hosts, secrets)
     readings = parts.readings(artifact.get(READINGS_STAT))
     preview = parts.preview(artifact.get(PREVIEW_STAT))
-    found = Stated(_result(artifact.get(RESULT_STAT), secrets), readings, preview, parts.left_out)
+    handoff = parts.handoff(artifact.get(HANDOFF_STAT))
+    found = Stated(_result(artifact.get(RESULT_STAT), secrets), readings, preview, parts.left_out, handoff)
     if stated_bytes(found.as_report()) <= STATED_BYTES:
         return found
     parts.leave_out(PAST_BOUNDS, sum(map(len, readings.values())) + len(preview))
-    return Stated(found.result, {}, {}, parts.left_out)
+    return Stated(found.result, {}, {}, parts.left_out, handoff)
 
 
 def _result(result: Any, secrets: Collection[str]) -> str | None:

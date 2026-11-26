@@ -1271,6 +1271,17 @@
             },
             "x-go-type": "map[string][]string",
             "description": "Each machine's lines of what a change would do."
+          },
+          "handoff": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "#/components/schemas/StatedMachine"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/UnitName"
+            },
+            "x-go-type": "map[string]string",
+            "description": "Each machine's systemd unit the run started and left running, whose job's end HQ settles the run at, by a read its procedure names (settled_by)."
           }
         },
         "additionalProperties": false,
@@ -7001,6 +7012,12 @@
         ],
         "type": "object",
         "description": "One tailscale.user record: Tailnet user."
+      },
+      "UnitName": {
+        "maxLength": 255,
+        "pattern": "^(?:[A-Za-z0-9:_.@-]|\\\\x[0-9a-f]{2})+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+        "type": "string",
+        "description": "A systemd unit's name, as systemd spells it."
       },
       "Verification": {
         "additionalProperties": false,

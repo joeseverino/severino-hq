@@ -102,6 +102,9 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
 # or its worker stopped before it reported (``hq_runner``). Either ends it
 # said as ``work_runs.STOPPED_REPORTING``, whatever the worker said.
 OUTCOME_UNKNOWN = "OutcomeUnknown"
+# The unit a run's playbook started on each of its machines and left running
+# (``RunStated.handoff``).
+HANDOFF = "handoff"
 
 
 def _stopped(operation: OperationRequest, result: dict[str, Any]) -> None:
@@ -656,7 +659,7 @@ def _hold_stated(operation: OperationRequest, stated: dict[str, Any]) -> None:
     if violation is not None:
         raise ValueError(violation)
     hosts = set((operation.input or {}).get("hosts") or ())
-    if any(set(stated.get(stat) or {}) - hosts for stat in ("readings", "preview")):
+    if any(set(stated.get(stat) or {}) - hosts for stat in ("readings", "preview", HANDOFF)):
         raise ValueError("A run states only what it found on the machines it was run on.")
     if _stated_bytes(stated) > limit("StatedBytes", "maxLength"):
         raise ValueError("What the run's playbook stated is larger than the bridge accepts.")

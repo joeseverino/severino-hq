@@ -23,6 +23,7 @@ from hq_runner import bridge, events, worker
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "hq" / "domains" / "control_plane" / "bridge_base.json"
 CONNECTIONS = ROOT / "controller" / "api" / "hq-connections.openapi.json"
+CONTROLLER = ROOT / "controller" / "api" / "hq-controller.openapi.json"
 DOCUMENT_GO = ROOT / "controller" / "connections" / "document.go"
 RUNS = ROOT / "hq" / "platform" / "application" / "automation_runs.py"
 
@@ -52,7 +53,9 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(events.HOST_LIMIT, self.schemas["StatedMachine"]["maxLength"])
         self.assertEqual(events.KIND_LIMIT, self.schemas["StatedKind"]["maxLength"])
         self.assertEqual(events.STATED_BYTES, self.schemas["StatedBytes"]["maxLength"])
-        self.assertEqual({events.READINGS_STAT, events.PREVIEW_STAT}, set(stated))
+        self.assertEqual({events.READINGS_STAT, events.PREVIEW_STAT, events.HANDOFF_STAT}, set(stated))
+        unit = json.loads(CONTROLLER.read_text(encoding="utf-8"))["components"]["schemas"]["UnitName"]
+        self.assertEqual((events.UNIT_NAME.pattern, events.UNIT_NAME_LIMIT), (unit["pattern"], unit["maxLength"]))
 
     def test_what_the_worker_reports_of_the_recorded_run_conforms_to_run_stated(self):
         from jsonschema import Draft202012Validator

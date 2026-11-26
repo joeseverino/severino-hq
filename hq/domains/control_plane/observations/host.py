@@ -460,4 +460,5 @@ INBOUND = {
 # from the contract.
 SHARED = (
     SharedValue("HostEvent", (UNIT_JOB, DOCKER_CONTAINER), "An event HQ's own host tells it of from the controller."),
+    SharedValue("UnitName", UnitName, "A systemd unit's name, as systemd spells it."),
 )

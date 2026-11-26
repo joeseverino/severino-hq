@@ -1271,6 +1271,17 @@
             },
             "x-go-type": "map[string][]string",
             "description": "Each machine's lines of what a change would do."
+          },
+          "handoff": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "#/components/schemas/StatedMachine"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/UnitName"
+            },
+            "x-go-type": "map[string]string",
+            "description": "Each machine's systemd unit the run started and left running, whose job's end HQ settles the run at, by a read its procedure names (settled_by)."
           }
         },
         "additionalProperties": false,
