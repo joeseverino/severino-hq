@@ -46,9 +46,20 @@ sandbox=/etc/systemd/system/severino-hq-.service.d
 drill=/usr/local/lib/severino-hq-drill
 units=/etc/systemd/system
 
+# What the release installs in $units, by name: a mount among them holds its
+# directory until it is stopped, so cleanup stops each one before removing it.
+shipped=()
+for path in "$root"/deploy/systemd/*; do shipped+=("${path##*/}"); done
+
 cleanup() {
-  sudo systemctl stop 'severino-hq*' 'run-severino*' drill-connect.service 2>/dev/null || true
-  sudo find "$units" \( -name 'severino-hq*' -o -name 'run-severino*' -o -name drill-connect.service \
+  local running=()
+  for name in "${shipped[@]}"; do
+    # A drop-in directory runs nothing, and a template runs as its instances.
+    case $name in *.d) ;; *) running+=("${name/@./@*.}") ;; esac
+  done
+  sudo systemctl stop "${running[@]}" drill-connect.service 2>/dev/null || true
+  sudo rm -rf "${shipped[@]/#/$units/}"
+  sudo find "$units" \( -name 'severino-hq*' -o -name drill-connect.service \
     -o -name 'actions.runner.example.service.d' \) -prune -exec rm -rf {} +
   sudo systemctl daemon-reload
   sudo docker rm --force severino-hq "$registry" >/dev/null 2>&1 || true
