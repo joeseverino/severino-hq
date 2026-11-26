@@ -59,6 +59,7 @@ from .refusal_codes import Code
 from .security import Capability, Principal
 from .tone import Absent, Tone, Toned
 from .ui import ended
+lazy from . import outbound_work, public_registry
 lazy from .adoption import manages_through, observes_only
 lazy from .facts import stored_snapshots
 lazy from .inbound_events import covers
@@ -765,15 +766,20 @@ def ask(
     ``activity`` notes that a person asked, so the active cadence decides the
     sweep and a panel says its reading is under way. ``spaced`` is an
     event's ask, which waits a gap after its kind was stored
-    (``read_requests.EVENT_READ_GAP``). A kind HQ stores no
-    reading of is refused, since nothing would answer it and it would force
-    sweeps until it expired.
+    (``read_requests.EVENT_READ_GAP``). A kind HQ reads itself starts its
+    host job once this commits instead, which reads what of it is due. A kind
+    HQ stores no reading of is refused, since nothing would answer it and it
+    would force sweeps until it expired.
     """
 
     now = timezone.now()
     kinds = tuple(dict.fromkeys(reads))
     if unknown := [kind for kind in kinds if kind not in OBSERVATIONS and kind not in PROVIDERS]:
         raise ValidationError({"kind": ValidationError(f"No such type: {', '.join(unknown)}.", code="invalid_choice")})
+    read_here = [kind for kind in kinds if kind in OBSERVATIONS and OBSERVATIONS[kind].read_by == "hq"]
+    if read_here:
+        kinds = tuple(kind for kind in kinds if kind not in read_here)
+        transaction.on_commit(lambda: outbound_work.start_for_host(public_registry.REFRESH), robust=True)
     if activity:
         note_activity()
     for kind in kinds or (("",) if connection or every else ()):
@@ -789,7 +795,8 @@ def ask(
             request.requested_at, request.completed_at, request.awaited = now, None, activity
             request.audit_said = said
             request.save()
-    _ring_on_commit(doorbell)
+    if kinds or connection or every or panels or not read_here:
+        _ring_on_commit(doorbell)
     return now
 
 

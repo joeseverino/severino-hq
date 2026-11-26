@@ -436,6 +436,35 @@ def _moved(record: Mapping[str, Any], references: tuple[str, ...]) -> bool:
     return read_for is not None and tuple(read_for) != references
 
 
+def _pending(
+    kind: str,
+    key: str,
+    subjects: Iterable[str],
+    now: datetime,
+    *,
+    force: bool = False,
+    moved: Callable[[str, Mapping[str, Any]], bool] | None = None,
+) -> tuple[ProviderInventory | None, dict[str, Mapping[str, Any]], tuple[str, ...], list[str]]:
+    """What HQ holds of ``kind``: the stored reading, its records by
+    ``key``, the subjects wanted, and those of them due to be read now."""
+
+    stored = ProviderInventory.objects.filter(kind=kind).first()
+    kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
+    wanted = tuple(dict.fromkeys(subjects))
+    due = [
+        subject
+        for subject in wanted
+        if _due(
+            kept.get(subject),
+            kind,
+            now,
+            force=force,
+            moved=moved is not None and subject in kept and moved(subject, kept[subject]),
+        )
+    ]
+    return stored, kept, wanted, due
+
+
 def _report(
     kind: str,
     key: str,
@@ -453,20 +482,7 @@ def _report(
     nothing was read, so its age says when HQ last checked it held all of it.
     """
 
-    stored = ProviderInventory.objects.filter(kind=kind).first()
-    kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
-    wanted = tuple(dict.fromkeys(subjects))
-    due = [
-        subject
-        for subject in wanted
-        if _due(
-            kept.get(subject),
-            kind,
-            now,
-            force=force,
-            moved=moved is not None and subject in kept and moved(subject, kept[subject]),
-        )
-    ]
+    stored, kept, wanted, due = _pending(kind, key, subjects, now, force=force, moved=moved)
     dropped = set(kept) - set(wanted)
     current = stored is not None and (
         kind not in _UNCHANGING or (stored.observed_at is not None and not freshness(kind, stored.observed_at, now).due)
@@ -606,35 +622,20 @@ def refresh(
 
 
 def registry_due() -> bool:
-    """Whether a sweep found an image, or a digest of one, that HQ has not
-    read, or an image now running as references it was not read for. Cheap enough to ask on every sweep: two stored readings, no join."""
+    """Whether the refresh would read an image or a digest now, as it
+    chooses them: one HQ has not read, one past its cadence, or an image now
+    running as references it was not read for."""
 
-    wanted = wanted_images()
-    held_images = {str(record.get("image")): record for _snapshot, record in inventory_records(IMAGE_KIND)}
-    if set(wanted) - set(held_images):
-        return True
-    if any(
-        not record.get("unread") and _moved(record, wanted[name])
-        for name, record in held_images.items()
-        if name in wanted
-    ):
-        return True
-    running = {
-        f"{image.name}@{image.digest}"
-        for references in wanted.values()
-        for image in (ImageRef.parse(reference) for reference in references)
-        if image is not None and image.digest
-    }
-    for _snapshot, pulled in inventory_records(PULLED_KIND):
-        if pulled.get("containers"):
-            running.update(
-                f"{image.name}@{image.digest}"
-                for image in (ImageRef.parse(str(named)) for named in pulled.get("digests") or ())
-                if image is not None and image.digest and image.name in wanted
-            )
-    held = {str(record.get("digest")) for _snapshot, record in inventory_records(DIGEST_KIND)}
-    return bool(running - held)
+    now = timezone.now()
+    images = wanted_images()
+    return bool(
+        _pending(IMAGE_KIND, "image", images, now, moved=lambda name, record: _moved(record, images[name]))[3]
+        or _pending(DIGEST_KIND, "digest", wanted_digests(), now)[3]
+    )
 
+
+# The host job that reads what is due of every reading HQ takes itself.
+REFRESH = "registry.refresh"
 
 # The HQ-side reader for each reading HQ takes itself; see ``read_by``.
 READERS: dict[str, Callable[..., dict[str, Any]]] = {

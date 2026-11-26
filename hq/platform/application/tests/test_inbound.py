@@ -71,14 +71,31 @@ class ApplyEventsTests(TestCase):
         self.assertEqual(asked(), PUSHED)
 
     def test_a_container_change_makes_the_container_readings_due(self):
+        """Each container reading a change moves, and once the controller
+        stores a recreated container running a digest HQ has not read, the
+        registry read starts, once."""
+
         from hq.domains.control_plane.models import InboundEvent
+
+        from ..report_testing import bridged
+        from .test_containers import running
 
         for action in ("die", "start", "health_status: unhealthy", "oom", "destroy"):
             event = {**DIED, "event": f"docker.container.{action}", "delivery_id": action}
             self.apply({"source": "host", "events": [event]})
 
-        self.assertEqual(asked(), [ENVIRONMENT_KIND])
+        self.assertEqual(
+            asked(), sorted([ENVIRONMENT_KIND, "portainer.container", "portainer.image", "portainer.runtime"])
+        )
         self.assertEqual(set(InboundEvent.objects.values_list("outcome", flat=True)), {"applied"})
+
+        recreated = running("example-app", "ghcr.io/example/app:v2@sha256:" + "c" * 64)
+        with (
+            mock.patch("hq.platform.application.outbound_work.start_for_host") as start,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            bridged("inventory", {"portainer.container": {"ok": True, "records": [recreated]}})
+        start.assert_called_once_with("registry.refresh")
 
     def test_a_job_systemd_ended_failed_makes_the_unit_reading_due(self):
         """For any unit on the host, HQ's or not, as severino-hq-events.service

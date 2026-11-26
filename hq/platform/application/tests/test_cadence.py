@@ -231,6 +231,17 @@ class DoorbellTests(TestCase):
 
         self.assertEqual((self.directory / "doorbell").read_bytes(), b"")
 
+    def test_a_reading_hq_takes_itself_starts_its_host_job_and_wakes_no_controller(self):
+        with (
+            mock.patch("hq.platform.application.outbound_work.start_for_host") as start,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            cadence.ask(reads=("registry.image",))
+
+        start.assert_called_once_with("registry.refresh")
+        self.assertFalse(ReadRequest.objects.exists())
+        self.assertFalse((self.directory / "doorbell").exists())
+
     def test_ringing_twice_leaves_one_doorbell(self):
         cadence._ring("controller")
         cadence._ring("controller")

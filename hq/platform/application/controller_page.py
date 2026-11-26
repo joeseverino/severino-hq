@@ -16,7 +16,7 @@ from django.utils.text import get_text_list
 
 from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
 
-from .cadence import WorkerStanding, controller_standing, every_sweep, own_clock, sweep_due
+from .cadence import WorkerStanding, controller_standing, every_sweep, swept, sweep_due
 from .entity_links import kind_label
 from .freshness import Freshness, freshness
 from .moments import duration
@@ -95,14 +95,15 @@ def _reading(row: ProviderInventory) -> KindReading:
 
 
 def _own_clocks(readings: tuple[KindReading, ...]) -> str:
-    """Each reading read on a clock of its own, as "GitHub profiles every
-    6 hours", and "and on each event" for one events keep current."""
+    """Each reading the sweep reads on a clock of its own, in its freshness's
+    words ("GitHub profile read every 6 hours"), and "and on each event" for
+    one events keep current."""
 
     return get_text_list(
         [
-            f"{reading.label} every {duration(clock)}{' and on each event' if covers(reading.kind) else ''}"
+            f"{reading.label}{reading.reading.cadence.removeprefix(';')}{' and on each event' * covers(reading.kind)}"
             for reading in readings
-            if (clock := own_clock(reading.kind)) is not None
+            if swept(reading.kind) and not every_sweep(reading.kind)
         ],
         "and",
     )

@@ -51,7 +51,11 @@ def _carried(source: InboundSource) -> list[str]:
     channel may have missed."""
 
     return [
-        kind for spec in INBOUND.values() if arrives_by(spec) == source for kinds in spec.events.values() for kind in kinds
+        kind
+        for spec in INBOUND.values()
+        if arrives_by(spec) == source
+        for kinds in spec.events.values()
+        for kind in kinds
     ]
 
 

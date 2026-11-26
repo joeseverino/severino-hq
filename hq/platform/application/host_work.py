@@ -26,7 +26,7 @@ lazy from hq.platform.core.models import AuditLog
 from .outbound_work import OutboundWork
 from .record_errors import RecordConflict
 from .ui import counted
-lazy from . import approvals, outbound_work
+lazy from . import approvals, outbound_work, public_registry
 lazy from .automation_adoption import prune_proposals
 lazy from .inbound import apply_events, prune_events
 lazy from .public_registry import refresh
@@ -145,7 +145,7 @@ def outbound() -> tuple[OutboundWork, ...]:
         _own("content.sync", "Content sync", _content_index, every=DAILY),
         _own("due", "Scheduled work", _due),
         _own("events.prune", "Event cleanup", prune_events, every=DAILY),
-        _own("registry.refresh", "Registry refresh", _public_registry, every=DAILY),
+        _own(public_registry.REFRESH, "Registry refresh", _public_registry, every=DAILY),
         _own("sessions.clear", "Session cleanup", _clear_sessions, every=DAILY),
         _own("units.read", "Service check", _unit_state),
     )

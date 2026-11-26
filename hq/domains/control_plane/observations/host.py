@@ -8,9 +8,10 @@ from pydantic import ConfigDict, Field
 from hq.platform.application.reasons import Checked
 lazy from hq.platform.application.labels import human_bytes
 
+from ..provider_adapters.portainer import CONTAINER_KIND
 from ..provider_spec import InboundSpec, SharedValue
 from .contract import ObservationRecord, ObservationSpec, Stamp
-from .portainer import ENVIRONMENT_KIND
+from .portainer import ENVIRONMENT_KIND, IMAGE_KIND, RUNTIME_KIND
 
 
 class HostFirewallRecord(ObservationRecord):
@@ -440,13 +441,21 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
 # What HQ's own host jobs say happened: a unit that failed, which every
 # severino-hq unit's OnFailure= reports (``host_work.units.read``); a job
 # systemd ended on HQ's host, for any unit, with its result after a dot; and a
-# container on HQ's host that changed, with Docker's action after a dot. The
-# last two are what severino-hq-events.service hears.
+# container on HQ's host that changed, with Docker's action after a dot, which
+# makes due the container list, each one's inspect and the images pulled, since
+# a sweep of only the environments reads none of them again. The last two are
+# what severino-hq-events.service hears.
 UNIT_FAILED = "unit.failed"
 UNIT_JOB = "unit.job"
 DOCKER_CONTAINER = "docker.container"
 INBOUND = {
-    "host": InboundSpec({UNIT_FAILED: (UNIT_KIND,), UNIT_JOB: (UNIT_KIND,), DOCKER_CONTAINER: (ENVIRONMENT_KIND,)})
+    "host": InboundSpec(
+        {
+            UNIT_FAILED: (UNIT_KIND,),
+            UNIT_JOB: (UNIT_KIND,),
+            DOCKER_CONTAINER: (ENVIRONMENT_KIND, CONTAINER_KIND, RUNTIME_KIND, IMAGE_KIND),
+        }
+    )
 }
 # The events severino-hq-events.service tells, which the controller spells
 # from the contract.
