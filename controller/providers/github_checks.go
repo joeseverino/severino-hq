@@ -2,9 +2,11 @@ package providers
 
 import (
 	"context"
+	"maps"
 	"strconv"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 )
 
@@ -104,28 +106,40 @@ func (g *githubRepository) branchChecks(ctx context.Context, head string, newest
 	if len(failing) > 0 {
 		checks.State, checks.Failing = "failure", sortedKeys(failing)
 	}
-	if len(failures) > 0 {
-		checks.Failures = failures
-	}
+	checks.Failures = stated(failures)
 	return checks, nil
 }
 
-// failures adds why each failing job of runs failed, by its name: each check
-// run in one of the workflows' suites is that run's job.
+// githubFailuresKept is the most failing jobs a commit's checks say why of,
+// which is the most job logs read for them.
+var githubFailuresKept = api.MustLimit("GitHubRepositoryChecks", "properties", "failures", "maxProperties")
+
+// failures adds why each failing job of runs failed, by its name, until
+// githubFailuresKept are read: each check run in one of the workflows' suites
+// is that run's job.
 func (g *githubRepository) failures(ctx context.Context, runs []githubapi.CheckRun, githubs, workflows map[int]bool, found map[string]GitHubFailure) error {
 	for _, run := range latestChecks(runs, githubs) {
-		if !githubFailed[string(run.Conclusion)] || !workflows[run.CheckSuite.ID] {
+		_, read := found[run.Name]
+		if len(found) >= githubFailuresKept || read || !githubFailed[string(run.Conclusion)] || !workflows[run.CheckSuite.ID] {
 			continue
 		}
 		failure, err := g.failure(ctx, run.ID)
 		if err != nil {
 			return err
 		}
-		if failure.Step != "" {
-			found[run.Name] = failure
-		}
+		found[run.Name] = failure
 	}
 	return nil
+}
+
+// stated is the failures that say why, nil for none: a job that failed before
+// any step did says nothing.
+func stated(failures map[string]GitHubFailure) map[string]GitHubFailure {
+	maps.DeleteFunc(failures, func(_ string, failure GitHubFailure) bool { return failure.Step == "" })
+	if len(failures) == 0 {
+		return nil
+	}
+	return failures
 }
 
 // checks is a commit's check runs, each standing as its last run did: a rerun
@@ -142,9 +156,7 @@ func (g *githubRepository) checks(ctx context.Context, sha string, githubs, work
 	if err := g.failures(ctx, runs, githubs, workflows, failures); err != nil {
 		return checks, err
 	}
-	if len(failures) > 0 {
-		checks.Failures = failures
-	}
+	checks.Failures = stated(failures)
 	return checks, nil
 }
 

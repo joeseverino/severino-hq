@@ -116,7 +116,7 @@ def _failing(repo: Repository) -> Iterator[Said]:
     failures = checks.get("failures") or {}
     jobs = checks.get("failing") or []
     failing = [f"{job} (at {failures[job]['step']})" if failures.get(job, {}).get("step") else job for job in jobs]
-    causes = [(job, cause) for job in jobs[:4] if (cause := failure_cause(failures.get(job) or {}))]
+    causes = [(job, cause) for job in jobs if (cause := failure_cause(failures.get(job) or {}))]
     said = [cause if len(jobs) == 1 else f"{job}: {cause}" for job, cause in causes]
     runs = repo.failing_runs
     one = runs[0] if len(runs) == 1 else None

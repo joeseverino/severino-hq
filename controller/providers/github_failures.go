@@ -26,7 +26,8 @@ import (
 
 // GitHubFailure is why one job failed: the step it failed at, the error
 // GitHub's log marks there, and the step's last lines of output before it.
-// A log GitHub no longer keeps, or would not hand out, leaves both unsaid.
+// A log GitHub would not hand out leaves both unsaid, and is a refused
+// job_logs part.
 type GitHubFailure struct {
 	Step  string   `json:"step"`
 	Error string   `json:"error"`
@@ -64,9 +65,11 @@ func (g *githubRepository) failure(ctx context.Context, job int) (GitHubFailure,
 			// A spent allowance ends the read, as on any other call.
 			return found, err
 		}
-		if err == nil {
-			found.Error, found.Log = said, lines
+		if err != nil {
+			refuse(ctx, runtime.PartJobLogs, g.c.ref, g.name, err)
+			return found, nil
 		}
+		found.Error, found.Log = said, lines
 		return found, nil
 	}
 	return GitHubFailure{}, nil

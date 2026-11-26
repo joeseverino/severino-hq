@@ -142,3 +142,43 @@ func TestAFailingJobSaysWhyFromItsStepsLog(t *testing.T) {
 		})
 	}
 }
+
+// A commit with more failing jobs than a reading says why of reads only as
+// many job logs as it keeps, and a log GitHub would not hand out is a refused
+// part, the job still named by the step it failed at.
+func TestFailingJobsReadOnlyTheLogsKeptAndARefusedLogShows(t *testing.T) {
+	routes := githubRepositoryRoutes()
+	api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
+	routes[api("/actions/runs?branch=main&per_page=100")] = `{"workflow_runs":[{"id":50,"name":"CI","workflow_id":11,"check_suite_id":80,"status":"completed","conclusion":"failure","event":"push","head_branch":"main","head_sha":"aaaa000000000000000000000000000000000000","created_at":"2030-01-03T00:00:00Z"}]}`
+	jobs := githubFailuresKept + 2
+	checks := []string{}
+	for job := 81; job < 81+jobs; job++ {
+		checks = append(checks, `{"id":`+strconv.Itoa(job)+`,"name":"job `+strconv.Itoa(job)+`","status":"completed","conclusion":"failure","check_suite":{"id":80}}`)
+		routes[api("/actions/jobs/"+strconv.Itoa(job))] = `{"id":` + strconv.Itoa(job) + `,"steps":[{"name":"Check","status":"completed","conclusion":"failure","number":2}]}`
+	}
+	routes[api("/commits/aaaa000000000000000000000000000000000000/check-runs?per_page=100")] = `{"check_runs":[` + strings.Join(checks, ",") + `]}`
+	h := newGitHubHarness(t, routes, runtime.Environment{})
+	for job := 82; job < 81+jobs; job++ {
+		h.stepLog(job, 2, githubLog("##[error]Process completed with exit code 1."))
+	}
+	h.refuse(githubFakeAPI, "/repos/example/app/actions/jobs/81/steps/2/logs", http.StatusForbidden)
+	record, refused := readRepository(t, h)
+
+	if len(record.Checks.Failures) != githubFailuresKept || record.Checks.Failures["job 81"].Step != "Check" {
+		t.Fatalf("failures %+v", record.Checks.Failures)
+	}
+	read := 0
+	for _, call := range h.recorded() {
+		if job, err := strconv.Atoi(strings.TrimPrefix(call.path, "/repos/example/app/actions/jobs/")); err == nil && job >= 81 {
+			read++
+		}
+	}
+	if read != githubFailuresKept {
+		t.Errorf("read %d jobs", read)
+	}
+	if !slices.ContainsFunc(refused, func(part runtime.RefusedPart) bool {
+		return part.Part == runtime.PartJobLogs && part.Scope == "example/app"
+	}) {
+		t.Errorf("refused %+v", refused)
+	}
+}

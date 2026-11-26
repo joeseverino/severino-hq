@@ -598,6 +598,7 @@ const (
 	PartFiltering         ReadingPartName = "filtering"
 	PartHTTPS             ReadingPartName = "https"
 	PartImages            ReadingPartName = "images"
+	PartJobLogs           ReadingPartName = "job_logs"
 	PartLeakedCredentials ReadingPartName = "leaked_credentials"
 	PartPageRules         ReadingPartName = "page_rules"
 	PartPosture           ReadingPartName = "posture"
@@ -655,6 +656,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartHTTPS:
 		return true
 	case PartImages:
+		return true
+	case PartJobLogs:
 		return true
 	case PartLeakedCredentials:
 		return true

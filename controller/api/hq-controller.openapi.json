@@ -4020,6 +4020,7 @@
               "$ref": "#/components/schemas/GitHubRepositoryJobFailure"
             },
             "default": {},
+            "maxProperties": 4,
             "type": "object"
           }
         },
@@ -6379,6 +6380,7 @@
           "filtering",
           "https",
           "images",
+          "job_logs",
           "leaked_credentials",
           "page_rules",
           "posture",
@@ -6416,6 +6418,7 @@
           "PartFiltering",
           "PartHTTPS",
           "PartImages",
+          "PartJobLogs",
           "PartLeakedCredentials",
           "PartPageRules",
           "PartPosture",

@@ -49,6 +49,8 @@ WORKFLOW_PINS = ReadingPart("workflow_pins", "Workflow action pins", requires=(G
 # Of a repository opted in to updates: each app's Compose files, the open
 # Dependency Dashboard, and the images each update moves.
 COMPOSE = ReadingPart("compose", "Compose apps", requires=(GitHub.CONTENTS_READ, GitHub.ISSUES_READ))
+# A failing job's step log, refused one job at a time while the checks read.
+JOB_LOGS = ReadingPart("job_logs", "Failed job logs", requires=(GitHub.ACTIONS_READ,))
 PARTS = (
     CODE_SCANNING,
     DEPENDABOT,
@@ -61,10 +63,14 @@ PARTS = (
     VARIABLES,
     WORKFLOW_PINS,
     COMPOSE,
+    JOB_LOGS,
 )
 # The most Compose files a record keeps, which the controller reads from the
 # record's schema in the bridge contract.
 COMPOSE_KEPT = 500
+# The most failing jobs a commit's checks say why of: the causes a failing
+# finding shows, and so the logs the controller reads, from the record's schema.
+FAILURES_KEPT = 4
 
 
 # The parts a record counts open alerts of, by their part names.
@@ -159,7 +165,7 @@ class Checks(ObservationRecord):
     failing: list[str] = []
     running: int = 0
     names: list[str] = []
-    failures: dict[str, JobFailure] = {}
+    failures: dict[str, JobFailure] = Field(default={}, max_length=FAILURES_KEPT)
 
 
 class PullRequest(ObservationRecord):
