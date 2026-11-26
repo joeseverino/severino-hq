@@ -790,6 +790,10 @@ SEVERINO_BRIDGE_SOCKET = env_str("SEVERINO_BRIDGE_SOCKET")
 # HQ's playbook worker's own bridge socket, in a directory of its own, served
 # under the same rules and holding only its claim, renewal and report.
 SEVERINO_AUTOMATION_BRIDGE_SOCKET = env_str("SEVERINO_AUTOMATION_BRIDGE_SOCKET")
+# The event readers' bridge socket (the listener's and the Docker watcher's),
+# in a directory of its own, served under the same rules and holding only the
+# events action.
+SEVERINO_EVENTS_BRIDGE_SOCKET = env_str("SEVERINO_EVENTS_BRIDGE_SOCKET")
 # tailscaled's LocalAPI socket, which places each agent call on the tailnet
 # device that sent it (hq.platform.application.tailscaled). Its presence is
 # what says the deployment has a tailnet: absent, as on a developer's machine,

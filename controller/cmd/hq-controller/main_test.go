@@ -180,7 +180,7 @@ func runFed(t *testing.T, binary string, bridge *stubBridge, input string, args 
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), binary, args...)
 	cmd.Stdin = strings.NewReader(input)
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), BridgeSocket + "=" + bridge.Socket, "HQ_CONTROLLER_ID=e2e"}
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), BridgeSocket + "=" + bridge.Socket, EventsBridgeSocket + "=" + bridge.Socket, "HQ_CONTROLLER_ID=e2e"}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

@@ -45,7 +45,7 @@ func TestEveryEgressTableLoadsInNft(t *testing.T) {
 // package variable whose value is a confinement literal; the source is read,
 // so a confinement added later is checked without being listed here.
 func confinements(t *testing.T) map[string]confinement {
-	known := map[string]confinement{"renovateEgress": renovateEgress, "automationEgress": automationEgress}
+	known := map[string]confinement{"renovateEgress": renovateEgress, "automationEgress": automationEgress, "listenerEgress": listenerEgress}
 	sources, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)

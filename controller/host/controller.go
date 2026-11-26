@@ -167,7 +167,7 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		role = "controller"
 	}
 	args := []string{
-		"run", "--rm", "--network", "host", "--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID), "--cap-drop", "ALL",
+		"run", "--rm", "--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID), "--cap-drop", "ALL",
 		"--no-healthcheck",
 		"--label", "severino-hq.role=" + role,
 		own.label(),
@@ -182,9 +182,24 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		"--env", "HQ_CONTROLLER_CONNECTIONS=" + controllerConnections,
 		"--env", "HQ_CONTROLLER_SSH_DIR=" + controllerSSH,
 	}
+	// The bridge, from the declaration the web container is given it by: the
+	// listener's holds the events action alone.
+	bridge, variable := BridgeSocket, "SEVERINO_BRIDGE_SOCKET"
 	if pass == Listen {
+		// It reaches only public addresses: the Worker, and the resolvers
+		// that name it. Nothing on this host, the LAN or the tailnet.
+		if err := listenerEgress.confine(ctx, c.Machine); err != nil {
+			return err
+		}
 		_ = c.Command(ctx, "docker", "rm", "--force", ListenerContainer).Run()
-		args = append(args, "--name", ListenerContainer)
+		args = append(args, "--name", ListenerContainer, "--network", ListenerNetwork)
+		for _, resolver := range PublicResolvers {
+			args = append(args, "--dns", resolver)
+		}
+		bridge, variable = EventsBridgeSocket, "SEVERINO_EVENTS_BRIDGE_SOCKET"
+	} else {
+		// A pass reads this host and the tailnet as the host does.
+		args = append(args, "--network", "host")
 	}
 	if pass.partial() {
 		roots, err := c.roots(run)
@@ -218,10 +233,9 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		args = append(args, grants...)
 		args = append(args, c.unitSocket()...)
 	}
-	// The bridge, from the declaration the web container is given it by.
 	args = append(args,
-		"--mount", "type=volume,source="+volumeAt(filepath.Dir(BridgeSocket)).Name+",target="+filepath.Dir(BridgeSocket)+",readonly",
-		"--env", "SEVERINO_BRIDGE_SOCKET="+BridgeSocket,
+		"--mount", "type=volume,source="+volumeAt(filepath.Dir(bridge)).Name+",target="+filepath.Dir(bridge)+",readonly",
+		"--env", variable+"="+bridge,
 		image)
 	switch pass {
 	case Apply:

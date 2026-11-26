@@ -50,7 +50,15 @@ type launch struct {
 	order     []string
 	// container is what the pass does, given its out directory on the host.
 	container func(out string)
+	// loaded is whether an egress table was loaded.
+	loaded bool
 }
+
+// listenerNetworkJSON is what `docker network inspect` says of the
+// listener's network, as Docker prints one it made.
+const listenerNetworkJSON = `{"Name":"severino-hq-listener","Id":"89abcdef","Scope":"local","Driver":"bridge","EnableIPv4":true,"EnableIPv6":false,` +
+	`"IPAM":{"Driver":"default","Options":null,"Config":[{"Subnet":"10.231.2.0/24","Gateway":"10.231.2.1"}]},"Internal":false,"Attachable":false,` +
+	`"Containers":{},"Options":{"com.docker.network.bridge.name":"hq-listener0"},"Labels":{}}`
 
 func newLaunch(t *testing.T) *launch {
 	t.Helper()
@@ -105,6 +113,13 @@ func newLaunch(t *testing.T) *launch {
 					}
 				}
 			}
+		}
+		if name == "docker" && slices.Equal(args[:2], []string{"network", "inspect"}) {
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"`, "sh", listenerNetworkJSON)
+		}
+		if name == "nft" && slices.Equal(args, []string{"-f", "-"}) {
+			l.loaded = true
+			return exec.CommandContext(ctx, "/bin/sh", "-c", "cat >/dev/null")
 		}
 		if name == "nft" || name == "systemctl" || name == "busctl" {
 			return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 1")
@@ -636,6 +651,31 @@ func TestAPartialPassIsGivenOnlyTheConnectionsItReads(t *testing.T) {
 	}
 }
 
+// The listener faces the internet, so its container reaches only public
+// addresses, on a network its table confines, and HQ only through the
+// socket that serves the events action alone.
+func TestTheListenerReachesOnlyPublicAddressesAndTheEventsBridge(t *testing.T) {
+	l := newLaunch(t)
+	glanceDocument(t, l)
+
+	l.run(t, Listen)
+
+	if !l.loaded {
+		t.Error("the listener's egress table was not loaded")
+	}
+	if network := l.args[slices.Index(l.args, "--network")+1]; network != ListenerNetwork {
+		t.Errorf("the listener runs on %s", network)
+	}
+	for i, arg := range l.args {
+		if arg == "--dns" && !slices.Contains(PublicResolvers, l.args[i+1]) {
+			t.Errorf("the listener resolves with %s", l.args[i+1])
+		}
+	}
+	if slices.ContainsFunc(l.args, func(arg string) bool { return strings.Contains(arg, filepath.Dir(BridgeSocket)+",") }) {
+		t.Errorf("the listener is lent the controller's bridge: %v", l.args)
+	}
+}
+
 // With no events connection there is no socket to hold, and no container.
 func TestAListenerWithNoEventsConnectionStartsNothing(t *testing.T) {
 	l := newLaunch(t)
@@ -756,7 +796,11 @@ func TestAPartialPassIsGivenNothingElseOfTheControllers(t *testing.T) {
 				names = append(names, name)
 			}
 			slices.Sort(names)
-			want := []string{"HQ_CONTROLLER_CA_FILE", "HQ_CONTROLLER_CONNECTIONS", "HQ_CONTROLLER_RUNS", "HQ_CONTROLLER_SSH_DIR", "SEVERINO_BRIDGE_SOCKET"}
+			bridge, variable := BridgeSocket, "SEVERINO_BRIDGE_SOCKET"
+			if pass == Listen {
+				bridge, variable = EventsBridgeSocket, "SEVERINO_EVENTS_BRIDGE_SOCKET"
+			}
+			want := []string{"HQ_CONTROLLER_CA_FILE", "HQ_CONTROLLER_CONNECTIONS", "HQ_CONTROLLER_RUNS", "HQ_CONTROLLER_SSH_DIR", variable}
 			if !slices.Equal(names, want) {
 				t.Errorf("the pass is told %v, want %v", names, want)
 			}
@@ -769,7 +813,7 @@ func TestAPartialPassIsGivenNothingElseOfTheControllers(t *testing.T) {
 				}
 			}
 			slices.Sort(targets)
-			if want := []string{filepath.Dir(BridgeSocket), controllerConnections, controllerSSH, controllerCA, RunsDir}; !slices.Equal(targets, slices.Sorted(slices.Values(want))) {
+			if want := []string{filepath.Dir(bridge), controllerConnections, controllerSSH, controllerCA, RunsDir}; !slices.Equal(targets, slices.Sorted(slices.Values(want))) {
 				t.Errorf("the pass mounts %v", targets)
 			}
 			if string(l.mounted[controllerCA]) != "ROOT\n" {

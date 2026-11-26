@@ -750,9 +750,13 @@ HQ's side of the socket is `severino-hq-listener.service`
   connection names.
 - Its container runs as the web account, with no capability, no new
   privileges and a `noexec` temporary directory. It is given only that
-  connection, the host's roots and the bridge, and reaches HQ only through
-  the bridge's `events` action. The unit starting it has no network and no
-  more than a glance's.
+  connection, the host's roots and the events bridge
+  (`/run/hq-events-bridge/bridge.sock`), a socket of its own that serves the
+  `events` action alone, so a listener taken over can only tell HQ to read
+  again. Its network is a bridge whose egress table lets it reach public
+  addresses alone, through public resolvers: nothing on the host, the LAN or
+  the tailnet. The unit starting it holds no more than the controller's, to
+  load that table.
 - It sends nothing on the socket but pings. What it hears is held to the
   contract's `InboundArrival`; anything else is dropped. A reconnect makes HQ
   read again every reading the Worker's providers name, at most once a

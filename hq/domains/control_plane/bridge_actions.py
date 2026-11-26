@@ -2,7 +2,8 @@
 
 Every action is declared once, in ``ACTIONS``: its name and the function that
 runs it. ``WORKER_ACTIONS`` are the three HQ's playbook worker's own socket
-serves, held to its lane as the controller's are to theirs. The contract (``bridge_contract``) states each action's parameters
+serves, held to its lane as the controller's are to theirs, and
+``EVENTS_ACTIONS`` the one the event readers' socket serves. The contract (``bridge_contract``) states each action's parameters
 and whether it carries a payload; the bridge application parses a request
 against that and calls the function with the result, so an action never reads
 a request itself.
@@ -275,7 +276,9 @@ ACTIONS: tuple[Action, ...] = (
     Action("glance", "The controller refreshed the dashboard", _glance),
     Action("registry", "The controller read what each provider declares", _registry),
     Action("job", "The controller ran scheduled work", _job),
-    Action("events", "The listener said what happened outside", _events),
 )
 # HQ's playbook worker's socket: its claim, renewal and report, and nothing else.
 WORKER_ACTIONS: tuple[Action, ...] = _queue(WORKER_LANE)
+# The socket the listener and the Docker watcher tell HQ of events on, and
+# nothing else: what either can ask is that HQ read again.
+EVENTS_ACTIONS: tuple[Action, ...] = (Action("events", "The listener said what happened outside", _events),)

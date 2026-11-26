@@ -8,7 +8,7 @@ from django.test import TestCase
 from pydantic import BaseModel
 
 from hq.domains.control_plane import bridge_application
-from hq.domains.control_plane.bridge_actions import ACTIONS
+from hq.domains.control_plane.bridge_actions import ACTIONS, EVENTS_ACTIONS
 from hq.domains.control_plane.bridge_contract import operations
 
 from . import bridge_client
@@ -146,7 +146,9 @@ def _recording(ran: list[tuple[str, Any]]):
     def noted(name: str):
         return lambda parameters, payload: ran.append((name, payload)) or {"ok": True}
 
-    return bridge_application.bridge(tuple(replace(action, run=noted(action.name)) for action in ACTIONS))
+    return bridge_application.bridge(
+        tuple(replace(action, run=noted(action.name)) for action in (*ACTIONS, *EVENTS_ACTIONS))
+    )
 
 
 def _at(value: Any, path: tuple[str | int, ...]) -> Any:

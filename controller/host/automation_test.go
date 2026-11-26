@@ -284,10 +284,15 @@ func TestTheWorkersTableIsTheRenderedOne(t *testing.T) {
 	if got := confined.rules(); got != want {
 		t.Errorf("rendered\n%s\nwant\n%s", got, want)
 	}
-	// The two networks never share addresses, so neither table names the
-	// other's containers.
-	if netip.MustParsePrefix(renovateEgress.subnet).Overlaps(netip.MustParsePrefix(automationEgress.subnet)) || renovateEgress.bridge == automationEgress.bridge || renovateEgress.table == automationEgress.table {
-		t.Error("the worker's network is the Renovate run's")
+	// No two networks share addresses, so no table names another's
+	// containers.
+	tables := confinements(t)
+	for one, a := range tables {
+		for other, b := range tables {
+			if one < other && (netip.MustParsePrefix(a.subnet).Overlaps(netip.MustParsePrefix(b.subnet)) || a.bridge == b.bridge || a.table == b.table || a.network == b.network) {
+				t.Errorf("%s and %s share a network", one, other)
+			}
+		}
 	}
 }
 

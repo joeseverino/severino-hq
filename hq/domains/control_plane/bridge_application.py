@@ -21,7 +21,7 @@ from starlette.responses import Response
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, WORKER_ACTIONS, Action
+from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, EVENTS_ACTIONS, WORKER_ACTIONS, Action
 from hq.domains.control_plane.bridge_contract import (
     Operation,
     Parameter,
@@ -256,13 +256,14 @@ def _routes(actions: tuple[Action, ...]) -> list[Route]:
 def bridge(actions: tuple[Action, ...]) -> UnixSocketOnly:
     """The bridge application serving ``actions``, each a path the contract declares, once.
 
-    Served with ``ACTIONS`` and ``WORKER_ACTIONS``; a test hands actions that record they ran.
+    Served with ``ACTIONS``, ``WORKER_ACTIONS`` and ``EVENTS_ACTIONS``; a test hands actions that record they ran.
     """
 
     return UnixSocketOnly(Starlette(routes=_routes(actions), exception_handlers={HTTPException: _http_error}))
 
 
-# The controller's socket, and HQ's playbook worker's: each a socket of its own,
-# so the worker, which runs as the same account, reaches only its lane.
+# The controller's socket, HQ's playbook worker's and the event readers': each
+# a socket of its own, so each, run as the same account, reaches only its lane.
 application = bridge(ACTIONS)
 worker_application = bridge(WORKER_ACTIONS)
+events_application = bridge(EVENTS_ACTIONS)

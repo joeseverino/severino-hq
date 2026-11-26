@@ -19,6 +19,7 @@ lazy from starlette.routing import Mount, Route
 from hq.config.imports import lazily
 lazy from hq.domains.control_plane.bridge_application import (
     application as bridge_application,
+    events_application as events_bridge_application,
     worker_application as worker_bridge_application,
 )
 lazy from hq.platform.application import agent_admission, tokens
@@ -141,8 +142,9 @@ mcp_metadata = ResourceMetadata(
 
 @contextlib.asynccontextmanager
 async def bridge_serving():
-    """The controller's bridge and the automation worker's, each on its own
-    listener for as long as the web application runs.
+    """The controller's bridge, the automation worker's and the event
+    readers', each on its own listener for as long as the web application
+    runs.
 
     Each bridge application is given to its listener and to nothing below: it
     is not a route here, so no network request reaches it. A socket path that
@@ -153,6 +155,7 @@ async def bridge_serving():
         for served, path in (
             (bridge_application, settings.SEVERINO_BRIDGE_SOCKET),
             (worker_bridge_application, settings.SEVERINO_AUTOMATION_BRIDGE_SOCKET),
+            (events_bridge_application, settings.SEVERINO_EVENTS_BRIDGE_SOCKET),
         ):
             if path:
                 await listening.enter_async_context(unix_server.serving(served, path))

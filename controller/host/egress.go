@@ -28,7 +28,10 @@ const (
 	// host's own address (confinement.rules).
 	AutomationNetwork = "severino-hq-automation"
 	AutomationSubnet  = "10.231.1.0/24"
-	bridgeName        = "com.docker.network.bridge.name"
+	// ListenerNetwork is the inbound-events listener's, which reaches public
+	// addresses alone.
+	ListenerNetwork = "severino-hq-listener"
+	bridgeName      = "com.docker.network.bridge.name"
 )
 
 // confinement is a container network and the nftables table that holds what
@@ -40,6 +43,8 @@ type confinement struct {
 }
 
 var renovateEgress = confinement{network: RenovateNetwork, bridge: "hq-renovate0", subnet: "10.231.0.0/24", table: EgressTable}
+
+var listenerEgress = confinement{network: ListenerNetwork, bridge: "hq-listener0", subnet: "10.231.2.0/24", table: "severino_hq_listener"}
 
 // automationEgress is the automation worker's network, before the runner
 // connections it reaches are added.

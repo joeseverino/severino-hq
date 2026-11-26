@@ -24,6 +24,9 @@ type Environment struct {
 	ID string `env:"HQ_CONTROLLER_ID"`
 	// BridgeSocket is HQ's bridge socket. There is no other way to reach HQ.
 	BridgeSocket string `env:"SEVERINO_BRIDGE_SOCKET"`
+	// EventsBridgeSocket is the listener's, which serves the events action
+	// alone.
+	EventsBridgeSocket string `env:"SEVERINO_EVENTS_BRIDGE_SOCKET"`
 	// ConnectionsFile is the connections document the launcher mounts.
 	// Connections arrive in that document and never in the container's
 	// environment, where `docker inspect` would show them.

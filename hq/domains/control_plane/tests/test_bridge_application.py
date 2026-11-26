@@ -299,9 +299,13 @@ class PayloadContractTests(TestCase):
 
 class ContractBindingTests(SimpleTestCase):
     def test_the_routes_are_the_contracts_paths(self):
-        served = {route.path for route in bridge_application.application.application.routes}
-        self.assertEqual(served, set(contract()["paths"]))
-        for route in bridge_application.application.application.routes:
+        routes = [
+            route
+            for app in (bridge_application.application, bridge_application.events_application)
+            for route in app.application.routes
+        ]
+        self.assertEqual({route.path for route in routes}, set(contract()["paths"]))
+        for route in routes:
             self.assertEqual(route.methods, {"POST"})
 
     def test_actions_and_paths_that_differ_stop_the_import(self):

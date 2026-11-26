@@ -79,6 +79,14 @@ def worker() -> Any:
     return worker_application
 
 
+def events() -> Any:
+    """The event readers' socket, for a test that calls as the listener does."""
+
+    from hq.domains.control_plane.bridge_application import events_application
+
+    return events_application
+
+
 def call(action: str, payload: Any = None, *, app: Any = application, **query: Any) -> Any:
     """Run one action and return its answer, failing on a refusal or an answer
     off the contract the Go controller's client is generated from.

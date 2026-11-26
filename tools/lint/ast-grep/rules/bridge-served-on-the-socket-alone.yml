@@ -1,7 +1,7 @@
 # The controller bridge answers on the private Unix socket only, which the
 # host's controller alone reaches; served by any other listener it would
-# answer the network. So each bridge application (the controller's and the
-# automation worker's), imported by its own name, is handed to
+# answer the network. So each bridge application (the controller's, the
+# automation worker's and the event readers'), imported by its own name, is handed to
 # unix_server.serving, or paired with its socket's setting for the loop that
 # hands it there, and to nothing else; no string names its module for a server
 # to import.
@@ -20,7 +20,7 @@ rule:
     - kind: string_content
       regex: \bbridge_application\b
     - kind: identifier
-      regex: ^(worker_)?bridge_application$
+      regex: ^(worker_|events_)?bridge_application$
       not:
         any:
           - inside:
@@ -29,7 +29,7 @@ rule:
               has:
                 stopBy: end
                 kind: aliased_import
-                has: {field: alias, regex: ^(worker_)?bridge_application$}
+                has: {field: alias, regex: ^(worker_|events_)?bridge_application$}
           - nthChild: 1
             inside:
               kind: tuple

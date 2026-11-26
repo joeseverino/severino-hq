@@ -213,7 +213,7 @@ class BridgeEventsTests(TestCase):
         from hq.domains.control_plane.models import InboundEvent
 
         with self.captureOnCommitCallbacks(execute=True):
-            bridge_client.call("events", worker(PUSH))
+            bridge_client.call("events", worker(PUSH), app=bridge_client.events())
 
         self.assertEqual(InboundEvent.objects.get().delivery_id, PUSH["delivery_id"])
         self.assertEqual(asked(), ["github.repository"])

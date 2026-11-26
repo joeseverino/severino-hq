@@ -1,7 +1,8 @@
-"""Each bridge socket leases and ends only its own lane's work: the
-automation worker's the automation kinds', through its claim, renewal and
-report alone, and the controller's every other kind's. Both run as one
-account and name one host, so the socket is all that tells them apart."""
+"""Each bridge socket serves only its own lane: the automation worker's
+leases and ends the automation kinds' work, through its claim, renewal and
+report alone, the controller's every other kind's, and the event readers'
+takes events alone. All run as one account and name one host, so the socket
+is all that tells them apart."""
 
 import json
 from datetime import timedelta
@@ -81,6 +82,18 @@ class WorkerSocketTests(LaneTestCase):
                 self.refused(
                     ask(bridge_client.worker(), "report", operation, success=True, observed_generation=1), operation
                 )
+
+
+class EventsSocketTests(LaneTestCase):
+    def test_it_serves_no_action_but_the_events(self):
+        for action in sorted(set(operations()) - {"events"}):
+            with self.subTest(action=action):
+                answer = bridge_client.request(f"/{action}", query={"controller-id": HOST}, app=bridge_client.events())
+                self.assertEqual(answer.status, 404, answer.body)
+
+    def test_the_controllers_socket_takes_no_events(self):
+        answer = bridge_client.request("/events", body=b'{"source":"host","events":[]}', app=bridge_client.application)
+        self.assertEqual(answer.status, 404, answer.body)
 
 
 class ControllerSocketTests(LaneTestCase):

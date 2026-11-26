@@ -343,7 +343,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
 | `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
 | `severino-hq-glance.service` / `.path` | `hq-controller --glance`, the only pass that reads a dashboard panel, beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |
-| `severino-hq-listener.service` | `hq-controller listen`, resident: it holds the inbound-events Worker's socket open, outbound, and posts what it hears to the bridge's `events` action. It stops and starts with the web unit (`PartOf=`), so it runs the image HQ runs, and is started again five minutes after it ends |
+| `severino-hq-listener.service` | `hq-controller listen`, resident: it holds the inbound-events Worker's socket open, outbound, and posts what it hears to the events bridge. It stops and starts with the web unit (`PartOf=`), so it runs the image HQ runs, and is started again five minutes after it ends |
 | `severino-hq-events-docker.service` | `hq-host events`, resident: it reads Docker's event stream for a container on this machine that dies, starts, changes health, runs out of memory or is removed, and hands each burst to `hq-controller events` in the web container, which makes the container readings due. HQ's own runs are left out. Each time it begins reading it tells HQ it reconnected, so HQ reads the containers again for whatever it missed. It restarts with the web unit (`PartOf=`), so it runs the release's `hq-host` |
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
@@ -374,7 +374,7 @@ call allow list. A unit that needs more widens it in its own
 | :--- | :--- |
 | controller | host network and netlink for its nftables reading (`CAP_NET_ADMIN`); the web account's files (`CAP_CHOWN`, `CAP_DAC_OVERRIDE`) |
 | glance | the same files, with no network |
-| listener | the same files, with no network: its container dials out through dockerd's |
+| listener | host network and netlink to load its container's egress table (`CAP_NET_ADMIN`); the same files |
 | renovate | host network and netlink to load the egress table (`CAP_NET_ADMIN`) |
 | automation | host network and netlink to load the egress table (`CAP_NET_ADMIN`); the run directory and the doorbell, the web account's (`CAP_CHOWN`, `CAP_DAC_OVERRIDE`) |
 | backup | the volumes (`CAP_DAC_OVERRIDE`) and SQLite's files (`CAP_CHOWN`) |
@@ -490,7 +490,10 @@ The controller reaches HQ over a Unix socket the web container serves
 (`/run/hq-bridge/bridge.sock`, in the `severino_bridge` volume), and the
 automation worker over one of its own
 (`/run/hq-automation-bridge/bridge.sock`, in the `severino_automation_bridge`
-volume), which serves its claim, renewal and report alone. Each socket
+volume), which serves its claim, renewal and report alone. The listener and
+`hq-controller events` reach it over a third
+(`/run/hq-events-bridge/bridge.sock`, in the `severino_events_bridge`
+volume), which serves the `events` action alone. Each socket
 exists once the web process starts and is gone while the container is
 replaced; a pass in that gap fails with the reason and the next one runs. Each
 volume takes its owner and mode from the image, and HQ refuses to start if a
@@ -570,6 +573,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION` | platform | whether extensions must be admitted; on unless `DJANGO_DEBUG` when unset |
 | `SEVERINO_BRIDGE_SOCKET` | platform | the Unix socket the controller bridge is served on; unset serves none |
 | `SEVERINO_AUTOMATION_BRIDGE_SOCKET` | platform | the Unix socket the automation worker's bridge is served on, its claim, renewal and report alone; unset serves none |
+| `SEVERINO_EVENTS_BRIDGE_SOCKET` | platform | the Unix socket the event readers' bridge is served on, the `events` action alone; unset serves none |
 | `SEVERINO_TAILSCALED_SOCKET` | platform | tailscaled's local API socket, which places each agent call on the tailnet device that sent it. Set by `hq-host run-web` to `/var/run/tailscale/tailscaled.sock` on a host where tailscaled is enabled, which binds `/var/run/tailscale` read-only at the same path; a socket missing or unanswering there makes a call wait (503). Empty, the default, is a deployment with no tailnet: a call is placed on no device and the client is the finest unit |
 | `SEVERINO_CONTROLLER_DOORBELL` | platform | the file HQ touches when it queues controller work |
 | `SEVERINO_HANDED_LISTENER` | platform | the Unix socket the image's server waits on for the listener it serves HQ on, which only root may send and which must be a listening TCP socket; unset, the server binds `127.0.0.1:8000` itself. Either way it answers its HEALTHCHECK on `/run/hq-web/ready.sock` from the start |

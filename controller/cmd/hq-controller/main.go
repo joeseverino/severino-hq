@@ -15,7 +15,8 @@
 //
 // "hq-controller listen" holds the inbound-events Worker's socket open, the
 // one events connection it is given, and tells HQ each event it hears, until
-// it is stopped. It reaches HQ only through the bridge's events action.
+// it is stopped. It reaches HQ only through the events bridge, which serves
+// the events action alone.
 //
 // "hq-controller ready [unix:PATH] URL" is the image's healthcheck: exit 0
 // when URL answers 200, asked on the socket at PATH when one is given, with
@@ -60,7 +61,7 @@ func main() {
 	case "job":
 		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
 	case "events":
-		code = events(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdin, stdout, os.Stderr)
+		code = events(ctx, os.Args[2:], os.Getenv(EventsBridgeSocket), os.Stdin, stdout, os.Stderr)
 	case "listen":
 		code = listen(ctx, os.Args[2:], stdout)
 	case "ready":
@@ -91,6 +92,11 @@ func load(entries []string) (runtime.Environment, runtime.Connections, error) {
 // which the launcher mounts. There is no other way to reach HQ: unset, or not
 // a socket this account can trust, the pass fails and the next one tries again.
 const BridgeSocket = "SEVERINO_BRIDGE_SOCKET"
+
+// EventsBridgeSocket names the variable holding the path of the bridge socket
+// that serves the events action alone, which `events` and `listen` reach HQ
+// through.
+const EventsBridgeSocket = "SEVERINO_EVENTS_BRIDGE_SOCKET"
 
 // failure is the one line a pass that could not run prints.
 type failure struct {
@@ -203,7 +209,7 @@ func listen(ctx context.Context, args []string, stdout io.Writer) int {
 	if err != nil {
 		return fail(err)
 	}
-	bridge, err := runtime.NewSocketBridge(env.BridgeSocket)
+	bridge, err := runtime.NewSocketBridge(env.EventsBridgeSocket)
 	if err != nil {
 		return fail(err)
 	}

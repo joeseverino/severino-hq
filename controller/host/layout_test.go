@@ -150,10 +150,12 @@ func TestThePartialPassUnitsAreGivenNoMoreThanTheControllers(t *testing.T) {
 				}
 			}
 		}
-		// Its container dials out through dockerd's network, never the unit's.
-		if net, _ := effective(t, systemd, unit, "PrivateNetwork"); !systemdTrue(net) {
-			t.Errorf("%s reaches the host's network (PrivateNetwork=%q)", unit, net)
-		}
+	}
+	// Its container dials out through dockerd's network, never the unit's. The
+	// listener's unit is in the host's network only to load its container's
+	// egress table, as the controller's is to read the firewall.
+	if net, _ := effective(t, systemd, GlanceUnit, "PrivateNetwork"); !systemdTrue(net) {
+		t.Errorf("%s reaches the host's network (PrivateNetwork=%q)", GlanceUnit, net)
 	}
 	if got, bound := unitSetting(t, GlanceUnit, "TimeoutStartSec"), unitSetting(t, ControllerUnit, "TimeoutStartSec"); got >= bound {
 		t.Errorf("a glance may run %s, as long as a sweep's %s", got, bound)
