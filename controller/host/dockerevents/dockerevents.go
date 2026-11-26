@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/api"
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -212,6 +213,12 @@ func (d *Watcher) read(ctx context.Context, stream io.Reader, heard chan<- messa
 		}
 		if event.Type != "container" || event.Actor.ID == "" || event.Action == "" || event.TimeNano <= 0 {
 			d.Log.Warn("event dropped", slog.String("event", "docker-events.unreadable"), slog.String("action", event.Action))
+			continue
+		}
+		// HQ's own runs are its work, never a change to read: a pass is a
+		// container, so its start and end would each ask for the next pass.
+		// Docker copies a container's labels into its events' attributes.
+		if _, own := event.Actor.Attributes[host.RunLabel]; own {
 			continue
 		}
 		select {

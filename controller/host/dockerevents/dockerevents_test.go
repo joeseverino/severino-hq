@@ -27,6 +27,15 @@ func engineMessage(action string, timeNano int64) string {
 		`"scope":"local","time":` + jsonInt(timeNano/int64(time.Second)) + `,"timeNano":` + jsonInt(timeNano) + "}\n"
 }
 
+// passMessage is one of Docker's EventMessage for a controller pass's own
+// container, labeled as hq-host's launch labels it.
+func passMessage(action string, timeNano int64) string {
+	return `{"Type":"container","Action":"` + action + `","Actor":{"ID":"0f5c1a8e9b2d4c6f8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f",` +
+		`"Attributes":{"image":"ghcr.io/example/hq@sha256:0000000000000000000000000000000000000000000000000000000000000000",` +
+		`"name":"wizardly_example","severino-hq.role":"controller","severino-hq.run":"EXAMPLEEXAMPLEEXAMPLEEXAMPLE"}},` +
+		`"scope":"local","time":` + jsonInt(timeNano/int64(time.Second)) + `,"timeNano":` + jsonInt(timeNano) + "}\n"
+}
+
 func jsonInt(n int64) string {
 	data, _ := json.Marshal(n)
 	return string(data)
@@ -179,6 +188,22 @@ func TestABurstIsOneBatchOfEventsHQReads(t *testing.T) {
 	}
 	if len(ids) != 3 {
 		t.Errorf("three events share delivery ids: %v", ids)
+	}
+}
+
+// A controller pass is a container: its own start, end and removal are HQ's
+// work, and told to HQ they would ask for the next pass, without end.
+func TestHQsOwnRunsAreNeverTold(t *testing.T) {
+	const at = int64(1461943101381709551)
+	socket, _ := fakeEngine(t, stream{
+		lines: passMessage("start", at) + passMessage("die", at+1) + passMessage("destroy", at+2) + engineMessage("die", at+3),
+		hold:  true,
+	})
+	told := watch(t, socket)
+
+	events := arrivals(t, arrived(t, told))
+	if len(events) != 1 || events[0].Subject != "my-container" {
+		t.Fatalf("told %+v, want only my-container's die", events)
 	}
 }
 
