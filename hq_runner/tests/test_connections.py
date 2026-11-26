@@ -1,8 +1,8 @@
 """A run's machines are reached only through the runner-role connection that
-names each as the run's privilege profile, as the inventory hands it to
-Ansible: its address, port and user, its own identity alone and its pinned
-host key, with no agent, password or other key, and nothing of any other
-connection in the document. A run through the read login never escalates.
+names each as the run's privilege profile, as the worker pins it for Ansible
+above anything a playbook sets: its address, port and user, its own identity
+alone and its pinned host key, with no agent, password or other key, and
+nothing of any other connection in the document. A run through the read login never escalates.
 
 The documents are written as the root renderer writes them: the shape
 ``controller/api/hq-connections.openapi.json`` declares, in this account's
@@ -38,32 +38,29 @@ class DocumentTestCase(unittest.TestCase):
 
 class InventoryTests(DocumentTestCase):
     def test_each_host_is_reached_as_its_runner_connection_says_and_no_other_way(self):
-        from hq_runner.ansible import _inventory
+        from hq_runner.ansible import LOGINS, PINNED, arguments, extravars
 
-        self.write(
-            fakes.runner("app.example.com", host="192.0.2.10"),
-            fakes.runner("edge.example.com", host="198.51.100.7", port="7722", user="example-ops"),
+        run = self.bound_run(
+            connections=(
+                fakes.runner("app.example.com", host="192.0.2.10"),
+                fakes.runner("edge.example.com", host="198.51.100.7", port="7722", user="example-ops"),
+            )
         )
-        targets = self.targets()
 
-        hosts = ("app.example.com", "edge.example.com")
-        inventory = _inventory(hosts, tuple(targets[host, "read"] for host in hosts))
+        logins = extravars(run)[LOGINS]
+        hosts = arguments(run, self.root / "run")["inventory"]["all"]["hosts"]
 
-        found = inventory["all"]["hosts"]
-        self.assertEqual(set(found), set(hosts))
-        edge = found["edge.example.com"]
-        self.assertEqual(edge["ansible_connection"], "ssh")
-        self.assertEqual(edge["ansible_host"], "198.51.100.7")
-        self.assertEqual(edge["ansible_port"], 7722)
-        self.assertEqual(edge["ansible_user"], "example-ops")
-        self.assertEqual(edge["ansible_ssh_private_key_file"], str(self.ssh_dir / "edge.example.com-read"))
-        self.assertTrue(edge["ansible_host_key_checking"])
-        self.assertNotIn("ansible_shell_type", edge)
-        self.assertEqual(found["app.example.com"]["ansible_port"], 22)
-        self.assertEqual(
-            found["app.example.com"]["ansible_ssh_private_key_file"], str(self.ssh_dir / "app.example.com-read")
-        )
-        words = shlex.split(edge["ansible_ssh_common_args"])
+        self.assertEqual(set(hosts), {"app.example.com", "edge.example.com"})
+        # The inventory says only that each host is opened over ssh: where to
+        # and as whom are pinned extra vars, which a playbook cannot outrank.
+        self.assertEqual(hosts["edge.example.com"], {"ansible_connection": "ssh"})
+        edge = logins["edge.example.com"]
+        self.assertEqual((edge["host"], edge["port"], edge["user"]), ("198.51.100.7", 7722, "example-ops"))
+        self.assertEqual(edge["key"], str(self.ssh_dir / "edge.example.com-read"))
+        self.assertEqual(logins["app.example.com"]["key"], str(self.ssh_dir / "app.example.com-read"))
+        self.assertTrue(edge["checks_host_key"])
+        self.assertLessEqual({field for field in PINNED.values() if field}, set(edge))
+        words = shlex.split(edge["args"])
         options = dict(
             option.split("=", 1) for flag, option in zip(words[::2], words[1::2], strict=True) if flag == "-o"
         )
@@ -83,27 +80,26 @@ class InventoryTests(DocumentTestCase):
         )
 
     def test_a_connection_s_shell_type_is_told_to_ansible_only_when_it_carries_one(self):
-        from hq_runner.ansible import _inventory
+        from hq_runner.ansible import arguments
 
-        self.write(fakes.runner("win.example.com", shell_type="powershell"))
-        (target,) = self.targets().values()
+        for transport, shell in (({"shell_type": "powershell"}, "powershell"), ({}, None)):
+            with self.subTest(shell=shell):
+                run = self.bound_run(connections=(fakes.runner("win.example.com", **transport),))
+                host = arguments(run, self.root / "run")["inventory"]["all"]["hosts"]["win.example.com"]
+                self.assertEqual(host.get("ansible_shell_type"), shell)
 
-        host = _inventory(("win.example.com",), (target,))["all"]["hosts"]["win.example.com"]
-
-        self.assertEqual(host["ansible_shell_type"], "powershell")
-
-    def bound_run(self, profile: str = "read", parameters: dict | None = None):
+    def bound_run(self, profile: str = "read", parameters: dict | None = None, connections: tuple = ()):
         from hq_runner.claim import Procedure, Run
 
-        self.write(fakes.runner("app.example.com", profile))
-        targets = tuple(self.targets().values())
+        self.write(*(connections or (fakes.runner("app.example.com", profile),)))
+        found = self.targets()
         return Run(
             "11111111-2222-4333-8444-555555555555",
             2,
             "example.check",
             Procedure("0" * 40, self.root / "project", "playbooks/check.yml"),
-            ("app.example.com",),
-            targets,
+            tuple(machine for machine, _ in found),
+            tuple(found.values()),
             parameters or {},
             60,
             profile,
@@ -116,20 +112,21 @@ class InventoryTests(DocumentTestCase):
         found = arguments(run, self.root / "run")
 
         # An extra var, which outranks every keyword and variable a playbook sets.
-        self.assertEqual(extravars(run), {"service": "web", "ansible_become": False})
+        self.assertIs(extravars(run)["ansible_become"], False)
         for host in found["inventory"]["all"]["hosts"].values():
             self.assertNotIn("ansible_become", host)
 
     def test_a_run_through_a_privilege_s_login_leaves_escalation_to_its_playbook(self):
         from hq_runner.ansible import extravars
 
-        self.assertEqual(extravars(self.bound_run("example.service_control", {"service": "web"})), {"service": "web"})
+        self.assertNotIn("ansible_become", extravars(self.bound_run("example.service_control", {"service": "web"})))
 
     def test_a_parameter_s_text_reaches_ansible_as_data_never_a_template(self):
-        from hq_runner.ansible import arguments, write_extravars
+        from hq_runner.ansible import LOGINS, PINNED, arguments, write_extravars
 
         template = "{{ lookup('ansible.builtin.pipe', 'id') }}"
-        run = self.bound_run(parameters={"service": template, "names": [template, 3], "keep": True})
+        asked = {"service": template, "names": [template, 3], "keep": True, "ansible_user": "root"}
+        run = self.bound_run(parameters=asked)
         private = self.root / "run"
         private.mkdir()
 
@@ -138,16 +135,19 @@ class InventoryTests(DocumentTestCase):
         # The file ansible-runner is pointed at, which no other account reads.
         self.assertEqual(arguments(run, private)["extravars"], str(written))
         self.assertEqual(written.stat().st_mode & 0o777, 0o600)
-        # Every text is tagged, at any depth, and nothing else is: the tags
-        # aside, it is the JSON of the values sent. smoke:runner holds that
-        # Ansible leaves a tagged text as it is.
+        # Every text a parameter or a login holds is tagged, at any depth, and
+        # nothing else is: the tags aside, it is the JSON of the values sent.
+        # smoke:runner holds that Ansible leaves a tagged text as it is.
         text = written.read_text(encoding="utf-8")
-        self.assertEqual(text.count("!unsafe "), 2)
         self.assertEqual(text.count(f"!unsafe {json.dumps(template)}"), 2)
+        found = json.loads(text.replace("!unsafe ", ""))
         self.assertEqual(
-            json.loads(text.replace("!unsafe ", "")),
-            {"service": template, "names": [template, 3], "keep": True, "ansible_become": False},
+            {name: found[name] for name in ("service", "names", "keep")},
+            {"service": template, "names": [template, 3], "keep": True},
         )
+        # A parameter of a pinned name is the worker's pin, never what was sent.
+        self.assertEqual(found["ansible_user"], f"{{{{ {LOGINS}[inventory_hostname].user }}}}")
+        self.assertLessEqual(set(PINNED), set(found))
 
     def test_ansible_s_working_files_stay_inside_the_run_s_private_directory(self):
         from hq_runner.ansible import arguments

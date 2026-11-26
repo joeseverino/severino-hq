@@ -14,7 +14,8 @@ its connection to local, so no ssh is opened. Two runs Ansible stops before
 their first task hold ``recorded_stopped_events.json`` to what it says.
 
 It also holds the worker's copies of Ansible's own names to the ansible-core
-installed: the plugin paths it pins, the plugin directories a scan reports,
+installed: the plugin paths it pins, the ssh connection's login variables it
+pins, the plugin directories a scan reports,
 the task keywords a scan reads as no module, and the role specs and modules
 the tests' fake ansible-doc answers; and the collections installed to the
 ones ``collections.yml`` pins.
@@ -26,9 +27,10 @@ import os
 import subprocess
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 
-from hq_runner import ansible, catalog, events
+from hq_runner import ansible, catalog, connections, events
 from hq_runner.__main__ import Config, drain
 
 from . import fakes
@@ -156,6 +158,47 @@ STOPPED_FILES = {
 STOPPED = {"broken_role": "playbooks/broken_role.yml", "missing_collection": "playbooks/missing_collection.yml"}
 
 
+# A read that points its login elsewhere in every way a play can: each
+# variable ansible.PINNED names, in the play's, a role's, a block's and a
+# task's vars, by set_fact and by include_vars, and the play's remote_user.
+# Each check reads every such variable as the ssh connection would and holds
+# it to the login the run was given, so the run ends well only while the
+# worker's pins outrank them all.
+REPOINTED = "playbooks/repointed_login.yml"
+_ELSEWHERE = json.dumps(
+    {name: False if field == "checks_host_key" else "elsewhere" for name, field in ansible.PINNED.items()}
+)
+_LOGIN_HOLDS = """\
+- name: Each login variable is the run's own
+  ansible.builtin.assert:
+    that: lookup('ansible.builtin.vars', item.key) == item.value
+    quiet: true
+  loop: "{{ login | dict2items }}"
+"""
+REPOINTED_FILES = {
+    REPOINTED: f"""\
+- name: Point the login elsewhere
+  hosts: all
+  gather_facts: false
+  remote_user: elsewhere
+  vars: {json.dumps({**json.loads(_ELSEWHERE), "ansible_connection": "local"})}
+  roles:
+    - repointing
+  tasks:
+    - name: Point it elsewhere as a fact
+      ansible.builtin.set_fact: {_ELSEWHERE}
+    - name: Point it elsewhere from a file
+      ansible.builtin.include_vars: repointing_vars.yml
+    - name: Point it elsewhere in a block
+      vars: {_ELSEWHERE}
+      block:
+{textwrap.indent(_LOGIN_HOLDS, "        ")}""",
+    "playbooks/repointing_vars.yml": _ELSEWHERE + "\n",
+    "roles/repointing/vars/main.yml": _ELSEWHERE + "\n",
+    "roles/repointing/tasks/main.yml": _LOGIN_HOLDS,
+}
+
+
 # Three procedures the scan judges by the modules their tasks name: one from a
 # collection the worker ships, which is no problem and runs; the one above,
 # from a collection it does not ship; and one by a name with no collection.
@@ -221,6 +264,7 @@ def _environment(root: Path) -> dict[str, str]:
         (root / directory).mkdir()
     return {
         "HQ_AUTOMATION_ID": fakes.WORKER,
+        "HQ_AUTOMATION_PROFILE": "read",
         "HQ_AUTOMATION_BRIDGE_SOCKET": str(root / "bridge" / "bridge.sock"),
         "HQ_AUTOMATION_JOURNAL": str(root / "state" / "journal.json"),
         "HQ_AUTOMATION_CONNECTIONS": str(connections),
@@ -230,13 +274,56 @@ def _environment(root: Path) -> dict[str, str]:
     }
 
 
+# The ssh connection's options that say where it connects, as whom, with
+# which key or password, and with which program and arguments, each of whose
+# variables ansible.PINNED pins; and those that say only how, which a
+# playbook may set.
+_PINNED_OPTIONS = frozenset(
+    {
+        "host",
+        "port",
+        "remote_user",
+        "private_key_file",
+        "private_key",
+        "private_key_passphrase",
+        "password",
+        "pkcs11_provider",
+        "host_key_checking",
+        "ssh_args",
+        "ssh_common_args",
+        "ssh_extra_args",
+        "scp_extra_args",
+        "sftp_extra_args",
+        "ssh_executable",
+        "scp_executable",
+        "sftp_executable",
+        "control_path",
+        "control_path_dir",
+    }
+)
+_LEFT_TO_PLAYS = frozenset(
+    {
+        "password_mechanism",
+        "pipelining",
+        "reconnection_retries",
+        "sftp_batch_mode",
+        "ssh_transfer_method",
+        "sshpass_prompt",
+        "timeout",
+        "use_tty",
+        "verbosity",
+    }
+)
+
+
 def _ansible_names() -> list[str]:
     """Where the worker's copies of Ansible's names differ from ansible-core's."""
 
+    from ansible import constants
     from ansible.config.manager import ConfigManager
     from ansible.playbook.handler import Handler
     from ansible.playbook.task import Task
-    from ansible.plugins.loader import get_all_plugin_loaders
+    from ansible.plugins.loader import connection_loader, get_all_plugin_loaders
 
     definitions = ConfigManager().get_configuration_definitions()
     searched = {
@@ -255,6 +342,16 @@ def _ansible_names() -> list[str]:
     keywords = {*Task.fattributes, *Handler.fattributes, "local_action", "static"}
     if keywords != catalog.TASK_KEYWORDS:
         wrong.append(f"catalog.TASK_KEYWORDS is not ansible-core's task keywords: {sorted(keywords)}")
+    # Loading the plugin registers its options' definitions.
+    connection_loader.get("ssh", class_only=True)
+    options = constants.config.get_configuration_definitions("connection", "ssh")
+    named = {option: {entry["name"] for entry in found.get("vars", ())} for option, found in options.items()}
+    if unsorted := sorted(set(named) - _LEFT_TO_PLAYS - _PINNED_OPTIONS):
+        wrong.append(f"the ssh connection's options {unsorted} are neither pinned nor left to a playbook")
+    # inventory_hostname is Ansible's own, which nothing sets.
+    pinned = set().union(*(named.get(option, set()) for option in _PINNED_OPTIONS)) - {"inventory_hostname"}
+    if pinned != set(ansible.PINNED):
+        wrong.append(f"ansible.PINNED is not the variables of the ssh connection's login options: {sorted(pinned)}")
     return wrong
 
 
@@ -299,10 +396,11 @@ def main() -> int:
                 **PREVIEWED_FILES,
                 **STOPPED_FILES,
                 **MODULE_FILES,
+                **REPOINTED_FILES,
             }
         )
-        run, escalating, templated, shipped, previewed, *stops = (
-            fakes.pending(revision=revision, effect="read", privilege="") for _ in range(5 + len(STOPPED))
+        run, escalating, templated, shipped, previewed, repointed, *stops = (
+            fakes.pending(revision=revision, effect="read", privilege="") for _ in range(6 + len(STOPPED))
         )
         for index, (asked, playbook) in enumerate(
             (
@@ -311,6 +409,7 @@ def main() -> int:
                 (templated, TEMPLATED),
                 (shipped, SHIPPED),
                 (previewed, PREVIEWED),
+                (repointed, REPOINTED),
                 *zip(stops, STOPPED.values(), strict=True),
             )
         ):
@@ -322,8 +421,13 @@ def main() -> int:
         templated["input"]["parameters"] = {"said": _templated(evaluated)}
         written = root / "written"
         previewed["input"].update(parameters={"written": str(written)}, check=True)
-        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated, shipped, previewed, *stops)
         config = Config.read(_environment(root))
+        (target,) = connections.runner_targets(config.connections, config.ssh_dir).values()
+        login = ansible.login(target)
+        repointed["input"]["parameters"] = {
+            "login": {name: field and login[field] for name, field in ansible.PINNED.items()}
+        }
+        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating, templated, shipped, previewed, repointed, *stops)
         # The one change from the configuration the environment gives: the
         # repository is this machine's, reached over git's file transport.
         config = dataclasses.replace(config, project=dataclasses.replace(config.project, origin=remote.origin))
@@ -337,11 +441,13 @@ def main() -> int:
             wrong.append("a parameter's template was evaluated on the worker")
         if written.exists():
             wrong.append("a preview wrote the file its playbook writes")
-    reports = 6 + len(STOPPED)
-    scanned, ran, read, given, used, shown, *stopped = [*bridge.reports, *({} for _ in range(reports))][:reports]
+    reports = 7 + len(STOPPED)
+    scanned, ran, read, given, used, shown, kept, *stopped = [*bridge.reports, *({} for _ in range(reports))][:reports]
     # The tasks HQ holds of each run reported, in the order they were.
     told = [bridge.tasks.get(sent["operation"], []) for action, sent in bridge.calls if action == "report"]
     _, ran_tasks, read_tasks, *_ = [*told, *([] for _ in range(reports))][:reports]
+    if kept.get("success") is not True:
+        wrong.append(f"a playbook pointed the login it runs through elsewhere: {kept.get('message')}")
     if shown.get("success") is not True:
         wrong.append(f"a preview of a playbook that writes a file did not succeed: {shown.get('message')}")
     for name, report in zip(STOPPED, stopped, strict=True):

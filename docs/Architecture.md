@@ -1829,11 +1829,23 @@ file it imports or includes by name, and every file Ansible reads as YAML
 includes or depends on. `become: false` and `ansible_become: false` alone
 escalate to nothing.
 
-Its inventory entry is that
-connection's address, port and user, its identity file alone (no agent, no
-password), its pinned `known_hosts` with host key checking on, since
-ansible-runner turns it off unless told otherwise, and its `shell_type` when
-it carries one. The hosts and extra-vars come from the claim's `input`, and
+Its login is that connection's address, port and user, its identity file
+alone (no agent, no password), and its pinned `known_hosts` with host key
+checking on, since ansible-runner turns it off unless told otherwise; its
+inventory entry says only `ssh` and the connection's `shell_type` when it
+carries one. The login is pinned as extra vars (`ansible.PINNED`): every
+variable the ssh connection reads for where it connects, as whom, with which
+key or password, and with which program and arguments, each set from the
+host's entry in `hq_logins` by a template of the worker's own, or to null. An
+extra var outranks every variable a playbook sets, and a variable outranks
+the `remote_user` keyword, so nothing a playbook declares changes the login a
+host is reached through, and a task delegated to another machine still goes
+to its own host as its own login. The smoke points the login elsewhere in
+every way a play can (its, a role's, a block's and a task's vars, `set_fact`,
+`include_vars`, `remote_user`) and holds each variable to the run's login, and
+it holds `PINNED` to the ssh connection's options in the pinned ansible-core.
+A playbook may still set `ansible_connection`; a task run on the worker
+itself is the case below of a playbook's local tasks. The hosts and extra-vars come from the claim's `input`, and
 every ansible-runner argument is fixed in `hq_runner/ansible.py`. A parameter
 is data, never a template: Ansible reads an extra var's text as one and runs
 its lookups on the worker, so the worker hands the extra vars over as a file
