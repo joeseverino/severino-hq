@@ -15,7 +15,8 @@ reconnect asks every reading its source carries, bounded by the reconnect's
 own backoff and ``ask``'s one request per kind; a provider no declaration
 names, or a batch outside the contract's ``InboundBatch``, is refused whole. Only the bridge's action, which serves the
 controller's account alone on a 0700 socket, and the host's jobs may import
-this (``lint:imports``), and each write is audited under its door's title.
+this (``lint:imports``). The events table is the record of what was told,
+kept for the routine window; the reads an event asks are audited as asks.
 """
 
 from collections.abc import Mapping
@@ -104,6 +105,5 @@ def prune_events(_progress: Any = None, *, subject: str = "", principal: Any = N
 
     del subject, principal
     days = int(settings.SEVERINO_AUDIT_ROUTINE_DAYS)
-    # Each deletion is audited as itself.
     deleted, _ = InboundEvent.objects.filter(received_at__lt=timezone.now() - timedelta(days=days)).delete()
     return {"deleted": deleted, "days": days}

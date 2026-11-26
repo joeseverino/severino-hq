@@ -192,6 +192,21 @@ class ApplyEventsTests(TestCase):
 
         self.assertEqual(list(InboundEvent.objects.values_list("delivery_id", flat=True)), [PUSH["delivery_id"]])
 
+    def test_a_pruned_event_leaves_no_row_behind(self):
+        from hq.domains.control_plane.models import InboundEvent
+        from hq.platform.core.models import AuditLog
+
+        from ..inbound import prune_events
+
+        self.apply(worker(PUSH))
+        told = str(InboundEvent.objects.get())
+        InboundEvent.objects.update(received_at=timezone.now() - timedelta(days=400))
+
+        prune_events()
+
+        self.assertFalse(InboundEvent.objects.exists())
+        self.assertFalse(AuditLog.objects.filter(object_repr=told).exists())
+
 
 class BridgeEventsTests(TestCase):
     def test_a_batch_posted_to_the_bridge_makes_its_reading_due(self):

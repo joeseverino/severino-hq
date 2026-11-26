@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.markup_testing import text
 from hq.platform.core import append_only
 from hq.platform.core.bindings import operation_context
@@ -360,28 +360,13 @@ class AuditHistoryPageTests(TestCase):
 class StepPageTests(TestCase):
     """A step opens the page of the kind of record its model says it is about."""
 
-    def test_an_event_about_a_unit_opens_no_resource_and_a_declaration_opens_its_own(self):
-        told, declared = uuid7().hex, uuid7().hex
-        with operation_context(
-            interface="controller", actor="controller", operation="bridge.events", operation_id=told
-        ):
-            InboundEvent.objects.create(
-                provider="host",
-                event="unit.failed",
-                subject="example-upload.service",
-                delivery_id="example-delivery",
-                source=InboundSource.HOST,
-                received_at=timezone.now(),
-                outcome=InboundOutcome.APPLIED,
-                reads=["host.unit"],
-            )
+    def test_a_declaration_opens_its_own(self):
+        declared = uuid7().hex
         with operation_context(interface="web", actor="owner", operation="example.declare", operation_id=declared):
             declare("example-web", "example.record")
 
-        (event,) = chain(told)
         (declaration,) = chain(declared)
 
-        self.assertEqual(event.opens, "")
         self.assertEqual(declaration.opens, reverse("control_plane:detail", kwargs={"key": "example-web"}))
 
 

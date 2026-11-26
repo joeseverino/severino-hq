@@ -190,8 +190,8 @@ fails where it runs. A model whose rows are about another record (an operation o
 declaration, a decision on one) passes `register_audit(..., subject=Subject(key,
 kind))`: `key` returns that record's key, so one indexed read of the log's
 `subject` is the record's whole story, and `kind` is the `entity_links` kind
-whose page the key opens, or None for a key no page is addressed by. A change to a row is written by its
-model's registration alone: the code saving it sets `audit_said` on the row
+whose page the key opens. A change to a row is written by its model's
+registration alone: the code saving it sets `audit_said` on the row
 (`audit_gone` before a delete) for the sentence its row says, and
 `register_audit(..., required=True)` fails the save when its row cannot be
 written. `record_event` is for an act that changes no row: a sign-in, an

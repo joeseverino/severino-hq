@@ -21,6 +21,7 @@ UNWATCHED = {
     "analytics.VitalsDaily": "a day of web vitals, a reading",
     "calendars.Preference": "a person arranging their own month, recorded as the capability's act",
     "control_plane.CertificateMaterial": "beside the sealed secret its upload writes, whose row records it",
+    "control_plane.InboundEvent": "what a source said happened, kept for the routine window; its asks are recorded",
     "control_plane.OperationHost": "an index of the machines a run's input names",
     "control_plane.ProviderConnection": "an endpoint as a controller reports it, a reading",
     "control_plane.ProviderInventory": "what a controller read, a reading",

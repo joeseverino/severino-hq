@@ -45,12 +45,10 @@ _AUDITED_MODELS: dict[type, str] = {}
 class Subject:
     """What a registered model's rows are about, where that is not the row
     itself: the key ``key`` reads off the row's record, and ``kind``, the
-    ``entity_links`` kind of record that key names, whose page a row opens.
-    None for a key no page is addressed by, such as a provider's own name
-    for what an event is about."""
+    ``entity_links`` kind of record that key names, whose page a row opens."""
 
     key: Callable[[Any], str]
-    kind: str | None
+    kind: str
 
 
 _SUBJECTS: dict[type, Subject] = {}
