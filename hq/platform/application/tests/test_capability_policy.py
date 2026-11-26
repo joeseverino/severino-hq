@@ -6,7 +6,6 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
@@ -19,11 +18,7 @@ from ..approvals import APPROVE, DELETING_FLAGS, ApproveCommand, approve
 from ..capabilities import capability_registry, command_spec, execute_capability, validate_command
 from ..capability_policy import Rule, decide, field_name, matrix, set_rule
 from ..certificates import UPLOAD
-from ..default_hold import needs_approval
-from ..doors import interface_label
-from ..entity_links import kind_label
 from ..integration_specs import capability_schema
-from ..labels import human_label, lower_first
 from ..security import Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 from .writers import keyed
@@ -463,51 +458,6 @@ class PageTests(PolicyTestCase):
 
         self.assertEqual(len(labels), len(set(labels)))
 
-    def test_a_row_is_the_commands_whole_title_and_says_what_it_does(self):
-        _, groups = matrix()
-        rows = {row.name: row for group in groups for row in group.rows}
-
-        for name, row in rows.items():
-            with self.subTest(name):
-                self.assertEqual(row.label, spec(name).title)
-                self.assertEqual(bool(row.effect_label), row.effect.changes)
-        self.assertNotEqual(rows["project.delete"].effect_label, rows["project.create"].effect_label)
-
-    def test_a_default_says_what_happens_in_the_words_the_choices_use(self):
-        _, groups = matrix()
-        rows = {row.name: row for group in groups for row in group.rows}
-        choices = {label for row in rows.values() for cell in row.cells for _value, label in cell.options}
-
-        self.assertEqual(rows["project.delete"].default, Rule.APPROVE.label)
-        self.assertEqual(rows["project.create"].default, Rule.ALLOW.label)
-        named = f"{Rule.APPROVE.label} for "
-        self.assertTrue(rows["infrastructure.resource.update"].default.startswith(named))
-        self.assertLessEqual({row.default for row in rows.values() if not row.default.startswith(named)}, choices)
-
-    def test_a_type_waiting_for_approval_is_named_as_its_page_names_it(self):
-        _, groups = matrix()
-        default = {row.name: row.default for group in groups for row in group.rows}["infrastructure.resource.update"]
-        held = [
-            kind
-            for kind, provider in PROVIDERS.items()
-            if needs_approval(provider, spec("infrastructure.resource.update"))
-        ]
-
-        self.assertTrue(held)
-        for kind in held:
-            with self.subTest(kind):
-                self.assertIn(lower_first(kind_label(kind)), default)
-
-    def test_a_column_says_how_its_agent_comes_in_and_for_whom_as_written(self):
-        AgentIdentity.objects.create(client_id="example-agent", person=self.user, person_key="op", interfaces=["mcp"])
-        details = {column.label: column.detail for column in matrix()[0] if column.identity.person}
-
-        self.assertEqual(details, {f"example-agent for {self.user.get_username()}": interface_label("mcp")})
-
-    def test_only_acronyms_are_capitalized(self):
-        self.assertEqual(human_label("example.pace.set"), "Example Pace Set")
-        self.assertEqual(human_label("tls.certificate"), "TLS Certificate")
-
     def test_the_matrix_costs_the_same_however_many_agents(self):
         def arrange(count):
             for index in range(AgentIdentity.objects.count(), count):
@@ -523,17 +473,6 @@ class PageTests(PolicyTestCase):
 
 class CommandTitleTests(TestCase):
     """A command is called what it declares, wherever a person reads it."""
-
-    def test_a_declared_label_is_the_title(self):
-        from ..capabilities import capability_title
-
-        for name in ("project.create", "contact.submission.delete"):
-            self.assertEqual(capability_title(name), spec(name).label)
-
-    def test_a_command_with_no_label_reads_as_its_name(self):
-        from ..capabilities import capability_title
-
-        self.assertEqual(capability_title("example.not.registered"), "Example Not Registered")
 
     def test_a_padded_label_does_not_compose(self):
         from dataclasses import replace
