@@ -20,6 +20,7 @@ UNSANDBOXED = {
     "audit:image": "docker saves the image under var/audit/image, and it takes the heavy turn's template",
     "audit:mcp": "--base checks a ref out in a git worktree, a write to .git",
     "audit:css-usage": "it draws every page in a browser on dev:look's test database, kept in var/dev-look",
+    "audit:refusals": "it runs the suite, which takes a share of the heavy turn and makes its test databases",
 }
 # What a sandboxed task may write beyond the template's paths, each a path it keeps its run in.
 ALSO_WRITES = {"audit:memory": ["var/perf"]}

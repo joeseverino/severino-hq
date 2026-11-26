@@ -1,0 +1,48 @@
+#!/bin/sh
+#MISE description="Each test that reaches the one place a refusal is answered, as invalid input or a recorded denial; reach for it before cutting refusal tests a root walk holds, reading each one's other assertions"
+#MISE hide=true
+#MISE extends="django"
+#USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag; none runs the suite"
+
+# coverage.py's test_function contexts name the test running each line, so the
+# tests reaching a line are read from its JSON report, with only the module
+# that answers refusals (refusal_status.py) measured to keep the run light.
+set -eu
+
+test_arguments="--noinput --parallel auto ${usage_arguments:-}"
+turn_bound=30m
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+root=hq/platform/application/refusal_status.py
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+cat >"${work}/rc" <<EOF
+[run]
+data_file = ${work}/data
+include = ${root}
+parallel = true
+concurrency = multiprocessing,thread
+sigterm = true
+relative_files = true
+dynamic_context = test_function
+EOF
+
+status=0
+# The C tracer keeps contexts; the sysmon core does not.
+eval "set -- ${usage_arguments:-}"
+COVERAGE_CORE=ctrace uv run coverage run --rcfile="${work}/rc" manage.py test --noinput --parallel auto "$@" \
+    >"${work}/log" 2>&1 || status=$?
+if [ "${status}" -eq 0 ]; then grep -E '^(Ran [0-9]+ tests?|OK)' "${work}/log"; else cat "${work}/log"; fi
+uv run coverage combine --rcfile="${work}/rc" -q
+uv run coverage json --rcfile="${work}/rc" --show-contexts -q -o "${work}/report.json"
+
+reached() {
+    line="$(grep -n "$2" "${root}" | head -n 1 | cut -d: -f1)"
+    echo "$1:"
+    jq -r --arg file "${root}" --arg line "${line}" '.files[$file].contexts[$line] // [] | .[] | select(. != "")' \
+        "${work}/report.json" | sort -u | sed 's/^/  /'
+}
+reached "invalid_input (a command its type refuses)" 'refused = pydantic_refusal('
+reached "a denial recorded (forbidden, insufficient scope, policy)" 'record_denial('
+exit "${status}"
