@@ -24,6 +24,7 @@ from .github_estate import (
     FAILED,
     REPOSITORY_KIND,
     SERIOUS_ALERTS,
+    VULNERABILITY,
     WAITING_SERIOUS_AFTER,
     Repository,
     failure_cause,
@@ -141,8 +142,7 @@ def _failing(repo: Repository) -> Iterator[Said]:
 # A mise lock that holds no entry for a version its config pins, or that
 # its config does not name: what locking again from the config answers.
 _UNLOCKED = re.compile(r"mise ERROR .*(is not in the lockfile|cannot lock)")
-# A vulnerability govulncheck reports, and the standard library release that fixes it.
-_VULNERABILITY = re.compile(r"^Vulnerability #\d+: (\S+)")
+# The standard library release that fixes a vulnerability govulncheck reports.
 _FIXED_IN_GO = re.compile(r"^Fixed in: (\S+)@(go\d\S*)")
 
 
@@ -153,7 +153,7 @@ def _next_step(failure: Mapping[str, Any]) -> Run | Do | None:
     log = [line.strip() for line in JobFailure.model_validate(failure).log]
     if any(_UNLOCKED.search(line) for line in log):
         return Run("Lock every tool mise.toml pins, then commit mise.lock", "mise lock")
-    vulnerability = next((found[1] for line in log if (found := _VULNERABILITY.match(line))), "")
+    vulnerability = next((found[1] for line in log if (found := VULNERABILITY.match(line))), "")
     fixed = next((found for line in log if (found := _FIXED_IN_GO.match(line))), None)
     if fixed:
         return Do(

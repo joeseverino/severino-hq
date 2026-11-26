@@ -155,8 +155,10 @@ def pull_checks(pull: Mapping[str, Any]) -> PullChecks:
 # What GitHub's log marks a step's end with when the tool said nothing of
 # its own: an exit code alone.
 _EXITED = re.compile(r"(Process completed|The process '.*' failed) with exit code \d+\.?")
+# A vulnerability govulncheck reports, by its id.
+VULNERABILITY = re.compile(r"^Vulnerability #\d+: (\S+)")
 # A line of a tool's output that says what failed.
-_SAYS_FAILED = re.compile(r"\b(error|fatal|panic|failed|failure)\b|^Vulnerability #\d+:", re.IGNORECASE)
+_SAYS_FAILED = re.compile(r"\b(error|fatal|panic|failed|failure)\b", re.IGNORECASE)
 
 
 def failure_cause(failure: Mapping[str, Any]) -> str:
@@ -169,7 +171,10 @@ def failure_cause(failure: Mapping[str, Any]) -> str:
     if said.error and not _EXITED.fullmatch(said.error):
         return said.error
     log = [line.strip() for line in said.log]
-    return next((line for line in log if _SAYS_FAILED.search(line)), log[-1] if log else said.error)
+    return next(
+        (line for line in log if _SAYS_FAILED.search(line) or VULNERABILITY.match(line)),
+        log[-1] if log else said.error,
+    )
 
 
 def _severity_rank(level: str) -> int:
