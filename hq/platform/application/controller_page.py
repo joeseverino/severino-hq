@@ -16,7 +16,7 @@ from django.utils.text import get_text_list
 
 from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
 
-from .cadence import WorkerStanding, controller_standing, every_sweep, swept, sweep_due
+from .cadence import WorkerStanding, controller_standing, every_sweep, sweep_due, swept
 from .entity_links import kind_label
 from .freshness import Freshness, freshness
 from .moments import duration
