@@ -13,11 +13,17 @@ from typing import Any
 
 from django.utils.text import get_text_list
 
-from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
+from .container_standard import (
+    POWERFUL_CAPABILITIES,
+    ROOT_POSTURE,
+    holds_socket,
+    privileged_ports,
+    root_ports,
+    writable_system_binds,
+)
 from .finding_steps import Do
-from .standards import Check, Standing
+from .standards import INTENDED, Check, Standing
 from .ui import ended
-lazy from .exposure import listening_ports
 lazy from .upgrades import data_of
 
 # Where HQ has no reading of what it uses: enough for most small services,
@@ -192,10 +198,12 @@ def _system_paths(container, _runtime, unmet):
 
 
 def _capabilities(container, runtime, unmet):
-    if "no-powerful-capability" not in unmet:
+    if "no-powerful-capability" not in unmet or ("not-root" in unmet and _must_be_root(container)):
         return
     added = [str(cap) for cap in runtime.get("cap_add") or ()]
-    kept = [cap for cap in added if cap not in POWERFUL_CAPABILITIES] + _bind_capability(container, runtime, unmet)
+    kept = [cap for cap in added if cap not in POWERFUL_CAPABILITIES]
+    if privileged_ports(container) and "NET_BIND_SERVICE" not in kept:
+        kept.append("NET_BIND_SERVICE")
     powerful = [cap for cap in added if cap in POWERFUL_CAPABILITIES]
     yaml = 'cap_drop:\n  - "ALL"\n' + (_listed("cap_add", kept) if kept else "cap_add: []")
     yield Change(
@@ -308,7 +316,15 @@ def _served_port(runtime: Mapping[str, Any]) -> tuple[str, str]:
 def _user(container, runtime, unmet):
     if "not-root" not in unmet:
         return
-
+    if _must_be_root(container):
+        yield Change(
+            ("not-root", *({"no-powerful-capability"} & unmet)),
+            "cap_drop",
+            ROOT_POSTURE,
+            "It runs as root, which binding a port under 1024 on the host's network takes, with every other "
+            "capability dropped: anything else it did as root (changing file owners, for one) then fails.",
+        )
+        return
     data = [str(mount.get("source")) for mount in data_of(container.mounts) if mount.get("type") == "bind"]
     caution = (
         f"Its files must be readable by {NON_ROOT} and its data writable: chown -R {NON_ROOT} {' '.join(data)} first."
@@ -316,33 +332,19 @@ def _user(container, runtime, unmet):
         else "An image that expects root (installing or changing owners as it starts) refuses to run."
     )
     yaml = f'user: "{NON_ROOT}"'
-    if low := _low_ports(container):
+    if low := privileged_ports(container):
         caution += (
             f" It binds {get_text_list(low, 'and')} on the host's network, which takes NET_BIND_SERVICE, "
             "and its image must grant that to its program."
         )
-        if "no-powerful-capability" not in unmet and (needed := _bind_capability(container, runtime, unmet)):
-            yaml += "\n" + _listed("cap_add", [*(str(cap) for cap in runtime.get("cap_add") or ()), *needed])
+        added = [str(cap) for cap in runtime.get("cap_add") or ()]
+        if "no-powerful-capability" not in unmet and "NET_BIND_SERVICE" not in added:
+            yaml += "\n" + _listed("cap_add", [*added, "NET_BIND_SERVICE"])
     yield Change(("not-root",), "user", yaml, caution)
 
 
-def _low_ports(container) -> list[str]:
-    """The ports under 1024 it binds on the host's own network. In a network
-    of its own Docker lets any user bind them (moby's daemon/oci_linux.go sets
-    net.ipv4.ip_unprivileged_port_start to 0 for a private network only)."""
-
-    if container.running.network_mode != "host":
-        return []
-    return [str(port) for port in sorted(listening_ports(container)) if port < 1024]
-
-
-def _bind_capability(container, runtime, unmet) -> list[str]:
-    """NET_BIND_SERVICE, where the user its fix sets binds a low port on the
-    host's network and nothing it adds already grants it."""
-
-    if "not-root" not in unmet or "NET_BIND_SERVICE" in (runtime.get("cap_add") or ()):
-        return []
-    return ["NET_BIND_SERVICE"] if _low_ports(container) else []
+def _must_be_root(container) -> bool:
+    return bool(root_ports(container, waived=container.posture.state_of("no-new-privileges") == INTENDED))
 
 
 def _socket(_container, _runtime, unmet):

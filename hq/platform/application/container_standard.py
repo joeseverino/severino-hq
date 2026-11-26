@@ -292,21 +292,63 @@ STANDARD: tuple[Check, ...] = (
 
 def posture_of(container: Any) -> Measurement:
     declared = by_design().get((container.machine.name, container.running.name)) or {}
-    return measure(container, STANDARD, {**_required(container), **declared}, helps=partial(help_for, container))
+    return measure(
+        container, STANDARD, {**_required(container, declared), **declared}, helps=partial(help_for, container)
+    )
 
 
-def _required(container: Any) -> dict[str, str]:
-    """The checks its job requires it to fail, each with why: the host network,
-    for a port a role of its machine is reached on, since there it answers at
-    the machine's own address and sees each client's."""
+def _required(container: Any, declared: Mapping[str, str]) -> dict[str, str]:
+    """The checks its job requires it to fail, each with why.
 
-    if container.running.network_mode != "host":
-        return {}
-    answered = set(listening_ports(container))
+    The host network, for a port a role of its machine is reached on, since
+    there it answers at the machine's own address and sees each client's. And
+    root, for a port under 1024 it binds there under no-new-privileges, held
+    with no capability but the one that binds it (``ROOT_POSTURE``).
+    """
+
+    required = {}
+    answered = set(listening_ports(container)) if container.running.network_mode == "host" else set()
     for role in container.machine.roles:
         if owned := [str(port) for port in role.ports if port in answered]:
-            return {"own-network": ended(f"{role.detail.removesuffix('.')} on port {get_text_list(owned, 'and')}")}
-    return {}
+            required["own-network"] = ended(f"{role.detail.removesuffix('.')} on port {get_text_list(owned, 'and')}")
+            break
+    runtime = container.runtime or {}
+    if (ports := root_ports(container, waived="no-new-privileges" in declared)) and holds_root_posture(runtime):
+        required["not-root"] = ended(
+            f"It binds {get_text_list(ports, 'and')} on the host's network under no-new-privileges, which only "
+            "root does, and holds no capability but NET_BIND_SERVICE"
+        )
+    return required
+
+
+# The strongest posture a service that must run as root still works under:
+# every capability dropped but the one that binds a port under 1024.
+ROOT_POSTURE = 'cap_drop:\n  - "ALL"\ncap_add:\n  - "NET_BIND_SERVICE"'
+
+
+def privileged_ports(container: Any) -> list[str]:
+    """The ports under 1024 it binds on the host's own network, which take
+    NET_BIND_SERVICE. In a network of its own Docker lets any user bind them
+    (moby's daemon/oci_linux.go sets net.ipv4.ip_unprivileged_port_start to 0
+    for a private network only)."""
+
+    if container.running.network_mode != "host":
+        return []
+    return [str(port) for port in sorted(listening_ports(container)) if port < 1024]
+
+
+def root_ports(container: Any, *, waived: bool) -> list[str]:
+    """The privileged ports that make root its only working user: unless
+    no-new-privileges is ``waived`` by design, the standard holds it to that,
+    which ignores a file capability on its program, and Docker gives a user
+    other than root no ambient capability (moby#8460, the fix reverted in
+    moby#26979; moby#45491 for no-new-privileges)."""
+
+    return [] if waived else privileged_ports(container)
+
+
+def holds_root_posture(runtime: Mapping[str, Any]) -> bool:
+    return "ALL" in (runtime.get("cap_drop") or ()) and set(runtime.get("cap_add") or ()) <= {"NET_BIND_SERVICE"}
 
 
 CHECK_IDS = frozenset(check.id for check in STANDARD)

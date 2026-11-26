@@ -134,17 +134,34 @@ class HardeningTests(TestCase):
         self.assertEqual(change.yaml, 'user: "1000:1000"')
         self.assertIn("chown -R 1000:1000 /opt/example/data", change.caution)
 
-    def test_a_non_root_user_keeps_the_low_port_it_binds_on_the_host_network(self):
+    def on_the_host_network(self, **fields):
         from .test_containers import running
 
         on_host = {**KEPT, "user": "", "cap_drop": ["ALL"], "network_mode": "host", "port_bindings": []}
         estate()
         inventory("portainer.container", [running("web", "example/web:1.0.0") | {"network_mode": "host"}])
-        inventory("portainer.runtime", [runtime("web", **on_host, exposed_ports=[53, 3000])])
-        (found,) = (item.hardening for item in containers() if item.running.name == "web")
-        bridged = self.hardening(**{**on_host, "network_mode": "bridge", "exposed_ports": [53]})
+        inventory("portainer.runtime", [runtime("web", **{**on_host, "exposed_ports": [53, 3000], **fields})])
+        (found,) = (item for item in containers() if item.running.name == "web")
+        return found
 
-        self.assertIn('cap_add:\n      - "NET_BIND_SERVICE"', found.step(CHECKS["not-root"]).value)
+    def test_a_low_port_on_the_host_network_under_no_new_privileges_keeps_root_with_one_capability(self):
+        found = self.on_the_host_network(cap_add=["NET_BIND_SERVICE", "CHOWN", "SYS_ADMIN"])
+
+        fix = found.hardening.step(CHECKS["not-root"]).value
+        self.assertIn('cap_drop:\n      - "ALL"\n    cap_add:\n      - "NET_BIND_SERVICE"', fix)
+        self.assertNotIn("user", fix)
+        self.assertNotIn("CHOWN", fix)
+        # The one change meets the capability check too, written once.
+        self.assertEqual([change.key for change in found.hardening.changes], ["cap_drop"])
+
+    def test_a_non_root_user_is_offered_where_no_new_privileges_is_waived_or_the_port_is_its_own(self):
+        container("web", by_design={"no-new-privileges": "Its program binds port 53 through a file capability."})
+        waived = self.on_the_host_network(security_opt=[]).hardening
+        bridged = self.hardening(**{**KEPT, "user": "", "exposed_ports": [53]})
+
+        self.assertIn(
+            'user: "1000:1000"\n    cap_add:\n      - "NET_BIND_SERVICE"', waived.step(CHECKS["not-root"]).value
+        )
         # In a network of its own any user binds a low port.
         self.assertNotIn("cap_add", bridged.step(CHECKS["not-root"]).value)
 

@@ -53,8 +53,8 @@ PACKAGES = ("pkg:apk/alpine/musl@1.2.5-r1", "pkg:apk/alpine/openssl@3.3.2-r1", "
 # the digest it could be pinned to and HQ names that pin.
 BY_TAG = "nginx-proxy-manager"
 # The DNS server tailnet devices use, on the host's network its job needs and
-# as root, as its image starts it: binding port 53 there takes NET_BIND_SERVICE,
-# which its dropped capabilities leave out.
+# as root, which binding port 53 there under no-new-privileges takes, keeping
+# more capabilities than NET_BIND_SERVICE.
 HOST_NETWORK = "adguard"
 DNS_PORT = 53
 
@@ -181,7 +181,7 @@ def _runtime(name, port):
         stack=name,
         service=name,
         image_id=digest("image-id", name),
-        **KEPT | ({"network_mode": "host", "user": ""} if on_host else {}),
+        **KEPT | ({"network_mode": "host", "user": "", "cap_add": ["NET_BIND_SERVICE", "CHOWN"]} if on_host else {}),
         mounts=mounts,
         port_bindings=[] if on_host else [{"container_port": f"{port}/tcp", "host_ip": LAN, "host_port": str(port)}],
         exposed_ports=[DNS_PORT, port] if on_host else [port],
@@ -226,7 +226,7 @@ def _network():
         driver="bridge",
         scope="local",
         subnets=["172.18.0.0/16"],
-        containers=[name for name, _port, _image in CONTAINERS],
+        containers=[name for name, _port, _image in CONTAINERS if name != HOST_NETWORK],
     )
 
 
