@@ -160,7 +160,7 @@ last done to it is read before its parts.
           {% if peering.path == "direct" %}Direct{% elif peering.path == "relayed" %}Relayed{% else %}None yet{% endif %}
         {% detail %}
           {% if peering.path == "direct" %}
-            <small><code>{{ peering.direct_endpoint|breakable }}</code></small>{% if peering.relay %}<small>Fallback relay <code>{{ peering.relay }}</code></small>{% endif %}
+            <small><code>{{ peering.direct_endpoint }}</code></small>{% if peering.relay %}<small>Fallback relay <code>{{ peering.relay }}</code></small>{% endif %}
           {% elif peering.path == "relayed" %}
             <small>Through <code>{{ peering.relay }}</code></small><small>No direct path was found, and it is still encrypted end to end</small>
           {% else %}
