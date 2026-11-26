@@ -372,6 +372,76 @@ class WireGithubAppTests(SimpleTestCase):
 
 
 @tag("source")
+class AppWebhookTests(SimpleTestCase):
+    """The App's webhook points at the Worker's github route, set as the App, its secret in the body alone."""
+
+    SECRET = "webhook-secret-0123456789"
+    REFERENCE = "op://Example Vault/example events/GITHUB_WEBHOOK_SECRET"
+
+    def setUp(self):
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.key = private.private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+        ).decode()
+        self.public = private.public_key()
+        self.calls: list[Call] = []
+
+    def send(self, call: Call):
+        self.calls.append(call)
+        return {"url": call.json["url"], "content_type": "json", "secret": "********", "insecure_ssl": "0"}
+
+    def wire(self, **flags: str) -> tuple[Commands, str]:
+        commands = Commands(
+            {("op", "document", "get"): self.key, ("gh", "repo", "view"): "example/host\n", ("op", "read"): self.SECRET}
+        )
+        out = io.StringIO()
+        usage = Usage({"vault": "Example Vault", "item": "example app", "client_id": "Iv1.example", **flags})
+        credentials.wire_github_app(usage, Programs(commands), out, self.send)
+        return commands, out.getvalue()
+
+    def test_the_webhook_is_set_as_the_app_to_the_workers_github_route(self):
+        import jwt
+
+        commands, out = self.wire(webhook_secret=self.REFERENCE, webhook_host="events.example.com")
+
+        routes = json.loads((ROOT / "worker" / "src" / "generated" / "routes.json").read_text())["providers"]
+        (github,) = [route for route in routes if route["provider"] == "github"]
+        (call,) = self.calls
+        self.assertEqual((call.method, call.url), ("PATCH", "https://api.github.com/app/hook/config"))
+        self.assertEqual(
+            call.json,
+            {
+                "url": f"https://events.example.com{github['path']}",
+                "content_type": "json",
+                "secret": self.SECRET,
+                "insecure_ssl": "0",
+            },
+        )
+        claims = jwt.decode(call.token, self.public, algorithms=["RS256"])
+        self.assertEqual(claims["iss"], "Iv1.example")
+        self.assertIn(["op", "read", self.REFERENCE], commands.argv)
+        self.assertFalse(any(self.SECRET in word for argv in commands.argv for word in argv))
+        self.assertNotIn(self.SECRET, out)
+        for event in github["events"]:
+            self.assertIn(event, out)
+
+    def test_a_webhook_without_its_host_reads_no_secret_and_calls_nothing(self):
+        with self.assertRaises(Refused):
+            self.wire(webhook_secret=self.REFERENCE)
+
+        self.assertEqual(self.calls, [])
+
+    def test_a_host_that_is_not_a_hostname_is_refused(self):
+        with self.assertRaises(Refused):
+            self.wire(webhook_secret=self.REFERENCE, webhook_host="events.example.com/elsewhere")
+
+        self.assertEqual(self.calls, [])
+
+
+@tag("source")
 class TaskTests(SimpleTestCase):
     def test_the_task_runs_as_printed(self):
         """Through mise, from another directory: the plan, on stderr, with nothing created."""
