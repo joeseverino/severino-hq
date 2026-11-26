@@ -16,13 +16,16 @@ from urllib.parse import urlsplit
 
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest
+from hq.domains.control_plane.models import ApprovalRequest, InboundSource
+from hq.platform.application import readings
 from hq.platform.application.approvals import entry_event
 from hq.platform.application.asks import REFRESHING
 from hq.platform.application.card_items import Kpi
 from hq.platform.application.contracts import Effect
 from hq.platform.application.drawings import Dot, Dots
+from hq.platform.application.inbound_events import channel
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.links import example_command
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, DomainOverview, stacked_bar_chart
@@ -337,8 +340,13 @@ def render_pages(client, pages=None):
 def asked_on_opening(client):
     """The answers to the dashboard's ask, by the path the browser asks them
     at: asked for, and waiting on a controller that arrived a moment before.
-    Every page that asks on opening hears the same, and draws what it says."""
+    Every page that asks on opening hears the same, and draws what it says.
+    The event listener has gone silent, so the repositories its events keep
+    current are the dashboard's to ask for again."""
 
+    readings.record(
+        readings.heartbeat(channel(InboundSource.WORKER)), {}, observed_at=timezone.now() - timedelta(hours=1)
+    )
     with tempfile.TemporaryDirectory() as directory:
         markers = Path(directory)
         (markers / "heartbeat").touch()
