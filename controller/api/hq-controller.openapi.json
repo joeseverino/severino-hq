@@ -5130,6 +5130,22 @@
         "type": "object",
         "description": "One host.firewall record: Host firewall."
       },
+      "HostJobResult": {
+        "type": "string",
+        "description": "How a job HQ's host tells it of ended, as systemd says it.",
+        "enum": [
+          "done",
+          "failed",
+          "timeout",
+          "canceled"
+        ],
+        "x-enum-varnames": [
+          "HostJobResultDone",
+          "HostJobResultFailed",
+          "HostJobResultTimeout",
+          "HostJobResultCanceled"
+        ]
+      },
       "HostPerimeterRecord": {
         "properties": {
           "record": {

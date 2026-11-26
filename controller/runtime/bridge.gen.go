@@ -458,6 +458,30 @@ func (e HostEvent) Valid() bool {
 	}
 }
 
+// Defines values for HostJobResult.
+const (
+	HostJobResultCanceled HostJobResult = "canceled"
+	HostJobResultDone     HostJobResult = "done"
+	HostJobResultFailed   HostJobResult = "failed"
+	HostJobResultTimeout  HostJobResult = "timeout"
+)
+
+// Valid indicates whether the value is a known member of the HostJobResult enum.
+func (e HostJobResult) Valid() bool {
+	switch e {
+	case HostJobResultCanceled:
+		return true
+	case HostJobResultDone:
+		return true
+	case HostJobResultFailed:
+		return true
+	case HostJobResultTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HostRenderStatusRecordReason.
 const (
 	HostRenderStatusRecordReasonEmpty      HostRenderStatusRecordReason = ""
@@ -2184,6 +2208,9 @@ type HostFirewallRecord struct {
 	ReadAt                  string `json:"read_at,omitempty"`
 	Record                  string `json:"record"`
 }
+
+// HostJobResult How a job HQ's host tells it of ended, as systemd says it.
+type HostJobResult string
 
 // HostPerimeterRecord One host.perimeter record: Open-port test.
 type HostPerimeterRecord struct {

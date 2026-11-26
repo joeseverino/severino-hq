@@ -29,17 +29,19 @@ lazy from hq.domains.control_plane.models import (
 lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
+lazy from hq.domains.jobs.runner import SCHEDULER
+lazy from hq.platform.core import bindings
 lazy from hq.platform.core.attribution import own_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
-from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
+from .automation_manifest import REVISION_INPUT, OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, command_adapter
 from .process_caches import kept
 from .quoted import Quoted
 from .record_errors import PolicyError, RecordNotFound
-from .security import Capability, Principal
+from .security import Capability, Principal, internal_principal
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
@@ -55,6 +57,8 @@ lazy from .machines import machine_catalog
 lazy from .moments import moment, since_when
 lazy from .playbook_about import about, reading_words, run_preview
 lazy from .resource_operations import (
+    HANDOFF,
+    SETTLES,
     Prepared,
     RunAsked,
     acting_for,
@@ -401,7 +405,12 @@ def _holding(resource: ManagedResource | None, hosts: list[str]) -> OperationReq
     same = active.filter(resource=resource).first() if resource is not None else None
     if same is not None:
         return same
-    return active.filter(hosts__host__in=hosts).order_by("created_at").first()
+    # A held run's playbook has ended, so it holds its machines against a
+    # change alone: a read, the one that settles it included, runs beside the
+    # unit it left running.
+    reads = resource is not None and (resource.spec or {}).get("effect") == Effect.READ
+    beside = active.exclude(result__has_key=HANDOFF) if reads else active
+    return beside.filter(hosts__host__in=hosts).order_by("created_at").first()
 
 
 def _held_by(holder: OperationRequest, resource: ManagedResource | None, hosts: list[str]) -> dict[str, Any]:
@@ -532,8 +541,66 @@ def queue_follow_up(
     return operation
 
 
+def held_runs():
+    """The runs whose playbook handed off to a unit it left running and that
+    HQ has yet to settle (``controller._hold``)."""
+
+    return OperationRequest.objects.filter(
+        action=OperationRequest.Action.RUN, state=OperationRequest.State.CLAIMED, result__has_key=HANDOFF
+    )
+
+
+def queue_settling(held: OperationRequest) -> OperationRequest | None:
+    """Queue the read that settles ``held`` (its procedure's ``settled_by``),
+    as HQ itself, on its machines at its revision, under its correlation; the
+    read queued, else None while one is still to end.
+
+    Its key is the workqueue's rule (Kubernetes' client-go): a held run is
+    queued at most once while its read waits or runs, and asked again once
+    that read has ended, so an event or a lease that says look again costs one
+    read in flight, never a pile of them.
+    """
+
+    asked = held.input or {}
+    manifest = operation_registry().get(str(asked.get("operation", "")))
+    settling = operation_registry().get(manifest.settled_by) if manifest and manifest.settled_by else None
+    if settling is None:
+        raise PolicyError("The playbook adopted now names no read that settles this run.")
+    reads = OperationRequest.objects.filter(**{f"input__{SETTLES}": str(held.pk)})
+    if reads.filter(state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)).exists():
+        return None
+    revision = (asked.get("parameters") or {}).get(REVISION_INPUT)
+    bound = {
+        "operation": settling.id,
+        "revision": settling.revision,
+        "parameters": {REVISION_INPUT: revision},
+        "hosts": list(asked.get("hosts") or ()),
+        "correlation": str(asked.get("correlation", "")),
+        SETTLES: str(held.pk),
+    }
+
+    def record() -> ManagedResource:
+        resource = ManagedResource.objects.select_for_update().filter(key=resource_key(settling.id)).first()
+        if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(settling):
+            raise PolicyError("The read that settles this run is not the one adopted now.")
+        return resource
+
+    principal = internal_principal(SCHEDULER)
+    with bindings.audit_operation(operation=capability_name(settling.id), principal=principal):
+        operation, queued = _enqueue_run(
+            record, bound, principal, reason="", once=f"{held.pk}:settle:{reads.count()}", released=True
+        )
+    return operation if queued and (operation.input or {}).get(SETTLES) == str(held.pk) else None
+
+
 def _enqueue_run(
-    record: Callable[[], ManagedResource], bound: dict[str, Any], principal: Principal, *, reason: str, once: str = ""
+    record: Callable[[], ManagedResource],
+    bound: dict[str, Any],
+    principal: Principal,
+    *,
+    reason: str,
+    once: str = "",
+    released: bool = False,
 ) -> tuple[OperationRequest, bool]:
     def prepare() -> Prepared:
         # A run no worker will take would wait for nothing: the finding that
@@ -545,8 +612,10 @@ def _enqueue_run(
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
         # A claim whose lease ran out is ended or put back first, by the rule
-        # a claim applies too, so a worker that went quiet holds nothing.
-        release_lapsed(timezone.now())
+        # a claim applies too, so a worker that went quiet holds nothing;
+        # ``released`` where that rule is what asks.
+        if not released:
+            release_lapsed(timezone.now())
         holder = _holding(resource, bound["hosts"])
         if holder is not None:
             raise PolicyError(

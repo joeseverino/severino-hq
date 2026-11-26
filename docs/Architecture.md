@@ -1073,6 +1073,39 @@ task is an audit row under the run's own id that leads back to the ask, and
 the run's end is one DONE or FAILED row (`audit.work_ended`), as a job's is,
 never a change to its record's state.
 
+A playbook that starts a long unit and leaves it running ends at once,
+stating a hand-off (`RunStated.handoff`: each of its machines to the unit's
+name). Its procedure names the read that settles it (`settled_by`: a read of
+the same commit, target kinds and `revision` input, held at adoption). HQ
+holds the run claimed, the hand-off on its result, under a lease its
+declaration's `timeout_seconds` bounds from the claim, which no worker renews
+(`controller._hold`). It then settles it from that read alone, asked as HQ
+itself on the run's machines at its revision, under its correlation
+(`automation_runs.queue_settling`). That read's readings become the held
+run's, and its outcome and what follows it are any run's (`_settled`, then
+`_finish` and `app_update_approval.succeeded`). What wakes HQ to ask is
+level-triggered, as a Kubernetes controller's informer and resync are: a job's
+end on HQ's machine (`unit.job.<result>`) makes `automation.held` due, which
+the host job `automation.settle` reads by asking the read of each run held on
+that machine. The lease's bound asks it once no event did
+(`_settle_lapsed_holds`), and a watcher's reconnect asks it as it asks every
+reading its events carry. A held run elsewhere settles at the bound. Its
+security properties:
+
+- An event settles nothing. Which job ended is never read. A read that states
+  no reading settles nothing, so a forged event, or another unit's, costs one
+  read-only read. The bound ends the run as `OutcomeUnknown` only once a read
+  asked at or after it states nothing.
+- At most one read is in flight per held run. Its key counts the reads that
+  have ended, as a workqueue queues a key once while it waits and again once
+  it has been processed.
+- A hand-off names only the run's own machines, as a reading does, and only a
+  unit's name (`UnitName`, the pattern `HostUnitRecord.unit` is held to). A
+  run whose procedure names no settling read may not state one.
+- A held run's playbook has ended, so it holds its machines against a change
+  alone (`_holding`). A read, the settling one included, runs beside the unit.
+- No new privilege: the read is `effect: read`, run under the read profile.
+
 A provider's declaration is Django's. Its controller half is Go, in
 `controller/providers/`: one file set per integration, each registering its
 readers, actions and probes in its `admit…` function, which `providers.New`
@@ -1706,7 +1739,8 @@ Its security properties:
   approval, or a record that no longer pins it, runs nothing, and the merge
   says why.
 - Every check a run passes still applies: a worker must take runs, one run
-  per playbook, one writer per machine (`_holding`), and a login for each
+  per playbook, one writer per machine (`_holding`, where a held run holds
+  its machines against a change alone), and a login for each
   machine (`reached`). A refused merge (`head_moved`, `checks_failing`, `checks_pending`) queues
   no run.
 
@@ -1854,7 +1888,8 @@ hands over as the `artifact_data` of the `playbook_on_stats` event, each machine
 by name when it is keyed by machine. A playbook that sets none is said by
 its verification, which its checks have just held (`hq_runner/events.py`).
 Beside `result`, the same event carries the playbook's `readings`
-(`{machine: {kind: [record]}}`) and `preview` (`{machine: [line]}`), which
+(`{machine: {kind: [record]}}`), `preview` (`{machine: [line]}`) and
+`handoff` (`{machine: unit}`), which
 Ansible merges by machine and the report carries as `stated`; any other stat
 is dropped. Their bounds are the bridge contract's `RunStated`, `StatedText`
 and `StatedBytes`, and the worker keeps each part (one machine's records of

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -20,12 +19,8 @@ const (
 	jobRemoved     = "JobRemoved"
 )
 
-// JobResults are the ends of a job HQ is told of: a unit whose start failed,
-// which systemd then holds as failed.
-var JobResults = []string{"failed"}
-
-// Systemd is the source of each job systemd ends with one of JobResults, for
-// any unit on the machine. systemd sends JobRemoved only to a client that
+// Systemd is the source of each job systemd ends as the contract's
+// HostJobResult names, for any unit on the machine. systemd sends JobRemoved only to a client that
 // asked with Subscribe, and stops when that client's connection closes.
 func Systemd() Source {
 	return func(ctx context.Context) (Stream, error) {
@@ -62,7 +57,7 @@ type jobs struct {
 
 func (j jobs) Close() error { return j.conn.Close() }
 
-// Read hands each job end of JobResults to heard, in order.
+// Read hands each job end HQ is told of to heard, in order.
 func (j jobs) Read(ctx context.Context, heard chan<- runtime.InboundArrival) error {
 	for {
 		var signal *dbus.Signal
@@ -94,7 +89,7 @@ func jobArrival(signal *dbus.Signal, heard time.Time) (runtime.InboundArrival, b
 	id, idOK := signal.Body[0].(uint32)
 	unit, unitOK := signal.Body[2].(string)
 	result, resultOK := signal.Body[3].(string)
-	if !idOK || !unitOK || !resultOK || unit == "" || !slices.Contains(JobResults, result) {
+	if !idOK || !unitOK || !resultOK || unit == "" || !runtime.HostJobResult(result).Valid() {
 		return runtime.InboundArrival{}, false
 	}
 	heard = heard.UTC().Truncate(time.Microsecond)

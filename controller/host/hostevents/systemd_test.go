@@ -37,25 +37,29 @@ func bus(t *testing.T) (source Source, opened chan chan *dbus.Signal) {
 	}, opened
 }
 
-// A unit HQ does not ship whose start failed is told at once, by its name and
-// the job's result; a job that ended any other way is not.
-func TestAFailedJobIsToldAsTheUnitsJob(t *testing.T) {
+// A job that ended as the contract's HostJobResult names is told at once, by
+// its unit's name and the job's result; a job that ended any other way is not.
+func TestAJobsEndIsToldAsTheUnitsJob(t *testing.T) {
 	source, opened := bus(t)
 	told, _ := watch(t, source)
 	signals := arrived(t, opened)
 
 	signals <- jobRemovedSignal(4020, "example-pull@0123abc.service", "done")
 	signals <- jobRemovedSignal(4021, "example-pull@4567def.service", "failed")
-	signals <- jobRemovedSignal(4022, "example-pull@89abcde.service", "canceled")
-	signals <- jobRemovedSignal(4023, "example-check.service", "skipped")
+	signals <- jobRemovedSignal(4022, "example-check.service", "skipped")
 
 	events := arrivals(t, arrived(t, told))
-	if len(events) != 1 {
-		t.Fatalf("told %+v, want only the failed job", events)
+	if len(events) != 2 {
+		t.Fatalf("told %+v, want the done and the failed job", events)
 	}
-	failed := events[0]
-	if failed.Provider != runtime.InboundProviderHost || failed.Event != string(runtime.HostEventUnitJob)+".failed" || failed.Subject != "example-pull@4567def.service" {
-		t.Errorf("told %+v", failed)
+	for index, want := range []struct{ result, unit string }{
+		{"done", "example-pull@0123abc.service"},
+		{"failed", "example-pull@4567def.service"},
+	} {
+		got := events[index]
+		if got.Provider != runtime.InboundProviderHost || got.Event != string(runtime.HostEventUnitJob)+"."+want.result || got.Subject != want.unit {
+			t.Errorf("told %+v, want %s of %s", got, want.result, want.unit)
+		}
 	}
 }
 

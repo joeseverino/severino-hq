@@ -87,6 +87,9 @@ class OutboundWork:
     # The kinds of reading the host's own work reads, so an ask for one
     # (``cadence.ask``) starts it: what an event makes due, read in HQ.
     reads: tuple[str, ...] = ()
+    # Whether reading them now would find anything to read, so an ask that
+    # would not starts no job; None: it always might.
+    reads_due: Callable[[], bool] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "effect", Effect(self.effect))
@@ -381,6 +384,15 @@ def run_for_host(name: str) -> dict[str, Any]:
     except RecordConflict:
         return {"name": name, "state": "running", "note": ALREADY_RUNNING}
     return {"name": name, "state": job.state, "note": job_run(job).note, "job": str(job.pk)}
+
+
+def start_reading(name: str) -> bool:
+    """Start the host's own work ``name`` for an ask of a kind it reads, where
+    it would find anything to read (``reads_due``); False where it would not
+    or it is already running."""
+
+    due = _host_named(name).reads_due
+    return (due is None or due()) and start_for_host(name)
 
 
 def start_for_host(name: str) -> bool:

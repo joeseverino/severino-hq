@@ -781,7 +781,7 @@ def ask(
     if read_here:
         kinds = tuple(kind for kind in kinds if kind not in read_here)
         for work in dict.fromkeys(read_here.values()):
-            transaction.on_commit(partial(outbound_work.start_for_host, work), robust=True)
+            transaction.on_commit(partial(outbound_work.start_reading, work), robust=True)
     if activity:
         note_activity()
     for kind in kinds or (("",) if connection or every else ()):

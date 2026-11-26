@@ -773,7 +773,8 @@ HQ's side of the socket is `severino-hq-listener.service`
   minute, so a gap is repaired by reading and nothing is replayed.
 
 `severino-hq-events.service` tells HQ of a container's change on its host
-and of a job systemd ended there in failure (`controller/host/hostevents`,
+and of each start job systemd ended there, as the contract's `HostJobResult`
+names its ends (`controller/host/hostevents`,
 which states its security properties). It holds Docker's socket, which the
 controller's units hold already, and the system bus, under the shared
 sandbox alone: no network, no address family but `AF_UNIX`, no capability
@@ -782,7 +783,8 @@ and no credential. It reads only Docker's event stream and systemd's
 client of the bus speaks for it, and tells HQ only names (the container's,
 Docker's action, id and time; the unit's, the job's result and id) through
 `hq-controller events`, so a forged event costs one read of the containers
-or the units.
+or the units, and one read-only settling read of each run held on a unit
+there, which settles nothing unless it states what the unit did.
 
 The deploy token is the one standing secret a workflow holds. Every other
 write a workflow makes is a GitHub token minted for one permission and one

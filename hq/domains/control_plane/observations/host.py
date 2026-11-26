@@ -447,18 +447,29 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
 UNIT_FAILED = "unit.failed"
 UNIT_JOB = "unit.job"
 DOCKER_CONTAINER = "docker.container"
+# The runs held on a unit their playbook left running on HQ's host, which HQ
+# reads itself by asking each its settling read (``host_work``).
+AUTOMATION_HELD = "automation.held"
+# Each end of a job HQ is told of, by systemd's result, and what it makes due:
+# any end may be a held run's unit's, and one that did not succeed leaves its
+# unit failed, which the machine's units say.
+JOB_ENDS = {
+    "done": (AUTOMATION_HELD,),
+    **dict.fromkeys(("failed", "timeout", "canceled"), (UNIT_KIND, AUTOMATION_HELD)),
+}
 INBOUND = {
     "host": InboundSpec(
         {
             UNIT_FAILED: (UNIT_KIND,),
-            UNIT_JOB: (UNIT_KIND,),
+            **{f"{UNIT_JOB}.{result}": kinds for result, kinds in JOB_ENDS.items()},
             DOCKER_CONTAINER: (ENVIRONMENT_KIND, CONTAINER_KIND, RUNTIME_KIND, IMAGE_KIND),
         }
     )
 }
-# The events severino-hq-events.service tells, which the controller spells
-# from the contract.
+# The events severino-hq-events.service tells, and the ends of a job it tells,
+# which the controller spells from the contract.
 SHARED = (
     SharedValue("HostEvent", (UNIT_JOB, DOCKER_CONTAINER), "An event HQ's own host tells it of from the controller."),
+    SharedValue("HostJobResult", tuple(JOB_ENDS), "How a job HQ's host tells it of ended, as systemd says it."),
     SharedValue("UnitName", UnitName, "A systemd unit's name, as systemd spells it."),
 )
