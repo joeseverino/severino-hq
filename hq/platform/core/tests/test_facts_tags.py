@@ -41,6 +41,19 @@ class FactsTagTests(SimpleTestCase):
             [whole.words for whole in with_class(html, "whole")], ["docker-compose.yml", "uptime-kuma:", "builder-go"]
         )
 
+    def test_a_value_that_is_only_a_link_is_the_values_own_link(self):
+        """Words around nothing but a link leave it the whole value, drawn as
+        a value's link is, never as a link among words."""
+
+        html = render(
+            '{% facts %}{% fact "Built from" %}<span class="prose">'
+            '<a href="/example/">Name the source</a></span>{% endfact %}{% endfacts %}',
+        )
+
+        (link,) = elements(html, "a")
+        self.assertIn("fact-shown", link.ancestors[-1].classes)
+        self.assertFalse(with_class(html, "prose"))
+
     def test_a_fact_without_its_label_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):
             Template("{% facts %}{% fact value=1 %}{% endfacts %}")

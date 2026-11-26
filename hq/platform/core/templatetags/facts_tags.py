@@ -1,11 +1,13 @@
 """Facts: every label and its value a page shows, drawn by one part, its
 ``{% facts %}`` around each ``{% fact %}``."""
 
+import re
 from collections.abc import Iterable
 from typing import NamedTuple
 
 from django import template
 from django.template.base import token_kwargs
+from django.utils.safestring import mark_safe
 from django.utils.text import capfirst
 
 from hq.platform.application.card_items import Answer
@@ -13,8 +15,24 @@ from hq.platform.application.display_words import Code
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.part_examples import facts
 from hq.platform.core.template_parts import Option, Part, SlotsNode
+from hq.platform.core.templatetags.line_breaks import code_breaks
 
 register = template.Library()
+
+# A value of words around nothing but one link: the link alone, which a
+# reader sees as the value, never as a link among words.
+_LONE_LINK = re.compile(r'<span class="prose">(<a\b(?:(?!<a\b).)*</a>)</span>', re.DOTALL)
+
+
+@register.filter(is_safe=True)
+def fact_markup(value):
+    """A fact's value or detail as the part draws it: a link that is the whole
+    value stands alone, and code a page wrote bare wraps at its separators."""
+
+    drawn = code_breaks(value)
+    lone = _LONE_LINK.fullmatch(str(drawn)) if hasattr(drawn, "__html__") else None
+    return mark_safe(lone[1]) if lone else drawn  # noqa: S308 - a part of markup already drawn
+
 
 FACTS_PARTIAL = "partials/_facts.html"
 FACT_PARTIAL = "partials/_fact.html"
@@ -193,7 +211,8 @@ FACT = FactTakes(
     follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
     ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value
     is colored. A fact whose one target is its value's link is that link whole, its label and detail
-    pressed as its value is; one holding another target keeps each its own. Given `{% heading %}`,
+    pressed as its value is; one holding another target keeps each its own. A value whose words hold
+    nothing but a link (a `prose` span around it) is that link alone. Given `{% heading %}`,
     `{% panel %}` and `{% foot %}` parts and an `id`, its value is the button that opens the panel
     in place, as a menu does, and each `data_*` option is its attribute, so a fragment region in the
     band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).

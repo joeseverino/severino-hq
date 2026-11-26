@@ -710,7 +710,8 @@ with its mark before it, its value large under it, its detail under that. What a
 follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
 ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value
 is colored. A fact whose one target is its value's link is that link whole, its label and detail
-pressed as its value is; one holding another target keeps each its own. Given `{% heading %}`,
+pressed as its value is; one holding another target keeps each its own. A value whose words hold
+nothing but a link (a `prose` span around it) is that link alone. Given `{% heading %}`,
 `{% panel %}` and `{% foot %}` parts and an `id`, its value is the button that opens the panel
 in place, as a menu does, and each `data_*` option is its attribute, so a fragment region in the
 band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).
