@@ -56,6 +56,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual({events.READINGS_STAT, events.PREVIEW_STAT, events.HANDOFF_STAT}, set(stated))
         unit = json.loads(CONTROLLER.read_text(encoding="utf-8"))["components"]["schemas"]["UnitName"]
         self.assertEqual((events.UNIT_NAME.pattern, events.UNIT_NAME_LIMIT), (unit["pattern"], unit["maxLength"]))
+        self.assertEqual(events.UNIT_NAME_LIMIT, stated["handoff"]["additionalProperties"]["maxLength"])
 
     def test_what_the_worker_reports_of_the_recorded_run_conforms_to_run_stated(self):
         from jsonschema import Draft202012Validator

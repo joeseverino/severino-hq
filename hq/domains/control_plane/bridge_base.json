@@ -1278,10 +1278,11 @@
               "$ref": "#/components/schemas/StatedMachine"
             },
             "additionalProperties": {
-              "$ref": "#/components/schemas/UnitName"
+              "type": "string",
+              "maxLength": 255
             },
             "x-go-type": "map[string]string",
-            "description": "Each machine's systemd unit the run started and left running, whose job's end HQ settles the run at, by a read its procedure names (settled_by)."
+            "description": "Each machine's systemd unit the run started and left running, whose job's end HQ settles the run at, by a read its procedure names (settled_by). The worker holds it to UnitName; the contract holds no pattern a request's string could be struck out of."
           }
         },
         "additionalProperties": false,

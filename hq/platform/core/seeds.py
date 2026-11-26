@@ -314,7 +314,7 @@ SEEDS: dict[str, Seed] = {
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
     **{
         f"update-{ended}": Seed(_approved(ended), _SET_UP)
-        for ended in ("queued", "preview-failed", "not-applied", "applied")
+        for ended in ("queued", "preview-failed", "not-applied", "held", "applied")
     },
     # The open app update's new image, whose publisher attaches no package list.
     "update-unlisted": Seed(_unlisted, _SET_UP),

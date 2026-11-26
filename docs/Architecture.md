@@ -1100,7 +1100,9 @@ security properties:
   have ended, as a workqueue queues a key once while it waits and again once
   it has been processed.
 - A hand-off names only the run's own machines, as a reading does, and only a
-  unit's name (`UnitName`, the pattern `HostUnitRecord.unit` is held to). A
+  unit's name, which the worker holds to `UnitName`, the pattern
+  `HostUnitRecord.unit` is held to; the contract holds none, as no string a
+  request carries is held to a shape a strike could break. A
   run whose procedure names no settling read may not state one.
 - A held run's playbook has ended, so it holds its machines against a change
   alone (`_holding`). A read, the settling one included, runs beside the unit.

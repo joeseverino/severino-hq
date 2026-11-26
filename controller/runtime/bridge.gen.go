@@ -2864,7 +2864,7 @@ type RunProgress struct {
 
 // RunStated What a playbook stated with set_stats beside its result, keyed by the machines of its run alone. Its compact JSON is at most StatedBytes' maxLength bytes.
 type RunStated struct {
-	// Handoff Each machine's systemd unit the run started and left running, whose job's end HQ settles the run at, by a read its procedure names (settled_by).
+	// Handoff Each machine's systemd unit the run started and left running, whose job's end HQ settles the run at, by a read its procedure names (settled_by). The worker holds it to UnitName; the contract holds no pattern a request's string could be struck out of.
 	Handoff map[string]string `json:"handoff,omitempty"`
 
 	// Preview Each machine's lines of what a change would do.

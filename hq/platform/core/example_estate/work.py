@@ -732,8 +732,8 @@ def worker_image_missing() -> None:
 
 # How the app update's approval ends in each seed that draws one: its preview
 # waiting for the playbook worker, refused on the host, its merge made and the
-# apply refused, or applied.
-PREVIEW_QUEUED, PREVIEW_FAILED, NOT_APPLIED = "queued", "preview-failed", "not-applied"
+# apply refused, held on the pull unit it started, or applied.
+PREVIEW_QUEUED, PREVIEW_FAILED, NOT_APPLIED, HELD = "queued", "preview-failed", "not-applied", "held"
 # The steps a run stops on when the host refuses to start the pull.
 _REFUSED = (
     ("Ask sudo whether the deploy login may start the pull unit", "ok", ""),
@@ -803,6 +803,37 @@ def _states(record: dict, newer: dict[str, str]) -> dict:
     }
 
 
+def _held(applied, merged: str) -> None:
+    """``applied`` held on the pull unit its playbook started, a minute in,
+    while the updated app's container is recreated on HQ's machine."""
+
+    from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource, OperationRequest
+    from hq.domains.control_plane.observations.host import DOCKER_CONTAINER
+    from hq.platform.application.resource_operations import HANDOFF
+
+    now = timezone.now()
+    claimed = now - timedelta(minutes=1)
+    OperationRequest.objects.filter(pk=applied.pk).update(
+        state=OperationRequest.State.CLAIMED,
+        claimed_by="example-worker",
+        claimed_at=claimed,
+        completed_at=None,
+        lease_expires_at=claimed + timedelta(seconds=1500),
+        result={HANDOFF: {MACHINE: f"example-pull@{merged}.service"}},
+    )
+    for number, (event, ago) in enumerate((("destroy", 40), ("start", 35), ("health_status: healthy", 20)), start=1):
+        InboundEvent.objects.create(
+            provider="host",
+            event=f"{DOCKER_CONTAINER}.{event}",
+            subject=UPDATED_APP,
+            delivery_id=f"00000000-0000-4000-9000-{number:012d}",
+            source=InboundSource.HOST,
+            received_at=now - timedelta(seconds=ago),
+            applied_at=now - timedelta(seconds=ago),
+            outcome=InboundOutcome.APPLIED,
+        )
+
+
 def approval(owner, ended: str) -> None:
     """The open app update approved and ended as ``ended`` says, each step
     queued as its approval queues it and ended as its worker leaves it."""
@@ -868,6 +899,8 @@ def approval(owner, ended: str) -> None:
             }
         },
     )
+    if ended == HELD:
+        _held(applied, merged)
     record(
         pull,
         "merge",
