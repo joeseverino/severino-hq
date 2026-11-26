@@ -117,6 +117,7 @@ and those that hold across parts in [Design](Design.md).
 | `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it or a record's read writes it. |
 | `entity` | `code` | `False` |  | Its name drawn as code. |
 | `entity` | `label` |  |  | The words it is named by, in place of its own. |
+| `entity` | `lead` |  |  | Words said quietly before the name ("at", "by"), held to it. |
 | `entity` | `mark` |  |  | The punctuation after the name, held to it, or a list's `forloop`. |
 | `fact` | `label`, first and unnamed | required |  | Its label. |
 | `fact` | `cut` |  |  | A line longer than its cell, the detail's first, cut at its end and read whole from its tip. |

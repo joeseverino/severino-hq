@@ -291,6 +291,15 @@ class BreakableTests(SimpleTestCase):
         link = EntityLink(label="example-docker-host", url="/machines/example-docker-host/", kind_label="Machine")
         self.assertIn('<span class="whole">example-docker-host</span>', entity({}, link))
 
+    def test_words_leading_a_name_are_held_with_it(self):
+        link = EntityLink(label="example-docker-host", url="/machines/example-docker-host/", kind_label="Machine")
+
+        printed = entity({}, link, lead="on")
+
+        (held,) = [element for element in all_elements(printed) if "led" in element.classes]
+        self.assertEqual(held.words, "on example-docker-host")
+        self.assertEqual(links(printed), [("example-docker-host", "/machines/example-docker-host/")])
+
     def test_a_link_is_named_without_its_mark(self):
         link = EntityLink(kind_label="Service", label="example.com", url="/services/example.com/")
 

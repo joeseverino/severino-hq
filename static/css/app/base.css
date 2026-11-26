@@ -122,6 +122,9 @@ th[scope=row] > code { display: inline-block; max-width: 100%; }
    It holds its neighbor with no box of its own, so nothing about it can reach
    past a cell or open a break where the part around it is held whole. */
 .joined { display: contents; white-space: nowrap; }
+/* Words that lead a name (`{% entity lead=... %}`, "at" before a commit) stay on its line: the
+   break between them is the lead's, and the name wraps as it does anywhere. */
+.led { white-space: nowrap; & > :last-child { white-space: normal; } }
 /* A moment (`when`, one `<time>`) is one phrase, read whole: what stands beside it on its line moves rather than split it. The narrowest table box alone lets one wrap (tables.css). */
 time { white-space: nowrap; }
 /* The sentence's mark after a name (line_breaks.breakable) sits inside the
