@@ -28,6 +28,37 @@
     }
    }
   },
+  "/app/hook/deliveries": {
+   "get": {
+    "operationId": "apps/list-webhook-deliveries",
+    "parameters": [
+     {
+      "name": "per_page",
+      "description": "The number of results per page (max 100). For more information, see \"[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api).\"",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/hook-delivery-item"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/app/installations": {
    "get": {
     "operationId": "apps/list-installations",
@@ -4368,6 +4399,46 @@
      "truncated"
     ]
    },
+   "hook-delivery-item": {
+    "title": "Simple webhook delivery",
+    "description": "Delivery made by a webhook, without request and response information.",
+    "type": "object",
+    "properties": {
+     "delivered_at": {
+      "description": "Time when the webhook delivery occurred.",
+      "type": "string",
+      "example": "2021-05-12T20:33:44Z"
+     },
+     "status": {
+      "description": "Describes the response returned after attempting the delivery.",
+      "type": "string",
+      "example": "failed to connect"
+     },
+     "status_code": {
+      "description": "Status code received when delivery was made.",
+      "type": "integer",
+      "example": 502
+     },
+     "event": {
+      "description": "The event that triggered the delivery.",
+      "type": "string",
+      "example": "issues"
+     },
+     "action": {
+      "description": "The type of activity for the event that triggered the delivery.",
+      "type": "string",
+      "example": "opened",
+      "nullable": true
+     }
+    },
+    "required": [
+     "delivered_at",
+     "status",
+     "status_code",
+     "event",
+     "action"
+    ]
+   },
    "installation": {
     "title": "Installation",
     "description": "Installation",
@@ -4422,9 +4493,33 @@
       "description": "The slug name of the GitHub app",
       "example": "probot-owners",
       "type": "string"
+     },
+     "owner": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/simple-user"
+       },
+       {
+        "$ref": "#/components/schemas/enterprise"
+       }
+      ]
+     },
+     "events": {
+      "description": "The list of events for the GitHub app. Note that the `installation_target`, `security_advisory`, and `meta` events are not included because they are global events and not specific to an installation.",
+      "example": [
+       "label",
+       "deployment"
+      ],
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
      }
     },
-    "required": []
+    "required": [
+     "owner",
+     "events"
+    ]
    },
    "issue": {
     "title": "Issue",
@@ -5809,10 +5904,15 @@
      "login": {
       "type": "string",
       "example": "octocat"
+     },
+     "type": {
+      "type": "string",
+      "example": "User"
      }
     },
     "required": [
-     "login"
+     "login",
+     "type"
     ]
    },
    "starred-repository": {

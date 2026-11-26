@@ -4656,6 +4656,87 @@
         },
         "type": "object"
       },
+      "GitHubWebhookDelivery": {
+        "description": "One delivery of the App's webhook, as GitHub's delivery log says it.",
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "action": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "status_code": {
+            "default": 0,
+            "type": "integer"
+          },
+          "delivered_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "event"
+        ],
+        "type": "object"
+      },
+      "GitHubWebhookRecord": {
+        "description": "What the App's webhook sends and how its newest deliveries went: the events the App is subscribed to, from ``GET /app``, and its delivery log's newest page, from ``GET /app/hook/deliveries``.",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "app": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "organization": {
+            "default": false,
+            "type": "boolean"
+          },
+          "events": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "deliveries": {
+            "default": 0,
+            "type": "integer"
+          },
+          "newest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubWebhookDelivery"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "failing": {
+            "default": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "app",
+          "owner"
+        ],
+        "type": "object"
+      },
       "GlanceObservation": {
         "additionalProperties": false,
         "description": "One dashboard panel the controller read (record_dashboard_observations), carrying the as_of of the plan it answers. Numbers, instants and states only: HQ words them.",
@@ -6480,6 +6561,7 @@
           "github.profile",
           "github.pull_request",
           "github.repository",
+          "github.webhook",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -6546,6 +6628,7 @@
           "ResourceKindGitHubProfile",
           "ResourceKindGitHubPullRequest",
           "ResourceKindGitHubRepository",
+          "ResourceKindGitHubWebhook",
           "ResourceKindHostEdgeReboot",
           "ResourceKindHostFilesystem",
           "ResourceKindHostFirewall",
@@ -6611,6 +6694,7 @@
           "github.dependency_run",
           "github.profile",
           "github.repository",
+          "github.webhook",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -6659,6 +6743,7 @@
           "SweptGitHubDependencyRun",
           "SweptGitHubProfile",
           "SweptGitHubRepository",
+          "SweptGitHubWebhook",
           "SweptHostEdgeReboot",
           "SweptHostFilesystem",
           "SweptHostFirewall",

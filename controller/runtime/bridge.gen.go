@@ -767,6 +767,7 @@ const (
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubPullRequest            ResourceKind = "github.pull_request"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
+	ResourceKindGitHubWebhook                ResourceKind = "github.webhook"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
 	ResourceKindHostEdgeReboot               ResourceKind = "host.edge_reboot"
 	ResourceKindHostFilesystem               ResourceKind = "host.filesystem"
@@ -860,6 +861,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindGitHubPullRequest:
 		return true
 	case ResourceKindGitHubRepository:
+		return true
+	case ResourceKindGitHubWebhook:
 		return true
 	case ResourceKindHQRequestPath:
 		return true
@@ -996,6 +999,7 @@ const (
 	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
 	SweptGitHubProfile                SweptKind = "github.profile"
 	SweptGitHubRepository             SweptKind = "github.repository"
+	SweptGitHubWebhook                SweptKind = "github.webhook"
 	SweptHostEdgeReboot               SweptKind = "host.edge_reboot"
 	SweptHostFilesystem               SweptKind = "host.filesystem"
 	SweptHostFirewall                 SweptKind = "host.firewall"
@@ -1066,6 +1070,8 @@ func (e SweptKind) Valid() bool {
 	case SweptGitHubProfile:
 		return true
 	case SweptGitHubRepository:
+		return true
+	case SweptGitHubWebhook:
 		return true
 	case SweptHostEdgeReboot:
 		return true
@@ -1986,6 +1992,27 @@ type GitHubRepositorySecuritySecretScanningPushProtection string
 
 // GitHubRepositorySecuritySecretScanningValidityChecks defines model for GitHubRepositorySecurity.SecretScanningValidityChecks.
 type GitHubRepositorySecuritySecretScanningValidityChecks string
+
+// GitHubWebhookDelivery One delivery of the App's webhook, as GitHub's delivery log says it.
+type GitHubWebhookDelivery struct {
+	Action      string `json:"action,omitempty"`
+	DeliveredAt string `json:"delivered_at,omitempty"`
+	Event       string `json:"event"`
+	Status      string `json:"status,omitempty"`
+	StatusCode  int    `json:"status_code,omitempty"`
+}
+
+// GitHubWebhookRecord What the App's webhook sends and how its newest deliveries went: the events the App is subscribed to, from “GET /app“, and its delivery log's newest page, from “GET /app/hook/deliveries“.
+type GitHubWebhookRecord struct {
+	App           string                `json:"app"`
+	ConnectionRef string                `json:"connection_ref"`
+	Deliveries    int                   `json:"deliveries,omitempty"`
+	Events        []string              `json:"events,omitempty"`
+	Failing       int                   `json:"failing,omitempty"`
+	Newest        GitHubWebhookDelivery `json:"newest,omitempty"`
+	Organization  bool                  `json:"organization,omitempty"`
+	Owner         string                `json:"owner"`
+}
 
 // GlanceMachineTarget defines model for GlanceMachineTarget.
 type GlanceMachineTarget struct {

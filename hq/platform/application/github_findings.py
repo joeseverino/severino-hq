@@ -1,22 +1,38 @@
-"""Findings from what the GitHub App's hourly allowance says: who else spends it.
+"""Findings about the GitHub App itself: who else spends its hourly
+allowance, and whether its webhook reaches HQ.
 
 GitHub records nothing readable when a leaked App key is used for reads, so
 what others spent of the hour is the one sign there is (docs/Security.md).
+HQ is never dialed, so GitHub's delivery log is the one place a delivery the
+events Worker refused, or never received, shows.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from hq.domains.control_plane.observations.github import ALLOWANCE_KIND, OTHERS_SPENT_ATTENTION, PROVIDER
+from django.utils.text import get_text_list
 
+from hq.domains.control_plane.observations.github import (
+    ALLOWANCE_KIND,
+    OTHERS_SPENT_ATTENTION,
+    PROVIDER,
+    WEBHOOK_KIND,
+    Delivery,
+    app_settings,
+)
+from hq.domains.control_plane.provider_adapters import INBOUND
+
+from .entity_links import web_url
 from .facts import records_for_connection
-from .finding_model import Finding, FindingEstate, FindingRule
+from .finding_model import Finding, FindingEstate, FindingRule, opens
 from .finding_steps import Do, Run
-from .moments import moment, when_at
+from .moments import moment, when, when_at
 from .tone import Tone
+from .ui import counted
 
 RULE = "github-others-spent"
+WEBHOOK_RULE = "github-webhook"
 
 # GitHub's own command for a private key's fingerprint, from "Managing private
 # keys for GitHub Apps": what the App's settings list beside each key.
@@ -105,6 +121,70 @@ def others_spent(estate: FindingEstate) -> tuple[Finding, ...]:
     return tuple(sorted(found, key=lambda finding: finding.title))
 
 
+# Each event HQ takes from the App, by the name the App's settings tick it under.
+_TAKEN = tuple(dict.fromkeys(event.partition(".")[0] for event in INBOUND[PROVIDER].events))
+
+
+def _unsubscribed(record: Mapping[str, Any]) -> tuple[str, ...]:
+    """The events HQ takes that the App is not subscribed to, once its
+    webhook is in use: one that has delivered, or subscribes to any of them.
+    An App never pointed at HQ is not set up, which is nothing to raise."""
+
+    subscribed = set(record.get("events") or ())
+    if not record.get("deliveries") and not subscribed & set(_TAKEN):
+        return ()
+    return tuple(event for event in _TAKEN if event not in subscribed)
+
+
+def _webhook(record: Mapping[str, Any], subject: str, now) -> Finding | None:
+    failing = int(record.get("failing") or 0)
+    missing = _unsubscribed(record)
+    if not failing and not missing:
+        return None
+    settings = web_url(app_settings(record))
+    events = get_text_list(list(missing), "and")
+    facts: list[tuple[str, str]] = []
+    if failing:
+        newest = Delivery.model_validate(record.get("newest") or {"event": ""})
+        title = f"{counted(failing, 'webhook delivery', 'webhook deliveries')} to HQ failed"
+        facts += [
+            ("Answer", f"{newest.status_code or ''} {newest.status}".strip() or "None"),
+            ("Event", newest.event),
+            ("Delivered", when(newest.delivered_at, now=now)),
+        ]
+    else:
+        title = f"The GitHub App does not send {events}"
+    if missing:
+        facts.append(("Not subscribed", events))
+    return Finding(
+        rule=WEBHOOK_RULE,
+        subject=subject,
+        part=str(record.get("app", "")),
+        title=title,
+        severity=Tone.ATTENTION,
+        explanation="Changes on GitHub show only once HQ next reads them.",
+        evidence=tuple(facts),
+        primary=opens("Open the App's settings", settings) if settings else None,
+        steps=(
+            *((Do(f"Tick {events} under Subscribe to events, then save."),) if missing else ()),
+            *((Do("Read the failed delivery's answer under Advanced, in Recent Deliveries."),) if failing else ()),
+        ),
+    )
+
+
+def webhook(estate: FindingEstate) -> tuple[Finding, ...]:
+    """A GitHub App whose newest webhook deliveries failed, or that is not
+    subscribed to an event HQ takes from it (``INBOUND``)."""
+
+    found = (
+        _webhook(record, node.id, estate.now)
+        for node in estate.nodes()
+        if node.kind == "connection" and node.provider == PROVIDER
+        for record in records_for_connection(WEBHOOK_KIND, node.connection_ref)
+    )
+    return tuple(finding for finding in found if finding is not None)
+
+
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         RULE,
@@ -115,5 +195,16 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Delete every App key on GitHub that is not HQ's, then rotate HQ's.",
         no_help_reason="GitHub lists the App's keys only on its settings page.",
         bars={Tone.ATTENTION: "something besides HQ spends the App's requests in an hour"},
+    ),
+    FindingRule(
+        WEBHOOK_RULE,
+        "App webhook not reaching HQ",
+        Tone.ATTENTION,
+        webhook,
+        gathered=True,
+        operator_action="Fix what the failed delivery's answer names, and tick each event HQ takes, in the App's settings.",
+        no_help_reason="HQ reads the App's settings and never changes them.",
+        bars={Tone.ATTENTION: "the App's newest webhook deliveries failed, or it is not sent an event HQ takes"},
+        clears="a delivery succeeds and the App is subscribed to every event HQ takes",
     ),
 )

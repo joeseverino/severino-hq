@@ -1841,6 +1841,24 @@ type GitTree struct {
 	Truncated bool `json:"truncated"`
 }
 
+// HookDeliveryItem Delivery made by a webhook, without request and response information.
+type HookDeliveryItem struct {
+	// Action The type of activity for the event that triggered the delivery.
+	Action string `json:"action"`
+
+	// DeliveredAt Time when the webhook delivery occurred.
+	DeliveredAt string `json:"delivered_at"`
+
+	// Event The event that triggered the delivery.
+	Event string `json:"event"`
+
+	// Status Describes the response returned after attempting the delivery.
+	Status string `json:"status"`
+
+	// StatusCode Status code received when delivery was made.
+	StatusCode int `json:"status_code"`
+}
+
 // Installation Installation
 type Installation struct {
 	Account Installation_Account `json:"account"`
@@ -1862,8 +1880,17 @@ type InstallationToken struct {
 
 // Integration GitHub apps are a new way to extend GitHub. They can be installed directly on organizations and user accounts and granted access to specific repositories. They come with granular permissions and built-in webhooks. GitHub apps are first class actors within GitHub.
 type Integration struct {
+	// Events The list of events for the GitHub app. Note that the `installation_target`, `security_advisory`, and `meta` events are not included because they are global events and not specific to an installation.
+	Events []string          `json:"events"`
+	Owner  Integration_Owner `json:"owner"`
+
 	// Slug The slug name of the GitHub app
 	Slug string `json:"slug,omitempty"`
+}
+
+// Integration_Owner defines model for Integration.Owner.
+type Integration_Owner struct {
+	union json.RawMessage
 }
 
 // Issue Issues are a great way to keep track of tasks, enhancements, and bugs for your projects.
@@ -2317,6 +2344,7 @@ type ShaPinningRequired = bool
 // SimpleUser A GitHub user.
 type SimpleUser struct {
 	Login string `json:"login"`
+	Type  string `json:"type"`
 }
 
 // StarredRepository Starred Repository
@@ -2376,6 +2404,12 @@ type WorkflowRun struct {
 
 	// WorkflowID The ID of the parent workflow.
 	WorkflowID int `json:"workflow_id"`
+}
+
+// AppsListWebhookDeliveriesParams defines parameters for AppsListWebhookDeliveries.
+type AppsListWebhookDeliveriesParams struct {
+	// PerPage The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
 
 // AppsListInstallationsParams defines parameters for AppsListInstallations.
@@ -3202,6 +3236,68 @@ func (t *Installation_Account) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsSimpleUser returns the union data inside the Integration_Owner as a SimpleUser
+func (t Integration_Owner) AsSimpleUser() (SimpleUser, error) {
+	var body SimpleUser
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSimpleUser overwrites any union data inside the Integration_Owner as the provided SimpleUser
+func (t *Integration_Owner) FromSimpleUser(v SimpleUser) error {
+	b, err := runtime.JSONMarshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSimpleUser performs a merge with any union data inside the Integration_Owner, using the provided SimpleUser
+func (t *Integration_Owner) MergeSimpleUser(v SimpleUser) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEnterprise returns the union data inside the Integration_Owner as a Enterprise
+func (t Integration_Owner) AsEnterprise() (Enterprise, error) {
+	var body Enterprise
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEnterprise overwrites any union data inside the Integration_Owner as the provided Enterprise
+func (t *Integration_Owner) FromEnterprise(v Enterprise) error {
+	b, err := runtime.JSONMarshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEnterprise performs a merge with any union data inside the Integration_Owner, using the provided Enterprise
+func (t *Integration_Owner) MergeEnterprise(v Enterprise) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Integration_Owner) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Integration_Owner) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // AsRepositoryRuleDetailed0 returns the union data inside the RepositoryRuleDetailed as a RepositoryRuleDetailed0
 func (t RepositoryRuleDetailed) AsRepositoryRuleDetailed0() (RepositoryRuleDetailed0, error) {
 	var body RepositoryRuleDetailed0
@@ -3429,6 +3525,9 @@ type ClientInterface interface {
 	// AppsGetAuthenticated performs a GET /app (the `AppsGetAuthenticated` operationId) request.
 	AppsGetAuthenticated(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// AppsListWebhookDeliveries performs a GET /app/hook/deliveries (the `AppsListWebhookDeliveries` operationId) request.
+	AppsListWebhookDeliveries(ctx context.Context, params *AppsListWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AppsListInstallations performs a GET /app/installations (the `AppsListInstallations` operationId) request.
 	AppsListInstallations(ctx context.Context, params *AppsListInstallationsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -3607,6 +3706,19 @@ type ClientInterface interface {
 // AppsGetAuthenticated performs a GET /app (the `AppsGetAuthenticated` operationId) request.
 func (c *Client) AppsGetAuthenticated(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAppsGetAuthenticatedRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AppsListWebhookDeliveries performs a GET /app/hook/deliveries (the `AppsListWebhookDeliveries` operationId) request.
+func (c *Client) AppsListWebhookDeliveries(ctx context.Context, params *AppsListWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAppsListWebhookDeliveriesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4348,6 +4460,60 @@ func NewAppsGetAuthenticatedRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAppsListWebhookDeliveriesRequest constructs an http.Request for the AppsListWebhookDeliveries method
+func NewAppsListWebhookDeliveriesRequest(server string, params *AppsListWebhookDeliveriesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/app/hook/deliveries"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -7458,6 +7624,11 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	AppsGetAuthenticatedWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AppsGetAuthenticatedReply, error)
 
+	// AppsListWebhookDeliveriesWithResponse performs a GET /app/hook/deliveries (the `AppsListWebhookDeliveries` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	AppsListWebhookDeliveriesWithResponse(ctx context.Context, params *AppsListWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*AppsListWebhookDeliveriesReply, error)
+
 	// AppsListInstallationsWithResponse performs a GET /app/installations (the `AppsListInstallations` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -7764,6 +7935,47 @@ func (r AppsGetAuthenticatedReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AppsGetAuthenticatedReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type AppsListWebhookDeliveriesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]HookDeliveryItem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AppsListWebhookDeliveriesReply) GetJSON200() *[]HookDeliveryItem {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r AppsListWebhookDeliveriesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AppsListWebhookDeliveriesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AppsListWebhookDeliveriesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AppsListWebhookDeliveriesReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -9968,6 +10180,17 @@ func (c *ClientWithResponses) AppsGetAuthenticatedWithResponse(ctx context.Conte
 	return ParseAppsGetAuthenticatedReply(rsp)
 }
 
+// AppsListWebhookDeliveriesWithResponse performs a GET /app/hook/deliveries (the `AppsListWebhookDeliveries` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) AppsListWebhookDeliveriesWithResponse(ctx context.Context, params *AppsListWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*AppsListWebhookDeliveriesReply, error) {
+	rsp, err := c.AppsListWebhookDeliveries(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAppsListWebhookDeliveriesReply(rsp)
+}
+
 // AppsListInstallationsWithResponse performs a GET /app/installations (the `AppsListInstallations` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -10578,6 +10801,32 @@ func ParseAppsGetAuthenticatedReply(rsp *http.Response) (*AppsGetAuthenticatedRe
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Integration
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAppsListWebhookDeliveriesReply parses an HTTP response from a AppsListWebhookDeliveriesWithResponse call
+func ParseAppsListWebhookDeliveriesReply(rsp *http.Response) (*AppsListWebhookDeliveriesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AppsListWebhookDeliveriesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []HookDeliveryItem
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

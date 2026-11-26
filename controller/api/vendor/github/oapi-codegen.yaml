@@ -34,6 +34,7 @@ output-options:
     - apps/get-authenticated
     - apps/get-repo-installation
     - apps/list-installations
+    - apps/list-webhook-deliveries
     - apps/list-repos-accessible-to-installation
     - checks/create
     - checks/list-for-ref

@@ -668,6 +668,26 @@
       "carried": true
     }
   ],
+  "github.webhook": [
+    {
+      "app": "example",
+      "connection_ref": "example",
+      "deliveries": 1,
+      "events": [
+        "example"
+      ],
+      "failing": 1,
+      "newest": {
+        "action": "example",
+        "delivered_at": "example",
+        "event": "example",
+        "status": "example",
+        "status_code": 1
+      },
+      "organization": true,
+      "owner": "example"
+    }
+  ],
   "host.edge_reboot": [
     {
       "connection_ref": "example",

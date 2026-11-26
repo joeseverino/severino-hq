@@ -384,6 +384,52 @@ class AllowanceRecord(ObservationRecord):
     others_since: SkipJsonSchema[str | None] = None
 
 
+WEBHOOK_KIND = "github.webhook"
+
+
+class Delivery(ObservationRecord):
+    """One delivery of the App's webhook, as GitHub's delivery log says it."""
+
+    event: str
+    action: str = ""
+    # GitHub's words for the answer ("OK", "failed to connect") and its
+    # status code, 0 where nothing answered.
+    status: str = ""
+    status_code: int = 0
+    delivered_at: Stamp = None
+
+
+class WebhookRecord(ObservationRecord):
+    """What the App's webhook sends and how its newest deliveries went: the
+    events the App is subscribed to, from ``GET /app``, and its delivery log's
+    newest page, from ``GET /app/hook/deliveries``."""
+
+    connection_ref: str
+    app: str
+    # The account that owns the App, and whether it is an organization: the
+    # two the App's settings page is addressed by.
+    owner: str
+    organization: bool = False
+    events: list[str] = []
+    # The deliveries read, the newest of them, and how many of the newest
+    # failed in a row: 0 once one succeeds. A success is an answer from 200
+    # to 399, as the log's own status filter counts it (``github_webhook.go``).
+    deliveries: int = 0
+    newest: Delivery | None = None
+    failing: int = 0
+
+
+def app_settings(record: Mapping[str, Any]) -> str:
+    """The App's settings page on GitHub, where its events are ticked."""
+
+    app, owner = str(record.get("app", "")), str(record.get("owner", ""))
+    if not app:
+        return ""
+    if record.get("organization") and owner:
+        return f"https://github.com/organizations/{owner}/settings/apps/{app}"
+    return f"https://github.com/settings/apps/{app}"
+
+
 def _installation(record: Mapping[str, Any]) -> tuple[str, str]:
     return str(record.get("connection_ref", "")), str(record.get("installation", ""))
 
@@ -494,5 +540,16 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         describe=_allowance,
         relation="Hourly allowance of",
         from_last=with_others_spent,
+    ),
+    ObservationSpec(
+        WEBHOOK_KIND,
+        PROVIDER,
+        "GitHub App webhook",
+        WebhookRecord,
+        # Two calls a sweep, each the App's own, signed with its key: they
+        # need no permission and spend no installation's allowance.
+        title=lambda record: str(record.get("app", "")),
+        relation="Webhook of",
+        console=app_settings,
     ),
 )
