@@ -15,6 +15,7 @@ from pydantic.json_schema import JsonSchemaMode
 
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.ui import ended
+lazy from hq.platform.application.inbound_events import CHANNEL_EVERY
 
 from . import provider_spec
 from .connection_kinds import SHAPES
@@ -235,8 +236,25 @@ def _records() -> Iterable[dict[str, dict[str, Any]]]:
         yield found
 
 
+def _heartbeat() -> dict[str, dict[str, Any]]:
+    """How often the Worker's listener says it is listening while nothing
+    happens: the interval HQ holds its channel's silence to."""
+
+    every = CHANNEL_EVERY[InboundSource.WORKER]
+    if every is None:
+        raise ValueError("The Worker's channel says how often it is heard.")
+    return {
+        "InboundHeartbeatSeconds": {
+            "type": "integer",
+            "default": int(every.total_seconds()),
+            "description": "How often the Worker's listener posts a batch with no events while its socket answers pings.",
+        }
+    }
+
+
 def _declared() -> Iterable[dict[str, dict[str, Any]]]:
     yield _enumerations()
+    yield _heartbeat()
     for module in (provider_spec, *ADMITTED):
         for value in getattr(module, "SHARED", ()):
             yield _shared(value)

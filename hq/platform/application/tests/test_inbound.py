@@ -98,6 +98,28 @@ class ApplyEventsTests(TestCase):
         self.assertIsNotNone(channel_standing(InboundSource.WORKER).seen_at)
         self.assertIsNone(channel_standing(InboundSource.HOST).seen_at)
 
+    def test_a_reconnect_asks_every_reading_the_worker_carries_once_a_minute(self):
+        from hq.platform.core.models import UpstreamReading
+
+        reconnected = {**worker(), "reconnected": True}
+
+        answer = self.apply(reconnected)
+
+        self.assertEqual(asked(), ["github.repository"])
+        self.assertEqual(answer["asked"], ["github.repository"])
+        ReadRequest.objects.all().delete()
+
+        self.apply(reconnected)
+        self.apply({**worker(), "reconnected": False})
+
+        self.assertEqual(asked(), [])
+
+        UpstreamReading.objects.update(observed_at=timezone.now() - timedelta(minutes=2))
+
+        self.apply(reconnected)
+
+        self.assertEqual(asked(), ["github.repository"])
+
     def test_events_past_the_routine_window_are_deleted(self):
         from hq.domains.control_plane.models import InboundEvent
 

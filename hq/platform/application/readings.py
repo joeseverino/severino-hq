@@ -54,13 +54,16 @@ def heartbeat(name: str) -> str:
     return f"{name}{_HEARTBEAT}"
 
 
-def note(name: str, *, every: timedelta) -> None:
+def note(name: str, *, every: timedelta) -> bool:
     """Record that ``name`` arrived now, at most once per ``every``: a
-    heartbeat holds a moment and nothing else, and an age is worded no finer."""
+    heartbeat holds a moment and nothing else, and an age is worded no finer.
+    Whether it was recorded."""
 
     reading = stored(heartbeat(name))
-    if reading is None or timezone.now() - reading.observed_at >= every:
-        record(heartbeat(name), {})
+    if reading is not None and timezone.now() - reading.observed_at < every:
+        return False
+    record(heartbeat(name), {})
+    return True
 
 
 def heard(name: str) -> datetime | None:

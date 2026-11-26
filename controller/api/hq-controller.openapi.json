@@ -2795,6 +2795,10 @@
             "items": {
               "$ref": "#/components/schemas/InboundArrival"
             }
+          },
+          "reconnected": {
+            "type": "boolean",
+            "description": "The source has just reconnected and may have missed events, so HQ asks every reading they make due, at most once a minute."
           }
         }
       },
@@ -3619,6 +3623,7 @@
           "adguard",
           "cloudflare_api",
           "cloudflare_dns",
+          "cloudflare_events",
           "github_app",
           "npm",
           "onepassword",
@@ -3631,6 +3636,7 @@
           "ConnectionProviderAdGuard",
           "ConnectionProviderCloudflareAPI",
           "ConnectionProviderCloudflareDNS",
+          "ConnectionProviderCloudflareEvents",
           "ConnectionProviderGitHubApp",
           "ConnectionProviderNPM",
           "ConnectionProviderOnePassword",
@@ -5519,6 +5525,11 @@
           "read_at"
         ],
         "type": "object"
+      },
+      "InboundHeartbeatSeconds": {
+        "type": "integer",
+        "default": 300,
+        "description": "How often the Worker's listener posts a batch with no events while its socket answers pings."
       },
       "InboundProvider": {
         "type": "string",

@@ -11,6 +11,7 @@ acts on what it claims; it asks for readings it would take anyway and reads
 them with its own credentials. A forged event costs one read, coalesced with
 any already asked; a replayed delivery is the stored event and asks nothing;
 an event no declaration names is recorded as ignored and asks nothing; a
+reconnect asks every reading its source carries once a minute at most; a
 provider no declaration names, or a batch outside the contract's
 ``InboundBatch``, is refused whole. Only the bridge's action, which serves the
 controller's account alone on a 0700 socket, and the host's jobs may import
@@ -38,6 +39,23 @@ lazy from .cadence import ask
 BATCH = "InboundBatch"
 # A channel reports far more often than an age is worded.
 _NOTED_EVERY = timedelta(minutes=1)
+# A link that flaps reconnects often, and each reconnect within this of the
+# last is the re-read already asked.
+_REREAD_EVERY = timedelta(minutes=1)
+
+
+def _carried(source: InboundSource) -> list[str]:
+    """Every reading the events ``source`` carries make due: what a gap in its
+    channel may have missed. The Worker carries each provider it routes."""
+
+    routed = source == InboundSource.WORKER
+    return [
+        kind
+        for spec in INBOUND.values()
+        if bool(spec.path) == routed
+        for kinds in spec.events.values()
+        for kind in kinds
+    ]
 
 
 @transaction.atomic
@@ -46,7 +64,9 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
     make due; how many were applied, repeated and ignored, and the kinds asked.
 
     ``batch`` is the contract's ``InboundBatch``. One with no events says its
-    source is listening and nothing happened.
+    source is listening and nothing happened. One that says its source
+    reconnected asks every reading that source's events make due, since a
+    gap is repaired by reading again, never by replaying what was missed.
     """
 
     if departed := departs(BATCH, batch):
@@ -55,6 +75,8 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
     readings.note(channel(source), every=_NOTED_EVERY)
     counts = dict.fromkeys(("applied", "repeated", "ignored"), 0)
     asked: dict[str, None] = {}
+    if batch.get("reconnected") and readings.note(f"{channel(source)}-reconnected", every=_REREAD_EVERY):
+        asked.update(dict.fromkeys(_carried(source)))
     for arrived in batch["events"]:
         provider, delivery = arrived["provider"], arrived["delivery_id"]
         if InboundEvent.objects.filter(provider=provider, delivery_id=delivery).exists():

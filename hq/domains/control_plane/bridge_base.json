@@ -2795,6 +2795,10 @@
             "items": {
               "$ref": "#/components/schemas/InboundArrival"
             }
+          },
+          "reconnected": {
+            "type": "boolean",
+            "description": "The source has just reconnected and may have missed events, so HQ asks every reading they make due, at most once a minute."
           }
         }
       },
