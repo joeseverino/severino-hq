@@ -35,7 +35,7 @@ from hq.platform.application.approvals import APPROVE, is_held
 from hq.platform.application.automation_adoption import ADOPT, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
 from hq.platform.application.automation_runs import capability_name, operation_registry
-from hq.platform.application.automation_sources import queue_scan
+from hq.platform.application.automation_sources import SCAN, queue_scan
 from hq.platform.application.cadence import AUTOMATION_HEARTBEAT, AUTOMATION_WORK, note_automation
 from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
@@ -49,6 +49,7 @@ from hq.platform.application.security import (
     web_principal,
 )
 from hq.platform.application.tokens import token_principal
+from hq.platform.core import bindings
 from hq.platform.core.audit import stamped
 from hq.platform.core.models import UpstreamReading
 
@@ -281,8 +282,9 @@ def _scanned(key: str, found: dict[str, Any] | None, message: str, ago: timedelt
     note_automation()
     with stamped(lambda *_: {"created_at": at} if at is not None else None):
         # Asked as a sweep's report asks it, by HQ itself.
-        with doors.controller("sweep"):
-            queued = queue_scan(principal=internal_principal(doors.CONTROLLER), once=key)
+        hq = internal_principal(doors.CONTROLLER)
+        with doors.controller("sweep"), bindings.audit_operation(operation=SCAN, principal=hq):
+            queued = queue_scan(principal=hq, once=key)
         with doors.controller("claim"):
             claimed = claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)["operation"]
         if queued is None or claimed is None or claimed["id"] != str(queued.pk):

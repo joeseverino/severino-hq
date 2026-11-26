@@ -27,7 +27,7 @@ from .inventory import (
 from .read_requests import askers, settle_read_requests
 from .zones import RECORD_KIND, adopt_discovered_records
 lazy from . import problems
-lazy from .automation_sources import scan_when_due
+lazy from .automation_sources import SCAN, scan_when_due
 lazy from .cadence import ask
 lazy from .first_seen import look_due
 lazy from .projects import sync_repositories
@@ -71,7 +71,9 @@ def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, An
     # just stored, and a playbook source whose branch moved is scanned again.
     if REPOSITORY_KIND in payload:
         sync_repositories(principal=principal)
-        scan_when_due(principal=principal)
+        # HQ's own act too, so the scan's rows say HQ asked for it.
+        with bindings.audit_operation(operation=SCAN, principal=principal):
+            scan_when_due(principal=principal)
     # And everything already declared that the sweep just found unchanged, so
     # a declaration nothing touched still reads as observed.
     confirmed = confirm_observed(payload)

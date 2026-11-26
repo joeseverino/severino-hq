@@ -148,6 +148,8 @@ class ScanDueTests(ScanTestCase):
         _, scan = scans()
         self.assertEqual(scan.state, OperationRequest.State.QUEUED)
         self.assertEqual((scan.requested_interface, scan.requested_actor), ("internal", "controller"))
+        asked = AuditLog.objects.get(object_id=str(scan.pk), action=AuditLog.Action.CREATED)
+        self.assertEqual(asked.metadata["operation"], "automation.source.scan")
         self.assertEqual(self.rung.call_args_list.count(call("automation")), 1)
         self.assertIsNotNone(self.claim()["operation"])
 

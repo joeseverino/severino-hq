@@ -23,7 +23,6 @@ from pydantic import (
     ValidationError,
 )
 
-from hq.platform.core import bindings
 lazy from hq.domains.control_plane import models
 lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
 lazy from hq.platform.core.audit import audited_labels
@@ -222,7 +221,7 @@ def scan_when_due(*, principal: Principal) -> OperationRequest | None:
 def queue_scan(*, principal: Principal, once: str) -> OperationRequest | None:
     """Queue one scan of the automation source asked by ``principal``, once
     for ``once``, and ring for the worker; the scan queued, else None: one
-    already waits, or no worker would take it."""
+    already waits, or no worker would take it. Its door binds it as ``SCAN``."""
 
     # A scan no worker will take would wait for nothing: the finding that
     # says so (``automation_findings``) carries how to set one up.
@@ -233,8 +232,7 @@ def queue_scan(*, principal: Principal, once: str) -> OperationRequest | None:
         resource = _source(principal)
         return resource, asked_fields(principal, reason="", generation=resource.generation)
 
-    with bindings.audit_operation(operation=SCAN, principal=principal):
-        operation, created = enqueue(models.OperationRequest.Action.SCAN, prepare, once=once)
+    operation, created = enqueue(models.OperationRequest.Action.SCAN, prepare, once=once)
     if not created:
         return None
     # The worker pulls the scan over the bridge; the ring only says one
