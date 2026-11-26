@@ -10,11 +10,15 @@ from typing import Any
 from django.utils.text import slugify
 
 from hq.platform.application import action_items
-from hq.platform.application.asks import following
+from hq.platform.application.action_links import read_now_link
+from hq.platform.application.asks import Ask, following
 from hq.platform.application.decisions import decision
+from hq.platform.application.finding_model import CHECK_AGAIN
 from hq.platform.application.moments import duration
+from hq.platform.application.security import Principal
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, StatusMark, TableColumn
 from hq.platform.application.tone import Tone
+from hq.platform.application.url_query import with_query
 from hq.platform.core.included_queue import ICON_LINKS, INSIGHT_FACTS, OPERATOR_STEPS, ORIGIN_PANEL
 from hq.platform.core.templatetags.action_tags import remedies, triage
 from hq.platform.core.templatetags.status_tags import origin_tip, urgency_tone
@@ -180,3 +184,23 @@ def _below(item: Mapping[str, Any]) -> tuple[Below, ...]:
     if item.get("links"):
         lines.append(Cell(piece=Piece(ICON_LINKS, {"links": item["links"]}, words=ICON_LINKS.about)))
     return (Below("", tuple(lines)),) if lines else ()
+
+
+def check_again(items: Iterable[Mapping[str, Any]], principal: Principal, here: str) -> Ask | None:
+    """The one press over a queue that reads again what its rows rest on
+    (each item's ``read_now``), then shows ``here`` anew; None when no row
+    rests on a reading or its reader may not ask for one.
+
+    A row never carries its own: the press asks for every row it stands
+    over. Rows that rest on one reading ask for that one, rows on several
+    for every connection, the one request the read command takes for many.
+    """
+
+    asked = {tuple(sorted(item["read_now"].items())) for item in items if item.get("read_now")}
+    if not asked:
+        return None
+    subject = dict(asked.pop()) if len(asked) == 1 else {"every_connection": True}
+    read = read_now_link(principal, **subject)
+    if read is None:
+        return None
+    return Ask(CHECK_AGAIN, with_query(read.url, {"next": here}), title="Reads them again now.", compact=True)

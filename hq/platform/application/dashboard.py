@@ -6,6 +6,7 @@ model and decides no number.
 """
 
 from collections.abc import Iterable, Mapping
+from dataclasses import asdict
 from functools import partial
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
@@ -141,7 +142,9 @@ class QueueItem(TypedDict):
     action: str
     steps: list[WrittenStep]
     no_help_reason: str
-    check: WrittenAction | None
+    # What to read again so its check runs on fresh data, as the read's
+    # payload (``Finding.read_now``); null where none is asked.
+    read_now: dict[str, str | bool] | None
     actions: list[WrittenAction]
     subject: WrittenAction | None
     notice: bool
@@ -210,7 +213,7 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "url": primary.url if primary else with_query(findings_url, {"rule": finding.rule}) if rule else "",
         "steps": [as_written(step) for step in finding.steps],
         "no_help_reason": finding.no_help_reason,
-        "check": as_written(finding.check) if finding.check else None,
+        "read_now": {key: value for key, value in asdict(finding.read_now).items() if value} if finding.read_now else None,
         "actions": [as_written(link) for link in pages if link.name == PLAYBOOK_INVESTIGATION],
         "subject": as_written(finding.subject_link) if finding.subject_link else None,
         "notice": finding.notice is not None,
@@ -255,7 +258,6 @@ def listed_item(item: QueueItem) -> ActionItem:
         "action": item["action"],
         "steps": item["steps"],
         "no_help_reason": item["no_help_reason"],
-        "check": item["check"],
         "actions": item["actions"],
         "subject": item["subject"],
         "notice": item["notice"],

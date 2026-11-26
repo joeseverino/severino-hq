@@ -180,7 +180,10 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
    once there is something to say, in the menu's own inset. */
 .overflow-menu-panel .ask-said { padding: 0 var(--space-5); }
 .overflow-menu-panel .ask-said span { padding: 0; white-space: normal; }
-:is(.page-head .page-actions, .overflow-menu-panel) > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
+/* Beside a title, in a menu or a section's heading, a line held for a note
+   would stand empty under the controls, so it is drawn once there is
+   something to say. */
+:is(.page-head .page-actions, .overflow-menu-panel, .section-aside) > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
 .ask-note { overflow-wrap: anywhere; }
 /* A note says its state's word and its sentence (_ask.html): the sentence
    where the line is the row's, the word alone in a table's cell, whose line is

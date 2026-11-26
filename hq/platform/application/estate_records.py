@@ -6,7 +6,7 @@ from typing import Annotated, TypedDict
 from .answer_fields import Since
 from .describe import Describe, listed
 from .finding_model import FindingEvidence
-from .finding_steps import WrittenCheck, WrittenReason, WrittenSteps
+from .finding_steps import WrittenReason, WrittenSteps
 from .plugins import ATTENTION_ORDER
 from .ui import ended
 from .workflows import WrittenAction
@@ -44,7 +44,6 @@ class ActionItem(ActionItemRow):
     count: Annotated[int, Describe("How many things it stands for, at least 1.")]
     steps: WrittenSteps
     no_help_reason: WrittenReason
-    check: WrittenCheck
     actions: Annotated[
         list[WrittenAction], Describe("The quick actions offered on it, each through its owner's own command or page.")
     ]

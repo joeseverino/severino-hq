@@ -21,11 +21,11 @@ queue's (data-queue) is counted down as its rows are dismissed.
 {% endcomment %}
 {% if action_groups %}
 {% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
-{% with area=action_groups.0 %}
+{% with area=action_groups.0 %}{% check_again groups=action_groups as again %}
 {% if action_groups|length == 1 %}{% firstof area.label as queue_heading %}{% elif action_query or action_status or action_source or action_about %}{% firstof "Matches" as queue_heading %}{% else %}{% firstof "To do" as queue_heading %}{% endif %}
 {% section queue_heading count=action_item_total data_queue=True data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
   {% include "action_items.html#queue_groups" with groups=action_groups prefix="queue" aside_url=dismiss_all.url titled=action_groups|length|add:"-1" %}
-{% aside %}{% if action_groups|length == 1 and area.url %}<a class="subtle-link" href="{{ area.url }}">View all{% arrow %}</a>{% if dismiss_all %}{% dot %}{% endif %}{% endif %}{% if dismiss_all %}{% include "partials/_page_action.html" with action=dismiss_all extra="compact ghost" only %}{% endif %}
+{% aside %}{% if action_groups|length == 1 and area.url %}<a class="subtle-link" href="{{ area.url }}">View all{% arrow %}</a>{% if dismiss_all or again %}{% dot %}{% endif %}{% endif %}{% if again %}{% include "partials/_page_action.html" with action=again only %}{% endif %}{% if dismiss_all %}{% include "partials/_page_action.html" with action=dismiss_all extra="compact ghost" only %}{% endif %}
 {% endsection %}
 {% endwith %}
 {% elif action_query or action_status or action_source or action_about %}

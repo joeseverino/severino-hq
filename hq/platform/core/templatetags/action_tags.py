@@ -26,6 +26,7 @@ lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.dashboard import gathered_rows
 lazy from hq.platform.application.page_parts import html_attributes
 lazy from hq.platform.application.pages import PageAction, offered_now
+lazy from hq.platform.application.security import web_principal
 lazy from hq.platform.application.ui import button_classes
 lazy from hq.platform.core import queue_table as queue_tables
 lazy from hq.platform.core.template_parts import Example, Part, answers, slotted
@@ -99,6 +100,19 @@ def queue_table(
     if groups is not None:
         return queue_tables.by_domain(context, groups, where, titled=titled not in (0, "0"))
     return queue_tables.table(context, items or (), where, fold=bool(fold))
+
+
+@answers(register, takes_context=True)
+def check_again(context, items=(), *, groups=()):
+    """``{% check_again items as again %}``: the one Check again over the
+    queue's rows (or ``groups``' rows), for the card that holds them to draw at
+    its top (``queue_table.check_again``); none where nothing would be read."""
+
+    request = _request(context)
+    if request is None or not request.user.is_authenticated:
+        return None
+    rows = [*(items or ()), *(item for group in groups or () for item in group["items"])]
+    return queue_tables.check_again(rows, web_principal(request.user), request.get_full_path())
 
 
 @register.filter

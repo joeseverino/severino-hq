@@ -59,7 +59,7 @@ than Source, each with its fix, so beside it Source would stretch empty.
     {% if standing.packages %}{% fact "Packages" %}{{ standing.packages }}{% detail %}<small>Listed by its publisher{% if standing.checked %}, checked against {% entity "https://osv.dev"|outside label="OSV" %}{% if standing.checked_at %} {{ standing.checked_at|when_text }}{% endif %}{% endif %}</small>{% endfact %}{% elif standing.attestations_read %}{% fact "Packages" value="None listed by its publisher" %}{% endif %}
     {% if standing.findings %}{% fact "Known in them" %}{% list %}{% for finding in standing.findings|slice:":6" %}<li class="prose">{% entity finding.url|outside label=finding.id %} {% muted %}{{ finding.package }} {% with mark=finding.severity|then:"·" %}{% if finding.fixed %}{% include "partials/_change.html" with from=finding.installed to=finding.fixed|join:", " mark=mark %}{% else %}{{ finding.installed|breakable:mark }}{% endif %}{% endwith %}{{ finding.severity }}{% endmuted %}</li>{% endfor %}{% if standing.findings|length > 6 %}<li>{% muted %}and {{ standing.findings|length|add:"-6"|measured:"more" }}{% endmuted %}</li>{% endif %}{% endlist %}{% endfact %}{% endif %}
   {% endfacts %}
-{% aside %}{% muted %}{% if chain.measured %}{{ chain.met }} of {{ chain.measured|counted:"check passes,checks pass" }}{% dot %}{% endif %}{% if standing.built_here %}built on its host{% else %}read from its public registry{% if standing.checked %} and OSV{% endif %} without a login{% endif %}{% endmuted %}
+{% aside %}{% muted %}{% if chain.measured %}{{ chain.met }} of {{ chain.measured|counted:"check passes,checks pass" }}{% dot %}{% endif %}{% if standing.built_here %}built on its host{% else %}read from its public registry{% if standing.checked %} and OSV{% endif %} without a login{% endif %}{% endmuted %}{% check_again chain.finding_rows as again %}{% if again %}{% include "partials/_page_action.html" with action=again only %}{% endif %}
 {% endsection %}
 {% endwith %}
 
@@ -77,6 +77,6 @@ than Source, each with its fix, so beside it Source would stretch empty.
     {% endif %}{% endwith %}
     {% if posture.measured < posture.results|length %}{% fact "Checks not read" %}<span tabindex="0" data-tip="{% for result in posture.results %}{% if result.state == 'unavailable' %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">{{ posture.unread }}</span>{% detail %}<small>Until its runtime is read</small>{% endfact %}{% endif %}
   {% endfacts %}
-{% aside %}{% muted %}{% if posture.measured %}{{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}{% if posture.intended %}, {{ posture.intended|length }} by design{% endif %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=item.running.observed_at only %}{% endmuted %}
+{% aside %}{% muted %}{% if posture.measured %}{{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}{% if posture.intended %}, {{ posture.intended|length }} by design{% endif %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=item.running.observed_at only %}{% endmuted %}{% check_again posture.finding_rows as again %}{% if again %}{% include "partials/_page_action.html" with action=again only %}{% endif %}
 {% endsection %}
 {% endwith %}

@@ -17,7 +17,7 @@ lazy from hq.platform.application.decisions import decision
 lazy from hq.platform.application.display_words import Code
 lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
-lazy from hq.platform.application.finding_model import CHECK_AGAIN, Finding, opens
+lazy from hq.platform.application.finding_model import Finding, opens
 lazy from hq.platform.application.finding_steps import Do, Run
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
@@ -836,9 +836,9 @@ def _glance():
     held = "00000000-0000-4000-8000-000000000001"
     said = "Asked with: machines set to example-host-01, security only set to yes, and 2 more fields."
     asked = Finding("approval", held, "example-agent wants to run a playbook", Tone.ATTENTION, said, held=True)
-    run, check = opens("Open run", "https://github.example/runs/1"), read_link("verify", CHECK_AGAIN, "/findings/")
+    run = opens("Open run", "https://github.example/runs/1")
     failing = [
-        Finding("example", n, f"{n} is failing", Tone.SERIOUS, "Failing job: test", primary=run, check=check)
+        Finding("example", n, f"{n} is failing", Tone.SERIOUS, "Failing job: test", primary=run)
         for n in ("example-app", "example-site")
     ]
     first, *runs = finding_rows("example", "Example", (asked, *failing))

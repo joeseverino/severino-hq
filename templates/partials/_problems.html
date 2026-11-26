@@ -24,7 +24,7 @@ Nothing is drawn when nothing is open.
   {% include "partials/_work_queue.html" with items=urgent grouped=True here=True fold=True only %}
 {% endcard %}
 {% endif %}
-{% if rest %}
-{% section "Open problems" id="problems" count=rest|length %}{% partial rest %}{% endsection %}
+{% if rest %}{% check_again rest as again %}
+{% section "Open problems" id="problems" count=rest|length %}{% partial rest %}{% aside %}{% if again %}{% include "partials/_page_action.html" with action=again only %}{% endif %}{% endsection %}
 {% endif %}
 {% endwith %}
