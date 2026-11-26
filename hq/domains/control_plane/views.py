@@ -503,7 +503,9 @@ class InfrastructureDetailView(RecordPageMixin, TemplateView):
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
         context["readout_rows"] = () if kind == CONTAINER_KIND else _linked_readout(record, self.relationships)
-        context["relationships"] = self.relationships
+        # The readings joined to it are raw data beside its own, in one fold.
+        context["relationships"] = replace(self.relationships, readouts=())
+        context["readouts"] = self.relationships.readouts
         context["spec_rows"] = _spec_rows(kind, record["key"], record["spec"], _readout(record), beside_readout=True)
         history = operation_history(run_rows(changes(self.row.operations.all(), HISTORY_ROWS)))
         context["history"] = (history,) if history else ()
