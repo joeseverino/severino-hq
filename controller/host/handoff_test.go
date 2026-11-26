@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 const exampleToken = "ghs_exampletokenvalue"
@@ -103,7 +105,7 @@ func TestAValidHandoffIsSpooledForRootAlone(t *testing.T) {
 		t.Fatal("the handoff was not spooled")
 	}
 	handoff, err := ParseHandoff(data)
-	if err != nil || len(handoff.Runs) != 1 || handoff.Runs[0].Token != exampleToken || !slices.Equal(handoff.Runs[0].Repositories, []string{"example/app", "example/site"}) {
+	if err != nil || len(handoff.Runs) != 1 || handoff.Runs[0].Token != secret.New(exampleToken) || !slices.Equal(handoff.Runs[0].Repositories, []string{"example/app", "example/site"}) {
 		t.Errorf("spooled %s (%v)", data, err)
 	}
 	for path, want := range map[string]os.FileMode{l.spool(): 0o700, filepath.Join(l.spool(), SpoolName): 0o600} {
@@ -259,8 +261,9 @@ func TestTheLastOutcomeIsGivenToTheNextPass(t *testing.T) {
 
 // A handoff is untrusted input from the controller's out directory. What
 // parses holds every rule of the contract, and survives the re-encoding
-// root spools it in, unchanged; what is refused is one line of root's log
-// that never repeats a token.
+// root spools it in, unchanged; what is refused is one line of root's log,
+// which holds no token since a token is a secret.Value from the moment it is
+// read.
 func FuzzParseHandoff(f *testing.F) {
 	f.Add(handoffDocument(f, nil))
 	for _, edit := range []func(run, top map[string]any){
@@ -290,17 +293,6 @@ func FuzzParseHandoff(f *testing.F) {
 			if strings.ContainsAny(err.Error(), "\r\n") {
 				t.Fatalf("the refusal is more than one line: %q", err)
 			}
-			var carried struct {
-				Runs []struct {
-					Token string `json:"token"`
-				} `json:"runs"`
-			}
-			_ = json.Unmarshal(data, &carried)
-			for _, run := range carried.Runs {
-				if len(run.Token) >= 8 && strings.Contains(err.Error(), run.Token) {
-					t.Fatalf("the refusal carries the token: %v", err)
-				}
-			}
 			return
 		}
 		if handoff.Version != handoffV1 || len(handoff.Runs) == 0 {
@@ -312,7 +304,7 @@ func FuzzParseHandoff(f *testing.F) {
 				t.Fatalf("parsed the owner %q", run.Owner)
 			}
 			owners[strings.ToLower(run.Owner)] = true
-			if !tokenShape.MatchString(run.Token) {
+			if !run.Token.Holds(tokenShape.MatchString) {
 				t.Fatal("parsed a token that is not one printable line")
 			}
 			if len(run.Repositories) == 0 || len(slices.Compact(slices.Sorted(slices.Values(run.Repositories)))) != len(run.Repositories) {

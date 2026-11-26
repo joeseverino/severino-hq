@@ -15,18 +15,19 @@ import (
 	"testing"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // carriedForms is a secret as a refusal or a child's stderr may carry it,
 // each beside the part that must not survive. A base64 run keeps the edge
 // characters it can share with its neighbors.
-func carriedForms(secret string) map[string][2]string {
-	encoded := base64.StdEncoding.EncodeToString([]byte(secret))
-	quoted := strconv.Quote(secret)
+func carriedForms(sentinel string) map[string][2]string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(sentinel))
+	quoted := strconv.Quote(sentinel)
 	return map[string][2]string{
-		"plain":        {"provider refused " + secret, secret},
+		"plain":        {"provider refused " + sentinel, sentinel},
 		"base64":       {"refused Basic " + encoded, encoded[2 : len(encoded)-2]},
-		"url-encoded":  {"refused /login?password=" + url.QueryEscape(secret), url.QueryEscape(secret)},
+		"url-encoded":  {"refused /login?password=" + url.QueryEscape(sentinel), url.QueryEscape(sentinel)},
 		"quote-escape": {"refused " + quoted, quoted[1 : len(quoted)-1]},
 	}
 }
@@ -41,12 +42,12 @@ func assertStruck(t *testing.T, where, text, leak string) {
 // A secret setting of a connection the run holds never reaches a report,
 // however the error that carries it is worded or wrapped.
 func TestAHeldSecretSettingNeverReachesAReport(t *testing.T) {
-	secret := `sentinel "held" pass/word+0123`
+	sentinel := `sentinel "held" pass/word+0123`
 	NewConnections(connections.Connection{
 		Ref: "example", Provider: "example",
-		Login: &connections.Login{URL: "https://a.example.com", Username: "reader", Password: secret},
+		Login: &connections.Login{URL: "https://a.example.com", Username: "reader", Password: secret.New(sentinel)},
 	})
-	for name, form := range carriedForms(secret) {
+	for name, form := range carriedForms(sentinel) {
 		wrapped := fmt.Errorf("read failed: %w", &ProviderError{Message: "login", Err: errors.New(form[0])})
 		assertStruck(t, name+" report text", ReportText(wrapped.Error()), form[1])
 		assertStruck(t, name+" reason", Clip(wrapped.Error(), ReasonLimit), form[1])
@@ -55,10 +56,10 @@ func TestAHeldSecretSettingNeverReachesAReport(t *testing.T) {
 
 // A cut that falls inside a secret leaves none of it behind.
 func TestAClipNeverLeavesPartOfASecret(t *testing.T) {
-	secret := "sentinel-clipped-secret-0123456789"
-	NewConnections(connections.Connection{Ref: "example", Provider: "example", ServiceAccount: &connections.ServiceAccount{APIToken: secret}})
-	text := strings.Repeat("x", ReasonLimit-10) + secret
-	assertStruck(t, "a clipped reason", Clip(text, ReasonLimit), secret[:10])
+	sentinel := "sentinel-clipped-secret-0123456789"
+	NewConnections(connections.Connection{Ref: "example", Provider: "example", ServiceAccount: &connections.ServiceAccount{APIToken: secret.New(sentinel)}})
+	text := strings.Repeat("x", ReasonLimit-10) + sentinel
+	assertStruck(t, "a clipped reason", Clip(text, ReasonLimit), sentinel[:10])
 }
 
 // A token this process sends a vendor is struck from the refusal that echoes
@@ -99,8 +100,8 @@ func TestASealedValueOpenedIsStruck(t *testing.T) {
 // What the bridge sends HQ carries no learned secret, in a field nothing
 // clipped too.
 func TestTheBridgeSendsNoLearnedSecret(t *testing.T) {
-	secret := `sentinel "bridged" secret/0123+&`
-	NewConnections(connections.Connection{Ref: "example", Provider: "example", ServiceAccount: &connections.ServiceAccount{APIToken: secret}})
+	sentinel := `sentinel "bridged" secret/0123+&`
+	NewConnections(connections.Connection{Ref: "example", Provider: "example", ServiceAccount: &connections.ServiceAccount{APIToken: secret.New(sentinel)}})
 	var mu sync.Mutex
 	var sent string
 	bridge := served(t, func(w http.ResponseWriter, r *http.Request) {
@@ -110,14 +111,14 @@ func TestTheBridgeSendsNoLearnedSecret(t *testing.T) {
 		mu.Unlock()
 		answer(`{"ok":true}`)(w, r)
 	})
-	report := ControllerReport{Message: "failed with " + secret, Status: map[string]any{"said": secret}}
+	report := ControllerReport{Message: "failed with " + sentinel, Status: map[string]any{"said": sentinel}}
 	if err := bridge.Report(context.Background(), "example", "1", report); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	quoted := strconv.Quote(secret)
-	if sent == "" || strings.Contains(sent, secret) || strings.Contains(sent, quoted[1:len(quoted)-1]) || strings.Contains(sent, `bridged\"`) {
+	quoted := strconv.Quote(sentinel)
+	if sent == "" || strings.Contains(sent, sentinel) || strings.Contains(sent, quoted[1:len(quoted)-1]) || strings.Contains(sent, `bridged\"`) {
 		t.Fatalf("the bridge sent %s", sent)
 	}
 }

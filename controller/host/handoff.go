@@ -17,6 +17,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // The controller's one writable place: a directory of each run's, the web
@@ -54,10 +55,10 @@ type Handoff struct {
 
 // HandoffRun is one owner's share of a Handoff.
 type HandoffRun struct {
-	Owner        string    `json:"owner"`
-	Repositories []string  `json:"repositories"`
-	Token        string    `json:"token"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	Owner        string       `json:"owner"`
+	Repositories []string     `json:"repositories"`
+	Token        secret.Value `json:"token"`
+	ExpiresAt    time.Time    `json:"expires_at"`
 }
 
 var (
@@ -80,7 +81,7 @@ func ParseHandoff(data []byte) (Handoff, error) {
 	// Learned before anything is checked, so a refused run's token is struck
 	// too, a run decoded before the decoder stopped included.
 	for _, run := range h.Runs {
-		mask.Learn(run.Token)
+		mask.Learn(run.Token.Reveal())
 	}
 	if err != nil {
 		// The decoder's error quotes the sender's text, which root's log
@@ -125,7 +126,7 @@ func checkRun(run HandoffRun) error {
 	if sorted := slices.Sorted(slices.Values(run.Repositories)); len(slices.Compact(sorted)) != len(run.Repositories) {
 		return errors.New("a repository is named twice")
 	}
-	if !tokenShape.MatchString(run.Token) {
+	if !run.Token.Holds(tokenShape.MatchString) {
 		return errors.New("its token is empty or not one printable line")
 	}
 	return nil
@@ -260,16 +261,17 @@ func (c *Controller) deliver(out *os.Root, grant Grant) error {
 
 // place writes token alone to path, root's to read and nobody's to write, all
 // at once: a reader never sees half a token.
-func place(path, token string) error {
+func place(path string, token secret.Value) error {
 	if err := ownDirectory(filepath.Dir(path)); err != nil {
 		return err
 	}
-	return atomicfile.WriteFile(path, []byte(token), 0o400)
+	return atomicfile.WriteFile(path, []byte(token.Reveal()), 0o400)
 }
 
-// spool writes handoff, as root re-encodes it, where only root can read it.
+// spool writes handoff, as root re-encodes it, where only root can read it:
+// the file root's run reads each token from.
 func spool(dir string, handoff Handoff) error {
-	data, err := json.Marshal(handoff)
+	data, err := jsonv2.Marshal(handoff, json.DefaultOptionsV1(), secret.Revealing)
 	if err != nil {
 		return err
 	}

@@ -141,8 +141,11 @@
             "type": "string",
             "x-go-name": "APIToken",
             "x-oapi-codegen-extra-tags": {
-              "setting": "API_TOKEN",
-              "secret": "true"
+              "setting": "API_TOKEN"
+            },
+            "x-go-type": "secret.Value",
+            "x-go-type-import": {
+              "path": "github.com/joeseverino/severino-hq/controller/internal/secret"
             }
           },
           "url": {
@@ -192,8 +195,11 @@
             "type": "string",
             "x-go-name": "Password",
             "x-oapi-codegen-extra-tags": {
-              "setting": "PASSWORD",
-              "secret": "true"
+              "setting": "PASSWORD"
+            },
+            "x-go-type": "secret.Value",
+            "x-go-type-import": {
+              "path": "github.com/joeseverino/severino-hq/controller/internal/secret"
             }
           },
           "url": {
@@ -233,8 +239,11 @@
             "type": "string",
             "x-go-name": "ClientSecret",
             "x-oapi-codegen-extra-tags": {
-              "setting": "CLIENT_SECRET",
-              "secret": "true"
+              "setting": "CLIENT_SECRET"
+            },
+            "x-go-type": "secret.Value",
+            "x-go-type-import": {
+              "path": "github.com/joeseverino/severino-hq/controller/internal/secret"
             }
           }
         },
@@ -322,8 +331,11 @@
             "type": "string",
             "x-go-name": "APIToken",
             "x-oapi-codegen-extra-tags": {
-              "setting": "API_TOKEN",
-              "secret": "true"
+              "setting": "API_TOKEN"
+            },
+            "x-go-type": "secret.Value",
+            "x-go-type-import": {
+              "path": "github.com/joeseverino/severino-hq/controller/internal/secret"
             }
           }
         },

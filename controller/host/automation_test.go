@@ -17,6 +17,7 @@ import (
 
 	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // automationSource is the repository whose runner image the fixture pins.
@@ -75,7 +76,7 @@ func newWorker(t *testing.T) *worker {
 		{Ref: "example-edge", Provider: "ssh", Store: store, SSHTransport: transport("198.51.100.7", "7722", connections.RunnerRole)},
 		{Ref: "example-named", Provider: "ssh", Store: store, SSHTransport: transport("named.example.com", "22", connections.RunnerRole)},
 		{Ref: "example-controller", Provider: "ssh", Store: store, SSHTransport: transport("198.51.100.7", "7722", "")},
-		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store, APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store, APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: secret.New(sentinel)}},
 	}}.Encode()
 	if err != nil {
 		t.Fatal(err)

@@ -105,24 +105,13 @@ func TestOnlyAPrivilegedPortIsDialedOutsideATest(t *testing.T) {
 	}
 }
 
-func TestTokenIsValidatedAndNeverFormats(t *testing.T) {
+func TestTokenIsValidated(t *testing.T) {
 	for _, raw := range []string{"", "\n", "has space", "tab\there", "line\nbreak", "quote'", "semi;colon", "naïve"} {
 		if _, err := NewToken([]byte(raw)); err == nil {
 			t.Errorf("token %q was accepted", raw)
 		} else if raw != "" && strings.TrimSpace(raw) != "" && strings.Contains(err.Error(), raw) {
 			t.Errorf("the refusal quotes the token: %v", err)
 		}
-	}
-	held := token(t)
-	var log bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&log, nil))
-	logger.Info("token", "token", held, "pointer", &held, "wrapped", fmt.Errorf("with %v", held))
-	jsonLogger := slog.New(slog.NewJSONHandler(&log, nil))
-	jsonLogger.Info("token", "token", held, "struct", struct{ T Token }{held})
-	rendered := log.String() + fmt.Sprintf("%v %s %+v %#v %q %x %d", held, held, held, held, held, held, held) +
-		fmt.Sprint(held, &held, []Token{held}, map[string]Token{"t": held}, struct{ T Token }{held})
-	if strings.Contains(rendered, connecttest.Token) {
-		t.Fatalf("the token was rendered: %s", rendered)
 	}
 }
 

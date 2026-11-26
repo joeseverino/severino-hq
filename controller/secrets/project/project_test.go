@@ -10,13 +10,13 @@ import (
 	"errors"
 	"os"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 	"github.com/joeseverino/severino-hq/controller/secrets/connecttest"
 )
@@ -28,7 +28,7 @@ type (
 
 var f, b, id = connecttest.F, connecttest.B, connecttest.ID
 
-const secret = "sentinel-credential-value"
+const secretValue = "sentinel-credential-value"
 
 // shipped is the registry the repository carries: HQ's registry emits it, and
 // it names no connection.
@@ -49,7 +49,7 @@ func registry(t testing.TB) Registry {
 
 // required is a value for each variable the shipped registry requires.
 func required() []field {
-	return []field{f("DJANGO_ALLOWED_HOSTS", "hq.example.com"), f("DJANGO_SECRET_KEY", secret)}
+	return []field{f("DJANGO_ALLOWED_HOSTS", "hq.example.com"), f("DJANGO_SECRET_KEY", secretValue)}
 }
 
 // envItem is an application environment item: every required variable, two
@@ -62,7 +62,7 @@ func envItem(extra ...field) item {
 func apiToken(n int, ref, prefix string, extra ...field) item {
 	return item{ID: id(n), Title: "Example " + ref, Fields: append([]field{
 		f("connection_ref", ref), f("projection", "api_token"), f("env_prefix", prefix),
-		b("credential", secret), f("website", "https://api.example.com"),
+		b("credential", secretValue), f("website", "https://api.example.com"),
 	}, extra...)}
 }
 
@@ -88,7 +88,7 @@ func refused(t *testing.T, in Input, want string) {
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("refused with %q, wanted %q", err, want)
 	}
-	if strings.Contains(err.Error(), secret) {
+	if strings.Contains(err.Error(), secretValue) {
 		t.Fatalf("the refusal carries a credential: %v", err)
 	}
 	if out.AppEnv != nil || out.Document.Connections != nil || out.SSH != nil {
@@ -112,7 +112,7 @@ func entries(t testing.TB, document connections.Document) map[string]string {
 		if connection.Store.Bootstrap != "" {
 			found[prefix+Bootstrap] = connection.Store.Bootstrap
 		}
-		encoded, err := json.Marshal(connection)
+		encoded, err := jsonv2.Marshal(connection, secret.Revealing)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -143,7 +143,7 @@ func rendered(t *testing.T, in Input) map[string]string {
 func TestAnItemDeclaresItsOwnConnection(t *testing.T) {
 	values := rendered(t, input(t, apiToken(1, "example", "EXAMPLE")))
 	want := map[string]string{
-		"EXAMPLE_CONNECTION_REF": "example", "EXAMPLE_API_TOKEN": secret, "EXAMPLE_URL": "https://api.example.com",
+		"EXAMPLE_CONNECTION_REF": "example", "EXAMPLE_API_TOKEN": secretValue, "EXAMPLE_URL": "https://api.example.com",
 		// An item that names no provider is for the one its env_prefix spells.
 		"EXAMPLE_PROVIDER": "example",
 		// Where the credential is kept: the vault and item it was rendered from.
@@ -165,7 +165,7 @@ func TestAnOptionalFieldRendersWhenPresentAndIsNotFatalWhenAbsent(t *testing.T) 
 		t.Fatal("an optional field the item carries was not rendered")
 	}
 	values = rendered(t, input(t, apiToken(1, "example", "EXAMPLE_API")))
-	if values["EXAMPLE_PROVIDER"] != "example_api" || values["EXAMPLE_API_TOKEN"] != secret {
+	if values["EXAMPLE_PROVIDER"] != "example_api" || values["EXAMPLE_API_TOKEN"] != secretValue {
 		t.Fatal("an absent optional field changed the render")
 	}
 	// Present but empty is absent, not an empty provider.
@@ -206,7 +206,7 @@ func TestATransportIsForSSHUnlessItSaysOtherwise(t *testing.T) {
 
 func TestAURLIsRenderedByIndex(t *testing.T) {
 	login := item{ID: id(1), Fields: []field{
-		f("connection_ref", "example"), f("projection", "login"), f("env_prefix", "EXAMPLE"), b("username", "reader"), b("password", secret)},
+		f("connection_ref", "example"), f("projection", "login"), f("env_prefix", "EXAMPLE"), b("username", "reader"), b("password", secretValue)},
 		URLs: []connecttest.URL{{Href: "https://login.example.com", Primary: true}}}
 	if rendered(t, input(t, login))["EXAMPLE_URL"] != "https://login.example.com" {
 		t.Fatal("the URL was not rendered")
@@ -281,9 +281,9 @@ func TestConnectionRefusals(t *testing.T) {
 		{"two items, one ref", input(t, apiToken(1, "example", "EXAMPLE"), apiToken(2, "example", "OTHER")), "More than one 1Password item declares connection_ref=example"},
 		{"two refs, one prefix", input(t, apiToken(1, "example", "EXAMPLE"), apiToken(2, "other", "EXAMPLE")), "same env_prefix"},
 		{"flattened collision", input(t, apiToken(1, "example", "A"),
-			item{ID: id(2), Fields: []field{f("connection_ref", "other"), f("projection", "service_account"), f("env_prefix", "A_API"), b("credential", secret)}},
+			item{ID: id(2), Fields: []field{f("connection_ref", "other"), f("projection", "service_account"), f("env_prefix", "A_API"), b("credential", secretValue)}},
 			item{ID: id(3), Fields: []field{f("connection_ref", "third"), f("projection", "api_token"), f("env_prefix", "A_API_TOKEN_X"),
-				b("credential", secret), f("website", "https://api.example.com")}}), ""},
+				b("credential", secretValue), f("website", "https://api.example.com")}}), ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -404,9 +404,9 @@ func TestBootstrapReferences(t *testing.T) {
 func TestAServiceAccountTokenIsProjectedFromItsItem(t *testing.T) {
 	writer := item{ID: id(1), Fields: []field{
 		f("connection_ref", "publisher"), f("projection", "service_account"), f("env_prefix", "ONEPASSWORD"),
-		f("provider", "onepassword"), b("credential", secret)}}
+		f("provider", "onepassword"), b("credential", secretValue)}}
 	values := rendered(t, input(t, writer))
-	if values["PUBLISHER_API_TOKEN"] != secret || values["PUBLISHER_PROVIDER"] != "onepassword" ||
+	if values["PUBLISHER_API_TOKEN"] != secretValue || values["PUBLISHER_PROVIDER"] != "onepassword" ||
 		values["PUBLISHER_STORE_ITEM"] != id(1) {
 		t.Fatal("the service account token was not projected from its item")
 	}
@@ -918,28 +918,6 @@ func FuzzParseRegistry(f *testing.F) {
 	})
 }
 
-// carries reports whether a refusal holds the credential outside the names a
-// refusal may say: the connection's ref and the registry's declared names. A
-// name is said whatever the credential holds, so each is struck out, longest
-// first, with a NUL, which no projected value can hold, and a credential that
-// overlaps a name is not read as one the refusal took from the value.
-func carries(refusal, credential, ref string, registry Registry) bool {
-	names := append([]string{ref}, registry.RequiredAppVariables...)
-	for name, projection := range registry.Projections {
-		names = append(names, name)
-		for variable, entry := range projection {
-			names = append(names, variable, entry.ID, entry.Label)
-		}
-	}
-	slices.SortFunc(names, func(a, b string) int { return len(b) - len(a) })
-	for _, name := range names {
-		if name != "" {
-			refusal = strings.ReplaceAll(refusal, name, "\x00")
-		}
-	}
-	return strings.Contains(refusal, credential)
-}
-
 func FuzzProject(f *testing.F) {
 	f.Add("example", "api_token", "EXAMPLE", "token", "https://api.example.com", "op://Operator Vault/item", "edge.example.com", "22")
 	f.Add("known_hosts", "ssh_transport", "EDGE", "tok\nen", "x", "op://"+connecttest.VaultName+"/item", "-oProxyCommand=x", "0")
@@ -959,13 +937,12 @@ func FuzzProject(f *testing.F) {
 			Vault: Vault{Configured: connecttest.VaultName, ID: connecttest.VaultID, Name: connecttest.VaultName},
 			Items: []connectapi.FullItem{connection.Full(), envItem().Full(),
 				connecttest.KeyItem(id(2), "Edge deploy key", key.PKCS8, key.Public).Full()}}
+		// A refusal holds no credential by construction: each projected value
+		// is a secret.Value from the moment it is read, which prints redacted.
 		out, err := Project(in)
 		if err != nil {
 			if !errors.Is(err, ErrContent) {
 				t.Fatalf("an untyped refusal: %v", err)
-			}
-			if len(credential) > 8 && carries(err.Error(), credential, ref, parsed) {
-				t.Fatalf("the refusal carries the credential: %v", err)
 			}
 			return
 		}

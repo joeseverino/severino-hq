@@ -158,7 +158,7 @@ func (r *Renovator) runOwner(ctx context.Context, work, envName, image string, l
 	}
 	env := filepath.Join(work, envName)
 	defer os.Remove(env)
-	body := "RENOVATE_TOKEN=" + run.Token + "\nRENOVATE_REPOSITORIES=" + strings.Join(run.Repositories, ",") + "\n"
+	body := "RENOVATE_TOKEN=" + run.Token.Reveal() + "\nRENOVATE_REPOSITORIES=" + strings.Join(run.Repositories, ",") + "\n"
 	if err := os.WriteFile(env, []byte(body), 0o400); err != nil {
 		result.Outcome = "failed"
 		fmt.Fprintf(log, "%s %s: %v\n", r.Now().UTC().Format(time.RFC3339), run.Owner, err)

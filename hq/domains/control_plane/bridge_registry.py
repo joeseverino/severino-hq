@@ -284,16 +284,21 @@ def setting_key(name: str) -> str:
     return name.lower()
 
 
+# A secret setting's Go type, which prints and encodes redacted.
+SECRET_GO_TYPE = {
+    "x-go-type": "secret.Value",
+    "x-go-type-import": {"path": "github.com/joeseverino/severino-hq/controller/internal/secret"},
+}
+
+
 def _shape(shape: ConnectionShape) -> dict[str, Any]:
     properties: dict[str, Any] = {}
     for setting in shape.settings:
-        tags = {"setting": setting.name}
-        if setting.secret:
-            tags["secret"] = "true"  # noqa: S105 - a schema tag's value, no credential
         properties[setting_key(setting.name)] = {
             "type": "string",
             "x-go-name": go_name(setting.name),
-            "x-oapi-codegen-extra-tags": tags,
+            "x-oapi-codegen-extra-tags": {"setting": setting.name},
+            **(SECRET_GO_TYPE if setting.secret else {}),
         }
     return {
         "type": "object",

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 	"github.com/joeseverino/severino-hq/controller/secrets/project"
 )
@@ -73,7 +74,7 @@ func newLaunch(t *testing.T) *launch {
 	}
 	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
 		{Ref: reference, Provider: "cloudflare_dns", Store: connections.Store{Vault: "Example", Item: "example"},
-			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: secret.New(sentinel)}},
 	}}.Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -589,13 +590,13 @@ func glanceDocument(t *testing.T, l *launch) {
 	store := connections.Store{Vault: "Example", Item: "example"}
 	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
 		{Ref: "example-portainer", Provider: "portainer", Store: store,
-			APIToken: &connections.APIToken{URL: "https://portainer.example.com", APIToken: "portainer-token"}},
+			APIToken: &connections.APIToken{URL: "https://portainer.example.com", APIToken: secret.New("portainer-token")}},
 		{Ref: "example-ssh", Provider: "ssh", Store: store,
 			SSHTransport: &connections.SSHTransport{Host: "192.0.2.10", User: "example", HostKey: "key", Identity: "example-ssh", Port: "22"}},
 		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store,
-			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: secret.New(sentinel)}},
 		{Ref: "example-events", Provider: string(runtime.ConnectionProviderCloudflareEvents), Store: store,
-			APIToken: &connections.APIToken{URL: "wss://events.example.com/socket", APIToken: "socket-token"}},
+			APIToken: &connections.APIToken{URL: "wss://events.example.com/socket", APIToken: secret.New("socket-token")}},
 	}}.Encode()
 	if err != nil {
 		t.Fatal(err)

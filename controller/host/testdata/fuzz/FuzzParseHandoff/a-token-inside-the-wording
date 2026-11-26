@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"version\":1,\"runs\":[{\"owner\":\"example\",\"repositories\":[\"other/app\"],\"token\":\"repository\",\"expires_at\":\"2030-01-01T00:00:00Z\"}]}")

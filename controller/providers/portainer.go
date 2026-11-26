@@ -192,7 +192,7 @@ func (r *Registry) portainerHeaders(ref string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]string{"X-API-Key": token.APIToken}, nil
+	return map[string]string{"X-API-Key": token.APIToken.Reveal()}, nil
 }
 
 // portainerCall is one request to Portainer's API at path.

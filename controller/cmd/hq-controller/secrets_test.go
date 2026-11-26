@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -26,10 +27,10 @@ func TestASecretInARefusalNeverLeavesTheBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret := `sentinel "binary" token/0123+&`
+	sentinel := `sentinel "binary" token/0123+&`
 	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{{
 		Ref: "example", Provider: "example", Store: connections.Store{Vault: "example-vault", Item: "example-item"},
-		ServiceAccount: &connections.ServiceAccount{APIToken: secret},
+		ServiceAccount: &connections.ServiceAccount{APIToken: secret.New(sentinel)},
 	}}}.Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -43,12 +44,12 @@ func TestASecretInARefusalNeverLeavesTheBinary(t *testing.T) {
 	if err := os.WriteFile(held, document, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	encoded := base64.StdEncoding.EncodeToString([]byte(secret))
-	quoted := strconv.Quote(secret)
+	encoded := base64.StdEncoding.EncodeToString([]byte(sentinel))
+	quoted := strconv.Quote(sentinel)
 	for name, form := range map[string][2]string{
-		"plain":        {"token " + secret + " refused", secret},
+		"plain":        {"token " + sentinel + " refused", sentinel},
 		"base64":       {"Basic " + encoded + " refused", encoded[2 : len(encoded)-2]},
-		"url-encoded":  {"GET /v1?token=" + url.QueryEscape(secret), url.QueryEscape(secret)},
+		"url-encoded":  {"GET /v1?token=" + url.QueryEscape(sentinel), url.QueryEscape(sentinel)},
 		"quote-escape": {"token " + quoted + " refused", quoted[1 : len(quoted)-1]},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -79,7 +80,7 @@ func TestASecretInARefusalNeverLeavesTheBinary(t *testing.T) {
 			}
 			for where, text := range map[string]string{"stdout": stdout.String(), "stderr": stderr.String()} {
 				if strings.Contains(text, form[1]) {
-					t.Errorf("%s carries the secret: %s", where, text)
+					t.Errorf("%s carries the sentinel: %s", where, text)
 				}
 			}
 		})

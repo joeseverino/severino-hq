@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -107,7 +108,7 @@ func (v *renovation) spool(t *testing.T, runs ...HandoffRun) {
 }
 
 func exampleRun(owner string) HandoffRun {
-	return HandoffRun{Owner: owner, Repositories: []string{owner + "/app"}, Token: exampleToken, ExpiresAt: time.Now().Add(50 * time.Minute)}
+	return HandoffRun{Owner: owner, Repositories: []string{owner + "/app"}, Token: secret.New(exampleToken), ExpiresAt: time.Now().Add(50 * time.Minute)}
 }
 
 func (v *renovation) outcome(t *testing.T) DependencyRun {

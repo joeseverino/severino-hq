@@ -10,12 +10,13 @@ import (
 	"testing"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 var kept = connections.Store{Vault: "example-vault", Item: "example-item"}
 
 func tokenConnection(ref, provider string) connections.Connection {
-	return connections.Connection{Ref: ref, Provider: provider, Store: kept, APIToken: &connections.APIToken{APIToken: "example-token", URL: "https://api.example.com"}}
+	return connections.Connection{Ref: ref, Provider: provider, Store: kept, APIToken: &connections.APIToken{APIToken: secret.New("example-token"), URL: "https://api.example.com"}}
 }
 
 func transport(ref string) connections.Connection {
@@ -97,7 +98,7 @@ func TestMissingSettingDoesNotNameIt(t *testing.T) {
 	if _, err := Need(connection.Login); !errors.Is(err, ErrSettingMissing) {
 		t.Fatalf("a token was read as a login: %v", err)
 	}
-	if settings, err := Need(connection.APIToken); err != nil || settings.APIToken != "example-token" {
+	if settings, err := Need(connection.APIToken); err != nil || settings.APIToken != secret.New("example-token") {
 		t.Fatalf("its own shape: %v", err)
 	}
 }
@@ -106,7 +107,7 @@ func TestMissingSettingDoesNotNameIt(t *testing.T) {
 // usable, and the refusal names neither the setting nor its value.
 func TestAConnectionMissingARequiredSettingIsNotUsable(t *testing.T) {
 	blank := tokenConnection("example", "example")
-	blank.APIToken.APIToken = "   "
+	blank.APIToken.APIToken = secret.New("   ")
 	if _, err := NewConnections(blank).For("example", "example"); !errors.Is(err, ErrSettingMissing) {
 		t.Fatalf("a connection with a blank token was usable: %v", err)
 	}
@@ -217,7 +218,7 @@ func TestConnectionsArriveInTheDocumentNotTheEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	connection, err := held.For("example", "example-a")
-	if err != nil || connection.APIToken == nil || connection.APIToken.APIToken != "example-token" {
+	if err != nil || connection.APIToken == nil || connection.APIToken.APIToken != secret.New("example-token") {
 		t.Fatalf("token: %v", err)
 	}
 	if !held.Manages("example-a") || !slices.Equal(held.Refs("example"), []string{"example-a"}) {
@@ -234,9 +235,9 @@ func TestConnectionsArriveInTheDocumentNotTheEnvironment(t *testing.T) {
 }
 
 func TestAnUnsafeOrAmbiguousConnectionsDocumentIsRefused(t *testing.T) {
-	secret := tokenConnection("example", "example")
-	secret.APIToken.APIToken = "sentinel-token-value"
-	document := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{secret}}
+	held := tokenConnection("example", "example")
+	held.APIToken.APIToken = secret.New("sentinel-token-value")
+	document := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{held}}
 	refused := func(why string, entries []string) {
 		t.Helper()
 		held, err := load(entries)
@@ -307,13 +308,13 @@ func benchDocument(b *testing.B) string {
 		ref := "example-" + string(rune('a'+index))
 		switch index % 4 {
 		case 0:
-			list = append(list, connections.Connection{Ref: ref, Provider: "adguard", Store: kept, Login: &connections.Login{URL: "https://dns.example.com", Username: "reader", Password: "synthetic"}})
+			list = append(list, connections.Connection{Ref: ref, Provider: "adguard", Store: kept, Login: &connections.Login{URL: "https://dns.example.com", Username: "reader", Password: secret.New("synthetic")}})
 		case 1:
 			list = append(list, tokenConnection(ref, "portainer"))
 		case 2:
 			list = append(list, transport(ref))
 		default:
-			list = append(list, connections.Connection{Ref: ref, Provider: "tailscale", Store: kept, OAuthClient: &connections.OAuthClient{ClientID: "id", ClientSecret: "synthetic"}})
+			list = append(list, connections.Connection{Ref: ref, Provider: "tailscale", Store: kept, OAuthClient: &connections.OAuthClient{ClientID: "id", ClientSecret: secret.New("synthetic")}})
 		}
 	}
 	data, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: list}.Encode()
@@ -349,7 +350,7 @@ func BenchmarkConnectionForAProvider(b *testing.B) {
 			b.Fatal(err)
 		}
 		login, err := Need(connection.Login)
-		if err != nil || login.URL == "" || login.Username == "" || login.Password == "" {
+		if err != nil || login.URL == "" || login.Username == "" || login.Password.IsZero() {
 			b.Fatal(err)
 		}
 	}

@@ -271,7 +271,7 @@ func (r *Registry) tailnetToken(ctx context.Context, connectionRef string) (stri
 		return "", err
 	}
 	raw, err := cached(ctx, r, "tailscale-token:"+connection.Ref, func() (json.RawMessage, error) {
-		data := url.Values{"client_id": {client.ClientID}, "client_secret": {client.ClientSecret}}
+		data := url.Values{"client_id": {client.ClientID}, "client_secret": {client.ClientSecret.Reveal()}}
 		answer, err := r.HTTP.Request(ctx, r.tailnetBase()+"/oauth/token", "POST", map[string]string{
 			"Content-Type": "application/x-www-form-urlencoded",
 		}, data)
