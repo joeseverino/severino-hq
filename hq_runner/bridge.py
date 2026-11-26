@@ -157,12 +157,13 @@ class Bridge:
         return decoded
 
     def claim(
-        self, controller_id: str, *, capabilities: Sequence[str], lease_seconds: int, attempt: str
+        self, controller_id: str, *, profile: str, capabilities: Sequence[str], lease_seconds: int, attempt: str
     ) -> dict[str, Any]:
         return self.call(
             "claim",
             {
                 "controller-id": controller_id,
+                "profile": profile,
                 "lease-seconds": lease_seconds,
                 "capability": list(capabilities),
                 "attempt": attempt,

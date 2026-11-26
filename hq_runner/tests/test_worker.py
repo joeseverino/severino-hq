@@ -14,7 +14,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hq_runner.claim import CAPABILITIES
 from hq_runner.journal import Journal
 from hq_runner.worker import LEASE_SECONDS, RENEW_EVERY_SECONDS, work_once
 
@@ -28,6 +27,9 @@ PRIVATE_KEY = (
 
 
 class PassTestCase(unittest.TestCase):
+    # The profile whose logins the worker is lent.
+    profile = fakes.PRIVILEGE
+
     def setUp(self):
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
@@ -38,6 +40,7 @@ class PassTestCase(unittest.TestCase):
         return work_once(
             bridge,
             controller_id=fakes.WORKER,
+            profile=self.profile,
             installed=fakes.installed,
             reach=fakes.reach,
             journal=self.journal,
@@ -140,8 +143,10 @@ class SuccessTests(PassTestCase):
         self.assertEqual(run.parameters, {"service": "db"})
         action, sent = bridge.calls[0]
         self.assertEqual(action, "claim")
-        self.assertEqual(sent["capabilities"], CAPABILITIES)
+        self.assertEqual(sent["profile"], fakes.PRIVILEGE)
         self.assertIn("automation.operation:run", sent["capabilities"])
+        # A scan is the read profile's worker's alone.
+        self.assertNotIn("automation.source:scan", sent["capabilities"])
 
     def test_a_preview_runs_in_check_mode_and_any_other_spelling_of_one_runs_nothing(self):
         from hq_runner.ansible import arguments
@@ -533,6 +538,7 @@ class LoginTests(PassTestCase):
         work_once(
             bridge,
             controller_id=fakes.WORKER,
+            profile=fakes.PRIVILEGE,
             installed=fakes.installed,
             reach=reach,
             journal=self.journal,
@@ -688,6 +694,8 @@ class RestartTests(PassTestCase):
 
 
 class ScanTests(PassTestCase):
+    profile = "read"
+
     CATALOG = {
         "branch": "main",
         "revision": fakes.REVISION,

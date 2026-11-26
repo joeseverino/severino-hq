@@ -89,6 +89,7 @@ class State:
 
         return {
             "HQ_AUTOMATION_ID": WORKER,
+            "HQ_AUTOMATION_PROFILE": logins.READ_PROFILE,
             "HQ_AUTOMATION_BRIDGE_SOCKET": socket,
             "HQ_AUTOMATION_JOURNAL": str(self.root / "state" / "journal.json"),
             "HQ_AUTOMATION_CONNECTIONS": str(self.connections),

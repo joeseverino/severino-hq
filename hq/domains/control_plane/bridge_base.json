@@ -43,6 +43,17 @@
             }
           },
           {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "The privilege profile of the logins the claiming automation worker holds, the read profile when it names none: it is offered that profile's playbook runs alone.",
+            "schema": {
+              "type": "string",
+              "maxLength": 160,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+            }
+          },
+          {
             "name": "attempt",
             "in": "query",
             "required": false,

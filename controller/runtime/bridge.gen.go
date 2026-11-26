@@ -3053,6 +3053,9 @@ type ClaimParams struct {
 	// Capability A kind:action the controller can perform.
 	Capability []string `form:"capability,omitempty" json:"capability,omitempty"`
 
+	// Profile The privilege profile of the logins the claiming automation worker holds, the read profile when it names none: it is offered that profile's playbook runs alone.
+	Profile string `form:"profile,omitempty" json:"profile,omitempty"`
+
 	// Attempt The claimant's name for this claim. A claim retried with the same name is answered the operation it already leased.
 	Attempt string `form:"attempt,omitempty" json:"attempt,omitempty"`
 }
@@ -4087,6 +4090,14 @@ func NewClaimRequest(server string, params *ClaimParams) (*http.Request, error) 
 				}
 			}
 
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "profile", params.Profile, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
 		}
 
 		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attempt", params.Attempt, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {

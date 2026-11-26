@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from . import tracing
-from .connections import READ_PROFILE, ConnectionsError, Target, profile
+from .connections import PROFILE, READ_PROFILE, ConnectionsError, Target, profile
 
 RUN_KIND = "automation.operation"
 RUN_ACTION = "run"
@@ -21,9 +21,16 @@ RUN_ACTION = "run"
 # of its default branch (``catalog``); it names nothing of the repository.
 SCAN_KIND = "automation.source"
 SCAN_ACTION = "scan"
-# What the worker claims: each kind:action it has a handler for.
-CAPABILITIES = (f"{RUN_KIND}:{RUN_ACTION}", f"{SCAN_KIND}:{SCAN_ACTION}")
 _REVISION = re.compile(r"[0-9a-f]{40}")
+
+
+def capabilities(profile: str) -> tuple[str, ...]:
+    """What a worker lent ``profile``'s logins claims: its runs, and only the
+    read profile's worker the scans, which need no login and report every
+    worker's (``connections.runner_targets``)."""
+
+    runs = (f"{RUN_KIND}:{RUN_ACTION}",)
+    return (*runs, f"{SCAN_KIND}:{SCAN_ACTION}") if profile == READ_PROFILE else runs
 
 
 class Refused(Exception):
@@ -51,7 +58,6 @@ Installed = Callable[[str, str, str], Procedure | None]
 # The connection a machine is reached through as a profile; None when none
 # reaches it. It may raise ConnectionsError when the connections cannot be read.
 Reach = Callable[[str, str], Target | None]
-_PRIVILEGE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,7 +165,7 @@ def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout < 1:
         raise Refused("Unrunnable", "The procedure's record declares no timeout.")
     privilege = spec.get("privilege", "")
-    if not isinstance(privilege, str) or (privilege and not _PRIVILEGE.fullmatch(privilege)):
+    if not isinstance(privilege, str) or (privilege and not PROFILE.fullmatch(privilege)):
         raise Refused("Unrunnable", "The procedure's record names a privilege that is no profile's name.")
     if spec.get("effect") == "read" and privilege:
         raise Refused("Unrunnable", "The procedure's record is a read that names a privilege.")

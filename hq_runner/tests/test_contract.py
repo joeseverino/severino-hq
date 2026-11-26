@@ -92,6 +92,7 @@ class ContractTests(unittest.TestCase):
             worker.work_once(
                 bridge,
                 controller_id=fakes.WORKER,
+                profile=fakes.PRIVILEGE,
                 installed=fakes.installed,
                 reach=fakes.reach,
                 journal=Journal(Path(scratch) / "journal.json"),

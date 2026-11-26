@@ -39,7 +39,7 @@ from .projection import iso
 from .record_errors import PolicyError
 from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation
 lazy from .app_update_approval import succeeded
-lazy from .automation_runs import held_runs, operation_registry, queue_settling
+lazy from .automation_runs import held_runs, operation_registry, other_profiles, queue_settling
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -398,8 +398,10 @@ def claim_next_operation(
     lease_seconds: int = 300,
     capabilities: tuple[tuple[str, str], ...],
     attempt: str = "",
+    profile: str | None = None,
 ) -> dict[str, Any]:
-    """Lease the oldest queued operation one of ``capabilities`` performs.
+    """Lease the oldest queued operation one of ``capabilities`` performs,
+    of ``profile`` alone when it is a playbook run and the claim names one.
 
     ``attempt`` names this claim, so a claim retried after its answer was
     lost is answered the operation it already leased rather than a second
@@ -436,6 +438,8 @@ def claim_next_operation(
     # what it asks next. Left queued, so lifting the brake resumes it.
     operations = operations.exclude(agent_access.held_askers())
     operations = _compatible_operations(operations, capabilities)
+    if profile is not None:
+        operations = operations.exclude(other_profiles(profile))
     operation, contract = _next_resolvable(operations)
     if operation is None:
         return {"ok": True, "operation": None}

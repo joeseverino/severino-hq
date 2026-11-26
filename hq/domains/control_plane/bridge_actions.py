@@ -39,6 +39,7 @@ from hq.platform.application.refused_reports import READINGS_ACTION
 from hq.platform.application.sealing import Sealed, sealer
 from hq.platform.application.security import Principal, internal_principal
 from hq.platform.application.sweep import record_sweep
+lazy from hq.platform.application.automation_runs import READ_PROFILE
 
 Parameters = Mapping[str, Any]
 Run = Callable[[Parameters, Any], Any]
@@ -106,6 +107,9 @@ def _claim(lane: Lane) -> Run:
             lease_seconds=parameters["lease-seconds"],
             capabilities=capabilities,
             attempt=parameters["attempt"] or "",
+            # The worker's socket is every profile's worker's, so the claim
+            # says whose; the logins it holds are what bound it.
+            profile=(parameters["profile"] or READ_PROFILE) if lane.automation else None,
         )
 
     return run

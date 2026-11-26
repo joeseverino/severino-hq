@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 from . import tracing
 from .bridge import BridgeError
-from .claim import CAPABILITIES, Claimed, Installed, Reach, Refused, Run, bind, claimed
+from .claim import Claimed, Installed, Reach, Refused, Run, bind, capabilities, claimed
 from .events import (
     ELSEWHERE,
     MISSHAPEN,
@@ -46,9 +46,9 @@ UNKNOWN = (
 
 class Bridge(Protocol):
     def claim(
-        self, controller_id: str, *, capabilities: Sequence[str], lease_seconds: int, attempt: str
+        self, controller_id: str, *, profile: str, capabilities: Sequence[str], lease_seconds: int, attempt: str
     ) -> dict[str, Any]:
-        """Claim the next queued run this worker can do, under a lease."""
+        """Claim the next queued run of ``profile`` this worker can do, under a lease."""
 
     def renew(
         self, controller_id: str, operation: str, *, lease_seconds: int, progress: Mapping[str, Any]
@@ -285,6 +285,7 @@ def work_once(
     bridge: Bridge,
     *,
     controller_id: str,
+    profile: str,
     installed: Installed,
     reach: Reach,
     journal: Journal,
@@ -295,16 +296,18 @@ def work_once(
 ) -> Outcome | None:
     """Claim one run or scan and see it through to its report; None when nothing waits.
 
-    ``installed`` resolves the procedure a run names and ``reach`` the
+    Only runs of ``profile``, the one whose logins this worker is lent, are
+    claimed. ``installed`` resolves the procedure a run names and ``reach`` the
     connection to each of its machines; ``scan`` reads the source a scan asks
     about. ``secrets`` are struck from the report wherever they appear, as a
     run's own secrets are.
     """
 
-    with tracing.span("automation pass", **{"hq.capabilities": ",".join(CAPABILITIES)}):
+    with tracing.span("automation pass", **{"hq.capabilities": ",".join(capabilities(profile))}):
         outcome = _pass(
             bridge,
             controller_id=controller_id,
+            profile=profile,
             installed=installed,
             reach=reach,
             journal=journal,
@@ -322,6 +325,7 @@ def _pass(
     bridge: Bridge,
     *,
     controller_id: str,
+    profile: str,
     installed: Installed,
     reach: Reach,
     journal: Journal,
@@ -331,7 +335,13 @@ def _pass(
     secrets: Collection[str],
 ) -> Outcome | None:
     entry = journal.begin()
-    pending = bridge.claim(controller_id, capabilities=CAPABILITIES, lease_seconds=LEASE_SECONDS, attempt=entry.attempt)
+    pending = bridge.claim(
+        controller_id,
+        profile=profile,
+        capabilities=capabilities(profile),
+        lease_seconds=LEASE_SECONDS,
+        attempt=entry.attempt,
+    )
     try:
         claim: Claimed | None = claimed(pending)
     except Refused:

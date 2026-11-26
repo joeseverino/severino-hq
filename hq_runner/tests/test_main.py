@@ -30,11 +30,14 @@ class DrainTests(unittest.TestCase):
         (self.root / "scratch").mkdir()
         (self.root / "state").mkdir()
         self.connections = self.root / "connections.json"
-        fakes.write_connections(self.connections, fakes.runner(fakes.APP, fakes.PRIVILEGE))
+        fakes.write_connections(
+            self.connections, fakes.runner(fakes.APP, fakes.PRIVILEGE), fakes.runner(fakes.APP, "example.other")
+        )
         self.token = self.root / "token"
         self.token.write_text("ghs_example0123456789token\n", encoding="utf-8")
         self.environ = {
             "HQ_AUTOMATION_ID": fakes.WORKER,
+            "HQ_AUTOMATION_PROFILE": fakes.PRIVILEGE,
             "HQ_AUTOMATION_BRIDGE_SOCKET": str(self.root / "bridge" / "bridge.sock"),
             "HQ_AUTOMATION_JOURNAL": str(self.root / "state" / "journal.json"),
             "HQ_AUTOMATION_CONNECTIONS": str(self.connections),
@@ -86,6 +89,20 @@ class DrainTests(unittest.TestCase):
         self.assertEqual(runner.runs, [])
         self.assertEqual(bridge.reports[0]["conditions"][0]["reason"], "NoConnection")
 
+    def test_a_run_of_another_profile_than_the_worker_s_is_refused_before_it_runs(self):
+        """Its login is in the connections document, which every worker reads,
+        and its identity is another worker's to hold."""
+
+        answer = fakes.pending(revision=self.revision, privilege="example.other")
+        bridge = fakes.Bridge(answer)
+        runner = fakes.Runner()
+
+        self.drain(bridge, runner)
+
+        self.assertEqual(runner.runs, [])
+        self.assertEqual(bridge.reports[0]["conditions"][0]["reason"], "NoConnection")
+        self.assertEqual(bridge.calls[0][1]["profile"], fakes.PRIVILEGE)
+
     def test_the_token_and_the_key_path_never_reach_a_report(self):
         leaky = fakes.recorded("Fail", "runner_on_failed")
         key = str(self.root / "ssh" / f"{fakes.APP}-{fakes.PRIVILEGE}")
@@ -105,6 +122,8 @@ class DrainTests(unittest.TestCase):
             ("HQ_AUTOMATION_JOURNAL", ""),
             ("HQ_AUTOMATION_SCRATCH", "scratch"),
             ("HQ_AUTOMATION_REPOSITORY", ""),
+            ("HQ_AUTOMATION_PROFILE", ""),
+            ("HQ_AUTOMATION_PROFILE", "Change Profile"),
         ):
             with self.subTest(name=name), self.assertRaises(ConfigError):
                 self.config(**{name: value})

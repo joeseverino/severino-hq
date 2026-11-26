@@ -338,10 +338,18 @@ class Bridge:
         self.fail_report = False
 
     def claim(
-        self, controller_id: str, *, capabilities: Iterable[str], lease_seconds: int, attempt: str
+        self, controller_id: str, *, profile: str, capabilities: Iterable[str], lease_seconds: int, attempt: str
     ) -> dict[str, Any]:
         self.calls.append(
-            ("claim", {"controller_id": controller_id, "capabilities": tuple(capabilities), "attempt": attempt})
+            (
+                "claim",
+                {
+                    "controller_id": controller_id,
+                    "profile": profile,
+                    "capabilities": tuple(capabilities),
+                    "attempt": attempt,
+                },
+            )
         )
         return self.claims.pop(0) if self.claims else {"ok": True, "operation": None}
 

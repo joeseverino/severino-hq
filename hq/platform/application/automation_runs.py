@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import get_text_list
 from pydantic import Field, StrictBool, StrictStr, StringConstraints
@@ -292,6 +293,14 @@ def login_profile(manifest: OperationManifest) -> str:
     privilege, or the read login's for one that names none."""
 
     return manifest.privilege or READ_PROFILE
+
+
+def other_profiles(profile: str) -> Q:
+    """Every playbook run of another profile than ``profile``: what a worker
+    lent ``profile``'s logins alone is never offered, since it holds no
+    identity to run it with."""
+
+    return Q(resource__kind=OPERATION_KIND) & ~Q(resource__spec__privilege="" if profile == READ_PROFILE else profile)
 
 
 def runner_reaches() -> frozenset[tuple[str, str]]:

@@ -1765,8 +1765,9 @@ to HQ only over the bridge socket, trusted as the controller trusts it. `python
 -m hq_runner` claims runs one pass at a time until none is left, then exits.
 Its environment names everything it reads, each as an `HQ_AUTOMATION_*`
 variable (`hq_runner/__main__.py`), since on the host "runner" is the Actions
-runner's word. Those are the bridge socket, the journal, the connections
-document, the ssh directory, and the scratch space each pass works in. They
+runner's word. Those are the privilege profile whose logins it holds, the
+bridge socket, the journal, the connections document, the ssh directory, and
+the scratch space each pass works in. They
 also name the repository its playbooks come from, whose root is an Ansible
 project, and the file holding the token that repository is fetched with.
 Nothing in a claim names any of them.
@@ -2065,10 +2066,30 @@ On a host the worker runs as the glance does, a oneshot unit a path starts.
 HQ's doorbell, `severino-hq-automation.path`, starts
 `severino-hq-automation.service`, and a 15-minute timer is its floor. Root's
 `hq-host automation` (`controller/host/automation.go`) launches it as a
-controller pass is launched, in a short-lived container of its own image
+controller pass is launched, in short-lived containers of its own image
 (`AutomationImage`, pinned in the tree). Where the procedures come from is the
 host's `automation` entry, never a claim ([Tokens on the
 host](Deployment.md#tokens-on-the-host)).
+
+It runs one container per privilege profile, as AWX runs each job with its
+own credential injected into an environment of its own. The profiles are the
+lent runner connections' (`lendByProfile`), always with the read profile's,
+and each container is told its own as `HQ_AUTOMATION_PROFILE`. They run one
+after another, in one bound, each until its profile's queue is empty. Each
+claims only the runs of its profile, which its claim names: HQ offers it no
+run whose playbook names another privilege
+(`automation_runs.other_profiles`), and the worker refuses one anyway, since
+it reaches a machine only as its own profile. Only the read profile's
+container claims scans, which take no login. Each keeps a journal of its own.
+
+Its security property: a worker holds the identities of its own profile's
+logins alone. Every lent identity is moved into the ssh directory of its
+connection's profile before any container starts, so the key of a login that
+escalates, the change profile's included, is in the one container that runs
+that profile's reviewed playbooks, and a read, a scan or another privilege's
+playbook runs where it is not. Each container reads every runner connection,
+which names an address, a user and an identity's item and no secret, so the
+read profile's scan reports every login.
 
 Its image is verified at deploy, as the controller's is: the controller runs
 the composition `hq-host deploy` verified and pulled. The release's own
@@ -2114,10 +2135,10 @@ What it is given, and what that means:
   bridge's peer check requires, with no capability, no way to gain one, a
   read-only root, a `noexec` scratch tmpfs, and caps on its memory and
   processes.
-- **Custody.** It holds the runner-role connections and their identities alone,
-  the pinned host keys and the grant's token. They are copied under the
-  renderer's lock into a directory of its own on the renderer's tmpfs and lent
-  read-only. The grant may only read: `host.json` is refused when the
+- **Custody.** Each container holds the runner-role connections, the
+  identities of its own profile's alone, the pinned host keys and the grant's
+  token. They are copied under the renderer's lock into a directory of the
+  run's own on the renderer's tmpfs and lent read-only. The grant may only read: `host.json` is refused when the
   automation entry names one with any permission above `read`. Its journal
   directory is the one host path it writes, and runs nothing: Docker's bind
   mount takes no `noexec`, so the directory is a `noexec` mount of its own
@@ -2138,17 +2159,20 @@ What it is given, and what that means:
   everything else: the LAN, the tailnet, the host's other services, other
   containers, IPv6 and a forged source. A runner connection whose host is not
   an IPv4 address cannot be named by the table, so it is not lent.
-- **A compromised worker** reaches the runner login on each machine lent to it,
-  with the rights that machine gives the login. It gets an hour's read of the
-  playbooks' repository. Over its socket it can claim, renew and report only
-  runs and scans: it misstates the outcome of the runs it claims and what
-  their playbooks stated of the machines they ran on, and no more. It cannot
+- **A compromised worker** reaches the runner login of its own profile on
+  each machine lent to it, with the rights that machine gives the login, and
+  no other profile's. It gets an hour's read of the playbooks' repository.
+  Every profile's container shares one socket, so the profile a claim names is
+  routing, never a bound: over it a compromised container can claim, renew and
+  report any profile's runs and the scans, misstating the outcome of the runs
+  it claims and what their playbooks stated of the machines they ran on, and
+  no more, since it holds no other profile's key to run one with. It cannot
   send a reading, settle a merge or report any other record's work, all of
   which only the controller's socket takes.
 - **A reviewed playbook's local tasks** run as the worker's account, and can
-  read the token file and the identity files, as any Ansible controller's
-  can.
+  read the token file and its own profile's identity files, as any Ansible
+  controller's can.
 - **Bounds.** A run ends at its manifest's `timeout_seconds` and its lease;
-  root removes the container at `AutomationBound`, and the unit's
-  start timeout outlasts that. A run in flight then is reported unknown and
+  root removes the container running at `AutomationBound`, which bounds
+  every profile's together, and the unit's start timeout outlasts that. A run in flight then is reported unknown and
   never run again; one queued behind it waits for the next start.

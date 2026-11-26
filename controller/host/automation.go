@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"net/netip"
 	"os"
@@ -146,6 +148,10 @@ func (a *Automation) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	profiles, err := lendByProfile(run, lent)
+	if err != nil {
+		return err
+	}
 	token, err := a.grantToken()
 	if err != nil {
 		return err
@@ -168,32 +174,83 @@ func (a *Automation) Run(ctx context.Context) error {
 	}
 	own := a.beginRun()
 	defer own.end()
-	name := "severino-hq-automation-" + rand.Text()
-	return a.work(ctx, name, slices.Insert(AutomationArgs(name, image, run, a.Journal, a.ID, *a.Project), 1, own.label()), run, token)
+	return a.work(ctx, image, run, token, profiles, own)
 }
 
-// work runs the container until it ends or the bound passes, keeping its
-// token current meanwhile; a container its client stopped waiting on is
-// removed.
-func (a *Automation) work(ctx context.Context, name string, args []string, run, token string) error {
+// work runs one container per profile, one after another, each until its
+// queue is empty, all within the bound, keeping the token current
+// meanwhile; a container its client stopped waiting on is removed. One
+// that fails leaves the next profile's runs to its own container.
+func (a *Automation) work(ctx context.Context, image, run, token string, profiles []string, own ownRun) error {
 	runCtx, cancel := context.WithTimeout(ctx, a.Bound)
 	defer cancel()
 	ended := make(chan struct{})
+	defer close(ended)
 	if token != "" {
 		go a.keepToken(runCtx, ended, run, token)
 	}
-	command := a.Command(runCtx, "docker", args...)
-	command.Stdout, command.Stderr = a.Stdout, a.Stderr
-	err := command.Run()
-	close(ended)
-	if runCtx.Err() != nil {
-		stop, done := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
-		_ = a.Command(stop, "docker", "rm", "--force", name).Run()
-		done()
-		return fmt.Errorf("the automation worker was stopped: %w", runCtx.Err())
+	var failed []error
+	for _, profile := range profiles {
+		name := "severino-hq-automation-" + rand.Text()
+		args := slices.Insert(AutomationArgs(name, image, run, a.Journal, a.ID, profile, *a.Project), 1, own.label())
+		command := a.Command(runCtx, "docker", args...)
+		command.Stdout, command.Stderr = a.Stdout, a.Stderr
+		err := command.Run()
+		if runCtx.Err() != nil {
+			stop, done := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+			_ = a.Command(stop, "docker", "rm", "--force", name).Run()
+			done()
+			return fmt.Errorf("the automation worker was stopped: %w", runCtx.Err())
+		}
+		if err != nil {
+			failed = append(failed, fmt.Errorf("the %s profile's worker: %w", profile, err))
+		}
 	}
-	return err
+	return errors.Join(failed...)
 }
+
+// lendByProfile moves each lent identity into the ssh directory of its
+// connection's privilege profile (profileSSH), beside the pinned host keys,
+// and answers the profiles, the read profile's always: it scans the
+// playbooks, which takes no login. An identity is moved, so it is in its own
+// profile's directory alone.
+func lendByProfile(run string, lent []connections.Connection) ([]string, error) {
+	profiles := []string{connections.ReadProfile}
+	of := map[string]string{}
+	for _, connection := range lent {
+		profile := connection.SSHTransport.Profile
+		of[connection.Ref] = profile
+		if !slices.Contains(profiles, profile) {
+			profiles = append(profiles, profile)
+		}
+	}
+	slices.Sort(profiles)
+	shared := filepath.Join(run, "ssh")
+	for _, profile := range profiles {
+		dir := profileSSH(run, profile)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, err
+		}
+		if err := os.Link(filepath.Join(shared, knownHosts), filepath.Join(dir, knownHosts)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+	}
+	entries, err := os.ReadDir(shared)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if profile, ok := of[identityOf(entry.Name())]; ok {
+			if err := os.Rename(filepath.Join(shared, entry.Name()), filepath.Join(profileSSH(run, profile), entry.Name())); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return profiles, os.RemoveAll(shared)
+}
+
+// profileSSH is the ssh directory of one profile's worker in run.
+func profileSSH(run, profile string) string { return filepath.Join(run, "profiles", profile, "ssh") }
 
 // noexec is whether the mount on top at dir, in a mount table's fstab(5)
 // format, runs no program.
@@ -332,14 +389,15 @@ func (a *Automation) pruneRuns() {
 	}
 }
 
-// AutomationArgs is the worker's container: the web account, which the
-// bridge's peer check requires, with no capability and no way to gain one;
-// a read-only root with only a scratch tmpfs and its journal to write, both
-// noexec; its own network, from which the egress table lets it reach its
-// runner connections and public addresses alone; public resolvers; and of
-// the host's, the lent connections, identities and token, read-only, and its
-// own bridge socket's volume, never the controller's.
-func AutomationArgs(name, image, run, journal, id string, project AutomationConfig) []string {
+// AutomationArgs is the container of the worker lent profile's logins: the
+// web account, which the bridge's peer check requires, with no capability
+// and no way to gain one; a read-only root with only a scratch tmpfs and its
+// journal to write, both noexec; its own network, from which the egress table
+// lets it reach its runner connections and public addresses alone; public
+// resolvers; and of the host's, the lent connections, that profile's
+// identities alone and the token, read-only, and its own bridge socket's
+// volume, never the controller's.
+func AutomationArgs(name, image, run, journal, id, profile string, project AutomationConfig) []string {
 	args := []string{
 		"run", "--rm", "--pull", "never", "--name", name,
 		"--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID),
@@ -357,12 +415,14 @@ func AutomationArgs(name, image, run, journal, id string, project AutomationConf
 		"--memory", "512m", "--pids-limit", "512",
 		"--tmpfs", automationScratch+":size=256m,noexec,nosuid,nodev",
 		"--mount", readOnly(filepath.Join(run, "connections.json"), automationConnections),
-		"--mount", readOnly(filepath.Join(run, "ssh"), automationSSH),
+		"--mount", readOnly(profileSSH(run, profile), automationSSH),
 		"--mount", "type=bind,source="+journal+",target="+automationJournal,
 		"--mount", "type=volume,source="+volumeAt(filepath.Dir(AutomationBridgeSocket)).Name+",target="+filepath.Dir(AutomationBridgeSocket)+",readonly",
 		"--env", "HQ_AUTOMATION_ID="+id,
+		"--env", "HQ_AUTOMATION_PROFILE="+profile,
 		"--env", "HQ_AUTOMATION_BRIDGE_SOCKET="+AutomationBridgeSocket,
-		"--env", "HQ_AUTOMATION_JOURNAL="+automationJournal+"/journal.json",
+		// Each profile's worker keeps a journal of its own.
+		"--env", "HQ_AUTOMATION_JOURNAL="+automationJournal+"/"+profile+".json",
 		"--env", "HQ_AUTOMATION_CONNECTIONS="+automationConnections,
 		"--env", "HQ_AUTOMATION_SSH_DIR="+automationSSH,
 		"--env", "HQ_AUTOMATION_SCRATCH="+automationScratch,

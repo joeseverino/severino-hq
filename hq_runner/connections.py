@@ -44,7 +44,7 @@ _PORT = re.compile(r"[0-9]{1,5}")
 _SHELL_TYPES = frozenset({"sh", "powershell", "cmd"})
 # A machine and a profile as the controller holds them (document.go).
 _MACHINE = re.compile(r"[a-z0-9][a-z0-9.-]{0,252}")
-_PROFILE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
+PROFILE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
 
 
 class ConnectionsError(Exception):
@@ -104,7 +104,7 @@ def _target(transport: Mapping[str, Any], ref: str, ssh_dir: Path) -> Target | N
     shell_type = transport.get(SHELL_TYPE, "")
     if not (isinstance(machine, str) and _MACHINE.fullmatch(machine)):
         return None
-    if not (isinstance(named, str) and _PROFILE.fullmatch(named)):
+    if not (isinstance(named, str) and PROFILE.fullmatch(named)):
         return None
     if not (isinstance(host, str) and _HOST.fullmatch(host)):
         return None

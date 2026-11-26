@@ -64,11 +64,12 @@ class BridgeTestCase(unittest.TestCase):
 
 
 class CallTests(BridgeTestCase):
-    def test_a_claim_names_its_controller_capabilities_lease_and_attempt(self):
+    def test_a_claim_names_its_controller_profile_capabilities_lease_and_attempt(self):
         self.answer = (200, "application/json", b'{"ok": true, "operation": null}')
 
         answer = self.bridge.claim(
             "example-worker",
+            profile="read",
             capabilities=("automation.operation:run", "automation.source:scan"),
             lease_seconds=120,
             attempt="a1",
@@ -81,6 +82,7 @@ class CallTests(BridgeTestCase):
             sent["query"],
             {
                 "controller-id": ["example-worker"],
+                "profile": ["read"],
                 "lease-seconds": ["120"],
                 "capability": ["automation.operation:run", "automation.source:scan"],
                 "attempt": ["a1"],
