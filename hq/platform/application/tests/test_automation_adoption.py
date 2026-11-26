@@ -210,6 +210,28 @@ class AdoptTests(AdoptionTestCase):
         notes = " ".join(capability_spec("automation.example.check.run").execution_notes)
         self.assertIn("`apps.pull`", notes)
 
+    def test_a_change_is_settled_only_by_a_read_of_its_targets_at_its_revision(self):
+        def at_revision(found: dict[str, Any]) -> dict[str, Any]:
+            found["declaration"]["inputs"] = {"revision": {"pattern": "^[0-9a-f]{40}$", "max_length": 40}}
+            found["roles"][0]["argument_spec"]["options"] = {
+                "revision": {"type": "str", "required": True, "description": "The commit."}
+            }
+            return found
+
+        apply = at_revision(procedure("apply", effect="infrastructure_change", settled_by="example.last"))
+        cases = {
+            "a read of this commit": procedure("other"),
+            "a read": at_revision(procedure("last", effect="infrastructure_change")),
+            "the same kinds of target": at_revision(procedure("last", target_kinds=["example.edge"])),
+            "its revision input": procedure("last"),
+        }
+        for number, (case, last) in enumerate(cases.items()):
+            with self.subTest(case):
+                said = self.refused(self.adopt(self.proposed(catalog(apply, last)), key=f"example-settle-{number}"))
+
+                self.assertIn("settled_by", said)
+        self.assertTrue(self.adopt(self.proposed(catalog(apply, at_revision(procedure("last")))))["adopted"])
+
     def test_a_procedure_s_inputs_are_its_role_s_argument_spec_bounded_by_its_sidecar(self):
         bounded = procedure("check", inputs={"unit": {"pattern": "^[a-z]+$", "max_length": 8}})
         bounded["roles"][0]["argument_spec"]["options"] = {

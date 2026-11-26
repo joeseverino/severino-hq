@@ -228,8 +228,9 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
 
     Every field but the input type, which its schema's digest stands for, so a
     new revision or a changed input moves the spec and with it what a held run
-    is measured against, and but its finding rules and readings, which say
-    where it is offered and what to read back, and nothing of what a run does.
+    is measured against, and but its finding rules, readings and settling
+    read, which say where it is offered and what to read back, and nothing of
+    what a run does.
     """
 
     return validate_spec(
@@ -237,7 +238,7 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
         {
             **manifest.model_dump(
                 mode="json",
-                exclude={"id", "input_type", "privilege", "fixes", "investigates", "readings"},
+                exclude={"id", "input_type", "privilege", "fixes", "investigates", "readings", "settled_by"},
             ),
             "operation": manifest.id,
             "privilege": manifest.privilege or "",
@@ -366,9 +367,12 @@ def record_of(manifest: OperationManifest, *, consented: Consented) -> ManagedRe
 
     Written when a run is asked for, where a transaction, an actor and an audit
     binding exist, never as the registry is composed in every process before
-    migrations.
+    migrations. The read that settles it (``settled_by``) is written beside
+    it, under the same consent, since HQ asks that read itself.
     """
 
+    if manifest.settled_by is not None and (settling := operation_registry().get(manifest.settled_by)) is not None:
+        record_of(settling, consented=consented)
     key = resource_key(manifest.id)
     current = ManagedResource.objects.select_for_update().filter(key=key).first()
     spec = pinned(manifest)

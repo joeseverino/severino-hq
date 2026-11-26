@@ -54,6 +54,7 @@ from .record_fields import RecordId
 from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
+lazy from .automation_manifest import REVISION_INPUT
 lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, reading_words, timeout_words
 lazy from .findings import rule_for
 lazy from .labels import dotted, lower_first
@@ -413,6 +414,7 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
     shared = {path: name for path, name in sorted(objects.items()) if path not in every}
     found: dict[str, AdoptedProcedure] = {}
     unadoptable: dict[str, _Unadoptable] = {}
+    sidecars: dict[str, str] = {}
     for scanned in proposal.procedures:
         name = scanned["sidecar"]
         declared = scanned["declaration"].get("id") if isinstance(scanned["declaration"], dict) else None
@@ -427,7 +429,32 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
             )
             continue
         found[procedure.id] = procedure
+        sidecars[procedure.id] = name
+    for procedure in tuple(found.values()):
+        if said := _unsettled(procedure, found):
+            name = sidecars[procedure.id]
+            del found[procedure.id]
+            unadoptable[name] = _Unadoptable(
+                procedure.id, Quoted(procedure.title or name), (Quoted(said),), frozenset(used[name])
+            )
     return found, unadoptable
+
+
+def _unsettled(procedure: AdoptedProcedure, found: Mapping[str, AdoptedProcedure]) -> str:
+    """Why the read ``procedure`` names to settle it cannot, or "": it is a
+    read of this catalog, on the same kinds of target, taking the same
+    revision input, so HQ can ask it of the held run's machines at its revision."""
+
+    if procedure.settled_by is None:
+        return ""
+    read = found.get(procedure.settled_by)
+    if read is None or read.effect != Effect.READ:
+        return f"Its sidecar's settled_by names {procedure.settled_by}, which is no read of this commit."
+    if read.target_kinds != procedure.target_kinds:
+        return f"Its sidecar's settled_by names {read.id}, which runs on other kinds of target."
+    if REVISION_INPUT not in procedure.inputs or read.inputs.get(REVISION_INPUT) != procedure.inputs[REVISION_INPUT]:
+        return f"Its sidecar's settled_by names {read.id}, which does not take its {REVISION_INPUT} input."
+    return ""
 
 
 def _used(scanned: Mapping[str, Any], objects: Mapping[str, str]) -> set[str]:

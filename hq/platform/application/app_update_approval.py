@@ -39,7 +39,7 @@ lazy from .app_update_open import ticked
 lazy from .app_updates import AppUpdate, app_updates, merged_of
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
-lazy from .automation_manifest import OperationManifest
+lazy from .automation_manifest import REVISION_INPUT as REVISION, OperationManifest
 lazy from .automation_runs import (
     CHECK,
     capability_name,
@@ -65,8 +65,6 @@ lazy from .payload_words import ChangeRow
 lazy from .resource_operations import ACTION_CAPABILITY, THEN, OperationAsked, queue_carried_merge
 lazy from .work_runs import WorkRun, run_row, standing_of as run_standing
 
-# The input of the playbook that applies a merge: the commit it applies.
-REVISION = "revision"
 _COMMIT = re.compile(COMMIT)
 _ACTIVE = (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
 
