@@ -13,7 +13,7 @@ from ..containers import containers
 from ..derivation_testing import uncached
 from ..findings import finding_key, rule_of
 from ..pages import command_reach
-from .test_container_standard import KEPT, runtime
+from .test_container_standard import KEPT, on_the_host_network, runtime
 from .test_containers import container, estate, inventory
 
 CHECKS = {check.id: check for check in STANDARD}
@@ -134,18 +134,8 @@ class HardeningTests(TestCase):
         self.assertEqual(change.yaml, 'user: "1000:1000"')
         self.assertIn("chown -R 1000:1000 /opt/example/data", change.caution)
 
-    def on_the_host_network(self, **fields):
-        from .test_containers import running
-
-        on_host = {**KEPT, "user": "", "cap_drop": ["ALL"], "network_mode": "host", "port_bindings": []}
-        estate()
-        inventory("portainer.container", [running("web", "example/web:1.0.0") | {"network_mode": "host"}])
-        inventory("portainer.runtime", [runtime("web", **{**on_host, "exposed_ports": [53, 3000], **fields})])
-        (found,) = (item for item in containers() if item.running.name == "web")
-        return found
-
     def test_a_low_port_on_the_host_network_under_no_new_privileges_keeps_root_with_one_capability(self):
-        found = self.on_the_host_network(cap_add=["NET_BIND_SERVICE", "CHOWN", "SYS_ADMIN"])
+        found = on_the_host_network(user="", cap_drop=["ALL"], cap_add=["NET_BIND_SERVICE", "CHOWN", "SYS_ADMIN"])
 
         fix = found.hardening.step(CHECKS["not-root"]).value
         self.assertIn('cap_drop:\n      - "ALL"\n    cap_add:\n      - "NET_BIND_SERVICE"', fix)
@@ -156,7 +146,7 @@ class HardeningTests(TestCase):
 
     def test_a_non_root_user_is_offered_where_no_new_privileges_is_waived_or_the_port_is_its_own(self):
         container("web", by_design={"no-new-privileges": "Its program binds port 53 through a file capability."})
-        waived = self.on_the_host_network(security_opt=[]).hardening
+        waived = on_the_host_network(user="", cap_drop=["ALL"], security_opt=[]).hardening
         bridged = self.hardening(**{**KEPT, "user": "", "exposed_ports": [53]})
 
         self.assertIn(
