@@ -109,14 +109,12 @@ class ConnectionShape:
 
     A vault item names its shape. The renderer projects the item into these
     settings, and the controller is handed them as one typed value.
-    ``provider`` fixes the provider of every connection of the shape.
     ``default_provider`` is the provider of an item that names none; without
-    either, such an item is for the provider its ``env_prefix`` spells.
+    it, such an item is for the provider its ``env_prefix`` spells.
     """
 
     name: str
     settings: tuple[Setting, ...]
-    provider: str = ""
     default_provider: str = ""
 
     def __post_init__(self) -> None:
@@ -127,8 +125,6 @@ class ConnectionShape:
             raise ValueError(f"{self.name} declares settings with unique names.")
         if set(names) & ENVELOPE_SETTINGS:
             raise ValueError(f"{self.name} declares a setting every connection already has.")
-        if self.provider and self.default_provider:
-            raise ValueError(f"{self.name} fixes its service or defaults it, not both.")
 
 
 # What every connection states about itself, whatever its shape.

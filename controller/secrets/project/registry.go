@@ -15,10 +15,9 @@ import (
 
 // Sources a projected variable can come from.
 const (
-	SourceRef      = "connection_ref"
-	SourceField    = "field"
-	SourceURL      = "url"
-	SourceConstant = "constant"
+	SourceRef   = "connection_ref"
+	SourceField = "field"
+	SourceURL   = "url"
 )
 
 // Variables every projection states beside its shape's settings: the
@@ -42,7 +41,6 @@ type Entry struct {
 	Source   string `json:"source"`
 	ID       string `json:"id,omitzero"`
 	Label    string `json:"label,omitzero"`
-	Value    string `json:"value,omitzero"`
 	Index    *int   `json:"index,omitzero"`
 	Optional bool   `json:"optional,omitzero"`
 	// Default is the value of an optional field the item does not carry.
@@ -125,13 +123,11 @@ func parse(data []byte) (Registry, error) {
 			valid := false
 			switch entry.Source {
 			case SourceRef:
-				valid = selectors == 0 && entry.Value == "" && entry.Index == nil
+				valid = selectors == 0 && entry.Index == nil
 			case SourceField:
-				valid = selectors == 1 && entry.Value == "" && entry.Index == nil
+				valid = selectors == 1 && entry.Index == nil
 			case SourceURL:
-				valid = selectors == 0 && entry.Value == "" && entry.Index != nil && *entry.Index >= 0
-			case SourceConstant:
-				valid = selectors == 0 && entry.Value != "" && entry.Index == nil
+				valid = selectors == 0 && entry.Index != nil && *entry.Index >= 0
 			}
 			// A default stands in for a field an item may leave out.
 			if entry.Default != "" && (entry.Source != SourceField || !entry.Optional) {

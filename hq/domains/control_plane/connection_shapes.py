@@ -90,11 +90,7 @@ def _entry(setting: Setting) -> dict[str, Any]:
 
 
 def _projection(shape: ConnectionShape) -> dict[str, dict[str, Any]]:
-    provider: dict[str, Any] = (
-        {"source": "constant", "value": shape.provider}
-        if shape.provider
-        else {"source": "field", "label": "provider", "optional": True}
-    )
+    provider: dict[str, Any] = {"source": "field", "label": "provider", "optional": True}
     if shape.default_provider:
         provider["default"] = shape.default_provider
     entries: dict[str, dict[str, Any]] = {
