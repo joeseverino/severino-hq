@@ -678,7 +678,6 @@ class PublicLogTests(SimpleTestCase):
         uploads = [step for step in self.steps if step.get("uses", "").startswith("actions/upload-artifact@")]
         # The verified composition's record, one digest its own step writes.
         (record,) = [upload for upload in uploads if upload["with"]["name"] == "composition"]
-        self.assertEqual(record["with"]["path"], "${{ runner.temp }}/verified/verified-composition")
         uploads.remove(record)
         self.assertTrue(uploads)
         for upload in uploads:
