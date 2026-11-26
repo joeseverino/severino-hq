@@ -34,7 +34,8 @@ of its repository instead: the production deploy, and the repository's alerts.
     {% detail %}
       {% if standing.built_here %}
       {% elif standing.newer %}
-        <small>{{ standing.newer|length|counted:"newer release,newer releases" }} available{% if standing.release.published %}, the newest {{ standing.release.published|when_text }}{% endif %}</small>
+        {% if standing.release.published %}<small>released {{ standing.release.published|when_text }}</small>{% endif %}
+        {% if standing.newer|length > 1 %}<small>newest of {{ standing.newer|length|counted:"newer release" }}</small>{% endif %}
       {% elif standing.update_state == "current" %}
         <small>No newer version.</small>
       {% else %}

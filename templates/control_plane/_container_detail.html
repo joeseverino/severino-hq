@@ -22,57 +22,25 @@ limits. Each said once; the band above has its version and standing.
     {% detail %}
       {% for pin in update.pins %}<small>{% if pin.digest %}{% muted tip=pin.digest %}{{ pin.digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}</small>{% endfor %}
     {% endfact %}
-    {% fact "Fixes" icon="shield" tone=update.fixes_tone %}
-      {{ update.fixes_said }}
-    {% detail %}
-      {% if update.fixes %}{% list kind="dots" %}{% for advisory in update.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% endif %}
-    {% endfact %}
-    {% fact "New vulnerabilities" icon="info" tone=update.brings_tone %}
-      {{ update.brings_said }}
-    {% detail %}
-      {% if update.brings %}{% list kind="dots" %}{% for finding in update.brings|slice:":2" %}<li>{% entity finding.url|outside label=finding.id %}</li>{% endfor %}{% endlist %}{% endif %}
-    {% endfact %}
+    {% fact "Fixes" icon="shield" value=update.fixes_said %}
+    {% fact "New vulnerabilities" icon="info" value=update.brings_said %}
     {% elif plan %}
     {% fact "To" icon="deploy" %}
       {% entity plan.release.url|outside label=plan.target_tag code=True %}
     {% detail %}
       <small>{% if plan.target_digest %}{% muted tip=plan.target_digest %}{{ plan.target_digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}{% if plan.release.published %}{% dot %}released {{ plan.release.published|when_text }}{% endif %}</small>
     {% endfact %}
-    {% fact "Fixes" icon="shield" tone=plan.fixes_tone %}
-      {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.known_vulnerabilities %}None of {{ item.standing.known_vulnerabilities|length }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
-    {% detail %}
-      {% if plan.fixes %}{% list kind="dots" %}{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% elif not item.standing.known_vulnerabilities %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
-    {% endfact %}
+    {% fact "Fixes" icon="shield" value=plan.fixes_said %}
     {% endif %}
-    {% if state and not update %}{% fact "Update" icon="deploy" value=state.words %}{% endif %}
-    {% with merge=state.standing %}{% if merge %}{% fact state.standing_label icon="commit" value=merge.words url=merge.run_url tone=merge.tone detail=merge.lines %}{% endif %}{% endwith %}
+    {% if state and not update %}{% fact "Update" icon="deploy" value=state.answer %}{% endif %}
+    {% with merge=state.standing %}{% if merge %}{% fact state.standing_label icon="commit" value=merge.answer url=merge.run_url %}{% endif %}{% endwith %}
     {% if plan %}
-    {% fact "Data" icon="layers" tone=plan.data_tone %}
-      {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }}{% else %}Keeps no data{% endif %}
-    {% detail %}
-      <small>{% for mount in plan.data %}<code>{{ mount.source }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
-    {% endfact %}
-    {% fact "Checked afterwards by" icon="check-circle" tone=plan.verified_tone %}
-      {% if plan.verified_by %}{{ plan.verified_by.0|capfirst }}{% else %}Nothing{% endif %}
-    {% detail %}
-      <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
-    {% endfact %}
+    {% fact "Data" icon="layers" value=plan.data_said %}
+    {% fact "Checked afterwards by" icon="check-circle" value=plan.verified_said %}
     {% elif readiness %}
-    {% fact "Checked afterwards by" icon="check-circle" tone=readiness.verified_tone %}
-      {% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst }}{% else %}Nothing{% endif %}
-    {% detail %}
-      <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not readiness.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
-    {% endfact %}
-    {% fact "Data" icon="layers" %}
-      {% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }}{% else %}Keeps no data{% endif %}
-    {% detail %}
-      <small>{% for mount in readiness.data %}<code>{{ mount.source }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
-    {% endfact %}
-    {% fact "Automatic upgrades" icon="deploy" tone=readiness.automatic_tone %}
-      {% if readiness.automatic %}Patch updates apply{% else %}Not yet{% endif %}
-    {% detail %}
-      {% if readiness.not_automatic %}<small>{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below</small>{% endif %}
-    {% endfact %}
+    {% fact "Checked afterwards by" icon="check-circle" value=readiness.verified_said %}
+    {% fact "Data" icon="layers" value=readiness.data_said %}
+    {% fact "Automatic upgrades" icon="deploy" value=readiness.automatic_said %}
     {% endif %}
   {% endfacts %}
   {% if held or act %}{% button_row %}{% if act %}{% include "partials/_page_action.html" with action=act only %}{% muted %}{{ state.said }}{% endmuted %}{% else %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% endbutton_row %}

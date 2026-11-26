@@ -1,9 +1,14 @@
 """Facts: every label and its value a page shows, drawn by one part, its
 ``{% facts %}`` around each ``{% fact %}``."""
 
+from collections.abc import Iterable
+from typing import NamedTuple
+
 from django import template
 from django.template.base import token_kwargs
 
+from hq.platform.application.card_items import Answer
+from hq.platform.application.display_words import Code
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.part_examples import facts
 from hq.platform.core.template_parts import Option, Part, SlotsNode
@@ -37,10 +42,35 @@ class FactTakes(Part):
 
     def values(self, given: dict) -> dict:
         given = super().values(given)
+        if isinstance(answer := given.get("value"), Answer):
+            if given.get("detail"):
+                raise ValueError("A fact given an Answer takes its detail from the answer's `because`.")
+            given = {**given, "value": answer.short, "detail": answer.because, "tone": given["tone"] or answer.tone}
         detail = given.get("detail")
         if isinstance(detail, list | tuple):
-            return {**given, "detail": "", "lines": tuple(line for line in detail if line)}
+            return {**given, "detail": "", "lines": _lines(line for line in detail if line)}
         return given
+
+
+class Line(NamedTuple):
+    """One line of a fact's detail as its partial draws it: words, code, or
+    the links that stand together, a dotted run of names."""
+
+    text: str = ""
+    code: bool = False
+    links: tuple = ()
+
+
+def _lines(given: Iterable[object]) -> tuple[Line, ...]:
+    drawn: list[Line] = []
+    for line in given:
+        if isinstance(line, str):
+            drawn.append(Line(line, code=isinstance(line, Code)))
+        elif drawn and drawn[-1].links:
+            drawn[-1] = drawn[-1]._replace(links=(*drawn[-1].links, line))
+        else:
+            drawn.append(Line(links=(line,)))
+    return tuple(drawn)
 
 
 FACTS = Part(
@@ -159,6 +189,15 @@ FACT = FactTakes(
     in place, as a menu does, and each `data_*` option is its attribute, so a fragment region in the
     band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).
 
+    **A value is the short answer.** A state, a count, a version: never a sentence, never its label's
+    or its state's word again ("Waiting: Waiting for…"). The sentence that explains it is the detail,
+    and a tone other than neutral or good says why there. A value a domain object words is an
+    `Answer` (`value=update.brings_said`): its `short` is the value, its `because` the detail's lines
+    (words, a link, or `Code`), its `tone` the fact's. So a sentence has nowhere to go but the
+    detail: an `Answer` whose short is a sentence, or whose attention or serious tone has no reason,
+    is refused where it is built, and a reason that opens with the short answer again is dropped.
+    A measure in the detail says what it measures ("asked 3 minutes ago", never a bare "3 s").
+
     A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
     or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure
     of what runs now) follows them in the detail, so a page's summary cards are a band of facts too,
@@ -210,7 +249,12 @@ FACT = FactTakes(
     parts=("value", "detail", "heading", "panel", "foot"),
     ordered={"label": Option(required=True, about="Its label.")},
     options={
-        "value": Option(about="Its value, which makes it one tag with no end."),
+        "value": Option(
+            about=(
+                "Its value, which makes it one tag with no end; an `Answer` gives its short answer as the value, "
+                "its reasons as the detail's lines and its tone."
+            )
+        ),
         "url": Option(about="The page in HQ its value links to; an outside one is the block form's `{% entity %}`."),
         "modal": Option(about="The dialog its value's link opens where script runs."),
         "id": Option(about="The id of the panel its value opens in place, given a `panel` part."),

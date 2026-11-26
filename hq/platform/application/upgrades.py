@@ -8,15 +8,18 @@ HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from django.utils.text import capfirst, get_text_list
 
+from .card_items import Answer
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .describe import Describe
+from .display_words import Code
+from .entity_links import EntityLink, declared_link
 from .images import affected, version
 from .tone import Tone
-from .ui import ended
+from .ui import counted, ended
 lazy from . import exposure
 lazy from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
 lazy from .exposure import LEVELS
@@ -71,16 +74,21 @@ class Plan:
         return bool(self.data)
 
     @property
-    def fixes_tone(self) -> str:
-        return Tone.GOOD if self.fixes else ""
+    def fixes_said(self) -> Answer:
+        standing = self.container.standing
+        if self.fixes:
+            return fixes_said(self.fixes)
+        if standing.known_vulnerabilities:
+            return Answer(f"None of {len(standing.known_vulnerabilities)}")
+        return Answer(capfirst(standing.vulnerabilities), (standing.vulnerabilities_note,))
 
     @property
-    def data_tone(self) -> str:
-        return Tone.ATTENTION if self.stateful else ""
+    def data_said(self) -> Answer:
+        return data_said(self.data, Tone.ATTENTION)
 
     @property
-    def verified_tone(self) -> str:
-        return "" if self.verified_by else Tone.ATTENTION
+    def verified_said(self) -> Answer:
+        return verified_said(self.verified_by)
 
     @property
     def risk(self) -> str:
@@ -313,12 +321,55 @@ class Readiness:
         return not self.not_automatic
 
     @property
-    def automatic_tone(self) -> str:
-        return Tone.GOOD if self.automatic else ""
+    def data_said(self) -> Answer:
+        return data_said(self.data)
 
     @property
-    def verified_tone(self) -> str:
-        return Tone.GOOD if self.verified_by else Tone.ATTENTION
+    def verified_said(self) -> Answer:
+        return verified_said(self.verified_by, Tone.GOOD)
+
+    @property
+    def automatic_said(self) -> Answer:
+        if self.automatic:
+            return Answer("Patch updates apply", tone=Tone.GOOD)
+        return Answer("Not yet", (f"{counted(len(self.not_automatic), 'reason')}, listed below",))
+
+
+def fixes_said(fixes: tuple[Mapping[str, Any], ...]) -> Answer:
+    """What a move fixes, counted, over the first two it names."""
+
+    return Answer(counted(len(fixes), "known vulnerability", "known vulnerabilities"), named(fixes), Tone.GOOD)
+
+
+def named(advisories: tuple[Mapping[str, Any], ...]) -> tuple[EntityLink, ...]:
+    """The first two of ``advisories``, each linked by its id: a fact's reasons."""
+
+    return tuple(
+        declared_link(str(each.get("id", "")), str(each.get("url", "")), "dependency") for each in advisories[:2]
+    )
+
+
+# Why a container's data is a reason to look before it is upgraded.
+DATA_RISK = "A new version may rewrite it"
+
+
+def data_said(data: tuple[Mapping[str, Any], ...], tone: Tone | Literal[""] = "") -> Answer:
+    """The data a container keeps as its fact says it: how many mounts hold
+    it, each named, in ``tone`` with its reason where an upgrade risks it."""
+
+    if not data:
+        return Answer("Keeps no data", ("It has no writable mount",))
+    sources = tuple(Code(str(mount.get("source", ""))) for mount in data)
+    return Answer(counted(len(data), "mount"), (DATA_RISK, *sources) if tone else sources, tone)
+
+
+def verified_said(verified_by: tuple[str, ...], tone: Tone | Literal[""] = "") -> Answer:
+    """What would show a new version works, as its fact says it: the first
+    over the rest, in ``tone``; nothing, in attention, with what HQ sees instead."""
+
+    if not verified_by:
+        return Answer("Nothing", ("HQ can only see that it stays running",), Tone.ATTENTION)
+    return Answer(capfirst(verified_by[0]), tuple(capfirst(what) for what in verified_by[1:]), tone)
 
 
 def readiness_of(item: Container) -> Readiness:

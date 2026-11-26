@@ -14,8 +14,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.models import OperationRequest
 
+from .card_items import Answer
 from .containers import Container, containers, published_digest, ranked, standing_of
 from .entity_links import EntityLink
 from .github_estate import UPDATE_BRANCH, PullChecks, Repository, pull_checks, repositories
@@ -23,7 +26,7 @@ from .images import ImageRef
 from .projection import projection_scope, read_once
 from .tone import Tone
 from .ui import counted, ended
-from .upgrades import plan_for, weigh
+from .upgrades import fixes_said, named, plan_for, weigh
 lazy from .app_update_approval import (
     APPLY,
     APPROVE,
@@ -48,8 +51,6 @@ if TYPE_CHECKING:
 
 # What an update's new pins bring of their own, as every page labels it.
 BRINGS = "New vulnerabilities"
-# What an update that moves no image brings, as its fact says it.
-REBUILT = "Not checked: it rebuilds on the host"
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,24 +135,14 @@ class AppUpdate:
         return pull_checks({"checks": self.checks, "artifact_problem": self.artifact_problem})
 
     @property
-    def fixes_tone(self) -> str:
-        return Tone.GOOD if self.fixes else ""
-
-    @property
-    def brings_tone(self) -> str:
-        if self.brings:
-            return Tone.SERIOUS
-        return Tone.GOOD if self.scanned else Tone.ATTENTION
-
-    @property
     def publisher(self) -> str:
         """Who publishes what it moves to, as its source repository names them, or ""."""
 
         return next((item.standing.upstream for item in self.containers if item.standing.upstream), "")
 
     @property
-    def fixes_said(self) -> str:
-        return counted(len(self.fixes), "known vulnerability", "known vulnerabilities") if self.fixes else "None known"
+    def fixes_said(self) -> Answer:
+        return fixes_said(self.fixes) if self.fixes else Answer("None known")
 
     @property
     def fixes_counted(self) -> str:
@@ -160,16 +151,18 @@ class AppUpdate:
         return f"fixes {len(self.fixes)}" if self.fixes else ""
 
     @property
-    def brings_said(self) -> str:
+    def brings_said(self) -> Answer:
         if self.brings:
-            return counted(len(self.brings), "serious vulnerability", "serious vulnerabilities")
+            counts = counted(len(self.brings), "serious vulnerability", "serious vulnerabilities")
+            return Answer(counts, named(self.brings), Tone.SERIOUS)
         if self.scanned:
-            return "Nothing serious"
+            return Answer("Nothing serious", tone=Tone.GOOD)
         if self.readable and not self.pins:
-            return REBUILT
+            return Answer("Not checked", ("It rebuilds on the host",), Tone.ATTENTION)
         if any(pin.unlisted for pin in self.pins):
-            return f"Can't be checked: {self.publisher or 'its publisher'} publishes no package list"
-        return "Not checked yet"
+            publisher = self.publisher or "Its publisher"
+            return Answer("Can't check", (f"{publisher} publishes no package list",), Tone.ATTENTION)
+        return Answer("Not checked yet", ("Its new image's packages are not read yet",), Tone.ATTENTION)
 
     @property
     def evidence(self) -> tuple[Fact, ...]:
@@ -179,8 +172,8 @@ class AppUpdate:
         return (
             ("Pull request", EntityLink(f"{self.repository}{self.label}", self.url, external=True)),
             *(("Pin", pin.said) for pin in self.pins),
-            ("Fixes", self.fixes_said),
-            (BRINGS, self.brings_said),
+            ("Fixes", self.fixes_said.short),
+            (BRINGS, self.brings_said.said),
         )
 
     def moves(self, item: Container) -> bool:
@@ -401,13 +394,14 @@ class MergeStanding:
     """How an approved update stands: its preview, its merge, and the run
     that applies it."""
 
-    words: str
+    # Where it stands in a word or two ("Waiting", "Apply failed").
+    word: str
     tone: str
     # Whether it previews, merges, applies or merged, so no second approval is offered.
     taken: bool = False
     # Its fact's detail: what it waits on, or of a preview or an apply that
     # ended, the step it stopped on, what that said and each app the run did
-    # not release; each left out where its words already say it.
+    # not release.
     lines: tuple[str, ...] = ()
     # The run or reconcile it stands on; None for Renovate's run, which is a
     # read asked of the controller rather than an operation.
@@ -417,7 +411,19 @@ class MergeStanding:
     run: WorkRun | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "lines", tuple(line for line in self.lines if line and line not in self.words))
+        object.__setattr__(self, "lines", tuple(map(str, self.answer.because)))
+
+    @property
+    def answer(self) -> Answer:
+        """How it stands as its fact draws it: its word, over why."""
+
+        return Answer(self.word, self.lines, self.tone)
+
+    @property
+    def words(self) -> str:
+        """How it stands as one line of prose, for a message or a reason."""
+
+        return self.answer.said
 
     @property
     def run_url(self) -> str:
@@ -467,6 +473,8 @@ class UpdateState:
     move: str
     # The sentence beside the title.
     words: str
+    # Where it stands as its fact says it, a word or two over why.
+    answer: Answer
     action: UpdateAction | None = None
     # Why no press is offered, "" when one is; and what the press does.
     reason: str = ""
@@ -511,11 +519,12 @@ def update_state(item: Container) -> UpdateState:
     latest = f"{item.standing.tag} to {plan.target_tag}" if plan is not None else ""
     if (update := update_of(item)) is not None:
         pin = update.pin_of(item)
-        fixes = f", and fixes {lower_first(update.fixes_said)}" if update.fixes else ""
+        fixes = f", and fixes {lower_first(update.fixes_said.short)}" if update.fixes else ""
         return _decided(
             UpdateKind.OPEN,
             pin.said if pin else latest,
             ended(f"Pull request {update.label} moves it{fixes}"),
+            Answer("Open", (f"Pull request {update.label}",)),
             UpdateAction(APPROVE, approve_target(update)),
             approval_of(update),
             update=update,
@@ -525,8 +534,9 @@ def update_state(item: Container) -> UpdateState:
         if (unmatched := _unmatched(item)) is not None:
             holder, why = unmatched
             words = ended(f"HQ can't match it to the Compose files in {holder}")
-            return UpdateState(UpdateKind.UNMATCHED, latest, words, reason=why)
-        return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND)
+            answer = Answer("Not matched", (f"No Compose file in {holder} matches it",))
+            return UpdateState(UpdateKind.UNMATCHED, latest, words, answer, reason=why)
+        return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND, Answer("By hand", ("No repository HQ reads holds it",)))
     repository = repositories()[managed.repository]
     if (move := _behind(item, repository, managed.app)) is not None:
         head = str((repository.head or {}).get("sha") or "")
@@ -534,6 +544,7 @@ def update_state(item: Container) -> UpdateState:
             UpdateKind.MERGED,
             move,
             ended(f"Merged in {managed.repository}, not applied"),
+            Answer("Not applied", (f"Merged in {managed.repository}",)),
             UpdateAction(APPLY, apply_target(managed, head)),
             apply_of(managed.repository, head, (item,)),
             managed=managed,
@@ -547,11 +558,15 @@ def update_state(item: Container) -> UpdateState:
         until = UNTIL.get(str(held.get("marker", "")), "")
         words = ended(" ".join(("Renovate is holding its branch", until)).strip())
         said = f"Ticks {held.get('branch', '')} on the Dependency Dashboard, then asks Renovate to run."
-        return UpdateState(UpdateKind.HELD, latest, words, said=said, standing=standing, managed=managed, **offered)
+        answer = Answer("Held by Renovate", (capfirst(until),))
+        return UpdateState(
+            UpdateKind.HELD, latest, words, answer, said=said, standing=standing, managed=managed, **offered
+        )
     return UpdateState(
         UpdateKind.UNOPENED,
         latest,
         UNOPENED,
+        Answer("Not opened", (UNOPENED,)),
         said="Asks Renovate to run.",
         standing=standing,
         managed=managed,
@@ -560,15 +575,15 @@ def update_state(item: Container) -> UpdateState:
 
 
 def _decided(
-    kind: UpdateKind, move: str, words: str, action: UpdateAction, approval: Approval, **of: Any
+    kind: UpdateKind, move: str, words: str, answer: Answer, action: UpdateAction, approval: Approval, **of: Any
 ) -> UpdateState:
     """A state whose press runs while ``approval`` holds nothing back."""
 
     if approval.held:
         return UpdateState(
-            kind, move, words, reason=approval.held, adopt=approval.adopt, standing=approval.standing, **of
+            kind, move, words, answer, reason=approval.held, adopt=approval.adopt, standing=approval.standing, **of
         )
-    return UpdateState(kind, move, words, action, said=approval.said, standing=approval.standing, **of)
+    return UpdateState(kind, move, words, answer, action, said=approval.said, standing=approval.standing, **of)
 
 
 def of_app(repository: str, app: str) -> tuple[Container, ...]:

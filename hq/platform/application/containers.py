@@ -422,13 +422,14 @@ class ImageStanding(ImageStandingWords):
 
     @property
     def vulnerability_tone(self) -> str:
-        """What is known against it as a tone: none where nothing could be checked."""
+        """What is known against it as a tone: good only once its packages were
+        checked, since its project's advisories alone miss what its image adds."""
 
         if self.serious:
             return Tone.SERIOUS
         if self.state == VULNERABLE:
             return Tone.ATTENTION
-        return Tone.GOOD if self.checkable else ""
+        return Tone.GOOD if self.checked else ""
 
     @property
     def update_tone(self) -> str:

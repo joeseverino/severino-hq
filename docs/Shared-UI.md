@@ -131,7 +131,7 @@ and those that hold across parts in [Design](Design.md).
 | `fact` | `title` |  |  | What pointing at it says. |
 | `fact` | `tone` |  |  | A status tone the fact is colored by, for what it means. |
 | `fact` | `url` |  |  | The page in HQ its value links to; an outside one is the block form's `{% entity %}`. |
-| `fact` | `value` |  |  | Its value, which makes it one tag with no end. |
+| `fact` | `value` |  |  | Its value, which makes it one tag with no end; an `Answer` gives its short answer as the value, its reasons as the detail's lines and its tone. |
 | `fact` | `zero` |  |  | Its value is nothing counted, drawn quiet. |
 | `fact` | `data_*` | | | Each a `data-` attribute. |
 | `facts` | `items` |  |  | Figures (`Kpi`) to draw as its facts, which makes it one tag with no end. |
@@ -714,6 +714,15 @@ pressed as its value is; one holding another target keeps each its own. Given `{
 `{% panel %}` and `{% foot %}` parts and an `id`, its value is the button that opens the panel
 in place, as a menu does, and each `data_*` option is its attribute, so a fragment region in the
 band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).
+
+**A value is the short answer.** A state, a count, a version: never a sentence, never its label's
+or its state's word again ("Waiting: Waiting for…"). The sentence that explains it is the detail,
+and a tone other than neutral or good says why there. A value a domain object words is an
+`Answer` (`value=update.brings_said`): its `short` is the value, its `because` the detail's lines
+(words, a link, or `Code`), its `tone` the fact's. So a sentence has nowhere to go but the
+detail: an `Answer` whose short is a sentence, or whose attention or serious tone has no reason,
+is refused where it is built, and a reason that opens with the short answer again is dropped.
+A measure in the detail says what it measures ("asked 3 minutes ago", never a bare "3 s").
 
 A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
 or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure

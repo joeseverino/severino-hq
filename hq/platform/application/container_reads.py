@@ -276,7 +276,7 @@ def serialize_app_update(update: Any) -> AppUpdateRecord:
 
 def _merge(standing: MergeStanding) -> MergePart:
     return {
-        "words": standing.words,
+        "words": standing.word,
         "tone": standing.tone,
         "run_url": standing.run_url,
         "taken": standing.taken,

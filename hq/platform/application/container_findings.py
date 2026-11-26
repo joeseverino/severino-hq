@@ -245,7 +245,7 @@ def _standing(state: UpdateState) -> tuple[Fact, ...]:
     lead = (
         entity_link(Kind.RUN, run.id, label=run_standing(run).label)
         if run is not None and run.url
-        else ended(standing.words)
+        else ended(standing.word)
     )
     return tuple((state.standing_label, said) for said in (lead, *map(ended, standing.lines)))
 

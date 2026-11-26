@@ -101,7 +101,7 @@ class AppUpdateTests(TestCase):
 
         self.assertFalse(found.pins[0].scanned)
         self.assertFalse(found.scanned)
-        self.assertNotEqual(found.brings_tone, "good")
+        self.assertNotEqual(found.brings_said.tone, "good")
 
     def test_a_digest_only_an_update_pins_is_read_and_scanned(self):
         from ..public_registry import wanted_digests
@@ -124,7 +124,7 @@ class AppUpdateTests(TestCase):
         found = self.update()
 
         self.assertEqual([item["id"] for item in found.brings], ["CVE-new"])
-        self.assertEqual(found.brings_tone, "serious")
+        self.assertEqual(found.brings_said.tone, "serious")
 
     def test_the_card_of_the_container_it_moves_names_the_pull_request_and_its_numbers(self):
         arranged(pull(moves=[moved()]))

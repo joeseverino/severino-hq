@@ -68,7 +68,7 @@ class PlanTests(TestCase):
         self.assertEqual((plan.change, plan.risk, plan.target_digest), (PATCH, LOW, TARGET))
         self.assertEqual([advisory["id"] for advisory in plan.fixes], ["GHSA-high"])
         self.assertEqual(plan.verified_by, ("its health check",))
-        self.assertEqual((plan.fixes_tone, plan.data_tone, plan.verified_tone), ("good", "", ""))
+        self.assertEqual((plan.fixes_said.tone, plan.data_said.tone, plan.verified_said.tone), ("good", "", ""))
         self.assertEqual(plan.blockers, ())
 
     def test_its_data_is_its_writable_mounts(self):
@@ -96,7 +96,7 @@ class PlanTests(TestCase):
 
         plan = self.plan("app")
 
-        self.assertEqual(([mount["source"] for mount in plan.data], plan.data_tone), (["app_data"], "attention"))
+        self.assertEqual(([mount["source"] for mount in plan.data], plan.data_said.tone), (["app_data"], "attention"))
 
     def test_a_major_version_is_high_risk_and_waits_for_a_person(self):
         estate()
@@ -247,9 +247,9 @@ class ReadinessTests(TestCase):
         # Nothing about a target it does not have.
         self.assertFalse(reasons & {"no-target-digest", "not-a-patch", "target-affected"})
         self.assertFalse(found.automatic)
-        self.assertEqual((found.verified_tone, found.automatic_tone), ("attention", ""))
+        self.assertEqual((found.verified_said.tone, found.automatic_said.tone), ("attention", ""))
         ready = replace(found, verified_by=("its health check",), not_automatic=())
-        self.assertEqual((ready.verified_tone, ready.automatic_tone), ("good", "good"))
+        self.assertEqual((ready.verified_said.tone, ready.automatic_said.tone), ("good", "good"))
 
 
 class ExposureOrderTests(TestCase):

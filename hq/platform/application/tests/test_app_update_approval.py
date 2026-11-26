@@ -147,7 +147,7 @@ class ApproveUpdateTests(TestCase):
         from ..container_reads import get_app_update
 
         record = get_app_update("example:alpha:7:app")
-        self.assertEqual(record["merge"]["words"], self.standing().words)
+        self.assertEqual(record["merge"]["words"], self.standing().word)
         self.assertEqual(record["held"], self.standing().words)
         self.assertEqual(record["checks"]["state"], "success")
 
@@ -470,11 +470,11 @@ class ApproveUpdateTests(TestCase):
 
         self.worked()
 
-        self.assertEqual((self.standing().words, self.standing().tone), ("Applied", "good"))
+        self.assertEqual((self.standing().word, self.standing().tone), ("Applied", "good"))
         # A closed update that applied offers nothing more on the container's page.
         self.merged_on_main()
         container = self.container_page().context["container"]
-        self.assertEqual((container["state"].standing.words, container["act"]), ("Applied", None))
+        self.assertEqual((container["state"].standing.word, container["act"]), ("Applied", None))
 
     def test_an_apply_whose_machine_rolled_an_app_back_stands_applied_in_the_tone_to_look_at(self):
         self.merged()
@@ -515,7 +515,7 @@ class ApproveUpdateTests(TestCase):
 
         self.assertFalse(self.applies().exists())
         # Said on the update, and pressed again once its head is reviewed.
-        self.assertEqual(self.standing().words, "GitHub refused the merge: the head moved after the approval.")
+        self.assertIn("head moved", self.standing().words)
         self.assertFalse(self.standing().taken)
 
     def test_a_merge_github_refused_is_merged_by_the_next_approval_at_that_head(self):

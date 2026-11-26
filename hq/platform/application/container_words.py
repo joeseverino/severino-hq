@@ -5,7 +5,11 @@ newer one is published. ``containers.ImageStanding`` carries the facts and takes
 these from here, so each phrase has one owner.
 """
 
+from django.utils.text import capfirst, get_text_list
+
+from .card_items import Answer
 from .images import version
+from .ui import counted
 
 # Whether a newer version is published, apart from what is known against it.
 UPDATE_AVAILABLE = "available"
@@ -58,7 +62,23 @@ class ImageStandingWords:
             return self.unread or "HQ has not read its source's advisories yet."
         if not self.checkable:
             return "The image does not say where its source is, and its publisher provides no package list."
-        return ""
+        return self.checked_against
+
+    @property
+    def checked_against(self) -> str:
+        """What was checked for what is known against it, as a reason says it."""
+
+        parts = [
+            *((counted(int(self.checked.get("checked") or 0), "package"),) if self.checked else ()),
+            *(("its project's advisories",) if self.upstream_read_at is not None else ()),
+        ]
+        return f"Checked {get_text_list(parts, 'and')}" if parts else ""
+
+    @property
+    def vulnerabilities_said(self) -> Answer:
+        """``vulnerabilities`` as a fact says it, over its sentence, in its tone."""
+
+        return Answer(capfirst(self.vulnerabilities), (self.vulnerabilities_note,), self.vulnerability_tone)
 
     @property
     def update_state(self) -> str:

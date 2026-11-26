@@ -83,7 +83,7 @@ STOPPED_REPORTING = "Stopped reporting"
 NOT_STARTED = "Not started"
 NOT_STARTED_TONE = Tone.ATTENTION
 # What a run or scan waiting its turn says it waits on, where it is followed.
-WORKER_DUE = "Waiting for HQ's playbook worker."
+WORKER_DUE = "HQ's playbook worker has not taken it yet."
 # The states of a run that has no outcome to say yet.
 UNENDED = frozenset({OperationState.QUEUED, OperationState.CLAIMED})
 # A kind of work whose latest run ended so is one to look at.

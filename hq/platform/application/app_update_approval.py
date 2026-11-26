@@ -13,7 +13,6 @@ and what each may do: docs/Architecture.md, "Approving an app update".
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import timedelta
 from typing import Annotated, Any
 
 from django.db import transaction
@@ -59,7 +58,7 @@ lazy from .entity_links import web_url
 lazy from .github_estate import repositories
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
 lazy from .labels import dotted, lower_first
-lazy from .moments import duration
+lazy from .moments import when
 lazy from .payload_words import ChangeRow
 lazy from .resource_operations import ACTION_CAPABILITY, THEN, OperationAsked, queue_carried_merge
 lazy from .work_runs import WorkRun, run_row, standing_of as run_standing
@@ -482,11 +481,11 @@ def _unapprovable(update: AppUpdate) -> Sentence:
 
 # Why GitHub refused a merge (``github.MergeRefusal``), as the update says it.
 REFUSED = {
-    "head_moved": "GitHub refused the merge: the head moved after the approval.",
-    "not_mergeable": "GitHub refused the merge: it cannot merge it as it stands.",
-    "checks_failing": "GitHub refused the merge: its checks fail.",
-    "checks_pending": "HQ held the merge: its checks have not all passed.",
-    "not_installed": "GitHub refused the merge: HQ's GitHub App is not installed on its repository.",
+    "head_moved": ("Merge refused", "GitHub's answer: the head moved after the approval"),
+    "not_mergeable": ("Merge refused", "GitHub's answer: it cannot merge it as it stands"),
+    "checks_failing": ("Merge refused", "GitHub's answer: its checks fail"),
+    "checks_pending": ("Merge held", "Its checks have not all passed"),
+    "not_installed": ("Merge refused", "HQ's GitHub App is not installed on its repository"),
 }
 
 
@@ -526,7 +525,7 @@ def _previewed(preview: OperationRequest) -> MergeStanding:
         return _under_way(preview, run)
     if preview.state == OperationRequest.State.SUCCEEDED:
         refused = str(((preview.result or {}).get(THEN) or {}).get("refused") or "")
-        return MergeStanding(ended(f"Previewed. {refused}".strip()), Tone.SERIOUS, operation=preview, run=run)
+        return MergeStanding("Previewed", Tone.SERIOUS, lines=(refused or "Not merged",), operation=preview, run=run)
     return _failed("Preview failed", "approve", preview, run)
 
 
@@ -539,12 +538,11 @@ def _merged(merge: OperationRequest) -> MergeStanding:
         if then.get("run"):
             return _applied(merge, str(then["run"]))
         return MergeStanding(
-            ended(f"Merged. {then.get('refused') or ''}".strip()), Tone.SERIOUS, taken=True, operation=merge
+            "Merged", Tone.SERIOUS, taken=True, lines=(str(then.get("refused") or "Not applied"),), operation=merge
         )
     refused = str((result.get("status") or {}).get("refused") or "")
-    return MergeStanding(
-        REFUSED.get(refused) or str(result.get("message") or "The merge failed."), Tone.SERIOUS, operation=merge
-    )
+    word, why = REFUSED.get(refused) or ("Merge failed", str(result.get("message") or ""))
+    return MergeStanding(word, Tone.SERIOUS, lines=(why or "GitHub gave no reason",), operation=merge)
 
 
 def _applied(merge: OperationRequest, first: str) -> MergeStanding:
@@ -560,7 +558,7 @@ def _applied(merge: OperationRequest, first: str) -> MergeStanding:
     if standing.tone == Tone.GOOD:
         return standing
     # Once merged, a failed apply is pressed again from the default branch (``app_updates.UpdateKind.MERGED``).
-    return replace(standing, words=f"Merged, {lower_first(standing.words)}", taken=True)
+    return replace(standing, word="Merged", lines=(f"Apply {lower_first(standing.word)}", *standing.lines), taken=True)
 
 
 def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] = ()) -> MergeStanding | None:
@@ -603,10 +601,14 @@ def _under_way(operation: OperationRequest, run: WorkRun) -> MergeStanding:
 
     standing = run_standing(run)
     return MergeStanding(
-        standing.said,
+        standing.label,
         Tone.ATTENTION,
         taken=True,
-        lines=(waits_on(operation), duration(timedelta(seconds=standing.seconds), short=True)),
+        lines=(
+            standing.note,
+            waits_on(operation),
+            f"asked {when(standing.since)}" if standing.since else "",
+        ),
         operation=operation,
         run=run,
     )
@@ -618,11 +620,15 @@ def _failed(what: str, again: str, operation: OperationRequest, run: WorkRun) ->
     did not release."""
 
     step, said = run.stopped
-    at = f" at “{step}”" if step else ""
     return MergeStanding(
-        f"{ended(f'{what}{at}')} Fix what stopped it, then {again} again.",
+        what,
         Tone.SERIOUS,
-        lines=(said, *(line for line, _tone in run.evidence.amiss)),
+        lines=(
+            f"At “{step}”" if step else "",
+            said,
+            *(line for line, _tone in run.evidence.amiss),
+            f"Fix what stopped it, then {again} again",
+        ),
         operation=operation,
         run=run,
     )

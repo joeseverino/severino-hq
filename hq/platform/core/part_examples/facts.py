@@ -5,7 +5,8 @@ lazy from datetime import date
 from hq.platform.core import held_values
 from hq.platform.core.part_examples import runs
 from hq.platform.core.template_parts import Example
-lazy from hq.platform.application.card_items import Counted, Kpi
+lazy from hq.platform.application.card_items import Answer, Counted, Kpi
+lazy from hq.platform.application.display_words import Code
 lazy from hq.platform.application.drawings import AllocationBar, Dots, Share, Trend
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.labels import dotted
@@ -192,6 +193,41 @@ FACTS_STATES = {
     # or option of the tags comes with an entry here (CatalogTests in test_part_tags). A
     # zero beside a linked count stands on its value's line, as the Agents
     # card's counts do.
+    # Values a domain object words (``Answer``), as a container's Upgrade card
+    # draws them: a state over what it waits on and when it was asked, a
+    # reason a check cannot run, a count in attention over why with each
+    # thing it counts as code, and a count over the links it names.
+    "answered": Example(
+        '{% card element="div" %}{% facts layout="band" %}'
+        '{% fact "Example approval" icon="commit" value=waiting url="/example/run/" %}'
+        '{% fact "Example new vulnerabilities" icon="info" value=unchecked %}'
+        '{% fact "Example data" icon="layers" value=data %}'
+        '{% fact "Example fixes" icon="shield" value=fixes %}'
+        "{% endfacts %}{% endcard %}",
+        lambda: {
+            "waiting": Answer(
+                "Waiting",
+                ("Example playbook worker has not taken it yet.", "asked an example minute ago"),
+                Tone.ATTENTION,
+            ),
+            "unchecked": Answer(
+                "Can't check", ("example-builds/example-app publishes no package list",), Tone.ATTENTION
+            ),
+            "data": Answer(
+                "2 mounts",
+                ("An example new version may rewrite it", Code("example_data"), Code("/srv/example")),
+                Tone.ATTENTION,
+            ),
+            "fixes": Answer(
+                "2 known vulnerabilities",
+                (
+                    EntityLink("GHSA-example-0001", "https://example.com/a", external=True),
+                    EntityLink("GHSA-example-0002", "https://example.com/b", external=True),
+                ),
+                Tone.GOOD,
+            ),
+        },
+    ),
     "band": Example(
         '{% card element="div" %}{% facts layout="band" label="Example status" %}'
         '{% fact "Example rules" value=0 %}'
