@@ -1,0 +1,19 @@
+// The inbound-events Worker (src/index.ts). The account and the route's
+// hostname come from the deploy's environment, so this public file names
+// neither.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hq-inbound",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-23",
+  "workers_dev": false,
+  "exports": {
+    "Hub": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "HUB", "class_name": "Hub" }]
+  },
+  "secrets": {
+    "required": ["GITHUB_WEBHOOK_SECRET", "SOCKET_TOKEN"]
+  }
+}

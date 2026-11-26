@@ -11,7 +11,7 @@
 #MISE   ".github/**/*", "composition/**/*", "controller/**/*", "demo/**/*", "deploy/**/*",
 #MISE   "Dockerfile", "Dockerfile.dockerignore", "entrypoint.sh", "examples/**/*",
 #MISE   "hq/**/*", "hq_sdk/**/*", "hq_runner/**/*", "manage.py", "mise-tasks/**/*", "mise.fast.toml", "mise.lock", "mise.toml",
-#MISE   "policy/**/*", "pyproject.toml", "static/**/*", "templates/**/*", "tests/**/*", "tools/**/*", "uv.lock",
+#MISE   "policy/**/*", "pyproject.toml", "static/**/*", "templates/**/*", "tests/**/*", "tools/**/*", "uv.lock", "worker/**/*",
 #MISE ]
 #MISE outputs=[]
 #USAGE flag "--at <ref>" help="Run this tree's test files, uncommitted work included, on the code at <ref> in a throwaway worktree: the way to prove a new test fails without the fix. A support file (a gate, probe or fixture) is laid over too, and the closing line names what was laid over and kept, each support file that replaced the ref's own copy apart from one the ref lacks. A Python or Go pass with such a file laid over runs again with each kept at <ref>, and the line gives both outcomes, that second run's as the verdict; a kept Python file the tests import a name from that <ref>'s copy lacks is a fixture, laid over again and named (docs/Development.md)"

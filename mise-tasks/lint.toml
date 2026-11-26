@@ -284,6 +284,27 @@ depends = ["setup:lint-tools"]
 usage = 'flag "--fix" help="Write what the tool fixes itself, then report the rest: fast runs it first"'
 run = 'eslint --config tools/lint/eslint.config.mjs --suppressions-location tools/lint/eslint-suppressions.json --max-warnings 0 $([ "${usage_fix:-}" != true ] || echo --fix) "static/js/**/*.js"'
 
+# The inbound-events Worker: wrangler writes the runtime's and the bindings'
+# types from wrangler.jsonc, then TypeScript checks the Worker and its tests
+# under worker/tsconfig.json's strict options. No linter or formatter of the
+# repository's reads TypeScript, so the compiler's checks are the bar.
+["lint:worker"]
+description = "The inbound-events Worker and its tests typecheck against the Workers runtime and the bindings wrangler.jsonc declares"
+hide = true
+tags = ["fast"]
+sources = [
+  "worker/**",
+  "!worker/node_modules/**",
+  "!worker/worker-configuration.d.ts",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+]
+outputs = []
+depends = ["setup:worker-tools"]
+env = { WRANGLER_SEND_METRICS = "false" }
+run = "cd worker && ./node_modules/.bin/wrangler types >/dev/null && ./node_modules/.bin/tsc -p ."
+
 # The Go controller's static half: format, generated types, the vendor slicer,
 # golangci-lint and the advisory guard. Its race tests are test:controller.
 ["lint:controller"]

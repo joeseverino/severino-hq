@@ -1,0 +1,8 @@
+{
+  "action": "opened",
+  "number": 2,
+  "pull_request": { "id": 279147437, "number": 2, "state": "open", "title": "Update the README with new information.", "body": "This is a pretty simple change that we need to pull into main.", "head": { "ref": "changes", "sha": "34c5c7793cb3b279e22454cb6750c80560547b3a" }, "base": { "ref": "main", "sha": "a10867b14bb761a232cd80139fbd4c0d33264240" } },
+  "repository": { "id": 186853002, "name": "hq", "full_name": "example/hq", "private": false, "owner": { "login": "example", "id": 21031067 } },
+  "sender": { "login": "example", "id": 21031067, "type": "User" },
+  "installation": { "id": 1 }
+}

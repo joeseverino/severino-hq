@@ -2,10 +2,10 @@
 # the derived files, the docs' pictures, an extension's contract check.
 
 ["ci:caches"]
-description = "Fill the caches CI's jobs restore: every Python group, the Go controller's builds, the npm tools"
+description = "Fill the caches CI's jobs restore: every Python group, the Go controller's builds, the npm tools and the Worker's"
 hide = true
 extends = "heavy"
-depends = ["setup:lint-tools"]
+depends = ["setup:lint-tools", "setup:worker-tools"]
 run = [
   "uv sync --all-groups",
   "go -C controller build ./... tool",
