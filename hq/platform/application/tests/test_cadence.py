@@ -599,30 +599,34 @@ class ControllerTimerTests(SimpleTestCase):
 
     def test_each_doorbell_is_the_one_its_path_unit_waits_on(self):
         """HQ is told only where the controller's doorbell is, and rings the
-        glance's and the automation worker's beside it: each must be the file
-        its unit on the host watches."""
+        others beside it: each must be the file its path unit on the host
+        waits to exist, and the service that unit starts removes it before it
+        works, so a ring while it runs starts it again when it ends."""
 
         units = Path(settings.BASE_DIR) / "deploy/systemd"
 
-        def watched(unit: str, key: str) -> Path:
-            (value,) = (
+        def setting(unit: str, key: str) -> str | None:
+            values = [
                 line.removeprefix(f"{key}=")
                 for line in (units / unit).read_text().splitlines()
                 if line.startswith(f"{key}=")
-            )
-            return Path(value)
+            ]
+            self.assertLessEqual(len(values), 1, (unit, key))
+            return values[0] if values else None
 
-        controller = watched("severino-hq-controller.path", "PathChanged")
-        for ring, unit, key in (
-            ("controller", "severino-hq-controller.path", "PathChanged"),
-            ("glance", "severino-hq-glance.path", "PathExists"),
-            ("automation", "severino-hq-automation.path", "PathExists"),
-        ):
-            with self.subTest(unit=unit), tempfile.TemporaryDirectory() as directory:
-                with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / controller.name)):
+        directories = set()
+        for ring in cadence.DOORBELLS:
+            path = f"severino-hq-{ring}.path"
+            with self.subTest(unit=path), tempfile.TemporaryDirectory() as directory:
+                with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / "controller-doorbell")):
                     self.assertTrue(cadence._ring(ring))
                 (rung,) = Path(directory).iterdir()
-                self.assertEqual(controller.with_name(rung.name), watched(unit, key))
+                watched = Path(setting(path, "PathExists") or "")
+                self.assertEqual(watched.name, rung.name)
+                self.assertIsNone(setting(path, "PathChanged"))
+                self.assertEqual(setting(str(setting(path, "Unit")), "ExecStartPre"), f"/bin/rm -f {watched}")
+                directories.add(watched.parent)
+        self.assertEqual(len(directories), 1, directories)
 
 
 class DefaultCadenceTests(TestCase):
