@@ -15,7 +15,9 @@ What HQ may take on next, and what it will not.
 
 - Invoices, payments, bank logins, payroll, clients or leads.
 - A customer portal, public registration, or more than one tenant.
-- Anything reachable from the public internet, or public webhooks.
+- HQ reachable from the public internet. Providers' webhooks reach the
+  inbound-events Worker, which HQ dials out to
+  ([Security](Security.md#the-inbound-events-worker)).
 - Secrets, runbook bodies or receipt files in AI-readable exports.
 - Replacing the notes vault. HQ indexes pointers to documentation; the vault
   stays the source of truth.

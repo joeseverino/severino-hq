@@ -698,7 +698,8 @@ is refused the audit log (`read_audit_log`) and the calendar
 
 Providers' webhooks reach a Cloudflare Worker (`worker/`), never HQ. HQ's
 listener dials out to it and holds the socket, so HQ itself still has no
-path from the public internet.
+path from the public internet. Setting it up is
+[Install step 12](Install.md#12-hear-providers-events-and-approve-deploys-in-hq).
 
 - It answers on a name of the operator's own zone, a Workers custom domain.
   Its `workers.dev` address, which names the Cloudflare account, is off
@@ -712,9 +713,10 @@ path from the public internet.
 - An event forwards its names alone (provider, event, subject, delivery id,
   time), never its body. A valid sender can only make HQ re-read a source
   with HQ's own credentials.
-- Its secrets, `GITHUB_WEBHOOK_SECRET` and `SOCKET_TOKEN`, have one source,
-  a 1Password item, which the host listener reads too. They are Worker
-  secrets, set by `mise run worker:deploy --with-secrets` from the
+- Its secrets, `GITHUB_WEBHOOK_SECRET` and `SOCKET_TOKEN`, live in a
+  1Password item of the operator's, and the listener holds the same
+  `SOCKET_TOKEN` as the `cloudflare_events` connection's credential. They
+  are Worker secrets, set by `mise run worker:deploy --with-secrets` from the
   operator's machine for the first deploy and each rotation. Every other
   deploy keeps them, and fails while one `wrangler.jsonc` requires is
   missing. No workflow holds them.
@@ -977,7 +979,9 @@ nothing leaked.
   controller like provider work.
 - Read contact submissions from the web process. The controller reads and
   changes them through the Cloudflare API connection.
-- Run a customer portal or public webhooks.
+- Run a customer portal, or answer a webhook itself. Providers' webhooks
+  reach the inbound-events Worker, which HQ dials out to
+  ([The inbound-events Worker](#the-inbound-events-worker)).
 - Decrypt an encrypted documentation source. HQ indexes documentation, and
   the source stays separate.
 - Store credentials, API tokens, or secrets in models. The documentation

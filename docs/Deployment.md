@@ -157,27 +157,9 @@ do: [Security](Security.md#releasing-a-deploy).
 The rule is a GitHub App of its own, the deploy review App, whose key only
 the controller holds: GitHub takes a rule's answer only from the App that is
 the rule, so the main App's key, which CI and every extension also hold,
-cannot release a deploy. Setting it up, once, on the repository that deploys
-HQ:
-
-1. Register the review App from the Setup page link
-   [Connections](Connections.md#github-deploy-review-app) gives, which fills
-   in its permissions and its one event; name it, give it a homepage, create
-   it, then generate a private key and store it in 1Password as an SSH Key
-   item.
-2. Install it on the host repository alone.
-3. Wire it: the command points its webhook at the inbound-events Worker
-   with the secret the Worker verifies, stores its ID as the `HQ_REVIEW_APP_ID`
-   secret, and makes the `release` environment `main` only, administrators
-   allowed to bypass its rules, with the review App as its protection rule.
-   Then tick Active on the App's settings page as the command says:
-
-   ```sh
-   mise run wire-github-app --review --vault 'Example Vault' --item 'example review app' --client-id EXAMPLE_CLIENT_ID --webhook-secret 'op://Example Vault/example events/GITHUB_WEBHOOK_SECRET'
-   ```
-
-4. Store its connection item as [Connections](Connections.md#github-deploy-review-app)
-   lays it out, `manages` set.
+cannot release a deploy. Its webhook reaches HQ through the inbound-events
+Worker. Setting both up, once, on the repository that deploys HQ is
+[Install step 12](Install.md#12-hear-providers-events-and-approve-deploys-in-hq).
 
 Deploy's Resolve refuses to go on until `release` is so, naming what is
 missing: GitHub makes an environment a job names on first use, unprotected,

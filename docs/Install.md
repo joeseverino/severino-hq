@@ -28,6 +28,8 @@ and [Secrets](Secrets.md). This page is only the order and the commands.
   credential HQ reads and a Connect server that reads it.
 - **Extensions, if you want any.** HQ runs without them; an empty list
   composes the host alone (see [step 2](#2-set-up-the-repository)).
+- **Cloudflare**, with a zone of your own: the inbound-events Worker answers
+  on a name in it ([step 12](#12-hear-providers-events-and-approve-deploys-in-hq)).
 - **A provider HQ can read**, such as Tailscale, Cloudflare, Portainer or
   your proxy, when you want HQ to read one. HQ starts without any
   ([step 8](#8-add-the-first-connection)).
@@ -49,9 +51,11 @@ section 3 there the text that has to be edited by hand.
 **For:** CI, Compose and Deploy need an app, secrets, an environment and a
 ruleset before they can publish anything.
 
-1. Register HQ's GitHub App with no webhook and the permissions in
-   [`deploy/github-apps.json`](../deploy/github-apps.json). Install it on
-   this repository and each extension.
+1. Register HQ's GitHub App with its webhook's Active unticked and the
+   permissions in [`deploy/github-apps.json`](../deploy/github-apps.json).
+   Install it on this repository and each extension. [Step
+   12](#12-hear-providers-events-and-approve-deploys-in-hq) points its webhook
+   at the inbound-events Worker.
 2. Store the app's private key in 1Password, then set the secrets with
    `mise run wire-github-app`; name each extension with `--extension`, or
    none. It needs `gh` and `op` signed in:
@@ -66,11 +70,7 @@ ruleset before they can publish anything.
    To take one out of production later, move its id to `retired`: a deploy
    refuses an image that drops an extension production runs unless it is named
    there. How an extension is admitted is in [Extensions](Plugins.md#composition).
-4. Register the deploy review App and wire it, which creates the `release`
-   environment, `main` only, with that App as its deployment protection rule
-   ([Releasing a deploy](Deployment.md#releasing-a-deploy)). Deploy refuses
-   to run until it is in place.
-5. Add a `main` ruleset requiring the **Ready** check, with GitHub Actions
+4. Add a `main` ruleset requiring the **Ready** check, with GitHub Actions
    as its expected source.
 
 **Check:** the repository's secrets list `HQ_APP_KEY`, `HQ_APP_CLIENT_ID` and
@@ -87,8 +87,9 @@ Merge to `main`. CI's **Release** starts **Compose**, which publishes and signs
 the composition. To run it by hand: Actions, **Compose**, Run workflow, on
 `main`.
 
-Compose then starts **Deploy**, which waits for your approval. The host is not
-ready for it yet: reject it.
+Compose then starts **Deploy**, which refuses to go on until [step
+12](#12-hear-providers-events-and-approve-deploys-in-hq) gives it an
+approval to wait on. The host is not ready for it yet either.
 
 Find the digest of what Compose published. Either read it on the package's
 page on GitHub, or, from any machine with Docker Buildx:
@@ -431,6 +432,119 @@ journalctl -u severino-hq-controller.service -n 50
 Open **Connections** (`/infrastructure/connections/`). Your connection is
 listed with what answered and what it can see.
 
+## 12. Hear providers' events and approve deploys in HQ
+
+**For:** providers' webhooks reach a Cloudflare Worker on a name of your own
+zone, never HQ, and HQ's listener dials out to it, so what changed is read
+in seconds ([Security](Security.md#the-inbound-events-worker)). Deploy waits
+on the deploy review App, which answers only as HQ tells it
+([Releasing a deploy](Deployment.md#releasing-a-deploy)), so every release
+needs this step.
+
+Run these from a checkout of your repository, with `gh` and `op` signed in.
+They keep `OWNER/REPO`, `events.example.com` for the name on your zone the
+Worker answers on, `0123abcd` for your Cloudflare account ID, and the vault
+and item names for you to fill in.
+
+1. Create the item holding the Worker's secrets, `GITHUB_WEBHOOK_SECRET` and
+   `SOCKET_TOKEN`:
+
+   ```sh
+   op item create --vault 'Example Vault' --category password --title 'example events' "GITHUB_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "SOCKET_TOKEN[password]=$(openssl rand -hex 32)"
+   ```
+
+2. Mint the Worker's deploy token, Workers Scripts Write alone, into an API
+   Credential item of its own. The bootstrap token is one that may create API
+   tokens ([Secrets](Secrets.md#minting-observer-credentials)):
+
+   ```sh
+   op item create --vault 'Example Vault' --category 'API Credential' --title 'example worker deploy'
+   ```
+
+   ```sh
+   CLOUDFLARE_BOOTSTRAP_TOKEN='op://Example Bootstrap/cloudflare/credential' op run -- mise run mint:cloudflare --account 0123abcd --name hq-worker-deploy --permissions mise-tasks/worker/deploy.permissions --store 'op://Example Vault/example worker deploy/credential'
+   ```
+
+3. Create the `inbound-worker` environment, with you as its required
+   reviewer, and give it the token, the account and the hostname. Deploy
+   Worker runs there on each merge that changes the Worker, once you approve
+   it:
+
+   ```sh
+   gh api -X PUT repos/OWNER/REPO/environments/inbound-worker -F 'reviewers[][type]=User' -F "reviewers[][id]=$(gh api user --jq .id)"
+   ```
+
+   ```sh
+   op read 'op://Example Vault/example worker deploy/credential' | gh secret set CLOUDFLARE_API_TOKEN --repo OWNER/REPO --env inbound-worker
+   ```
+
+   ```sh
+   gh secret set CLOUDFLARE_ACCOUNT_ID --repo OWNER/REPO --env inbound-worker --body 0123abcd
+   ```
+
+   ```sh
+   gh secret set HQ_INBOUND_HOSTNAME --repo OWNER/REPO --env inbound-worker --body events.example.com
+   ```
+
+4. Deploy the Worker the first time, with its secrets. A later deploy keeps
+   them; run this again after rotating one:
+
+   ```sh
+   CLOUDFLARE_API_TOKEN='op://Example Vault/example worker deploy/credential' CLOUDFLARE_ACCOUNT_ID=0123abcd HQ_INBOUND_HOSTNAME=events.example.com GITHUB_WEBHOOK_SECRET='op://Example Vault/example events/GITHUB_WEBHOOK_SECRET' SOCKET_TOKEN='op://Example Vault/example events/SOCKET_TOKEN' op run -- mise run worker:deploy --with-secrets
+   ```
+
+5. Point HQ's GitHub App's webhook at the Worker: the command from [step
+   2](#2-set-up-the-repository), with the secret it signs with.
+
+   ```sh
+   HQ_INBOUND_HOSTNAME=events.example.com mise run wire-github-app --vault 'Example Vault' --item 'example github app' --client-id EXAMPLE_CLIENT_ID --extension example-owner/example-extension --webhook-secret 'op://Example Vault/example events/GITHUB_WEBHOOK_SECRET'
+   ```
+
+   Then, on the App's settings page, tick Active and subscribe to the events
+   the command prints. GitHub has no API for either.
+6. Add the `cloudflare_events` connection, which the listener waits for
+   before it starts: an item in the vault `host.json` names, laid out as
+   [Connections](Connections.md#cloudflare-inbound-events) says, its
+   `credential` the `SOCKET_TOKEN` from step 1 and its `website` the Worker's
+   socket, `wss://events.example.com/socket`. Once the renderer installs it
+   ([step 8](#8-add-the-first-connection)), the listener starts within five
+   minutes, or at once, on the host:
+
+   ```sh
+   systemctl start severino-hq-listener.service
+   ```
+
+7. Register the deploy review App from the Setup page link
+   [Connections](Connections.md#github-deploy-review-app) gives, which fills
+   in its permissions and its one event. Name it, give it a homepage, create
+   it, then generate a private key and store it in the vault `host.json` names as an
+   SSH Key item. Install it on this repository alone.
+8. Wire it: the command points its webhook at the Worker with the same
+   secret, stores its ID as the `HQ_REVIEW_APP_ID` secret, and makes the
+   `release` environment `main` only, administrators allowed to bypass its
+   rules, with the review App as its protection rule. Then tick Active on the
+   App's settings page, as the command says:
+
+   ```sh
+   HQ_INBOUND_HOSTNAME=events.example.com mise run wire-github-app --review --vault 'Example Vault' --item 'example review app' --client-id EXAMPLE_CLIENT_ID --webhook-secret 'op://Example Vault/example events/GITHUB_WEBHOOK_SECRET'
+   ```
+
+9. Store its connection item as
+   [Connections](Connections.md#github-deploy-review-app) lays it out, its
+   `signing_key` naming the SSH Key item and `manages` set.
+
+**Check:**
+
+- **Events** (`/infrastructure/events/`) lists the Worker channel with when
+  it was last heard, and each event under the channel it came by, with what
+  it made due and its outcome. A push to a repository the App is installed
+  on appears there within seconds.
+- **Controller** (`/infrastructure/controller/`) shows the event listener
+  online. Until the connection is installed it reads not set up, with a
+  Setup guide link to this step.
+- A Deploy waiting on `release` is a finding under **Needs you**, with
+  Approve and Reject.
+
 HQ is installed.
 
 ## What happens next
@@ -451,7 +565,8 @@ HQ is installed.
   enforces, such as tailnet lock. `SEVERINO_POSTURE=advanced` on the env item
   lists each unmet one in Needs you ([Posture](Posture.md)).
 - **Releases.** A merge to `main` reaches this host through
-  Compose and Deploy, after your approval ([Deployment](Deployment.md)).
+  Compose and Deploy, after you approve it in HQ
+  ([Releasing a deploy](Deployment.md#releasing-a-deploy)).
   Rerun `hq-host bootstrap` whenever `host.json` changes, and once after a
   release that changes the sudo rule it renders.
 - **Backup.** `hq-host install` enabled the nightly backup. It needs
