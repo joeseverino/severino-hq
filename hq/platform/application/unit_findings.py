@@ -16,6 +16,7 @@ from django.utils.text import capfirst, get_text_list
 from hq.domains.control_plane.observations.host import UNIT_KIND, unescaped
 
 from . import render_status_findings
+from .action_links import ActionLink
 from .finding_model import (
     Finding,
     FindingEstate,
@@ -29,6 +30,7 @@ from .finding_steps import Run
 from .moments import duration, moment, when
 from .quoted import Quoted
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
+from .security import Capability
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import agreed, counted, ended
@@ -216,6 +218,61 @@ def machine_units(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[U
         units = tuple(row for row in rows if row.unit)
         if units:
             yield node, units
+
+
+# Who is told a worker on HQ's machine stopped reporting: whoever may read
+# HQ. It is about no record or reading, so no subject or scope gates it.
+WORKER_READ = (str(Capability.READ),)
+
+
+def unit_causes(estate: FindingEstate, unit: str) -> tuple[str, ...]:
+    """The findings a worker's silence follows from, on the machine whose
+    units include ``unit``, the one that runs it: that unit failed, or it or
+    what starts it is not set up."""
+
+    causes = []
+    for node, units in machine_units(estate):
+        starts = tuple(each for each in units if unit in (each.unit, each.activates))
+        if any(each.unit == unit and each.failed for each in starts):
+            causes.append(matter_key(FAILED, node.id))
+        if any(each.absent for each in starts):
+            causes.append(matter_key(NOT_INSTALLED, node.id))
+    return tuple(causes)
+
+
+def stopped_reporting(
+    estate: FindingEstate,
+    seen_at: datetime,
+    *,
+    rule: str,
+    unit: str,
+    title: str,
+    explanation: str,
+    severity: Tone,
+    primary: ActionLink,
+    part: str = "",
+    steps: tuple[Run, ...] = (),
+) -> Finding:
+    """The one finding for a worker on HQ's machine, run by ``unit``, that
+    stopped reporting: when it was last seen and how to read why, beneath its
+    unit's own failure."""
+
+    return Finding(
+        rule=rule,
+        subject="",
+        part=part,
+        read_capabilities=WORKER_READ,
+        title=title,
+        severity=severity,
+        explanation=explanation,
+        evidence=(("Last seen", when(seen_at, now=estate.now)),),
+        steps=(
+            *steps,
+            Run(label="Read why it stopped", command=f"sudo journalctl -u {shlex.quote(unit)} -n 50 --no-pager"),
+        ),
+        primary=primary,
+        follows=unit_causes(estate, unit),
+    )
 
 
 def _ended(unit: UnitState) -> str:

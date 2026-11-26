@@ -1,0 +1,38 @@
+// The inbound-events Worker (src/index.ts). The account and the route's
+// hostname come from the deploy's environment, so this public file names
+// neither. Written by `mise run manage -- inbound_worker` from the providers'
+// INBOUND declarations.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hq-events",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-23",
+  "workers_dev": false,
+  "exports": {
+    "Hub": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "HUB",
+        "class_name": "Hub"
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "invocation_logs": false
+    }
+  },
+  "secrets": {
+    "required": [
+      "GITHUB_WEBHOOK_SECRET",
+      "SOCKET_TOKEN"
+    ]
+  }
+}

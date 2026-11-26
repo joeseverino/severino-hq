@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.9.2",
+    "typescript": "7.0.2",
+    "vitest": "5.1.2",
+    "wrangler": "4.168.0"
+  },
+  "allowScripts": {
+    "esbuild": false,
+    "workerd": false,
+    "fsevents": false
+  }
+}

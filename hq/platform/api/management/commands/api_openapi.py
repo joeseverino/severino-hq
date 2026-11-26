@@ -10,9 +10,5 @@ class Command(DerivedFileCommand):
     source = "the API's routes and registries"
 
     @override
-    def target(self) -> Path:
-        return DOCUMENT_PATH
-
-    @override
-    def derive(self) -> str:
-        return render(document())
+    def emitted(self) -> dict[Path, str]:
+        return {DOCUMENT_PATH: render(document())}

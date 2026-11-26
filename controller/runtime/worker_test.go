@@ -11,8 +11,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 type bridgeCall struct {
@@ -268,14 +266,6 @@ func TestAGlancePassStopsWhenHQRefusesItsReport(t *testing.T) {
 	}
 }
 
-// Root gives a glance pass the Portainer connections by the name this
-// registry gives the provider.
-func TestTheGlanceIsGivenPortainerByItsDeclaredName(t *testing.T) {
-	if host.PortainerProvider != string(ConnectionProviderPortainer) {
-		t.Errorf("root gives a glance %q connections; Portainer's are %q", host.PortainerProvider, ConnectionProviderPortainer)
-	}
-}
-
 func TestAGlancePassWithoutAPlanFails(t *testing.T) {
 	w, b, _ := newWorker()
 	b.Fail["glance-plan"] = errors.New("HQ is not serving the bridge")
@@ -296,12 +286,29 @@ func TestIdleApplyOrder(t *testing.T) {
 		t.Fatal("snapshot leaked beyond sweep")
 	}
 }
-func TestTargetedSweepDoesNotReadAnalytics(t *testing.T) {
-	w, b, p := newWorker()
-	b.Responses["sweep-due"] = Object{"due": true, "carry": []string{"example-ssh"}, "only_kinds": []string{"example.kind"}}
-	_, err := w.Run(t.Context(), true)
-	if err != nil || p.AnalyticsCalls != 0 || !reflect.DeepEqual(p.Only, []ResourceKind{"example.kind"}) || !reflect.DeepEqual(p.Carried, []string{"example-ssh"}) {
-		t.Fatalf("%v %#v", err, p)
+
+// A sweep of named kinds reads those kinds alone: no analytics, and no
+// connection probed unless a forced read names one.
+func TestTargetedSweepReadsOnlyWhatItNames(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		forced []Object
+		probed bool
+	}{
+		{"kinds alone", []Object{{"kind": "example.kind", "kinds": []string{"example.kind"}, "connection_ref": "", "requested_at": "2026-01-02T03:04:05Z"}}, false},
+		{"a connection named", []Object{{"kind": "", "kinds": []string{"example.kind"}, "connection_ref": "example-ssh", "requested_at": "2026-01-02T03:04:05Z"}}, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			w, b, p := newWorker()
+			b.Responses["sweep-due"] = Object{"due": true, "carry": []string{"example-ssh"}, "only_kinds": []string{"example.kind"}, "forced": c.forced}
+			_, err := w.Run(t.Context(), true)
+			if err != nil || p.AnalyticsCalls != 0 || !reflect.DeepEqual(p.Only, []ResourceKind{"example.kind"}) {
+				t.Fatalf("%v %#v", err, p)
+			}
+			if probed := slices.Contains(b.actions(), "connections"); probed != c.probed {
+				t.Errorf("connections probed: %t", probed)
+			}
+		})
 	}
 }
 func TestProviderFailureReportsGenerationAndStillSweeps(t *testing.T) {

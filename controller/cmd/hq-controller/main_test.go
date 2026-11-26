@@ -96,6 +96,7 @@ var responses = map[string]any{
 	"steps":       map[string]any{"ok": true},
 	"glance":      map[string]any{"ok": true},
 	"analytics":   map[string]any{"ok": true},
+	"events":      map[string]any{"ok": true},
 }
 
 // jobs is what the stub answers for each piece of scheduled work asked of it.
@@ -171,8 +172,15 @@ func setUp(t *testing.T) (binary string, bridge *stubBridge) {
 
 func runBinary(t *testing.T, binary string, bridge *stubBridge, args ...string) (int, []call, []string) {
 	t.Helper()
+	return runFed(t, binary, bridge, "", args...)
+}
+
+// runFed is runBinary with input on the binary's stdin.
+func runFed(t *testing.T, binary string, bridge *stubBridge, input string, args ...string) (int, []call, []string) {
+	t.Helper()
 	cmd := exec.CommandContext(t.Context(), binary, args...)
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), BridgeSocket + "=" + bridge.Socket, "HQ_CONTROLLER_ID=e2e"}
+	cmd.Stdin = strings.NewReader(input)
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), BridgeSocket + "=" + bridge.Socket, EventsBridgeSocket + "=" + bridge.Socket, "HQ_CONTROLLER_ID=e2e"}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -384,6 +392,50 @@ func TestJob(t *testing.T) {
 				if made.Action != "job" || made.Query.Get("name") != tc.args[1] {
 					t.Fatalf("called %s %v", made.Action, made.Query)
 				}
+			}
+		})
+	}
+}
+
+func TestEvents(t *testing.T) {
+	binary, bridge := setUp(t)
+	push := `{"provider":"github_app","event":"push","subject":"example/app","delivery_id":"d-1","received_at":"2026-01-15T12:00:00Z"}`
+	overlong := strings.Replace(push, `"push"`, `"`+strings.Repeat("a", 121)+`"`, 1)
+	for _, tc := range []struct {
+		name        string
+		args        []string
+		input       string
+		code        int
+		posted      []int
+		reconnected bool
+	}{
+		{"a line is an event", []string{"events"}, push + "\n", 0, []int{1}, false},
+		{"every line is one batch", []string{"events"}, push + "\n" + push + "\n", 0, []int{2}, false},
+		{"a batch is split at the contract's bound", []string{"events"}, strings.Repeat(push+"\n", runtime.MaxInboundEvents+1), 0, []int{runtime.MaxInboundEvents, 1}, false},
+		{"no events says the teller is listening", []string{"events"}, "", 0, []int{0}, false},
+		{"a reconnect is told", []string{"events", "--reconnected"}, "", 0, []int{0}, true},
+		{"a line out of the contract is dropped alone", []string{"events"}, overlong + "\n" + `{"provider":"github_app","body":"x"}` + "\n" + push + "\n", 0, []int{1}, false},
+		{"a source is not named", []string{"events", "worker"}, "", 2, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := len(bridge.Calls())
+			code, calls, lines := runFed(t, binary, bridge, tc.input, tc.args...)
+			if code != tc.code {
+				t.Fatalf("exit %d, output %v", code, lines)
+			}
+			var posted []int
+			for _, made := range calls[before:] {
+				var batch runtime.InboundBatch
+				if made.Action != "events" || json.Unmarshal(made.Payload, &batch) != nil || batch.Source != runtime.InboundSourceHost {
+					t.Fatalf("called %s %s", made.Action, made.Payload)
+				}
+				if batch.Reconnected != (tc.reconnected && len(posted) == 0) {
+					t.Errorf("batch %d says reconnected %t", len(posted), batch.Reconnected)
+				}
+				posted = append(posted, len(batch.Events))
+			}
+			if !slices.Equal(posted, tc.posted) {
+				t.Fatalf("posted %v, want %v", posted, tc.posted)
 			}
 		})
 	}

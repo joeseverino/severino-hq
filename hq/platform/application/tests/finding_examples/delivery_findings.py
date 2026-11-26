@@ -71,7 +71,6 @@ ENDED = (
 )
 
 EXAMPLES = (
-    Examples("deploy-waiting", fires=(raising(WAITING, "A deploy is waiting for your approval"),), quiet=(RUNNING,)),
     Examples(
         "deploy-running",
         fires=(

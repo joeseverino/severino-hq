@@ -261,8 +261,6 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 		switch entry.Source {
 		case SourceRef:
 			value = ref
-		case SourceConstant:
-			value = entry.Value
 		case SourceURL:
 			if item.Urls != nil && *entry.Index < len(*item.Urls) {
 				value = (*item.Urls)[*entry.Index].Href

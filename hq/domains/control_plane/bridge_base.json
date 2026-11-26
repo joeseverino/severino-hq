@@ -814,6 +814,45 @@
           }
         }
       }
+    },
+    "/events": {
+      "post": {
+        "operationId": "events",
+        "summary": "Record the events a source reports, and ask for the readings they make due.",
+        "x-bridge-action": "events",
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboundBatch"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2737,6 +2776,63 @@
           "machine",
           "profile"
         ]
+      },
+      "InboundBatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "What one source was told happened (inbound.apply_events). No events says it is listening.",
+        "required": [
+          "source",
+          "events"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/InboundSource"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/InboundArrival"
+            }
+          },
+          "reconnected": {
+            "type": "boolean",
+            "description": "The source has just reconnected and may have missed events, so HQ asks every reading they make due, at most once a minute."
+          }
+        }
+      },
+      "InboundArrival": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One event by its name alone: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; and when it arrived.",
+        "required": [
+          "provider",
+          "event",
+          "delivery_id",
+          "received_at"
+        ],
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/InboundProvider"
+          },
+          "event": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "delivery_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     }
   }

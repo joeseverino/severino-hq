@@ -128,9 +128,16 @@ def built_on(variant):
 
 def narrow(name, schema, kept):
     """Keep only the named properties of a schema and its inline allOf parts,
-    or, for a oneOf or anyOf, only the variants built on the named components."""
+    or, for a oneOf or anyOf, only the variants built on the named components.
+    A dotted name (``output.title``) keeps that property of an inline object,
+    narrowed the same way."""
 
-    kept = set(kept)
+    inner = {}
+    for each in kept:
+        if "." in each:
+            outer, _, rest = each.partition(".")
+            inner.setdefault(outer, []).append(rest)
+    kept = {each.partition(".")[0] for each in kept}
     found = set()
     unions = [key for key in ("oneOf", "anyOf") if key in schema]
     for key in unions:
@@ -143,6 +150,8 @@ def narrow(name, schema, kept):
                 part["properties"] = {key: value for key, value in part["properties"].items() if key in kept}
                 if "required" in part:
                     part["required"] = [key for key in part["required"] if key in kept]
+                for key in inner.keys() & part["properties"].keys():
+                    narrow(f"{name}.{key}", part["properties"][key], inner[key])
     if missing := kept - found:
         raise SystemExit(f"keep names what {name} does not have: {sorted(missing)}")
 

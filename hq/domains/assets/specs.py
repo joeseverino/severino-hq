@@ -120,12 +120,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             ),
             detail_handler=assets.get_asset,
             identifier="slug",
-            search=SearchDefinition(
-                "assets",
+            search=SearchDefinition.of(
                 Asset,
                 "slug",
                 ("item_name", "slug", "vendor", "serial_number", "category", "notes"),
-                label="Assets",
                 title_field="item_name",
             ),
             web_route="assets:list",

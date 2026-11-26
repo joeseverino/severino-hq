@@ -10,7 +10,7 @@ from typing import Any
 
 from ..observations import host, hq, public_registry
 from ..observations.contract import ObservationSpec, registry
-from ..provider_spec import ConnectionKind
+from ..provider_spec import ConnectionKind, InboundSpec
 from . import (
     adguard,
     automation,
@@ -51,14 +51,16 @@ OBSERVATIONS: Mapping[str, ObservationSpec] = registry(
 )
 
 
-def admitted_connections(modules: Iterable[object]) -> dict[str, ConnectionKind]:
-    """Every connection provider, named once, in admission order."""
+def admitted(modules: Iterable[object], declaration: str) -> dict[str, Any]:
+    """What the modules declare under ``declaration``, by provider, each
+    named once, in admission order: their connections (``CONNECTIONS``) or
+    the events they tell HQ of (``INBOUND``)."""
 
-    found: dict[str, ConnectionKind] = {}
-    for provider, kind in (item for module in modules for item in getattr(module, "CONNECTIONS", {}).items()):
+    found: dict[str, Any] = {}
+    for provider, declared in (item for module in modules for item in getattr(module, declaration, {}).items()):
         if provider in found:
-            raise ValueError(f"Two modules declare the connection provider {provider!r}.")
-        found[provider] = kind
+            raise ValueError(f"Two modules declare the {declaration} of {provider!r}.")
+        found[provider] = declared
     return found
 
 
@@ -75,7 +77,8 @@ def undeclared_connections(definitions: Iterable[Any], connections: Collection[s
     )
 
 
-CONNECTIONS = admitted_connections(ADMITTED)
+CONNECTIONS: dict[str, ConnectionKind] = admitted(ADMITTED, "CONNECTIONS")
+INBOUND: dict[str, InboundSpec] = admitted(ADMITTED, "INBOUND")
 
 if undeclared := undeclared_connections(DECLARATIONS, CONNECTIONS):
     raise ValueError(f"A kind names connection providers no admitted module declares: {undeclared}.")
@@ -84,7 +87,8 @@ __all__ = [
     "ADMITTED",
     "CONNECTIONS",
     "DECLARATIONS",
+    "INBOUND",
     "OBSERVATIONS",
-    "admitted_connections",
+    "admitted",
     "undeclared_connections",
 ]

@@ -404,6 +404,7 @@ sources = [
   "templates/**/*",
   "tests/**/*",
   "tools/**/*",
+  "worker/**/*",
   ".editorconfig",
   ".gitattributes",
   ".gitignore",

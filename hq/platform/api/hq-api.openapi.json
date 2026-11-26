@@ -1287,6 +1287,35 @@
           "$ref": "#/components/schemas/IdempotencyKey"
         }
       },
+      "InboundEventItemFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "id",
+              "provider",
+              "provider_label",
+              "event",
+              "subject",
+              "delivery_id",
+              "source",
+              "outcome",
+              "reads",
+              "received_at",
+              "applied_at",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "KeyIdentifier": {
         "description": "The record's `key`, as each item of the list carries it.",
         "in": "path",
@@ -3506,6 +3535,21 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/HqImportedSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
+      "InboundEventItemSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/InboundEventItemSuccess"
             }
           }
         },
@@ -17282,6 +17326,162 @@
         ],
         "type": "object"
       },
+      "InboundEventItem": {
+        "additionalProperties": false,
+        "description": "One event a provider or HQ's host said happened, and what it made due.",
+        "properties": {
+          "applied_at": {
+            "description": "When HQ stored it, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "delivery_id": {
+            "description": "The provider's id for the delivery, the same on each retry of it.",
+            "type": "string"
+          },
+          "event": {
+            "description": "The provider's name for the event, with its action after a dot where the action matters.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The event's id in HQ.",
+            "type": "integer"
+          },
+          "outcome": {
+            "description": "`applied` where it made readings due, `ignored` for an event HQ does not take.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "The provider that sent it, by its name in HQ's declarations.",
+            "type": "string"
+          },
+          "provider_label": {
+            "description": "That provider, as HQ's pages name it.",
+            "type": "string"
+          },
+          "reads": {
+            "description": "The reading kinds it made due; empty for an ignored event.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "received_at": {
+            "description": "When the provider's request arrived, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "description": "Which channel told HQ: `worker` or `host`.",
+            "type": "string"
+          },
+          "subject": {
+            "description": "What it is about, as the provider names it; empty when it names nothing.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "provider_label",
+          "event",
+          "subject",
+          "delivery_id",
+          "source",
+          "outcome",
+          "reads",
+          "received_at",
+          "applied_at"
+        ],
+        "type": "object"
+      },
+      "InboundEventItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/InboundEventItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "InboundEventItemPartial": {
+        "additionalProperties": false,
+        "description": "One event a provider or HQ's host said happened, and what it made due.",
+        "properties": {
+          "applied_at": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/applied_at"
+          },
+          "delivery_id": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/delivery_id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/event"
+          },
+          "id": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/id"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/outcome"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/provider"
+          },
+          "provider_label": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/provider_label"
+          },
+          "reads": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/reads"
+          },
+          "received_at": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/received_at"
+          },
+          "source": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/source"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/InboundEventItem/properties/subject"
+          }
+        },
+        "type": "object"
+      },
+      "InboundEventItemSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InboundEventItemPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "InfrastructureControllerRefreshRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -29665,6 +29865,7 @@
           "github.profile",
           "github.pull_request",
           "github.repository",
+          "github.webhook",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -29733,6 +29934,7 @@
           "github.profile": "GitHub profile",
           "github.pull_request": "Pull request",
           "github.repository": "GitHub repository",
+          "github.webhook": "GitHub App webhook",
           "host.edge_reboot": "Pending restart on an edge",
           "host.filesystem": "Disk space",
           "host.firewall": "Host firewall",
@@ -32856,6 +33058,7 @@
                 "estate",
                 "expenses",
                 "hq",
+                "inbound_events",
                 "infrastructure",
                 "machines",
                 "playbook_scans",
@@ -37968,6 +38171,7 @@
                 "credential-missing-permissions",
                 "credential-expiring",
                 "github-others-spent",
+                "github-webhook",
                 "render-failing",
                 "render-stale",
                 "connect-sync-stalled",
@@ -38020,7 +38224,7 @@
                 "service-wiring-incomplete",
                 "posture-unmet",
                 "automation-worker-absent",
-                "deploy-waiting",
+                "event-channel-silent",
                 "deploy-running",
                 "machine-offline",
                 "content-drafts",
@@ -38175,6 +38379,7 @@
                 "estate",
                 "expenses",
                 "hq",
+                "inbound_events",
                 "infrastructure",
                 "machines",
                 "playbook_scans",
@@ -41129,6 +41334,198 @@
         "x-hq-resource": "hq"
       }
     },
+    "/api/v2/resources/inbound_events/": {
+      "get": {
+        "description": "What providers and HQ's host told HQ happened, each delivery once, and the readings each made due.",
+        "operationId": "listInboundEventsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
+            "description": "Only the records whose source is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:worker|host)(?:,(?:worker|host))*$",
+              "title": "Source",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose outcome is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:applied|ignored)(?:,(?:applied|ignored))*$",
+              "title": "Outcome",
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "The order the records come in; absent, the best match first for a search, else newest event.",
+            "explode": true,
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "enum": [
+                "-applied_at",
+                "applied_at"
+              ],
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "$ref": "#/components/parameters/InboundEventItemFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundEventItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "getInboundEventsV2": {
+                "operationId": "getInboundEventsV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
+              "listInboundEventsV2": {
+                "operationId": "listInboundEventsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.outcome": "$request.query.outcome",
+                  "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
+                  "query.sort": "$request.query.sort",
+                  "query.source": "$request.query.source"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Events: the list",
+        "tags": [
+          "hq.events"
+        ],
+        "x-hq-resource": "inbound_events"
+      }
+    },
+    "/api/v2/resources/inbound_events/{identifier}/": {
+      "get": {
+        "description": "One of the records Events lists, found by its `id`.",
+        "operationId": "getInboundEventsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/InboundEventItemFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/InboundEventItemSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Events: one by id",
+        "tags": [
+          "hq.events"
+        ],
+        "x-hq-identifier": "id",
+        "x-hq-resource": "inbound_events"
+      }
+    },
     "/api/v2/resources/infrastructure/": {
       "get": {
         "description": "Everything HQ manages: what HQ expects and what is live.",
@@ -43639,6 +44036,7 @@
                 "estate",
                 "expenses",
                 "hq",
+                "inbound_events",
                 "infrastructure",
                 "machines",
                 "playbook_scans",
@@ -44105,6 +44503,12 @@
       "kind": "nav",
       "name": "hq.estate",
       "summary": "Estate"
+    },
+    {
+      "description": "What providers and HQ's host told HQ happened, and the readings each made due.",
+      "kind": "nav",
+      "name": "hq.events",
+      "summary": "Events"
     },
     {
       "description": "One query across every domain, answered with what the reader may read.",

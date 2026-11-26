@@ -18,12 +18,12 @@ lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .adoption import adopt_discovered, unmanaged
-from .cadence import askers, settle_read_requests
 from .inventory import (
     confirm_observed,
     record_inventory,
     retire_departed,
 )
+from .read_requests import askers, settle_read_requests
 from .zones import RECORD_KIND, adopt_discovered_records
 lazy from . import outbound_work, problems
 lazy from .first_seen import look_due

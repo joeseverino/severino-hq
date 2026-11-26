@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "description": "One event by its name alone: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; and when it arrived.",
+  "required": [
+    "provider",
+    "event",
+    "delivery_id",
+    "received_at"
+  ],
+  "properties": {
+    "provider": {
+      "type": "string",
+      "description": "A provider whose events HQ takes, as an admitted module's INBOUND declares it.",
+      "enum": [
+        "github_app",
+        "host"
+      ],
+      "x-enum-varnames": [
+        "InboundProviderGitHubApp",
+        "InboundProviderHost"
+      ]
+    },
+    "event": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "subject": {
+      "type": "string",
+      "maxLength": 255
+    },
+    "delivery_id": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

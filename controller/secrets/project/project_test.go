@@ -204,20 +204,6 @@ func TestATransportIsForSSHUnlessItSaysOtherwise(t *testing.T) {
 	}
 }
 
-func TestAConstantIsRenderedFromTheProjection(t *testing.T) {
-	key := connecttest.RSAKey(t)
-	keyItem := connecttest.KeyItem(id(2), "Example app key", key.PKCS8, key.Public)
-	values := rendered(t, input(t, signingConnection("example", "Example app key"), keyItem))
-	if values["EXAMPLE_PROVIDER"] != "github_app" {
-		t.Fatal("the constant was not rendered")
-	}
-	// The item cannot say otherwise: the shape fixes its provider.
-	values = rendered(t, input(t, signingConnection("example", "Example app key", f("provider", "other")), keyItem))
-	if values["EXAMPLE_PROVIDER"] != "github_app" {
-		t.Fatal("an item overrode the provider its shape fixes")
-	}
-}
-
 func TestAURLIsRenderedByIndex(t *testing.T) {
 	login := item{ID: id(1), Fields: []field{
 		f("connection_ref", "example"), f("projection", "login"), f("env_prefix", "EXAMPLE"), b("username", "reader"), b("password", secret)},
@@ -318,7 +304,7 @@ func TestConnectionRefusals(t *testing.T) {
 		RefVariable: {Source: SourceRef}, "URL": {Source: SourceField, Label: "website"}}}}
 	refused(t, in, "names a projection the controller does not read")
 	in.Registry.Projections["api_token"] = in.Registry.Projections["one"]
-	in.Registry.Projections["api_token"]["EXAMPLE"] = Entry{Source: SourceConstant, Value: "x"}
+	in.Registry.Projections["api_token"]["EXAMPLE"] = Entry{Source: SourceRef}
 	in.Items[0] = item{ID: id(1), Fields: []field{f("connection_ref", "a"), f("projection", "api_token"), f("env_prefix", "A"), f("website", "https://api.example.com")}}.Full()
 	refused(t, in, "names a projection the controller does not read")
 }
@@ -698,11 +684,11 @@ func TestIdentityRefusals(t *testing.T) {
 	}
 }
 
-func signingConnection(ref, key string, extra ...field) item {
-	return item{ID: id(1), Fields: append([]field{
+func signingConnection(ref, key string) item {
+	return item{ID: id(1), Fields: []field{
 		f("connection_ref", ref), f("projection", "github_app"), f("env_prefix", "GITHUB"),
 		f("app_id", "12345"), f("signing_key", key),
-	}, extra...)}
+	}}
 }
 
 func TestASigningKeyRendersAsPKCS8BesideTheIdentities(t *testing.T) {
@@ -852,11 +838,6 @@ func TestARegistryThatIsNotTheDocumentsShapesIsRefused(t *testing.T) {
 			entry := p["login"]["USERNAME"]
 			entry.Default = "reader"
 			p["login"]["USERNAME"] = entry
-		},
-		"a default for a constant": func(p map[string]map[string]Entry) {
-			entry := p["github_app"][ProviderVariable]
-			entry.Default = "other"
-			p["github_app"][ProviderVariable] = entry
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

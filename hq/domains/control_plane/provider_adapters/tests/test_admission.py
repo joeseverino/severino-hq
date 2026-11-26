@@ -8,25 +8,33 @@ from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 
+from hq.domains.control_plane import provider_adapters as admission, provider_spec
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.connection_shapes import API_TOKEN, LOGIN
 from hq.domains.control_plane.provider_adapters import (
     ADMITTED,
     CONNECTIONS,
     DECLARATIONS,
-    admitted_connections,
+    OBSERVATIONS,
     undeclared_connections,
 )
 from hq.domains.control_plane.provider_spec import ConnectionKind
+from hq.domains.control_plane.providers import PROVIDERS
 
 EXAMPLE = ConnectionKind("Example", "scoped", API_TOKEN)
+
+
+def events(name: str = "example.changed"):
+    """A synthetic provider's events, each making an example reading due."""
+
+    return provider_spec.InboundSpec({name: ("example.thing",)})
 
 
 class ConnectionAdmissionTests(SimpleTestCase):
     def test_an_admitted_module_brings_its_connection(self):
         module = SimpleNamespace(CONNECTIONS={"example_api": EXAMPLE})
 
-        found = admitted_connections((*ADMITTED, module))
+        found = admission.admitted((*ADMITTED, module), "CONNECTIONS")
 
         self.assertIs(found["example_api"], EXAMPLE)
         self.assertEqual(list(found)[: len(CONNECTIONS)], list(CONNECTIONS))
@@ -39,7 +47,7 @@ class ConnectionAdmissionTests(SimpleTestCase):
         second = SimpleNamespace(CONNECTIONS={"example_api": ConnectionKind("Other", "coarse", LOGIN)})
 
         with self.assertRaisesRegex(ValueError, "example_api"):
-            admitted_connections((first, second))
+            admission.admitted((first, second), "CONNECTIONS")
 
     def test_a_kind_naming_an_undeclared_connection_is_found(self):
         kind = SimpleNamespace(connection_providers=("example_api",))
@@ -51,3 +59,27 @@ class ConnectionAdmissionTests(SimpleTestCase):
 
     def test_the_connection_table_is_what_the_modules_declare(self):
         self.assertEqual(dict(CONNECTION_KINDS), CONNECTIONS)
+
+
+class InboundAdmissionTests(SimpleTestCase):
+    def test_an_admitted_module_brings_its_events(self):
+        declared = events()
+        module = SimpleNamespace(INBOUND={"example_api": declared})
+
+        found = admission.admitted((*ADMITTED, module), "INBOUND")
+
+        self.assertIs(found["example_api"], declared)
+        self.assertNotIn("example_api", admission.INBOUND)
+
+    def test_one_providers_events_are_declared_once(self):
+        first = SimpleNamespace(INBOUND={"example_api": events()})
+        second = SimpleNamespace(INBOUND={"example_api": events("example.other")})
+
+        with self.assertRaisesRegex(ValueError, "example_api"):
+            admission.admitted((first, second), "INBOUND")
+
+    def test_every_event_makes_due_a_reading_hq_stores(self):
+        for provider, spec in admission.INBOUND.items():
+            for event, kinds in spec.events.items():
+                with self.subTest(provider=provider, event=event):
+                    self.assertTrue(all(kind in OBSERVATIONS or kind in PROVIDERS for kind in kinds), kinds)

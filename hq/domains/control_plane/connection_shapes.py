@@ -35,7 +35,8 @@ GITHUB_APP: ConnectionShape = ConnectionShape(
         # The name of the key item, never the key.
         Setting("SIGNING_KEY", label="signing_key"),
     ),
-    provider="github_app",
+    # HQ reads GitHub through one App, whatever its item's env_prefix.
+    default_provider="github_app",
 )
 LOGIN: ConnectionShape = ConnectionShape(
     "login",
@@ -91,11 +92,7 @@ def _entry(setting: Setting) -> dict[str, Any]:
 
 
 def _projection(shape: ConnectionShape) -> dict[str, dict[str, Any]]:
-    provider: dict[str, Any] = (
-        {"source": "constant", "value": shape.provider}
-        if shape.provider
-        else {"source": "field", "label": "provider", "optional": True}
-    )
+    provider: dict[str, Any] = {"source": "field", "label": "provider", "optional": True}
     if shape.default_provider:
         provider["default"] = shape.default_provider
     entries: dict[str, dict[str, Any]] = {

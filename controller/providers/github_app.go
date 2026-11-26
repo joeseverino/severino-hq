@@ -54,6 +54,7 @@ func (r *Registry) admitGitHub() {
 	r.probe(runtime.ConnectionProviderGitHubApp, r.githubProbe)
 	r.reader(runtime.ResourceKindGitHubRepository, r.githubRepositories)
 	r.reader(runtime.ResourceKindGitHubDelivery, r.githubDeliveryInventory)
+	r.reader(runtime.ResourceKindGitHubWebhook, r.githubWebhook)
 	r.tally(runtime.ResourceKindGitHubAllowance, r.githubAllowances)
 	act(r, runtime.ResourceKindGitHubDelivery, "reconcile", r.githubDeliveryReconcile)
 	act(r, runtime.ResourceKindGitHubPullRequest, "merge", r.githubMerge)

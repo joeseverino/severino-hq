@@ -9,11 +9,13 @@ valid:
     lazy from hq.domains.control_plane.bridge_application import (
         application as bridge_application,
         worker_application as worker_bridge_application,
+        events_application as events_bridge_application,
     )
     async def serve(listening):
         for served, path in (
             (bridge_application, settings.SEVERINO_BRIDGE_SOCKET),
             (worker_bridge_application, settings.SEVERINO_AUTOMATION_BRIDGE_SOCKET),
+            (events_bridge_application, settings.SEVERINO_EVENTS_BRIDGE_SOCKET),
         ):
             await listening.enter_async_context(unix_server.serving(served, path))
 invalid:
@@ -26,6 +28,9 @@ invalid:
   - |
     from hq.domains.control_plane.bridge_application import worker_application as worker_bridge_application
     server = uvicorn.Server(Config(worker_bridge_application, port=8002))
+  - |
+    from hq.domains.control_plane.bridge_application import events_application as events_bridge_application
+    server = uvicorn.Server(Config(events_bridge_application, port=8003))
   - |
     from hq.domains.control_plane.bridge_application import application as bridge_application
     pairs = [(bridge_application, 8001)]

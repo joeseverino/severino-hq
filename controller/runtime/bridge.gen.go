@@ -88,16 +88,17 @@ func (e ConditionType) Valid() bool {
 
 // Defines values for ConnectionProvider.
 const (
-	ConnectionProviderACME          ConnectionProvider = "acme"
-	ConnectionProviderAdGuard       ConnectionProvider = "adguard"
-	ConnectionProviderCloudflareAPI ConnectionProvider = "cloudflare_api"
-	ConnectionProviderCloudflareDNS ConnectionProvider = "cloudflare_dns"
-	ConnectionProviderGitHubApp     ConnectionProvider = "github_app"
-	ConnectionProviderNPM           ConnectionProvider = "npm"
-	ConnectionProviderOnePassword   ConnectionProvider = "onepassword"
-	ConnectionProviderPortainer     ConnectionProvider = "portainer"
-	ConnectionProviderSSH           ConnectionProvider = "ssh"
-	ConnectionProviderTailscale     ConnectionProvider = "tailscale"
+	ConnectionProviderACME             ConnectionProvider = "acme"
+	ConnectionProviderAdGuard          ConnectionProvider = "adguard"
+	ConnectionProviderCloudflareAPI    ConnectionProvider = "cloudflare_api"
+	ConnectionProviderCloudflareDNS    ConnectionProvider = "cloudflare_dns"
+	ConnectionProviderCloudflareEvents ConnectionProvider = "cloudflare_events"
+	ConnectionProviderGitHubApp        ConnectionProvider = "github_app"
+	ConnectionProviderNPM              ConnectionProvider = "npm"
+	ConnectionProviderOnePassword      ConnectionProvider = "onepassword"
+	ConnectionProviderPortainer        ConnectionProvider = "portainer"
+	ConnectionProviderSSH              ConnectionProvider = "ssh"
+	ConnectionProviderTailscale        ConnectionProvider = "tailscale"
 )
 
 // Valid indicates whether the value is a known member of the ConnectionProvider enum.
@@ -110,6 +111,8 @@ func (e ConnectionProvider) Valid() bool {
 	case ConnectionProviderCloudflareAPI:
 		return true
 	case ConnectionProviderCloudflareDNS:
+		return true
+	case ConnectionProviderCloudflareEvents:
 		return true
 	case ConnectionProviderGitHubApp:
 		return true
@@ -437,6 +440,21 @@ func (e GlancePanelID) Valid() bool {
 	}
 }
 
+// Defines values for HostEvent.
+const (
+	HostEventDockerContainer HostEvent = "docker.container"
+)
+
+// Valid indicates whether the value is a known member of the HostEvent enum.
+func (e HostEvent) Valid() bool {
+	switch e {
+	case HostEventDockerContainer:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HostRenderStatusRecordReason.
 const (
 	HostRenderStatusRecordReasonEmpty      HostRenderStatusRecordReason = ""
@@ -476,6 +494,42 @@ func (e HostRenderStatusRecordState) Valid() bool {
 	case HostRenderStatusRecordStateRead:
 		return true
 	case HostRenderStatusRecordStateUnreadable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InboundProvider.
+const (
+	InboundProviderGitHubApp InboundProvider = "github_app"
+	InboundProviderHost      InboundProvider = "host"
+)
+
+// Valid indicates whether the value is a known member of the InboundProvider enum.
+func (e InboundProvider) Valid() bool {
+	switch e {
+	case InboundProviderGitHubApp:
+		return true
+	case InboundProviderHost:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InboundSource.
+const (
+	InboundSourceHost   InboundSource = "host"
+	InboundSourceWorker InboundSource = "worker"
+)
+
+// Valid indicates whether the value is a known member of the InboundSource enum.
+func (e InboundSource) Valid() bool {
+	switch e {
+	case InboundSourceHost:
+		return true
+	case InboundSourceWorker:
 		return true
 	default:
 		return false
@@ -544,6 +598,7 @@ const (
 	PartFiltering         ReadingPartName = "filtering"
 	PartHTTPS             ReadingPartName = "https"
 	PartImages            ReadingPartName = "images"
+	PartJobLogs           ReadingPartName = "job_logs"
 	PartLeakedCredentials ReadingPartName = "leaked_credentials"
 	PartPageRules         ReadingPartName = "page_rules"
 	PartPosture           ReadingPartName = "posture"
@@ -601,6 +656,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartHTTPS:
 		return true
 	case PartImages:
+		return true
+	case PartJobLogs:
 		return true
 	case PartLeakedCredentials:
 		return true
@@ -710,6 +767,7 @@ const (
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubPullRequest            ResourceKind = "github.pull_request"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
+	ResourceKindGitHubWebhook                ResourceKind = "github.webhook"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
 	ResourceKindHostEdgeReboot               ResourceKind = "host.edge_reboot"
 	ResourceKindHostFilesystem               ResourceKind = "host.filesystem"
@@ -803,6 +861,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindGitHubPullRequest:
 		return true
 	case ResourceKindGitHubRepository:
+		return true
+	case ResourceKindGitHubWebhook:
 		return true
 	case ResourceKindHQRequestPath:
 		return true
@@ -939,6 +999,7 @@ const (
 	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
 	SweptGitHubProfile                SweptKind = "github.profile"
 	SweptGitHubRepository             SweptKind = "github.repository"
+	SweptGitHubWebhook                SweptKind = "github.webhook"
 	SweptHostEdgeReboot               SweptKind = "host.edge_reboot"
 	SweptHostFilesystem               SweptKind = "host.filesystem"
 	SweptHostFirewall                 SweptKind = "host.firewall"
@@ -1009,6 +1070,8 @@ func (e SweptKind) Valid() bool {
 	case SweptGitHubProfile:
 		return true
 	case SweptGitHubRepository:
+		return true
+	case SweptGitHubWebhook:
 		return true
 	case SweptHostEdgeReboot:
 		return true
@@ -1776,9 +1839,11 @@ type GitHubRepositoryHeld struct {
 	Repository string `json:"repository"`
 }
 
-// GitHubRepositoryJobFailure Why one failing job failed: the step it failed at, the error GitHub's
-// log of that step marks, and the step's last lines of output before it,
-// each the job's own words, bounded (“github_failures.go“).
+// GitHubRepositoryJobFailure Why one failing check failed: for a workflow's job, the step it failed
+// at, the error GitHub's log of that step marks, and the step's last lines
+// of output before it; for any other check, no step, its output's title as
+// the error and its summary as the log. Each is the check's own words,
+// bounded (“github_failures.go“, “github_checks.go“).
 type GitHubRepositoryJobFailure struct {
 	Error string   `json:"error,omitempty"`
 	Log   []string `json:"log,omitempty"`
@@ -1928,6 +1993,27 @@ type GitHubRepositorySecuritySecretScanningPushProtection string
 // GitHubRepositorySecuritySecretScanningValidityChecks defines model for GitHubRepositorySecurity.SecretScanningValidityChecks.
 type GitHubRepositorySecuritySecretScanningValidityChecks string
 
+// GitHubWebhookDelivery One delivery of the App's webhook, as GitHub's delivery log says it.
+type GitHubWebhookDelivery struct {
+	Action      string `json:"action,omitempty"`
+	DeliveredAt string `json:"delivered_at,omitempty"`
+	Event       string `json:"event"`
+	Status      string `json:"status,omitempty"`
+	StatusCode  int    `json:"status_code,omitempty"`
+}
+
+// GitHubWebhookRecord What the App's webhook sends and how its newest deliveries went: the events the App is subscribed to, from “GET /app“, and its delivery log's newest page, from “GET /app/hook/deliveries“.
+type GitHubWebhookRecord struct {
+	App           string                `json:"app"`
+	ConnectionRef string                `json:"connection_ref"`
+	Deliveries    int                   `json:"deliveries,omitempty"`
+	Events        []string              `json:"events,omitempty"`
+	Failing       int                   `json:"failing,omitempty"`
+	Newest        GitHubWebhookDelivery `json:"newest,omitempty"`
+	Organization  bool                  `json:"organization,omitempty"`
+	Owner         string                `json:"owner"`
+}
+
 // GlanceMachineTarget defines model for GlanceMachineTarget.
 type GlanceMachineTarget struct {
 	Connections []string `json:"connections"`
@@ -2065,6 +2151,9 @@ type HostEdgeRebootRecord struct {
 	// Since When the flag was first written, when one is there; empty when none is.
 	Since string `json:"since,omitempty"`
 }
+
+// HostEvent An event HQ's own host tells it of from the controller.
+type HostEvent string
 
 // HostFilesystemRecord One real filesystem on the controller's machine, as statfs(2) states it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs or zfs mount the machine shows, one per device, and sends where it is mounted and its space; no device, option or file name.
 type HostFilesystemRecord struct {
@@ -2276,6 +2365,37 @@ type IdlePassOutput struct {
 	Mode PassMode `json:"mode"`
 	OK   bool     `json:"ok"`
 }
+
+// InboundArrival One event by its name alone: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; and when it arrived.
+type InboundArrival struct {
+	DeliveryID string `json:"delivery_id"`
+	Event      string `json:"event"`
+
+	// Provider A provider whose events HQ takes, as an admitted module's INBOUND declares it.
+	Provider   InboundProvider `json:"provider"`
+	ReceivedAt time.Time       `json:"received_at"`
+	Subject    string          `json:"subject,omitempty"`
+}
+
+// InboundBatch What one source was told happened (inbound.apply_events). No events says it is listening.
+type InboundBatch struct {
+	Events []InboundArrival `json:"events"`
+
+	// Reconnected The source has just reconnected and may have missed events, so HQ asks every reading they make due, at most once a minute.
+	Reconnected bool `json:"reconnected,omitempty"`
+
+	// Source Who was told an event happened: the listener on the Worker's socket, or HQ's own host jobs.
+	Source InboundSource `json:"source"`
+}
+
+// InboundHeartbeatSeconds How often an event reader posts a batch with no events while it is listening.
+type InboundHeartbeatSeconds = int
+
+// InboundProvider A provider whose events HQ takes, as an admitted module's INBOUND declares it.
+type InboundProvider string
+
+// InboundSource Who was told an event happened: the listener on the Worker's socket, or HQ's own host jobs.
+type InboundSource string
 
 // Inventory One sweep: each kind read, by kind name.
 type Inventory map[string]KindReport
@@ -2994,6 +3114,9 @@ type AnalyticsPlanJSONRequestBody = AnalyticsPlanJSONBody
 // ConnectionsJSONRequestBody defines body for Connections for application/json ContentType.
 type ConnectionsJSONRequestBody = ConnectionsJSONBody
 
+// EventsJSONRequestBody defines body for Events for application/json ContentType.
+type EventsJSONRequestBody = InboundBatch
+
 // GlanceJSONRequestBody defines body for Glance for application/json ContentType.
 type GlanceJSONRequestBody = GlanceObservations
 
@@ -3195,6 +3318,20 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /connections (the `Connections` operationId).
 	Connections(ctx context.Context, params *ConnectionsParams, body ConnectionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EventsWithBody Record the events a source reports, and ask for the readings they make due.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /events (the `Events` operationId).
+	EventsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Events Record the events a source reports, and ask for the readings they make due.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /events (the `Events` operationId).
+	Events(ctx context.Context, body EventsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// Export The contract for one resource.
 	//
@@ -3414,6 +3551,40 @@ func (c *Client) ConnectionsWithBody(ctx context.Context, params *ConnectionsPar
 // Corresponds with POST /connections (the `Connections` operationId).
 func (c *Client) Connections(ctx context.Context, params *ConnectionsParams, body ConnectionsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewConnectionsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EventsWithBody Record the events a source reports, and ask for the readings they make due.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /events (the `Events` operationId).
+func (c *Client) EventsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEventsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Events Record the events a source reports, and ask for the readings they make due.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /events (the `Events` operationId).
+func (c *Client) Events(ctx context.Context, body EventsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEventsRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3946,6 +4117,46 @@ func NewConnectionsRequestWithBody(server string, params *ConnectionsParams, con
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewEventsRequest calls the generic Events builder with application/json body
+func NewEventsRequest(server string, body EventsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := runtime.JSONMarshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEventsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewEventsRequestWithBody constructs an http.Request for the Events method, with any body, and a specified content type
+func NewEventsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/events"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
@@ -4771,6 +4982,20 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /connections (the `Connections` operationId).
 	ConnectionsWithResponse(ctx context.Context, params *ConnectionsParams, body ConnectionsJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectionsResponse, error)
 
+	// EventsWithBodyWithResponse Record the events a source reports, and ask for the readings they make due.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /events (the `Events` operationId).
+	EventsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EventsResponse, error)
+
+	// EventsWithResponse Record the events a source reports, and ask for the readings they make due.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /events (the `Events` operationId).
+	EventsWithResponse(ctx context.Context, body EventsJSONRequestBody, reqEditors ...RequestEditorFn) (*EventsResponse, error)
+
 	// ExportWithResponse The contract for one resource.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -5084,6 +5309,54 @@ func (r ConnectionsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ConnectionsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Acknowledgement
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EventsResponse) GetJSON200() *Acknowledgement {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EventsResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EventsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EventsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5805,6 +6078,32 @@ func (c *ClientWithResponses) ConnectionsWithResponse(ctx context.Context, param
 	return ParseConnectionsResponse(rsp)
 }
 
+// EventsWithBodyWithResponse Record the events a source reports, and ask for the readings they make due.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /events (the `Events` operationId).
+func (c *ClientWithResponses) EventsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EventsResponse, error) {
+	rsp, err := c.EventsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEventsResponse(rsp)
+}
+
+// EventsWithResponse Record the events a source reports, and ask for the readings they make due.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /events (the `Events` operationId).
+func (c *ClientWithResponses) EventsWithResponse(ctx context.Context, body EventsJSONRequestBody, reqEditors ...RequestEditorFn) (*EventsResponse, error) {
+	rsp, err := c.Events(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEventsResponse(rsp)
+}
+
 // ExportWithResponse The contract for one resource.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -6147,6 +6446,39 @@ func ParseConnectionsResponse(rsp *http.Response) (*ConnectionsResponse, error) 
 	}
 
 	response := &ConnectionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Acknowledgement
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEventsResponse parses an HTTP response from a EventsWithResponse call
+func ParseEventsResponse(rsp *http.Response) (*EventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EventsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

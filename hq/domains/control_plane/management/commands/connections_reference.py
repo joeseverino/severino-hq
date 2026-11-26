@@ -16,9 +16,5 @@ class Command(DerivedFileCommand):
     source = "the providers"
 
     @override
-    def target(self) -> Path:
-        return reference_path()
-
-    @override
-    def derive(self) -> str:
-        return reference_markdown()
+    def emitted(self) -> dict[Path, str]:
+        return {reference_path(): reference_markdown()}

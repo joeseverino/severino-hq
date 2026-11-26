@@ -88,9 +88,5 @@ class Command(DerivedFileCommand):
     source = "the checks' declarations"
 
     @override
-    def target(self) -> Path:
-        return posture_doc()
-
-    @override
-    def derive(self) -> str:
-        return reference_markdown()
+    def emitted(self) -> dict[Path, str]:
+        return {posture_doc(): reference_markdown()}

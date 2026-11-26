@@ -15,7 +15,8 @@ lazy from django.contrib.sessions.models import Session
 lazy from django.core.management import call_command
 
 lazy from hq.domains.content.content_sync import ContentSyncError, sync_content_index
-lazy from hq.domains.control_plane.observations.host import UNIT_KIND
+lazy from hq.domains.control_plane.models import InboundSource
+lazy from hq.domains.control_plane.observations.host import UNIT_FAILED
 lazy from hq.domains.jobs import runner
 lazy from hq.domains.jobs.runner import Failed
 lazy from hq.platform.core.audit import prune_routine, record_operation
@@ -27,7 +28,7 @@ from .record_errors import RecordConflict
 from .ui import counted
 lazy from . import approvals, outbound_work
 lazy from .automation_adoption import prune_proposals
-lazy from .cadence import ask
+lazy from .inbound import apply_events, prune_events
 lazy from .public_registry import refresh
 
 
@@ -75,15 +76,21 @@ def _public_registry(_progress: Any, *, subject: str, principal: Any) -> dict[st
     return refresh(principal=principal)
 
 
-def _unit_state(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
-    """Have the controller read the machine's units now: a unit there failed.
+def _unit_state(progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
+    """Tell HQ a unit on its machine failed, which has the controller read
+    the machine's units now.
 
     The failed unit is not named and need not be. The reading says which.
     """
 
     del subject, principal
-    ask(reads=(UNIT_KIND,))
-    return {"asked": UNIT_KIND}
+    event = {
+        "provider": "host",
+        "event": UNIT_FAILED,
+        "delivery_id": progress.job_id,
+        "received_at": timezone.now().isoformat(),
+    }
+    return apply_events({"source": InboundSource.HOST, "events": [event]})
 
 
 def _due(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
@@ -127,6 +134,7 @@ def outbound() -> tuple[OutboundWork, ...]:
         _own("audit.prune", "Log cleanup", prune_audit, every=DAILY),
         _own("content.sync", "Content sync", _content_index, every=DAILY),
         _own("due", "Scheduled work", _due),
+        _own("events.prune", "Event cleanup", prune_events, every=DAILY),
         _own("registry.refresh", "Registry refresh", _public_registry, every=DAILY),
         _own("sessions.clear", "Session cleanup", _clear_sessions, every=DAILY),
         _own("units.read", "Service check", _unit_state),

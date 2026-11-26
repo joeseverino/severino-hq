@@ -2,14 +2,17 @@ package providers
 
 import (
 	"context"
+	"maps"
 	"strconv"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // How a repository's checks stand: the default branch's, each update pull
-// request's, and what each failing job says of why.
+// request's, and what each failing check says of why.
 
 type GitHubChecks struct {
 	State   string   `json:"state"`
@@ -17,8 +20,8 @@ type GitHubChecks struct {
 	Failing []string `json:"failing"`
 	Running int      `json:"running"`
 	Names   []string `json:"names"`
-	// Failures is why each failing job of a workflow run failed, by the
-	// job's name (githubFailure).
+	// Failures is why each failing check failed, a job by its log and any
+	// other by its output, by the check's name (githubFailure).
 	Failures map[string]GitHubFailure `json:"failures,omitempty"`
 }
 
@@ -104,28 +107,58 @@ func (g *githubRepository) branchChecks(ctx context.Context, head string, newest
 	if len(failing) > 0 {
 		checks.State, checks.Failing = "failure", sortedKeys(failing)
 	}
-	if len(failures) > 0 {
-		checks.Failures = failures
-	}
+	checks.Failures = stated(failures)
 	return checks, nil
 }
 
-// failures adds why each failing job of runs failed, by its name: each check
-// run in one of the workflows' suites is that run's job.
+// githubFailuresKept is the most failing jobs a commit's checks say why of,
+// which is the most job logs read for them.
+var githubFailuresKept = api.MustLimit("GitHubRepositoryChecks", "properties", "failures", "maxProperties")
+
+// failures adds why each failing check of runs failed, by its name, until
+// githubFailuresKept are read: each check run in one of the workflows' suites
+// is that run's job, whose log says; any other says in its own output.
 func (g *githubRepository) failures(ctx context.Context, runs []githubapi.CheckRun, githubs, workflows map[int]bool, found map[string]GitHubFailure) error {
 	for _, run := range latestChecks(runs, githubs) {
-		if !githubFailed[string(run.Conclusion)] || !workflows[run.CheckSuite.ID] {
+		_, read := found[run.Name]
+		if len(found) >= githubFailuresKept || read || !githubFailed[string(run.Conclusion)] {
+			continue
+		}
+		if !workflows[run.CheckSuite.ID] {
+			found[run.Name] = githubCheckOutput(run)
 			continue
 		}
 		failure, err := g.failure(ctx, run.ID)
 		if err != nil {
 			return err
 		}
-		if failure.Step != "" {
-			found[run.Name] = failure
-		}
+		found[run.Name] = failure
 	}
 	return nil
+}
+
+// githubCheckOutput is why a check no workflow owns failed, as its output
+// says: its title as the error, and its summary's first lines.
+func githubCheckOutput(run githubapi.CheckRun) GitHubFailure {
+	lines := []string{}
+	for line := range strings.SplitSeq(run.Output.Summary, "\n") {
+		if text := githubLogLine(line); strings.TrimSpace(text) != "" && len(lines) < githubLogLines {
+			lines = append(lines, runtime.Line(text))
+		}
+	}
+	return GitHubFailure{Error: runtime.Line(githubLogLine(run.Output.Title)), Log: lines}
+}
+
+// stated is the failures that say why, nil for none: a job that failed before
+// any step did, or a check whose output is empty, says nothing.
+func stated(failures map[string]GitHubFailure) map[string]GitHubFailure {
+	maps.DeleteFunc(failures, func(_ string, failure GitHubFailure) bool {
+		return failure.Step == "" && failure.Error == "" && len(failure.Log) == 0
+	})
+	if len(failures) == 0 {
+		return nil
+	}
+	return failures
 }
 
 // checks is a commit's check runs, each standing as its last run did: a rerun
@@ -142,9 +175,7 @@ func (g *githubRepository) checks(ctx context.Context, sha string, githubs, work
 	if err := g.failures(ctx, runs, githubs, workflows, failures); err != nil {
 		return checks, err
 	}
-	if len(failures) > 0 {
-		checks.Failures = failures
-	}
+	checks.Failures = stated(failures)
 	return checks, nil
 }
 

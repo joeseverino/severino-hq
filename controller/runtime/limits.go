@@ -37,3 +37,7 @@ var MaxBridgeOutput = api.MustLimit("BridgeBody", "maxLength")
 // ClaimLeaseSeconds is how long a claimed operation is leased: the contract's
 // default, which HQ applies to a claim that names none.
 var ClaimLeaseSeconds = api.MustLimit("LeaseSeconds", "default")
+
+// MaxInboundEvents is how many events one batch carries: the contract's
+// bound, over which HQ's bridge refuses the batch.
+var MaxInboundEvents = api.MustLimit("InboundBatch", "properties", "events", "maxItems")

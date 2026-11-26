@@ -141,12 +141,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             detail_handler=receipts.get_receipt,
             identifier="id",
             identifier_type=RecordId,
-            search=SearchDefinition(
-                "receipts",
+            search=SearchDefinition.of(
                 Receipt,
                 "pk",
                 ("original_filename", "vendor", "notes"),
-                label="Receipts",
             ),
             web_route="receipts:list",
             record_type=ReceiptRecord,

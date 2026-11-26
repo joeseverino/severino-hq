@@ -1,55 +1,18 @@
-import difflib
-from argparse import ArgumentParser
-from typing import Any, override
+from pathlib import Path
+from typing import override
 
-from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
-
+from hq.platform.core.management.derived import DerivedFileCommand
 lazy from hq.domains.control_plane import bridge_contract
 
 
-class Command(BaseCommand):
+class Command(DerivedFileCommand):
     help = (
         "Write the controller's contracts from the registry: the bridge contract, the "
-        "connections document's schema and the renderer's connection shapes. "
-        "--check exits 1 on drift."
+        "connections document's schema and the renderer's connection shapes, or --check them for drift."
     )
+    source = "the registry"
+    then = ", then `go generate ./...` in controller/ for the Go types generated from these"
 
     @override
-    def add_arguments(self, parser: ArgumentParser) -> None:
-        parser.add_argument(
-            "--check",
-            action="store_true",
-            help="Exit 1 when a committed file differs from the derived one.",
-        )
-
-    @override
-    def handle(self, *args: Any, **options: Any) -> None:
-        stale = []
-        for path, current in bridge_contract.emitted().items():
-            name = str(path.relative_to(settings.BASE_DIR))
-            committed = path.read_text(encoding="utf-8") if path.exists() else ""
-            if committed == current:
-                continue
-            if not options["check"]:
-                path.write_text(current, encoding="utf-8")
-                self.stdout.write(f"Wrote {name}.")
-                continue
-            stale.append(name)
-            self.stderr.write(
-                "".join(
-                    difflib.unified_diff(
-                        committed.splitlines(keepends=True),
-                        current.splitlines(keepends=True),
-                        f"committed/{name}",
-                        f"derived/{name}",
-                    )
-                ),
-                ending="",
-            )
-        if stale:
-            raise CommandError(
-                f"{', '.join(stale)} is behind the registry; run `mise run manage -- bridge_contract`, then "
-                "`go generate ./...` in controller/ for the Go types generated from these, and commit the result."
-            )
-        self.stdout.write("The controller's contracts are current.")
+    def emitted(self) -> dict[Path, str]:
+        return bridge_contract.emitted()

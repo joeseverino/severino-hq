@@ -15,17 +15,11 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
 
-from .cadence import (
-    ForcedRead,
-    WorkerStanding,
-    controller_standing,
-    every_sweep,
-    forced_reads,
-    sweep_due,
-)
+from .cadence import WorkerStanding, controller_standing, every_sweep, sweep_due
 from .entity_links import kind_label
 from .freshness import Freshness, freshness
 from .moments import duration
+from .read_requests import ForcedRead, forced_reads
 from .tone import Tone
 lazy from .facts import every_snapshot
 

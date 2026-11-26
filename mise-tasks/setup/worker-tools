@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Install what worker/package.json pins for the inbound-events Worker: wrangler, TypeScript, and Vitest with Cloudflare's Workers plugin"
+#MISE hide=true
+#MISE sources=["worker/package-lock.json", "mise.lock"]
+#MISE outputs=["worker/node_modules/.package-lock.json"]
+set -eu
+
+npm --prefix worker ci

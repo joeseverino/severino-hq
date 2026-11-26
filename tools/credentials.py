@@ -17,8 +17,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, Any
+from urllib.parse import urlsplit
 
 import httpx2
+import jwt
 
 from hq.platform.application.http_read import UNREACHABLE
 from hq.platform.core.tests.task import Usage
@@ -517,7 +519,7 @@ def admission_environment(programs: Programs, repository: str) -> None:
         )
 
 
-def wire_github_app(usage: Usage, programs: Programs, out: IO[str]) -> None:
+def wire_github_app(usage: Usage, programs: Programs, out: IO[str], send: Send = https) -> None:
     """The host's HQ_APP_KEY and HQ_APP_CLIENT_ID secrets; on each extension, the key in ``admission`` and the ID.
 
     The client ID is a secret too. A variable is state outside the repository
@@ -538,6 +540,43 @@ def wire_github_app(usage: Usage, programs: Programs, out: IO[str]) -> None:
         programs.output(["gh", "secret", "set", APP_KEY, "--repo", repository, "--env", ENVIRONMENT], stdin=key)
         programs.output(["gh", "secret", "set", APP_CLIENT_ID, "--repo", repository], stdin=client_id)
         print(f"{repository}: {ENVIRONMENT} environment (main only) with {APP_KEY}; {APP_CLIENT_ID} set.", file=out)
+    if usage.text("webhook_secret"):
+        app_webhook(usage, programs, key, client_id, out, send)
+
+
+# The routes the inbound-events Worker serves, one per provider: its path and the events it forwards.
+ROUTES = Path(__file__).resolve().parents[1] / "worker" / "src" / "generated" / "routes.json"
+GITHUB_API = "https://api.github.com"
+
+
+def app_webhook(usage: Usage, programs: Programs, key: str, client_id: str, out: IO[str], send: Send) -> None:
+    """The App's webhook: the Worker's github route on the inbound host, and the secret the Worker verifies with.
+
+    GitHub sets the address, format and secret only as the App itself, through
+    a JWT the App's key signs; whether it is active and the events it sends
+    are set on its settings page alone.
+    """
+
+    host = usage.text("webhook_host")
+    if not host:
+        raise UsageError("--webhook-secret needs the inbound host: --webhook-host or HQ_INBOUND_HOSTNAME.")
+    (route,) = [route for route in json.loads(ROUTES.read_text())["providers"] if route["provider"] == "github_app"]
+    url = f"https://{host}{route['path']}"
+    if urlsplit(https_url(url)).netloc != host:
+        raise UsageError(f"{host} is not a hostname.")
+    secret = programs.output(["op", "read", usage.text("webhook_secret")]).strip()
+    if not secret:
+        raise Refused("The webhook secret's field is empty.")
+    now = int(datetime.now(UTC).timestamp())
+    # GitHub's limits: issued up to 60 s back for clock drift, expiring within 10 minutes.
+    token = jwt.encode({"iat": now - 60, "exp": now + 540, "iss": client_id}, key, algorithm="RS256")
+    body = {"url": url, "content_type": "json", "secret": secret, "insecure_ssl": "0"}
+    answer = send(Call("PATCH", f"{GITHUB_API}/app/hook/config", token=token, json=body))
+    if not isinstance(answer, dict) or answer.get("url") != url:
+        message = answer.get("message") if isinstance(answer, dict) else None
+        raise Refused(f"GitHub refused the App's webhook: {message or 'unreadable response'}")
+    print(f"The App's webhook delivers to {url}, signed with the secret the Worker holds.", file=out)
+    print(f"On the App's settings page: tick Active and subscribe to {', '.join(route['events'])}.", file=out)
 
 
 # ------------------------------------------------------------------ the entry

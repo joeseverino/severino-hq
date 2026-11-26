@@ -23,6 +23,19 @@ class SliceTests(unittest.TestCase):
         slicer.narrow("model", schema, ["read"])
         self.assertEqual(schema, {"properties": {"read": {"type": "integer"}}, "required": ["read"]})
 
+    def test_a_dotted_name_narrows_an_inline_object(self):
+        inline = {
+            "properties": {"title": {"type": "string"}, "text": {"type": "string"}},
+            "required": ["title", "text"],
+        }
+        schema = {"properties": {"output": inline, "unused": {"type": "string"}}}
+        slicer.narrow("model", schema, ["output.title"])
+        self.assertEqual(
+            schema["properties"], {"output": {"properties": {"title": {"type": "string"}}, "required": ["title"]}}
+        )
+        with self.assertRaisesRegex(SystemExit, "model.output does not have"):
+            slicer.narrow("model", {"properties": {"output": {"properties": {}}}}, ["output.stale"])
+
     def test_union_narrowing_keeps_shared_allof_parts(self):
         schema = {
             "oneOf": [

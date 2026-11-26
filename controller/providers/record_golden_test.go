@@ -41,6 +41,7 @@ var recordTypes = map[runtime.ResourceKind][]any{
 	runtime.ResourceKindCloudflareRedirect:           {CloudflareRedirectRecord{}},
 	runtime.ResourceKindGitHubRepository:             {GitHubRepositoryRecord{}, githubCarried{}},
 	runtime.ResourceKindGitHubAllowance:              {runtime.GitHubAllowanceRecord{}},
+	runtime.ResourceKindGitHubWebhook:                {runtime.GitHubWebhookRecord{}},
 	runtime.ResourceKindGitHubDelivery:               {GitHubDeliveryRecord{}},
 	runtime.ResourceKindGitHubDependencyRun:          {GitHubDependencyRunRecord{}},
 	runtime.ResourceKindGitHubProfile:                {GitHubProfileRecord{}},

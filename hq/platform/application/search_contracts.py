@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 lazy from datetime import datetime
 
 lazy from django.db.models import Model
@@ -66,6 +66,13 @@ class SearchDefinition:
     timestamp_field: str = "updated_at"
     # A property holding readable text for the result; blank uses the indexed body.
     snippet_field: str = ""
+
+    @classmethod
+    def of(cls, model: type, identifier_field: str, fields: tuple[str, ...], **options: str) -> Self:
+        """A resource's search, whose scope and label its ``ResourceSpec``
+        supplies from its own name and label."""
+
+        return cls("", model, identifier_field, fields, **options)
 
     def object_id(self, instance: Model) -> str:
         return str(getattr(instance, self.identifier_field))

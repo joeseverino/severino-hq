@@ -814,6 +814,45 @@
           }
         }
       }
+    },
+    "/events": {
+      "post": {
+        "operationId": "events",
+        "summary": "Record the events a source reports, and ask for the readings they make due.",
+        "x-bridge-action": "events",
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acknowledgement"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboundBatch"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2738,6 +2777,63 @@
           "profile"
         ]
       },
+      "InboundBatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "What one source was told happened (inbound.apply_events). No events says it is listening.",
+        "required": [
+          "source",
+          "events"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/InboundSource"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/InboundArrival"
+            }
+          },
+          "reconnected": {
+            "type": "boolean",
+            "description": "The source has just reconnected and may have missed events, so HQ asks every reading they make due, at most once a minute."
+          }
+        }
+      },
+      "InboundArrival": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One event by its name alone: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; and when it arrived.",
+        "required": [
+          "provider",
+          "event",
+          "delivery_id",
+          "received_at"
+        ],
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/InboundProvider"
+          },
+          "event": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "delivery_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "AdGuardClientRecord": {
         "properties": {
           "connection_ref": {
@@ -3527,6 +3623,7 @@
           "adguard",
           "cloudflare_api",
           "cloudflare_dns",
+          "cloudflare_events",
           "github_app",
           "npm",
           "onepassword",
@@ -3539,6 +3636,7 @@
           "ConnectionProviderAdGuard",
           "ConnectionProviderCloudflareAPI",
           "ConnectionProviderCloudflareDNS",
+          "ConnectionProviderCloudflareEvents",
           "ConnectionProviderGitHubApp",
           "ConnectionProviderNPM",
           "ConnectionProviderOnePassword",
@@ -3922,6 +4020,7 @@
               "$ref": "#/components/schemas/GitHubRepositoryJobFailure"
             },
             "default": {},
+            "maxProperties": 4,
             "type": "object"
           }
         },
@@ -3970,7 +4069,7 @@
         "type": "object"
       },
       "GitHubRepositoryJobFailure": {
-        "description": "Why one failing job failed: the step it failed at, the error GitHub's\nlog of that step marks, and the step's last lines of output before it,\neach the job's own words, bounded (``github_failures.go``).",
+        "description": "Why one failing check failed: for a workflow's job, the step it failed\nat, the error GitHub's log of that step marks, and the step's last lines\nof output before it; for any other check, no step, its output's title as\nthe error and its summary as the log. Each is the check's own words,\nbounded (``github_failures.go``, ``github_checks.go``).",
         "properties": {
           "step": {
             "default": "",
@@ -4557,6 +4656,87 @@
         },
         "type": "object"
       },
+      "GitHubWebhookDelivery": {
+        "description": "One delivery of the App's webhook, as GitHub's delivery log says it.",
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "action": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "status_code": {
+            "default": 0,
+            "type": "integer"
+          },
+          "delivered_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "event"
+        ],
+        "type": "object"
+      },
+      "GitHubWebhookRecord": {
+        "description": "What the App's webhook sends and how its newest deliveries went: the events the App is subscribed to, from ``GET /app``, and its delivery log's newest page, from ``GET /app/hook/deliveries``.",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "app": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "organization": {
+            "default": false,
+            "type": "boolean"
+          },
+          "events": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "deliveries": {
+            "default": 0,
+            "type": "integer"
+          },
+          "newest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubWebhookDelivery"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "failing": {
+            "default": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "app",
+          "owner"
+        ],
+        "type": "object"
+      },
       "GlanceObservation": {
         "additionalProperties": false,
         "description": "One dashboard panel the controller read (record_dashboard_observations), carrying the as_of of the plan it answers. Numbers, instants and states only: HQ words them.",
@@ -4847,6 +5027,16 @@
           "connection_ref"
         ],
         "type": "object"
+      },
+      "HostEvent": {
+        "type": "string",
+        "description": "An event HQ's own host tells it of from the controller.",
+        "enum": [
+          "docker.container"
+        ],
+        "x-enum-varnames": [
+          "HostEventDockerContainer"
+        ]
       },
       "HostFilesystemRecord": {
         "additionalProperties": false,
@@ -5427,6 +5617,35 @@
           "read_at"
         ],
         "type": "object"
+      },
+      "InboundHeartbeatSeconds": {
+        "type": "integer",
+        "default": 300,
+        "description": "How often an event reader posts a batch with no events while it is listening."
+      },
+      "InboundProvider": {
+        "type": "string",
+        "description": "A provider whose events HQ takes, as an admitted module's INBOUND declares it.",
+        "enum": [
+          "github_app",
+          "host"
+        ],
+        "x-enum-varnames": [
+          "InboundProviderGitHubApp",
+          "InboundProviderHost"
+        ]
+      },
+      "InboundSource": {
+        "type": "string",
+        "description": "Who was told an event happened: the listener on the Worker's socket, or HQ's own host jobs.",
+        "enum": [
+          "worker",
+          "host"
+        ],
+        "x-enum-varnames": [
+          "InboundSourceWorker",
+          "InboundSourceHost"
+        ]
       },
       "NPMAccessListAccessRule": {
         "properties": {
@@ -6242,6 +6461,7 @@
           "filtering",
           "https",
           "images",
+          "job_logs",
           "leaked_credentials",
           "page_rules",
           "posture",
@@ -6279,6 +6499,7 @@
           "PartFiltering",
           "PartHTTPS",
           "PartImages",
+          "PartJobLogs",
           "PartLeakedCredentials",
           "PartPageRules",
           "PartPosture",
@@ -6340,6 +6561,7 @@
           "github.profile",
           "github.pull_request",
           "github.repository",
+          "github.webhook",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -6406,6 +6628,7 @@
           "ResourceKindGitHubProfile",
           "ResourceKindGitHubPullRequest",
           "ResourceKindGitHubRepository",
+          "ResourceKindGitHubWebhook",
           "ResourceKindHostEdgeReboot",
           "ResourceKindHostFilesystem",
           "ResourceKindHostFirewall",
@@ -6471,6 +6694,7 @@
           "github.dependency_run",
           "github.profile",
           "github.repository",
+          "github.webhook",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -6519,6 +6743,7 @@
           "SweptGitHubDependencyRun",
           "SweptGitHubProfile",
           "SweptGitHubRepository",
+          "SweptGitHubWebhook",
           "SweptHostEdgeReboot",
           "SweptHostFilesystem",
           "SweptHostFirewall",

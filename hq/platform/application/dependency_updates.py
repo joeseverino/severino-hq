@@ -26,10 +26,11 @@ from .refusal_codes import Code
 from .refusal_status import RefusalEnvelope, refuse
 from .security import Principal
 from .tone import Tone
-lazy from .cadence import ask, asked_at as read_asked_at
+lazy from .cadence import ask
 lazy from .capabilities import command_spec
 lazy from .moments import moment
 lazy from .projects import repository_key
+lazy from .read_requests import asked_at as read_asked_at
 
 RUN_NOW = "project.dependency_updates.run"
 # Each outcome a run reports, as the job state every page words and tones.

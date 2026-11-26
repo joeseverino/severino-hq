@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
@@ -13,7 +14,7 @@ const (
 	ReportTextLimit = 500 // a failure's text in a report
 	ReasonLimit     = 200 // why one optional read or part was refused
 	VerdictLimit    = 300 // a remote verdict quoted in an error
-	SaidLimit       = 240 // the last line a child printed
+	SaidLimit       = 240 // one line of a child's or a job's output
 	isoDateLength   = 10  // YYYY-MM-DD
 )
 
@@ -35,9 +36,17 @@ func Clip(s string, n int) string {
 	return s
 }
 
+// Line is one line of output as a report says it: clipped to SaidLimit,
+// ending in an ellipsis when cut.
+func Line(s string) string {
+	if s = mask.Text(s); utf8.RuneCountInString(s) <= SaidLimit {
+		return s
+	}
+	return Clip(s, SaidLimit-1) + "…"
+}
+
 // LastLine is the last line of a child's output that is not blank, trimmed
-// and clipped to SaidLimit with an ellipsis when cut; empty when every line
-// is blank.
+// and said as Line; empty when every line is blank.
 func LastLine(output string) string {
 	last := ""
 	for line := range strings.SplitSeq(output, "\n") {
@@ -45,10 +54,7 @@ func LastLine(output string) string {
 			last = line
 		}
 	}
-	if clipped := Clip(last, SaidLimit); clipped == last {
-		return last
-	}
-	return Clip(last, SaidLimit-1) + "…"
+	return Line(last)
 }
 
 // ReportText is failure text as a report carries it.

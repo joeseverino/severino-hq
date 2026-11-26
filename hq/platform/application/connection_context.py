@@ -19,7 +19,6 @@ lazy from hq.platform.application.url_query import with_query
 
 from . import record_saves
 from .action_links import read_now_link
-from .cadence import forced_reads
 from .connection_catalog import (
     CONTROLLER_CONNECTIONS,
     ConnectionAbilityState,
@@ -46,6 +45,7 @@ from .paths import hq_path
 from .posture import estate_inputs, guide, posture
 from .problems import problem_counts
 from .projection import iso, page_of, projection_scope, read_once
+from .read_requests import forced_reads
 from .record_errors import RecordNotFound
 from .request_connection import connection as request_connection
 from .request_path import joined

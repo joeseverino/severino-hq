@@ -49,6 +49,8 @@ WORKFLOW_PINS = ReadingPart("workflow_pins", "Workflow action pins", requires=(G
 # Of a repository opted in to updates: each app's Compose files, the open
 # Dependency Dashboard, and the images each update moves.
 COMPOSE = ReadingPart("compose", "Compose apps", requires=(GitHub.CONTENTS_READ, GitHub.ISSUES_READ))
+# A failing job's step log, refused one job at a time while the checks read.
+JOB_LOGS = ReadingPart("job_logs", "Failed job logs", requires=(GitHub.ACTIONS_READ,))
 PARTS = (
     CODE_SCANNING,
     DEPENDABOT,
@@ -61,10 +63,14 @@ PARTS = (
     VARIABLES,
     WORKFLOW_PINS,
     COMPOSE,
+    JOB_LOGS,
 )
 # The most Compose files a record keeps, which the controller reads from the
 # record's schema in the bridge contract.
 COMPOSE_KEPT = 500
+# The most failing jobs a commit's checks say why of: the causes a failing
+# finding shows, and so the logs the controller reads, from the record's schema.
+FAILURES_KEPT = 4
 
 
 # The parts a record counts open alerts of, by their part names.
@@ -141,9 +147,11 @@ class PullFile(ObservationRecord):
 
 
 class JobFailure(ObservationRecord):
-    """Why one failing job failed: the step it failed at, the error GitHub's
-    log of that step marks, and the step's last lines of output before it,
-    each the job's own words, bounded (``github_failures.go``)."""
+    """Why one failing check failed: for a workflow's job, the step it failed
+    at, the error GitHub's log of that step marks, and the step's last lines
+    of output before it; for any other check, no step, its output's title as
+    the error and its summary as the log. Each is the check's own words,
+    bounded (``github_failures.go``, ``github_checks.go``)."""
 
     step: str = ""
     error: str = ""
@@ -159,7 +167,7 @@ class Checks(ObservationRecord):
     failing: list[str] = []
     running: int = 0
     names: list[str] = []
-    failures: dict[str, JobFailure] = {}
+    failures: dict[str, JobFailure] = Field(default={}, max_length=FAILURES_KEPT)
 
 
 class PullRequest(ObservationRecord):
@@ -376,6 +384,52 @@ class AllowanceRecord(ObservationRecord):
     others_since: SkipJsonSchema[str | None] = None
 
 
+WEBHOOK_KIND = "github.webhook"
+
+
+class Delivery(ObservationRecord):
+    """One delivery of the App's webhook, as GitHub's delivery log says it."""
+
+    event: str
+    action: str = ""
+    # GitHub's words for the answer ("OK", "failed to connect") and its
+    # status code, 0 where nothing answered.
+    status: str = ""
+    status_code: int = 0
+    delivered_at: Stamp = None
+
+
+class WebhookRecord(ObservationRecord):
+    """What the App's webhook sends and how its newest deliveries went: the
+    events the App is subscribed to, from ``GET /app``, and its delivery log's
+    newest page, from ``GET /app/hook/deliveries``."""
+
+    connection_ref: str
+    app: str
+    # The account that owns the App, and whether it is an organization: the
+    # two the App's settings page is addressed by.
+    owner: str
+    organization: bool = False
+    events: list[str] = []
+    # The deliveries read, the newest of them, and how many of the newest
+    # failed in a row: 0 once one succeeds. A success is an answer from 200
+    # to 399, as the log's own status filter counts it (``github_webhook.go``).
+    deliveries: int = 0
+    newest: Delivery | None = None
+    failing: int = 0
+
+
+def app_settings(record: Mapping[str, Any]) -> str:
+    """The App's settings page on GitHub, where its events are ticked."""
+
+    app, owner = str(record.get("app", "")), str(record.get("owner", ""))
+    if not app:
+        return ""
+    if record.get("organization") and owner:
+        return f"https://github.com/organizations/{owner}/settings/apps/{app}"
+    return f"https://github.com/settings/apps/{app}"
+
+
 def _installation(record: Mapping[str, Any]) -> tuple[str, str]:
     return str(record.get("connection_ref", "")), str(record.get("installation", ""))
 
@@ -486,5 +540,16 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         describe=_allowance,
         relation="Hourly allowance of",
         from_last=with_others_spent,
+    ),
+    ObservationSpec(
+        WEBHOOK_KIND,
+        PROVIDER,
+        "GitHub App webhook",
+        WebhookRecord,
+        # Two calls a sweep, each the App's own, signed with its key: they
+        # need no permission and spend no installation's allowance.
+        title=lambda record: str(record.get("app", "")),
+        relation="Webhook of",
+        console=app_settings,
     ),
 )

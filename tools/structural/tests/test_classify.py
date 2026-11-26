@@ -105,6 +105,7 @@ class FingerprintTests(SimpleTestCase):
                 module.fingerprints(pages)
 
 
+@tag("source")
 class DeclarationTests(SimpleTestCase):
     """What counts as a constructor declaration, read from source alone."""
 
@@ -141,6 +142,31 @@ class DeclarationTests(SimpleTestCase):
         self.assertTrue(self.declares(META))
         self.assertFalse(self.declares(META.replace('("name",)))', '("name",), **extra))')))
         self.assertFalse(self.declares(META.replace("Capability.READ", "compute().READ")))
+
+    def test_only_the_contracts_frozen_declarations_and_their_classmethods_declare(self):
+        head = (
+            "from hq.platform.application.integration_specs import CommandFact, ListRead, ListSort, ResourceSpec\n"
+            "from hq.platform.application.search_contracts import SearchDefinition\n"
+            "from example.helpers import sorted_by\n"
+        )
+        spec = 'def resources():\n    return (ResourceSpec("example", Capability.READ, handler, {}),)\n'
+        parts = (
+            'sorts=ListSort.both("-at", "Newest", "Oldest")',
+            'search=SearchDefinition.of(Model, "id", ("name",))',
+            'sorts=(ListSort("-at", "Newest"),)',
+        )
+        for part in parts:
+            with self.subTest(part=part):
+                self.assertTrue(self.declares(head + spec.format(part)))
+        refused = (
+            'sorts=sorted_by("-at")',
+            "rows=Model.objects.filter(kept=True)",
+            'listing=ListRead.ordering("-at")',
+            'about=CommandFact("Example")',
+        )
+        for part in refused:
+            with self.subTest(part=part):
+                self.assertFalse(self.declares(head + spec.format(part)))
 
     def test_literals_that_call_no_constructor_declare_nothing(self):
         self.assertFalse(self.declares('def resources():\n    return ("example", Capability.READ)\n'))

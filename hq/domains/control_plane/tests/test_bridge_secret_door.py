@@ -8,7 +8,7 @@ from django.test import TestCase
 from pydantic import BaseModel
 
 from hq.domains.control_plane import bridge_application
-from hq.domains.control_plane.bridge_actions import ACTIONS
+from hq.domains.control_plane.bridge_actions import ACTIONS, EVENTS_ACTIONS
 from hq.domains.control_plane.bridge_contract import operations
 
 from . import bridge_client
@@ -50,6 +50,18 @@ EXAMPLES: dict[str, Any] = {
     },
     "steps": [{"subject": "example-npm", "step": "npm.proxy_host:reconcile", "reason": "refused"}],
     "analytics-plan": [{"site_tag": "tag", "connection_ref": "example-api"}],
+    "events": {
+        "source": "worker",
+        "events": [
+            {
+                "provider": "github_app",
+                "event": "push",
+                "subject": "example/app",
+                "delivery_id": "72d3162e-cc78-11e3-81ab-4c9367dc0958",
+                "received_at": "2026-01-15T12:00:00Z",
+            }
+        ],
+    },
     "analytics": {
         "sites": [
             {
@@ -134,7 +146,9 @@ def _recording(ran: list[tuple[str, Any]]):
     def noted(name: str):
         return lambda parameters, payload: ran.append((name, payload)) or {"ok": True}
 
-    return bridge_application.bridge(tuple(replace(action, run=noted(action.name)) for action in ACTIONS))
+    return bridge_application.bridge(
+        tuple(replace(action, run=noted(action.name)) for action in (*ACTIONS, *EVENTS_ACTIONS))
+    )
 
 
 def _at(value: Any, path: tuple[str | int, ...]) -> Any:

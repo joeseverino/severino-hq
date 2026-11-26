@@ -141,6 +141,14 @@ Resolve records the deployment itself: the environment's job sets
 `deployment: false`, since the deployment GitHub would record names the
 commit `main` was at when the run started and succeeds once approved.
 
+### Releasing a deploy
+
+Approve waits on the `production` environment, whose required reviewer is
+you. Approve or reject it on the run's page, in GitHub or GitHub Mobile, which
+notifies you ([Reviewing deployments](https://docs.github.com/en/actions/managing-workflow-runs/reviewing-deployments)).
+HQ shows a waiting run as the `github-waiting` finding, read-only, its link the
+run's page, and never answers GitHub.
+
 ### When a run fails
 
 `mise run annotations RUN_ID` prints the annotations of each failed job, one
@@ -169,11 +177,13 @@ prints: they move between steps as files.
 
 ### HQ's GitHub App
 
-One app, registered with no webhook and the permissions in
+One app, registered with the permissions in
 [`deploy/github-apps.json`](../deploy/github-apps.json) (a test holds them to
-what HQ asks for), installed on the host repository, every extension and each
-repository a host grant names ([Tokens on the host](#tokens-on-the-host)). Each
-use mints an hour-long token for only what it does:
+what HQ asks for), its webhook the inbound-events Worker's
+([Install step 12](Install.md#12-hear-providers-events)), installed on the
+host repository, every extension and each repository a host grant names
+([Tokens on the host](#tokens-on-the-host)). Each use mints an hour-long token
+for only what it does:
 
 | Who | Holds the key as | Asks for |
 | :--- | :--- | :--- |
@@ -305,7 +315,7 @@ from the tree, and every unit and the deploy call it.
 | Command | Does |
 | :--- | :--- |
 | `run-web` | runs the web container (`severino-hq-web.service`); waits for the rendered environment, notifies systemd once HQ is healthy. A request body or an upload spools to the container's own `/spool` volume (its `TMPDIR`), which is removed with the container and backed up by nothing |
-| `controller [--apply \| --glance]` | one controller pass: plan, claim and apply queued work, or (`--glance`) read only the dashboard panels HQ is waiting on. A glance's container is given the Portainer and SSH connections from the connections document and their identities, the host's roots, the bridge and the registry of runs, and nothing else a controller pass is given. It gets no certificate state, unit socket, host reading or out directory. A pass is told which of the host's grants are due, and an applying pass may leave a hand-off for each, and for a due dependency run, in its own out directory. Root opens each one without following links and validates it against its grant (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key). It moves a dependency run's hand-off to `/run/severino-hq-renovate/` and writes a host grant's token to the grant's path ([Tokens on the host](#tokens-on-the-host)), or logs and drops the hand-off |
+| `controller [--apply \| --glance \| --events]` | one controller pass: plan, claim and apply queued work, or (`--glance`) read only the dashboard panels HQ is waiting on, or (`--events`) hold the inbound-events Worker's socket until stopped. The listener's container is given what a glance's is, but of the connections only the `cloudflare_events` one; with none configured it starts nothing. A glance's container is given the Portainer and SSH connections from the connections document and their identities, the host's roots, the bridge and the registry of runs, and nothing else a controller pass is given. It gets no certificate state, unit socket, host reading or out directory. A pass is told which of the host's grants are due, and an applying pass may leave a hand-off for each, and for a due dependency run, in its own out directory. Root opens each one without following links and validates it against its grant (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key). It moves a dependency run's hand-off to `/run/severino-hq-renovate/` and writes a host grant's token to the grant's path ([Tokens on the host](#tokens-on-the-host)), or logs and drops the hand-off |
 | `renovate` | runs the spooled handoff: Renovate once per owner, in a container with no capability, a read-only root, no host path but `deploy/renovate/config.json`, and the token in an environment file; records each owner's outcome for the next pass. The container reaches public IPv4 addresses and nothing else: not the host, the LAN, the tailnet, link-local, multicast or another container. It runs on its own bridge, `severino-hq-renovate` (10.231.0.0/24, interface `hq-renovate0`, no IPv6), made if absent and refused unless it is exactly that, with public resolvers. Before each run root loads the nftables table `inet severino_hq_renovate` (`controller/host/egress.go`) in one transaction. The table drops everything the bridge sends to a private, reserved or IPv6 destination and everything it sends to the host itself. A run that cannot load the table never starts |
 | `automation` | runs the automation worker until no run is queued, when `host.json` has an `automation` entry and the release pins the worker's image (`AutomationImage` in `controller/host/layout.go`), and otherwise says which is missing and exits 0. It runs only the image the deploy verified and pulled, with `--pull never`, and refuses when the host does not hold it. It copies into a run directory on the renderer's tmpfs the runner-role SSH connections whose host is an IPv4 address, with their identities and pinned host keys. The grant's token goes beside them, kept current while the worker runs. It names each runner connection it leaves out. It lends the worker its own bridge socket's volume, never the controller's, and refuses to start it unless the journal is a `noexec` mount. Root loads the egress table `inet severino_hq_automation` (`controller/host/egress.go`) before the container starts, and removes the container at `AutomationBound`. What the container is given, and why: [The automation worker on the host](Architecture.md#the-automation-worker-on-the-host) |
 | `deploy IMAGE` | verifies the signature, refuses an image that drops an extension production runs, pulls, and hands over to the image's own `hq-host release` |
@@ -333,6 +343,8 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
 | `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
 | `severino-hq-glance.service` / `.path` | `hq-controller --glance`, the only pass that reads a dashboard panel, beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |
+| `severino-hq-listener.service` | `hq-controller listen`, resident: it holds the inbound-events Worker's socket open, outbound, and posts what it hears to the events bridge. It stops and starts with the web unit (`PartOf=`), so it runs the image HQ runs, and is started again five seconds after it fails. With no events connection it exits 0 and stays stopped; `severino-hq-listener.path` starts it when a render moves a changed connections document into place |
+| `severino-hq-events-docker.service` | `hq-host events`, resident: it reads Docker's event stream for a container on this machine that dies, starts, changes health, runs out of memory or is removed, and hands each burst to `hq-controller events` in the web container, which makes the container readings due. HQ's own runs are left out. Each time it begins reading it tells HQ it reconnected, so HQ reads the containers again for whatever it missed. It restarts with the web unit (`PartOf=`), so it runs the release's `hq-host` |
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
@@ -362,6 +374,7 @@ call allow list. A unit that needs more widens it in its own
 | :--- | :--- |
 | controller | host network and netlink for its nftables reading (`CAP_NET_ADMIN`); the web account's files (`CAP_CHOWN`, `CAP_DAC_OVERRIDE`) |
 | glance | the same files, with no network |
+| listener | host network and netlink to load its container's egress table (`CAP_NET_ADMIN`); the same files |
 | renovate | host network and netlink to load the egress table (`CAP_NET_ADMIN`) |
 | automation | host network and netlink to load the egress table (`CAP_NET_ADMIN`); the run directory and the doorbell, the web account's (`CAP_CHOWN`, `CAP_DAC_OVERRIDE`) |
 | backup | the volumes (`CAP_DAC_OVERRIDE`) and SQLite's files (`CAP_CHOWN`) |
@@ -477,7 +490,10 @@ The controller reaches HQ over a Unix socket the web container serves
 (`/run/hq-bridge/bridge.sock`, in the `severino_bridge` volume), and the
 automation worker over one of its own
 (`/run/hq-automation-bridge/bridge.sock`, in the `severino_automation_bridge`
-volume), which serves its claim, renewal and report alone. Each socket
+volume), which serves its claim, renewal and report alone. The listener and
+`hq-controller events` reach it over a third
+(`/run/hq-events-bridge/bridge.sock`, in the `severino_events_bridge`
+volume), which serves the `events` action alone. Each socket
 exists once the web process starts and is gone while the container is
 replaced; a pass in that gap fails with the reason and the next one runs. Each
 volume takes its owner and mode from the image, and HQ refuses to start if a
@@ -557,6 +573,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION` | platform | whether extensions must be admitted; on unless `DJANGO_DEBUG` when unset |
 | `SEVERINO_BRIDGE_SOCKET` | platform | the Unix socket the controller bridge is served on; unset serves none |
 | `SEVERINO_AUTOMATION_BRIDGE_SOCKET` | platform | the Unix socket the automation worker's bridge is served on, its claim, renewal and report alone; unset serves none |
+| `SEVERINO_EVENTS_BRIDGE_SOCKET` | platform | the Unix socket the event readers' bridge is served on, the `events` action alone; unset serves none |
 | `SEVERINO_TAILSCALED_SOCKET` | platform | tailscaled's local API socket, which places each agent call on the tailnet device that sent it. Set by `hq-host run-web` to `/var/run/tailscale/tailscaled.sock` on a host where tailscaled is enabled, which binds `/var/run/tailscale` read-only at the same path; a socket missing or unanswering there makes a call wait (503). Empty, the default, is a deployment with no tailnet: a call is placed on no device and the client is the finest unit |
 | `SEVERINO_CONTROLLER_DOORBELL` | platform | the file HQ touches when it queues controller work |
 | `SEVERINO_HANDED_LISTENER` | platform | the Unix socket the image's server waits on for the listener it serves HQ on, which only root may send and which must be a listening TCP socket; unset, the server binds `127.0.0.1:8000` itself. Either way it answers its HEALTHCHECK on `/run/hq-web/ready.sock` from the start |

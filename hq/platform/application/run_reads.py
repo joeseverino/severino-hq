@@ -323,11 +323,10 @@ def resources() -> tuple[ResourceSpec, ...]:
                 WorkQuery,
                 WorkItem,
                 sorts=(
-                    ListSort("failed", "Failing first", ("lead", "-created_at", "-id"), _failed_first),
-                    ListSort("-created_at", "Newest first", ("-created_at", "-id")),
-                    ListSort("created_at", "Oldest first", ("created_at", "id")),
-                    ListSort("title", "Job A–Z", ("title", "-created_at", "-id"), _a_to_z),
-                    ListSort("state", "State", ("seen", "-created_at", "-id")),
+                    ListSort("failed", "Failing first", ("lead", "-created_at"), _failed_first),
+                    *ListSort.both("-created_at", "Newest first", "Oldest first"),
+                    ListSort("title", "Job A–Z", ("title", "-created_at"), _a_to_z),
+                    ListSort("state", "State", ("seen", "-created_at")),
                 ),
                 filters=(
                     ListFilter("state", "State", JobState.choices, lookup="seen"),

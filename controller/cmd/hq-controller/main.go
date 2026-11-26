@@ -9,14 +9,26 @@
 // "hq-controller job NAME" is the other thing a timer asks of HQ: one piece of
 // scheduled work, done by the running process. It reads no connection.
 //
+// "hq-controller events [--reconnected]" tells HQ what its host was told
+// happened: one event per line of its input. Input with no events says the
+// teller is listening.
+//
+// "hq-controller listen" holds the inbound-events Worker's socket open, the
+// one events connection it is given, and tells HQ each event it hears, until
+// it is stopped. It reaches HQ only through the events bridge, which serves
+// the events action alone.
+//
 // "hq-controller ready [unix:PATH] URL" is the image's healthcheck: exit 0
 // when URL answers 200, asked on the socket at PATH when one is given, with
 // no interpreter started per probe.
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -25,6 +37,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -47,6 +60,10 @@ func main() {
 	switch mode {
 	case "job":
 		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
+	case "events":
+		code = events(ctx, os.Args[2:], os.Getenv(EventsBridgeSocket), os.Stdin, stdout, os.Stderr)
+	case "listen":
+		code = listen(ctx, os.Args[2:], stdout)
 	case "ready":
 		code = ready(ctx, os.Args[2:], stdout)
 	default:
@@ -75,6 +92,11 @@ func load(entries []string) (runtime.Environment, runtime.Connections, error) {
 // which the launcher mounts. There is no other way to reach HQ: unset, or not
 // a socket this account can trust, the pass fails and the next one tries again.
 const BridgeSocket = "SEVERINO_BRIDGE_SOCKET"
+
+// EventsBridgeSocket names the variable holding the path of the bridge socket
+// that serves the events action alone, which `events` and `listen` reach HQ
+// through.
+const EventsBridgeSocket = "SEVERINO_EVENTS_BRIDGE_SOCKET"
 
 // failure is the one line a pass that could not run prints.
 type failure struct {
@@ -109,6 +131,99 @@ func job(ctx context.Context, args []string, socket string, stdout io.Writer) in
 		return 0
 	}
 	return 1
+}
+
+// events posts the events of its input, one InboundArrival per line, as HQ's
+// host was told of them, in batches of the contract's bound. A line the
+// contract refuses is dropped alone, with a line on stderr. --reconnected
+// says the teller has just begun reading, so HQ reads again what it may have
+// missed; input with no events says it is listening. A batch HQ refuses ends
+// it with exit 1.
+func events(ctx context.Context, args []string, socket string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fail := func(message string) int {
+		_ = json.NewEncoder(stdout).Encode(failure{Message: message})
+		return 1
+	}
+	options := flag.NewFlagSet("events", flag.ContinueOnError)
+	options.SetOutput(io.Discard)
+	reconnected := options.Bool("reconnected", false, "the teller has just begun reading")
+	if options.Parse(args) != nil || options.NArg() != 0 {
+		fail("usage: hq-controller events [--reconnected]")
+		return 2
+	}
+	bridge, err := runtime.NewSocketBridge(strings.TrimSpace(socket))
+	if err != nil {
+		return fail(err.Error())
+	}
+	log := mask.Logger(stderr)
+	read := []runtime.InboundArrival{}
+	reader := bufio.NewReader(stdin)
+	for line := 1; ; line++ {
+		text, readErr := reader.ReadBytes('\n')
+		if text = bytes.TrimSpace(text); len(text) > 0 {
+			if event, err := runtime.ReadArrival(text); err != nil {
+				log.Warn("event dropped", slog.String("event", "events.unreadable"), slog.Int("line", line), slog.Any("error", err))
+			} else {
+				read = append(read, event)
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return fail(readErr.Error())
+		}
+	}
+	batches := slices.Collect(slices.Chunk(read, runtime.MaxInboundEvents))
+	if len(batches) == 0 {
+		batches = [][]runtime.InboundArrival{read}
+	}
+	for i, batch := range batches {
+		if err := bridge.Events(ctx, runtime.InboundBatch{Source: runtime.InboundSourceHost, Events: batch, Reconnected: *reconnected && i == 0}); err != nil {
+			return fail(err.Error())
+		}
+	}
+	_ = json.NewEncoder(stdout).Encode(struct {
+		OK     bool `json:"ok"`
+		Posted int  `json:"posted"`
+	}{true, len(read)})
+	return 0
+}
+
+// listen runs the listener on the events connection the launcher lent, until
+// ctx ends. One that cannot start is exit 1, so its unit starts it again.
+func listen(ctx context.Context, args []string, stdout io.Writer) int {
+	fail := func(err error) int {
+		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
+		return 1
+	}
+	if len(args) != 0 {
+		fail(errors.New("usage: hq-controller listen"))
+		return 2
+	}
+	env, supplied, err := load(os.Environ())
+	if err != nil {
+		return fail(err)
+	}
+	connection, err := supplied.For(runtime.ConnectionProviderCloudflareEvents, "")
+	if err != nil {
+		return fail(err)
+	}
+	bridge, err := runtime.NewSocketBridge(env.EventsBridgeSocket)
+	if err != nil {
+		return fail(err)
+	}
+	transport, err := runtime.NewHTTPClient(env.CAFile)
+	if err != nil {
+		return fail(err)
+	}
+	client := &http.Client{Transport: transport.Transport, Timeout: transport.Timeout}
+	listener, err := runtime.NewListener(connection, client, bridge.Events, mask.Logger(os.Stderr))
+	if err != nil {
+		return fail(err)
+	}
+	listener.Run(ctx)
+	return 0
 }
 
 // readyTimeout is under the healthcheck's own timeout, so a slow answer is

@@ -8,7 +8,9 @@ from pydantic import ConfigDict, Field
 from hq.platform.application.reasons import Checked
 lazy from hq.platform.application.labels import human_bytes
 
+from ..provider_spec import InboundSpec, SharedValue
 from .contract import ObservationRecord, ObservationSpec, Stamp
+from .portainer import ENVIRONMENT_KIND
 
 
 class HostFirewallRecord(ObservationRecord):
@@ -434,3 +436,14 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         relation="Restart state of",
     ),
 )
+
+# What HQ's own host jobs say happened: a unit that failed, which every
+# severino-hq unit's OnFailure= reports (``host_work.units.read``), and a
+# container on HQ's host that changed, with Docker's action after a dot,
+# which severino-hq-events-docker.service hears from Docker.
+UNIT_FAILED = "unit.failed"
+DOCKER_CONTAINER = "docker.container"
+INBOUND = {"host": InboundSpec({UNIT_FAILED: (UNIT_KIND,), DOCKER_CONTAINER: (ENVIRONMENT_KIND,)})}
+# The event severino-hq-events-docker.service tells, which the controller
+# spells from the contract.
+SHARED = (SharedValue("HostEvent", (DOCKER_CONTAINER,), "An event HQ's own host tells it of from the controller."),)

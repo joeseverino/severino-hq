@@ -1,0 +1,4 @@
+# What wrangler writes: the runtime and binding types (lint:worker generates
+# them before it typechecks) and its local state.
+worker-configuration.d.ts
+.wrangler/

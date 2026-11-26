@@ -15,15 +15,17 @@ from pydantic.json_schema import JsonSchemaMode
 
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.ui import ended
+lazy from hq.platform.application.inbound_events import CHANNEL_EVERY
 
 from . import provider_spec
 from .connection_kinds import SHAPES
 from .observations import OBSERVATIONS
-from .provider_adapters import ADMITTED, CONNECTIONS
+from .provider_adapters import ADMITTED, CONNECTIONS, INBOUND
 from .provider_adapters.contracts import FAILURES, REFUSALS
 from .provider_spec import ConnectionShape, SharedValue
 from .providers import OBSERVATION_KINDS, PROVIDERS
 from .reading_parts import parts_of
+lazy from .models import InboundSource
 
 REFERENCE = "#/components/schemas/"
 
@@ -122,6 +124,16 @@ def _enumerations() -> dict[str, dict[str, Any]]:
             "A connection provider HQ's registry declares: what a credential is for.",
             sorted(CONNECTIONS),
             "ConnectionProvider",
+        ),
+        "InboundProvider": _enumeration(
+            "A provider whose events HQ takes, as an admitted module's INBOUND declares it.",
+            sorted(INBOUND),
+            "InboundProvider",
+        ),
+        "InboundSource": _enumeration(
+            "Who was told an event happened: the listener on the Worker's socket, or HQ's own host jobs.",
+            InboundSource.values,
+            "InboundSource",
         ),
         "ReadingPartName": _enumeration(
             "A part a reading is read in, as HQ's registry declares them; empty for "
@@ -224,8 +236,22 @@ def _records() -> Iterable[dict[str, dict[str, Any]]]:
         yield found
 
 
+def _heartbeat() -> dict[str, dict[str, Any]]:
+    """How often an event reader says it is listening while nothing
+    happens: the interval HQ holds its channel's silence to."""
+
+    return {
+        "InboundHeartbeatSeconds": {
+            "type": "integer",
+            "default": int(CHANNEL_EVERY.total_seconds()),
+            "description": "How often an event reader posts a batch with no events while it is listening.",
+        }
+    }
+
+
 def _declared() -> Iterable[dict[str, dict[str, Any]]]:
     yield _enumerations()
+    yield _heartbeat()
     for module in (provider_spec, *ADMITTED):
         for value in getattr(module, "SHARED", ()):
             yield _shared(value)

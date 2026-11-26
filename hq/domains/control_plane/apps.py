@@ -15,7 +15,8 @@ class ControlPlaneConfig(AppConfig):
     @override
     def ready(self):
         from hq.platform.application.approvals import AUDIT_LABEL as APPROVAL_AUDIT_LABEL
-        from hq.platform.core.audit import register_audit
+        from hq.platform.application.references import Kind
+        from hq.platform.core.audit import Subject, register_audit
 
         from .models import (
             AdoptedCatalog,
@@ -40,18 +41,23 @@ class ControlPlaneConfig(AppConfig):
             observation=("last_observed_at",),
             connection=_resource_connection,
             redact_for=_withheld_fields,
-            subject=lambda resource: resource.key,
+            subject=Subject(lambda resource: resource.key, Kind.RESOURCE),
         )
         register_audit(
             OperationRequest,
             "Infrastructure operation",
             connection=lambda operation: _resource_connection(operation.resource),
-            subject=lambda operation: operation.resource.key,
+            subject=Subject(lambda operation: operation.resource.key, Kind.RESOURCE),
         )
         # An operator's choice that a record stays unmanaged, and its reversal.
         register_audit(NotManaged, "Not managed")
         # Who asked for a held change, who agreed to it and when.
-        register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL, subject=lambda held: held.resource_key, required=True)
+        register_audit(
+            ApprovalRequest,
+            APPROVAL_AUDIT_LABEL,
+            subject=Subject(lambda held: held.resource_key, Kind.RESOURCE),
+            required=True,
+        )
         # Who asked for a connection to be read now, and when.
         register_audit(ReadRequest, READ_REQUEST, connection=lambda request: request.connection_ref)
         # Who asked for a dashboard panel to be read now, filed with the other
@@ -59,16 +65,21 @@ class ControlPlaneConfig(AppConfig):
         register_audit(DashboardRefreshRequest, READ_REQUEST, observation=("completed_at",), required=True)
         # What the dashboard shows, and on which machines, under one label.
         register_audit(DashboardConfiguration, DASHBOARD, required=True)
-        register_audit(DashboardMachine, DASHBOARD, subject=lambda placement: placement.machine.key, required=True)
+        register_audit(
+            DashboardMachine,
+            DASHBOARD,
+            subject=Subject(lambda placement: placement.machine.key, Kind.RESOURCE),
+            required=True,
+        )
         # What a Refresh found in the automation source, and who rejected it, under the source's key.
         register_audit(
             SourceProposal,
             "Playbook scan result",
-            subject=lambda proposal: proposal.operation.resource.key,
+            subject=Subject(lambda proposal: proposal.operation.resource.key, Kind.RESOURCE),
             required=True,
         )
         # Which commit of it became the catalog HQ runs from, and who adopted it.
-        register_audit(AdoptedCatalog, "Adopted playbooks", subject=_source_key)
+        register_audit(AdoptedCatalog, "Adopted playbooks", subject=Subject(_source_key, Kind.RESOURCE))
         # An operator's rule for what one agent may run.
         register_audit(CapabilityRule, "Capability policy", required=True)
         # A secret handed to one resource: that it was set, never what it holds.
@@ -76,7 +87,7 @@ class ControlPlaneConfig(AppConfig):
             SealedSecret,
             "Sealed secret",
             redact=("sealed",),
-            subject=lambda secret: secret.resource.key,
+            subject=Subject(lambda secret: secret.resource.key, Kind.RESOURCE),
             required=True,
         )
 

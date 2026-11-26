@@ -26,9 +26,10 @@ from .linked_accounts import GITHUB
 from .quoted import Quoted
 from .record_errors import RecordNotFound
 from .security import Capability, Principal
-lazy from .cadence import CONTROLLER_REFRESH, ask, asked_at
+lazy from .cadence import CONTROLLER_REFRESH, ask
 lazy from .capabilities import command_spec
 lazy from .moments import moment
+lazy from .read_requests import asked_at
 
 READ_NOW = "github.profile.read"
 

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 	"github.com/joeseverino/severino-hq/controller/secrets/project"
 )
 
@@ -49,7 +50,15 @@ type launch struct {
 	order     []string
 	// container is what the pass does, given its out directory on the host.
 	container func(out string)
+	// loaded is whether an egress table was loaded.
+	loaded bool
 }
+
+// listenerNetworkJSON is what `docker network inspect` says of the
+// listener's network, as Docker prints one it made.
+const listenerNetworkJSON = `{"Name":"severino-hq-listener","Id":"89abcdef","Scope":"local","Driver":"bridge","EnableIPv4":true,"EnableIPv6":false,` +
+	`"IPAM":{"Driver":"default","Options":null,"Config":[{"Subnet":"10.231.2.0/24","Gateway":"10.231.2.1"}]},"Internal":false,"Attachable":false,` +
+	`"Containers":{},"Options":{"com.docker.network.bridge.name":"hq-listener0"},"Labels":{}}`
 
 func newLaunch(t *testing.T) *launch {
 	t.Helper()
@@ -104,6 +113,13 @@ func newLaunch(t *testing.T) *launch {
 					}
 				}
 			}
+		}
+		if name == "docker" && slices.Equal(args[:2], []string{"network", "inspect"}) {
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"`, "sh", listenerNetworkJSON)
+		}
+		if name == "nft" && slices.Equal(args, []string{"-f", "-"}) {
+			l.loaded = true
+			return exec.CommandContext(ctx, "/bin/sh", "-c", "cat >/dev/null")
 		}
 		if name == "nft" || name == "systemctl" || name == "busctl" {
 			return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 1")
@@ -567,7 +583,7 @@ func TestTheCertificateStateIsTheControllersWithoutFollowingLinks(t *testing.T) 
 }
 
 // glanceDocument is a rendered document with a connection of each kind a
-// glance reads and one it does not.
+// glance reads, the listener's, and one neither reads.
 func glanceDocument(t *testing.T, l *launch) {
 	t.Helper()
 	store := connections.Store{Vault: "Example", Item: "example"}
@@ -578,6 +594,8 @@ func glanceDocument(t *testing.T, l *launch) {
 			SSHTransport: &connections.SSHTransport{Host: "192.0.2.10", User: "example", HostKey: "key", Identity: "example-ssh", Port: "22"}},
 		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store,
 			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+		{Ref: "example-events", Provider: string(runtime.ConnectionProviderCloudflareEvents), Store: store,
+			APIToken: &connections.APIToken{URL: "wss://events.example.com/socket", APIToken: "socket-token"}},
 	}}.Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -592,32 +610,80 @@ func glanceDocument(t *testing.T, l *launch) {
 }
 
 // A glance pass is given the connections it reads a machine through and the
-// identities they name, and none of the rest.
-func TestAGlanceIsGivenOnlyTheConnectionsItReads(t *testing.T) {
+// identities they name, the listener the events connection alone, and
+// neither any of the rest.
+func TestAPartialPassIsGivenOnlyTheConnectionsItReads(t *testing.T) {
+	for _, c := range []struct {
+		pass       Pass
+		refs       []string
+		role, last string
+	}{
+		{Glance, []string{"example-portainer", "example-ssh"}, "glance", "--glance"},
+		{Listen, []string{"example-events"}, "listener", "listen"},
+	} {
+		t.Run(c.role, func(t *testing.T) {
+			l := newLaunch(t)
+			glanceDocument(t, l)
+
+			l.run(t, c.pass)
+
+			document, err := connections.Decode(l.mounted[controllerConnections])
+			if err != nil {
+				t.Fatal(err)
+			}
+			var refs []string
+			for _, connection := range document.Connections {
+				refs = append(refs, connection.Ref)
+			}
+			if !slices.Equal(refs, c.refs) {
+				t.Errorf("the pass is given %v", refs)
+			}
+			if strings.Contains(string(l.mounted[controllerConnections]), sentinel) {
+				t.Error("the pass is given a credential it does not read")
+			}
+			if l.args[len(l.args)-1] != c.last || l.args[len(l.args)-2] != running {
+				t.Errorf("the launch ends %v", l.args[len(l.args)-2:])
+			}
+			if !slices.Contains(l.args, "severino-hq.role="+c.role) {
+				t.Errorf("the pass's container is not labeled as one: %v", l.args)
+			}
+		})
+	}
+}
+
+// The listener faces the internet, so its container reaches only public
+// addresses, on a network its table confines, and HQ only through the
+// socket that serves the events action alone.
+func TestTheListenerReachesOnlyPublicAddressesAndTheEventsBridge(t *testing.T) {
 	l := newLaunch(t)
 	glanceDocument(t, l)
 
-	l.run(t, Glance)
+	l.run(t, Listen)
 
-	document, err := connections.Decode(l.mounted[controllerConnections])
-	if err != nil {
-		t.Fatal(err)
+	if !l.loaded {
+		t.Error("the listener's egress table was not loaded")
 	}
-	var refs []string
-	for _, connection := range document.Connections {
-		refs = append(refs, connection.Ref)
+	if network := l.args[slices.Index(l.args, "--network")+1]; network != ListenerNetwork {
+		t.Errorf("the listener runs on %s", network)
 	}
-	if !slices.Equal(refs, []string{"example-portainer", "example-ssh"}) {
-		t.Errorf("the glance is given %v", refs)
+	for i, arg := range l.args {
+		if arg == "--dns" && !slices.Contains(PublicResolvers, l.args[i+1]) {
+			t.Errorf("the listener resolves with %s", l.args[i+1])
+		}
 	}
-	if strings.Contains(string(l.mounted[controllerConnections]), sentinel) {
-		t.Error("the glance is given a credential it does not read")
+	if slices.ContainsFunc(l.args, func(arg string) bool { return strings.Contains(arg, filepath.Dir(BridgeSocket)+",") }) {
+		t.Errorf("the listener is lent the controller's bridge: %v", l.args)
 	}
-	if l.args[len(l.args)-1] != "--glance" || l.args[len(l.args)-2] != running {
-		t.Errorf("the launch ends %v", l.args[len(l.args)-2:])
-	}
-	if !slices.Contains(l.args, "severino-hq.role=glance") {
-		t.Errorf("the glance's container is not labeled as one: %v", l.args)
+}
+
+// With no events connection there is no socket to hold, and no container.
+func TestAListenerWithNoEventsConnectionStartsNothing(t *testing.T) {
+	l := newLaunch(t)
+
+	l.run(t, Listen)
+
+	if l.args != nil {
+		t.Errorf("a listener with nothing to hold started %v", l.args)
 	}
 }
 
@@ -625,7 +691,7 @@ func TestAGlanceIsGivenOnlyTheConnectionsItReads(t *testing.T) {
 // controller or glance pass, and a pass holds only the identities of the
 // connections it is given.
 func TestNoPassHoldsTheAutomationWorkersKey(t *testing.T) {
-	for _, pass := range []Pass{Plan, Apply, Glance} {
+	for _, pass := range []Pass{Plan, Apply, Glance, Listen} {
 		t.Run(fmt.Sprint(pass), func(t *testing.T) {
 			l := newLaunch(t)
 			glanceDocument(t, l)
@@ -643,8 +709,11 @@ func TestNoPassHoldsTheAutomationWorkersKey(t *testing.T) {
 				}
 			}
 			slices.Sort(l.lentFiles)
-			want := []string{"example-ssh", "example-ssh.pub", "known_hosts"}
-			if pass != Glance {
+			want := map[Pass][]string{
+				Glance: {"example-ssh", "example-ssh.pub", "known_hosts"},
+				Listen: {"known_hosts"},
+			}[pass]
+			if !pass.partial() {
 				want = []string{"example-dns.key", "example-ssh", "example-ssh.pub", "known_hosts"}
 			}
 			if !slices.Equal(l.lentFiles, want) {
@@ -701,49 +770,58 @@ func withRunnerConnection(t *testing.T, secrets string) {
 	}
 }
 
-// A glance pass is given less than a controller pass: no certificate state,
-// unit socket, reading of this host, delivery or way to hand root work.
-func TestAGlanceIsGivenNothingElseOfTheControllers(t *testing.T) {
-	l := newLaunch(t)
-	glanceDocument(t, l)
-	for _, dir := range []string{filepath.Dir(l.controller.UnitSocket), l.controller.CertStore} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(l.controller.CertStore, "example.crt"), []byte("ROOT\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	l.controller.LookPath = func(string) (string, error) { return "/usr/bin/op", nil }
+// A glance or listener pass is given less than a controller pass: no
+// certificate state, unit socket, reading of this host, delivery or way to
+// hand root work.
+func TestAPartialPassIsGivenNothingElseOfTheControllers(t *testing.T) {
+	for _, pass := range []Pass{Glance, Listen} {
+		t.Run(fmt.Sprint(pass), func(t *testing.T) {
+			l := newLaunch(t)
+			glanceDocument(t, l)
+			for _, dir := range []string{filepath.Dir(l.controller.UnitSocket), l.controller.CertStore} {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(l.controller.CertStore, "example.crt"), []byte("ROOT\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			l.controller.LookPath = func(string) (string, error) { return "/usr/bin/op", nil }
 
-	l.run(t, Glance)
+			l.run(t, pass)
 
-	var names []string
-	for _, env := range l.envs() {
-		name, _, _ := strings.Cut(env, "=")
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	want := []string{"HQ_CONTROLLER_CA_FILE", "HQ_CONTROLLER_CONNECTIONS", "HQ_CONTROLLER_RUNS", "HQ_CONTROLLER_SSH_DIR", "SEVERINO_BRIDGE_SOCKET"}
-	if !slices.Equal(names, want) {
-		t.Errorf("the glance is told %v, want %v", names, want)
-	}
-	var targets []string
-	for i, arg := range l.args {
-		if arg == "--mount" {
-			_, target, _ := strings.Cut(l.args[i+1], ",target=")
-			target, _, _ = strings.Cut(target, ",")
-			targets = append(targets, target)
-		}
-	}
-	slices.Sort(targets)
-	if want := []string{filepath.Dir(BridgeSocket), controllerConnections, controllerSSH, controllerCA, RunsDir}; !slices.Equal(targets, slices.Sorted(slices.Values(want))) {
-		t.Errorf("the glance mounts %v", targets)
-	}
-	if string(l.mounted[controllerCA]) != "ROOT\n" {
-		t.Error("the host's roots were not lent to the glance")
-	}
-	if _, err := os.Stat(l.controller.ACME); err == nil {
-		t.Error("a glance made the certificate state")
+			var names []string
+			for _, env := range l.envs() {
+				name, _, _ := strings.Cut(env, "=")
+				names = append(names, name)
+			}
+			slices.Sort(names)
+			bridge, variable := BridgeSocket, "SEVERINO_BRIDGE_SOCKET"
+			if pass == Listen {
+				bridge, variable = EventsBridgeSocket, "SEVERINO_EVENTS_BRIDGE_SOCKET"
+			}
+			want := []string{"HQ_CONTROLLER_CA_FILE", "HQ_CONTROLLER_CONNECTIONS", "HQ_CONTROLLER_RUNS", "HQ_CONTROLLER_SSH_DIR", variable}
+			if !slices.Equal(names, want) {
+				t.Errorf("the pass is told %v, want %v", names, want)
+			}
+			var targets []string
+			for i, arg := range l.args {
+				if arg == "--mount" {
+					_, target, _ := strings.Cut(l.args[i+1], ",target=")
+					target, _, _ = strings.Cut(target, ",")
+					targets = append(targets, target)
+				}
+			}
+			slices.Sort(targets)
+			if want := []string{filepath.Dir(bridge), controllerConnections, controllerSSH, controllerCA, RunsDir}; !slices.Equal(targets, slices.Sorted(slices.Values(want))) {
+				t.Errorf("the pass mounts %v", targets)
+			}
+			if string(l.mounted[controllerCA]) != "ROOT\n" {
+				t.Error("the host's roots were not lent to the pass")
+			}
+			if _, err := os.Stat(l.controller.ACME); err == nil {
+				t.Error("the pass made the certificate state")
+			}
+		})
 	}
 }

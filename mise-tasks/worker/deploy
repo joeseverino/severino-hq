@@ -1,0 +1,42 @@
+#!/bin/sh
+#MISE description="Deploy the inbound-events Worker to Cloudflare on the custom domain the environment names (docs/Security.md)"
+#MISE hide=true
+#MISE depends=["setup:worker-tools"]
+#USAGE flag "--dry-run" help="Build and check the Worker, uploading nothing"
+#USAGE flag "--with-secrets" help="Upload each secret wrangler.jsonc requires from the variable of its name: the first deploy, and a rotation"
+
+# The environment names what this public repository must not:
+# CLOUDFLARE_ACCOUNT_ID, which wrangler reads itself, and HQ_INBOUND_HOSTNAME,
+# the name on the operator's own zone the Worker answers on. wrangler.jsonc
+# turns off the workers.dev address, which names the account.
+# CLOUDFLARE_API_TOKEN deploys; a dry run needs none.
+set -eu
+
+: "${CLOUDFLARE_ACCOUNT_ID:?worker:deploy needs CLOUDFLARE_ACCOUNT_ID, the Cloudflare account to deploy to}"
+: "${HQ_INBOUND_HOSTNAME:?worker:deploy needs HQ_INBOUND_HOSTNAME, the name on your own zone the Worker answers on}"
+export WRANGLER_SEND_METRICS=false
+
+cd worker
+set -- deploy --domain "$HQ_INBOUND_HOSTNAME"
+if [ "${usage_dry_run:-}" = true ]; then
+    set -- "$@" --dry-run
+fi
+
+# A deploy without --with-secrets keeps the secrets the Worker holds, and fails
+# while one wrangler.jsonc requires is unset. With it, the secrets go up with
+# the version on stdin, never in a file; a name left unset stops the upload,
+# since wrangler refuses the empty input.
+if [ "${usage_with_secrets:-}" != true ]; then
+    exec ./node_modules/.bin/wrangler "$@"
+fi
+# shellcheck disable=SC2016  # the program is node's, whose template literals the shell must not expand
+node --input-type=module -e '
+import { experimental_readRawConfig as read } from "wrangler";
+const names = read({ config: "wrangler.jsonc" }).rawConfig.secrets?.required ?? [];
+const unset = names.filter((name) => !process.env[name]);
+if (unset.length) {
+    console.error(`worker:deploy --with-secrets: set ${unset.join(", ")}`);
+    process.exit(1);
+}
+process.stdout.write(JSON.stringify(Object.fromEntries(names.map((name) => [name, process.env[name]]))));
+' | ./node_modules/.bin/wrangler "$@" --secrets-file /dev/stdin

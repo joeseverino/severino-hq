@@ -1,0 +1,17 @@
+[Unit]
+Description=Hold the Severino HQ inbound-events socket once a render gives it one
+# The secrets render moves the connections document into place whenever it
+# changes, so a host that gains an events connection starts its listener
+# then, and one without one never polls for it: the listener exits cleanly
+# with nothing to hold, and nothing starts it again until the next change.
+# A start of the listener while it runs does nothing.
+#
+# PathChanged: the render renames the document into place, which systemd
+# sees on the directory (IN_MOVED_TO, systemd's src/core/path.c).
+
+[Path]
+PathChanged=/run/severino-hq-secrets/controller-connections.json
+Unit=severino-hq-listener.service
+
+[Install]
+WantedBy=paths.target

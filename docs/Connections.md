@@ -161,7 +161,7 @@ Store it as a Login item:
 
 Repo rules on your repositories, and HQ's deploys waiting for your approval.
 
-A GitHub App on your account; mise run wire-github-app records its ID and stores its key. [Setup page](https://github.com/settings/apps/new)
+A GitHub App on your account; mise run wire-github-app records its ID, stores its key and points its webhook at the inbound-events Worker. [Setup page](https://github.com/settings/apps/new)
 
 Permissions, and no others:
 
@@ -253,4 +253,21 @@ Store it as an item of any type:
 | `env_prefix` | `ACME` | Says which service it is for. |
 | `website` | yours | A field labeled website. |
 | `email` | yours | A field labeled email. |
+| `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |
+
+## Cloudflare inbound events
+
+Your providers' events as they happen, so what changed is read in seconds.
+
+A random token, set as the inbound-events Worker's SOCKET_TOKEN secret by its deploy. [Setup page](https://developers.cloudflare.com/workers/configuration/secrets/)
+
+Store it as an API Credential item:
+
+| Field | Value | What it is |
+| --- | --- | --- |
+| `connection_ref` | `cloudflare-events` | Any name; how HQ refers to this connection. |
+| `projection` | `api_token` | The shape HQ reads the item as. |
+| `env_prefix` | `CLOUDFLARE_EVENTS` | Says which service it is for. |
+| `credential` | the secret | The item's own credential field. |
+| `website` | yours | A field labeled website. |
 | `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |

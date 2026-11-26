@@ -918,6 +918,14 @@ installation's last record of the same hour, and the connection's node carries
 the `github-others-spent` fact once that passes the usual
 ([Security](Security.md#a-leaked-github-app-credential)).
 
+The `github.webhook` reading is one record per App, read as the App itself:
+the events it is subscribed to (`GET /app`) and its delivery log's newest
+page (`GET /app/hook/deliveries`), kept as the newest delivery and how many of
+the newest failed in a row. Neither call needs a permission. The
+`github-webhook` finding fires when the newest deliveries failed, or when the
+App is not subscribed to an event `INBOUND` takes from it, and opens the App's
+settings page.
+
 ## Machine roles
 
 What a machine does for the estate is derived from the tailnet readings by the

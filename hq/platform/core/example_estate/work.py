@@ -153,6 +153,17 @@ def repositories():
             record["environments"] = [
                 {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]}
             ]
+            # A deploy waiting on production's reviewer, approved on GitHub.
+            record["waiting"] = [
+                {
+                    "id": 4100,
+                    "name": "Deploy",
+                    "environments": ["production"],
+                    "sha": hexed("release", name, length=40),
+                    "created_at": iso(timedelta(minutes=20)),
+                    "url": "https://github.com/example/hq/actions/runs/4100",
+                }
+            ]
             record["images"] = [{"name": "example/hq", "signed": [HQ_DIGEST.removeprefix("sha256:")]}]
             # Its default branch's rules, with checks its pull requests run
             # that they do not require, and the runner its deploys run on.
@@ -187,12 +198,17 @@ def repositories():
                     "Your code is affected by 1 vulnerability from the Go standard library.",
                 ],
             }
+            # A check no workflow owns says why in its own output.
+            denied = {
+                "error": "License denied",
+                "log": ["example-lib 1.2.0: GPL-3.0"],
+            }
             record["checks"] = {
                 "state": "failure",
-                "total": 4,
-                "failing": ["Scan"],
+                "total": 5,
+                "failing": ["License", "Scan"],
                 "running": 0,
-                "failures": {"Scan": failure},
+                "failures": {"License": denied, "Scan": failure},
             }
             record["runs"], record["failing_runs"] = [scan], [scan]
         if name == APPS:
@@ -238,6 +254,26 @@ def repositories():
         conditions=[{"type": READY, "status": True, "reason": "Reconciled", "message": ""}],
     )
     store(delivery.KIND, {**deploys, "connection_ref": GITHUB, "extensions": []})
+    # The App's newest deliveries refused by the events Worker, its secret
+    # out of step with the App's.
+    store(
+        "github.webhook",
+        {
+            "connection_ref": GITHUB,
+            "app": "example-hq",
+            "owner": "example",
+            "events": ["push", "workflow_run", "check_suite", "pull_request", "deployment_status", "deployment_review"],
+            "deliveries": 40,
+            "failing": 3,
+            "newest": {
+                "event": "workflow_run",
+                "action": "completed",
+                "status": "Unauthorized",
+                "status_code": 401,
+                "delivered_at": iso(timedelta(minutes=12)),
+            },
+        },
+    )
     store(
         "github.profile",
         {

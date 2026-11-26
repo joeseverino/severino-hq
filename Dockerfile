@@ -245,11 +245,11 @@ RUN DJANGO_SECRET_KEY="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
 # Made after every step that runs HQ, and refused if one left a file there: a
 # new volume starts as a copy of the image's directory, so a file a root step
 # wrote would be root's in the volume, where HQ's account cannot write it.
-RUN mkdir -p /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge \
-    && left="$(find /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge -mindepth 1)" \
+RUN mkdir -p /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge /run/hq-events-bridge \
+    && left="$(find /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge /run/hq-events-bridge -mindepth 1)" \
     && if [ -n "$left" ]; then echo "A build step left files in HQ's volumes: $left" >&2; exit 1; fi \
-    && chown -R severino:severino /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge \
-    && chmod 0700 /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge
+    && chown -R severino:severino /data /media /exports /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge /run/hq-events-bridge \
+    && chmod 0700 /spool /run/hq-web /run/hq-bridge /run/hq-automation-bridge /run/hq-events-bridge
 
 USER severino
 EXPOSE 8000

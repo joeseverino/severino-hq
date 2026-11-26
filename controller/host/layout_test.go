@@ -128,32 +128,104 @@ func TestARefreshDuringAGlanceStartsTheNext(t *testing.T) {
 	}
 }
 
-// The glance unit is given no more than the controller unit: each setting
-// that confines the controller confines the glance the same way, and the
-// glance writes nowhere the controller cannot.
-func TestTheGlanceUnitIsGivenNoMoreThanTheControllers(t *testing.T) {
+// The resident units, which only these tests name.
+const (
+	listenerUnit     = "severino-hq-listener.service"
+	dockerEventsUnit = "severino-hq-events-docker.service"
+)
+
+// The glance and listener units are given no more than the controller unit:
+// each setting that confines the controller confines them the same way, and
+// they write nowhere the controller cannot.
+func TestThePartialPassUnitsAreGivenNoMoreThanTheControllers(t *testing.T) {
 	systemd := filepath.Join("..", "..", "deploy", "systemd")
-	for _, key := range []string{"User", "Group", "NoNewPrivileges", "PrivateTmp", "ProtectHome", "ProtectSystem", "WorkingDirectory"} {
-		want, _ := effective(t, systemd, ControllerUnit, key)
-		if got, _ := effective(t, systemd, GlanceUnit, key); got != want {
-			t.Errorf("%s=%q for the glance, %q for the controller", key, got, want)
+	for _, unit := range []string{GlanceUnit, listenerUnit} {
+		for _, key := range []string{"User", "Group", "NoNewPrivileges", "PrivateTmp", "ProtectHome", "ProtectSystem", "WorkingDirectory"} {
+			want, _ := effective(t, systemd, ControllerUnit, key)
+			if got, _ := effective(t, systemd, unit, key); got != want {
+				t.Errorf("%s=%q for %s, %q for the controller", key, got, unit, want)
+			}
 		}
-	}
-	// What the glance may write, hold or reach is what the controller may.
-	for _, key := range []string{"ReadWritePaths", "CapabilityBoundingSet", "RestrictAddressFamilies", "SystemCallFilter"} {
-		_, wide := effective(t, systemd, ControllerUnit, key)
-		_, given := effective(t, systemd, GlanceUnit, key)
-		for _, word := range given {
-			if !slices.Contains(wide, word) {
-				t.Errorf("the glance's %s holds %s, which the controller's does not", key, word)
+		// What it may write, hold or reach is what the controller may.
+		for _, key := range []string{"ReadWritePaths", "CapabilityBoundingSet", "RestrictAddressFamilies", "SystemCallFilter"} {
+			_, wide := effective(t, systemd, ControllerUnit, key)
+			_, given := effective(t, systemd, unit, key)
+			for _, word := range given {
+				if !slices.Contains(wide, word) {
+					t.Errorf("%s's %s holds %s, which the controller's does not", unit, key, word)
+				}
 			}
 		}
 	}
+	// Its container dials out through dockerd's network, never the unit's. The
+	// listener's unit is in the host's network only to load its container's
+	// egress table, as the controller's is to read the firewall.
 	if net, _ := effective(t, systemd, GlanceUnit, "PrivateNetwork"); !systemdTrue(net) {
-		t.Errorf("the glance reaches the host's network (PrivateNetwork=%q), and reads nothing there", net)
+		t.Errorf("%s reaches the host's network (PrivateNetwork=%q)", GlanceUnit, net)
 	}
 	if got, bound := unitSetting(t, GlanceUnit, "TimeoutStartSec"), unitSetting(t, ControllerUnit, "TimeoutStartSec"); got >= bound {
 		t.Errorf("a glance may run %s, as long as a sweep's %s", got, bound)
+	}
+}
+
+// The listener holds the socket for as long as HQ runs: started again
+// whenever it fails, started when a render changes the connections, and
+// with HQ, so it runs the image HQ runs. With nothing to hold it stops.
+func TestThelistenerUnitHoldsTheSocketWhileHQRuns(t *testing.T) {
+	service := filepath.Join("..", "..", "deploy", "systemd", listenerUnit)
+	if got := unitValue(t, service, "ExecStart"); got != HostProgram+" controller --events" {
+		t.Errorf("the listener unit runs %q", got)
+	}
+	if got := unitValue(t, service, "Restart"); got != "on-failure" {
+		t.Errorf("the listener is started again on %q", got)
+	}
+	if got := unitValue(t, service, "PartOf"); got != hostcore.WebUnit {
+		t.Errorf("the listener is part of %q, not HQ's unit", got)
+	}
+	path := filepath.Join("..", "..", "deploy", "systemd", "severino-hq-listener.path")
+	if got := unitValue(t, path, "PathChanged"); got != filepath.Join(hostcore.SecretDir, "controller-connections.json") {
+		t.Errorf("the listener is started when %q changes, not the rendered connections", got)
+	}
+}
+
+// The Docker watcher holds Docker's socket, so it is given the shared
+// sandbox and nothing more: no network, no address family but AF_UNIX, no
+// capability, nowhere to write and no credential. It holds the stream while
+// HQ runs, and restarts with it.
+func TestTheDockerWatcherRunsInTheSharedSandboxAlone(t *testing.T) {
+	shipped, err := Shipped(shippedUnits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range dropInsOf(dockerEventsUnit, shipped) {
+		if !strings.HasPrefix(name, "severino-hq-.service.d/") {
+			t.Errorf("%s is widened by %s", dockerEventsUnit, name)
+		}
+	}
+	setting := func(key string) (string, []string) { return effective(t, shippedUnits, dockerEventsUnit, key) }
+	if net, _ := setting("PrivateNetwork"); !systemdTrue(net) {
+		t.Errorf("the watcher reaches the host's network (PrivateNetwork=%q)", net)
+	}
+	if _, families := setting("RestrictAddressFamilies"); !slices.Equal(families, []string{"AF_UNIX"}) {
+		t.Errorf("the watcher may open sockets of %v", families)
+	}
+	if _, held := setting("CapabilityBoundingSet"); len(held) != 0 {
+		t.Errorf("the watcher may hold %v", held)
+	}
+	for _, key := range []string{"ReadWritePaths", "LoadCredential", "LoadCredentialEncrypted", "SetCredential", "ImportCredential", "EnvironmentFile", "Environment"} {
+		if value, _ := setting(key); value != "" {
+			t.Errorf("the watcher is given %s=%s", key, value)
+		}
+	}
+	service := filepath.Join(shippedUnits, dockerEventsUnit)
+	if got := unitValue(t, service, "ExecStart"); got != HostProgram+" events" {
+		t.Errorf("the watcher unit runs %q", got)
+	}
+	if got := unitValue(t, service, "Restart"); got != "always" {
+		t.Errorf("the watcher is started again only on %q", got)
+	}
+	if got := unitValue(t, service, "PartOf"); got != hostcore.WebUnit {
+		t.Errorf("the watcher is part of %q, not HQ's unit", got)
 	}
 }
 

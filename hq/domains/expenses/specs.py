@@ -118,12 +118,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             identifier="id",
             identifier_type=RecordId,
             pass_principal=True,
-            search=SearchDefinition(
-                "expenses",
+            search=SearchDefinition.of(
                 Expense,
                 "pk",
                 ("vendor", "item", "category", "business_purpose", "notes"),
-                label="Expenses",
             ),
             web_route="expenses:list",
             record_type=ExpenseRecord,

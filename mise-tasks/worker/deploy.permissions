@@ -1,0 +1,6 @@
+# The Cloudflare token worker:deploy runs with, minted by
+# `mise run mint:cloudflare --permissions mise-tasks/worker/deploy.permissions`.
+# Uploading the Worker, its Durable Object migration and its custom domain
+# (PUT /accounts/{account_id}/workers/domains) all take this one account
+# permission; Cloudflare creates the domain's DNS record and certificate.
+Workers Scripts Write (account)

@@ -64,6 +64,8 @@ VULNERABLE = {
 }
 # An error the tool marks itself says why on its own.
 MARKED = {"step": "Lint", "error": "main.go:3:1: undefined: example", "log": ["golangci-lint run"]}
+# A check no workflow owns, as its output says why: its title and summary.
+DENIED = {"error": "1 dependency has a denied license", "log": ["example-lib 1.2.0: GPL-3.0 is denied"]}
 
 
 def failed(**failures: dict) -> dict[str, Any]:
@@ -97,6 +99,16 @@ EXAMPLES = (
                 checks={"state": "failure", "failing": ["lint", "test"], "failures": {"test": {"step": "Run tests"}}},
                 raises=(
                     Raised(title="alpha is failing on main", explanation="Failing jobs: lint, test (at Run tests)"),
+                ),
+            ),
+            # A check no workflow owns says why in its own output.
+            alpha(
+                checks={"state": "failure", "failing": ["license"], "failures": {"license": DENIED}},
+                raises=(
+                    Raised(
+                        title="alpha is failing on main",
+                        explanation="Failing job: license. 1 dependency has a denied license",
+                    ),
                 ),
             ),
             alpha(

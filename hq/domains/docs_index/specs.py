@@ -79,8 +79,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             detail_handler=documentation.get_documentation,
             identifier="doc_id",
             pass_principal=True,
-            search=SearchDefinition(
-                "documentation",
+            search=SearchDefinition.of(
                 DocumentationRecord,
                 "doc_id",
                 (
@@ -91,7 +90,6 @@ def resources() -> tuple[ResourceSpec, ...]:
                     "github_path",
                     "notes",
                 ),
-                label="Docs",
                 title_field="title",
                 badge_field="doc_id",
             ),

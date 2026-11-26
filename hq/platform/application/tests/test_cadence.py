@@ -27,7 +27,7 @@ from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import connection, declare, operator
 
-from .. import cadence, readings
+from .. import cadence, read_requests, readings
 from ..cadence import (
     RECORD_CONTRACTS,
     ControllerSweepCommand,
@@ -753,41 +753,41 @@ class AnsweredReadTests(TestCase):
     def test_a_connection_probed_at_the_moment_it_was_asked_for_is_still_owed(self):
         connection("tailscale", "example-tailnet", observed_at=self.asked)
         self.ask(connection_ref="example-tailnet")
-        for kind in cadence.forced_kinds("example-tailnet", ""):
+        for kind in read_requests.forced_kinds("example-tailnet", ""):
             self.store(kind, self.asked + timedelta(seconds=5))
 
-        self.assertEqual(len(cadence.forced_reads()), 1)
+        self.assertEqual(len(read_requests.forced_reads()), 1)
 
         ProviderConnection.objects.update(observed_at=self.asked + timedelta(seconds=5))
-        self.assertEqual(cadence.forced_reads(), ())
+        self.assertEqual(read_requests.forced_reads(), ())
 
     def test_everything_is_answered_by_a_sweep_stored_after_the_ask(self):
         self.ask()
         self.store("adguard.rewrite", self.asked)
 
-        self.assertEqual(len(cadence.forced_reads()), 1)
+        self.assertEqual(len(read_requests.forced_reads()), 1)
 
         self.store("adguard.rewrite", self.asked + timedelta(seconds=1))
-        self.assertEqual(cadence.forced_reads(), ())
+        self.assertEqual(read_requests.forced_reads(), ())
 
     def test_settling_an_answered_read_says_what_was_read(self):
         self.ask(kind="adguard.rewrite")
         self.store("adguard.rewrite", self.asked + timedelta(seconds=1))
 
-        self.assertEqual(cadence.settle_read_requests(), 1)
+        self.assertEqual(read_requests.settle_read_requests(), 1)
 
         gone = AuditLog.objects.filter(object_type="Read request", action=AuditLog.Action.DELETED).get()
         self.assertIn("adguard.rewrite", gone.message)
 
     def test_an_unanswered_read_forces_sweeps_for_its_lifetime_only(self):
         self.ask(kind="adguard.rewrite")
-        lifetime = cadence.read_request_lifetime()
+        lifetime = read_requests.read_request_lifetime()
         now = self.asked + lifetime
 
         with mock.patch("django.utils.timezone.now", return_value=now):
-            self.assertEqual(len(cadence.forced_reads()), 1)
+            self.assertEqual(len(read_requests.forced_reads()), 1)
         with mock.patch("django.utils.timezone.now", return_value=now + timedelta(seconds=1)):
-            self.assertEqual(cadence.forced_reads(), ())
+            self.assertEqual(read_requests.forced_reads(), ())
 
 
 class ControllerSilenceTests(TestCase):

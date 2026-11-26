@@ -87,6 +87,10 @@ const (
 	// claim, renewal and report, in a volume of its own, so the worker, run
 	// as the web account, is lent this socket and never the controller's.
 	AutomationBridgeSocket = "/run/hq-automation-bridge/bridge.sock"
+	// EventsBridgeSocket is where HQ serves the event readers the events
+	// action alone, in a volume of its own: the listener is lent it, and
+	// `hq-controller events` in the web container reaches it there.
+	EventsBridgeSocket = "/run/hq-events-bridge/bridge.sock"
 	// UnitSocketDir holds the socket root's `hq-host unit --serve` answers
 	// on (severino-hq-unit.socket). Only WebUID may enter it, and only the
 	// controller's container mounts it, at the same path.
@@ -157,7 +161,7 @@ var UnitProperties = []string{
 // its data across the change to a unit-run container.
 type Volume struct{ Name, Target string }
 
-// Volumes are HQ's state: the database, uploads, exports and the two bridge
+// Volumes are HQ's state: the database, uploads, exports and the bridge
 // sockets' directories. A backup reads the same volumes.
 var Volumes = []Volume{
 	{"severino-hq_severino_data", "/data"},
@@ -165,6 +169,7 @@ var Volumes = []Volume{
 	{"severino-hq_severino_exports", "/exports"},
 	{"severino-hq_severino_bridge", "/run/hq-bridge"},
 	{"severino-hq_severino_automation_bridge", "/run/hq-automation-bridge"},
+	{"severino-hq_severino_events_bridge", "/run/hq-events-bridge"},
 }
 
 // volumeAt is the declared volume the container mounts at target.

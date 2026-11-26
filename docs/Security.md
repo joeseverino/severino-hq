@@ -694,6 +694,101 @@ is refused the audit log (`read_audit_log`) and the calendar
   sets the actor, interface and capability name for whatever the handler
   records (`_run` in `hq/platform/application/capabilities.py`).
 
+## The inbound-events Worker
+
+Providers' webhooks reach a Cloudflare Worker (`worker/`), never HQ. HQ's
+listener dials out to it and holds the socket, so HQ itself still has no
+path from the public internet. Setting it up is
+[Install step 12](Install.md#12-hear-providers-events).
+
+- It answers on a name of the operator's own zone, a Workers custom domain.
+  Its `workers.dev` address, which names the Cloudflare account, is off
+  (`workers_dev: false`). The hostname and the account reach the deploy from
+  its environment (`HQ_INBOUND_HOSTNAME`, `CLOUDFLARE_ACCOUNT_ID`), never
+  from this repository.
+- A webhook's body is read only when its `Content-Length` is within the
+  largest its provider's route declares (GitHub's 25 MB). Its signature is
+  checked over the raw body before anything parses it, and a request that
+  fails it never reaches the Durable Object.
+- A listener's socket is accepted only with the `SOCKET_TOKEN` bearer,
+  compared in constant time, and tagged with the token's SHA-256. An event
+  goes only to the sockets tagged with the token the Worker holds now, and
+  closes every other, so a rotation evicts a socket opened with the old
+  token, which a hibernated socket would otherwise outlive.
+- An event forwards its names alone (provider, event, subject, delivery id,
+  time), never its body, each within the bound the contract's
+  `InboundArrival` gives it (`worker/src/generated/arrival.json`); one over
+  its bound is refused alone, never sent. A valid sender can only make HQ
+  re-read a source with HQ's own credentials.
+- GitHub signs the body alone, so the delivery and event headers are outside
+  the signature: a captured signed body can be sent again under a new
+  delivery id, and each is a new event. Its cost is bounded by the read it
+  asks, coalesced with any already asked.
+- Workers Logs records each request as its method, path and status, which
+  the Worker logs itself. Invocation logs are off, since they keep the
+  request's headers, the bearer among them.
+- Its secrets, `GITHUB_WEBHOOK_SECRET` and `SOCKET_TOKEN`, live in a
+  1Password item of the operator's, and the listener holds the same
+  `SOCKET_TOKEN` as the `cloudflare_events` connection's credential. They
+  are Worker secrets, set by `mise run worker:deploy --with-secrets` from the
+  operator's machine for the first deploy and each rotation. Every other
+  deploy keeps them, and fails while one `wrangler.jsonc` requires is
+  missing. No workflow holds them.
+- `mise run wire-github-app --webhook-secret <op reference>` sets the App's
+  webhook through `PATCH /app/hook/config`, authenticated as the App by a JWT
+  its key signs. It sets the Worker's github route on the inbound host, JSON,
+  and the same secret. Whether the webhook is active, and which events it
+  sends, are set on the App's settings page, since GitHub has no API for
+  them.
+
+HQ's side of the socket is `severino-hq-listener.service`
+(`controller/runtime/listener.go`, which states its security properties):
+
+- It dials out and is never dialed. It holds one credential, the socket's
+  token (the `cloudflare_events` connection, read from the operator's own
+  secret store), and sends it only over TLS to the `wss://` address that
+  connection names.
+- Its container runs as the web account, with no capability, no new
+  privileges and a `noexec` temporary directory. It is given only that
+  connection, the host's roots and the events bridge
+  (`/run/hq-events-bridge/bridge.sock`), a socket of its own that serves the
+  `events` action alone, so a listener taken over can only tell HQ to read
+  again. Its network is a bridge whose egress table lets it reach public
+  addresses alone, through public resolvers: nothing on the host, the LAN or
+  the tailnet. The unit starting it holds no more than the controller's, to
+  load that table.
+- It sends nothing on the socket but pings. What it hears is held to the
+  contract's `InboundArrival`; anything else is dropped. A reconnect makes HQ
+  read again every reading the Worker's providers name, at most once a
+  minute, so a gap is repaired by reading and nothing is replayed.
+
+`severino-hq-events-docker.service` tells HQ of a container's change on its
+host (`controller/host/dockerevents`, which states its security properties).
+It holds Docker's socket, which the controller's units hold already, under
+the shared sandbox alone: no network, no address family but `AF_UNIX`, no
+capability and no credential. It reads only Docker's event stream, and tells
+HQ only names (the container's, Docker's action, id and time) through
+`hq-controller events`, so a forged event costs one read of the
+containers.
+
+The deploy token is the one standing secret a workflow holds. Every other
+write a workflow makes is a GitHub token minted for one permission and one
+job. `CLOUDFLARE_API_TOKEN` lives on the `inbound-worker` environment,
+which deploys from `main` alone (`deploy-worker.yml`), beside the account
+and the hostname, which are secrets so GitHub masks them in public logs. It
+has no reviewer: the merge to `main` is the approval, and a Worker deploy
+takes nothing down. A workflow on any other branch, a pull request's
+included, never reaches the token. The job's own permissions stay at read. The token carries one
+permission, Workers Scripts Write on the account
+(`mise-tasks/worker/deploy.permissions`, minted by `mint:cloudflare`), which
+uploads the Worker and attaches its custom domain. It reaches as far as the
+account does: it can upload a script that returns the Worker's secrets,
+since every deploy keeps them bound, attach a custom domain on any of the
+account's zones, and replace any Worker on the account. So it is held as
+the Worker's secrets are, on the one environment only `main` deploys from.
+A deploy with no terminal replaces any DNS record already on that hostname,
+so the name is kept for the Worker alone.
+
 ## A leaked GitHub App credential
 
 The controller holds the GitHub App's private key and mints installation
@@ -846,6 +941,9 @@ nothing leaked.
       queue have been watched being proposed.
 - [ ] The DNS-01 token is its own connection item, with only Zone Read and
       DNS Edit on the zones it renews, and is not the Cloudflare API token.
+- [ ] The Worker's deploy token is its own item, with Workers Scripts Write
+      alone, on the `inbound-worker` environment only, which deploys from
+      `main` alone ([The inbound-events Worker](#the-inbound-events-worker)).
 - [ ] No personal SSH private key is rendered for the controller. Its
       identities are SSH Key items generated by 1Password, remote host keys
       are pinned in the connection registry, and each public key is authorized
@@ -861,7 +959,9 @@ nothing leaked.
   controller like provider work.
 - Read contact submissions from the web process. The controller reads and
   changes them through the Cloudflare API connection.
-- Run a customer portal or public webhooks.
+- Run a customer portal, or answer a webhook itself. Providers' webhooks
+  reach the inbound-events Worker, which HQ dials out to
+  ([The inbound-events Worker](#the-inbound-events-worker)).
 - Decrypt an encrypted documentation source. HQ indexes documentation, and
   the source stays separate.
 - Store credentials, API tokens, or secrets in models. The documentation

@@ -61,6 +61,12 @@ class Progress:
         self._last = 0.0
         self._note = ""
 
+    @property
+    def job_id(self) -> str:
+        """The job it reports for."""
+
+        return str(self._job.pk)
+
     def __call__(self, note: str = "", percent: int | None = None, *, force: bool = False) -> None:
         now = timezone.now()
         # A changed note always writes. The limit is for a step repeating

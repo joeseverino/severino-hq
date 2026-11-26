@@ -641,7 +641,8 @@ class ShippedUnitTests(TestCase):
 
 
 class UnitFailureTests(TestCase):
-    """A failed unit asks for the machine's units to be read, and for nothing else."""
+    """A failed unit is an event of the host's, which asks for the machine's
+    units to be read, and for nothing else."""
 
     def test_the_read_is_asked_for_and_the_doorbell_rung(self):
         from hq.domains.control_plane.models import ReadRequest
@@ -658,7 +659,11 @@ class UnitFailureTests(TestCase):
         self.assertEqual(answer["state"], "succeeded")
         doorbell.assert_called_once_with("controller")
         self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", UNIT_KIND)])
-        self.assertEqual(Job.objects.get(pk=answer["job"]).result, {"asked": UNIT_KIND})
+        # Told as the host's event, once, under the job that told it.
+        from hq.domains.control_plane.models import InboundEvent
+
+        event = InboundEvent.objects.get()
+        self.assertEqual((event.provider, event.source, event.delivery_id), ("host", "host", answer["job"]))
         # The sweep it causes reads that kind alone, whatever the cadence says.
         with mock.patch.object(cadence, "sweep_interval", return_value=cadence.slowest_sweep_interval()):
             from hq.platform.application.inventory_testing import store

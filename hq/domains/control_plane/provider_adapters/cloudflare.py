@@ -742,4 +742,15 @@ CONNECTIONS = {
         writes=(Cloudflare.DNS_WRITE, Cloudflare.ZONE_READ),
         gives="Your domains and their public DNS records.",
     ),
+    # The host's listener alone is lent it (hq-host controller --events): the
+    # Worker's socket address (wss://, ending /socket) and the SOCKET_TOKEN
+    # its deploy sets, which opens that socket and nothing else.
+    "cloudflare_events": ConnectionKind(
+        "Cloudflare inbound events",
+        "scoped",
+        API_TOKEN,
+        create="A random token, set as the inbound-events Worker's SOCKET_TOKEN secret by its deploy.",
+        create_url="https://developers.cloudflare.com/workers/configuration/secrets/",
+        gives="Your providers' events as they happen, so what changed is read in seconds.",
+    ),
 }

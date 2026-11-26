@@ -14,10 +14,10 @@ from hq.platform.core.models import AuditLog, LinkedAccount
 
 from .. import github_profile
 from ..asks import REFRESHING
-from ..cadence import asked_at
 from ..cadence_testing import controller_arrived
 from ..capabilities import command_spec, execute_capability
 from ..freshness import RETRY_AFTER, cadence
+from ..read_requests import asked_at
 from ..security import Capability, Principal
 from .sentinel import SENTINEL
 
