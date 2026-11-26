@@ -67,7 +67,7 @@ def record_inventory(
     visibly instead of vanishing (``_record_report``). ``payload`` is the
     contract's ``Inventory``, which the bridge holds every sweep to first.
     What it writes of a kind joins the chain ``asked`` names for it, the
-    creation context of the read that asked for the kind (``cadence.askers``).
+    creation context of the read that asked for the kind (``read_requests.askers``).
     """
 
     observed_at = timezone.now()

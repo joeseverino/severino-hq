@@ -25,7 +25,6 @@ from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
 from .ui import MISSING
 lazy from . import connections, services
-lazy from .cadence import connection_providers
 lazy from .finding_model import CONTAINERS_CARD, TAILNET_CARD
 lazy from .hq_self import hq_service
 lazy from .locate import host_of
@@ -36,6 +35,7 @@ lazy from .policy_links import PolicyNames
 lazy from .problems import About, problems_about
 lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
+lazy from .read_requests import connection_providers
 lazy from .routes import reverse
 lazy from .tailnet import TAILNET_KIND
 lazy from .topology_model import RELATIONS

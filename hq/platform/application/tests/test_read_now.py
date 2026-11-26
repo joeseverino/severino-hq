@@ -18,9 +18,10 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import READER, connection, operator
 
 from ..action_links import read_now_link, read_now_payload
-from ..cadence import forced_reads, settle_read_requests, sweep_due
+from ..cadence import sweep_due
 from ..capabilities import command_spec, execute_capability
 from ..credential_sight import fed_kinds
+from ..read_requests import forced_reads, settle_read_requests
 from ..security import cli_principal
 
 READ_NOW = "infrastructure.controller.refresh"

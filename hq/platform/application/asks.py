@@ -30,8 +30,9 @@ from .record_errors import Sentence
 from .routes import reverse
 from .ui import button_classes, ended
 lazy from . import cadence
-lazy from .cadence import every_sweep, read_request_lifetime
+lazy from .cadence import every_sweep
 lazy from .moments import moment
+lazy from .read_requests import read_request_lifetime
 lazy from .refusal_status import refusal_of
 lazy from .security import safe_next
 lazy from .web_writes import execute_posted, run_posted

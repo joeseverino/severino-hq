@@ -25,10 +25,11 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from .asks import Asked, AskedAnswer, Standing, asked_read
-from .cadence import ask, controller_standing, forced_reads, swept
+from .cadence import ask, controller_standing, swept
 from .command_fields import Describe
 from .freshness import PAGE_VISIT, freshness
 from .pages import PageVisit
+from .read_requests import forced_reads
 from .record_errors import RecordNotFound
 from .security import Principal
 lazy from . import machines
