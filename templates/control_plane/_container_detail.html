@@ -22,7 +22,7 @@ limits. Each said once; the band above has its version and standing.
     {% detail %}
       {% for pin in update.pins %}<small>{% if pin.digest %}{% muted tip=pin.digest %}{{ pin.digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}</small>{% empty %}<small>Its diff is too large to read</small>{% endfor %}
     {% endfact %}
-    {% fact "Fixes" icon="shield" value=update.fixes_said %}
+    {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=update.fixes_said %}{% endif %}
     {% fact "New vulnerabilities" icon="info" value=update.brings_said %}
     {% elif plan %}
     {% fact "To" icon="deploy" %}
@@ -30,9 +30,9 @@ limits. Each said once; the band above has its version and standing.
     {% detail %}
       <small>{% if plan.target_digest %}{% muted tip=plan.target_digest %}{{ plan.target_digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}{% if plan.release.published %}{% dot %}released {{ plan.release.published|when_text }}{% endif %}</small>
     {% endfact %}
-    {% fact "Fixes" icon="shield" value=plan.fixes_said %}
+    {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=plan.fixes_said %}{% endif %}
     {% endif %}
-    {% if state and not update %}{% fact "Update" icon="deploy" value=state.answer %}{% endif %}
+    {% if state and not update %}{% fact "Pull request" icon="commit" value=state.answer %}{% endif %}
     {% with merge=state.standing %}{% if merge %}{% fact state.standing_label icon="commit" value=merge.answer url=merge.run_url %}{% endif %}{% endwith %}
     {% if plan %}
     {% fact "Data" icon="layers" value=plan.data_said %}

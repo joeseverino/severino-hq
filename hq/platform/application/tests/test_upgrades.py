@@ -233,7 +233,11 @@ class UpgradeCardTests(TestCase):
         self.assertNotIn('id="upgrade"', self.page("web"))
 
     def test_a_container_with_a_newer_release_draws_its_upgrade_card(self):
-        self.assertIn('id="upgrade"', self.page("kuma"))
+        page = self.page("kuma")
+
+        self.assertIn('id="upgrade"', page)
+        # Nothing is known against what runs, which the band says, so no move fixes anything.
+        self.assertNotIn(">Fixes<", page)
 
 
 class ExposureOrderTests(TestCase):

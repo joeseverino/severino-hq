@@ -84,12 +84,12 @@ class Plan:
 
     @property
     def fixes_said(self) -> Answer:
-        standing = self.container.standing
+        """Of what is known against what runs, what the move fixes. Asked only
+        where something is known: otherwise the band's vulnerabilities say it."""
+
         if self.fixes:
             return fixes_said(self.fixes)
-        if standing.known_vulnerabilities:
-            return Answer(f"None of {len(standing.known_vulnerabilities)}")
-        return Answer(capfirst(standing.vulnerabilities), (standing.vulnerabilities_note,))
+        return Answer(f"None of {len(self.container.standing.known_vulnerabilities)}")
 
     @property
     def data_said(self) -> Answer:
