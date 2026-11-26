@@ -14,9 +14,8 @@ from django.db import transaction
 from hq.platform.core import bindings
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
-lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, IMAGE_KIND
 lazy from hq.domains.control_plane.observations.public_registry import IMAGE_KIND as REGISTRY_IMAGE_KIND
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .adoption import adopt_discovered, unmanaged
 from .inventory import (

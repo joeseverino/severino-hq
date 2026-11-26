@@ -15,7 +15,7 @@ from django.utils.text import Truncator
 from hq.domains.control_plane.names import in_zone, normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 
 from .entity_links import entity_link
 from .exposure import FRONT_DOOR_PORTS, front_door_names, listening_ports, public_name, publicly_answering

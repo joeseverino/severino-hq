@@ -14,8 +14,8 @@ from typing import Any
 from django.utils.text import Truncator
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, read_spec, readout_rows
 

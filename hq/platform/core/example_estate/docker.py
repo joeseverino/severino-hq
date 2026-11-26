@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import portainer
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.observations.public_registry import (
     DIGEST_KIND,
     IMAGE_KIND,
@@ -15,7 +16,6 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.platform.application.docker_estate import release_pins
 from hq.platform.application.images import ImageRef
-from hq.platform.application.services import CONTAINER_KIND
 
 from .names import (
     BUILT,

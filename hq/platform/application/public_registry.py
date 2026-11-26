@@ -32,8 +32,7 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.platform.application.url_query import with_query
 lazy from hq.domains.control_plane.models import ProviderInventory
-lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND as PULLED_KIND
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, IMAGE_KIND as PULLED_KIND
 
 from .facts import Subject, inventory_records, readings, record_read_at
 from .freshness import RETRY_AFTER, freshness

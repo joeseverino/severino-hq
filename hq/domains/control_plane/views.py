@@ -67,7 +67,7 @@ lazy from hq.platform.application.projection import iso
 
 from .cells import run
 from .models import ApprovalRequest, ManagedResource, OperationRequest
-from .provider_adapters.portainer import CONTAINER_KIND
+from .observations.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers, read_spec, readout_rows, shown_spec
 lazy from .container_views import container_detail

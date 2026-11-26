@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_capabilities import LIFECYCLE_VERBS, resource_capabilities

@@ -17,7 +17,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.adguard import QUERY_KIND
 from hq.domains.control_plane.providers import PROVIDERS, record_spec
 lazy from hq.domains.control_plane.observations.contract import container_key
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 
 from .action_links import open_link
 from .connection_lifecycle import UNREPORTED_NODE, Lifecycle

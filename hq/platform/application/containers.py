@@ -16,6 +16,7 @@ from typing import Any
 lazy from django.utils import timezone
 
 from hq.domains.control_plane.observations.portainer import (
+    CONTAINER_KIND,
     IMAGE_KIND as PULLED_KIND,
     RUNTIME_KIND,
     STACK_KIND,
@@ -27,7 +28,6 @@ from hq.domains.control_plane.observations.public_registry import (
     UPSTREAM_KIND,
     VULNERABILITY_KIND,
 )
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .container_state import ContainerCount, ContainerState, HealthCheck, uptime_of
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords

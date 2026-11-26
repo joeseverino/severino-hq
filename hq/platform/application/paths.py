@@ -16,6 +16,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS, operator_label, read_spec, record_spec
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 lazy from hq.platform.core.network import split_host_port
 
 from .entity_links import EntityLink, entity_link, kind_label, web_url
@@ -33,7 +34,6 @@ lazy from .hq_self import hq_service, scoped_served_at, scoped_served_port
 lazy from .inventory import record_identity
 lazy from .known_hosts import operator
 lazy from .moments import moment
-lazy from .services import CONTAINER_KIND
 lazy from .ui import counted
 lazy from .whereabouts import locate, machine_link, whereabouts
 

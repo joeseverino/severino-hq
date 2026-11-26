@@ -24,8 +24,6 @@ from ..provider_spec import (
     locked,
 )
 
-CONTAINER_KIND = "portainer.container"
-
 # A check of the container standard, by id. The set is read at run time, so a
 # type checker reads the key as text.
 if TYPE_CHECKING:
@@ -145,7 +143,7 @@ def _container_removal_note(spec: dict[str, Any]) -> str:
 
 
 CONTAINER = ProviderSpec(
-    CONTAINER_KIND,
+    readings.CONTAINER_KIND,
     "A container HQ watches and can start, stop or restart. Its compose file still defines it.",
     PortainerContainerSpec,
     actions={

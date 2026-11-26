@@ -43,7 +43,7 @@ lazy from hq.platform.application.pins import FAVORITES, MOVE, PIN, SERVICE, ord
 
 from .forms import ServiceStartForm
 from .models import ManagedResource
-from .provider_adapters.portainer import CONTAINER_KIND
+from .observations.portainer import CONTAINER_KIND
 from .providers import service_facets
 from .service_tables import aliases_table, parts_table, services_table, unmanaged_table
 from .views import verb_action

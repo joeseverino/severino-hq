@@ -7,7 +7,7 @@ from pydantic import Field, computed_field
 
 from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.platform.application.labels import dotted
 
 from .describe import Describe

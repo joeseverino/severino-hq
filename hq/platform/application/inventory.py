@@ -31,7 +31,7 @@ from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.digests import canonical
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 
 from .conditions import DEGRADED, DRIFTED, READY, stamped
 from .contracts import endpoint_has_private_parts

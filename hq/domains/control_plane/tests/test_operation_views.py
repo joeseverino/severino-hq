@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.platform.application.approval_review import asked, preview
 from hq.platform.application.approvals import ApproveCommand, approve
 from hq.platform.application.capabilities import command_spec, execute_capability

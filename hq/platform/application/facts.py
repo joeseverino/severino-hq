@@ -14,7 +14,7 @@ from typing import Any
 
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationSpec
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS, read_record
 from hq.domains.control_plane.reading_parts import RefusedPart, refused_parts

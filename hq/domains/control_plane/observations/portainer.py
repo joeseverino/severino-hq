@@ -20,6 +20,7 @@ from .contract import ObservationRecord, ObservationSpec, Stamp, container_key
 
 PROVIDER = "portainer"
 
+CONTAINER_KIND = "portainer.container"
 ENVIRONMENT_KIND = "portainer.environment"
 NETWORK_KIND = "portainer.network"
 VOLUME_KIND = "portainer.volume"

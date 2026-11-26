@@ -10,6 +10,7 @@ these late-bound, as a domain names its attention provider.
 from collections.abc import Set as AbstractSet
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_TYPES,
     ZONE_KIND,
@@ -18,7 +19,6 @@ from hq.domains.control_plane.provider_adapters.declarations import (
     DELIVERY_TARGET_KIND,
     MACHINE_KIND,
 )
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.provider_adapters.tls import (
     CERTIFICATE_KIND,

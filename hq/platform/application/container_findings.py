@@ -12,9 +12,8 @@ from typing import Any
 
 from django.utils.text import capfirst
 
-from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, RUNTIME_KIND
 from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.routes import reverse
 
 from .container_standard import STANDARD

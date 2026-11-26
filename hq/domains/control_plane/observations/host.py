@@ -8,10 +8,9 @@ from pydantic import ConfigDict, Field
 from hq.platform.application.reasons import Checked
 lazy from hq.platform.application.labels import human_bytes
 
-from ..provider_adapters.portainer import CONTAINER_KIND
 from ..provider_spec import InboundSpec, SharedValue
 from .contract import ObservationRecord, ObservationSpec, Stamp
-from .portainer import ENVIRONMENT_KIND, IMAGE_KIND, RUNTIME_KIND
+from .portainer import CONTAINER_KIND, ENVIRONMENT_KIND, IMAGE_KIND, RUNTIME_KIND
 
 
 class HostFirewallRecord(ObservationRecord):

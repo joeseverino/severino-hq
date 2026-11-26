@@ -13,7 +13,7 @@ from typing import Any
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.names import certificate_covers, in_zone, normalized_hostname
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS, operator_label, registry_label, resource_home, service_facets
 
 from .containers import Running, container_watchers

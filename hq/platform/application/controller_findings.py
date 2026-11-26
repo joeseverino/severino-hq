@@ -4,8 +4,7 @@ import re
 from dataclasses import replace
 from datetime import date
 
-from hq.domains.control_plane.observations.portainer import ENVIRONMENT_KIND
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, ENVIRONMENT_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .cadence import CONTROLLER_REFRESH, sweep_interval
