@@ -95,6 +95,35 @@ when that run left none of them out ([What a pull request
 runs](Development.md#what-a-pull-request-runs)). Short of all three, every gate
 runs again.
 
+The composed suite runs once too, in the pull request's Composition job. A
+composition that passed its suite, boot and scan there is pushed as
+`composition:pr-<head>`, signed and attested by that job as the pull request's
+(`compose.yml@refs/pull/<number>/merge`, which `hq-host deploy` refuses), and
+its digest recorded in the run's `composition` artifact. Every composition
+carries a `dev.severino.hq.composition` label,
+`tools/pipeline/composition-identity.sh`'s one digest over the host and worker
+images and the staged build context: each admitted wheel's digest, the merged
+lock, the policy, the enabled references and what the release may retire.
+
+Main's Compose still downloads and verifies every admission and stages the
+context, then asks `proven-on-pr.sh` with that identity. The composition is
+promoted when the host and worker images are proven as above and the record
+that pull request's passing run holds names a digest that its Composition job
+signed for that pull request, built from the commit's tree, with an identity
+equal to the release's. The release then pushes that manifest, byte for byte,
+under `composition:<commit>` and its fingerprint tag, signs and attests it as
+main's, and starts Deploy: no build, suite, boot or scan. The digest comes from
+the run GitHub names for the merged pull request, never from a tag, and any
+difference in the tree, the host or worker images or a single wheel builds and
+verifies in full. This follows promotion by digest as SLSA frames it: the
+artifact verified is the one released, its provenance checked before it is
+promoted, as GitHub's merge queue holds a merge to the tree it tested.
+
+The promoted image names the pull request's head as its
+`org.opencontainers.image.revision`. Deploy records the commit on main it
+releases, with the image's digest in the deployment's payload, and HQ judges
+whether it runs that release by the digest.
+
 ### Where a change stands
 
 GitHub's own records say it:

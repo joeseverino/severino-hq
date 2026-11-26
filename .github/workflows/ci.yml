@@ -675,10 +675,12 @@ jobs:
         run: mise run build
 
   # A pull request's composition: this image plus every admitted extension,
-  # each extension's tests run inside it (compose.yml). It publishes and signs
-  # nothing: those steps belong to a dispatch on main. A fork's pull request
-  # has no image and no secrets, so it is not composed here: main composes it
-  # before anything is published.
+  # each extension's tests run inside it (compose.yml), the one run of the
+  # composed suite a release gets. What it verified it pushes under a pr- tag
+  # and signs as this pull request's, which no deploy accepts; the release of
+  # the commit it merges as promotes that digest. A fork's pull request has no
+  # image and no secrets, so it is not composed here: main composes it before
+  # anything is published.
   compose:
     name: Composition
     needs: build
@@ -687,12 +689,13 @@ jobs:
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/compose.yml
-    # What compose.yml's job declares, which a caller must grant: it signs
-    # and publishes only on a dispatch on main, never from here.
+    # What compose.yml's job declares, which a caller must grant: the
+    # deployable signature is a dispatch on main's alone.
     permissions:
       contents: read
       packages: write
       actions: read
+      pull-requests: read
       id-token: write
     with:
       host-image: ${{ needs.build.outputs.image }}

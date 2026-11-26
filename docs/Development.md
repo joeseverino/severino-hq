@@ -459,7 +459,7 @@ A test tagged `tree` finds its files by walking this checkout, or loads what a
 fresh process starts with (the startup budgets), so whatever the change, it
 reads the whole tree: fast's runs leave it out (`--exclude-tag tree`), and
 CI's `lint:source` runs it. So does the composed suite with the extensions,
-which is `mise run check --release`'s.
+which a pull request's Composition job runs.
 
 A run runs its selection however wide it is. `--whole` runs the whole suite
 (the tests tagged `tree` aside) with every quick gate instead, whatever
@@ -583,11 +583,12 @@ reads round-trips or keeps the invariant it documents. An input a run finds
 failing is kept in that package's `testdata/fuzz` with its fix.
 
 A setting whose default follows `DEBUG` is held by a test that loads the
-settings both ways. The suite inside an image runs once, in Compose, on the
-composed image production runs.
+settings both ways. The suite inside an image runs once, in the pull
+request's Composition job, on the composed image production runs: its release
+promotes that image ([Deployment](Deployment.md#checked-once)).
 
-`mise run check --release` then runs the composed suite with the extensions
-required and checks the deploy host, read-only, on the committed `HEAD`. Its
+`mise run check --release` then checks the deploy host, read-only, on the
+committed `HEAD`. Its
 verdict is kept apart, in `var/gate/check-release.txt`.
 `mise tasks info check` says what `--remote` and `--skip-host` do
 ([Deployment](Deployment.md)).
@@ -716,8 +717,7 @@ the files `Dockerfile.dockerignore` admits, less what the Dockerfile's
 stamped and only the runtime dependencies (`.venv-image`). A test that reads a
 file the image leaves out, or loads a development tool, fails here.
 
-Without a set it runs the host alone and says so; with `REQUIRE_COMPOSED=1`,
-as `mise run check --release` runs it, it fails instead.
+Without a set it runs the host alone and says so.
 
 That copy is read from the two files by `tools/lib/image-tree.sh`.
 `image:verify:tree`, one of the checks `mise run build` runs, holds it to the

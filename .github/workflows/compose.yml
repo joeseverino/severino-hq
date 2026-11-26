@@ -11,13 +11,20 @@ name: Compose
 # or by hand. There it publishes and signs, and Deploy (deploy.yml) takes it
 # from there.
 #
+# The composed suite runs once per release, on the pull request. A verified
+# composition is pushed under a pr- tag and signed as that pull request's,
+# which no deploy accepts. A release whose commit and admitted set equal what
+# that pull request composed promotes the same digest instead of building
+# and verifying it again (tools/pipeline/proven-on-pr.sh); anything less
+# builds and verifies in full.
+#
 # The file keeps its name: the composition is signed by it, and the deploy
 # script on the host pins this path.
 
 on:
   # A pull request composes and verifies (DEBUG off, the extensions loaded, as
-  # production assembles it) before merge. It does not publish and cannot
-  # deploy: only a dispatch on main is a release.
+  # production assembles it) before merge. It cannot deploy: only a dispatch
+  # on main is a release.
   workflow_call:
     inputs:
       host-image:
@@ -207,8 +214,11 @@ jobs:
       contents: read
       packages: write
       # Read-only, so "Resolve the host image" can ask whether the host build
-      # it is waiting for has already failed, and a failure can name its step.
+      # it is waiting for has already failed, and a failure can name its step;
+      # and so a release can read the run of the pull request it merged.
       actions: read
+      # Which pull request merged the commit a release composes.
+      pull-requests: read
       # Keyless signing of the published composition. Granted to this job
       # alone: the deploy job verifies signatures and never makes one, and a
       # self-hosted runner has no business holding an identity that can.
@@ -457,16 +467,57 @@ jobs:
           # drop from the release it replaces.
           jq -c '(.retired // []) | unique' composition-set.json > build/composition/plugin-retired.json
 
-      - name: Build composed image
-        # Skipped by an admission's dispatch that found nothing to do, and by a
-        # coordinated change, which builds the candidate below instead.
+      - name: Name what this composition is made of
+        # One digest over the host and worker images and every staged input,
+        # each wheel's digest among them: the composition's label, and what a
+        # release compares with its pull request's.
+        id: identity
         if: >-
           steps.coordinated.outputs.found != 'true' &&
           (steps.fingerprint.outputs.build == 'true')
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
           RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
+        run: |
+          set -euo pipefail
+          identity="$(tools/pipeline/composition-identity.sh "$HQ_IMAGE" "$RUNNER_IMAGE" build/composition)"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          echo "composition $identity"
+
+      - name: Find the composition its pull request verified
+        # The digest the merged pull request's Composition job verified and
+        # recorded in its passing run, signed by that job, of this commit's
+        # tree and this identity. Anything less, or an error here, builds and
+        # verifies in full below: unproven is the safe answer.
+        id: proven
+        if: env.IS_RELEASE == 'true' && steps.identity.outputs.identity != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.host.outputs.sha }}
+          COMPOSITION: ${{ steps.identity.outputs.identity }}
+        run: |
+          set -euo pipefail
+          tools/pipeline/proven-on-pr.sh "$COMMIT" > "$RUNNER_TEMP/proven.txt"
+          image="$(sed -n 's/^composition=//p' "$RUNNER_TEMP/proven.txt")"
+          pr="$(sed -n 's/^pr=//p' "$RUNNER_TEMP/proven.txt")"
+          if [ -n "$image" ]; then
+            echo "image=$image" >> "$GITHUB_OUTPUT"
+            echo "Promoted the composition #$pr verified, \`$image\`: the same commit tree and admitted set." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build composed image
+        # Skipped by an admission's dispatch that found nothing to do, by a
+        # coordinated change, which builds the candidate below instead, and by
+        # a release that promotes its pull request's composition.
+        if: >-
+          steps.coordinated.outputs.found != 'true' &&
+          steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
+        env:
+          HQ_IMAGE: ${{ steps.host.outputs.image }}
+          RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
           HOST_SHA: ${{ steps.host.outputs.sha }}
+          IDENTITY: ${{ steps.identity.outputs.identity }}
         run: |
           staged=build/composition
           docker build -f composition/Dockerfile \
@@ -475,6 +526,7 @@ jobs:
             --build-arg PLUGIN_POLICY_SHA256="$(cat "$staged/policy-sha256")" \
             --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" \
             --build-arg HQ_REVISION="$HOST_SHA" \
+            --build-arg HQ_COMPOSITION="$IDENTITY" \
             -t "ghcr.io/${{ github.repository }}/composition:$HOST_SHA" .
 
       - name: Build coordinated extension branches
@@ -512,15 +564,16 @@ jobs:
         # of the host commit: named once, for every check after it.
         id: candidate
         if: >-
-          steps.fingerprint.outputs.build == 'true'
+          steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         env:
           IMAGE: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
         run: echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Verify the composition as one application
-        # Skipped only by an admission's dispatch that found nothing to do.
+        # Skipped by an admission's dispatch that found nothing to do, and by
+        # a release that promotes what its pull request verified here.
         if: >-
-          steps.fingerprint.outputs.build == 'true'
+          steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         # Per-plugin admission proves each wheel against the host in isolation.
         # This second layer is deliberately after assembly: only the real image
         # can expose duplicate routes/capabilities, migration conflicts, missing
@@ -537,7 +590,7 @@ jobs:
         # As production boots it, before anything is published: the suite above
         # runs the code, this runs the container.
         if: >-
-          steps.fingerprint.outputs.build == 'true'
+          steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         env:
           IMAGE: ${{ steps.candidate.outputs.image }}
         run: tools/pipeline/image-health.sh "$IMAGE"
@@ -548,7 +601,7 @@ jobs:
       - name: Restore the vulnerability database
         id: trivy-db
         if: >-
-          steps.fingerprint.outputs.build == 'true'
+          steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/.cache/trivy
@@ -566,12 +619,12 @@ jobs:
           install_args: trivy
           cache: false
       - name: Scan composed image
-        # Skipped only by an admission's dispatch that found nothing to do.
-        # One analysis is the gate and the SBOM attested below; a finding is
-        # named by its ID, never by the package table (mise-tasks/image/trivy).
+        # Skipped where the suite is, above. One analysis is the gate and the
+        # SBOM attested below; a finding is named by its ID, never by the
+        # package table (mise-tasks/image/trivy).
         id: scan
         if: >-
-          steps.fingerprint.outputs.build == 'true'
+          steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         env:
           IMAGE: ${{ steps.candidate.outputs.image }}
           TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
@@ -583,7 +636,7 @@ jobs:
         # The image the composition pins as its automation worker, by the same
         # gate, its SBOM and reports in a directory of their own.
         if: >-
-          steps.fingerprint.outputs.build == 'true'
+          steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         env:
           RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
           TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
@@ -592,16 +645,71 @@ jobs:
 
       - name: Save the vulnerability database
         if: >-
-          steps.fingerprint.outputs.build == 'true' && github.ref_name == github.event.repository.default_branch &&
+          steps.trivy-db.outcome == 'success' && github.ref_name == github.event.repository.default_branch &&
           steps.trivy-db.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/.cache/trivy
           key: ${{ steps.trivy-db.outputs.cache-primary-key }}
 
-      # A pull request has already had the only thing it was here for: the
-      # image was built and its suite was run inside it. Publishing is what
-      # makes an image deployable, so a pull request does not.
+      # A pull request's composition, once its suite, boot and scan passed:
+      # pushed under a pr- tag, which no commit's release is named by, and
+      # signed and attested as this pull request's, which no deploy accepts
+      # (Source.Signer, controller/host/deploy.go). The digest pushed is
+      # recorded in this run, where its release finds it.
+      - name: Publish the verified composition for its merge
+        id: verified
+        if: >-
+          github.event_name == 'pull_request' && steps.coordinated.outputs.found != 'true' &&
+          steps.scan.outcome == 'success'
+        env:
+          HOST_SHA: ${{ steps.host.outputs.sha }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/$GITHUB_REPOSITORY/composition:$HOST_SHA"
+          verified="${image%:*}:pr-$HOST_SHA"
+          docker tag "$image" "$verified"
+          # The digest the push reports, since GHCR may not yet answer a read
+          # of a tag it has just accepted.
+          digest=$(docker push "$verified" | tee /dev/stderr \
+            | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -n 1)
+          echo "image=${verified%:*}@${digest:?the push reported no digest}" >> "$GITHUB_OUTPUT"
+      - name: Sign and attest the verified composition as this pull request's
+        if: steps.verified.outputs.image != ''
+        env:
+          IMAGE: ${{ steps.verified.outputs.image }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes "$IMAGE"
+          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMAGE"
+          mkdir -p "$RUNNER_TEMP/verified"
+          printf '%s\n' "$IMAGE" > "$RUNNER_TEMP/verified/verified-composition"
+      - name: Record the verified composition in this run
+        if: steps.verified.outputs.image != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: composition
+          path: ${{ runner.temp }}/verified/verified-composition
+
+      # The SBOMs a promotion attests, of the digests its pull request
+      # scanned, read as Build reads a promoted host image's. Trivy needs no
+      # vulnerability database for an SBOM.
+      - name: Read the promoted composition's SBOMs
+        if: steps.proven.outputs.image != ''
+        env:
+          IMAGE: ${{ steps.proven.outputs.image }}
+          RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
+        run: |
+          set -euo pipefail
+          mkdir -p runner
+          trivy image --quiet --format cyclonedx --output sbom.cdx.json "$IMAGE"
+          trivy image --quiet --format cyclonedx --output runner/sbom.cdx.json "$RUNNER_IMAGE"
+
+      # Publishing under the commit's tag and signing as main is what makes a
+      # composition deployable, so only a release does. A promotion pushes the
+      # pull request's verified manifest under these tags, byte for byte:
+      # `imagetools create --prefer-index=false` pushes what it fetched by
+      # digest, and the digest each push reports must be that one.
       - name: Publish by digest
         if: >-
           env.IS_RELEASE == 'true' &&
@@ -610,8 +718,23 @@ jobs:
         env:
           HOST_SHA: ${{ steps.host.outputs.sha }}
           FINGERPRINT_TAG: ${{ steps.fingerprint.outputs.tag }}
+          PROVEN: ${{ steps.proven.outputs.image }}
         run: |
+          set -euo pipefail
           image="ghcr.io/${{ github.repository }}/composition:$HOST_SHA"
+          if [ -n "$PROVEN" ]; then
+            for tag in "$image" "$FINGERPRINT_TAG"; do
+              docker buildx imagetools create --prefer-index=false \
+                --metadata-file "$RUNNER_TEMP/promote.json" --tag "$tag" "$PROVEN"
+              pushed=$(jq -r '."containerimage.descriptor".digest' "$RUNNER_TEMP/promote.json")
+              if [ "$pushed" != "${PROVEN#*@}" ]; then
+                echo "::error::$tag was pushed as $pushed, not ${PROVEN#*@}"
+                exit 1
+              fi
+            done
+            echo "image=$PROVEN" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           docker push "$image"
           # The fingerprint tag is what the next admission's dispatch reads to decide
           # there is nothing to do. Pushed after the image itself, so a failed
@@ -645,7 +768,7 @@ jobs:
       # distributions, extensions included, each Go binary's modules), in
       # CycloneDX, signed by the same workflow identity as the image and
       # stored beside it in the registry: the list attested is the list
-      # scanned. Its subject is the published digest; the list itself names
+      # scanned, or for a promotion the list of what its pull request scanned. Its subject is the published digest; the list itself names
       # the image by the tag it was scanned under.
       - name: Attest the SBOMs
         if: >-

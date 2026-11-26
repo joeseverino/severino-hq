@@ -35,7 +35,6 @@ WATCH_FAILURES = 5
 # Every gate CI runs, by the task of each job's name, one at a time: each
 # suite starts a worker per core, and two at once exhaust a small machine.
 GATES = ["mise", "run", "-c", "-j", "1", "lint", ":::", "test", ":::", "browser", ":::", "build", ":::", "scan"]
-COMPOSED = ["env", "REQUIRE_COMPOSED=1", "mise", "run", "test", "--composed"]
 # The deploy host's half, tools/gate/host.py, which exits as hq-host check did.
 HOST = ["mise", "run", "check:host"]
 
@@ -233,7 +232,6 @@ def main() -> int:
         summary.command("every gate CI runs", GATES)
     if not release:
         return report(summary, gate)
-    summary.command("the composed suite, as the image runs it", COMPOSED)
 
     destination = os.environ.get("SEVERINO_HQ_DEPLOY_HOST", "")
     if asked.switch("skip_host"):

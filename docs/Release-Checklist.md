@@ -22,12 +22,14 @@ only by a merged pull request.
 - [ ] **Ready** passes. When it fails, its summary names each job that did
       not pass, and that job's log the error.
 - [ ] `mise run check --release` (or `mise run check --release --remote` after
-      the push) exits 0: every gate, the composed suite with the extensions
-      required, and the deploy host read-only.
+      the push) exits 0: every gate and the deploy host read-only. The
+      composed suite is Ready's, through the Composition job.
 
 ## 3. Merge and deploy
 
-- [ ] After the merge, CI promotes the proven image and starts Compose.
+- [ ] After the merge, CI promotes the proven image and starts Compose,
+      which promotes the composition the pull request verified when the
+      admitted set is the same.
 - [ ] The commit's `production` deployment is *queued*, waiting for
       approval. Approve the Deploy run in the `production` environment. A
       newer release waiting supersedes an older one: reject the stale one.

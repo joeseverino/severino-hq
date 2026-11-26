@@ -49,7 +49,7 @@ COMPOSING = {"fast", "perf"}
 # What this run sets that changes what a gate does, handed to the run there.
 CARRIED = (
     *("HQ_BROWSER_CHANNEL", "HQ_BROWSER_ENGINE", "HQ_BROWSER_FACE", "HQ_BROWSER_SHARD", "HQ_GATE_OUTPUT"),
-    *("HQ_LOCAL_PLUGINS", "HQ_TEST_STALL_SECONDS", "HYPOTHESIS_PROFILE", "REQUIRE_COMPOSED", "TEST_PYTHONS"),
+    *("HQ_LOCAL_PLUGINS", "HQ_TEST_STALL_SECONDS", "HYPOTHESIS_PROFILE", "TEST_PYTHONS"),
 )
 # Every other variable a gate reads, by why the run there reads its own.
 LEFT = {

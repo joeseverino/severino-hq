@@ -418,7 +418,10 @@ hashed into a fingerprint, published as a
 fingerprint is already published (the same commit admitted twice) stops before
 building. Every other trigger rebuilds: a host build, a pull request, and a
 hand-run **Compose** (`workflow_dispatch`), which is how to rebuild the current
-set on purpose.
+set on purpose. A host merge whose commit, images and every staged wheel equal
+what its pull request's composition verified promotes that composition instead
+([Checked once](Deployment.md#checked-once)); an admission since then changes
+the wheels, so the merge builds and verifies in full.
 
 Compose reads the extensions' admissions as the same app, through a token minted
 per run with only Actions and Contents read; there is no personal token to

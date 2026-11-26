@@ -87,11 +87,15 @@ FROM extended
 # Derived from the merged lock, never configured by hand: the enabled set and
 # the approved set must be identical or the host will not start.
 ARG PLUGIN_POLICY_SHA256
-# The commit on main this composition releases. The host image may have been
-# built for the pull request that proved the same tree, so the release's own
-# commit is stated here rather than inherited.
+# The commit this composition was built from: a pull request's head where
+# its composition is promoted, whose deployment records the commit on main
+# it releases.
 ARG HQ_REVISION
-LABEL org.opencontainers.image.revision=${HQ_REVISION}
+# What it is made of (tools/pipeline/composition-identity.sh), by which a
+# release finds the pull request's verified composition of the same inputs.
+ARG HQ_COMPOSITION
+LABEL org.opencontainers.image.revision=${HQ_REVISION} \
+      dev.severino.hq.composition=${HQ_COMPOSITION}
 COPY --chown=severino:severino build/composition/plugin-lock.json /opt/severino/plugin-lock.json
 # The extensions this composition removed on purpose. Only a deploy reads it:
 # production refuses an image that drops an extension it runs unless it is
@@ -105,7 +109,8 @@ RUN test -s /opt/severino/plugin-lock.json \
 # installs (AutomationImage, controller/host/layout.go), and the release's
 # deploy verifies and pulls it. Required, so every release pins one.
 ARG RUNNER_IMAGE
-RUN [ -n "${RUNNER_IMAGE}" ] || { echo "RUNNER_IMAGE names the automation worker's image this release pins" >&2; exit 1; } \
+RUN [ -n "${HQ_COMPOSITION}" ] || { echo "HQ_COMPOSITION names what this release is made of" >&2; exit 1; } \
+    && [ -n "${RUNNER_IMAGE}" ] || { echo "RUNNER_IMAGE names the automation worker's image this release pins" >&2; exit 1; } \
     && mkdir -p /app/deploy/automation \
     && printf "%s\n" "${RUNNER_IMAGE}" > /app/deploy/automation/image
 
