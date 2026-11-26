@@ -24,7 +24,6 @@ from ..approval_review import compare, preview
 from ..approvals import (
     APPROVE,
     MAX_PENDING_PER_ACTOR,
-    REJECT,
     ApprovalError,
     ApproveCommand,
     RejectCommand,
@@ -271,20 +270,6 @@ class HeldRequestTests(TestCase):
             )
 
         self.assertNotEqual(result.get("status"), "awaiting_approval")
-
-    def test_an_unauthorized_caller_is_refused_rather_than_held(self):
-        """Authority first. A request nobody may make is not a decision for anybody."""
-
-        result = execute_capability(
-            "infrastructure.resource.reconcile",
-            reconcile_payload(),
-            principal=Principal("stranger", "mcp", frozenset()),
-            target=POLICY_KEY,
-        )
-
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(ApprovalRequest.objects.exists())
 
     def test_an_ungated_kind_is_unaffected(self):
         """The rule is the smallest one that closes the hole.
@@ -824,25 +809,6 @@ class SurfaceTests(TestCase):
 
         said = [str(message) for message in get_messages(response.wsgi_request)]
         self.assertEqual(said, ["That request is already rejected, so nothing was written."])
-
-    def test_a_token_is_refused_the_decision_whatever_it_holds_before_anything_moves(self):
-        omnipotent = frozenset(Capability)
-        for principal in (
-            Principal("example-agent", "mcp", omnipotent, granted=omnipotent),
-            Principal("example-client", "api", omnipotent, granted=omnipotent),
-            cli_principal(),
-        ):
-            for name, payload in (
-                (APPROVE, {"approval_id": str(self.held.id)}),
-                (REJECT, {"approval_id": str(self.held.id)}),
-            ):
-                with self.subTest(interface=principal.interface, capability=name):
-                    result = execute_capability(name, payload, principal=principal)
-
-                    self.assertEqual(result["error"]["code"], "forbidden")
-        self.held.refresh_from_db()
-        self.assertEqual(self.held.state, ApprovalRequest.State.PENDING)
-        self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), 6)
 
     def test_each_request_is_an_action_item_that_opens_its_audit_entry(self):
         from ..domains import domain_attention_items

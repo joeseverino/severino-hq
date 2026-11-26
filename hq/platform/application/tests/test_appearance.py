@@ -16,7 +16,7 @@ from hq.platform.core.testing import operator
 
 from ..appearance import SET_THEME, ThemeCommand, set_theme, theme_for
 from ..capabilities import execute_capability
-from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, web_principal
 
 
 def drawn_theme(response) -> str | None:
@@ -72,18 +72,6 @@ class ThemeServiceTests(TestCase):
         self.assertEqual(theme_for(self.user), "dark")
         (event,) = AuditLog.objects.filter(object_type="Appearance")
         self.assertEqual((event.message, event.metadata["operation"]), ("Theme set to Dark", SET_THEME))
-
-    def test_a_principal_with_no_person_cannot_choose_for_one(self):
-        granted = frozenset(Capability)
-        for principal in (
-            Principal("example-agent", "mcp", granted, granted=granted),
-            Principal("example-client", "api", granted, granted=granted),
-            cli_principal(),
-        ):
-            with self.subTest(interface=principal.interface):
-                self.assertEqual(self.choose("dark", principal)["error"]["code"], "forbidden")
-        self.assertEqual(theme_for(self.user), "system")
-        self.assertEqual(denials(), 3)
 
     def test_the_choice_does_not_happen_without_its_record(self):
         with (

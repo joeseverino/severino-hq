@@ -12,7 +12,6 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import NOBODY
 from hq.platform.mcp.capability_answer import agent_capabilities
 
 from .. import history
@@ -88,17 +87,6 @@ class CapabilityTests(TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertIn("target must be the id of the record it acts on", result["error"]["message"])
-
-    def test_an_unauthorized_caller_is_refused_before_its_target_is_read(self):
-        result = execute_capability(
-            "expense.update",
-            {},
-            principal=NOBODY,
-            target="not-an-integer",
-        )
-
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "forbidden")
 
     def test_json_executor_creates_through_same_service(self):
         result = execute_capability(

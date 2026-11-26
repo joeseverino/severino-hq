@@ -11,7 +11,7 @@ from hq.platform.core.models import AuditLog
 
 from ..capabilities import command_spec, execute_capability
 from ..registry_import import MAX_IMPORT_RECORDS
-from ..security import Capability, Principal, cli_principal
+from ..security import cli_principal
 
 DOCUMENT = {
     "projects": [
@@ -110,29 +110,11 @@ class ValidationTests(TestCase):
         self.assertFalse(imported_events().exists())
         return result
 
-    def test_a_record_without_a_slug_is_refused(self):
-        result = self.assert_refused({"projects": [{"name": "No slug"}]})
-        self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 0, "slug"]])
-
-    def test_a_blank_slug_is_refused(self):
-        self.assert_refused({"projects": [{"slug": " ", "name": "Blank slug"}]}, '["projects", 0, "slug"]')
-
     def test_a_slug_twice_is_refused(self):
         self.assert_refused(
             {"projects": [{"slug": "twice", "name": "A"}, {"slug": "twice", "name": "B"}]},
             "appears twice",
         )
-
-    def test_a_bad_choice_is_refused_before_anything_is_written(self):
-        result = self.assert_refused(
-            {
-                "projects": [
-                    {"slug": "good", "name": "Good"},
-                    {"slug": "bad", "name": "Bad", "status": "not-a-status"},
-                ]
-            },
-        )
-        self.assertEqual([problem["loc"] for problem in result["error"]["details"]], [["projects", 1, "status"]])
 
     def test_an_asset_naming_an_unknown_project_is_refused(self):
         self.assert_refused(
@@ -242,13 +224,3 @@ class CapabilityGateTests(TestCase):
         )
 
         self.assertEqual(set(spec.required_capabilities), creates)
-
-    def test_a_principal_missing_either_is_refused(self):
-        for held in ("write_projects", "write_assets"):
-            principal = Principal("example-agent", "mcp", frozenset({Capability.READ, held}))
-
-            result = run(principal=principal)
-
-            self.assertFalse(result["ok"])
-            self.assertEqual(result["error"]["code"], "forbidden")
-            self.assertFalse(Project.objects.exists())

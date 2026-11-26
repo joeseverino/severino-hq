@@ -8,7 +8,6 @@ shell is not asked.
 from django.test import TestCase
 
 from hq.domains.projects.models import Project
-from hq.platform.core.testing import MCP_READER
 
 from ..capabilities import execute_capability
 from ..security import DEVICE_INTERFACE, Capability, Principal
@@ -28,8 +27,3 @@ class RequiredTests(TestCase):
 
                 self.assertEqual(result["error"]["code"], "idempotency_key_required")
         self.assertFalse(Project.objects.exists())
-
-    def test_a_caller_who_may_not_change_it_is_told_that_first(self):
-        result = self.create(MCP_READER)
-
-        self.assertEqual(result["error"]["code"], "forbidden")

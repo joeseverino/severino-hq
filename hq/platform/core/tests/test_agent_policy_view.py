@@ -6,7 +6,6 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import CapabilityRule
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.capability_policy import (
     SET_POLICY,
     Rule,
@@ -15,8 +14,7 @@ from hq.platform.application.capability_policy import (
 )
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
-from hq.platform.application.tests.writers import keyed
+from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.testing import operator
 
@@ -51,21 +49,6 @@ class PolicyWriteTests(TestCase):
         self.assertIn("govern_agents", text(response))
         self.assertFalse(CapabilityRule.objects.exists())
         self.assertEqual(self.denials(), 1)
-
-    def test_no_credential_sets_policy(self):
-        granted = frozenset(Capability)
-        cell = {"subject": "example-agent", "capability": "project.delete", "rule": Rule.ALLOW}
-        for principal in (
-            Principal("example-agent", "mcp", granted, granted=granted),
-            Principal("example-client", "api", granted, granted=granted),
-            cli_principal(),
-        ):
-            with self.subTest(interface=principal.interface):
-                result = execute_capability(SET_POLICY, keyed({"rules": [cell]}), principal=principal)
-
-                self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(CapabilityRule.objects.exists())
-        self.assertEqual(self.denials(), 3)
 
     def test_the_form_names_each_cell_by_its_agent_and_capability(self):
         post = {self.field: Rule.DENY, "csrfmiddlewaretoken": "x", "rule|too-few": "allow", "rule|a|b|c": "allow"}

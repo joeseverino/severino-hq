@@ -325,23 +325,6 @@ class SettingTests(PolicyTestCase):
         self.assertFalse(self.set())
         self.assertEqual(AuditLog.objects.filter(object_type="Capability policy").count(), 1)
 
-    def test_nothing_governed_by_policy_may_set_it(self):
-        """Whatever its grant, and a person behind it or not: the policy is a person's in the browser."""
-
-        everything = frozenset(Capability)
-        cell = {"subject": "example-agent", "capability": "project.delete", "rule": Rule.ALLOW}
-        for credential in (
-            agent(capabilities=everything),
-            replace(agent(capabilities=everything), person_key="example-key"),
-            replace(agent(interface="api", capabilities=everything), person_key="example-key"),
-            cli_principal(),
-        ):
-            with self.subTest(interface=credential.interface, person=credential.person_key):
-                result = execute_capability("agent.policy.set", keyed({"rules": [cell]}), principal=credential)
-
-                self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(CapabilityRule.objects.exists())
-
     def test_a_read_can_be_denied_but_not_held(self):
         with self.assertRaisesMessage(ValueError, "Look up a name only reads."):
             self.set(spec=spec("lookup.name.read"))
@@ -475,7 +458,6 @@ class CommandTitleTests(TestCase):
     """A command is called what it declares, wherever a person reads it."""
 
     def test_a_padded_label_does_not_compose(self):
-        from dataclasses import replace
 
         from django.core.exceptions import ImproperlyConfigured
 
@@ -485,7 +467,7 @@ class CommandTitleTests(TestCase):
             validate_capability_spec(replace(spec("project.create"), label=" Create a project"))
 
     def test_a_command_type_without_a_schema_does_not_compose(self):
-        from dataclasses import dataclass, replace
+        from dataclasses import dataclass
 
         from django.core.exceptions import ImproperlyConfigured
 

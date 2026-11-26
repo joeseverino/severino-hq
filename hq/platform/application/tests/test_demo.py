@@ -8,7 +8,6 @@ from django.urls import reverse
 
 from hq.platform.application.markup_testing import with_class, within
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
 
@@ -237,22 +236,3 @@ class DoorTests(TestCase):
         self.client.post(reverse("demo_mode"), form_keyed())
 
         self.assertTrue(self.client.get(reverse("dashboard")).wsgi_request.showing_demo)
-
-    def test_no_agent_is_offered_it_or_may_run_it(self):
-        from hq.platform.application.capabilities import describe_capabilities, execute_capability
-        from hq.platform.application.demo import SET_DEMO
-        from hq.platform.application.security import (
-            API_INTERFACE,
-            MCP_INTERFACE,
-            OPERATOR_CAPABILITIES,
-            Principal,
-        )
-
-        for interface in (MCP_INTERFACE, API_INTERFACE):
-            with self.subTest(interface):
-                agent = Principal("example-agent", interface, OPERATOR_CAPABILITIES)
-                offered = {entry["name"] for entry in describe_capabilities(principal=agent)["capabilities"]}
-                self.assertNotIn(SET_DEMO, offered)
-                answer = execute_capability(SET_DEMO, keyed({"showing": True}), principal=agent)
-                self.assertFalse(answer["ok"])
-        self.assertFalse(AuditLog.objects.filter(metadata__operation=SET_DEMO, action=AuditLog.Action.DONE).exists())

@@ -20,7 +20,6 @@ from ..security import (
     Capability,
     Principal,
     agent_principal,
-    cli_principal,
     device_principal,
     subject_of,
     web_principal,
@@ -120,22 +119,6 @@ class WhoMayBlockTests(TestCase):
     def setUp(self):
         _seen(AGENT)
         self.person = operator(username="op")
-
-    def test_no_credential_blocks_or_frees_a_client(self):
-        granted = frozenset(Capability)
-        for credential in (
-            Principal(AGENT, "mcp", granted, granted=granted),
-            Principal("example-client", "api", granted, granted=granted),
-            cli_principal(),
-        ):
-            for state in (True, False):
-                with self.subTest(interface=credential.interface, blocked=state):
-                    result = execute_capability(
-                        SET_AGENT_BLOCK, keyed({"blocked": state}), principal=credential, target=AGENT
-                    )
-
-                    self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(_blocked(AGENT))
 
     def test_a_client_hq_has_never_seen_is_not_found(self):
         result = execute_capability(

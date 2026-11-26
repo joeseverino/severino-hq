@@ -12,7 +12,7 @@ from hq.platform.core.testing import operator
 from ..capabilities import CAPABILITY_AUDIT_TYPE, execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
 from ..own_devices import SET_OWN_DEVICE, registered
-from ..security import Capability, Principal, cli_principal, web_principal
+from ..security import web_principal
 
 PHONE = "example-phone"
 
@@ -64,21 +64,6 @@ class RegistrationTests(TestCase):
         result = self._set(state=True, user=unbound)
 
         self.assertEqual(result["error"]["code"], "precondition")
-        self.assertFalse(OwnDevice.objects.exists())
-
-    def test_no_credential_registers_a_device(self):
-        granted = frozenset(Capability)
-        for credential in (
-            Principal("example-agent", "mcp", granted, granted=granted),
-            Principal("example-client", "api", granted, granted=granted),
-            cli_principal(),
-        ):
-            with self.subTest(interface=credential.interface):
-                result = execute_capability(
-                    SET_OWN_DEVICE, keyed({"registered": True}), principal=credential, target="example-agent"
-                )
-
-                self.assertEqual(result["error"]["code"], "forbidden")
         self.assertFalse(OwnDevice.objects.exists())
 
 

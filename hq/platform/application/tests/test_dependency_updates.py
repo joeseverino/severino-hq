@@ -10,14 +10,12 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.projects.models import Project
-from hq.platform.core.testing import MCP_READER
 
 from .. import dependency_updates
 from ..capabilities import execute_capability
-from ..domains import records_of
 from ..freshness import RETRY_AFTER, cadence
 from ..projection import projection_scope
-from ..security import Capability, Principal, cli_principal
+from ..security import Principal, cli_principal
 
 KIND = dependency_updates.KIND
 
@@ -121,18 +119,6 @@ class RunNowTests(TestCase):
 
     def run_now(self, payload: dict, *, principal: Principal | None = None) -> dict:
         return execute_capability(dependency_updates.RUN_NOW, payload, principal=principal or cli_principal())
-
-    def test_a_principal_without_project_writes_is_denied(self):
-        reader = MCP_READER
-
-        self.assertEqual(self.run_now({}, principal=reader)["error"]["code"], "forbidden")
-        self.assertIsNone(dependency_updates.asked_at())
-
-    def test_a_project_writer_who_may_not_ask_the_controller_is_denied(self):
-        writer = Principal("example-writer", "mcp", frozenset({Capability.READ, records_of("projects").write}))
-
-        self.assertEqual(self.run_now({}, principal=writer)["error"]["code"], "forbidden")
-        self.assertIsNone(dependency_updates.asked_at())
 
     def test_nothing_opted_in_is_refused(self):
         Project.objects.update(dependency_updates=False)

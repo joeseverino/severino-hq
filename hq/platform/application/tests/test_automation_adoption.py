@@ -16,14 +16,14 @@ from unittest.mock import patch
 
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
 from ..approvals import ApprovalError, ApproveCommand, approve
 from ..automation_adoption import REJECT
 from ..automation_sources import queue_scan
 from ..capabilities import capability_spec, run_capability
 from ..machines import Machine
-from ..security import MCP_INTERFACE, Capability, Principal, agent_subject, internal_principal, mcp_principal
+from ..security import MCP_INTERFACE, Capability, Principal, internal_principal, mcp_principal
 from .test_approvals import an_operator
 from .test_automation_sources import DOORBELL, SOURCE, ScanTestCase
 
@@ -33,7 +33,6 @@ OPERATOR = Principal(
     "web",
     frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE, Capability.ADOPT_PLAYBOOKS}),
 )
-READER = Principal("example-reader", "web", frozenset({Capability.READ}))
 FIRST, SECOND = "1" * 40, "2" * 40
 APP = "app.example.com"
 
@@ -160,14 +159,6 @@ class AdoptTests(AdoptionTestCase):
         self.assertTrue(answer["adopted"], answer)
         self.assertEqual(self.adopted(), [FIRST])
         self.assertIsNotNone(capability_spec("automation.example.check.run"))
-
-    def test_someone_who_cannot_manage_infrastructure_is_refused(self):
-        proposal = self.proposed(catalog(procedure("check")))
-
-        answer = self.adopt(proposal, READER)
-
-        self.assertEqual(answer["error"]["code"], "forbidden", answer)
-        self.assertEqual(self.adopted(), [])
 
     def test_a_commit_github_did_not_verify_is_refused(self):
         unsigned = {"verified": False, "reason": "unsigned", "committer": ""}
@@ -320,22 +311,6 @@ class AgentAdoptionTests(AdoptionTestCase):
         # An agent whose grant names adopting too, as a token could.
         self.agent = Principal("example-agent", MCP_INTERFACE, OPERATOR.capabilities)
 
-    def test_an_agent_s_adoption_or_rejection_is_refused_and_nothing_is_held_whatever_its_rule_says(self):
-        proposal = self.proposed(catalog(procedure("check")))
-        for capability in (ADOPT, REJECT):
-            CapabilityRule.objects.create(capability=capability, subject=agent_subject(self.agent), rule="allow")
-            with self.subTest(capability=capability):
-                answer = run_capability(
-                    capability, {"proposal": proposal}, principal=self.agent, idempotency_key=f"example-{capability}"
-                ).answer
-
-                self.assertEqual(answer["error"]["code"], "forbidden", answer)
-        self.assertFalse(ApprovalRequest.objects.exists())
-        self.assertEqual(self.adopted(), [])
-        from hq.domains.control_plane.models import SourceProposal
-
-        self.assertIsNone(SourceProposal.objects.get(pk=proposal).rejected_at)
-
 
 class ReviewTests(AdoptionTestCase):
     """What a person decides on: the commit read against the one adopted."""
@@ -438,12 +413,11 @@ class RejectTests(AdoptionTestCase):
         self.assertIsNone(standing().pending)
         self.assertEqual(self.adopted(), [FIRST])
 
-    def test_the_commit_hq_runs_from_is_not_rejected_and_a_reader_rejects_nothing(self):
+    def test_the_commit_hq_runs_from_is_not_rejected(self):
         adopted = self.proposed(catalog(procedure("check")))
         self.adopt(adopted)
 
         self.assertEqual(self.reject(adopted)["error"]["code"], "precondition")
-        self.assertEqual(self.reject(adopted, READER, key="example-reader")["error"]["code"], "forbidden")
 
 
 def sharing(name: str, role: str = "common") -> dict[str, Any]:

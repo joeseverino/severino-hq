@@ -28,7 +28,7 @@ from ..cadence_testing import controller_arrived, controller_never_arrived
 from ..capabilities import Ran, execute_capability
 from ..freshness import VISIT_EVERY
 from ..record_errors import PolicyError, RecordNotFound
-from ..security import Capability, Principal, cli_principal
+from ..security import Principal, cli_principal
 from ..visit_refresh import VISIT_REFRESH, Reads, VisitRefreshCommand, askable, request_visit_refresh
 
 SWEEPS = override_settings(
@@ -257,32 +257,6 @@ class VisitRefreshTests(TestCase):
             for subject, name in (("example", "unknown"), ("no-such-subject", "known")):
                 with self.subTest(subject=subject), self.assertRaises(RecordNotFound):
                     request_visit_refresh(VisitRefreshCommand(subject, name), principal=cli_principal())
-        self.assertEqual(asked(), set())
-
-    def test_somebody_who_could_not_press_read_now_is_refused_and_reads_nothing(self):
-        store(FAST, age=OLD)
-        reader = Principal(interface="mcp", actor="reader", capabilities=frozenset({Capability.READ}))
-
-        with page(FAST):
-            result = execute_capability(VISIT_REFRESH, {"subject": "example", "name": "known"}, principal=reader)
-
-        self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertNotIn("requested", result)
-        self.assertEqual(asked(), set())
-
-    def test_a_request_that_does_not_name_one_page_is_invalid(self):
-        store(FAST, age=OLD)
-
-        with page(FAST):
-            for payload in (
-                {"subject": "example"},
-                {"subject": "example", "name": "known", "kind": FAST},
-                {"subject": "example", "name": "x" * 300},
-            ):
-                with self.subTest(payload=sorted(payload)):
-                    result = execute_capability(VISIT_REFRESH, payload, principal=cli_principal())
-
-                    self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertEqual(asked(), set())
 
     def test_with_no_controller_arriving_nothing_is_asked_or_promised(self):

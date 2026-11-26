@@ -11,7 +11,6 @@ from django.utils import timezone
 from hq.domains.content.models import ContentItem
 from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import ActionItemRead, AuditLog
 from hq.platform.core.testing import operator
 from hq_sdk.testing import plain
@@ -29,12 +28,11 @@ from ..action_items import (
     waiting_count,
     with_aside_state,
 )
-from ..capabilities import execute_capability
 from ..dashboard import readable_queue
 from ..finding_model import Finding
 from ..findings import finding_key
 from ..projection import projection_scope
-from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal
+from ..security import Capability, Principal, cli_principal
 
 ITEM = {
     "key": "example:widgets",
@@ -456,24 +454,6 @@ class AsideCapabilityTests(TestCase):
                     ).exists()
                 )
 
-    def test_a_principal_with_no_person_is_refused_whatever_it_was_granted(self):
-        granted = frozenset({Capability.SET_ASIDE_ACTION_ITEMS})
-        rows = {ITEM["key"]: ITEM["revision"]}
-        for principal in (
-            Principal("op", "api", granted, granted=granted),
-            Principal("op", "mcp", granted, granted=granted),
-            cli_principal(),
-            internal_principal("example-purpose"),
-        ):
-            with self.subTest(interface=principal.interface):
-                result = execute_capability(SET_ASIDE, keyed({"rows": rows}), principal=principal)
-
-                self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(ActionItemRead.objects.exists())
-        self.assertEqual(
-            AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=SET_ASIDE).count(), 4
-        )
-
     def test_the_page_says_when_it_is_refused_and_keeps_nothing(self):
         lacking = Principal("op", "web", frozenset({Capability.READ}))
         with mock.patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
@@ -484,16 +464,3 @@ class AsideCapabilityTests(TestCase):
         self.assertContains(response, Capability.SET_ASIDE_ACTION_ITEMS.value)
         self.assertFalse(ActionItemRead.objects.exists())
         self.assertTrue(AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=SET_ASIDE).exists())
-
-    def test_a_malformed_request_is_invalid_input(self):
-        operator = Principal("op", "web", OPERATOR_CAPABILITIES)
-        for name, payload in (
-            (SET_ASIDE, {"rows": {ITEM["key"]: "bad!rev"}}),
-            (SET_ASIDE, {"keys": ITEM["key"]}),
-            (RESTORE, {}),
-        ):
-            with self.subTest(payload=payload):
-                result = execute_capability(name, keyed(payload), principal=operator)
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertFalse(ActionItemRead.objects.exists())

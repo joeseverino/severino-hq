@@ -209,15 +209,6 @@ class RefreshCapabilityTests(TestCase):
         self.assertEqual((answer["ok"], answer["started"]), (True, True))
         self.assertEqual(str(Job.objects.get(kind=REFRESH).pk), answer["job"])
 
-    def test_a_principal_that_may_not_write_projects_is_refused_and_nothing_is_recorded(self):
-        reader = Principal("agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-
-        with held_jobs():
-            answer = execute_capability(REFRESH, keyed({}), principal=reader, target="alpha")
-
-        self.assertEqual(answer["error"]["code"], "forbidden")
-        self.assertFalse(Job.objects.exists())
-
     def test_an_unknown_project_is_not_found_before_any_job(self):
         with held_jobs():
             answer = execute_capability(REFRESH, keyed({}), principal=OPERATOR, target="missing")

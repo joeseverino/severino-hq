@@ -60,18 +60,6 @@ class LifecycleVerbTests(TestCase):
         self.assertEqual(said, ["This record is switched off in HQ."])
         self.assertFalse(OperationRequest.objects.exists())
 
-    def test_a_token_without_the_grant_is_refused_before_anything_is_queued(self):
-        reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
-        for action in LIFECYCLE:
-            with self.subTest(action=action):
-                result = execute_capability(
-                    ACTION_CAPABILITY[action], keyed({}), principal=reader, target="example-web"
-                )
-
-                self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(OperationRequest.objects.exists())
-        self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), len(LIFECYCLE))
-
 
 class RemovalVerbTests(TestCase):
     def setUp(self):

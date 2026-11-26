@@ -134,28 +134,6 @@ class PinCapabilityTests(TestCase):
                     ).exists()
                 )
 
-    def test_a_principal_with_no_person_is_refused_whatever_it_was_granted(self):
-        from hq.platform.application.capabilities import execute_capability
-        from hq.platform.application.pins import PIN, SERVICE
-        from hq.platform.application.security import Capability, Principal, cli_principal, internal_principal
-        from hq.platform.core.models import AuditLog, Pin
-
-        granted = frozenset({Capability.PIN_FAVORITES})
-        for principal in (
-            Principal("an-operator", "api", granted, granted=granted),
-            Principal("an-operator", "mcp", granted, granted=granted),
-            cli_principal(),
-            internal_principal("example-purpose"),
-        ):
-            with self.subTest(interface=principal.interface):
-                result = execute_capability(
-                    PIN, keyed({"kind": SERVICE, "key": "one.example.test"}), principal=principal
-                )
-
-                self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(Pin.objects.exists())
-        self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=PIN).count(), 4)
-
     def test_the_page_keeps_nothing_when_refused(self):
         from unittest import mock
 

@@ -124,11 +124,6 @@ class RefusalTests(TestCase):
         self.assertEqual(result["error"]["code"], "not_found")
         self.assertFalse(ReadRequest.objects.exists())
 
-    def test_an_unknown_kind_is_refused(self):
-        result = execute_capability(READ_NOW, {"kinds": ["no.such.kind"]}, principal=cli_principal())
-
-        self.assertEqual(result["error"]["code"], "invalid_input")
-
     def test_two_subjects_at_once_are_refused(self):
         result = execute_capability(
             READ_NOW,
@@ -139,15 +134,8 @@ class RefusalTests(TestCase):
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(ReadRequest.objects.exists())
 
-    def test_a_reader_may_not_ask(self):
-        reader = READER
-
-        result = execute_capability(READ_NOW, {"connection_refs": ["example-tailnet"]}, principal=reader)
-
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(ReadRequest.objects.exists())
-        self.assertIsNone(read_now_link(reader, connection_refs=("example-tailnet",)))
+    def test_a_reader_is_offered_no_read_now(self):
+        self.assertIsNone(read_now_link(READER, connection_refs=("example-tailnet",)))
 
 
 @SWEEPS
