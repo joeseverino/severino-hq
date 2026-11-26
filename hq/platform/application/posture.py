@@ -220,11 +220,14 @@ def _approval(_inputs) -> Reading:
     found = repository(None)
     if found is None:
         return _not_read((REPOSITORY_KIND,))
-    production = found.production_environment
-    if production is None:
-        return Reading.unmet("No production environment")
-    reviewers = production.get("reviewers") or ()
-    return Reading.met(f"Reviewers: {', '.join(reviewers)}") if reviewers else Reading.unmet("No reviewers")
+    # Each environment a deploy job would wait on, by who answers it: HQ's
+    # own protection rule, or its required reviewers.
+    gates = [
+        f"{item.get('name')}: {'HQ' if item.get('hq_rule') else ', '.join(item.get('reviewers') or ())}"
+        for item in found.environments or ()
+        if item.get("hq_rule") or item.get("reviewers")
+    ]
+    return Reading.met("; ".join(gates)) if gates else Reading.unmet("No environment waits for approval")
 
 
 # Of HQ's standard, and drawn on a request's path too (``request_standard``),
@@ -307,11 +310,12 @@ STANDARD: tuple[Check, ...] = (
         "Deploys wait for your approval",
         _approval,
         "a merge reaching production before you see it",
-        "Add yourself as a required reviewer on the repository's production environment.",
+        "Make HQ's GitHub App the protection rule of the environment the deploy job waits on, or add yourself as "
+        "its required reviewer.",
         unmet="Deploys do not wait for approval",
         holds="Nothing reaches production until you approve it.",
         boundary="Release",
-        mechanism="The production environment's reviewers, read by the GitHub App",
+        mechanism="An environment's protection rule or reviewers, read by the GitHub App",
     ),
 )
 

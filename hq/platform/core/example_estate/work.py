@@ -151,7 +151,19 @@ def repositories():
                 }
             ]
             record["environments"] = [
-                {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]}
+                {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]},
+                {"name": "release", "reviewers": [], "wait_minutes": 0, "branches": ["main"], "hq_rule": True},
+            ]
+            # A release waiting on HQ's protection rule, which HQ offers to approve or reject.
+            record["waiting"] = [
+                {
+                    "id": 4100,
+                    "name": "Deploy",
+                    "environments": ["release"],
+                    "sha": hexed("release", name, length=40),
+                    "created_at": iso(timedelta(minutes=20)),
+                    "url": "https://github.com/example/hq/actions/runs/4100",
+                }
             ]
             record["images"] = [{"name": "example/hq", "signed": [HQ_DIGEST.removeprefix("sha256:")]}]
             # Its default branch's rules, with checks its pull requests run

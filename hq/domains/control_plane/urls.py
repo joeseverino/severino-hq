@@ -2,6 +2,7 @@ from django.urls import path
 
 from hq.platform.application.app_update_approval import APPLY, APPROVE
 from hq.platform.application.app_update_open import OPEN
+from hq.platform.application.deployment_review import APPROVE as APPROVE_DEPLOY, REJECT as REJECT_DEPLOY
 from hq.platform.application.resource_capabilities import CREATE_CAPABILITY, UPDATE_CAPABILITY
 
 from . import (
@@ -19,7 +20,7 @@ from . import (
     views,
     visit_views,
 )
-from .container_views import AppUpdatePressView, ContainerListView
+from .container_views import ContainerListView, RepositoryPressView
 from .models import OperationRequest
 
 app_name = "control_plane"
@@ -76,17 +77,27 @@ urlpatterns = [
     path("adopt/<str:hostname>/", resource_form_views.AdoptView.as_view(), name="adopt"),
     path(
         "app-updates/<str:owner>/<str:name>/<int:number>/<str:head_sha>/approve/",
-        AppUpdatePressView.as_view(runs=(APPROVE,)),
+        RepositoryPressView.as_view(runs=(APPROVE,)),
         name="app_update_approve",
     ),
     path(
         "app-updates/<str:owner>/<str:name>/<str:app>/<str:head_sha>/apply/",
-        AppUpdatePressView.as_view(runs=(APPLY,)),
+        RepositoryPressView.as_view(runs=(APPLY,)),
         name="app_update_apply",
     ),
     path(
+        "deploys/<str:owner>/<str:name>/<int:run_id>/<str:environment>/<str:head_sha>/approve/",
+        RepositoryPressView.as_view(runs=(APPROVE_DEPLOY,), fallback="control_plane:findings"),
+        name="deploy_approve",
+    ),
+    path(
+        "deploys/<str:owner>/<str:name>/<int:run_id>/<str:environment>/<str:head_sha>/reject/",
+        RepositoryPressView.as_view(runs=(REJECT_DEPLOY,), fallback="control_plane:findings"),
+        name="deploy_reject",
+    ),
+    path(
         "app-updates/<str:owner>/<str:name>/<str:app>/open/",
-        AppUpdatePressView.as_view(runs=(OPEN,)),
+        RepositoryPressView.as_view(runs=(OPEN,)),
         name="app_update_open",
     ),
     # One specific record rather than everything a hostname answers with. A

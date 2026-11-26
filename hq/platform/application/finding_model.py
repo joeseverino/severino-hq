@@ -53,6 +53,13 @@ class FindingRemedy:
     # the only correct place for anything else.
     auto: bool = False
 
+    @classmethod
+    def posted(cls, capability: str, route: Mapping[str, str], intent: str = "") -> FindingRemedy:
+        """A press of ``capability`` posted to the route whose view runs it, at ``route``'s arguments."""
+
+        url, _ = command_reach(capability, route)
+        return cls(capability=capability, target="", intent=intent, url=url, method="POST")
+
     @property
     def label(self) -> str:
         return self.intent or capability_words(self.capability, self.variant)

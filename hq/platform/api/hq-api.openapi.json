@@ -12542,9 +12542,28 @@
         ],
         "type": "object"
       },
+      "DeploymentApproveRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ReviewDeploymentCommand"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
       "DeploymentNotes": {
         "description": "How it is deployed.",
         "type": "string"
+      },
+      "DeploymentRejectRequest": {
+        "$ref": "#/components/schemas/DeploymentApproveRequest"
       },
       "DnsRecordPart": {
         "additionalProperties": false,
@@ -27422,6 +27441,41 @@
         "minimum": 1,
         "type": "integer"
       },
+      "ReviewDeploymentCommand": {
+        "additionalProperties": false,
+        "description": "The run waiting to deploy, at the commit you saw.",
+        "properties": {
+          "environment": {
+            "description": "The environment it waits to deploy to.",
+            "pattern": "^[^/\\s][^/]{0,254}$",
+            "type": "string"
+          },
+          "head_sha": {
+            "description": "The commit you saw it deploy. The run's `sha`; a run at another commit is refused.",
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "repository": {
+            "description": "The repository it runs in, as owner/name.",
+            "maxLength": 140,
+            "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+            "type": "string"
+          },
+          "run_id": {
+            "description": "The workflow run that waits.",
+            "maximum": 9223372036854775807,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "repository",
+          "run_id",
+          "environment",
+          "head_sha"
+        ],
+        "type": "object"
+      },
       "ReviewStatus": {
         "description": "Where its review stands.",
         "enum": [
@@ -35156,6 +35210,156 @@
         "x-hq-effect": "remote_write"
       }
     },
+    "/api/v2/capabilities/deployment.approve/": {
+      "post": {
+        "description": "Approve a deploy waiting on HQ's deployment protection rule, at the commit you saw.",
+        "operationId": "deploymentApproveV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Approve deploy",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "deployment.approve",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
+    "/api/v2/capabilities/deployment.reject/": {
+      "post": {
+        "description": "Reject a deploy waiting on HQ's deployment protection rule, at the commit you saw.",
+        "operationId": "deploymentRejectV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentRejectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Reject deploy",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "deployment.reject",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
     "/api/v2/capabilities/documentation.create/": {
       "post": {
         "description": "Add a new document.",
@@ -38033,6 +38237,8 @@
                 "dashboard.panels.refresh",
                 "dashboard.panels.refresh_due",
                 "dashboard.settings.update",
+                "deployment.approve",
+                "deployment.reject",
                 "documentation.create",
                 "documentation.delete",
                 "documentation.sync",

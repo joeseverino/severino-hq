@@ -390,10 +390,6 @@ class Repository:
         return [name for name in self.record.get("pull_request_checks") or () if name not in required]
 
     @property
-    def production_environment(self) -> Mapping[str, Any] | None:
-        return next((item for item in self.record.get("environments") or () if item.get("name") == "production"), None)
-
-    @property
     def production_verified(self) -> bool | None:
         """Whether production's last deploy passed every check it ran before
         deploying (a signature verified, say): None when it ran none."""

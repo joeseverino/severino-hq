@@ -14,6 +14,7 @@ from hq.domains.control_plane.providers import PROVIDERS, spec_withheld
 from . import (
     app_update_approval,
     app_update_open,
+    deployment_review,
     infrastructure,
     resource_context,
     resource_operations as operations,
@@ -285,6 +286,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
         ),
         *app_update_approval.capabilities(),
         *app_update_open.capabilities(),
+        *deployment_review.capabilities(),
     )
 
 

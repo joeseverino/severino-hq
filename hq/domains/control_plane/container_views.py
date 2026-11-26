@@ -146,13 +146,16 @@ class ContainerListView(PageMixin, TemplateView):
         return context
 
 
-class AppUpdatePressView(View):
-    """The one press an app update's state offers (``update_state``), asked
-    through the command its route says the view ``runs``."""
+class RepositoryPressView(View):
+    """A press on something of one repository (an app update's, a waiting
+    deploy's), asked through the command its route says the view ``runs``,
+    with the route's owner and name as the command's repository."""
 
     runs: tuple[str, ...] = ()
+    # Where a press with no page to return to lands.
+    fallback = "control_plane:containers"
 
     def post(self, request, owner, name, **route):
         # Its card says how the press went, so a press that ran says nothing more.
         refused(request, run_posted(request, self.runs[0], {"repository": f"{owner}/{name}", **route}).answer)
-        return redirect(safe_next(request, fallback=reverse("control_plane:containers")))
+        return redirect(safe_next(request, fallback=reverse(self.fallback)))

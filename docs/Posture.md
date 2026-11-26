@@ -52,7 +52,7 @@ findings, the Connections page and its API read it.
 | Tailnet lock is on | a device added to your tailnet without your key | Tailnet lock, read by the host's own daemon |
 | Sign-in is single sign-on only | a guessed or reused password | HQ's sign-in settings |
 | Tokens hold the permissions HQ uses, and no more | a stolen token reaching the whole account | Each connection's permission check |
-| Deploys wait for your approval | a merge reaching production before you see it | The production environment's reviewers, read by the GitHub App |
+| Deploys wait for your approval | a merge reaching production before you see it | An environment's protection rule or reviewers, read by the GitHub App |
 
 A check with no reading yet is shown as not read, never as met. A login, such
 as Nginx Proxy Manager's, has no scoped form, so it meets the token check
