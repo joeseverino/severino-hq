@@ -147,9 +147,11 @@ class PullFile(ObservationRecord):
 
 
 class JobFailure(ObservationRecord):
-    """Why one failing job failed: the step it failed at, the error GitHub's
-    log of that step marks, and the step's last lines of output before it,
-    each the job's own words, bounded (``github_failures.go``)."""
+    """Why one failing check failed: for a workflow's job, the step it failed
+    at, the error GitHub's log of that step marks, and the step's last lines
+    of output before it; for any other check, no step, its output's title as
+    the error and its summary as the log. Each is the check's own words,
+    bounded (``github_failures.go``, ``github_checks.go``)."""
 
     step: str = ""
     error: str = ""

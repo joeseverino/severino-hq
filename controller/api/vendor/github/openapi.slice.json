@@ -3538,6 +3538,23 @@
       "example": "2018-05-04T01:14:52Z",
       "nullable": true
      },
+     "output": {
+      "type": "object",
+      "properties": {
+       "title": {
+        "type": "string",
+        "nullable": true
+       },
+       "summary": {
+        "type": "string",
+        "nullable": true
+       }
+      },
+      "required": [
+       "title",
+       "summary"
+      ]
+     },
      "name": {
       "description": "The name of the check.",
       "example": "test-coverage",
@@ -3562,7 +3579,8 @@
      "status",
      "conclusion",
      "started_at",
-     "check_suite"
+     "check_suite",
+     "output"
     ]
    },
    "code-scanning-alert-items": {

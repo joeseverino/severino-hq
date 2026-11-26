@@ -1540,7 +1540,11 @@ type CheckRun struct {
 	ID int `json:"id"`
 
 	// Name The name of the check.
-	Name      string `json:"name"`
+	Name   string `json:"name"`
+	Output struct {
+		Summary string `json:"summary"`
+		Title   string `json:"title"`
+	} `json:"output"`
 	StartedAt string `json:"started_at"`
 
 	// Status The phase of the lifecycle that the check is currently in. Statuses of waiting, requested, and pending are reserved for GitHub Actions check runs.

@@ -182,3 +182,22 @@ func TestFailingJobsReadOnlyTheLogsKeptAndARefusedLogShows(t *testing.T) {
 		t.Errorf("refused %+v", refused)
 	}
 }
+
+// A failing check no workflow owns says why in its own output, its title and
+// its summary, at no request of its own; one whose output is empty says nothing.
+func TestAFailingCheckNoWorkflowOwnsSaysWhyFromItsOutput(t *testing.T) {
+	routes := githubRepositoryRoutes()
+	routes[githubFakeAPI+" /repos/example/app/commits/aaaa000000000000000000000000000000000000/check-runs?per_page=100"] = `{"check_runs":[` +
+		`{"id":91,"name":"license","status":"completed","conclusion":"failure","check_suite":{"id":90},"output":{"title":"1 dependency has a denied license","summary":"example-lib 1.2.0: GPL-3.0 is denied\n\nSee the policy.","text":null,"annotations_count":0,"annotations_url":"https://api.github.com/repos/example/app/check-runs/91/annotations"}},` +
+		`{"id":92,"name":"quiet","status":"completed","conclusion":"failure","check_suite":{"id":90},"output":{"title":null,"summary":null,"text":null,"annotations_count":0,"annotations_url":"https://api.github.com/repos/example/app/check-runs/92/annotations"}}]}`
+	h := newGitHubHarness(t, routes, runtime.Environment{})
+	record, _ := readRepository(t, h)
+
+	said := record.Checks.Failures["license"]
+	if said.Error != "1 dependency has a denied license" || !slices.Equal(said.Log, []string{"example-lib 1.2.0: GPL-3.0 is denied", "See the policy."}) {
+		t.Fatalf("failure %+v", said)
+	}
+	if _, ok := record.Checks.Failures["quiet"]; ok {
+		t.Errorf("an empty output said %+v", record.Checks.Failures["quiet"])
+	}
+}

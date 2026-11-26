@@ -4069,7 +4069,7 @@
         "type": "object"
       },
       "GitHubRepositoryJobFailure": {
-        "description": "Why one failing job failed: the step it failed at, the error GitHub's\nlog of that step marks, and the step's last lines of output before it,\neach the job's own words, bounded (``github_failures.go``).",
+        "description": "Why one failing check failed: for a workflow's job, the step it failed\nat, the error GitHub's log of that step marks, and the step's last lines\nof output before it; for any other check, no step, its output's title as\nthe error and its summary as the log. Each is the check's own words,\nbounded (``github_failures.go``, ``github_checks.go``).",
         "properties": {
           "step": {
             "default": "",
