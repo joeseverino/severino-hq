@@ -374,12 +374,12 @@ class InboundSource(models.TextChoices):
     HOST = "host", "Host"
 
 
-class InboundOutcome(models.TextChoices):
+class InboundOutcome(TonedChoices):
     """What an event made due: the readings it names, or nothing, for one HQ
     does not take."""
 
-    APPLIED = "applied", "Applied"
-    IGNORED = "ignored", "Ignored"
+    APPLIED = "applied", Tone.GOOD, "Applied"
+    IGNORED = "ignored", Tone.NEUTRAL, "Ignored"
 
 
 class InboundEvent(TimestampedModel):

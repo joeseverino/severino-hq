@@ -9,7 +9,6 @@ from hq.platform.application.entity_links import kind_label
 from hq.platform.application.moments import moment
 from hq.platform.application.quoted import Quoted
 from hq.platform.application.tables import Cell, DataTable, Group, Row, TableColumn
-from hq.platform.application.tone import Tone
 
 
 def _event(item: dict[str, Any]) -> Cell:
@@ -19,11 +18,6 @@ def _event(item: dict[str, Any]) -> Cell:
     return Cell(item["event"], lines=(Cell(item["provider_label"], muted=True),))
 
 
-def _outcome(item: dict[str, Any]) -> Cell:
-    outcome = InboundOutcome(item["outcome"])
-    return Cell(outcome.label, tone=Tone.GOOD if outcome == InboundOutcome.APPLIED else "")
-
-
 EVENT_COLUMNS = (
     TableColumn("Event", kind="identifier", cell=_event),
     # Text HQ did not write: shown as the provider wrote it, and never a link.
@@ -31,7 +25,7 @@ EVENT_COLUMNS = (
     TableColumn(
         "Made due", drop=3, cell=lambda item: Cell(", ".join(kind_label(kind) for kind in item["reads"]), muted=True)
     ),
-    TableColumn("Outcome", kind="status", css="key-col", cell=_outcome),
+    TableColumn("Outcome", kind="status", css="key-col", cell=lambda item: Cell.state(InboundOutcome(item["outcome"]))),
     TableColumn("Received", sort="applied_at", cell=lambda item: Cell(moment=moment(item["applied_at"]))),
 )
 
