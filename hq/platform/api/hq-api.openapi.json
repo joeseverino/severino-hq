@@ -41375,8 +41375,8 @@
             "required": false,
             "schema": {
               "enum": [
-                "-received_at",
-                "received_at"
+                "-applied_at",
+                "applied_at"
               ],
               "type": "string"
             },

@@ -179,14 +179,14 @@ class ApplyEventsTests(TestCase):
         read = ProviderInventory.objects.get(kind="github.repository").updated_at
         self.assertGreater(read, ReadRequest.objects.get().requested_at, "the last event's ask was read")
 
-    def test_events_past_the_routine_window_are_deleted(self):
+    def test_events_stored_before_the_routine_window_are_deleted_whatever_their_sender_said(self):
         from hq.domains.control_plane.models import InboundEvent
 
         from ..inbound import prune_events
 
         self.apply(worker(PUSH, {**PUSH, "delivery_id": "older"}))
-        InboundEvent.objects.update(received_at=timezone.now())
-        InboundEvent.objects.filter(delivery_id="older").update(received_at=timezone.now() - timedelta(days=400))
+        InboundEvent.objects.update(received_at=timezone.now() - timedelta(days=400))
+        InboundEvent.objects.filter(delivery_id="older").update(applied_at=timezone.now() - timedelta(days=400))
 
         prune_events()
 
@@ -200,7 +200,7 @@ class ApplyEventsTests(TestCase):
 
         self.apply(worker(PUSH))
         told = str(InboundEvent.objects.get())
-        InboundEvent.objects.update(received_at=timezone.now() - timedelta(days=400))
+        InboundEvent.objects.update(applied_at=timezone.now() - timedelta(days=400))
 
         prune_events()
 

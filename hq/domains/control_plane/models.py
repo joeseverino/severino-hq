@@ -395,14 +395,16 @@ class InboundEvent(TimestampedModel):
     subject = models.CharField(max_length=255, blank=True)
     delivery_id = models.CharField("delivery ID", max_length=128)
     source = models.CharField(max_length=16, choices=InboundSource.choices)
+    # The sender's clock, shown and never trusted: HQ orders and prunes by
+    # its own.
     received_at = models.DateTimeField()
-    applied_at = models.DateTimeField(default=timezone.now)
+    applied_at = models.DateTimeField(default=timezone.now, db_index=True)
     outcome = models.CharField(max_length=16, choices=InboundOutcome.choices)
     # The reading kinds it made due.
     reads = models.JSONField(default=list, blank=True)
 
     class Meta:
-        ordering = ("-received_at",)
+        ordering = ("-applied_at",)
         constraints = [
             # A delivery the sender repeats is the one event.
             models.UniqueConstraint(fields=("provider", "delivery_id"), name="one_inbound_event_per_delivery"),

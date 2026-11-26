@@ -32,12 +32,12 @@ class Migration(migrations.Migration):
                 ("delivery_id", models.CharField(max_length=128, verbose_name="delivery ID")),
                 ("source", models.CharField(choices=[("worker", "Worker"), ("host", "Host")], max_length=16)),
                 ("received_at", models.DateTimeField()),
-                ("applied_at", models.DateTimeField(default=hq.platform.application.derivations._now)),
+                ("applied_at", models.DateTimeField(db_index=True, default=hq.platform.application.derivations._now)),
                 ("outcome", models.CharField(choices=[("applied", "Applied"), ("ignored", "Ignored")], max_length=16)),
                 ("reads", models.JSONField(blank=True, default=list)),
             ],
             options={
-                "ordering": ("-received_at",),
+                "ordering": ("-applied_at",),
                 "constraints": [
                     models.UniqueConstraint(fields=("provider", "delivery_id"), name="one_inbound_event_per_delivery"),
                 ],

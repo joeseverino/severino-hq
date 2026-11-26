@@ -32,7 +32,7 @@ EVENT_COLUMNS = (
         "Made due", drop=3, cell=lambda item: Cell(", ".join(kind_label(kind) for kind in item["reads"]), muted=True)
     ),
     TableColumn("Outcome", kind="status", css="key-col", cell=_outcome),
-    TableColumn("Received", sort="received_at", cell=lambda item: Cell(moment=moment(item["received_at"]))),
+    TableColumn("Received", sort="applied_at", cell=lambda item: Cell(moment=moment(item["applied_at"]))),
 )
 
 

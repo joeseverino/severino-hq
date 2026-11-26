@@ -93,7 +93,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 list_events,
                 InboundEventQuery,
                 InboundEventItem,
-                sorts=ListSort.both("-received_at", "Newest event", "Oldest event"),
+                sorts=ListSort.both("-applied_at", "Newest event", "Oldest event"),
                 filters=(
                     ListFilter("source", "Source", InboundSource.choices),
                     ListFilter("outcome", "Outcome", InboundOutcome.choices),
@@ -110,7 +110,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 "pk",
                 ("event", "subject", "provider", "delivery_id"),
                 badge_field="source",
-                timestamp_field="received_at",
+                timestamp_field="applied_at",
             ),
         ),
     )

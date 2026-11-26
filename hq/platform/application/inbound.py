@@ -71,29 +71,40 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError(departed)
     source = InboundSource(batch["source"])
     readings.note(channel(source), every=_NOTED_EVERY)
-    counts = dict.fromkeys(("applied", "repeated", "ignored"), 0)
     asked: dict[str, None] = {}
     if batch.get("reconnected"):
         asked.update(dict.fromkeys(_carried(source)))
-    for arrived in batch["events"]:
-        provider, delivery = arrived["provider"], arrived["delivery_id"]
-        if InboundEvent.objects.filter(provider=provider, delivery_id=delivery).exists():
-            counts["repeated"] += 1
+    arrivals = batch["events"]
+    stored = set(
+        InboundEvent.objects.filter(delivery_id__in={arrived["delivery_id"] for arrived in arrivals}).values_list(
+            "provider", "delivery_id"
+        )
+    )
+    new: dict[tuple[str, str], InboundEvent] = {}
+    for arrived in arrivals:
+        delivery = (arrived["provider"], arrived["delivery_id"])
+        if delivery in stored or delivery in new:
             continue
-        kinds = INBOUND[provider].reads(arrived["event"])
-        outcome = InboundOutcome.APPLIED if kinds else InboundOutcome.IGNORED
-        InboundEvent.objects.create(
-            provider=provider,
+        kinds = INBOUND[arrived["provider"]].reads(arrived["event"])
+        new[delivery] = InboundEvent(
+            provider=arrived["provider"],
             event=arrived["event"],
             subject=arrived.get("subject", ""),
-            delivery_id=delivery,
+            delivery_id=arrived["delivery_id"],
             source=source,
             received_at=moment(arrived["received_at"]),
-            outcome=outcome,
+            outcome=InboundOutcome.APPLIED if kinds else InboundOutcome.IGNORED,
             reads=list(kinds),
         )
-        counts[str(outcome)] += 1
         asked.update(dict.fromkeys(kinds))
+    # One statement for the batch; a delivery stored meanwhile by another
+    # batch is the one event, as the constraint says.
+    InboundEvent.objects.bulk_create(new.values(), ignore_conflicts=True)
+    counts = {
+        "applied": sum(event.outcome == InboundOutcome.APPLIED for event in new.values()),
+        "repeated": len(arrivals) - len(new),
+        "ignored": sum(event.outcome == InboundOutcome.IGNORED for event in new.values()),
+    }
     if asked:
         ask(reads=asked, spaced=True)
     return {"ok": True, **counts, "asked": list(asked)}
@@ -105,5 +116,5 @@ def prune_events(_progress: Any = None, *, subject: str = "", principal: Any = N
 
     del subject, principal
     days = int(settings.SEVERINO_AUDIT_ROUTINE_DAYS)
-    deleted, _ = InboundEvent.objects.filter(received_at__lt=timezone.now() - timedelta(days=days)).delete()
+    deleted, _ = InboundEvent.objects.filter(applied_at__lt=timezone.now() - timedelta(days=days)).delete()
     return {"deleted": deleted, "days": days}

@@ -26,6 +26,7 @@ def told(source: InboundSource, event: str, *, hours: int, outcome: InboundOutco
         delivery_id=f"{source}-{event}",
         source=source,
         received_at=timezone.now() - timedelta(hours=hours),
+        applied_at=timezone.now() - timedelta(hours=hours),
         outcome=outcome,
     )
 
