@@ -2139,6 +2139,65 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/environments/{environment_name}/deployment_protection_rules": {
+   "get": {
+    "operationId": "repos/get-all-deployment-protection-rules",
+    "parameters": [
+     {
+      "name": "environment_name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List of deployment protection rules",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "total_count": {
+           "description": "The number of enabled custom deployment protection rules for this environment",
+           "type": "integer",
+           "example": 10
+          },
+          "custom_deployment_protection_rules": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/deployment-protection-rule"
+           }
+          }
+         },
+         "example": {
+          "$ref": "#/components/examples/deployment-protection-rules"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/git/trees/{tree_sha}": {
    "get": {
     "operationId": "git/get-tree",
@@ -3346,6 +3405,41 @@
   }
  },
  "components": {
+  "examples": {
+   "deployment-protection-rules": {
+    "value": [
+     {
+      "total_count": 2
+     },
+     {
+      "custom_deployment_protection_rules": [
+       {
+        "id": 3,
+        "node_id": "IEH37kRlcGxveW1lbnRTdGF0ddiv",
+        "enabled": true,
+        "app": {
+         "id": 1,
+         "node_id": "GHT58kRlcGxveW1lbnRTdTY!bbcy",
+         "slug": "a-custom-app",
+         "integration_url": "https://api.github.com/apps/a-custom-app"
+        }
+       },
+       {
+        "id": 4,
+        "node_id": "MDE2OkRlcGxveW1lbnRTdHJ41128",
+        "enabled": true,
+        "app": {
+         "id": 1,
+         "node_id": "UHVE67RlcGxveW1lbnRTdTY!jfeuy",
+         "slug": "another-custom-app",
+         "integration_url": "https://api.github.com/apps/another-custom-app"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
   "schemas": {
    "actions-can-approve-pull-request-reviews": {
     "type": "boolean",
@@ -3818,6 +3912,21 @@
      "encoding"
     ]
    },
+   "custom-deployment-rule-app": {
+    "title": "Custom deployment protection rule app",
+    "description": "A GitHub App that is providing a custom deployment protection rule.",
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "integer",
+      "example": 3515,
+      "description": "The unique identifier of the deployment protection rule integration."
+     }
+    },
+    "required": [
+     "id"
+    ]
+   },
    "dependabot-alert": {
     "type": "object",
     "description": "A Dependabot alert.",
@@ -4043,6 +4152,25 @@
     "required": [
      "protected_branches",
      "custom_branch_policies"
+    ]
+   },
+   "deployment-protection-rule": {
+    "title": "Deployment protection rule",
+    "description": "Deployment protection rule",
+    "type": "object",
+    "properties": {
+     "enabled": {
+      "type": "boolean",
+      "example": true,
+      "description": "Whether the deployment protection rule is enabled for the environment."
+     },
+     "app": {
+      "$ref": "#/components/schemas/custom-deployment-rule-app"
+     }
+    },
+    "required": [
+     "enabled",
+     "app"
     ]
    },
    "deployment-reviewer-type": {

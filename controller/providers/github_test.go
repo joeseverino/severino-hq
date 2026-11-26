@@ -546,6 +546,9 @@ func githubRepositoryRoutes() map[string]string {
 			{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"test"},{"context":"lint"},{"context":"test"}]}},{"type":"non_fast_forward"},{"type":"deletion"}]`,
 		api("/environments"): `{"environments":[{"name":"production","protection_rules":[{"id":1,"type":"required_reviewers","reviewers":[{"type":"User","reviewer":{"login":"octo"}},{"type":"Team","reviewer":{"name":"ops"}}]},
 			{"id":2,"type":"wait_timer","wait_timer":5}],"deployment_branch_policy":{"protected_branches":true,"custom_branch_policies":false}},{"name":"preview"}]}`,
+		// HQ's own App is the rule on production; another App's, and HQ's switched off, are not HQ's rule.
+		api("/environments/production/deployment_protection_rules"): `{"total_count":1,"custom_deployment_protection_rules":[{"id":3,"node_id":"r3","enabled":true,"app":{"id":12345,"node_id":"a1","slug":"example-hq","integration_url":"https://api.github.com/apps/example-hq"}}]}`,
+		api("/environments/preview/deployment_protection_rules"):    `{"total_count":2,"custom_deployment_protection_rules":[{"id":4,"node_id":"r4","enabled":true,"app":{"id":99,"node_id":"a2","slug":"example-other","integration_url":"https://api.github.com/apps/example-other"}},{"id":5,"node_id":"r5","enabled":false,"app":{"id":12345,"node_id":"a1","slug":"example-hq","integration_url":"https://api.github.com/apps/example-hq"}}]}`,
 		api("/actions/runners"):                `{"runners":[{"name":"homelab","status":"online","busy":false,"labels":[{"name":"self-hosted"},{"name":"linux"}]}]}`,
 		api("/actions/permissions"):            `{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}`,
 		api("/actions/permissions/workflow"):   `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}`,
@@ -627,7 +630,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"alerts by severity; a refused kind is absent, not zero", record.Alerts, `{"code_scanning":{"high":1,"warning":1},"dependabot":{"critical":1,"high":1}}`},
 		{"live artifacts, soonest first", record.Artifacts, `[{"name":"soon","expires_at":"2030-02-01T00:00:00Z","sha":"aaaa"},{"name":"late","expires_at":"2030-03-01T00:00:00Z","sha":"aaaa"}]`},
 		{"rules", record.Rules, `{"pull_request":true,"reviews":2,"required_checks":["lint","test"],"blocks_force_push":true,"blocks_deletion":true}`},
-		{"environments", record.Environments, `[{"name":"production","reviewers":["octo","ops"],"wait_minutes":5,"branches":"protected"},{"name":"preview","reviewers":[],"wait_minutes":0,"branches":"any"}]`},
+		{"environments", record.Environments, `[{"name":"production","reviewers":["octo","ops"],"wait_minutes":5,"branches":"protected","hq_rule":true},{"name":"preview","reviewers":[],"wait_minutes":0,"branches":"any","hq_rule":false}]`},
 		{"runners", record.Runners, `[{"name":"homelab","status":"online","busy":false,"labels":["linux","self-hosted"]}]`},
 		{"access", record.Access, `{"visibility":"private","collaborators":[{"login":"octo","role":"admin"}],"deploy_keys":[{"title":"deploy","read_only":true,"last_used":"2030-01-01T00:00:00Z","created_at":"2029-01-01T00:00:00Z"}],"allowed_actions":"selected","pinning_required":true,"token":"read","token_approves_reviews":false,"vulnerability_alerts":true,"security":{"advanced_security":"disabled","secret_scanning":"enabled","secret_scanning_push_protection":null}}`},
 		{"variable names, never values", record.Variables, `["REGION"]`},

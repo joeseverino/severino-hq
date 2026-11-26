@@ -39,6 +39,9 @@ type GitHubEnvironment struct {
 	Reviewers   []string `json:"reviewers"`
 	WaitMinutes int      `json:"wait_minutes"`
 	Branches    string   `json:"branches"`
+	// HQRule is whether the App HQ reads through is an enabled custom
+	// deployment protection rule here: the rule a deployment review answers.
+	HQRule bool `json:"hq_rule"`
 }
 
 type GitHubRunner struct {

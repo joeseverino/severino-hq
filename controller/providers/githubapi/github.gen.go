@@ -1630,6 +1630,12 @@ type ContentFile struct {
 	Encoding string `json:"encoding"`
 }
 
+// CustomDeploymentRuleApp A GitHub App that is providing a custom deployment protection rule.
+type CustomDeploymentRuleApp struct {
+	// ID The unique identifier of the deployment protection rule integration.
+	ID int `json:"id"`
+}
+
 // DependabotAlert A Dependabot alert.
 type DependabotAlert struct {
 	// Dependency Details for the vulnerable dependency.
@@ -1711,6 +1717,15 @@ type DeploymentBranchPolicySettings struct {
 
 	// ProtectedBranches Whether only branches with branch protection rules can deploy to this environment. If `protected_branches` is `true`, `custom_branch_policies` must be `false`; if `protected_branches` is `false`, `custom_branch_policies` must be `true`.
 	ProtectedBranches bool `json:"protected_branches"`
+}
+
+// DeploymentProtectionRule Deployment protection rule
+type DeploymentProtectionRule struct {
+	// App A GitHub App that is providing a custom deployment protection rule.
+	App CustomDeploymentRuleApp `json:"app"`
+
+	// Enabled Whether the deployment protection rule is enabled for the environment.
+	Enabled bool `json:"enabled"`
 }
 
 // DeploymentReviewerType The type of reviewer.
@@ -3583,6 +3598,9 @@ type ClientInterface interface {
 	// ReposGetAllEnvironments performs a GET /repos/{owner}/{repo}/environments (the `ReposGetAllEnvironments` operationId) request.
 	ReposGetAllEnvironments(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ReposGetAllDeploymentProtectionRules performs a GET /repos/{owner}/{repo}/environments/{environment_name}/deployment_protection_rules (the `ReposGetAllDeploymentProtectionRules` operationId) request.
+	ReposGetAllDeploymentProtectionRules(ctx context.Context, owner string, repo string, environmentName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GitGetTree performs a GET /repos/{owner}/{repo}/git/trees/{tree_sha} (the `GitGetTree` operationId) request.
 	GitGetTree(ctx context.Context, owner string, repo string, treeSha string, params *GitGetTreeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -4122,6 +4140,19 @@ func (c *Client) ReposListDeploymentStatuses(ctx context.Context, owner string, 
 // ReposGetAllEnvironments performs a GET /repos/{owner}/{repo}/environments (the `ReposGetAllEnvironments` operationId) request.
 func (c *Client) ReposGetAllEnvironments(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewReposGetAllEnvironmentsRequest(c.Server, owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReposGetAllDeploymentProtectionRules performs a GET /repos/{owner}/{repo}/environments/{environment_name}/deployment_protection_rules (the `ReposGetAllDeploymentProtectionRules` operationId) request.
+func (c *Client) ReposGetAllDeploymentProtectionRules(ctx context.Context, owner string, repo string, environmentName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReposGetAllDeploymentProtectionRulesRequest(c.Server, owner, repo, environmentName)
 	if err != nil {
 		return nil, err
 	}
@@ -6397,6 +6428,54 @@ func NewReposGetAllEnvironmentsRequest(server string, owner string, repo string)
 	return req, nil
 }
 
+// NewReposGetAllDeploymentProtectionRulesRequest constructs an http.Request for the ReposGetAllDeploymentProtectionRules method
+func NewReposGetAllDeploymentProtectionRulesRequest(server string, owner string, repo string, environmentName string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "environment_name", environmentName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/environments/" + pathParam2 + "/deployment_protection_rules"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGitGetTreeRequest constructs an http.Request for the GitGetTree method
 func NewGitGetTreeRequest(server string, owner string, repo string, treeSha string, params *GitGetTreeParams) (*http.Request, error) {
 	var err error
@@ -7834,6 +7913,11 @@ type ClientWithResponsesInterface interface {
 	//
 	// Returns a wrapper object for the known response body format(s).
 	ReposGetAllEnvironmentsWithResponse(ctx context.Context, owner string, repo string, reqEditors ...RequestEditorFn) (*ReposGetAllEnvironmentsReply, error)
+
+	// ReposGetAllDeploymentProtectionRulesWithResponse performs a GET /repos/{owner}/{repo}/environments/{environment_name}/deployment_protection_rules (the `ReposGetAllDeploymentProtectionRules` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ReposGetAllDeploymentProtectionRulesWithResponse(ctx context.Context, owner string, repo string, environmentName string, reqEditors ...RequestEditorFn) (*ReposGetAllDeploymentProtectionRulesReply, error)
 
 	// GitGetTreeWithResponse performs a GET /repos/{owner}/{repo}/git/trees/{tree_sha} (the `GitGetTree` operationId) request.
 	//
@@ -9333,6 +9417,57 @@ func (r ReposGetAllEnvironmentsReply) ContentType() string {
 	return ""
 }
 
+type ReposGetAllDeploymentProtectionRulesReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		CustomDeploymentProtectionRules []DeploymentProtectionRule `json:"custom_deployment_protection_rules,omitempty"`
+
+		// TotalCount The number of enabled custom deployment protection rules for this environment
+		TotalCount int `json:"total_count,omitempty"`
+	}
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReposGetAllDeploymentProtectionRulesReply) GetJSON200() *struct {
+	CustomDeploymentProtectionRules []DeploymentProtectionRule `json:"custom_deployment_protection_rules,omitempty"`
+
+	// TotalCount The number of enabled custom deployment protection rules for this environment
+	TotalCount int `json:"total_count,omitempty"`
+} {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ReposGetAllDeploymentProtectionRulesReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReposGetAllDeploymentProtectionRulesReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReposGetAllDeploymentProtectionRulesReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReposGetAllDeploymentProtectionRulesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GitGetTreeReply struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -10645,6 +10780,17 @@ func (c *ClientWithResponses) ReposGetAllEnvironmentsWithResponse(ctx context.Co
 	return ParseReposGetAllEnvironmentsReply(rsp)
 }
 
+// ReposGetAllDeploymentProtectionRulesWithResponse performs a GET /repos/{owner}/{repo}/environments/{environment_name}/deployment_protection_rules (the `ReposGetAllDeploymentProtectionRules` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ReposGetAllDeploymentProtectionRulesWithResponse(ctx context.Context, owner string, repo string, environmentName string, reqEditors ...RequestEditorFn) (*ReposGetAllDeploymentProtectionRulesReply, error) {
+	rsp, err := c.ReposGetAllDeploymentProtectionRules(ctx, owner, repo, environmentName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReposGetAllDeploymentProtectionRulesReply(rsp)
+}
+
 // GitGetTreeWithResponse performs a GET /repos/{owner}/{repo}/git/trees/{tree_sha} (the `GitGetTree` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -11738,6 +11884,37 @@ func ParseReposGetAllEnvironmentsReply(rsp *http.Response) (*ReposGetAllEnvironm
 			Environments []Environment `json:"environments,omitempty"`
 
 			// TotalCount The number of environments in this repository
+			TotalCount int `json:"total_count,omitempty"`
+		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReposGetAllDeploymentProtectionRulesReply parses an HTTP response from a ReposGetAllDeploymentProtectionRulesWithResponse call
+func ParseReposGetAllDeploymentProtectionRulesReply(rsp *http.Response) (*ReposGetAllDeploymentProtectionRulesReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReposGetAllDeploymentProtectionRulesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			CustomDeploymentProtectionRules []DeploymentProtectionRule `json:"custom_deployment_protection_rules,omitempty"`
+
+			// TotalCount The number of enabled custom deployment protection rules for this environment
 			TotalCount int `json:"total_count,omitempty"`
 		}
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {

@@ -24,7 +24,7 @@ func reviewSpec(state string) Object {
 // schemas answer it: its status and commit, and the environments it waits on.
 func reviewRoutes(status, sha, waitsOn string) map[string]string {
 	return map[string]string{
-		githubFakeAPI + " " + reviewRun: `{"id":41,"name":"Deploy","head_branch":"main","head_sha":"` + sha + `","status":"` + status + `","conclusion":null}`,
+		githubFakeAPI + " " + reviewRun:                          `{"id":41,"name":"Deploy","head_branch":"main","head_sha":"` + sha + `","status":"` + status + `","conclusion":null}`,
 		githubFakeAPI + " " + reviewRun + "/pending_deployments": `[{"environment":{"id":9,"name":"` + waitsOn + `"},"wait_timer":0,"wait_timer_started_at":null,"current_user_can_approve":false,"reviewers":[]}]`,
 	}
 }

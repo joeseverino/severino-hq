@@ -55,6 +55,7 @@ output-options:
     - rate-limit/get
     - repos/check-vulnerability-alerts
     - repos/get
+    - repos/get-all-deployment-protection-rules
     - repos/get-all-environments
     - repos/get-branch-rules
     - repos/get-commit

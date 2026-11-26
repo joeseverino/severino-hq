@@ -453,7 +453,11 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		if err != nil {
 			return nil, err
 		}
-		return githubEnvironments(found.Environments)
+		environments, err := githubEnvironments(found.Environments)
+		if err != nil {
+			return nil, err
+		}
+		return environments, g.hqRules(ctx, environments)
 	})
 	if record.Environments == nil {
 		record.Environments = []GitHubEnvironment{}
@@ -620,6 +624,22 @@ func (g *githubRepository) waiting(ctx context.Context, runs []githubapi.Workflo
 		found = append(found, GitHubWaitingRun{GitHubRun: githubRunOf(run), Environments: sortedKeys(environments)})
 	}
 	return found, nil
+}
+
+// hqRules marks each environment where this connection's App is an enabled
+// custom deployment protection rule. GitHub lists custom rules per
+// environment, apart from the built-in ones the environments list carries.
+func (g *githubRepository) hqRules(ctx context.Context, environments []GitHubEnvironment) error {
+	for i := range environments {
+		found, err := json200(g.api.ReposGetAllDeploymentProtectionRulesWithResponse(ctx, g.owner, g.repo, environments[i].Name))
+		if err != nil {
+			return err
+		}
+		environments[i].HQRule = slices.ContainsFunc(found.CustomDeploymentProtectionRules, func(rule githubapi.DeploymentProtectionRule) bool {
+			return rule.Enabled && strconv.Itoa(rule.App.ID) == g.c.appID
+		})
+	}
+	return nil
 }
 
 // deployments is the newest deployment to each environment, with its latest status.

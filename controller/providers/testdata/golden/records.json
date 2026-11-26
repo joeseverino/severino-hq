@@ -557,7 +557,8 @@
             "example"
           ],
           "wait_minutes": 1,
-          "branches": "example"
+          "branches": "example",
+          "hq_rule": true
         }
       ],
       "runners": [
