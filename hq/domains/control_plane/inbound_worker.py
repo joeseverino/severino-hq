@@ -28,7 +28,7 @@ HEADER = """\
 # What the Worker is, whatever the providers declare.
 SETTINGS = {
     "$schema": "node_modules/wrangler/config-schema.json",
-    "name": "hq-inbound",
+    "name": "hq-events",
     "main": "src/index.ts",
     "compatibility_date": "2026-11-23",
     "workers_dev": False,

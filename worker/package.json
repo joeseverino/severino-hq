@@ -1,5 +1,4 @@
 {
-  "name": "hq-inbound-worker",
   "private": true,
   "type": "module",
   "devDependencies": {
