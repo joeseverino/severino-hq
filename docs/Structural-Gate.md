@@ -60,9 +60,12 @@ on a diff, in CI and `mise run lint`.
 
 A module-level undecorated Python function has no runtime arguments and
 exactly one return statement. Its returned tree contains only constants,
-names, attribute references, tuples, and calls to the imported
-ResourceSpec/ListRead/SearchDefinition contract constructors. Relative imports are
-resolved.
+names, attribute references, tuples, and calls to an imported contract
+constructor. The constructors are read from the resource contract's modules
+(`CONTRACTS` in `tools/structural/classify.py`): each frozen dataclass they
+declare (`ResourceSpec`, `ListRead`, `ListSort`, `SearchDefinition`) and each
+classmethod one of those declares (`ListSort.both`, `SearchDefinition.of`).
+Relative imports are resolved.
 
 Constructor rebinding, lists and dicts, operators, control flow, starred
 arguments and computed calls do not qualify.

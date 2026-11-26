@@ -110,12 +110,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             ),
             detail_handler=content.get_content,
             identifier="slug",
-            search=SearchDefinition(
-                "content",
+            search=SearchDefinition.of(
                 ContentItem,
                 "slug",
                 ("title", "slug", "topic", "tags", "notes"),
-                label="Content",
                 title_field="title",
             ),
             web_route="content:list",

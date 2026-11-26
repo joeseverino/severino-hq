@@ -273,12 +273,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             ),
             detail_handler=projects.get_project,
             identifier="slug",
-            search=SearchDefinition(
-                "projects",
+            search=SearchDefinition.of(
                 Project,
                 "slug",
                 ("name", "slug", "description", "technologies_used", "notes"),
-                label="Projects",
                 title_field="name",
             ),
             web_route="projects:list",

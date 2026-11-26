@@ -93,10 +93,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 list_events,
                 InboundEventQuery,
                 InboundEventItem,
-                sorts=(
-                    ListSort("-received_at", "Newest event", ("-received_at", "-pk")),
-                    ListSort("received_at", "Oldest event", ("received_at", "pk")),
-                ),
+                sorts=ListSort.both("-received_at", "Newest event", "Oldest event"),
                 filters=(
                     ListFilter("source", "Source", InboundSource.choices),
                     ListFilter("outcome", "Outcome", InboundOutcome.choices),
@@ -108,12 +105,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             web_route="control_plane:events",
             record_type=InboundEventItem,
             # A delivery id pasted from the provider's log finds its event.
-            search=SearchDefinition(
-                INBOUND_EVENTS,
+            search=SearchDefinition.of(
                 InboundEvent,
                 "pk",
                 ("event", "subject", "provider", "delivery_id"),
-                label="Events",
                 badge_field="source",
                 timestamp_field="received_at",
             ),

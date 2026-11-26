@@ -15,11 +15,43 @@ from operator import eq
 from pathlib import Path
 from typing import NamedTuple
 
-CONSTRUCTORS = {
-    "hq.platform.application.integration_specs.ListRead",
-    "hq.platform.application.integration_specs.ResourceSpec",
-    "hq.platform.application.search_contracts.SearchDefinition",
-}
+# The modules that declare a resource's contract, each read from this checkout.
+CONTRACTS = ("hq/platform/application/integration_specs.py", "hq/platform/application/search_contracts.py")
+_CHECKOUT = Path(__file__).resolve().parents[2]
+
+
+@cache
+def constructors():
+    """The dotted names a declaration may call: each frozen dataclass the
+    contract modules declare, and each classmethod one of them declares."""
+
+    names = set()
+    for path in CONTRACTS:
+        module = path.removesuffix(".py").replace("/", ".")
+        for node in ast.parse((_CHECKOUT / path).read_text()).body:
+            if isinstance(node, ast.ClassDef) and any(map(frozen_dataclass, node.decorator_list)):
+                names.add(f"{module}.{node.name}")
+                names |= {
+                    f"{module}.{node.name}.{method.name}"
+                    for method in node.body
+                    if isinstance(method, ast.FunctionDef)
+                    and any(isinstance(d, ast.Name) and d.id == "classmethod" for d in method.decorator_list)
+                }
+    return frozenset(names)
+
+
+def frozen_dataclass(decorator):
+    """Whether a class decorator is ``@dataclass(frozen=True, ...)``."""
+
+    return (
+        isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Name)
+        and decorator.func.id == "dataclass"
+        and any(
+            k.arg == "frozen" and isinstance(k.value, ast.Constant) and k.value.value is True
+            for k in decorator.keywords
+        )
+    )
 
 
 def constructor_bindings(tree, path):
@@ -28,7 +60,7 @@ def constructor_bindings(tree, path):
     name a second way, since a call of it could then run anything."""
 
     bindings = imported_names(tree, path)
-    constructors_bound = {name for name, target in bindings.items() if target in CONSTRUCTORS}
+    constructors_bound = {name for name, target in bindings.items() if target in constructors()}
     if any(rebinds(node, constructors_bound) for node in ast.walk(tree)):
         return {}
     return bindings
@@ -95,7 +127,7 @@ def takes_anything(function):
 
 class Declaration:
     """Reads an expression as a declaration: only constants, names, attributes
-    of names, tuples, and calls of a constructor ``CONSTRUCTORS`` lists with
+    of names, tuples, and calls of a constructor ``constructors`` names with
     arguments of the same kind, noting each constructor it calls."""
 
     def __init__(self, bindings):
@@ -114,8 +146,15 @@ class Declaration:
         return False
 
     def constructor_call(self, node):
-        target = self.bindings.get(node.func.id) if isinstance(node.func, ast.Name) else None
-        if target not in CONSTRUCTORS:
+        func = node.func
+        if isinstance(func, ast.Name):
+            target = self.bindings.get(func.id)
+        elif isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+            owner = self.bindings.get(func.value.id)
+            target = f"{owner}.{func.attr}" if owner in constructors() else None
+        else:
+            target = None
+        if target not in constructors():
             return False
         self.constructors.append(target)
         return all(self.literal(child) for child in node.args) and all(

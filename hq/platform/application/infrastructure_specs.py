@@ -325,12 +325,10 @@ InfrastructureResourceQuery = create_model(
     ),
 )
 
-SEARCH = ResourceSearchDefinition(
-    "infrastructure",
+SEARCH = ResourceSearchDefinition.of(
     ManagedResource,
     "key",
     ("key", "kind", "spec", "status", "conditions"),
-    label="Records",
     title_field="key",
     badge_field="kind_label",
     snippet_field="search_summary",

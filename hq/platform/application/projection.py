@@ -278,11 +278,12 @@ def _claimed() -> PageScope:
 
 def _ordered(rows: QuerySet, order: tuple[str, ...]) -> QuerySet:
     """``rows`` in ``order``, with the primary key last so no two rows tie and
-    a page holds the same rows on every read."""
+    a page holds the same rows on every read. It runs the way the last key
+    does, so rows of one moment come newest first in a newest-first list."""
 
     keys = tuple(name.removeprefix("-") for name in order)
     if not any(key in ("pk", rows.model._meta.pk.name) for key in keys):
-        order = (*order, "pk")
+        order = (*order, "-pk" if order and order[-1].startswith("-") else "pk")
     return rows.order_by(*order)
 
 

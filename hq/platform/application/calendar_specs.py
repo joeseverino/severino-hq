@@ -163,12 +163,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             listing=ListRead(calendar_entries.list_agenda, AgendaQuery, AgendaItem),
             detail_handler=calendar_entries.get_entry,
             identifier="uid",
-            search=SearchDefinition(
-                "calendar",
+            search=SearchDefinition.of(
                 Entry,
                 "uid",
                 ("title", "location", "notes"),
-                label="Calendar",
                 title_field="title",
             ),
             web_route="calendar:month",

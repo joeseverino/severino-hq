@@ -179,8 +179,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 AuditQuery,
                 AuditItem,
                 sorts=(
-                    ListSort("-created_at", "Newest event", ("-created_at", "-pk")),
-                    ListSort("created_at", "Oldest event", ("created_at", "pk")),
+                    *ListSort.both("-created_at", "Newest event", "Oldest event"),
                     *ListSort.both("object_type", "Type"),
                     *ListSort.both("user__username", "User"),
                     *ListSort.both("action", "Action"),
@@ -217,12 +216,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             identifier="id",
             identifier_type=RecordId,
             record_type=AuditItem,
-            search=SearchDefinition(
-                "audit",
+            search=SearchDefinition.of(
                 AuditLog,
                 "pk",
                 ("action", "object_type", "object_id", "object_repr", "operation_id", "message"),
-                label="Audit log",
                 title_field="search_title",
                 badge_field="type_label",
                 timestamp_field="created_at",

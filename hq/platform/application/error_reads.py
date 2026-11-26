@@ -87,21 +87,16 @@ def resources() -> tuple[ResourceSpec, ...]:
                 list_errors,
                 ServerErrorQuery,
                 ServerErrorItem,
-                sorts=(
-                    ListSort("-occurred_at", "Newest error", ("-occurred_at", "-pk")),
-                    ListSort("occurred_at", "Oldest error", ("occurred_at", "pk")),
-                ),
+                sorts=ListSort.both("-occurred_at", "Newest error", "Oldest error"),
             ),
             detail_handler=get_error,
             identifier="request_id",
             record_type=ServerErrorRecord,
             # A request id pasted into HQ's search finds its error; the traceback is never indexed.
-            search=SearchDefinition(
-                SERVER_ERRORS,
+            search=SearchDefinition.of(
                 ServerError,
                 "request_id",
                 ("request_id", "exception", "message", "path"),
-                label="Errors",
                 title_field="exception",
                 badge_field="method",
                 timestamp_field="occurred_at",

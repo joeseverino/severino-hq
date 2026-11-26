@@ -4,7 +4,7 @@ import annotationlib
 import inspect
 from annotationlib import Format
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
+from dataclasses import dataclass, fields as dataclass_fields, is_dataclass, replace
 from functools import cache
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
@@ -642,6 +642,13 @@ class ResourceSpec(Requires):
     pass_principal: bool = False
     # The TypedDict a read of one record answers.
     record_type: type | None = None
+
+    def __post_init__(self) -> None:
+        # A search declared through ``SearchDefinition.of`` is this resource's
+        # by name and label.
+        if isinstance(self.search, SearchDefinition):
+            found = replace(self.search, scope=self.search.scope or self.name, label=self.search.label or self.label)
+            object.__setattr__(self, "search", found)
 
     @property
     def read_around(self) -> frozenset[str]:
