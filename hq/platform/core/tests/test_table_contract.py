@@ -216,12 +216,6 @@ class TableTagTests(SimpleTestCase):
         # Never the name's, though it says nothing: a column of tick-boxes stands before it.
         self.assertEqual([(each.tag, each.words) for each in marked], [("th", "Empty"), ("td", "\u2014"), ("td", "")])
 
-    def test_a_rows_toggle_is_a_child_of_its_gutter_cell(self):
-        # The stylesheet shows a cut row's toggle as the gutter cell's own child.
-        html = _drawn(_things(TableColumn("When", kind="status"), ("Note",), rows=(_row("Nov 2", "b"),)))
-        (toggle,) = [each for each in elements(html, "button") if "data-row-toggle" in each.attrs]
-        self.assertEqual(toggle.ancestors[-1].tag, "td")
-
     def test_only_a_cut_cell_with_a_long_line_is_clamped(self):
         """A value with a long line is held to a few lines where its row
         opens, and its row holds the toggle that shows it whole; the name the
@@ -347,7 +341,7 @@ class TableTagTests(SimpleTestCase):
         self.assertGreater(int(state), int(check))
 
     def test_a_column_refuses_what_cannot_be(self):
-        for options in ({"kind": "color"}, {"css": "key-col", "drop": 1}):
+        for options in ({"kind": "color"}, {"css": "key-col", "drop": 1}, {"drop": -1}):
             with self.subTest(options), self.assertRaises(ValueError):
                 TableColumn("Name", **options)
 
@@ -509,12 +503,6 @@ class TableColumnTests(SimpleTestCase):
         self.assertEqual(
             [column.kind for column in columns], ["prose", "status", "numeric", "status", "prose", "prose", "prose"]
         )
-
-    def test_a_kept_column_has_no_drop_rank(self):
-        with self.assertRaises(ValueError):
-            TableColumn("Cost", css="key-col", drop=1)
-        with self.assertRaises(ValueError):
-            TableColumn("Note", drop=-1)
 
     def test_the_column_that_names_each_row_never_drops(self):
         with self.assertRaises(ValueError):

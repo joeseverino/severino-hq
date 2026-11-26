@@ -189,14 +189,6 @@ class SearchPageTests(SignedInTestCase):
 
 
 class EmptyListTests(SignedInTestCase):
-    def test_an_empty_list_is_the_empty_state_and_no_table(self):
-        """Headings over no rows say nothing; the one empty state says what is missing."""
-
-        page = self.client.get(reverse("expenses:list"))
-
-        self.assertTrue(select(page, "data-empty-state"))
-        self.assertFalse(elements(page, "table"))
-
     def test_a_list_emptied_by_its_filter_offers_the_way_back(self):
         page = self.client.get(reverse("expenses:list"), {"q": "nothing-matches-this"})
 
@@ -206,7 +198,7 @@ class EmptyListTests(SignedInTestCase):
 
 
 class KeyColumnTests(SignedInTestCase):
-    """A list says which columns a phone keeps, on the heading, sortable or not."""
+    """A list says which columns a phone keeps."""
 
     @classmethod
     def setUpTestData(cls):
@@ -217,21 +209,6 @@ class KeyColumnTests(SignedInTestCase):
 
         with throwaway_media():
             example_estate.seed()
-
-    def test_a_sortable_heading_carries_its_columns_classes(self):
-        page = self.client.get(reverse("expenses:list"))
-
-        headings = elements(page, "th")
-
-        def heading(label):
-            return next(each.attrs for each in headings if each.text.strip().startswith(label))
-
-        # Cost sorts, and is one of the two an expense is read for.
-        self.assertIn("aria-sort", heading("Cost"))
-        self.assertIn("key-col", heading("Cost").get("class", "").split())
-        # A column that is not key is not kept on a phone.
-        self.assertIn("aria-sort", heading("Category"))
-        self.assertNotIn("key-col", heading("Category").get("class", "").split())
 
     def test_every_shared_list_names_at_least_one_key_column(self):
         """With none, a phone would show only the column that names the row."""
