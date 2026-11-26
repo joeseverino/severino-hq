@@ -16,6 +16,7 @@ from typing import Any
 
 from hq.platform.core.digests import canonical
 
+from .display_words import display
 from .labels import field_label, lower_first
 from .moments import moment
 from .printable import admitted
@@ -160,7 +161,7 @@ def field_words(name: str, schema: Mapping[str, Any] | None = None) -> str:
     return field_label(name, (schema or {}).get("title"))
 
 
-@dataclass(frozen=True, slots=True)
+@display
 class ChangeRow:
     """One value that moves, named and valued in words.
 
