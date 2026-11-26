@@ -41,7 +41,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% else %}
         <small>{{ standing.update_note }}</small>
       {% endif %}
-      {% if standing.read_at %}<small>{% include "partials/_reading_age.html" with at=standing.read_at only %}</small>{% endif %}
+      {% if standing.read_at %}<small>{% include "partials/_reading_age.html" with reading=standing.reading only %}</small>{% endif %}
     {% endfact %}
     {% fact "Known vulnerabilities" icon="shield" value=standing.vulnerabilities_said %}
   {% endif %}

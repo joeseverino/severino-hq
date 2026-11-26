@@ -58,6 +58,9 @@ class PublishedImageRecord(ObservationRecord):
     digests: dict[str, str] = {}
     # Tags whose digest could not be read, which makes the image due again.
     unresolved: tuple[str, ...] = ()
+    # The references running when it was read: once a container runs another
+    # (an upgrade applied), the image is due again.
+    references: tuple[str, ...] = ()
     # What the image says about itself in its build labels: the repository it
     # is built from, the commit and the version.
     source: str = ""

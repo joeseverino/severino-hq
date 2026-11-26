@@ -47,6 +47,7 @@ lazy from .container_standard import posture_of, runtime_path
 lazy from .container_usage import usage_of
 lazy from .entity_links import container_link, entity_link
 lazy from .facts import inventory_records
+lazy from .freshness import Freshness, freshness
 lazy from .github_estate import build_of, repositories
 lazy from .infrastructure import enabled_resources
 lazy from .inventory import record_token
@@ -403,6 +404,12 @@ class ImageStanding(ImageStandingWords):
         if self.unread or not version(self.tag) or self.read_at is None:
             return UNKNOWN
         return CURRENT
+
+    @property
+    def reading(self) -> Freshness:
+        """Its registry reading's age, judged by how often an image is read."""
+
+        return freshness(IMAGE_KIND, self.read_at)
 
     @property
     def newest(self) -> bool:

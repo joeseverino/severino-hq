@@ -272,6 +272,7 @@ def read_image(name: str, references: tuple[str, ...]) -> dict[str, Any]:
         # Due again on the next refresh rather than in a day: a digest an
         # upgrade would pin is worth the extra read.
         "unresolved": unresolved,
+        "references": list(references),
         "source": built.get("org.opencontainers.image.source", ""),
         "revision": built.get("org.opencontainers.image.revision", ""),
         "version": built.get("org.opencontainers.image.version", ""),
@@ -411,17 +412,28 @@ def _advisory(item: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _due(record: Mapping[str, Any] | None, kind: str, now: datetime, *, force: bool) -> bool:
-    """Whether one subject's record of ``kind`` is due to be read again."""
+def _due(record: Mapping[str, Any] | None, kind: str, now: datetime, *, force: bool, moved: bool = False) -> bool:
+    """Whether one subject's record of ``kind`` is due to be read again:
+    ``moved`` when what it was read for is no longer what runs."""
 
     if record is None or record.get("unresolved"):
         return True
     read_at = record_read_at(record) or datetime.min.replace(tzinfo=now.tzinfo)
     if record.get("unread"):
         return read_at < now - RETRY_AFTER
+    if moved:
+        return True
     if kind in _UNCHANGING:
         return False
     return force or freshness(kind, read_at, now).due
+
+
+def _moved(record: Mapping[str, Any], references: tuple[str, ...]) -> bool:
+    """Whether an image was read for other references than those running now.
+    A reading that does not say what it was read for ages out on its cadence."""
+
+    read_for = record.get("references")
+    return read_for is not None and tuple(read_for) != references
 
 
 def _report(
@@ -433,6 +445,7 @@ def _report(
     budget: int = LOOKUPS_PER_REFRESH,
     *,
     force: bool = False,
+    moved: Callable[[str, Mapping[str, Any]], bool] | None = None,
 ) -> dict[str, Any] | None:
     """One kind's payload for the ingest, or None when nothing is due.
 
@@ -443,7 +456,17 @@ def _report(
     stored = ProviderInventory.objects.filter(kind=kind).first()
     kept = {str(record.get(key, "")): record for record in (stored.records if stored is not None else ())}
     wanted = tuple(dict.fromkeys(subjects))
-    due = [subject for subject in wanted if _due(kept.get(subject), kind, now, force=force)]
+    due = [
+        subject
+        for subject in wanted
+        if _due(
+            kept.get(subject),
+            kind,
+            now,
+            force=force,
+            moved=moved is not None and subject in kept and moved(subject, kept[subject]),
+        )
+    ]
     dropped = set(kept) - set(wanted)
     current = stored is not None and (
         kind not in _UNCHANGING or (stored.observed_at is not None and not freshness(kind, stored.observed_at, now).due)
@@ -520,7 +543,15 @@ def _images(now: datetime, *, force: bool) -> list[Any]:
 
     images = wanted_images()
     stages = (
-        lambda: _report(IMAGE_KIND, "image", images, lambda name: read_image(name, images[name]), now, force=force),
+        lambda: _report(
+            IMAGE_KIND,
+            "image",
+            images,
+            lambda name: read_image(name, images[name]),
+            now,
+            force=force,
+            moved=lambda name, record: _moved(record, images[name]),
+        ),
         lambda: _report(DIGEST_KIND, "digest", wanted_digests(), read_digest, now),
         lambda: _report(
             UPSTREAM_KIND, "repository", wanted_upstreams(), read_upstream, now, UPSTREAMS_PER_REFRESH, force=force
@@ -576,11 +607,17 @@ def refresh(
 
 def registry_due() -> bool:
     """Whether a sweep found an image, or a digest of one, that HQ has not
-    read. Cheap enough to ask on every sweep: two stored readings, no join."""
+    read, or an image now running as references it was not read for. Cheap enough to ask on every sweep: two stored readings, no join."""
 
     wanted = wanted_images()
-    held_images = {str(record.get("image")) for _snapshot, record in inventory_records(IMAGE_KIND)}
-    if set(wanted) - held_images:
+    held_images = {str(record.get("image")): record for _snapshot, record in inventory_records(IMAGE_KIND)}
+    if set(wanted) - set(held_images):
+        return True
+    if any(
+        not record.get("unread") and _moved(record, wanted[name])
+        for name, record in held_images.items()
+        if name in wanted
+    ):
         return True
     running = {
         f"{image.name}@{image.digest}"
