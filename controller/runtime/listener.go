@@ -46,9 +46,11 @@ type Listener struct {
 	// Post is the bridge's events action.
 	Post func(context.Context, InboundBatch) error
 	Log  *slog.Logger
-	// The pace, ListenerPing and NewBurst's unless a test sets its own.
-	Ping  time.Duration
-	Burst Burst
+	// The pace, ListenerPing and NewBurst's unless a test sets its own: a
+	// ping every Ping, each ending the connection unless answered within
+	// PongWait (gorilla/websocket's pingPeriod and pongWait).
+	Ping, PongWait time.Duration
+	Burst          Burst
 	Reconnect
 }
 
@@ -62,7 +64,7 @@ func NewListener(connection connections.Connection, client *http.Client, post fu
 	}
 	return &Listener{
 		URL: connection.APIToken.URL, Token: connection.APIToken.APIToken, Client: client, Post: post, Log: log,
-		Ping: ListenerPing, Burst: NewBurst(), Reconnect: NewReconnect(),
+		Ping: ListenerPing, PongWait: ListenerPing, Burst: NewBurst(), Reconnect: NewReconnect(),
 	}, nil
 }
 
@@ -127,7 +129,7 @@ func (l *Listener) session(ctx context.Context) error {
 				return
 			case <-ticker.C:
 			}
-			pinged, stop := context.WithTimeout(ctx, l.Ping)
+			pinged, stop := context.WithTimeout(ctx, l.PongWait)
 			err := conn.Ping(pinged)
 			stop()
 			if err != nil {

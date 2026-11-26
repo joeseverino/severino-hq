@@ -206,7 +206,7 @@ func TestAnUnansweredPingEndsTheConnectionWithNoHeartbeat(t *testing.T) {
 	w := newHub(t, holding)
 	w.pong = false
 	listener := listenerFor(t, w, bridge)
-	listener.Ping = 10 * time.Millisecond
+	listener.Ping, listener.PongWait = 10*time.Millisecond, 10*time.Millisecond
 	run(t, listener)
 
 	for range 2 {
