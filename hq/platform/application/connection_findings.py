@@ -6,7 +6,6 @@ from . import credential_findings
 from .credential_findings import mint_steps
 from .entity_links import entity_link
 from .finding_model import (
-    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     FindingRule,
@@ -120,7 +119,7 @@ RULES: tuple[FindingRule, ...] = (
         "Connection not answering",
         Tone.ATTENTION,
         _connection_not_answering,
-        operator_action=f"Open the connection and fix what its error says. {THEN_CHECK_AGAIN}",
+        operator_action="Open the connection and fix what its error says.",
         no_help_reason="HQ cannot change 1Password or your network.",
         bars={Tone.ATTENTION: "a connection fails its check"},
     ),
@@ -129,7 +128,7 @@ RULES: tuple[FindingRule, ...] = (
         "Certificate not checked",
         Tone.SERIOUS,
         _unreachable_consumer,
-        operator_action=f"Make it reachable from the controller's machine. {THEN_CHECK_AGAIN}",
+        operator_action="Make it reachable from the controller's machine.",
         no_help_reason="HQ cannot reach it any other way.",
         # Says the same thing with the name of the consumer in it. The generic
         # rule would otherwise put this in front of an operator twice.

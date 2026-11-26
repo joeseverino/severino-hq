@@ -7,13 +7,14 @@ requires it to fail, declared or derived with the reason, is "by design" and nev
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Self
 
 from .labels import dotted
 from .tone import Tone, Toned
 from .ui import counted, ended
 lazy from . import dashboard
+lazy from .cadence import ControllerSweepCommand, swept
 lazy from .finding_model import Finding
 lazy from .standard_findings import worded
 
@@ -232,6 +233,9 @@ class Measurement:
     # What a finding about one check offers (``standard_findings.Help``), for
     # a standard whose subject has its fix written for it.
     helps: Callable[[Check], Any] | None = None
+    # The kind of reading its checks are measured on, which its findings ask
+    # again to be checked on fresh data; "" where none is.
+    reads: str = ""
 
     @property
     def met(self) -> int:
@@ -292,12 +296,16 @@ class Measurement:
         fails by design with why."""
 
         unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
+        read = ControllerSweepCommand(kind=self.reads) if self.reads and swept(self.reads) else None
         return tuple(
-            worded(
-                _rule(result.check),
-                (result.check,),
-                [(None, result)],
-                said=[self.helps(result.check)] if self.helps else None,
+            replace(
+                worded(
+                    _rule(result.check),
+                    (result.check,),
+                    [(None, result)],
+                    said=[self.helps(result.check)] if self.helps else None,
+                ),
+                read_now=read,
             )
             for result in unmet
         ) + tuple(
@@ -331,11 +339,13 @@ def measure(
     enforced: bool = True,
     quiet: tuple[Check, ...] = (),
     helps: Callable[[Check], Any] | None = None,
+    reads: str = "",
 ) -> Measurement:
     """``subject`` against every check in ``standard`` that applies to it.
     ``intended`` maps a check it fails on purpose to why; with ``enforced``
     false an unmet check is an open item rather than a fault, as it is for
-    each check in ``quiet``; ``helps`` words each finding's fix."""
+    each check in ``quiet``; ``helps`` words each finding's fix; ``reads``
+    is the kind of reading the checks are measured on."""
 
     results = []
     for check in standard:
@@ -344,7 +354,7 @@ def measure(
         reading = check.test(subject)
         reason = (intended or {}).get(check.id, "") if reading.standing is Standing.UNMET else ""
         results.append(CheckResult(check, reading, reason, enforced and not any(check is held for held in quiet)))
-    return Measurement(subject, tuple(results), enforced, helps)
+    return Measurement(subject, tuple(results), enforced, helps, reads)
 
 
 def _rule(check: Check) -> str:

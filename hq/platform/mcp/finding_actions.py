@@ -12,9 +12,10 @@ from pydantic import ConfigDict, with_config
 
 from hq.platform.application.action_links import INVESTIGATIONS, READ_NOW_CAPABILITY
 from hq.platform.application.answer_fields import Pinned, SchemaVersion
+from hq.platform.application.cadence import CONTROLLER_REFRESH
 from hq.platform.application.capabilities import command_spec
 from hq.platform.application.describe import Describe
-from hq.platform.application.finding_model import CHECK_AGAIN, Finding
+from hq.platform.application.finding_model import Finding
 from hq.platform.application.finding_steps import Do, Press, Run
 from hq.platform.application.findings import (
     NODE_READ,
@@ -199,11 +200,11 @@ def _read(link: ActionLink, finding: Finding) -> RecordCall | None:
 def _check(finding: Finding) -> list[Call]:
     """Read again what it rests on, where it asks to, then run its check."""
 
-    again: FindingsCall = {"label": CHECK_AGAIN, "tool": "get_findings", "arguments": {"rule": finding.rule}}
+    again: FindingsCall = {"label": "Run its check", "tool": "get_findings", "arguments": {"rule": finding.rule}}
     if finding.read_now is None:
         return [again]
     payload = {field: value for field, value in asdict(finding.read_now).items() if value}
-    return [_command(CHECK_AGAIN, READ_NOW_CAPABILITY, "", payload), again]
+    return [_command(CONTROLLER_REFRESH.words(), READ_NOW_CAPABILITY, "", payload), again]
 
 
 def _unique[T: Call](calls: list[T | None]) -> list[T]:

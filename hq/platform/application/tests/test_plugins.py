@@ -776,7 +776,7 @@ class ComposedPluginTestKitTests(TestCase):
 
 
 class AttentionOrderTests(SimpleTestCase):
-    def entry(self, title, status="attention", *, since=None, notice=None, source="Example", actions=(), check=None):
+    def entry(self, title, status="attention", *, since=None, notice=None, source="Example", actions=()):
         from ..finding_model import Finding
         from ..finding_steps import Do, Press
 
@@ -789,7 +789,6 @@ class AttentionOrderTests(SimpleTestCase):
             since=since,
             notice=notice,
             steps=tuple(Press(action) for action in actions) or (Do("Fix it."),),
-            check=check,
         )
         return {"finding": finding, "source": source, "source_id": "example"}
 
@@ -804,7 +803,6 @@ class AttentionOrderTests(SimpleTestCase):
         old = timezone.now() - timedelta(days=30)
         entries = [
             self.entry("a page", since=old, actions=press(capability="")),
-            self.entry("a check again", since=old, check=press("verify")[0]),
             self.entry("refused", since=old, actions=press(refusal="Not now.")),
             self.entry("one press", actions=press()),
             self.entry("serious", status="serious", since=old),

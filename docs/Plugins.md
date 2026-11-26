@@ -583,7 +583,7 @@ Supply the help the shared card shows (`partials/_work_queue.html` in
 | `Finding.remedies` | the HQ commands that fix it, each a `FindingRemedy`; HQ offers each one the reader may run as a press |
 | `Finding.primary` | the page the work is done on (a short label; a sentence is shown as a sentence) |
 | `Finding.no_help_reason` | why HQ can offer no command for it |
-| `Finding.check` | the link that reads it again |
+| `Finding.read_now` | the read its check rests on, which the queue's one Refresh asks for (derivation sets it) |
 | `Finding.since` | the moment it began, when that is known |
 | `Finding.why` | why it is as urgent as its severity says: what was read and what makes that this urgent, in one sentence. Required of every item the queue may show, never a restatement of its rating; the plugin check's `attention-item-says-why` fails a `Finding` built without it, and `attention-why-restates-rating` one that closes on "which needs attention" or "which is urgent" |
 | `Finding.clears` | what clears an item a threshold raises, worded from that same threshold as a clause after "Clears once" ("a balance newer than 3 days arrives"); the panel says it after the why. The plugin check's `threshold-says-what-clears-it` fails a why that names a constant without it |

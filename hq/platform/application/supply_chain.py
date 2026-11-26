@@ -11,6 +11,8 @@ provenance) is a fact on its page, never a check its operator could fail.
 from datetime import UTC, datetime
 from typing import Any
 
+from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
+
 from .standards import Check, Examples, Measurement, Reading, measure
 lazy from .container_standard import example
 
@@ -122,7 +124,7 @@ STANDARD: tuple[Check, ...] = (
 
 
 def supply_chain_of(container: Any) -> Measurement:
-    return measure(container, STANDARD)
+    return measure(container, STANDARD, reads=IMAGE_KIND)
 
 
 _READ = datetime(2026, 1, 1, tzinfo=UTC)

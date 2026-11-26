@@ -13,6 +13,8 @@ from typing import Any
 
 from django.utils.text import get_text_list
 
+from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+
 from .standards import Check, Examples, Measurement, Reading, measure
 lazy from .container_findings import help_for
 lazy from .container_hardening import hardening_of
@@ -293,7 +295,11 @@ STANDARD: tuple[Check, ...] = (
 def posture_of(container: Any) -> Measurement:
     declared = by_design().get((container.machine.name, container.running.name)) or {}
     return measure(
-        container, STANDARD, {**_required(container, declared), **declared}, helps=partial(help_for, container)
+        container,
+        STANDARD,
+        {**_required(container, declared), **declared},
+        helps=partial(help_for, container),
+        reads=CONTAINER_KIND,
     )
 
 

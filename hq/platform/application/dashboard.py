@@ -213,7 +213,9 @@ def _queue_item(source_id: str, source: str, finding: Finding, findings_url: str
         "url": primary.url if primary else with_query(findings_url, {"rule": finding.rule}) if rule else "",
         "steps": [as_written(step) for step in finding.steps],
         "no_help_reason": finding.no_help_reason,
-        "read_now": {key: value for key, value in asdict(finding.read_now).items() if value} if finding.read_now else None,
+        "read_now": {key: value for key, value in asdict(finding.read_now).items() if value}
+        if finding.read_now
+        else None,
         "actions": [as_written(link) for link in pages if link.name == PLAYBOOK_INVESTIGATION],
         "subject": as_written(finding.subject_link) if finding.subject_link else None,
         "notice": finding.notice is not None,

@@ -386,9 +386,10 @@ A request is answered once each forced reading is stored after it, and stops
 forcing after `SEVERINO_READ_REQUEST_SECONDS`. The web form is
 `POST /infrastructure/connections/read/`; a GET is refused.
 
-A finding offers "Check again" as its verification. Where a reading is
-involved, it refreshes and runs the check on what the controller reports.
-Otherwise it runs the check against current data.
+A finding names the read its check rests on as `read_now`, where one is
+involved. A page asks the reads of every finding it shows from one Refresh at
+the top of the queue, and MCP's `get_findings` gives each finding's `check` as
+that read and the rule's check after it.
 
 ### What each surface exposes
 

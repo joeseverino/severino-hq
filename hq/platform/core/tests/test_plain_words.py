@@ -377,6 +377,7 @@ RETIRED = (
     "Command center",
     "Request fresh sweep",
     "Read now and check again",
+    "Check again",
     "Read now",
     "Read them now",
     "Read all now",

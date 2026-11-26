@@ -40,7 +40,7 @@ last done to it is read before its parts.
       {% data_table folded_table %}
     {% endsection %}
   {% endif %}
-{% aside %}{% if docker %}{% muted %}{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}{% endmuted %}{% endif %}
+{% aside %}{% if docker %}{% muted %}{% if docker.version %}Docker {{ docker.version }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}{% endmuted %}{% endif %}{% include "partials/_work_queue.html#refresh" with items=problems_in.containers only %}
 {% endsection %}
 {% endif %}
 
@@ -134,7 +134,7 @@ last done to it is read before its parts.
   {% endcomment %}
   {% if device_names %}
     {% url 'control_plane:tailnet' as tailnet_url %}{% with_query tailnet_url source=asked.source target=asked.target as asked_url %}{% button policy_test.title asked_url modal=policy_test.id %}
-  {% endif %}
+  {% endif %}{% include "partials/_work_queue.html#refresh" with items=problems_in.tailnet only %}
 {% endsection %}
 {% else %}
 {% partial short %}

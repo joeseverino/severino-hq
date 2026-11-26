@@ -49,7 +49,7 @@ ITEM = {
     "action": "",
     "steps": [],
     "no_help_reason": "",
-    "check": None,
+    "read_now": None,
 }
 OTHER = {**ITEM, "key": "example:gadget", "label": "A gadget is stale", "count": 1}
 

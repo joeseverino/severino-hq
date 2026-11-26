@@ -907,7 +907,7 @@ def _toggles_beside_controls() -> DataTable:
     rows = tuple(
         Row(
             (Cell(f"Example finding {at}", below=(Below("", (Cell("Example note under the finding."),)),)),),
-            actions=(PageAction("Open example", f"/example/{at}/"), PageAction("Check again", f"/example/{at}/check/")),
+            actions=(PageAction("Open example", f"/example/{at}/"), PageAction("Restart", f"/example/{at}/restart/")),
         )
         for at in (1, 2)
     )

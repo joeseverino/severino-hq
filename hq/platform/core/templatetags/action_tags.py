@@ -103,16 +103,21 @@ def queue_table(
 
 
 @answers(register, takes_context=True)
-def check_again(context, items=(), *, groups=()):
-    """``{% check_again items as again %}``: the one Check again over the
-    queue's rows (or ``groups``' rows), for the card that holds them to draw at
-    its top (``queue_table.check_again``); none where nothing would be read."""
+def queue_refresh(context, *lists, groups=()):
+    """``{% queue_refresh items as refresh %}``: the one Refresh over the
+    queue's rows (each list given, and ``groups``' rows), for the card that
+    holds them to draw at its top (``queue_table.refresh``); none where
+    nothing would be read."""
 
     request = _request(context)
-    if request is None or not request.user.is_authenticated:
+    user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
         return None
-    rows = [*(items or ()), *(item for group in groups or () for item in group["items"])]
-    return queue_tables.check_again(rows, web_principal(request.user), request.get_full_path())
+    rows = [
+        *(item for rows in lists for item in rows or ()),
+        *(item for group in groups or () for item in group["items"]),
+    ]
+    return queue_tables.refresh(rows, web_principal(user), request.get_full_path())
 
 
 @register.filter

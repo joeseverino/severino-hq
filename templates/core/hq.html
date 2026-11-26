@@ -42,6 +42,7 @@ uptime and how the request came.
     {% fact "Kept running by" %}{% list %}{% for job in work.services %}<li>{% include "core/hq.html#unit" with title=job.title unit=job.name only %}{% if job.last_run %} {% muted %}{{ job.last_run|when:"since" }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}
     {% endif %}
   {% endfacts %}
+{% aside %}{% include "partials/_work_queue.html#refresh" with items=hq.problems_in.where|not_urgent only %}
 {% endsection %}
 {% endif %}
 {% if hq.request_path %}{% with found=hq.request_path %}
@@ -50,6 +51,7 @@ uptime and how the request came.
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.reach|not_urgent only %}
   {% include "core/_connection_panel.html#route" with route=found.route only %}
   {% if found.findings %}{% include "partials/_work_queue.html" with items=found.finding_rows grouped=True here=True only %}{% endif %}
+{% aside %}{% include "partials/_work_queue.html#refresh" with items=hq.problems_in.reach|not_urgent also=hq.request_path.finding_rows only %}
 {% endsection %}
 {% endwith %}{% endif %}
 {% section "Release" id="hq-release" %}
@@ -70,6 +72,7 @@ uptime and how the request came.
     {% endif %}
     {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name }} {% muted %}{{ version }}{% endmuted %}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
   {% endfacts %}
+{% aside %}{% include "partials/_work_queue.html#refresh" with items=hq.problems_in.release|not_urgent only %}
 {% endsection %}
 {% endlayout %}
 
@@ -105,6 +108,7 @@ row in the flow.
   {% data_table sight.table %}
   {% endif %}
   {% if sight.unconnected %}{% muted element="p" %}Not connected: {{ sight.unconnected|join:", " }}. <a href="{% url 'control_plane:connections' %}">Connections</a>{% endmuted %}{% endif %}
+{% aside %}{% include "partials/_work_queue.html#refresh" with items=hq.problems_in.sight|not_urgent only %}
 {% endsection %}
 {% endif %}
 {% endlayout %}

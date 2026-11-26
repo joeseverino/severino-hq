@@ -14,7 +14,8 @@ share an "Open problems" section under that box; a page made of parts draws a pa
 
     {% include "partials/_problems.html#rest" with rest=part_problems %}
 
-Nothing is drawn when nothing is open.
+Open problems' one Refresh stands over the urgent box's rows too. Nothing
+is drawn when nothing is open.
 {% endcomment %}
 {% partialdef rest %}{% if rest %}{% include "partials/_work_queue.html" with items=rest grouped=True here=True fold=True only %}{% endif %}{% endpartialdef %}
 {% with urgent=problems|urgent rest=problems|not_urgent %}
@@ -24,7 +25,7 @@ Nothing is drawn when nothing is open.
   {% include "partials/_work_queue.html" with items=urgent grouped=True here=True fold=True only %}
 {% endcard %}
 {% endif %}
-{% if rest %}{% check_again rest as again %}
-{% section "Open problems" id="problems" count=rest|length %}{% partial rest %}{% aside %}{% if again %}{% include "partials/_page_action.html" with action=again only %}{% endif %}{% endsection %}
+{% if rest %}
+{% section "Open problems" id="problems" count=rest|length %}{% partial rest %}{% aside %}{% include "partials/_work_queue.html#refresh" with items=problems only %}{% endsection %}
 {% endif %}
 {% endwith %}

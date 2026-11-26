@@ -4,18 +4,18 @@ import json
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.urls import reverse
 
 from hq.platform.application import cadence
 from hq.platform.application.action_links import read_link
 from hq.platform.application.asks import RUNNING, Standing
-from hq.platform.application.contracts import Effect
+from hq.platform.application.cadence import ControllerSweepCommand
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.finding_model import Finding, opens
 from hq.platform.application.finding_steps import Do, Press, Run
 from hq.platform.application.markup_testing import hrefs, select, with_class, within
 from hq.platform.application.plugins import gather_attention
-from hq.platform.application.tests.links import example_command
 from hq.platform.application.tests.test_decisions import row_hrefs
 from hq.platform.application.ui import DomainOverview
 from hq.platform.core.testing import SignedInTestCase, operator
@@ -25,14 +25,6 @@ from hq_sdk.testing import plain
 class DashboardQueueTests(SignedInTestCase):
     def setUp(self):
         super().setUp()
-        check = example_command(
-            "verify",
-            "Recheck facts",
-            Effect.REMOTE_WRITE,
-            "/dashboard/glance/",
-            method="POST",
-            capability="dashboard.panels.refresh",
-        )
         insights = (
             Finding(
                 rule="example-reading",
@@ -42,7 +34,7 @@ class DashboardQueueTests(SignedInTestCase):
                 explanation="Supporting facts.",
                 primary=opens("Reconcile the bill", ""),
                 steps=(Press(read_link("remedy", "Inspect evidence", "/example/evidence/", recommended=True)),),
-                check=check,
+                read_now=ControllerSweepCommand(kind="github.repository"),
             ),
             Finding(
                 rule="example-service",
@@ -72,7 +64,7 @@ class DashboardQueueTests(SignedInTestCase):
         self.assertEqual(queue[0]["steps"], [])
         self.assertEqual(queue[1]["action"], "Reconcile the bill")
         self.assertEqual(queue[1]["steps"][0]["link"]["url"], "/example/evidence/")
-        self.assertEqual(queue[1]["check"]["method"], "POST")
+        self.assertEqual(queue[1]["read_now"], {"kind": "github.repository"})
 
     def test_queue_has_safe_actions_and_dashboard_keeps_domain_overviews_first(self):
         from hq.domains.control_plane.models import DashboardRefreshRequest
@@ -83,9 +75,13 @@ class DashboardQueueTests(SignedInTestCase):
                 if path == "/action-items/":
                     self.assertContains(response, "Reconcile the bill")
                     self.assertEqual(row_hrefs(response).count("/example/evidence/"), 1)
-                    # The verification is a write: posted with the token, never a link.
-                    self.assertTrue(select(response, "formaction", "/dashboard/glance/"))
-                    self.assertNotIn("/dashboard/glance/", hrefs(response))
+                    # The queue's one Refresh is a write: posted with the token, never a link.
+                    read = reverse("control_plane:read_now")
+                    (refresh,) = [
+                        each for each in select(response, "formaction") if each.attrs["formaction"].startswith(read)
+                    ]
+                    self.assertIn("kind=github.repository", refresh.attrs["formaction"])
+                    self.assertFalse([href for href in hrefs(response) if href.startswith(read)])
                     self.assertTrue(select(response, "name", "csrfmiddlewaretoken"))
                 else:
                     # What is serious is read on the dashboard itself; the rest is a count.

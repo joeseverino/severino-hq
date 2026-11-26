@@ -10,6 +10,8 @@ from hq.platform.core.part_examples import DRAWN_AT, NARROW, runs, table
 from hq.platform.core.template_parts import Example
 lazy from hq.platform.application.action_links import read_link
 lazy from hq.platform.application.approvals import DECISIONS, _decision_link
+lazy from hq.platform.application.asks import Ask
+lazy from hq.platform.application.cadence import CONTROLLER_REFRESH
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
 lazy from hq.platform.application.dashboard import finding_rows
@@ -58,7 +60,7 @@ def _month_gone_by(month=date(2026, 1, 1)):
 
 
 def _problems(*titles, family="", status="attention"):
-    """The queue's items about a thing, each with its meaning and the check that reads again."""
+    """The queue's items about a thing, each with its meaning."""
 
     return list(
         finding_rows(
@@ -795,7 +797,7 @@ def opened_problems():
                     title="Example certificate expired",
                     explanation="It serves no name, so nothing breaks when it expires.",
                     evidence=(("Certificate", "example.com"), ("Held in", "example-proxy")),
-                    steps=(Do("Renew the certificate where it is held, then press Check again."),),
+                    steps=(Do("Renew the certificate where it is held."),),
                     no_help_reason="HQ cannot renew this certificate.",
                 ),
             ),
@@ -853,5 +855,17 @@ WORK_QUEUE_STATES = {
     # where its title does, commands in one column, a lone step close.
     "opened": Example(
         '{% include "partials/_work_queue.html" %}', lambda: {"items": opened_problems(), "grouped": True}
+    ),
+    # Under a section's heading, the queue's one Refresh at its end, beside
+    # what the heading says, where no row draws its own.
+    "refresh": Example(
+        '{% section "Example" count=2 %}{% include "partials/_work_queue.html" %}'
+        '{% aside %}{% include "partials/_work_queue.html#refresh" %}{% endsection %}',
+        lambda: {
+            "items": _problems("Example certificate expires soon", "Example backup is late"),
+            "grouped": True,
+            "here": True,
+            "refresh": Ask(CONTROLLER_REFRESH.words(), "/example/read/", title="Reads it again now.", compact=True),
+        },
     ),
 }

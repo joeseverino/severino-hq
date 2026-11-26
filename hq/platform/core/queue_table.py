@@ -12,8 +12,8 @@ from django.utils.text import slugify
 from hq.platform.application import action_items
 from hq.platform.application.action_links import read_now_link
 from hq.platform.application.asks import Ask, following
+from hq.platform.application.cadence import CONTROLLER_REFRESH
 from hq.platform.application.decisions import decision
-from hq.platform.application.finding_model import CHECK_AGAIN
 from hq.platform.application.moments import duration
 from hq.platform.application.security import Principal
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, StatusMark, TableColumn
@@ -186,7 +186,7 @@ def _below(item: Mapping[str, Any]) -> tuple[Below, ...]:
     return (Below("", tuple(lines)),) if lines else ()
 
 
-def check_again(items: Iterable[Mapping[str, Any]], principal: Principal, here: str) -> Ask | None:
+def refresh(items: Iterable[Mapping[str, Any]], principal: Principal, here: str) -> Ask | None:
     """The one press over a queue that reads again what its rows rest on
     (each item's ``read_now``), then shows ``here`` anew; None when no row
     rests on a reading or its reader may not ask for one.
@@ -203,4 +203,4 @@ def check_again(items: Iterable[Mapping[str, Any]], principal: Principal, here: 
     read = read_now_link(principal, **subject)
     if read is None:
         return None
-    return Ask(CHECK_AGAIN, with_query(read.url, {"next": here}), title="Reads them again now.", compact=True)
+    return Ask(CONTROLLER_REFRESH.words(), with_query(read.url, {"next": here}), title=read.reason, compact=True)

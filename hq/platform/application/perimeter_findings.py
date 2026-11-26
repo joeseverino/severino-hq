@@ -3,7 +3,6 @@
 from django.utils.text import capfirst
 
 from .finding_model import (
-    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     FindingRule,
@@ -154,7 +153,7 @@ RULES: tuple[FindingRule, ...] = (
         "Ports open to the internet",
         Tone.SERIOUS,
         _perimeter_open,
-        operator_action=f"Close them in the machine's firewall. {THEN_CHECK_AGAIN}",
+        operator_action="Close them in the machine's firewall.",
         no_help_reason="HQ cannot change the firewall.",
         bars={Tone.SERIOUS: "a port answers from the internet"},
     ),
@@ -163,7 +162,7 @@ RULES: tuple[FindingRule, ...] = (
         "Open ports not tested",
         Tone.ATTENTION,
         _perimeter_unchecked,
-        operator_action=f"Have the machine report its public addresses and ports. {THEN_CHECK_AGAIN}",
+        operator_action="Have the machine report its public addresses and ports.",
         no_help_reason="HQ cannot change what the machine reports.",
         bars={Tone.ATTENTION: "HQ cannot test a machine for ports open to the internet"},
     ),

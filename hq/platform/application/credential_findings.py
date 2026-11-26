@@ -18,7 +18,7 @@ lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 
 from .connection_lifecycle import UNREPORTED_FACT
 from .derivations import reached
-from .finding_model import THEN_REFRESH, Finding, FindingEstate, FindingRule, connections_carrying, fact_values
+from .finding_model import Finding, FindingEstate, FindingRule, connections_carrying, fact_values
 from .finding_steps import Do, Run, told
 from .moments import moment
 from .tone import Tone
@@ -65,7 +65,7 @@ def operator_steps(
         return ()
     if by_hand:
         notes += (ended(f"Or by hand: {by_hand}" + (f", adding {', '.join(missing)}" if missing else "")),)
-    return (told("Make a new token on your Mac" if command else "Make a new token", command, (*notes, THEN_REFRESH)),)
+    return (told("Make a new token on your Mac" if command else "Make a new token", command, notes),)
 
 
 def fix_steps(fix: Any) -> tuple[Run | Do, ...]:
@@ -114,17 +114,14 @@ def answer_steps(node: Any) -> tuple[Run | Do, ...]:
                 notes=(
                     *((f"{endpoint} is not the API.",) if endpoint else ()),
                     ended(f"Set the address in the connection's 1Password item, {address_fields()}"),
-                    THEN_REFRESH,
                 ),
             ),
         )
     if failure == NETWORK_FAILURE:
         where = _host(endpoint) or "the machine it points at"
-        return (Do(f"Check that {where} is up and the controller can reach it", notes=(THEN_REFRESH,)),)
+        return (Do(f"Check that {where} is up and the controller can reach it"),)
     if failure in REFUSALS:
-        return mint_steps(node) or (
-            Do("Replace the credential in the connection's 1Password item", notes=(THEN_REFRESH,)),
-        )
+        return mint_steps(node) or (Do("Replace the credential in the connection's 1Password item"),)
     return ()
 
 
@@ -203,7 +200,7 @@ RULES: tuple[FindingRule, ...] = (
         "Token missing permissions",
         Tone.ATTENTION,
         missing_permissions,
-        operator_action=f"Make a new token from the connection's page. {THEN_REFRESH}",
+        operator_action="Make a new token from the connection's page.",
         no_help_reason=_CANNOT_ISSUE,
         bars={Tone.ATTENTION: "a token lacks a permission HQ uses"},
     ),
@@ -212,7 +209,7 @@ RULES: tuple[FindingRule, ...] = (
         "Token expiring",
         Tone.ATTENTION,
         expiring,
-        operator_action=f"Make a new token from the connection's page. {THEN_REFRESH}",
+        operator_action="Make a new token from the connection's page.",
         no_help_reason=_CANNOT_ISSUE,
         bars={
             Tone.SERIOUS: "a token has expired",

@@ -8,6 +8,7 @@ what is not met. A check met everywhere is a word in one closing line.
   {% if unmet %}
     {% section "Failing" count=unmet|length %}
     {% include "partials/_work_queue.html" with items=unmet grouped=True here=True only %}
+    {% aside %}{% include "partials/_work_queue.html#refresh" with items=unmet only %}
     {% endsection %}
   {% endif %}
 

@@ -180,53 +180,50 @@ class WebTests(TestCase):
         self.assertEqual(read_now_payload({"every_connection": "yes"}), {})
 
 
-class VerificationTests(TestCase):
-    """A finding whose evidence is a reading is confirmed by reading it again."""
+class QueueRefreshTests(TestCase):
+    """A queue's one Refresh reads again what its shown rows rest on."""
 
-    def verify(self, finding, subject=None, principal=None):
-        from ..findings import _verification
-
-        action, _read = _verification(finding, principal or cli_principal(), subject)
-        return action
-
-    def read(self, finding, principal=None):
-        from ..findings import _verification
-
-        _action, read = _verification(finding, principal or cli_principal(), None)
-        return read
-
-    def finding(self, **fields):
+    def rows(self, *scopes, principal=None):
+        from ..dashboard import finding_rows
         from ..finding_model import Finding
+        from ..findings import _resolved
 
-        return Finding(
-            rule="example-rule",
-            subject="",
-            title="t",
-            severity="neutral",
-            explanation="e",
-            **fields,
+        found = (
+            _resolved(
+                Finding(
+                    rule="example-rule",
+                    subject="",
+                    title=scope or "t",
+                    severity="neutral",
+                    explanation="e",
+                    scope=scope,
+                ),
+                principal or cli_principal(),
+                None,
+            )
+            for scope in scopes
         )
+        return finding_rows("example", "Example", tuple(found))
 
-    def test_a_kind_level_finding_reads_that_kind_now(self):
-        action = self.verify(self.finding(scope="tailscale.device"))
+    def refresh(self, rows, principal=None):
+        from hq.platform.core.queue_table import refresh
 
-        self.assertEqual(action.label, "Check again")
-        self.assertEqual(action.method, "POST")
+        return refresh(rows, principal or cli_principal(), "/example/page/")
+
+    def test_rows_on_one_reading_ask_for_it_and_come_back(self):
+        action = self.refresh(self.rows("tailscale.device", "tailscale.device"))
+
+        self.assertEqual(action.label, command_spec(READ_NOW).words())
         self.assertIn("kind=tailscale.device", action.url)
-        self.assertIn("next=%2Finfrastructure%2Ffindings%2F%3Frule%3Dexample-rule", action.url)
-        # The read the link asks for, carried beside it for a door that sends it as a payload.
-        self.assertEqual(self.read(self.finding(scope="tailscale.device")).kind, "tailscale.device")
+        self.assertIn("next=%2Fexample%2Fpage%2F", action.url)
 
-    def test_a_finding_no_reading_involves_is_checked_again(self):
-        action = self.verify(self.finding())
+    def test_rows_on_several_readings_ask_for_every_connection(self):
+        action = self.refresh(self.rows("tailscale.device", "portainer.container"))
 
-        self.assertEqual(action.label, "Check again")
-        self.assertEqual(action.method, "GET")
+        self.assertIn("every_connection=1", action.url)
 
-    def test_a_reader_is_offered_the_check_not_the_read(self):
-        reader = READER
+    def test_nothing_is_offered_where_no_row_rests_on_a_reading(self):
+        self.assertIsNone(self.refresh(self.rows("")))
 
-        action = self.verify(self.finding(scope="tailscale.device"), principal=reader)
-        self.assertIsNone(self.read(self.finding(scope="tailscale.device"), principal=reader))
-
-        self.assertEqual(action.label, "Check again")
+    def test_a_reader_who_may_not_ask_is_offered_nothing(self):
+        self.assertIsNone(self.refresh(self.rows("tailscale.device", principal=READER), principal=READER))

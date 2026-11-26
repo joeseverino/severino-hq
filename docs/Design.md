@@ -86,8 +86,7 @@ one name per thing:
 | --- | --- |
 | the queue | "Needs you" |
 | search, and its box | "Search", "Find anything" |
-| a fresh read from a thing's page | "Refresh" ("Refresh all" for everything) |
-| a fresh read from a problem card | "Check again" |
+| a fresh read from a thing's page, or of what a queue's problems rest on | "Refresh" ("Refresh all" for everything) |
 | a filter form's button | "Filter" |
 | making a new record, on its list, its form and its command | "Add" and the record: "Add an asset" (`labels.adding`) |
 | saving the form of a record that exists | "Save changes" (`labels.SAVE_CHANGES`) |

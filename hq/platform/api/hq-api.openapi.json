@@ -56,17 +56,6 @@
               "steps.text",
               "steps.value",
               "no_help_reason",
-              "check",
-              "check.name",
-              "check.label",
-              "check.effect",
-              "check.url",
-              "check.method",
-              "check.capability",
-              "check.target",
-              "check.reason",
-              "check.recommended",
-              "check.refusal",
               "actions",
               "actions.name",
               "actions.label",
@@ -2726,17 +2715,6 @@
               "findings.steps.notes",
               "findings.steps.text",
               "findings.steps.value",
-              "findings.check",
-              "findings.check.name",
-              "findings.check.label",
-              "findings.check.effect",
-              "findings.check.url",
-              "findings.check.method",
-              "findings.check.capability",
-              "findings.check.target",
-              "findings.check.reason",
-              "findings.check.recommended",
-              "findings.check.refusal",
               "findings.offers",
               "findings.offers.name",
               "findings.offers.label",
@@ -4681,9 +4659,6 @@
             },
             "type": "array"
           },
-          "check": {
-            "$ref": "#/components/schemas/WrittenCheck"
-          },
           "count": {
             "description": "How many things it stands for, at least 1.",
             "type": "integer"
@@ -4768,7 +4743,6 @@
           "count",
           "steps",
           "no_help_reason",
-          "check",
           "actions",
           "subject",
           "notice",
@@ -4821,9 +4795,6 @@
               "$ref": "#/components/schemas/ActionLinkPartial"
             },
             "type": "array"
-          },
-          "check": {
-            "$ref": "#/components/schemas/WrittenCheckPartial"
           },
           "count": {
             "$ref": "#/components/schemas/ActionItem/properties/count"
@@ -28318,9 +28289,6 @@
           "affected_scopes": {
             "$ref": "#/components/schemas/FindingFacts/properties/affected_scopes"
           },
-          "check": {
-            "$ref": "#/components/schemas/WrittenCheck"
-          },
           "evidence": {
             "$ref": "#/components/schemas/FindingFacts/properties/evidence"
           },
@@ -28382,7 +28350,6 @@
           "no_help_reason",
           "since",
           "steps",
-          "check",
           "offers",
           "investigations"
         ],
@@ -28394,9 +28361,6 @@
         "properties": {
           "affected_scopes": {
             "$ref": "#/components/schemas/FindingFactsPartial/properties/affected_scopes"
-          },
-          "check": {
-            "$ref": "#/components/schemas/WrittenCheckPartial"
           },
           "evidence": {
             "$ref": "#/components/schemas/FindingFactsPartial/properties/evidence"
@@ -32547,32 +32511,6 @@
           "data"
         ],
         "type": "object"
-      },
-      "WrittenCheck": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/ActionLink",
-            "title": "Action link"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "The press that reads again what it rests on and runs its check; null where there is none.",
-        "title": "Written check"
-      },
-      "WrittenCheckPartial": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/ActionLinkPartial",
-            "title": "Action link"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "The press that reads again what it rests on and runs its check; null where there is none.",
-        "title": "Written check"
       },
       "WrittenReason": {
         "description": "Why HQ can neither run a fix nor name an exact command for it; empty when it can do either.",

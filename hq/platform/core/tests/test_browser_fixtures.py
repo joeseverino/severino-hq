@@ -199,14 +199,14 @@ def _urgent_dashboard():
 @contextmanager
 def _rechecks():
     """The queue as a machine's findings fill it: urgent rows whose only remedy
-    is the check that reads again, beside the reader's Dismiss, each title a
+    is one press, beside the reader's Dismiss, each title a
     quoted unit name long enough to wrap. No row holds a third button, so a
     table of them is as narrow as two buttons leave it."""
 
     from dataclasses import asdict
 
     from hq.platform.application.dashboard import finding_rows
-    from hq.platform.application.finding_model import CHECK_AGAIN, Finding
+    from hq.platform.application.finding_model import Finding
 
     titles = (
         (
@@ -223,7 +223,11 @@ def _rechecks():
         {
             **row,
             "actions": [
-                asdict(example_command("verify", CHECK_AGAIN, Effect.READ, f"/example/check/{place}/", method="POST"))
+                asdict(
+                    example_command(
+                        "remedy", "Restart it", Effect.REMOTE_WRITE, f"/example/restart/{place}/", method="POST"
+                    )
+                )
             ],
             "aside": False,
         }

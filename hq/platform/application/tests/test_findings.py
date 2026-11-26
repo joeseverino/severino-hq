@@ -259,7 +259,6 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertEqual(whole["schema_version"], FINDINGS_SCHEMA_VERSION)
         self.assertTrue(any(item["offers"] for item in whole["findings"]))
         self.assertTrue(any(item["investigations"] for item in whole["findings"]))
-        self.assertTrue(any(item["check"] for item in whole["findings"]))
         self.assertTrue(all(item["id"] for item in whole["findings"]))
         presses = [step["link"] for item in whole["findings"] for step in item["steps"] if step["kind"] == "press"]
         self.assertTrue(presses)

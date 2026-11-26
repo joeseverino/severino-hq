@@ -142,8 +142,6 @@ def _buttons(item: Any) -> list[dict[str, Any]]:
     return actions
 
 
-
-
 def decision(item: dict[str, Any]) -> dict[str, Any]:
     actions = _buttons(item)
     subject = item.get("subject") or {}

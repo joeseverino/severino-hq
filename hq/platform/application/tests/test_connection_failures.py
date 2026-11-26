@@ -143,16 +143,6 @@ class FindingCardTests(TestCase):
         self.assertEqual(parts[:2], ["gutter", "links"])
         self.assertNotIn("Next steps", words)
         self.assertNotIn("Fix it", words)
-        # A connection that does not answer is a reading: confirming it reads now.
-        self.assertIn("Check again", words)
-        self.assertTrue(
-            any(
-                element.attrs.get("formaction", "").startswith(
-                    "/infrastructure/connections/read/?connection_ref=example-npm"
-                )
-                for element in held
-            )
-        )
 
     def test_open_connections_is_a_link_not_the_fix(self):
         words, held = self.card()
@@ -165,4 +155,3 @@ class FindingCardTests(TestCase):
         found = finding()
 
         self.assertIn("steps", found)
-        self.assertEqual(found["check"]["name"], "verify")
