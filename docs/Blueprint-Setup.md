@@ -44,11 +44,10 @@ fork changes them in every place listed.
 | :--- | :--- | :--- |
 | `HQ_APP_KEY`, `HQ_APP_CLIENT_ID` | repository secrets, set by `mise run wire-github-app` | CI's Release and Compose: reading admissions and starting the next workflow |
 | `COMPOSITION_EXTENSIONS` | repository secret: JSON in the shape of [`composition/extensions.json`](../composition/extensions.json) | Compose: which extensions to compose, and whose signatures to trust |
-| The `release` environment, `main` only, with the deploy review App as its deployment protection rule, and the `HQ_REVIEW_APP_ID` repository secret | set by `mise run wire-github-app --review` | Deploy's approval, which Deploy refuses to reach until both are in place |
+| The `production` environment, with required reviewers | repository environments | Deploy's approval |
 | The `admission` environment on each extension, `main` only, holding `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` | each extension's settings, set by `mise run wire-github-app` | an admission starting Compose |
-| HQ's GitHub App: the permissions in [`deploy/github-apps.json`](../deploy/github-apps.json), installed on the host and every extension, its webhook the inbound-events Worker's github route | the account's app settings; the webhook set by `mise run wire-github-app --webhook-secret` ([Install](Install.md#12-hear-providers-events-and-approve-deploys-in-hq)) | everything above, and the controller |
-| The deploy review App: the permissions in [`deploy/github-apps.json`](../deploy/github-apps.json), installed on the host alone, its webhook the Worker's github route | the account's app settings, wired by `mise run wire-github-app --review` ([Install](Install.md#12-hear-providers-events-and-approve-deploys-in-hq)) | the controller, answering a deploy waiting on `release` |
-| The `inbound-worker` environment, the operator its required reviewer, holding `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `HQ_INBOUND_HOSTNAME` | the repository's settings ([Install](Install.md#12-hear-providers-events-and-approve-deploys-in-hq)) | Deploy Worker |
+| HQ's GitHub App: the permissions in [`deploy/github-apps.json`](../deploy/github-apps.json), installed on the host and every extension, its webhook the inbound-events Worker's github route | the account's app settings; the webhook set by `mise run wire-github-app --webhook-secret` ([Install](Install.md#12-hear-providers-events)) | everything above, and the controller |
+| The `inbound-worker` environment, the operator its required reviewer, holding `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `HQ_INBOUND_HOSTNAME` | the repository's settings ([Install](Install.md#12-hear-providers-events)) | Deploy Worker |
 | A `main` ruleset requiring **Ready** from GitHub Actions, with code scanning holding a merge on a CodeQL alert | repository rules | merges |
 | A self-hosted runner with the `severino-hq` label | the host ([Install](Install.md#6-install-the-runner-and-write-hostjson)) | Deploy |
 
@@ -80,7 +79,7 @@ the connections can see.
 | `SEVERINO_HQ_DEPLOY_HOST`, an SSH destination | the shell running `mise run check --release` |
 | `HQ_LOCAL_PYTHONPATH`, `HQ_LOCAL_PLUGINS` | `mise.local.toml` ([Development](Development.md#the-extension-set)) |
 | `SEVERINO_FAILURE_LOG_IDENTITY` | the operator's shell, for `mise run failure-logs` |
-| `GITHUB_WEBHOOK_SECRET`, `SOCKET_TOKEN` | a 1Password item of the operator's, for `mise run worker:deploy --with-secrets` and `mise run wire-github-app` ([Install](Install.md#12-hear-providers-events-and-approve-deploys-in-hq)) |
+| `GITHUB_WEBHOOK_SECRET`, `SOCKET_TOKEN` | a 1Password item of the operator's, for `mise run worker:deploy --with-secrets` and `mise run wire-github-app` ([Install](Install.md#12-hear-providers-events)) |
 | Internal CA roots | `/usr/local/share/ca-certificates` on the host |
 
 ## 3. Residue

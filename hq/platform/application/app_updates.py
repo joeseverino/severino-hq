@@ -39,7 +39,7 @@ lazy from .asks import DONE, RUNNING, Asked, Standing
 lazy from .container_findings import BY_HAND
 lazy from .finding_model import Fact, FindingRemedy
 lazy from .labels import lower_first
-lazy from .pages import PageAction
+lazy from .pages import PageAction, command_reach
 lazy from .resource_operations import OperationAsked, operation_asked
 lazy from .work_runs import standing_of as run_standing
 
@@ -389,7 +389,8 @@ class UpdateAction:
 
     @property
     def remedy(self) -> FindingRemedy:
-        return FindingRemedy.posted(self.capability, self.target)
+        url, _ = command_reach(self.capability, self.target)
+        return FindingRemedy(capability=self.capability, target="", url=url, method="POST")
 
     def control(self, back: str) -> PageAction | None:
         return PageAction.command(self.capability, self.target, primary=True, query={"next": back})

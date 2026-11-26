@@ -41,15 +41,13 @@ class PermissionTableTests(SimpleTestCase):
         self.assertEqual(Cloudflare.D1_READ, Cloudflare.D1_READ.api)
 
     @tag("source")
-    def test_every_github_permission_is_one_its_app_is_registered_with(self):
+    def test_every_github_permission_is_one_the_app_is_registered_with(self):
         """GitHub refuses a token asking for more than the App declares."""
 
-        apps = json.loads((ROOT / "deploy" / "github-apps.json").read_text())["apps"]
+        declared = json.loads((ROOT / "deploy" / "github-apps.json").read_text())["apps"]["hq"]["permissions"]
         levels = ("read", "write")
-        for provider, app in (("github_app", "hq"), ("github_deploy_review", "deploy_review")):
-            declared = apps[app]["permissions"]
-            for name in asked(provider):
-                with self.subTest(provider=provider, name=name):
-                    key, level = name.api.split(": ")
-                    self.assertIn(key, declared)
-                    self.assertGreaterEqual(levels.index(declared[key]), levels.index(level))
+        for name in asked("github_app"):
+            with self.subTest(name=name):
+                key, level = name.api.split(": ")
+                self.assertIn(key, declared)
+                self.assertGreaterEqual(levels.index(declared[key]), levels.index(level))

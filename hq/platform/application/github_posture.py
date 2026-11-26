@@ -45,9 +45,7 @@ ACCESS_UNREAD = "Its access has not been read"
 # The secrets the host's own wiring sets (mise run wire-github-app). A
 # variable by one of these names is one of them kept in the wrong place.
 APP_KEY, APP_CLIENT_ID = "HQ_APP_KEY", "HQ_APP_CLIENT_ID"
-# The deploy review App's ID, which Deploy checks the release rule against.
-REVIEW_APP_ID = "HQ_REVIEW_APP_ID"
-WIRED_SECRETS = frozenset({APP_KEY, APP_CLIENT_ID, REVIEW_APP_ID})
+WIRED_SECRETS = frozenset({APP_KEY, APP_CLIENT_ID})
 # The owner, the one collaborator a kept repository has.
 _OWNER = {"login": "example", "role": "admin"}
 

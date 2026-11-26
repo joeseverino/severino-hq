@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "_comment": "HQ's GitHub Apps and the permissions each is registered with. A test holds them to exactly what HQ's code and pipeline ask for; mise run wire-github-app puts the main App's key where the pipeline reads it. Nothing personal lives in this file.",
+  "_comment": "HQ's GitHub App and the permissions it is registered with. A test holds them to exactly what HQ's code and pipeline ask for; mise run wire-github-app puts its key where the pipeline reads it. Nothing personal lives in this file.",
   "apps": {
     "hq": {
-      "description": "HQ's main app. The controller reads each repository, reports delivery and hands each dependency update run, and each grant a host declares, its token; an extension's admission starts the host's composition; the composition reads the extensions' admissions. Each use mints a token for only what it does.",
+      "description": "HQ's one app. The controller reads each repository, reports delivery and hands each dependency update run, and each grant a host declares, its token; an extension's admission starts the host's composition; the composition reads the extensions' admissions. Each use mints a token for only what it does.",
       "installed_on": "the host repository, every extension repository, and each repository a host's grant names (docs/Deployment.md, Tokens on the host)",
       "permissions": {
         "actions": "write",
@@ -21,15 +21,6 @@
         "statuses": "write",
         "vulnerability_alerts": "read",
         "workflows": "write"
-      }
-    },
-    "deploy_review": {
-      "description": "The deploy review app: the protection rule of the environment Deploy waits on, held by the controller alone, so only it answers a waiting deploy, after a person's press in HQ or their approval of an agent's request. It reads the run again and answers the rule.",
-      "installed_on": "the host repository alone",
-      "permissions": {
-        "actions": "read",
-        "deployments": "write",
-        "metadata": "read"
       }
     }
   }

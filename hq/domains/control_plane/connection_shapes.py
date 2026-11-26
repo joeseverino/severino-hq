@@ -35,6 +35,8 @@ GITHUB_APP: ConnectionShape = ConnectionShape(
         # The name of the key item, never the key.
         Setting("SIGNING_KEY", label="signing_key"),
     ),
+    # HQ reads GitHub through one App, whatever its item's env_prefix.
+    default_provider="github_app",
 )
 LOGIN: ConnectionShape = ConnectionShape(
     "login",

@@ -63,7 +63,8 @@
       "PROVIDER": {
         "source": "field",
         "label": "provider",
-        "optional": true
+        "optional": true,
+        "default": "github_app"
       },
       "SIGNING_KEY": {
         "source": "field",

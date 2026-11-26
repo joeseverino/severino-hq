@@ -337,7 +337,7 @@ func (r *Registry) githubDeliveryInventory(ctx context.Context) ([]any, error) {
 	if repository == "" {
 		return []any{}, nil
 	}
-	c, err := r.githubConnection()
+	c, err := r.githubConnection("")
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +459,7 @@ func (r *Registry) announce(ctx context.Context, c githubConnection, extension e
 // commit, and announces a newly live one. A composition that ended without
 // deploying is degraded and never retried here.
 func (r *Registry) githubDeliveryReconcile(ctx context.Context, spec GitHubDeliverySpec, _ Object, apply bool) (Result, error) {
-	c, err := r.githubConnection()
+	c, err := r.githubConnection("")
 	if err != nil {
 		return Result{}, err
 	}

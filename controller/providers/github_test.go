@@ -282,7 +282,7 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 	t.Cleanup(server.Close)
 	env := extra
 	env.SSHDir = t.TempDir()
-	held := supplied(githubAppConnection("hq-app", "12345"), githubAppOf(runtime.ConnectionProviderGitHubDeployReview, reviewApp, reviewAppID))
+	held := supplied(githubAppConnection("hq-app", "12345"))
 	h := &githubHarness{githubFake: fake}
 	h.r = New(env, held, &runtime.HTTPClient{Transport: toFake{server}})
 	h.r.Now = func() time.Time { return time.Unix(1_900_000_000, 0) }
@@ -296,10 +296,8 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 		t.Fatal(err)
 	}
 	der, _ := x509.MarshalPKCS8PrivateKey(key)
-	for _, ref := range []string{"hq-app", reviewApp} {
-		if err := os.WriteFile(filepath.Join(env.SSHDir, ref+".key"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o400); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.WriteFile(filepath.Join(env.SSHDir, "hq-app.key"), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o400); err != nil {
+		t.Fatal(err)
 	}
 	h.key = key
 	return h
@@ -307,7 +305,7 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 
 func TestGitHubAppJWTIsSignedWithTheConnectionsKey(t *testing.T) {
 	h := newGitHubHarness(t, nil, runtime.Environment{})
-	c, err := h.r.githubConnection()
+	c, err := h.r.githubConnection("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +336,7 @@ func TestGitHubAppJWTIsSignedWithTheConnectionsKey(t *testing.T) {
 
 func TestGitHubAppJWTRefusesAKeyItCannotRead(t *testing.T) {
 	h := newGitHubHarness(t, nil, runtime.Environment{})
-	c, _ := h.r.githubConnection()
+	c, _ := h.r.githubConnection("")
 	path := filepath.Join(h.r.Env.SSHDir, "hq-app.key")
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
@@ -363,7 +361,7 @@ func TestGitHubConnectionRefusals(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := New(test.env, supplied(test.app), &fakeHTTP{})
-			c, err := r.githubConnection()
+			c, err := r.githubConnection("")
 			if err == nil {
 				_, err = r.githubJWT(t.Context(), c)
 			}
@@ -376,7 +374,7 @@ func TestGitHubConnectionRefusals(t *testing.T) {
 
 func TestGitHubTokensAreScopedAndMintedOncePerSweep(t *testing.T) {
 	h := newGitHubHarness(t, map[string]string{githubFakeAPI + " /repos/example/app": `{}`}, runtime.Environment{})
-	c, _ := h.r.githubConnection()
+	c, _ := h.r.githubConnection("")
 	ctx := t.Context()
 	call := func(perms githubapi.AppPermissions) {
 		t.Helper()
@@ -420,7 +418,7 @@ func TestGitHubProbe(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(h.r.Env.SSHDir, "hq-app.key.pub"), ssh.MarshalAuthorizedKey(key), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := h.r.githubProbe(runtime.ConnectionProviderGitHubApp)(t.Context(), "hq-app")
+	result, err := h.r.githubProbe(t.Context(), "hq-app")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,17 +433,16 @@ func TestGitHubProbe(t *testing.T) {
 	}
 
 	h.answer(githubFakeAPI, "/app", `{}`)
-	if _, err := h.r.githubProbe(runtime.ConnectionProviderGitHubApp)(t.Context(), "hq-app"); func() runtime.FailureClass { f, _, _ := runtime.Classify(err); return f }() != runtime.FailureClassCredential {
+	if _, err := h.r.githubProbe(t.Context(), "hq-app"); func() runtime.FailureClass { f, _, _ := runtime.Classify(err); return f }() != runtime.FailureClassCredential {
 		t.Fatalf("an app GitHub does not name is a refused credential: %v", err)
 	}
 }
 
-// Each app is registered with exactly what its code asks for. The main app:
-// the controller's grants, a dependency update run's included, plus the
-// pipeline's Actions write for an admission starting the host's composition
-// and Deployments write for Deploy recording production's deployment. The
-// deploy review app: a review's grant, and the metadata every app holds.
-func TestEachAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
+// The app is registered with exactly what the controller's code asks for,
+// a dependency update run's grant included, plus the pipeline's: Actions
+// write for an admission starting the host's composition, and Deployments
+// write for Deploy recording production's deployment.
+func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 	data, err := os.ReadFile("../../deploy/github-apps.json")
 	if err != nil {
 		t.Fatal(err)
@@ -458,29 +455,25 @@ func TestEachAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 	if err := json.Unmarshal(data, &registered); err != nil {
 		t.Fatal(err)
 	}
-	asked := map[string][]githubapi.AppPermissions{
-		"hq":            {githubRead, githubChecksWrite, githubPullsWrite, githubMergeWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}},
-		"deploy_review": {githubReviewGrant, {Metadata: githubapi.AppPermissionsMetadataRead}},
-	}
-	if len(registered.Apps) != len(asked) {
-		t.Fatalf("apps %v", registered.Apps)
-	}
-	for name, grants := range asked {
-		wanted := map[string]string{}
-		for _, grant := range grants {
-			encoded, _ := json.Marshal(grant)
-			var names map[string]string
-			_ = json.Unmarshal(encoded, &names)
-			for permission, level := range names {
-				if level == "write" || wanted[permission] == "" {
-					wanted[permission] = level
-				}
+	wanted := map[string]string{}
+	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubMergeWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
+		encoded, _ := json.Marshal(grant)
+		var names map[string]string
+		_ = json.Unmarshal(encoded, &names)
+		for name, level := range names {
+			if level == "write" || wanted[name] == "" {
+				wanted[name] = level
 			}
 		}
-		got, _ := json.Marshal(registered.Apps[name].Permissions)
+	}
+	if len(registered.Apps) != 1 {
+		t.Fatalf("apps %v", registered.Apps)
+	}
+	for _, app := range registered.Apps {
+		got, _ := json.Marshal(app.Permissions)
 		want, _ := json.Marshal(wanted)
 		if string(got) != string(want) {
-			t.Errorf("%s registered %s\nasked for %s", name, got, want)
+			t.Fatalf("registered %s\nasked for %s", got, want)
 		}
 	}
 }
@@ -553,9 +546,6 @@ func githubRepositoryRoutes() map[string]string {
 			{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"test"},{"context":"lint"},{"context":"test"}]}},{"type":"non_fast_forward"},{"type":"deletion"}]`,
 		api("/environments"): `{"environments":[{"name":"production","protection_rules":[{"id":1,"type":"required_reviewers","reviewers":[{"type":"User","reviewer":{"login":"octo"}},{"type":"Team","reviewer":{"name":"ops"}}]},
 			{"id":2,"type":"wait_timer","wait_timer":5}],"deployment_branch_policy":{"protected_branches":true,"custom_branch_policies":false}},{"name":"preview"}]}`,
-		// HQ's own App is the rule on production; another App's, and HQ's switched off, are not HQ's rule.
-		api("/environments/production/deployment_protection_rules"): `{"total_count":1,"custom_deployment_protection_rules":[{"id":3,"node_id":"r3","enabled":true,"app":{"id":67890,"node_id":"a3","slug":"example-hq-review","integration_url":"https://api.github.com/apps/example-hq-review"}}]}`,
-		api("/environments/preview/deployment_protection_rules"):    `{"total_count":3,"custom_deployment_protection_rules":[{"id":4,"node_id":"r4","enabled":true,"app":{"id":12345,"node_id":"a1","slug":"example-hq","integration_url":"https://api.github.com/apps/example-hq"}},{"id":5,"node_id":"r5","enabled":false,"app":{"id":67890,"node_id":"a3","slug":"example-hq-review","integration_url":"https://api.github.com/apps/example-hq-review"}},{"id":6,"node_id":"r6","enabled":true,"app":{"id":99,"node_id":"a2","slug":"example-other","integration_url":"https://api.github.com/apps/example-other"}}]}`,
 		api("/actions/runners"):                `{"runners":[{"name":"homelab","status":"online","busy":false,"labels":[{"name":"self-hosted"},{"name":"linux"}]}]}`,
 		api("/actions/permissions"):            `{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}`,
 		api("/actions/permissions/workflow"):   `{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}`,
@@ -637,7 +627,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"alerts by severity; a refused kind is absent, not zero", record.Alerts, `{"code_scanning":{"high":1,"warning":1},"dependabot":{"critical":1,"high":1}}`},
 		{"live artifacts, soonest first", record.Artifacts, `[{"name":"soon","expires_at":"2030-02-01T00:00:00Z","sha":"aaaa"},{"name":"late","expires_at":"2030-03-01T00:00:00Z","sha":"aaaa"}]`},
 		{"rules", record.Rules, `{"pull_request":true,"reviews":2,"required_checks":["lint","test"],"blocks_force_push":true,"blocks_deletion":true}`},
-		{"environments", record.Environments, `[{"name":"production","reviewers":["octo","ops"],"wait_minutes":5,"branches":"protected","hq_rule":true},{"name":"preview","reviewers":[],"wait_minutes":0,"branches":"any","hq_rule":false}]`},
+		{"environments", record.Environments, `[{"name":"production","reviewers":["octo","ops"],"wait_minutes":5,"branches":"protected"},{"name":"preview","reviewers":[],"wait_minutes":0,"branches":"any"}]`},
 		{"runners", record.Runners, `[{"name":"homelab","status":"online","busy":false,"labels":["linux","self-hosted"]}]`},
 		{"access", record.Access, `{"visibility":"private","collaborators":[{"login":"octo","role":"admin"}],"deploy_keys":[{"title":"deploy","read_only":true,"last_used":"2030-01-01T00:00:00Z","created_at":"2029-01-01T00:00:00Z"}],"allowed_actions":"selected","pinning_required":true,"token":"read","token_approves_reviews":false,"vulnerability_alerts":true,"security":{"advanced_security":"disabled","secret_scanning":"enabled","secret_scanning_push_protection":null}}`},
 		{"variable names, never values", record.Variables, `["REGION"]`},
@@ -880,7 +870,7 @@ func TestEveryInstalledRepositoryIsListed(t *testing.T) {
 		githubFakeAPI + " " + githubRepositoriesPage + "1":  `{"total_count":101,"repositories":[` + strings.Join(repositories, ",") + `]}`,
 		githubFakeAPI + " " + githubRepositoriesPage + "2":  `{"total_count":101,"repositories":[{"full_name":"example/last"}]}`,
 	}, runtime.Environment{})
-	c, _ := h.r.githubConnection()
+	c, _ := h.r.githubConnection("")
 	names, err := h.r.githubInstallationRepositories(t.Context(), c)
 	if err != nil {
 		t.Fatal(err)
@@ -1186,8 +1176,8 @@ func TestGitHubDeliveryWithoutASourceRepositoryReadsNothing(t *testing.T) {
 }
 
 // The admission opens the check the controller moves on, under the same name,
-// and the Deploy runs it reads wait for approval on the release environment,
-// which is what a run's "waiting" status is.
+// and the Deploy runs it reads wait for approval on the production
+// environment, which is what a run's "waiting" status is.
 func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 	read := func(path string) string {
 		t.Helper()
@@ -1200,8 +1190,8 @@ func TestDeliveryNamesAgreeWithThePipeline(t *testing.T) {
 	if !strings.Contains(read(".github/actions/admit-plugin/action.yml"), githubCheckName) {
 		t.Errorf("the admission does not name the check %q", githubCheckName)
 	}
-	if !strings.Contains(read(githubDeploy), "    environment: release\n") {
-		t.Errorf("%s has no job that waits on the release environment", githubDeploy)
+	if !strings.Contains(read(githubDeploy), "environment:\n      name: production\n") {
+		t.Errorf("%s has no job that waits on the production environment", githubDeploy)
 	}
 }
 

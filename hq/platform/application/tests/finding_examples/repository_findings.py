@@ -21,21 +21,8 @@ def alpha(raises: tuple[Raised | str, ...] = (), **record) -> Example:
     return Example(readings={KIND: ({**ALPHA, **record},)}, raises=raises)
 
 
-HEAD = "c" * 40
-
-
-def waiting(since: Ago, sha: str = HEAD) -> list[dict]:
-    return [{"id": 9, "name": "Compose", "environments": ["release"], "sha": sha, "created_at": since, "url": "u"}]
-
-
-# The environment a run waits on, with HQ's deploy review App as its protection rule.
-RULED = [{"name": "release", "hq_rule": True}]
-
-
-def deployed(sha: str) -> list[dict]:
-    """Production's newest deploy, at ``sha``."""
-
-    return [{"environment": "production", "sha": sha, "state": "success", "url": "u"}]
+def waiting(since: Ago) -> list[dict]:
+    return [{"id": 9, "name": "Compose", "environments": ["production"], "created_at": since, "url": "u"}]
 
 
 def admission(*lapses: float) -> list[dict]:
@@ -88,37 +75,14 @@ def failed(**failures: dict) -> dict[str, Any]:
 
 QUIET = alpha(checks={"state": "success"}, alerts={"code_scanning": {"low": 2}})
 SERIOUS = Tone.SERIOUS
-WAITS = "Compose waits for your approval to deploy to release"
-ANSWERS = ("deployment.approve", "deployment.reject")
-BYPASS = Do("If HQ's answer has not reached GitHub, press Start all waiting jobs on the run's page there.")
+WAITS = "Compose waits for your approval to deploy to production"
 
 EXAMPLES = (
     Examples(
         "github-waiting",
-        # Held for hours, it is serious, and says how to release it without HQ.
+        # Held for hours, it is serious.
         fires=(
-            alpha(
-                waiting=waiting(ago(hours=3)),
-                environments=RULED,
-                raises=(Raised(title=WAITS, severity=SERIOUS, presses=ANSWERS, steps=(BYPASS,)),),
-            ),
-            alpha(waiting=waiting(ago(minutes=5)), environments=RULED, raises=(Raised(title=WAITS, presses=ANSWERS),)),
-            # A commit production already runs is only offered Reject.
-            alpha(
-                waiting=waiting(ago(minutes=5)),
-                environments=RULED,
-                deployments=deployed(HEAD),
-                raises=(
-                    Raised(
-                        title=WAITS,
-                        explanation="Production already runs commit ccccccc of alpha",
-                        presses=("deployment.reject",),
-                    ),
-                ),
-            ),
-            # A run whose commit the reading does not hold, or held where HQ is
-            # not a protection rule, is answered on GitHub alone.
-            alpha(waiting=waiting(ago(minutes=5), sha=""), environments=RULED, raises=(WAITS,)),
+            alpha(waiting=waiting(ago(hours=3)), raises=(Raised(title=WAITS, severity=SERIOUS),)),
             alpha(waiting=waiting(ago(minutes=5)), raises=(WAITS,)),
         ),
         quiet=(QUIET,),

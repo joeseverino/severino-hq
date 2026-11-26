@@ -11,14 +11,12 @@ from datetime import timedelta
 from typing import Any
 
 from hq.domains.control_plane.observations.github import JobFailure
-from hq.domains.control_plane.provider_adapters.github import COMMIT
 from hq.platform.application.routes import reverse
 
 from .action_links import read_link
-from .deployment_review import APPROVE, REJECT, hq_rules, production_runs, review_target
 from .derivations import reached, whole
 from .entity_links import web_url
-from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule, Notice, opens
+from .finding_model import Finding, FindingEstate, FindingRule, Notice, opens
 from .finding_steps import Do, Run
 from .github_estate import (
     ARTIFACT_ATTENTION_DAYS,
@@ -37,7 +35,6 @@ from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
 from .ui import counted, ended
-lazy from .capabilities import capability_words
 lazy from .projects import projects_by_repository, repository_key
 
 PROJECTS = "hq.projects"
@@ -47,9 +44,6 @@ UNVERIFIED = "github-unverified"
 ALERTS = "github-alerts"
 LAPSING = "github-artifact"
 POSTURE = "github-posture"
-_COMMIT = re.compile(COMMIT)
-# What releases a run HQ's answer has not reached, as GitHub's run page offers it.
-BYPASS = "If HQ's answer has not reached GitHub, press Start all waiting jobs on the run's page there."
 
 # Each finding about one repository, with what it says once its reading is out of date.
 Said = tuple[Finding, str]
@@ -95,52 +89,21 @@ def _each(said: Callable[[Repository], Iterator[Said]]) -> Callable[[FindingEsta
     return detect
 
 
-def _answers(repo: Repository, run: Mapping[str, Any]) -> tuple[FindingRemedy, ...]:
-    """Approve and Reject for each environment the run waits on where HQ is
-    a protection rule, at its commit: Reject alone for a commit production
-    already runs, and none for a run whose commit the reading does not hold."""
-
-    sha = str(run.get("sha") or "")
-    if not _COMMIT.fullmatch(sha):
-        return ()
-    environments = [environment for environment in run.get("environments") or () if hq_rules(repo.name, environment)]
-    answers = (REJECT,) if production_runs(repo.name, sha) else (APPROVE, REJECT)
-    return tuple(
-        FindingRemedy.posted(
-            answer,
-            review_target(repo.name, run, environment),
-            intent=f"{capability_words(answer)} {environment}" if len(environments) > 1 else "",
-        )
-        for environment in environments
-        for answer in answers
-    )
-
-
 def _waiting(repo: Repository) -> Iterator[Said]:
     for run in repo.waiting or ():
         started = moment(run.get("created_at", ""))
         hours = max(0, whole(started, timedelta(hours=1))) if started else 0
         where = ", ".join(run.get("environments") or ()) or "an environment"
         name = run.get("name") or "A run"
-        sha = str(run.get("sha") or "")
-        serious = bool(started) and reached(started + WAITING_SERIOUS_AFTER.value)
         finding = _about(
             repo,
             WAITING,
             str(run.get("id")),
             title=f"{name} waits for your approval to deploy to {where}",
-            severity=Tone.SERIOUS if serious else Tone.ATTENTION,
-            explanation=(
-                f"Production already runs commit {sha[:7]} of {repo.short}"
-                if production_runs(repo.name, sha)
-                else f"Commit {sha[:7]} of {repo.short}"
-            ),
+            severity=Tone.SERIOUS if started and reached(started + WAITING_SERIOUS_AFTER.value) else Tone.ATTENTION,
+            explanation=f"Commit {run.get('sha', '')[:7]} of {repo.short}",
             evidence=(("Waiting", f"{hours}h"),),
             primary=opens("Review deployment", web_url(run.get("url")) or repo.url),
-            remedies=_answers(repo, run),
-            # Long past its threshold, HQ's answer may not be reaching GitHub,
-            # where an administrator can release the run without it.
-            steps=(Do(BYPASS),) if serious else (),
         )
         yield finding, f"{name} was waiting for your approval to deploy to {where}"
 
@@ -347,12 +310,12 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _each(_waiting),
         operator_action="Approve or reject the run on GitHub, as one of its required reviewers.",
-        no_help_reason="HQ answers only an environment where its deploy review App is the protection rule.",
+        no_help_reason="Only a required reviewer can approve a deployment.",
         bars={
-            Tone.SERIOUS: f"a run has waited for approval for {WAITING_SERIOUS_AFTER}",
-            Tone.ATTENTION: "a run waits for approval",
+            Tone.SERIOUS: f"a run has waited on a reviewer for {WAITING_SERIOUS_AFTER}",
+            Tone.ATTENTION: "a run waits on a reviewer",
         },
-        clears="the run is approved or rejected",
+        clears="a reviewer approves or rejects the run",
         domain=PROJECTS,
         gathered=True,
     ),

@@ -88,18 +88,17 @@ func (e ConditionType) Valid() bool {
 
 // Defines values for ConnectionProvider.
 const (
-	ConnectionProviderACME               ConnectionProvider = "acme"
-	ConnectionProviderAdGuard            ConnectionProvider = "adguard"
-	ConnectionProviderCloudflareAPI      ConnectionProvider = "cloudflare_api"
-	ConnectionProviderCloudflareDNS      ConnectionProvider = "cloudflare_dns"
-	ConnectionProviderCloudflareEvents   ConnectionProvider = "cloudflare_events"
-	ConnectionProviderGitHubApp          ConnectionProvider = "github_app"
-	ConnectionProviderGitHubDeployReview ConnectionProvider = "github_deploy_review"
-	ConnectionProviderNPM                ConnectionProvider = "npm"
-	ConnectionProviderOnePassword        ConnectionProvider = "onepassword"
-	ConnectionProviderPortainer          ConnectionProvider = "portainer"
-	ConnectionProviderSSH                ConnectionProvider = "ssh"
-	ConnectionProviderTailscale          ConnectionProvider = "tailscale"
+	ConnectionProviderACME             ConnectionProvider = "acme"
+	ConnectionProviderAdGuard          ConnectionProvider = "adguard"
+	ConnectionProviderCloudflareAPI    ConnectionProvider = "cloudflare_api"
+	ConnectionProviderCloudflareDNS    ConnectionProvider = "cloudflare_dns"
+	ConnectionProviderCloudflareEvents ConnectionProvider = "cloudflare_events"
+	ConnectionProviderGitHubApp        ConnectionProvider = "github_app"
+	ConnectionProviderNPM              ConnectionProvider = "npm"
+	ConnectionProviderOnePassword      ConnectionProvider = "onepassword"
+	ConnectionProviderPortainer        ConnectionProvider = "portainer"
+	ConnectionProviderSSH              ConnectionProvider = "ssh"
+	ConnectionProviderTailscale        ConnectionProvider = "tailscale"
 )
 
 // Valid indicates whether the value is a known member of the ConnectionProvider enum.
@@ -116,8 +115,6 @@ func (e ConnectionProvider) Valid() bool {
 	case ConnectionProviderCloudflareEvents:
 		return true
 	case ConnectionProviderGitHubApp:
-		return true
-	case ConnectionProviderGitHubDeployReview:
 		return true
 	case ConnectionProviderNPM:
 		return true
@@ -194,24 +191,6 @@ const (
 func (e GitHubDeliveryProduction) Valid() bool {
 	switch e {
 	case GitHubDeliveryProductionCurrent:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for GitHubDeploymentReviewSpecState.
-const (
-	Approved GitHubDeploymentReviewSpecState = "approved"
-	Rejected GitHubDeploymentReviewSpecState = "rejected"
-)
-
-// Valid indicates whether the value is a known member of the GitHubDeploymentReviewSpecState enum.
-func (e GitHubDeploymentReviewSpecState) Valid() bool {
-	switch e {
-	case Approved:
-		return true
-	case Rejected:
 		return true
 	default:
 		return false
@@ -767,7 +746,6 @@ const (
 	ResourceKindGitHubDashboardBox           ResourceKind = "github.dashboard_box"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
-	ResourceKindGitHubDeploymentReview       ResourceKind = "github.deployment_review"
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubPullRequest            ResourceKind = "github.pull_request"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
@@ -858,8 +836,6 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindGitHubDelivery:
 		return true
 	case ResourceKindGitHubDependencyRun:
-		return true
-	case ResourceKindGitHubDeploymentReview:
 		return true
 	case ResourceKindGitHubProfile:
 		return true
@@ -1745,30 +1721,6 @@ type GitHubDependencyRunRecord struct {
 	Repositories []string `json:"repositories,omitempty"`
 	StartedAt    string   `json:"started_at,omitempty"`
 }
-
-// GitHubDeploymentReviewSpec A github.deployment_review declaration: the answer a reconcile sends.
-type GitHubDeploymentReviewSpec struct {
-	// Environment The environment it waits to deploy to.
-	Environment string `json:"environment"`
-
-	// HeadSha The commit the run deploys; a run at another one is refused.
-	HeadSha string `json:"head_sha"`
-
-	// Repository The repository, as owner/name.
-	Repository GitHubDeploymentReviewSpecRepository `json:"repository"`
-
-	// RunID The workflow run that waits.
-	RunID int `json:"run_id"`
-
-	// State The answer: release the deploy, or stop it.
-	State GitHubDeploymentReviewSpecState `json:"state"`
-}
-
-// GitHubDeploymentReviewSpecState The answer: release the deploy, or stop it.
-type GitHubDeploymentReviewSpecState string
-
-// GitHubDeploymentReviewSpecRepository The repository, as owner/name.
-type GitHubDeploymentReviewSpecRepository = string
 
 // GitHubMergeRefusal Why GitHub refused a merge, as a refused merge's status says it.
 type GitHubMergeRefusal string

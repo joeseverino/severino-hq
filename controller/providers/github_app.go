@@ -51,26 +51,17 @@ type githubConnection struct {
 }
 
 func (r *Registry) admitGitHub() {
-	r.probe(runtime.ConnectionProviderGitHubApp, r.githubProbe(runtime.ConnectionProviderGitHubApp))
-	r.probe(runtime.ConnectionProviderGitHubDeployReview, r.githubProbe(runtime.ConnectionProviderGitHubDeployReview))
+	r.probe(runtime.ConnectionProviderGitHubApp, r.githubProbe)
 	r.reader(runtime.ResourceKindGitHubRepository, r.githubRepositories)
 	r.reader(runtime.ResourceKindGitHubDelivery, r.githubDeliveryInventory)
 	r.tally(runtime.ResourceKindGitHubAllowance, r.githubAllowances)
 	act(r, runtime.ResourceKindGitHubDelivery, "reconcile", r.githubDeliveryReconcile)
 	act(r, runtime.ResourceKindGitHubPullRequest, "merge", r.githubMerge)
 	act(r, runtime.ResourceKindGitHubDashboardBox, "reconcile", r.githubDashboardBox)
-	act(r, runtime.ResourceKindGitHubDeploymentReview, "reconcile", r.githubReview)
 }
 
-// githubConnection is the main App's connection.
-func (r *Registry) githubConnection() (githubConnection, error) {
-	return r.githubConnectionOf(runtime.ConnectionProviderGitHubApp, "")
-}
-
-// githubConnectionOf is one GitHub App provider's connection: the main App, or
-// the deploy review App only a review signs as.
-func (r *Registry) githubConnectionOf(provider runtime.ConnectionProvider, ref string) (githubConnection, error) {
-	connection, err := r.Supplied.For(provider, ref)
+func (r *Registry) githubConnection(ref string) (githubConnection, error) {
+	connection, err := r.Supplied.For(runtime.ConnectionProviderGitHubApp, ref)
 	if err != nil {
 		return githubConnection{}, err
 	}
@@ -448,17 +439,11 @@ func (r *Registry) githubBot(ctx context.Context, c githubConnection) (string, e
 
 // githubProbe is whether the key still signs for the app, and which accounts
 // it is installed on.
-func (r *Registry) githubProbe(provider runtime.ConnectionProvider) Probe {
-	return func(ctx context.Context, ref string) (ProbeResult, error) {
-		c, err := r.githubConnectionOf(provider, ref)
-		if err != nil {
-			return ProbeResult{}, err
-		}
-		return r.githubProbeOf(ctx, c)
+func (r *Registry) githubProbe(ctx context.Context, ref string) (ProbeResult, error) {
+	c, err := r.githubConnection(ref)
+	if err != nil {
+		return ProbeResult{}, err
 	}
-}
-
-func (r *Registry) githubProbeOf(ctx context.Context, c githubConnection) (ProbeResult, error) {
 	app, err := json200(r.githubAsApp(ctx, c).AppsGetAuthenticatedWithResponse(ctx))
 	if err != nil {
 		return ProbeResult{}, err

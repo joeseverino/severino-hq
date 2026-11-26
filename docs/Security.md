@@ -699,7 +699,7 @@ is refused the audit log (`read_audit_log`) and the calendar
 Providers' webhooks reach a Cloudflare Worker (`worker/`), never HQ. HQ's
 listener dials out to it and holds the socket, so HQ itself still has no
 path from the public internet. Setting it up is
-[Install step 12](Install.md#12-hear-providers-events-and-approve-deploys-in-hq).
+[Install step 12](Install.md#12-hear-providers-events).
 
 - It answers on a name of the operator's own zone, a Workers custom domain.
   Its `workers.dev` address, which names the Cloudflare account, is off
@@ -765,48 +765,6 @@ uploads the Worker and attaches its custom domain, and grants nothing on a
 zone. A deploy with no terminal replaces any DNS record already on that
 hostname, so the name is kept for the Worker alone. Cloudflare never returns
 a Worker secret's value, so the token cannot read the Worker's secrets.
-
-## Releasing a deploy
-
-Deploy's Approve job waits on the `release` environment, whose one
-protection rule is HQ's deploy review App, a custom deployment protection
-rule. Deploy (`deploy.yml`) is started only by a dispatch on `main` and
-deploys only a commit Compose published and signed, so the rule decides when
-a merged commit ships, never what ships.
-
-Who holds which key:
-
-| Key | Held by | Can answer the rule |
-| :--- | :--- | :--- |
-| the deploy review App's | the controller alone, rendered from its connection item | yes: the rule is that App |
-| the main App's (`HQ_APP_KEY`) | the controller, CI's Release, Compose, each extension's `admission` environment | no: GitHub takes a rule's answer only from the App that is the rule |
-
-- Only a person's press in HQ, or an agent's request a person approved, makes
-  the controller answer. The `github-waiting` finding offers Approve and
-  Reject (`deployment.approve`, `deployment.reject`) for a run waiting on an
-  environment whose rule is the review App, at the commit the reading holds.
-  An agent's call waits for a person's approval, always
-  (`waits_for_a_person(every_call)`). An event from GitHub only makes the
-  repository's reading due.
-- The answer is the controller's (`controller/providers/github_review.go`),
-  signed as the review App and never the main one: it reads the run again and
-  answers only while it still waits on that environment at that commit, under
-  a token for that one repository with Actions read and Deployments write. A
-  commit production already runs is offered and allowed Reject alone.
-- The review App is installed on the host repository alone and holds nothing
-  else, so its key reaches no code, secret or other repository. A stolen main
-  key still mints Deployments write on the host, which records deployments
-  but answers no rule.
-- Deploy fails closed: Resolve reads `release` before anything is recorded
-  and refuses unless main alone may deploy and the review App, by the ID in
-  `HQ_REVIEW_APP_ID`, is an enabled rule. GitHub makes an environment a job
-  names on first use, with no protection, so without this check a run before
-  the setup would pass Approve with no person.
-- With HQ down, the run waits up to 30 days, then fails; it never releases
-  itself. A repository administrator releases it without HQ by "Start all
-  waiting jobs" on the run, as long as the environment lets administrators
-  bypass its rules. The finding names that step once a run has waited past
-  `WAITING_SERIOUS_AFTER`.
 
 ## A leaked GitHub App credential
 

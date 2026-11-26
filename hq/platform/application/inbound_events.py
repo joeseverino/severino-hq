@@ -39,7 +39,7 @@ def setup_guide(standing: WorkerStanding) -> str:
 
     if standing.state is not WorkerState.NOT_CONFIGURED:
         return ""
-    return docs_url("Install.md", "12-hear-providers-events-and-approve-deploys-in-hq")
+    return docs_url("Install.md", "12-hear-providers-events")
 
 
 def channel(source: InboundSource) -> str:

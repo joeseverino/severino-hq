@@ -151,15 +151,14 @@ def repositories():
                 }
             ]
             record["environments"] = [
-                {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]},
-                {"name": "release", "reviewers": [], "wait_minutes": 0, "branches": ["main"], "hq_rule": True},
+                {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]}
             ]
-            # A release waiting on HQ's protection rule, which HQ offers to approve or reject.
+            # A deploy waiting on production's reviewer, approved on GitHub.
             record["waiting"] = [
                 {
                     "id": 4100,
                     "name": "Deploy",
-                    "environments": ["release"],
+                    "environments": ["production"],
                     "sha": hexed("release", name, length=40),
                     "created_at": iso(timedelta(minutes=20)),
                     "url": "https://github.com/example/hq/actions/runs/4100",

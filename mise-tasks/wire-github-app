@@ -5,7 +5,6 @@
 #USAGE flag "--vault <vault>" required=#true help="The 1Password vault holding the app's private key"
 #USAGE flag "--item <item>" required=#true help="The 1Password item holding the app's private key"
 #USAGE flag "--client-id <id>" required=#true help="The app's client ID, from its settings page"
-#USAGE flag "--review" help="The App is the deploy review App: its webhook, HQ_REVIEW_APP_ID, and the release environment with it as the rule; its key in no secret"
 #USAGE flag "--extension <repo>" var=#true help="OWNER/REPO, once per extension; none for a host without any"
 #USAGE flag "--webhook-secret <ref>" help="op://<vault>/<item>/<field> holding the Worker's GITHUB_WEBHOOK_SECRET: set the App's webhook to the Worker's github route with it"
 #USAGE flag "--webhook-host <hostname>" env="HQ_INBOUND_HOSTNAME" help="The name on your own zone the inbound-events Worker answers on"

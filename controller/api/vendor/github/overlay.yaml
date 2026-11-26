@@ -27,13 +27,6 @@ actions:
   # generates marshals every field, an empty conclusion included.
   - target: $.paths['/repos/{owner}/{repo}/check-runs/{check_run_id}'].patch.requestBody.content['application/json'].schema.anyOf
     remove: true
-  # A review answers with a state, the one variant of the body's anyOf HQ
-  # sends; the other is a status report with no answer.
-  - target: $.paths['/repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule'].post.requestBody.content['application/json'].schema.anyOf
-    remove: true
-  - target: $.paths['/repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule'].post.requestBody.content['application/json'].schema
-    update:
-      $ref: '#/components/schemas/review-custom-gates-state-required'
   # An alert's dependency is an inline object the slice cannot narrow; its
   # enums go, since nothing reads them and they generate bare package-level names.
   - target: $.components.schemas['dependabot-alert'].properties.dependency.properties.scope

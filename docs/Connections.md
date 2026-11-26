@@ -271,25 +271,3 @@ Store it as an API Credential item:
 | `credential` | the secret | The item's own credential field. |
 | `website` | yours | A field labeled website. |
 | `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |
-
-## GitHub deploy review App
-
-Approve or reject a deploy waiting on HQ, from HQ.
-
-A second GitHub App on your account, installed on the host repository alone, made the protection rule of the environment Deploy waits on; mise run wire-github-app --review points its webhook at the inbound-events Worker. [Setup page](https://github.com/settings/apps/new?public=false&actions=read&deployments=write&events%5B%5D=deployment_protection_rule)
-
-Permissions, and no others:
-
-- `Actions: Read-only`
-- `Deployments: Read & write`
-
-Store it as an item of any type:
-
-| Field | Value | What it is |
-| --- | --- | --- |
-| `connection_ref` | `github-deploy-review` | Any name; how HQ refers to this connection. |
-| `projection` | `github_app` | The shape HQ reads the item as. |
-| `env_prefix` | `GITHUB_DEPLOY_REVIEW` | Says which service it is for. |
-| `app_id` | yours | A field labeled app_id. |
-| `signing_key` | yours | A field labeled signing_key. |
-| `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |

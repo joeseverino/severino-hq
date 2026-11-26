@@ -3625,7 +3625,6 @@
           "cloudflare_dns",
           "cloudflare_events",
           "github_app",
-          "github_deploy_review",
           "npm",
           "onepassword",
           "portainer",
@@ -3639,7 +3638,6 @@
           "ConnectionProviderCloudflareDNS",
           "ConnectionProviderCloudflareEvents",
           "ConnectionProviderGitHubApp",
-          "ConnectionProviderGitHubDeployReview",
           "ConnectionProviderNPM",
           "ConnectionProviderOnePassword",
           "ConnectionProviderPortainer",
@@ -3840,52 +3838,6 @@
           "exit_code"
         ],
         "type": "object"
-      },
-      "GitHubDeploymentReviewSpec": {
-        "additionalProperties": false,
-        "description": "A github.deployment_review declaration: the answer a reconcile sends.",
-        "properties": {
-          "repository": {
-            "$ref": "#/components/schemas/GitHubDeploymentReviewSpecRepository"
-          },
-          "run_id": {
-            "description": "The workflow run that waits.",
-            "maximum": 9223372036854775807,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "environment": {
-            "description": "The environment it waits to deploy to.",
-            "pattern": "^[^/\\s][^/]{0,254}$",
-            "type": "string"
-          },
-          "head_sha": {
-            "description": "The commit the run deploys; a run at another one is refused.",
-            "pattern": "^[0-9a-f]{40}$",
-            "type": "string"
-          },
-          "state": {
-            "description": "The answer: release the deploy, or stop it.",
-            "enum": [
-              "approved",
-              "rejected"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "repository",
-          "run_id",
-          "environment",
-          "head_sha",
-          "state"
-        ],
-        "type": "object"
-      },
-      "GitHubDeploymentReviewSpecRepository": {
-        "description": "The repository, as owner/name.",
-        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-        "type": "string"
       },
       "GitHubMergeRefusal": {
         "type": "string",
@@ -6512,7 +6464,6 @@
           "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
-          "github.deployment_review",
           "github.profile",
           "github.pull_request",
           "github.repository",
@@ -6579,7 +6530,6 @@
           "ResourceKindGitHubDashboardBox",
           "ResourceKindGitHubDelivery",
           "ResourceKindGitHubDependencyRun",
-          "ResourceKindGitHubDeploymentReview",
           "ResourceKindGitHubProfile",
           "ResourceKindGitHubPullRequest",
           "ResourceKindGitHubRepository",

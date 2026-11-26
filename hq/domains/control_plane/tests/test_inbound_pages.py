@@ -15,7 +15,7 @@ from hq.platform.application.inbound_events import channel
 from hq.platform.core.testing import operator
 
 SOURCE = override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq")
-GUIDE = "docs/Install.md#12-hear-providers-events-and-approve-deploys-in-hq"
+GUIDE = "docs/Install.md#12-hear-providers-events"
 
 
 def told(source: InboundSource, event: str, *, hours: int, outcome: InboundOutcome = InboundOutcome.APPLIED) -> None:

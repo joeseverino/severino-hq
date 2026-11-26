@@ -19,7 +19,7 @@ waits on a schedule.
 | :--- | :--- | :--- |
 | **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image and the automation worker's image built beside it, and attest their SBOMs), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application, pinning the worker image CI built beside the host image; on `main`, published and signed with that worker image, and both SBOMs attested |
-| **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits on the `release` environment, whose protection rule is HQ's GitHub App, then deploys on the self-hosted runner |
+| **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
 Each CI job is named for the `mise` task it runs, so the gates are declared
 once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
@@ -137,33 +137,17 @@ ran before (`python3 -m tools.pipeline.production previous COMMIT`, the same
 reading `mise run release:report` takes). It gives the `cosign verify` command
 for the image it deployed.
 
-Resolve records the production deployment itself, since one a job of that
-environment recorded would name the commit `main` was at when the run started
-and succeed once approved. Approve waits on an environment of its own,
-`release`, because a custom protection rule cannot hold a job that sets
-`deployment: false`; the deployment that job records is `release`'s.
+Resolve records the deployment itself: the environment's job sets
+`deployment: false`, since the deployment GitHub would record names the
+commit `main` was at when the run started and succeeds once approved.
 
 ### Releasing a deploy
 
-A run waiting on `release` is the `github-waiting` finding, with Approve and
-Reject. A press sends the answer through the controller, which reads the run
-again and answers only while it still waits there at the commit you saw;
-Reject alone is offered for a commit production already runs. An agent's
-press waits for your approval. With HQ down the run waits, never releases
-itself: "Start all waiting jobs" on the run releases it without HQ, which the
-finding names once the run has waited past its threshold. What each part may
-do: [Security](Security.md#releasing-a-deploy).
-
-The rule is a GitHub App of its own, the deploy review App, whose key only
-the controller holds: GitHub takes a rule's answer only from the App that is
-the rule, so the main App's key, which CI and every extension also hold,
-cannot release a deploy. Its webhook reaches HQ through the inbound-events
-Worker. Setting both up, once, on the repository that deploys HQ is
-[Install step 12](Install.md#12-hear-providers-events-and-approve-deploys-in-hq).
-
-Deploy's Resolve refuses to go on until `release` is so, naming what is
-missing: GitHub makes an environment a job names on first use, unprotected,
-so a run before this setup would otherwise pass Approve with no person.
+Approve waits on the `production` environment, whose required reviewer is
+you. Approve or reject it on the run's page, in GitHub or GitHub Mobile, which
+notifies you ([Reviewing deployments](https://docs.github.com/en/actions/managing-workflow-runs/reviewing-deployments)).
+HQ shows a waiting run as the `github-waiting` finding, read-only, its link the
+run's page, and never answers GitHub.
 
 ### When a run fails
 
@@ -193,18 +177,17 @@ prints: they move between steps as files.
 
 ### HQ's GitHub App
 
-Two apps, each registered with the permissions in
+One app, registered with the permissions in
 [`deploy/github-apps.json`](../deploy/github-apps.json) (a test holds them to
-what HQ asks for). The main app is installed on the host repository, every
-extension and each repository a host grant names
-([Tokens on the host](#tokens-on-the-host)); the deploy review app, on the host
-repository alone ([Releasing a deploy](#releasing-a-deploy)). Each use mints
-an hour-long token for only what it does:
+what HQ asks for), its webhook the inbound-events Worker's
+([Install step 12](Install.md#12-hear-providers-events)), installed on the
+host repository, every extension and each repository a host grant names
+([Tokens on the host](#tokens-on-the-host)). Each use mints an hour-long token
+for only what it does:
 
 | Who | Holds the key as | Asks for |
 | :--- | :--- | :--- |
 | the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs; Contents and Pull requests write on one repository to merge a pull request you approved |
-| the controller, as the deploy review app | its own SSH Key item, rendered the same way | Actions read and Deployments write on the host repository to answer a deploy you approved or rejected |
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
 | Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
 
