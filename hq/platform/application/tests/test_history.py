@@ -365,9 +365,10 @@ class StepPageTests(TestCase):
         with operation_context(interface="web", actor="owner", operation="example.declare", operation_id=declared):
             declare("example-web", "example.record")
 
-        (declaration,) = chain(declared)
-
-        self.assertEqual(declaration.opens, reverse("control_plane:detail", kwargs={"key": "example-web"}))
+        self.assertEqual(
+            [line.opens for line in chain(declared)],
+            [reverse("control_plane:detail", kwargs={"key": "example-web"})],
+        )
 
 
 class NoSecondHistoryTests(TestCase):
