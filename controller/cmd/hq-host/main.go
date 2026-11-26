@@ -50,7 +50,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance | --events] | events | renovate | automation | install [--check] | setup RUNNER | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | backup | unit --serve | check --release DIR | edge-receiver | dry-run | verified DIR"
+const usage = "usage: hq-host run-web | controller [--apply | --glance | --events] | events | renovate | automation | install [--check] | setup RUNNER | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | backup | unit --serve | check | edge-receiver | dry-run | verified DIR"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
 var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance, "--events": host.Listen}
@@ -226,24 +226,18 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 	return runner.Run(ctx)
 }
 
-// check is the deploy host's half of a preflight: --release is the unit
-// directory this release ships.
+// check is the deploy host's half of a preflight.
 func check(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	options := flag.NewFlagSet("check", flag.ContinueOnError)
-	options.SetOutput(stderr)
-	release := options.String("release", "", "the unit directory this release ships")
-	if err := options.Parse(args); err != nil || options.NArg() != 0 || *release == "" {
+	if len(args) != 0 {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	checker := hostChecker(stdout)
-	checker.Release = *release
-	return checker.Check(ctx)
+	return hostChecker(stdout).Check(ctx)
 }
 
 func hostChecker(out io.Writer) *host.Checker {
 	return &host.Checker{
-		Lib: host.Lib, Systemd: "/etc/systemd/system", RootUID: 0,
+		Lib: host.Lib, RootUID: 0,
 		FreeBytes: host.DeployFreeBytes, Free: host.Free,
 		Command: hostcore.Command, Out: out,
 	}

@@ -1,6 +1,6 @@
 """The check:host task: the deploy host's half of `mise run check --release`,
 read-only. hq-host check, built from HEAD for the host's platform, runs there
-over SSH with the units this release and main ship; its exit is this one's.
+over SSH; its exit is this one's.
 """
 
 from __future__ import annotations
@@ -44,19 +44,10 @@ def build_check(work: Path, platform: tuple[str, str]) -> Path:
     return program
 
 
-def unit_trees(payload: Path) -> None:
-    """The units this release ships, as release/."""
-
-    into = payload / "release"
-    into.mkdir(parents=True)
-    archive = subprocess.run(["git", "archive", "HEAD", "deploy/systemd"], cwd=ROOT, check=True, capture_output=True)
-    subprocess.run(["tar", "-x", "-C", str(into)], input=archive.stdout, check=True)
-
-
 # Run by the login shell: unpack, check, remove, exit as the check did.
 REMOTE = (
     'dir="$(mktemp -d "${TMPDIR:-/tmp}/hq-check.XXXXXX")" || exit 1; '
-    'if tar -x -C "$dir"; then "$dir/hq-host" check --release "$dir/release/deploy/systemd"; '
+    'if tar -x -C "$dir"; then "$dir/hq-host" check; '
     'status=$?; else status=1; fi; rm -rf "$dir"; exit "$status"'
 )
 
@@ -71,7 +62,6 @@ def host_check(destination: str) -> int:
         work = Path(directory)
         try:
             build_check(work, ("linux", ARCHITECTURES[machine]))
-            unit_trees(work / "payload")
         except subprocess.CalledProcessError as error:
             print(f"The check could not be built from HEAD: {shlex.join(map(str, error.cmd))} failed.")
             return 1
