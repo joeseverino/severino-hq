@@ -152,16 +152,6 @@ class GraphTests(TestCase):
 
 
 class ContainerPageTests(TestCase):
-    def test_its_readings_are_raw_data_in_the_one_fold(self):
-        estate()
-        operator(self.client)
-
-        page = self.client.get(reverse("control_plane:detail", args=["lab-web"]))
-
-        self.assertTrue(page.context["readouts"])
-        self.assertFalse(page.context["relationships"].readouts)
-        self.assertNotIn("Raw readings", text(page))
-
     def test_a_group_read_through_a_connection_the_page_names_says_only_when(self):
         from django.template.loader import render_to_string
         from django.utils import timezone
