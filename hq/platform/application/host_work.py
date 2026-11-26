@@ -16,6 +16,7 @@ lazy from django.core.management import call_command
 
 lazy from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 lazy from hq.domains.control_plane.models import InboundSource
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.observations.host import UNIT_FAILED
 lazy from hq.domains.jobs import runner
 lazy from hq.domains.jobs.runner import Failed
@@ -130,8 +131,14 @@ def _due(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
 DAILY = timedelta(days=1)
 
 
-def _own(name: str, label: str, run: Any, every: timedelta | None = None) -> OutboundWork:
-    return OutboundWork(name, label, "", "", run, every=every, offered=False)
+def _own(name: str, label: str, run: Any, every: timedelta | None = None, reads: tuple[str, ...] = ()) -> OutboundWork:
+    return OutboundWork(name, label, "", "", run, every=every, offered=False, reads=reads)
+
+
+def _read_here() -> tuple[str, ...]:
+    """The readings HQ takes itself, each from a public registry (``read_by``)."""
+
+    return tuple(kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "hq")
 
 
 def outbound() -> tuple[OutboundWork, ...]:
@@ -145,7 +152,7 @@ def outbound() -> tuple[OutboundWork, ...]:
         _own("content.sync", "Content sync", _content_index, every=DAILY),
         _own("due", "Scheduled work", _due),
         _own("events.prune", "Event cleanup", prune_events, every=DAILY),
-        _own(public_registry.REFRESH, "Registry refresh", _public_registry, every=DAILY),
+        _own(public_registry.REFRESH, "Registry refresh", _public_registry, every=DAILY, reads=_read_here()),
         _own("sessions.clear", "Session cleanup", _clear_sessions, every=DAILY),
         _own("units.read", "Service check", _unit_state),
     )

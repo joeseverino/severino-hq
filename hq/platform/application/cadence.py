@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -60,7 +61,7 @@ from .refusal_codes import Code
 from .security import Capability, Principal
 from .tone import Absent, Tone, Toned
 from .ui import ended
-lazy from . import outbound_work, public_registry
+lazy from . import outbound_work
 lazy from .adoption import manages_through, observes_only
 lazy from .facts import stored_snapshots
 lazy from .inbound_events import covers
@@ -763,20 +764,24 @@ def ask(
     ``activity`` notes that a person asked, so the active cadence decides the
     sweep and a panel says its reading is under way. ``spaced`` is an
     event's ask, which waits a gap after its kind was stored
-    (``read_requests.EVENT_READ_GAP``). A kind HQ reads itself starts its
-    host job once this commits instead, which reads what of it is due. A kind
-    HQ stores no reading of is refused, since nothing would answer it and it
+    (``read_requests.EVENT_READ_GAP``). A kind HQ reads itself starts the
+    host job that declares it (``OutboundWork.reads``) once this commits
+    instead, which reads what of it is due. Any other kind HQ stores no
+    reading of is refused, since nothing would answer it and it
     would force sweeps until it expired.
     """
 
     now = timezone.now()
     kinds = tuple(dict.fromkeys(reads))
-    if unknown := [kind for kind in kinds if kind not in OBSERVATIONS and kind not in PROVIDERS]:
+    read_here = {kind: work for kind in kinds if (work := outbound_work.reader_of(kind))}
+    if unknown := [
+        kind for kind in kinds if kind not in OBSERVATIONS and kind not in PROVIDERS and kind not in read_here
+    ]:
         raise ValidationError({"kind": ValidationError(f"No such type: {', '.join(unknown)}.", code="invalid_choice")})
-    read_here = [kind for kind in kinds if kind in OBSERVATIONS and OBSERVATIONS[kind].read_by == "hq"]
     if read_here:
         kinds = tuple(kind for kind in kinds if kind not in read_here)
-        transaction.on_commit(lambda: outbound_work.start_for_host(public_registry.REFRESH), robust=True)
+        for work in dict.fromkeys(read_here.values()):
+            transaction.on_commit(partial(outbound_work.start_for_host, work), robust=True)
     if activity:
         note_activity()
     for kind in kinds or (("",) if connection or every else ()):

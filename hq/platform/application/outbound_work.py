@@ -84,6 +84,9 @@ class OutboundWork:
     # or route offers it, so it needs no effect or required capability. The
     # host's own (``host_work``) is also what its units ask for by name.
     offered: bool = True
+    # The kinds of reading the host's own work reads, so an ask for one
+    # (``cadence.ask``) starts it: what an event makes due, read in HQ.
+    reads: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "effect", Effect(self.effect))
@@ -115,6 +118,8 @@ def validate(work: object) -> OutboundWork:
         raise ImproperlyConfigured(f"Outbound work {work.name!r} needs a short label.")
     if work.offered and not work.effect.changes:
         raise ImproperlyConfigured(f"Outbound work {work.name!r} reads only, so it is no outbound work.")
+    if work.reads and work.offered:
+        raise ImproperlyConfigured(f"Outbound work {work.name!r} is offered, so no ask of a reading starts it.")
     if work.refuse is not None and not callable(work.refuse):
         raise ImproperlyConfigured(f"Outbound work {work.name!r} refuse is not callable.")
     # Checked as what was given: a declaration does not have to respect the annotation.
@@ -142,8 +147,13 @@ def _declared(_composition: Composition) -> dict[str, OutboundWork]:
     declared: dict[str, OutboundWork] = {}
     # The host's domains declare theirs as an extension does, so neither can
     # take a name the other holds.
-    for work in (*host_specs("outbound"), *plugin_outbound_work()):
+    extensions = plugin_outbound_work()
+    for work in (*host_specs("outbound"), *extensions):
         validate(work)
+        if work.reads and work in extensions:
+            raise ImproperlyConfigured(
+                f"Outbound work {work.name!r} reads a kind, which only the host's own work does."
+            )
         if work.name in declared:
             raise ImproperlyConfigured(f"Duplicate outbound work {work.name!r}.")
         declared[work.name] = work
@@ -153,6 +163,17 @@ def _declared(_composition: Composition) -> dict[str, OutboundWork]:
 @kept
 def _host() -> frozenset[str]:
     return frozenset(work.name for work in host_specs("outbound") if not work.offered)
+
+
+@kept
+def _readers() -> dict[str, str]:
+    return {kind: work.name for work in host_specs("outbound") for kind in work.reads}
+
+
+def reader_of(kind: str) -> str:
+    """The host's own work that reads ``kind``, by name, or ""."""
+
+    return _readers().get(kind, "")
 
 
 def declared_work() -> dict[str, OutboundWork]:
