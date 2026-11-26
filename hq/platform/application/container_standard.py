@@ -13,7 +13,7 @@ from typing import Any
 
 from django.utils.text import get_text_list
 
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 
 from .standards import Check, Examples, Measurement, Reading, measure
 lazy from .container_findings import help_for
