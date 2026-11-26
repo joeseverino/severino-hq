@@ -61,7 +61,7 @@ class EventsPageTests(TestCase):
         self.assertIn(GUIDE, empty.context["page_facts"])
         self.assertIn("Host: Nothing yet", strip_tags(empty.context["page_facts"]))
         self.assertNotIn(GUIDE, listening.context["page_facts"])
-        self.assertIn("heard just now", strip_tags(listening.context["page_facts"]))
+        self.assertIn("seen just now", strip_tags(listening.context["page_facts"]))
 
     def test_the_controller_page_shows_the_listener_beside_the_controller(self):
         never = self.client.get(reverse("control_plane:controller"))
@@ -70,5 +70,5 @@ class EventsPageTests(TestCase):
 
         self.assertContains(never, GUIDE)
         self.assertNotContains(arrived, GUIDE)
-        self.assertIn("Last heard just now.", strip_tags(arrived.content.decode()))
+        self.assertIn("Last seen just now.", strip_tags(arrived.content.decode()))
         self.assertContains(arrived, reverse("control_plane:events"))

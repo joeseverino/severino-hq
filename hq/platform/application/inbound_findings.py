@@ -4,37 +4,35 @@ only at its next sweep. One never heard is not set up, which is nothing to raise
 from hq.domains.control_plane.models import InboundSource
 
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .moments import when
-from .security import Capability
 from .tone import Tone
-lazy from .inbound_events import CHANNEL_EVERY, channel_standing
+from .unit_findings import stopped_reporting
+lazy from .inbound_events import channel_standing
 lazy from .routes import reverse
 
 RULE = "event-channel-silent"
-# It is about no record or reading, so no subject or scope gates it.
-_READ = (str(Capability.READ),)
+# The unit on HQ's machine that runs each channel's reader (deploy/systemd).
+READERS = {
+    InboundSource.WORKER: "severino-hq-listener.service",
+    InboundSource.HOST: "severino-hq-events-docker.service",
+}
 
 
 def _silent(estate: FindingEstate) -> tuple[Finding, ...]:
-    found = []
-    for source in (source for source in InboundSource if CHANNEL_EVERY[source] is not None):
-        standing = channel_standing(source)
-        if not standing.silent or standing.seen_at is None:
-            continue
-        found.append(
-            Finding(
-                rule=RULE,
-                subject="",
-                part=str(source),
-                read_capabilities=_READ,
-                title=f"The {standing.named} stopped reporting",
-                severity=Tone.ATTENTION,
-                explanation="Changes outside HQ show only once HQ next reads them.",
-                evidence=(("Last heard", when(standing.seen_at, now=estate.now)),),
-                primary=opens("Open the controller", reverse("control_plane:controller")),
-            )
+    return tuple(
+        stopped_reporting(
+            estate,
+            standing.seen_at,
+            rule=RULE,
+            unit=unit,
+            part=str(source),
+            title=f"The {standing.named} stopped reporting",
+            explanation="Changes outside HQ show only once HQ next reads them.",
+            severity=Tone.ATTENTION,
+            primary=opens("Open events", reverse("control_plane:events")),
         )
-    return tuple(found)
+        for source, unit in READERS.items()
+        if (standing := channel_standing(source)).silent and standing.seen_at is not None
+    )
 
 
 # The rules this module raises, beside the detectors that decide them.

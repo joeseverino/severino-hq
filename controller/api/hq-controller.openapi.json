@@ -5529,7 +5529,7 @@
       "InboundHeartbeatSeconds": {
         "type": "integer",
         "default": 300,
-        "description": "How often the Worker's listener posts a batch with no events while its socket answers pings."
+        "description": "How often an event reader posts a batch with no events while it is listening."
       },
       "InboundProvider": {
         "type": "string",

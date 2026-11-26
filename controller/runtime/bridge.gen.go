@@ -2338,7 +2338,7 @@ type InboundBatch struct {
 	Source InboundSource `json:"source"`
 }
 
-// InboundHeartbeatSeconds How often the Worker's listener posts a batch with no events while its socket answers pings.
+// InboundHeartbeatSeconds How often an event reader posts a batch with no events while it is listening.
 type InboundHeartbeatSeconds = int
 
 // InboundProvider A provider whose events HQ takes, as an admitted module's INBOUND declares it.

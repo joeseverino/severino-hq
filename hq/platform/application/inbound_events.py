@@ -16,14 +16,11 @@ lazy from .connection_setup import docs_url
 # What each channel is called in a sentence about it.
 LISTENER_NAMED = "event listener"
 
-# How often a channel says it is listening when nothing happens, and so how
-# long it may go unheard before it is silent: two of these. HQ's own host jobs
-# speak only as a unit fails or a container changes, so their silence says
-# nothing.
-CHANNEL_EVERY: dict[InboundSource, timedelta | None] = {
-    InboundSource.WORKER: timedelta(minutes=5),
-    InboundSource.HOST: None,
-}
+# How often each channel's reader (the Worker's listener, the Docker reader)
+# says it is listening when nothing happens, as the contract's
+# InboundHeartbeatSeconds, and so how long a channel may go unheard before it
+# is silent: two of these.
+CHANNEL_EVERY = timedelta(minutes=5)
 
 
 def unheard(source: InboundSource) -> WorkerState:
@@ -55,6 +52,5 @@ def channel_standing(source: InboundSource) -> WorkerStanding:
     seen_at = readings.heard(channel(source))
     if seen_at is None:
         return WorkerStanding(seen_at=None, silent=False, named=LISTENER_NAMED, unheard=unheard(source))
-    every = CHANNEL_EVERY[source]
-    silent = every is not None and passed(seen_at + 2 * every)
+    silent = passed(seen_at + 2 * CHANNEL_EVERY)
     return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=LISTENER_NAMED)

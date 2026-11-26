@@ -1,5 +1,5 @@
 {% comment %}
 Each channel that tells HQ of events, the head's line of facts (`page_facts`):
-its standing (`inbound_events.channel_standing`), when it was last heard, and
+its standing (`inbound_events.channel_standing`), when it was last seen, and
 where setting it up is written down while it is not.
-{% endcomment %}{% for label, standing, guide in channels %}{% if not forloop.first %}{% dot %}{% endif %}{{ label }}: {% status standing.state pill=False %}{% if standing.known %}, heard {{ standing.seen_at|when }}{% elif guide %}{% dot %}{% entity guide|outside label="Setup guide" %}{% endif %}{% endfor %}
+{% endcomment %}{% for label, standing, guide in channels %}{% if not forloop.first %}{% dot %}{% endif %}{{ label }}: {% status standing.state pill=False %}{% if standing.known %}, seen {{ standing.seen_at|when }}{% elif guide %}{% dot %}{% entity guide|outside label="Setup guide" %}{% endif %}{% endfor %}

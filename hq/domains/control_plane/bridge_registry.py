@@ -237,17 +237,14 @@ def _records() -> Iterable[dict[str, dict[str, Any]]]:
 
 
 def _heartbeat() -> dict[str, dict[str, Any]]:
-    """How often the Worker's listener says it is listening while nothing
+    """How often an event reader says it is listening while nothing
     happens: the interval HQ holds its channel's silence to."""
 
-    every = CHANNEL_EVERY[InboundSource.WORKER]
-    if every is None:
-        raise ValueError("The Worker's channel says how often it is heard.")
     return {
         "InboundHeartbeatSeconds": {
             "type": "integer",
-            "default": int(every.total_seconds()),
-            "description": "How often the Worker's listener posts a batch with no events while its socket answers pings.",
+            "default": int(CHANNEL_EVERY.total_seconds()),
+            "description": "How often an event reader posts a batch with no events while it is listening.",
         }
     }
 
