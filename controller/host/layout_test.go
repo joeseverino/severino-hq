@@ -175,6 +175,47 @@ func TestTheListenerUnitHoldsTheSocketWhileHQRuns(t *testing.T) {
 	}
 }
 
+// The Docker watcher holds Docker's socket, so it is given the shared
+// sandbox and nothing more: no network, no address family but AF_UNIX, no
+// capability, nowhere to write and no credential. It holds the stream while
+// HQ runs, and restarts with it.
+func TestTheDockerWatcherRunsInTheSharedSandboxAlone(t *testing.T) {
+	shipped, err := Shipped(shippedUnits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range dropInsOf(DockerEventsUnit, shipped) {
+		if !strings.HasPrefix(name, "severino-hq-.service.d/") {
+			t.Errorf("%s is widened by %s", DockerEventsUnit, name)
+		}
+	}
+	setting := func(key string) (string, []string) { return effective(t, shippedUnits, DockerEventsUnit, key) }
+	if net, _ := setting("PrivateNetwork"); !systemdTrue(net) {
+		t.Errorf("the watcher reaches the host's network (PrivateNetwork=%q)", net)
+	}
+	if _, families := setting("RestrictAddressFamilies"); !slices.Equal(families, []string{"AF_UNIX"}) {
+		t.Errorf("the watcher may open sockets of %v", families)
+	}
+	if _, held := setting("CapabilityBoundingSet"); len(held) != 0 {
+		t.Errorf("the watcher may hold %v", held)
+	}
+	for _, key := range []string{"ReadWritePaths", "LoadCredential", "LoadCredentialEncrypted", "SetCredential", "ImportCredential", "EnvironmentFile", "Environment"} {
+		if value, _ := setting(key); value != "" {
+			t.Errorf("the watcher is given %s=%s", key, value)
+		}
+	}
+	service := filepath.Join(shippedUnits, DockerEventsUnit)
+	if got := unitValue(t, service, "ExecStart"); got != HostProgram+" events" {
+		t.Errorf("the watcher unit runs %q", got)
+	}
+	if got := unitValue(t, service, "Restart"); got != "always" {
+		t.Errorf("the watcher is started again only on %q", got)
+	}
+	if got := unitValue(t, service, "PartOf"); got != hostcore.WebUnit {
+		t.Errorf("the watcher is part of %q, not HQ's unit", got)
+	}
+}
+
 func TestTheControllerUnitMayWriteWhatAPassPrepares(t *testing.T) {
 	writable := strings.Fields(unitValue(t, filepath.Join("..", "..", "deploy", "systemd", ControllerUnit), "ReadWritePaths"))
 	for _, path := range []string{ACMEDir, SealDir, filepath.Dir(SealPublicKey)} {

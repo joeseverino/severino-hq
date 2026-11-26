@@ -202,9 +202,10 @@ class InboundSpec:
 
     def reads(self, event: str) -> tuple[str, ...]:
         """The readings ``event`` makes due: its own entry, else its name's
-        before the action; none for an event HQ does not take."""
+        before the action, which follows the last dot; none for an event HQ
+        does not take."""
 
-        return self.events.get(event) or self.events.get(event.partition(".")[0], ())
+        return self.events.get(event) or self.events.get(event.rpartition(".")[0], ())
 
 
 class ProviderModel(Closed):

@@ -10,6 +10,7 @@ lazy from hq.platform.application.labels import human_bytes
 
 from ..provider_spec import InboundSpec
 from .contract import ObservationRecord, ObservationSpec, Stamp
+from .portainer import ENVIRONMENT_KIND
 
 
 class HostFirewallRecord(ObservationRecord):
@@ -437,6 +438,9 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
 )
 
 # What HQ's own host jobs say happened: a unit that failed, which every
-# severino-hq unit's OnFailure= reports (``host_work.units.read``).
+# severino-hq unit's OnFailure= reports (``host_work.units.read``), and a
+# container on HQ's host that changed, with Docker's action after a dot,
+# which severino-hq-events-docker.service hears from Docker.
 UNIT_FAILED = "unit.failed"
-INBOUND = {"host": InboundSpec({UNIT_FAILED: (UNIT_KIND,)})}
+DOCKER_CONTAINER = "docker.container"
+INBOUND = {"host": InboundSpec({UNIT_FAILED: (UNIT_KIND,), DOCKER_CONTAINER: (ENVIRONMENT_KIND,)})}

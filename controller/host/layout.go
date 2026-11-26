@@ -60,6 +60,9 @@ const (
 	GlanceUnit = "severino-hq-glance.service"
 	// ListenerUnit holds the inbound-events Worker's socket, resident.
 	ListenerUnit = "severino-hq-listener.service"
+	// DockerEventsUnit tells HQ of each change to a container on this
+	// machine, resident (package dockerevents).
+	DockerEventsUnit = "severino-hq-events-docker.service"
 	// BackupUnit snapshots HQ's volumes.
 	BackupUnit = "severino-hq-backup.service"
 	// DeployFreeBytes is the free space on / a deploy needs before it pulls.

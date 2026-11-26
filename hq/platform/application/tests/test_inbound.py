@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ReadRequest
+from hq.domains.control_plane.observations.portainer import ENVIRONMENT_KIND
 from hq.domains.control_plane.tests import bridge_client
 
 # As the Worker forwards a GitHub delivery: the X-GitHub-Event header, and the
@@ -18,6 +19,16 @@ PUSH = {
     "subject": "example/app",
     "delivery_id": "72d3162e-cc78-11e3-81ab-4c9367dc0958",
     "received_at": "2026-01-15T12:00:00Z",
+}
+
+# As severino-hq-events-docker.service tells of one Docker event: the
+# container's name, and Docker's own id, time and action as the delivery.
+DIED = {
+    "provider": "host",
+    "event": "docker.container.die",
+    "subject": "example-app",
+    "delivery_id": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743-1461943101381709551-die",
+    "received_at": "2016-04-29T15:18:21.381709Z",
 }
 
 
@@ -52,6 +63,25 @@ class ApplyEventsTests(TestCase):
         self.apply(worker({**PUSH, "event": "pull_request.opened"}))
 
         self.assertEqual(asked(), ["github.repository"])
+
+    def test_a_container_change_makes_the_container_readings_due(self):
+        from hq.domains.control_plane.models import InboundEvent
+
+        for action in ("die", "start", "health_status: unhealthy", "oom", "destroy"):
+            event = {**DIED, "event": f"docker.container.{action}", "delivery_id": action}
+            self.apply({"source": "host", "events": [event]})
+
+        self.assertEqual(asked(), [ENVIRONMENT_KIND])
+        self.assertEqual(set(InboundEvent.objects.values_list("outcome", flat=True)), {"applied"})
+
+    def test_a_host_event_outside_the_declaration_makes_nothing_due(self):
+        from hq.domains.control_plane.models import InboundEvent
+
+        for event in ("docker.image.pull", "docker", "container.die", "unit.started.again"):
+            self.apply({"source": "host", "events": [{**DIED, "event": event, "delivery_id": event}]})
+
+        self.assertEqual(set(InboundEvent.objects.values_list("outcome", flat=True)), {"ignored"})
+        self.assertEqual(asked(), [])
 
     def test_a_replayed_delivery_asks_nothing(self):
         from hq.domains.control_plane.models import InboundEvent

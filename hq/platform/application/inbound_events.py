@@ -18,7 +18,8 @@ LISTENER_NAMED = "event listener"
 
 # How often a channel says it is listening when nothing happens, and so how
 # long it may go unheard before it is silent: two of these. HQ's own host jobs
-# speak only as a unit fails, so their silence says nothing.
+# speak only as a unit fails or a container changes, so their silence says
+# nothing.
 CHANNEL_EVERY: dict[InboundSource, timedelta | None] = {
     InboundSource.WORKER: timedelta(minutes=5),
     InboundSource.HOST: None,
