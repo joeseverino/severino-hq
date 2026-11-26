@@ -437,31 +437,33 @@
 /* Each fact is a row of the list's columns, its detail under its value, its
    label held to its value by the narrow gap. */
 .facts-list > .fact { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; gap: var(--space-1) var(--space-6); }
-.facts-list .fact-detail { grid-column: 2; color: var(--muted); }
+.facts-list .fact-detail { color: var(--muted); }
 /* On the page, a list lays as many pairs to a row as keep each a short label
    and a short value wide, as a description list does at width (Ant Design's
    Descriptions, Tailwind's description lists), so a few short facts fill a
-   wide frame rather than stacking down its start beside an empty end. The
-   pairs stand in columns every row shares, as many as fit a pair's basis
-   (`--facts-across` holds two), so a label stands under the label above it
-   in every row; a list of fewer pairs than columns fit spreads them over
-   the row. Every pair's label is one width, so the values of a column line
-   up too, and pairs stand apart by more than the gap that holds a label to
-   its value. Narrower than two pairs it is one pair to a row, from the
-   pair's basis, so no query or script measures it. The label's track is a
-   share of the list, so a single column's label is the list's share.
-   Opened to read more (a disclosure, a popover, a dialog), set above what a
-   form changes, or a table row's small print, a list is a few short pairs
-   under what it serves and keeps one pair to a row. A folded section on the
-   page is a part of the page, so its list is the page's; one folded inside a
-   frame (a resource's other settings) is opened to read more. */
+   wide frame rather than stacking down its start beside an empty end. Each
+   pair is a label track and a value track every row shares, the label's as
+   wide as the longest label in its column and the value's the rest, so a
+   label stands under the label above it and the values of a column line up;
+   columns no pair fills collapse, so a list of fewer pairs than fit spreads
+   them over the row. How many pairs fit is counted from each track's least
+   width, so no query or script measures it; narrower than two it is one pair
+   to a row. Pairs stand apart by more than the gap that holds a label to its
+   value. Opened to read more (a disclosure, a popover, a dialog), set above
+   what a form changes, or a table row's small print, a list is a few short
+   pairs under what it serves and keeps one pair to a row. A folded section
+   on the page is a part of the page, so its list is the page's; one folded
+   inside a frame (a resource's other settings) is opened to read more. */
 .facts-list:not(:where(tbody, details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) *) {
-  --facts-across: 42rem;
+  /* Contained, the list asks its frame for no width of its own, so it grows
+     into its row as every member of a flow does. */
   container-type: inline-size; column-gap: var(--space-16);
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a list's pairs in columns every row shares */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc((var(--facts-across) - var(--space-16)) / 2)), 1fr));
-  & > .fact { grid-column: auto; grid-template-columns: min(9rem, 40cqi) minmax(0, 1fr); }
+  grid-template-columns: repeat(auto-fit, minmax(min(6rem, 25%), max-content) minmax(min(14rem, 60%), auto));
+  & > .fact { grid-column: span 2; column-gap: var(--space-6); }
 }
+/* A fact's value and detail take every value column its row spans. */
+.facts-list > .fact > dd { grid-column: 2 / -1; }
 /* A value that is a list of several (names, addresses, links) takes the
    row, wrapping there, so its lines never squeeze into one column. */
 .facts-list > .fact:has(> .fact-value > .fact-shown > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) { grid-column: 1 / -1; }

@@ -805,11 +805,13 @@ A list, the default, is the facts about one thing, each label beside its value. 
 pairs to a row as keep each a short label and a short value wide, so a few short facts fill a
 wide frame rather than stacking down its start. The pairs stand in columns every row shares, so
 each label stands under the label above it, and a list of fewer pairs than its columns spreads
-them over the row; every label is one width, so the values of a column line up. A value that is
-a run of several (a `labeled` or `codes` list, addresses) takes the row. Narrower than two pairs
-it is one pair to a row. A
-label with several values holds them as a list inside one fact. An identifier in a value (code,
-a `|breakable` name) runs inline, code a chip on each line it wraps to, so a value's first line
+them over the row; a column's label is as wide as its longest label and its value takes the
+rest, so the values of a column line up. A value that is a run of several (a `labeled` or `codes`
+list, addresses) takes the row. Narrower than two pairs it is one pair to a row. A
+label with several values holds them as a list inside one fact. Code a value or its detail holds
+is drawn as `|breakable` draws it, by the part, so it wraps only at a separator. An identifier
+moves to the next line whole where it fits there; one that opens the value runs inline, a chip
+on each line it wraps to, so a value's first line
 stands on its label's line in every engine; the value keeps a chip's end padding free at its end,
 so a wrapped line's chip stays inside its column in any face. A list opened to read more (in a disclosure, a
 popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and

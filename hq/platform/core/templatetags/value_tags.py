@@ -49,7 +49,7 @@ from hq.platform.core.held_values import format_html
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, SlotsNode, answers, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
-from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
+from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_breaks, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
 lazy from hq.platform.application.derivations import this_year
@@ -63,6 +63,7 @@ register = template.Library()
 register.filter("breakable", breakable, is_safe=True)
 register.filter("button_words", button_words, is_safe=True)
 register.filter("code_spans", code_spans, is_safe=True)
+register.filter("code_breaks", code_breaks, is_safe=True)
 
 # The one form a link to a page outside HQ takes, whichever tag writes it.
 OUTSIDE_LINK = "partials/_outside_link.html"

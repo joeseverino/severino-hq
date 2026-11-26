@@ -395,6 +395,23 @@ def code_spans(value):
     return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))  # noqa: S308 - each word is escaped as it is drawn
 
 
+# A code element that holds only text: an identifier written as it is, with
+# none of the seams ``breakable`` marks.
+_BARE_CODE = re.compile(r"(<code(?:\s[^>]*)?>)([^<]+)(</code>)")
+
+
+def code_breaks(value):
+    """``value``, a part's markup, with each code element that holds only text
+    drawn as ``breakable`` draws it, so an identifier a page wrote bare wraps
+    at its seams and never inside a hyphenated name. Text that is not markup
+    passes as it is, for the template to draw as it draws any value."""
+
+    if not hasattr(value, "__html__"):
+        return value
+    drawn = _BARE_CODE.sub(lambda found: f"{found[1]}{breakable(unescape(found[2]))}{found[3]}", str(value))
+    return mark_safe(drawn)  # noqa: S308 - markup already escaped, each identifier escaped again as it is drawn
+
+
 def mark_text(mark) -> str:
     """A mark as ``breakable`` takes it: the text given, or for a list's
     ``forloop`` a comma after every item but the last."""
