@@ -186,6 +186,9 @@ class InboundSpec:
     subject_pointer: str = ""
     # The Worker secret the signature is checked with.
     secret_binding: str = ""
+    # The largest body the provider sends, so the Worker refuses a larger one
+    # by its Content-Length before reading it.
+    max_body_bytes: int = 0
     # What the provider's app must hold to be sent these events.
     requires: tuple[Permission, ...] = ()
 
@@ -193,8 +196,8 @@ class InboundSpec:
         if not self.events or not all(self.events.values()):
             raise ValueError("An inbound declaration names each event's readings.")
         route = (self.path, self.scheme, self.signature_header, self.delivery_header, self.event_header)
-        if any(route) and not all((*route, self.secret_binding)):
-            raise ValueError(f"The route {self.path!r} names its scheme, its headers and its secret.")
+        if any(route) and not all((*route, self.secret_binding, self.max_body_bytes)):
+            raise ValueError(f"The route {self.path!r} names its scheme, its headers, its secret and its largest body.")
 
     def reads(self, event: str) -> tuple[str, ...]:
         """The readings ``event`` makes due: its own entry, else its name's

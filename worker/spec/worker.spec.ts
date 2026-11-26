@@ -59,10 +59,15 @@ interface Delivery {
   payload: unknown;
   id: string;
   signature?: string | null;
+  /** The Content-Length it states: the body's own unless given, none when null. */
+  length?: string | null;
 }
 
-/** POSTs a delivery as GitHub sends one, signed with the Worker's secret unless `signature` says otherwise. */
-async function deliver({ event, payload, id, signature: sent }: Delivery): Promise<Response> {
+/**
+ * POSTs a delivery as GitHub sends one, its length stated and signed with the
+ * Worker's secret, unless `length` or `signature` says otherwise.
+ */
+async function deliver({ event, payload, id, signature: sent, length }: Delivery): Promise<Response> {
   const body = JSON.stringify(payload);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -72,7 +77,10 @@ async function deliver({ event, payload, id, signature: sent }: Delivery): Promi
   };
   const signed = sent === undefined ? await signature(body) : sent;
   if (signed !== null) headers[github.signature_header] = signed;
-  return exports.default.fetch(`${ORIGIN}${github.path}`, { method: "POST", headers, body });
+  if (length) headers["Content-Length"] = length;
+  // A string states its own length; a stream, as a chunked request sends it, none.
+  const streamed = length === null ? new Response(body).body!.pipeThrough(new TransformStream()) : body;
+  return exports.default.fetch(`${ORIGIN}${github.path}`, { method: "POST", headers, body: streamed });
 }
 
 describe("a GitHub delivery", () => {
@@ -119,6 +127,8 @@ describe("a delivery that never reaches the listeners", () => {
     ["a signature of another body", { event: "push", signature: "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17" }, 401],
     ["no signature", { event: "push", signature: null }, 401],
     ["an event the route does not list", { event: "issues" }, 202],
+    ["a length over the provider's largest body", { event: "push", length: String(github.max_body_bytes + 1) }, 413],
+    ["no length", { event: "push", length: null }, 411],
   ])("%s", async (_, delivery, status) => {
     const listener = await listen();
 

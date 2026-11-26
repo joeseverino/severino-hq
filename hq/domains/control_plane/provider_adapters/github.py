@@ -282,6 +282,8 @@ INBOUND = {
         action_pointer="/action",
         subject_pointer="/repository/full_name",
         secret_binding="GITHUB_WEBHOOK_SECRET",  # noqa: S106 - the Worker secret's name, never its value
+        # "Payloads are capped at 25 MB" (docs.github.com, webhook events and payloads).
+        max_body_bytes=25 * 1024 * 1024,
         requires=(
             GitHub.CONTENTS_READ,
             GitHub.ACTIONS_READ,

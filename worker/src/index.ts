@@ -4,9 +4,10 @@
 // Security properties:
 // - The Worker holds no route and no credential into HQ. It answers webhooks
 //   and holds sockets HQ dials out to, and writes only to its own Hub.
-// - A webhook's signature is verified over the raw body, read once, before
-//   anything parses it; a request that fails is answered 401 and never
-//   reaches the Hub.
+// - A webhook's body is read only when its Content-Length is within the
+//   largest its provider sends. Its signature is verified over the raw body,
+//   read once, before anything parses it; a request that fails is answered
+//   401 and never reaches the Hub.
 // - A socket is accepted only with the SOCKET_TOKEN bearer, compared in
 //   constant time before the upgrade reaches the Hub, and an event reaches
 //   only a socket that presented the token the Worker holds now, so a
@@ -69,6 +70,11 @@ async function socket(request: Request, env: Env): Promise<Response> {
 
 async function webhook(request: Request, env: Env, route: Route, verify: Verifier): Promise<Response> {
   if (request.method !== "POST") return answer(405);
+  // Bounded before the body is read: a provider states its length, and
+  // sends nothing larger than its declared cap.
+  const length = request.headers.get("Content-Length") ?? "";
+  if (!/^\d+$/.test(length)) return answer(411);
+  if (Number(length) > route.max_body_bytes) return answer(413);
   const body = await request.arrayBuffer();
   const secret = (env as unknown as Record<string, unknown>)[route.secret_binding];
   if (!(await verify(text(secret), request.headers.get(route.signature_header), body))) return answer(401);
