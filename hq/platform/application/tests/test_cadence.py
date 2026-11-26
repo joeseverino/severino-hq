@@ -25,7 +25,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import connection, declare, operator
+from hq.platform.core.testing import channel_heard, connection, declare, operator
 
 from .. import cadence, read_requests, readings
 from ..cadence import (
@@ -146,15 +146,10 @@ class SweepPolicyTests(TestCase):
         it falls silent they are swept as before. A reading no event keeps
         current is swept whatever the channel says."""
 
-        from hq.domains.control_plane.models import InboundSource
-        from hq.platform.core.models import UpstreamReading
-
-        from ..inbound_events import channel
-
         note_activity()
         swept(age_seconds=30)
         swept(age_seconds=3600, kind="github.repository")
-        readings.note(channel(InboundSource.WORKER), every=timedelta(0))
+        channel_heard()
 
         heard = sweep_due()
         self.assertFalse(heard["due"])
@@ -164,14 +159,12 @@ class SweepPolicyTests(TestCase):
         self.assertEqual(sweep_due()["carry_kinds"], [], "past its own clock it is read again")
 
         swept(age_seconds=3600, kind="github.repository")
-        UpstreamReading.objects.filter(key=readings.heartbeat(channel(InboundSource.WORKER))).update(
-            observed_at=timezone.now() - timedelta(minutes=11)
-        )
+        channel_heard(silent=True)
         silent = sweep_due()
         self.assertTrue(silent["due"])
         self.assertEqual(silent["carry_kinds"], [])
 
-        readings.note(channel(InboundSource.WORKER), every=timedelta(0))
+        channel_heard()
         swept(age_seconds=3600, kind="github.repository")
         swept(age_seconds=3600)
         self.assertTrue(sweep_due()["due"], "a reading no event keeps current makes the sweep due")

@@ -164,22 +164,14 @@ class VisitRefreshTests(TestCase):
         """Unless the App's webhook keeps it current: while its listener is
         heard, opening the page asks nothing of GitHub."""
 
-        from hq.domains.control_plane.models import InboundSource
-        from hq.platform.core.models import UpstreamReading
-
-        from .. import readings
-        from ..inbound_events import channel
-
         store(REPOSITORY_KIND, age=OLD)
-        readings.note(channel(InboundSource.WORKER), every=timedelta(0))
+        testing.channel_heard()
 
         def opened():
             return request_visit_refresh(VisitRefreshCommand("page", "dashboard"), principal=cli_principal())
 
         self.assertEqual(opened()["requested"], [])
-        UpstreamReading.objects.filter(key=readings.heartbeat(channel(InboundSource.WORKER))).update(
-            observed_at=timezone.now() - timedelta(minutes=11)
-        )
+        testing.channel_heard(silent=True)
         self.assertEqual(opened()["requested"], [REPOSITORY_KIND])
 
     def test_opening_the_connection_panel_asks_for_what_it_shows_and_never_github(self):

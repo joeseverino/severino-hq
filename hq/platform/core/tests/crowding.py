@@ -50,7 +50,7 @@ from hq.platform.application.tests.writers import keyed, runbook
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.records import SERVER_ASSET
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import channel_heard, declare
 
 # Hyphenated on purpose: a browser breaks a name at a hyphen, and a name that
 # wraps there mid-word is the failure this crowding exists to show.
@@ -468,8 +468,10 @@ def _glance():
 
 def _due_on_opening():
     """What the dashboard's queue says GitHub holds, old enough to read again,
-    so the dashboard draws the ask it posts once it is shown."""
+    with the event listener gone silent, so no event keeps it current and the
+    dashboard draws the ask it posts once it is shown."""
 
+    channel_heard(silent=True)
     old = timezone.now() - timedelta(hours=3)
     ProviderInventory.objects.filter(kind=REPOSITORY_KIND).update(observed_at=old, updated_at=old)
 
