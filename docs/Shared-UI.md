@@ -43,7 +43,7 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_toggle_set.html` | `legend`, `set` | `name`, `toggles` | A set of toggles that filter what a view shows. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
-| `partials/_work_queue.html` | `also`, `groups`, `items` | `empty`, `fold`, `glance`, `grouped`, `here`, `refresh`, `triage` | What waits on the operator, each row what wants doing and why, or that nothing does. |
+| `partials/_work_queue.html` | nothing | `empty`, `fold`, `glance`, `grouped`, `here`, `items`, `triage` | What waits on the operator, each row what wants doing and why, or that nothing does. |
 
 | Tag | Later parts | What it is | Written |
 | --- | --- | --- | --- |

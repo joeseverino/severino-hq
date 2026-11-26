@@ -30,7 +30,6 @@ lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.domains.jobs.runner import SCHEDULER
-lazy from hq.platform.core import bindings
 lazy from hq.platform.core.attribution import own_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
@@ -586,7 +585,8 @@ def queue_settling(held: OperationRequest) -> OperationRequest | None:
         return resource
 
     principal = internal_principal(SCHEDULER)
-    with bindings.audit_operation(operation=capability_name(settling.id), principal=principal):
+    # Its rows are part of the held run's life, as HQ's own.
+    with own_operation(held, operation=capability_name(settling.id), principal=principal):
         operation, queued = _enqueue_run(
             record, bound, principal, reason="", once=f"{held.pk}:settle:{reads.count()}", released=True
         )
