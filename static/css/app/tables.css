@@ -445,7 +445,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
   display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-5) var(--space-6); margin: 0;
   padding: var(--space-5) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); container: row-columns / inline-size;
 }
-.row-columns > * { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; row-gap: var(--space-1); align-items: inherit; }
+/* A label standing over its value is as far from it as a link's target stands past its line (cuts.css). */
+.row-columns > * { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; row-gap: max(var(--space-1), (var(--target-min) - 1lh) / 2); align-items: inherit; }
 /* A value that opens with a wrapped inline block has its baseline on that block's last line where an engine has no `baseline-source`, so there a pair lines up by its top. */
 @supports not (baseline-source: first) {
   .row-columns { align-items: start; }

@@ -21,6 +21,8 @@ DELIVERED = {
     "branch": "main",
     "production": "Every extension's latest admission, confirmed on GitHub",
 }
+# A box ticked on a Dependency Dashboard, whose apply reports nothing more.
+TICKED = {"repository": "example/apps", "branch": "renovate/example-major", "marker": "approve"}
 UNCONFIRMED = "example.alpha: aaaaaaa is live, not yet confirmed on GitHub"
 REPORTS_ITSELF = [{"type": "Degraded", "status": True, "reason": "Reported", "message": f"{UNCONFIRMED}."}]
 
@@ -245,6 +247,10 @@ EXAMPLES = (
                 raises=offering("TLS certificate wildcard could not be checked"),
             ),
         ),
-        quiet=(HEALTHY,),
+        quiet=(
+            HEALTHY,
+            # A kind nothing reads back holds no state past its apply.
+            estate(held("ticked", "github.dashboard_box", spec=TICKED, conditions=[])),
+        ),
     ),
 )

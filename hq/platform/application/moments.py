@@ -246,18 +246,19 @@ def when_range(start: date, end: date) -> str:
     return f"{first} – {when_day(end)}"
 
 
-def duration(delta: timedelta, *, short: bool = False) -> str:
-    """A length of time in the phrasing ``when`` gives an age, without the "ago"; ``short``, a run time as ``ask.js``'s
-    ``elapsed`` ticks one: "45 s", "4 min 33 s", "1 h 2 min", never a zero part after a larger one."""
+def duration(delta: timedelta, *, short: bool = False, depth: int = 2) -> str:
+    """A length of time in the phrasing ``when`` gives an age, without the "ago", in up to ``depth`` units, one as
+    Docker says an uptime; ``short``, a run time as ``ask.js``'s ``elapsed`` ticks one: "45 s", "4 min 33 s",
+    "1 h 2 min", never a zero part after a larger one."""
 
     delta = max(delta, timedelta(0))
-    return Figure(_lasted(delta, short=short), delta.total_seconds())
+    return Figure(_lasted(delta, short=short, depth=depth), delta.total_seconds())
 
 
-def _lasted(delta: timedelta, *, short: bool) -> str:
+def _lasted(delta: timedelta, *, short: bool, depth: int) -> str:
     if not short:
         start = datetime(2000, 1, 1, tzinfo=UTC)
-        return timesince(start, start + delta)
+        return timesince(start, start + delta, depth=depth)
     hours, rest = divmod(round(delta.total_seconds()), 3600)
     minutes, left = divmod(rest, 60)
     larger, unit, smaller, small_unit = (hours, "h", minutes, "min") if hours else (minutes, "min", left, "s")

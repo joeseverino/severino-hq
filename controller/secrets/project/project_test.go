@@ -10,6 +10,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -936,6 +937,28 @@ func FuzzParseRegistry(f *testing.F) {
 	})
 }
 
+// carries reports whether a refusal holds the credential outside the names a
+// refusal may say: the connection's ref and the registry's declared names. A
+// name is said whatever the credential holds, so each is struck out, longest
+// first, with a NUL, which no projected value can hold, and a credential that
+// overlaps a name is not read as one the refusal took from the value.
+func carries(refusal, credential, ref string, registry Registry) bool {
+	names := append([]string{ref}, registry.RequiredAppVariables...)
+	for name, projection := range registry.Projections {
+		names = append(names, name)
+		for variable, entry := range projection {
+			names = append(names, variable, entry.ID, entry.Label)
+		}
+	}
+	slices.SortFunc(names, func(a, b string) int { return len(b) - len(a) })
+	for _, name := range names {
+		if name != "" {
+			refusal = strings.ReplaceAll(refusal, name, "\x00")
+		}
+	}
+	return strings.Contains(refusal, credential)
+}
+
 func FuzzProject(f *testing.F) {
 	f.Add("example", "api_token", "EXAMPLE", "token", "https://api.example.com", "op://Operator Vault/item", "edge.example.com", "22")
 	f.Add("known_hosts", "ssh_transport", "EDGE", "tok\nen", "x", "op://"+connecttest.VaultName+"/item", "-oProxyCommand=x", "0")
@@ -960,7 +983,7 @@ func FuzzProject(f *testing.F) {
 			if !errors.Is(err, ErrContent) {
 				t.Fatalf("an untyped refusal: %v", err)
 			}
-			if len(credential) > 8 && strings.Contains(err.Error(), credential) {
+			if len(credential) > 8 && carries(err.Error(), credential, ref, parsed) {
 				t.Fatalf("the refusal carries the credential: %v", err)
 			}
 			return

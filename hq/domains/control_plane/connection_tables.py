@@ -2,8 +2,10 @@
 
 from collections.abc import Iterable
 from dataclasses import replace
+from operator import attrgetter
 from typing import Any
 
+from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.entity_links import connection_anchor, declared_link
 from hq.platform.application.freshness import reading_age
 from hq.platform.application.moments import when
@@ -84,9 +86,19 @@ def _connection_row(row: Any, request: Any, *, starts: bool) -> Row:
     return Row(
         (
             replace(_name(row, starts=starts), below=_name_below(row)),
-            replace(
-                _reads(row),
-                below=(Below("Changes", _abilities(row)),) if row.changes and not row.changes_only else (),
+            Cell(
+                parts=_pieces(row, CONNECTION_READ, "read", row.reads, attrgetter("label")),
+                fit=True,
+                below=(
+                    (
+                        Below(
+                            "Changes",
+                            _pieces(row, CONNECTION_ABILITY, "state", row.changes, attrgetter("ability.label")),
+                        ),
+                    )
+                    if row.changes
+                    else ()
+                ),
             ),
             _reaches(connection.instance),
             _state(row),
@@ -146,6 +158,9 @@ def _reached(row: Any) -> Cell | None:
         else:
             said.append(Cell(reach.label, after="," if reach.relay else ""))
         said += [Cell(reach.relay)] if reach.relay else []
+    # A controller that is the machine the reach names is said once.
+    machine = normalized_hostname(reach.machine.label) if reach is not None and reach.machine else None
+    facts = [fact for fact in facts if not (fact.label == "Controller" and normalized_hostname(fact.value) == machine)]
     said += [
         Cell(
             f"via {fact.value}" if fact.label == "Controller" else f"{fact.label}: {fact.value}",
@@ -182,27 +197,10 @@ def _name_below(row: Any) -> tuple[Below, ...]:
     )
 
 
-def _reads(row: Any) -> Cell:
-    """What it reads, as many as the line holds; or, reading nothing, what it changes."""
+def _pieces(row: Any, part: Any, key: str, items: Iterable[Any], label: Any) -> tuple[Cell, ...]:
+    """Each of a connection's items (what it reads, what it lets HQ change) drawn as its part."""
 
-    if row.changes_only:
-        return Cell("Changes only:", muted=True, parts=_abilities(row), fit=True)
-    return Cell(
-        parts=tuple(
-            Cell(piece=Piece(CONNECTION_READ, {"read": read, "connection": row.connection}, read.label))
-            for read in row.reads
-        ),
-        fit=True,
-    )
-
-
-def _abilities(row: Any) -> tuple[Cell, ...]:
-    """Each thing its credential lets HQ change."""
-
-    return tuple(
-        Cell(piece=Piece(CONNECTION_ABILITY, {"state": state, "connection": row.connection}, state.ability.label))
-        for state in row.changes
-    )
+    return tuple(Cell(piece=Piece(part, {key: item, "connection": row.connection}, label(item))) for item in items)
 
 
 def _reaches(instance: Any) -> Cell:

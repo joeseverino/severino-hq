@@ -262,3 +262,10 @@ class SpanTests(SimpleTestCase):
         self.assertEqual(span(301), "9\xa0months, 3\xa0weeks")
         self.assertEqual(span(1443), "3\xa0years, 11\xa0months")
         self.assertEqual(span(-3), "3 days overdue")
+
+    def test_a_length_can_be_said_in_its_largest_unit_alone(self):
+        from ..moments import duration
+
+        twelve_days = timedelta(days=12, hours=5)
+        self.assertEqual(duration(twelve_days), "1\xa0week, 5\xa0days")
+        self.assertEqual(duration(twelve_days, depth=1), "1\xa0week")
