@@ -276,43 +276,7 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertIn("resource:mcp-lonely", {n["id"] for n in narrowed["nodes"]})
         self.assertLess(narrowed["summary"]["nodes"], whole["summary"]["nodes"])
 
-    def test_an_invalid_payload_is_named_to_the_agent(self):
-        from hq.platform.application.security import mcp_principal
-
-        from ..identity import set_principal
-
-        self.enterContext(set_principal(mcp_principal()))
-        result = services.execute_capability(
-            "documentation.sync", {"manifest": "hunter2-not-for-logs", "idempotency_key": "example-key"}
-        )
-
-        self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(result["error"]["message"], "documentation.sync: manifest must be a valid list.")
-        # Nor anywhere else: the agent's transcript keeps whatever it is told.
-        self.assertNotIn("hunter2", json.dumps(result, default=repr))
-
-    def test_an_invalid_resource_filter_is_named_by_the_tool(self):
-        async def call():
-            tool = mcp.tools.get("list_resource")
-            return await tool.call({"name": "projects", "filters": {"limti": "hunter2-not-for-logs"}})
-
-        with self.assertRaises(ValueError) as refused:
-            async_to_sync(call)()
-
-        self.assertIn("projects: limti is not a known field.", str(refused.exception))
-        self.assertNotIn("hunter2", str(refused.exception))
-
-    def test_the_narrowing_arguments_are_in_each_schema_and_nothing_else_is_taken(self):
-        tools = {tool.name: tool for tool in mcp.tools.values()}
-
-        for name, arguments in {
-            "get_resource": {"fields"},
-            "list_resource": {"fields"},
-            "get_findings": {"severity", "limit"},
-        }.items():
-            with self.subTest(name):
-                self.assertLessEqual(arguments, set(tools[name].input_schema["properties"]))
-
+    def test_an_argument_a_tool_does_not_take_or_of_another_type_is_refused(self):
         async def call(name, arguments):
             return await mcp.tools[name].call(arguments)
 

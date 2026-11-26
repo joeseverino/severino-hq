@@ -1,7 +1,7 @@
 """A value sent empty is a value, judged as the document declares it, on every
 door: only one left out takes its default. A narrowing whose choices are
-listed refuses one sent empty, and so does the retry key, whose shape is at
-least one character."""
+listed refuses one sent empty, and the retry key refuses one sent empty or in
+any shape a key does not take."""
 
 from django.test import TestCase
 
@@ -27,11 +27,12 @@ class EmptyIsSentTests(TestCase):
 
                         self.assertEqual(answer["error"]["code"], "invalid_input", (tool, answer))
 
-    def test_a_retry_key_sent_empty_is_refused_as_a_key_and_acts_on_nothing(self):
+    def test_a_retry_key_sent_empty_or_out_of_shape_is_refused_as_a_key_and_acts_on_nothing(self):
         for caller in (WRITER, OPERATOR):
             for door in each_door(self, caller):
-                with door:
-                    answer = door.capability("project.create", PROJECT | {"idempotency_key": ""})
+                for key in ("", "has a space", "x" * 129, 7):
+                    with door:
+                        answer = door.capability("project.create", PROJECT | {"idempotency_key": key})
 
-                    self.assertEqual(answer["error"]["code"], "invalid_idempotency_key", answer)
-                    self.assertFalse(Project.objects.exists())
+                        self.assertEqual(answer["error"]["code"], "invalid_idempotency_key", (key, answer))
+                        self.assertFalse(Project.objects.exists())

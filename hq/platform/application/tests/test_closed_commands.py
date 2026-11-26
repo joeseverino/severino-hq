@@ -23,6 +23,7 @@ from ..input_errors import pydantic_refusal
 from ..integration_specs import capability_schema
 from ..json_schemas import LOCAL, json_schema
 from ..security import web_principal
+from .procedures import Supply, manifest
 from .writers import keyed
 
 # A field no command has.
@@ -115,6 +116,10 @@ def _refused_at(errors: list[dict[str, Any]], path: tuple[Any, ...]) -> bool:
 
 
 class ClosedCommandTests(SimpleTestCase):
+    def setUp(self):
+        # A procedure supplied, so the command each run is asked through is walked too.
+        Supply(self, manifest())
+
     def test_every_command_refuses_an_unknown_field_at_every_depth(self):
         open_levels = []
         for spec in capability_registry():

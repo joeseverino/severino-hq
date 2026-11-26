@@ -1,7 +1,9 @@
 """The same malformed narrowing or call gets the same refusal on every door: the
 machine API's query string or body, an MCP tool's arguments, the operator's
 ``hq_call`` and an extension's call answer with one code, one sentence and one
-set of details."""
+set of details, none of which repeats a value it refused."""
+
+import json
 
 from django.test import TestCase
 
@@ -35,6 +37,40 @@ CHOICES = (
     ("get_topology", {"focus": FOCUS, "direction": "sideways"}),
     ("get_findings", {"rule": "example-unknown"}),
     ("get_findings", {"severity": "critical"}),
+)
+SECRET = "example-secret-not-for-logs"
+# A refused value in each place a call carries one: a field of the wrong type,
+# a choice none declares, a stamp a validator of HQ's own refuses, a read's
+# count and a filter no list has.
+SECRETS = (
+    (
+        WRITER,
+        "execute_capability",
+        {
+            "name": "project.create",
+            "payload": {"name": [SECRET], "slug": "example", "status": "active", "idempotency_key": "example-type"},
+        },
+    ),
+    (
+        WRITER,
+        "execute_capability",
+        {
+            "name": "project.create",
+            "payload": {"name": "Example", "slug": "example", "status": SECRET, "idempotency_key": "example-choice"},
+        },
+    ),
+    (
+        WRITER,
+        "execute_capability",
+        {
+            "name": "project.update",
+            "payload": {"idempotency_key": "example-stamp"},
+            "target": "example",
+            "expected_updated_at": SECRET,
+        },
+    ),
+    (READER, "list_resource", {"name": "projects", "limit": SECRET}),
+    (READER, "list_resource", {"name": "projects", "filters": {"example_unknown": SECRET}}),
 )
 
 
@@ -87,6 +123,19 @@ class OneRefusalEachDoorTests(TestCase):
 
                         self.assertFalse(answer["ok"])
                         self.assertEqual(answer["error"]["code"], "insufficient_scope")
+
+    def test_a_refusal_repeats_nothing_it_was_sent(self):
+        """Neither message nor details carry a refused value: a payload can hold a
+        secret, and a refusal travels further than the request did."""
+
+        for caller, tool, arguments in SECRETS:
+            for asker in (caller, OPERATOR):
+                for door in each_door(self, asker, tool):
+                    with door:
+                        answer = door(tool, **arguments)
+
+                        self.assertEqual(answer["error"]["code"], "invalid_input", answer)
+                        self.assertNotIn(SECRET, json.dumps(answer))
 
     def _api(self, query):
         return self.client.get(f"/api/v2/topology/?{query}", HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}")

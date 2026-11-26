@@ -84,19 +84,6 @@ class RefreshTests(TestCase):
 
         self.assertTrue(self.ask(every_connection=True, idempotency_key="refresh-once")["ok"])
 
-    def test_a_malformed_key_is_refused_and_asks_for_nothing(self):
-        for key in ("has a space", "x" * 129, 7):
-            with self.subTest(key=key):
-                result = self.ask(every_connection=True, idempotency_key=key)
-
-                self.assertEqual(result["error"]["code"], "invalid_idempotency_key")
-        self.assertFalse(ReadRequest.objects.exists())
-
-    def test_a_field_the_command_does_not_have_is_still_refused(self):
-        result = self.ask(every_connection=True, idempotency_keys="refresh-once")
-
-        self.assertEqual(result["error"]["code"], "invalid_input")
-
 
 class ReadTests(TestCase):
     def test_a_read_takes_no_key(self):
