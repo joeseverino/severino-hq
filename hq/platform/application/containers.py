@@ -780,11 +780,11 @@ def _built_here(host: str, container: str, pulled: Mapping[str, Any]) -> bool:
     if not pulled or pulled.get("digests"):
         return False
     user = next((each for each in pulled.get("containers") or () if each.get("container") == container), {})
-    stack = _stacks().get((host, container), "")
+    stack = stacks().get((host, container), "")
     return builds(_compose_files().get((host, stack), ()), str(user.get("service", "") or ""))
 
 
-def _stacks() -> dict[tuple[str, str], str]:
+def stacks() -> dict[tuple[str, str], str]:
     """The Compose project each container belongs to, by ``(machine, container)``."""
 
     def records():

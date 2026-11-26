@@ -1907,11 +1907,11 @@ each record in the words its kind declares, a swept reading's
 (the applier's `apps.pull` and `apps.receipt`, `app_update_approval.PULLED_KIND`
 and `RECEIPT_KIND`), names and
 counts a kind HQ declares nothing of, and folds the readings as stated under
-Raw data (`work_runs.wording`). A task's message that is a line of JSON, as a
-retry's often is, it says in the words of the `StatedKind` whose `progress`
-reads that shape (the applier's following task: the app releasing and how
-each ended app ended), and any other as the task said it (`work_runs.told`);
-the `runs` read carries the message as the worker said it. A
+Raw data (`work_runs.wording`). A held run's page says what it waits on, each
+unit on its machine, and what each Compose project's containers on HQ's
+machine have done since it was claimed, from the container events HQ stored
+(`work_runs.held_note`); the event's name is shown, and nothing is settled by
+it. A
 journal names each claim before it is sent and records a run once it starts,
 so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook

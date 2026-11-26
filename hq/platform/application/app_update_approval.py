@@ -693,16 +693,14 @@ class AppRelease(BaseModel):
 
 class PullReceipt(BaseModel):
     """The machine's last pull, beside the revision a run asked for: the
-    revision that pull attempted, whether it was of the one asked and
-    released every app, and while it runs, the app it releases."""
+    revision that pull attempted, and whether it was of the one asked and
+    released every app."""
 
     model_config = ConfigDict(frozen=True)
 
     revision: str
     last_attempt: str
     ok: bool
-    running: bool = False
-    releasing: str = ""
 
 
 def _read[Model: BaseModel](model: type[Model], record: Mapping[str, Any]) -> Model | None:
@@ -743,24 +741,10 @@ def _pulled(record: Mapping[str, Any]) -> str:
     return dotted(_released(record)[0], release.health if release else "")
 
 
-def _releasing(line: Mapping[str, Any]) -> str | None:
-    """How far the applier's pull has got, from one pass of its following
-    task (``{running, result, releasing, ended: {project: result}}``): the
-    app it is releasing, then how each ended app ended."""
-
-    ended = line.get("ended")
-    if "releasing" not in line or not isinstance(ended, Mapping):
-        return None
-    releasing = line["releasing"]
-    said = (f"{app}: {_result(str(result))[0]}" for app, result in ended.items())
-    return dotted(f"Releasing {releasing}" if releasing else "", *said)
-
-
 PULLED_KIND = StatedKind(
     "App releases",
     title=lambda record: str(record.get("project") or ""),
     describe=_pulled,
-    progress=_releasing,
     tone=lambda record: _released(record)[1],
 )
 
@@ -772,8 +756,6 @@ def _receipt_said(record: Mapping[str, Any]) -> tuple[str, Tone]:
     receipt = _read(PullReceipt, record)
     if receipt is None:
         return "Unread", Tone.NEUTRAL
-    if receipt.running:
-        return dotted("Pulling", f"releasing {receipt.releasing}" if receipt.releasing else ""), Tone.ATTENTION
     if receipt.ok:
         return "Applied", Tone.GOOD
     if receipt.last_attempt == receipt.revision:

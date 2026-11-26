@@ -4,8 +4,6 @@ and names only the run's own machines; the run's row and its read carry
 each reading it stated with its records. Every procedure here is a synthetic
 ``example.*`` one."""
 
-import json
-
 from hq.domains.control_plane.models import OperationRequest
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
@@ -114,33 +112,6 @@ class KeptTests(RunStatedTestCase):
         )
         ((line, tone),) = evidence.amiss
         self.assertEqual((line.startswith("example-app"), tone), (True, "attention"))
-
-    def test_a_task_s_line_of_json_reads_in_the_words_a_stated_kind_declares_and_any_other_as_said(self):
-        from ..app_update_approval import PULLED_KIND
-        from ..work_runs import RunEvidence
-
-        line = {
-            "running": True,
-            "result": "success",
-            "releasing": "example-web",
-            "ended": {"example-db": "rolled_back"},
-        }
-        lines = (json.dumps(line), json.dumps({"example_member": 1}), "Touched.", "")
-        evidence = RunEvidence(
-            worker=WORKER,
-            events=tuple(
-                {"host": APP, "task": f"Task {n}", "outcome": "started", "message": m} for n, m in enumerate(lines)
-            ),
-        )
-
-        worded, *others = (event["message"] for event in evidence.under_way)
-        assert PULLED_KIND.progress is not None
-        self.assertEqual(worded, PULLED_KIND.progress(line))
-        self.assertIn("example-web", worded)
-        self.assertIn("Rolled back", worded)
-        self.assertNotIn("rolled_back", worded)
-        self.assertEqual(others, list(lines[1:]))
-        self.assertEqual([event["message"] for event in evidence.tasks], [worded, *lines[1:]])
 
     def test_a_run_that_stated_nothing_names_no_kind(self):
         run = self.claimed(self.run_of(APP))

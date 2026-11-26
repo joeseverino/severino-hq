@@ -203,6 +203,32 @@ class HeldRunTests(TestCase):
 
         self.assertFalse(self.reads(run).exists())
 
+    def test_a_held_run_says_the_unit_it_waits_on_and_what_each_app_s_containers_did_since(self):
+        from ..work_runs import run_rows, seen_as_runs
+
+        run = self.held()
+        for container, event in (("example-web-1", "start"), ("example-db-1", "die"), ("example-other-1", "start")):
+            arrived = {
+                "provider": "host",
+                "event": f"docker.container.{event}",
+                "subject": container,
+                "delivery_id": f"example-{next(_DELIVERIES)}",
+                "received_at": timezone.now().isoformat(),
+            }
+            with mock.patch.object(outbound_work, "start_for_host"), self.captureOnCommitCallbacks(execute=True):
+                apply_events({"source": InboundSource.HOST, "events": [arrived]})
+        stacks = {(APP, "example-web-1"): "example-web", (APP, "example-db-1"): "example-db"}
+
+        with (
+            mock.patch("hq.platform.application.work_runs.stacks", return_value=stacks),
+            mock.patch("hq.platform.application.work_runs.own_machine", return_value=Machine(APP)),
+        ):
+            (row,) = run_rows(seen_as_runs(OperationRequest.objects.filter(pk=run.pk)))
+
+        for fact in (UNIT, APP, "example-web: start", "example-db: die"):
+            self.assertIn(fact, row.note)
+        self.assertNotIn("example-other", row.note)
+
     def test_a_hand_off_naming_a_machine_the_run_is_not_on_is_refused(self):
         run = self.pull()
         self.claim()

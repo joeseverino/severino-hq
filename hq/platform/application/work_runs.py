@@ -20,7 +20,9 @@ from django.utils.text import get_text_list
 
 from hq.domains.control_plane.models import OPERATION_LAPSE, OperationHost, OperationRequest, OperationState
 from hq.domains.jobs.models import LAPSE as JOB_LAPSE, Job, JobState
+lazy from hq.domains.control_plane.models import InboundEvent, InboundSource
 lazy from hq.domains.control_plane.observations import OBSERVATIONS, ObservationSpec
+lazy from hq.domains.control_plane.observations.host import DOCKER_CONTAINER
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
@@ -34,11 +36,14 @@ from .tone import Tone, Toned
 lazy from .app_update_approval import PULLED, PULLED_KIND, RECEIPT, RECEIPT_KIND
 lazy from .automation_adoption import playbook_titles
 lazy from .cadence import automation_standing
+lazy from .containers import stacks
 lazy from .entity_links import entity_link
 lazy from .history import Acts, asked_by, asking, who_did_each
+lazy from .hq_self import own_machine
 lazy from .labels import dotted
 lazy from .outbound_work import job_names
 lazy from .references import Kind
+lazy from .resource_operations import HANDOFF
 
 type Source = Literal["job", "run"]
 JOB: Source = "job"
@@ -106,14 +111,12 @@ class StatedKind:
     """What the records of a reading only a playbook states mean, in the
     shape a swept reading's ``ObservationSpec`` declares it: what the reading
     is called, each record's name, what it says and the tone of what it
-    says. ``progress``, where a kind has one, says a line of JSON a task of
-    the playbook says while under way, or None for a line not of its shape."""
+    says."""
 
     label: str
     title: Callable[[Mapping[str, Any]], str]
     describe: Callable[[Mapping[str, Any]], str]
     tone: Callable[[Mapping[str, Any]], Tone]
-    progress: Callable[[Mapping[str, Any]], str | None] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,21 +144,6 @@ def wording(kind: str) -> ObservationSpec | StatedKind | None:
     spec, or a playbook's own (``_stated_kinds``)."""
 
     return OBSERVATIONS.get(kind) or _stated_kinds().get(kind)
-
-
-def told(message: str) -> str:
-    """What a task said, in words: a line of JSON as the stated kind whose
-    ``progress`` reads it says it, any other as the task said it."""
-
-    try:
-        line = json.loads(message)
-    except ValueError:
-        return message
-    if isinstance(line, Mapping):
-        for declared in _stated_kinds().values():
-            if declared.progress is not None and (said := declared.progress(line)) is not None:
-                return said
-    return message
 
 
 def _worded(kind: str, host: str, records: Sequence[Mapping[str, Any]]) -> Reading:
@@ -192,17 +180,11 @@ class RunEvidence:
     raw: str = ""
 
     @property
-    def tasks(self) -> tuple[dict[str, Any], ...]:
-        """Each task so far, its message in words (``told``)."""
-
-        return tuple({**event, "message": told(str(event.get("message") or ""))} for event in self.events)
-
-    @property
     def under_way(self) -> tuple[dict[str, Any], ...]:
         """The tasks started and not yet ended while a worker holds the run."""
 
         return (
-            tuple(event for event in self.tasks if event.get("outcome") == TaskOutcome.STARTED) if self.worker else ()
+            tuple(event for event in self.events if event.get("outcome") == TaskOutcome.STARTED) if self.worker else ()
         )
 
     @property
@@ -291,7 +273,7 @@ class WorkRun:
         failed = next(
             (
                 event
-                for event in self.evidence.tasks
+                for event in self.evidence.events
                 if event.get("outcome") in (TaskOutcome.FAILED, TaskOutcome.UNREACHABLE)
             ),
             None,
@@ -675,6 +657,28 @@ def standing_word(state: str) -> str:
     return next((seen.label for seen, stands in STANDS.items() if stands == state), "")
 
 
+def held_note(handoff: Mapping[str, str], since: datetime | None) -> str:
+    """What a held run waits on: each unit it handed off to, on its machine,
+    then what each Compose project's containers on HQ's own machine did
+    since ``since``, by the name of each event HQ stored. Only HQ's machine
+    tells HQ of its containers, so an app elsewhere shows nothing."""
+
+    waits = get_text_list([f"{unit} on {machine}" for machine, unit in handoff.items()], "and")
+    here = own_machine()
+    if here is None or since is None:
+        return f"Waiting on {waits}"
+    prefix = f"{DOCKER_CONTAINER}."
+    heard = InboundEvent.objects.filter(
+        source=InboundSource.HOST, event__startswith=prefix, applied_at__gte=since
+    ).order_by("applied_at")
+    stack = stacks()
+    done: dict[str, list[str]] = {}
+    for subject, event in heard.values_list("subject", "event"):
+        if app := stack.get((here.name, subject)):
+            done.setdefault(app, []).append(event.removeprefix(prefix))
+    return dotted(f"Waiting on {waits}", *(f"{app}: {', '.join(events)}" for app, events in done.items()))
+
+
 def _run_row(
     operation: OperationRequest, seen: JobState, title: str, now: datetime, by: Attribution, *, untaken: str = ""
 ) -> WorkRun:
@@ -696,6 +700,7 @@ def _run_row(
         else (seen.label, seen.tone)
     )
     started, finished = operation.claimed_at, operation.completed_at
+    held = claimed and HANDOFF in result
     return WorkRun(
         source=RUN,
         id=str(operation.pk),
@@ -705,9 +710,11 @@ def _run_row(
         word=word,
         tone=tone,
         # A run not yet ended says only its state, in the State column, unless
-        # it will not start.
+        # it will not start or waits on a unit it handed off to.
         note=untaken
         if stuck
+        else held_note(result[HANDOFF], operation.claimed_at)
+        if held
         else STOPPED_REPORTING
         if lapsed
         else ""
