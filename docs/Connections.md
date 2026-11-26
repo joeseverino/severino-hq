@@ -161,7 +161,7 @@ Store it as a Login item:
 
 Repo rules on your repositories, and HQ's deploys waiting for your approval.
 
-A GitHub App on your account; mise run wire-github-app records its ID and stores its key. [Setup page](https://github.com/settings/apps/new)
+A GitHub App on your account; mise run wire-github-app records its ID, stores its key and points its webhook at the inbound-events Worker. [Setup page](https://github.com/settings/apps/new)
 
 Permissions, and no others:
 
@@ -276,7 +276,7 @@ Store it as an API Credential item:
 
 Approve or reject a deploy waiting on HQ, from HQ.
 
-A second GitHub App on your account, installed on the host repository alone, made the protection rule of the environment Deploy waits on; mise run wire-github-app --review points its webhook at HQ. [Setup page](https://github.com/settings/apps/new?public=false&actions=read&deployments=write&events%5B%5D=deployment_protection_rule)
+A second GitHub App on your account, installed on the host repository alone, made the protection rule of the environment Deploy waits on; mise run wire-github-app --review points its webhook at the inbound-events Worker. [Setup page](https://github.com/settings/apps/new?public=false&actions=read&deployments=write&events%5B%5D=deployment_protection_rule)
 
 Permissions, and no others:
 

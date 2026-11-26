@@ -319,7 +319,10 @@ CONNECTIONS = {
         "GitHub App",
         "scoped",
         GITHUB_APP,
-        create="A GitHub App on your account; mise run wire-github-app records its ID and stores its key.",
+        create=(
+            "A GitHub App on your account; mise run wire-github-app records its ID, stores its key and points"
+            " its webhook at the inbound-events Worker."
+        ),
         create_url="https://github.com/settings/apps/new",
         gives="Repo rules on your repositories, and HQ's deploys waiting for your approval.",
     ),
@@ -329,7 +332,8 @@ CONNECTIONS = {
         GITHUB_APP,
         create=(
             "A second GitHub App on your account, installed on the host repository alone, made the protection rule"
-            " of the environment Deploy waits on; mise run wire-github-app --review points its webhook at HQ."
+            " of the environment Deploy waits on; mise run wire-github-app --review points its webhook at the"
+            " inbound-events Worker."
         ),
         create_url=_registration(REVIEW_WRITES, REVIEW_EVENTS),
         writes=REVIEW_WRITES,
