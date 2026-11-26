@@ -12,7 +12,9 @@ from django.utils import timezone
 
 from hq.domains.jobs.models import JobState
 from hq.platform.application.labels import dotted
+from hq.platform.application.routes import reverse
 from hq.platform.application.tone import Tone, TonedChoices
+from hq.platform.application.url_query import with_query
 from hq.platform.core.attribution import queued_chain
 from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
@@ -411,6 +413,11 @@ class InboundEvent(TimestampedModel):
     @override
     def __str__(self) -> str:
         return f"{self.provider} {self.event}" + (f" on {self.subject}" if self.subject else "")
+
+    def get_absolute_url(self) -> str:
+        """An event is read on Events, searched by its delivery."""
+
+        return with_query(reverse("control_plane:events"), {"q": self.delivery_id})
 
 
 class DashboardConfiguration(TimestampedModel):

@@ -13,11 +13,16 @@ from .labels import human_label
 from .projection import guarded, iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import RecordId
-from .resources import BoundedQuery
+from .resources import BoundedQuery, SearchText
+from .search_contracts import SearchDefinition
 from .security import Capability
 from .ui import ended
 
 INBOUND_EVENTS = "inbound_events"
+
+
+class InboundEventQuery(BoundedQuery):
+    query: SearchText = None
 
 
 class InboundEventItem(TypedDict):
@@ -86,7 +91,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             Capability.READ,
             listing=ListRead(
                 list_events,
-                BoundedQuery,
+                InboundEventQuery,
                 InboundEventItem,
                 sorts=(
                     ListSort("-received_at", "Newest event", ("-received_at", "-pk")),
@@ -102,5 +107,15 @@ def resources() -> tuple[ResourceSpec, ...]:
             identifier_type=RecordId,
             web_route="control_plane:events",
             record_type=InboundEventItem,
+            # A delivery id pasted from the provider's log finds its event.
+            search=SearchDefinition(
+                INBOUND_EVENTS,
+                InboundEvent,
+                "pk",
+                ("event", "subject", "provider", "delivery_id"),
+                label="Events",
+                badge_field="source",
+                timestamp_field="received_at",
+            ),
         ),
     )

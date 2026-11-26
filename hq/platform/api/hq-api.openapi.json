@@ -41614,6 +41614,9 @@
         "operationId": "listInboundEventsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/SearchText"
+          },
+          {
             "description": "Only the records whose source is one of these, comma-separated; absent, every one.",
             "explode": true,
             "in": "query",
@@ -41695,6 +41698,7 @@
                   "query.limit": "$request.query.limit",
                   "query.outcome": "$request.query.outcome",
                   "query.page": "$response.body#/data/next",
+                  "query.query": "$request.query.query",
                   "query.sort": "$request.query.sort",
                   "query.source": "$request.query.source"
                 }
