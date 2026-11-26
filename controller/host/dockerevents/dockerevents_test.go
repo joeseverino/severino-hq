@@ -173,13 +173,13 @@ func TestABurstIsOneBatchOfEventsHQReads(t *testing.T) {
 		t.Fatalf("a burst of 3 was told as a batch of %d", len(events))
 	}
 	died := events[0]
-	if died.Provider != runtime.InboundProviderHost || died.Event != ContainerEvent+".die" || died.Subject != "my-container" {
+	if died.Provider != runtime.InboundProviderHost || died.Event != string(runtime.HostEventDockerContainer)+".die" || died.Subject != "my-container" {
 		t.Errorf("told %+v", died)
 	}
 	if !died.ReceivedAt.Equal(time.Unix(0, at).Truncate(time.Microsecond)) {
 		t.Errorf("received at %s, the event was at %s", died.ReceivedAt, time.Unix(0, at))
 	}
-	if events[1].Event != ContainerEvent+".health_status: unhealthy" {
+	if events[1].Event != string(runtime.HostEventDockerContainer)+".health_status: unhealthy" {
 		t.Errorf("a health change is told as %q", events[1].Event)
 	}
 	ids := map[string]bool{}
@@ -224,19 +224,7 @@ func TestADroppedStreamIsReadAgainFromTheLastEventHQStored(t *testing.T) {
 	if len(replayed) != 2 || replayed[0] != stored[0] {
 		t.Errorf("the replay %+v is not the event HQ stored, %+v, then the next", replayed, stored)
 	}
-	if replayed[1].Event != ContainerEvent+".destroy" {
+	if replayed[1].Event != string(runtime.HostEventDockerContainer)+".destroy" {
 		t.Errorf("then told %q", replayed[1].Event)
-	}
-}
-
-// HQ's host readings declare the event the watcher tells, so it makes the
-// container readings due.
-func TestHQsHostReadingsDeclareTheWatchersEvent(t *testing.T) {
-	source, err := os.ReadFile(filepath.Join("..", "..", "..", "hq", "domains", "control_plane", "observations", "host.py"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Contains(source, []byte(`DOCKER_CONTAINER = "`+ContainerEvent+`"`)) {
-		t.Errorf("hq/domains/control_plane/observations/host.py declares no DOCKER_CONTAINER = %q", ContainerEvent)
 	}
 }

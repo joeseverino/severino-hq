@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 	"github.com/joeseverino/severino-hq/controller/secrets/project"
 )
 
@@ -578,7 +579,7 @@ func glanceDocument(t *testing.T, l *launch) {
 			SSHTransport: &connections.SSHTransport{Host: "192.0.2.10", User: "example", HostKey: "key", Identity: "example-ssh", Port: "22"}},
 		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store,
 			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
-		{Ref: "example-events", Provider: EventsProvider, Store: store,
+		{Ref: "example-events", Provider: string(runtime.ConnectionProviderCloudflareEvents), Store: store,
 			APIToken: &connections.APIToken{URL: "wss://events.example.com/socket", APIToken: "socket-token"}},
 	}}.Encode()
 	if err != nil {

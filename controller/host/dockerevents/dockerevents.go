@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -24,10 +23,6 @@ import (
 const (
 	// Socket is Docker's Engine API, where its CLI finds it.
 	Socket = "/var/run/docker.sock"
-	// ContainerEvent is the host event a container's change is told
-	// as, its action after a dot: the name HQ's host readings declare in
-	// INBOUND (held to it by a test).
-	ContainerEvent = "docker.container"
 	// tellBound is the longest HQ is given to store one batch.
 	tellBound = time.Minute
 )
@@ -40,10 +35,6 @@ var Filters = map[string][]string{
 	"type":  {"container"},
 	"event": {"die", "start", "health_status", "oom", "destroy"},
 }
-
-// subjectLimit bounds what an event is about, as the contract's
-// InboundArrival does, so no container's name makes HQ refuse a batch.
-var subjectLimit = api.MustLimit("InboundArrival", "properties", "subject", "maxLength")
 
 // Watcher tells HQ the moment a container on this machine changes, so
 // its container readings are made due at once instead of at the next sweep.
@@ -112,14 +103,10 @@ type message struct {
 // arrival is the event as HQ is told it. Its delivery id is Docker's id,
 // time and action, so a replay of the same event is the event HQ stored.
 func (e message) arrival() runtime.InboundArrival {
-	subject := e.Actor.Attributes["name"]
-	if len(subject) > subjectLimit {
-		subject = subject[:subjectLimit]
-	}
 	return runtime.InboundArrival{
 		Provider:   runtime.InboundProviderHost,
-		Event:      ContainerEvent + "." + e.Action,
-		Subject:    subject,
+		Event:      string(runtime.HostEventDockerContainer) + "." + e.Action,
+		Subject:    e.Actor.Attributes["name"],
 		DeliveryID: fmt.Sprintf("%s-%d-%s", e.Actor.ID, e.TimeNano, e.Action),
 		ReceivedAt: time.Unix(0, e.TimeNano).UTC().Truncate(time.Microsecond),
 	}

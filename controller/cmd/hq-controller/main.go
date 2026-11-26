@@ -9,10 +9,9 @@
 // "hq-controller job NAME" is the other thing a timer asks of HQ: one piece of
 // scheduled work, done by the running process. It reads no connection.
 //
-// "hq-controller events SOURCE" tells HQ what SOURCE was told happened: one
-// event per line of its input, posted in batches as they arrive, so a
-// listener can pipe a stream into it. Input with no events says SOURCE is
-// listening.
+// "hq-controller events [--reconnected]" tells HQ what its host was told
+// happened: one event per line of its input. Input with no events says the
+// teller is listening.
 //
 // "hq-controller listen" holds the inbound-events Worker's socket open, the
 // one events connection it is given, and tells HQ each event it hears, until
@@ -37,6 +36,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -60,7 +60,7 @@ func main() {
 	case "job":
 		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
 	case "events":
-		code = events(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdin, stdout)
+		code = events(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdin, stdout, os.Stderr)
 	case "listen":
 		code = listen(ctx, os.Args[2:], stdout)
 	case "ready":
@@ -127,50 +127,39 @@ func job(ctx context.Context, args []string, socket string, stdout io.Writer) in
 	return 1
 }
 
-// events posts each line of input as an event SOURCE was told of. A batch is
-// what has arrived when the input pauses, up to the contract's bound, so a
-// burst is one call and a lone event is posted at once. A line that is not an
-// event, or a batch HQ refuses, ends it with exit 1.
-func events(ctx context.Context, args []string, socket string, stdin io.Reader, stdout io.Writer) int {
+// events posts the events of its input, one InboundArrival per line, as HQ's
+// host was told of them, in batches of the contract's bound. A line the
+// contract refuses is dropped alone, with a line on stderr. --reconnected
+// says the teller has just begun reading, so HQ reads again what it may have
+// missed; input with no events says it is listening. A batch HQ refuses ends
+// it with exit 1.
+func events(ctx context.Context, args []string, socket string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fail := func(message string) int {
 		_ = json.NewEncoder(stdout).Encode(failure{Message: message})
 		return 1
 	}
-	if len(args) != 1 || !runtime.InboundSource(args[0]).Valid() {
-		fail("usage: hq-controller events host|worker")
+	options := flag.NewFlagSet("events", flag.ContinueOnError)
+	options.SetOutput(io.Discard)
+	reconnected := options.Bool("reconnected", false, "the teller has just begun reading")
+	if options.Parse(args) != nil || options.NArg() != 0 {
+		fail("usage: hq-controller events [--reconnected]")
 		return 2
 	}
 	bridge, err := runtime.NewSocketBridge(strings.TrimSpace(socket))
 	if err != nil {
 		return fail(err.Error())
 	}
-	batch := runtime.InboundBatch{Source: runtime.InboundSource(args[0]), Events: []runtime.InboundArrival{}}
-	posted := 0
-	post := func() error {
-		if err := bridge.Events(ctx, batch); err != nil {
-			return err
-		}
-		posted += len(batch.Events)
-		batch.Events = batch.Events[:0]
-		return nil
-	}
+	log := mask.Logger(stderr)
+	read := []runtime.InboundArrival{}
 	reader := bufio.NewReader(stdin)
-	sent := false
 	for line := 1; ; line++ {
 		text, readErr := reader.ReadBytes('\n')
-		if len(bytes.TrimSpace(text)) > 0 {
-			event, err := runtime.ReadArrival(bytes.TrimSpace(text))
-			if err != nil {
-				return fail(fmt.Sprintf("line %d is not an event: %v", line, err))
+		if text = bytes.TrimSpace(text); len(text) > 0 {
+			if event, err := runtime.ReadArrival(text); err != nil {
+				log.Warn("event dropped", slog.String("event", "events.unreadable"), slog.Int("line", line), slog.Any("error", err))
+			} else {
+				read = append(read, event)
 			}
-			batch.Events = append(batch.Events, event)
-		}
-		ended := readErr != nil
-		if len(batch.Events) > 0 && (ended || reader.Buffered() == 0 || len(batch.Events) == runtime.MaxInboundEvents) || ended && !sent {
-			if err := post(); err != nil {
-				return fail(err.Error())
-			}
-			sent = true
 		}
 		if readErr == io.EOF {
 			break
@@ -179,10 +168,19 @@ func events(ctx context.Context, args []string, socket string, stdin io.Reader, 
 			return fail(readErr.Error())
 		}
 	}
+	batches := slices.Collect(slices.Chunk(read, runtime.MaxInboundEvents))
+	if len(batches) == 0 {
+		batches = [][]runtime.InboundArrival{read}
+	}
+	for i, batch := range batches {
+		if err := bridge.Events(ctx, runtime.InboundBatch{Source: runtime.InboundSourceHost, Events: batch, Reconnected: *reconnected && i == 0}); err != nil {
+			return fail(err.Error())
+		}
+	}
 	_ = json.NewEncoder(stdout).Encode(struct {
 		OK     bool `json:"ok"`
 		Posted int  `json:"posted"`
-	}{true, posted})
+	}{true, len(read)})
 	return 0
 }
 

@@ -237,3 +237,31 @@ func TestTheTokenGoesOnlyToAWSSAddress(t *testing.T) {
 		}
 	}
 }
+
+// Each text is held to the contract's bounds by its length in characters, so
+// a name HQ would store whole is never refused, and one it would refuse
+// never reaches it.
+func TestAnEventIsHeldToTheContractsBounds(t *testing.T) {
+	with := func(member, value string) []byte {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(pushEvent), &event); err != nil {
+			t.Fatal(err)
+		}
+		event[member] = value
+		data, _ := json.Marshal(event)
+		return data
+	}
+	for _, kept := range [][]byte{with("subject", strings.Repeat("é", 255)), with("subject", "")} {
+		if _, err := ReadArrival(kept); err != nil {
+			t.Errorf("%s refused: %v", kept, err)
+		}
+	}
+	for _, refused := range [][]byte{
+		with("subject", strings.Repeat("a", 256)), with("event", strings.Repeat("a", 121)),
+		with("delivery_id", strings.Repeat("a", 129)),
+	} {
+		if _, err := ReadArrival(refused); err == nil {
+			t.Errorf("%.80s... is read", refused)
+		}
+	}
+}

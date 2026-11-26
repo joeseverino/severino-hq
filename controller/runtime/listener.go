@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"unicode/utf8"
 
 	"github.com/coder/websocket"
 
@@ -181,8 +182,32 @@ func (l *Listener) session(ctx context.Context) error {
 // HQ would refuse with every event posted beside it.
 var ErrUnknownProvider = errors.New("no provider HQ takes events from")
 
+// ErrOutOfBounds is an event whose text the contract's InboundArrival refuses.
+var ErrOutOfBounds = errors.New("outside the contract's bounds")
+
+// arrivalText is one text an event carries, and the contract's bound on its
+// length in characters. The contract sets no floor on a request's text, since
+// a secret struck from it only shortens it.
+type arrivalText struct {
+	member string
+	max    int
+	of     func(InboundArrival) string
+}
+
+func boundedText(member string, of func(InboundArrival) string) arrivalText {
+	return arrivalText{member, api.MustLimit("InboundArrival", "properties", member, "maxLength"), of}
+}
+
+var arrivalTexts = []arrivalText{
+	boundedText("event", func(e InboundArrival) string { return e.Event }),
+	boundedText("subject", func(e InboundArrival) string { return e.Subject }),
+	boundedText("delivery_id", func(e InboundArrival) string { return e.DeliveryID }),
+}
+
 // ReadArrival is one event as the contract's InboundArrival holds it: no
-// member it does not name, and a provider HQ declares.
+// member it does not name, a provider HQ declares, and each text within its
+// bounds. Every reader passes each event through it, so one out of bounds is
+// dropped alone and never makes HQ refuse the batch beside it.
 func ReadArrival(data []byte) (InboundArrival, error) {
 	var event InboundArrival
 	if err := jsonv2.Unmarshal(data, &event, jsonv2.RejectUnknownMembers(true)); err != nil {
@@ -190,6 +215,11 @@ func ReadArrival(data []byte) (InboundArrival, error) {
 	}
 	if !event.Provider.Valid() {
 		return event, fmt.Errorf("%q: %w", event.Provider, ErrUnknownProvider)
+	}
+	for _, text := range arrivalTexts {
+		if length := utf8.RuneCountInString(text.of(event)); length > text.max {
+			return event, fmt.Errorf("%s of %d characters: %w", text.member, length, ErrOutOfBounds)
+		}
 	}
 	return event, nil
 }

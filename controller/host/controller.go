@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // Where the controller's container finds what it is given: each path is the
@@ -111,13 +112,9 @@ func (p Pass) lends(connection connections.Connection) bool {
 	return true
 }
 
-// EventsProvider is the provider name of the inbound-events Worker's socket,
-// as the controller's registry declares it (held to it by a test there).
-const EventsProvider = "cloudflare_events"
-
 // eventsReads is whether a connection is the socket the listener holds.
 func eventsReads(connection connections.Connection) bool {
-	return connection.Provider == EventsProvider
+	return connection.Provider == string(runtime.ConnectionProviderCloudflareEvents)
 }
 
 // ListenerContainer names the listener's container, so one left by a
@@ -125,14 +122,10 @@ func eventsReads(connection connections.Connection) bool {
 // hold the socket at once.
 const ListenerContainer = "severino-hq-listener"
 
-// PortainerProvider is the provider name of a Portainer connection, as the
-// controller's registry declares it (held to it by a test there).
-const PortainerProvider = "portainer"
-
 // glanceReads is whether a glance pass is given a connection: what it reads a
 // machine through, Portainer or an SSH transport, whatever provider names it.
 func glanceReads(connection connections.Connection) bool {
-	return connection.Provider == PortainerProvider || connection.SSHTransport != nil
+	return connection.Provider == string(runtime.ConnectionProviderPortainer) || connection.SSHTransport != nil
 }
 
 // Run launches one pass.

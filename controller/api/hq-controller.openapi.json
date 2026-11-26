@@ -4946,6 +4946,16 @@
         ],
         "type": "object"
       },
+      "HostEvent": {
+        "type": "string",
+        "description": "An event HQ's own host tells it of from the controller.",
+        "enum": [
+          "docker.container"
+        ],
+        "x-enum-varnames": [
+          "HostEventDockerContainer"
+        ]
+      },
       "HostFilesystemRecord": {
         "additionalProperties": false,
         "description": "One real filesystem on the controller's machine, as statfs(2) states it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs or zfs mount the machine shows, one per device, and sends where it is mounted and its space; no device, option or file name.",

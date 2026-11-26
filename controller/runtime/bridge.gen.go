@@ -440,6 +440,21 @@ func (e GlancePanelID) Valid() bool {
 	}
 }
 
+// Defines values for HostEvent.
+const (
+	HostEventDockerContainer HostEvent = "docker.container"
+)
+
+// Valid indicates whether the value is a known member of the HostEvent enum.
+func (e HostEvent) Valid() bool {
+	switch e {
+	case HostEventDockerContainer:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HostRenderStatusRecordReason.
 const (
 	HostRenderStatusRecordReasonEmpty      HostRenderStatusRecordReason = ""
@@ -2104,6 +2119,9 @@ type HostEdgeRebootRecord struct {
 	// Since When the flag was first written, when one is there; empty when none is.
 	Since string `json:"since,omitempty"`
 }
+
+// HostEvent An event HQ's own host tells it of from the controller.
+type HostEvent string
 
 // HostFilesystemRecord One real filesystem on the controller's machine, as statfs(2) states it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs or zfs mount the machine shows, one per device, and sends where it is mounted and its space; no device, option or file name.
 type HostFilesystemRecord struct {

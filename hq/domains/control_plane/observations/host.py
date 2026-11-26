@@ -8,7 +8,7 @@ from pydantic import ConfigDict, Field
 from hq.platform.application.reasons import Checked
 lazy from hq.platform.application.labels import human_bytes
 
-from ..provider_spec import InboundSpec
+from ..provider_spec import InboundSpec, SharedValue
 from .contract import ObservationRecord, ObservationSpec, Stamp
 from .portainer import ENVIRONMENT_KIND
 
@@ -444,3 +444,6 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
 UNIT_FAILED = "unit.failed"
 DOCKER_CONTAINER = "docker.container"
 INBOUND = {"host": InboundSpec({UNIT_FAILED: (UNIT_KIND,), DOCKER_CONTAINER: (ENVIRONMENT_KIND,)})}
+# The event severino-hq-events-docker.service tells, which the controller
+# spells from the contract.
+SHARED = (SharedValue("HostEvent", (DOCKER_CONTAINER,), "An event HQ's own host tells it of from the controller."),)

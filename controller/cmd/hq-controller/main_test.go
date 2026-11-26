@@ -400,19 +400,22 @@ func TestJob(t *testing.T) {
 func TestEvents(t *testing.T) {
 	binary, bridge := setUp(t)
 	push := `{"provider":"github_app","event":"push","subject":"example/app","delivery_id":"d-1","received_at":"2026-01-15T12:00:00Z"}`
+	overlong := strings.Replace(push, `"push"`, `"`+strings.Repeat("a", 121)+`"`, 1)
 	for _, tc := range []struct {
-		name   string
-		args   []string
-		input  string
-		code   int
-		posted []int
+		name        string
+		args        []string
+		input       string
+		code        int
+		posted      []int
+		reconnected bool
 	}{
-		{"a line is an event", []string{"events", "worker"}, push + "\n", 0, []int{1}},
-		{"lines that arrive together are one batch", []string{"events", "worker"}, push + "\n" + push + "\n", 0, []int{2}},
-		{"no events says the source is listening", []string{"events", "worker"}, "", 0, []int{0}},
-		{"a line that is not an event posts nothing", []string{"events", "host"}, `{"provider":"github_app","body":"x"}` + "\n", 1, nil},
-		{"an unknown source", []string{"events", "elsewhere"}, "", 2, nil},
-		{"no source", []string{"events"}, "", 2, nil},
+		{"a line is an event", []string{"events"}, push + "\n", 0, []int{1}, false},
+		{"every line is one batch", []string{"events"}, push + "\n" + push + "\n", 0, []int{2}, false},
+		{"a batch is split at the contract's bound", []string{"events"}, strings.Repeat(push+"\n", runtime.MaxInboundEvents+1), 0, []int{runtime.MaxInboundEvents, 1}, false},
+		{"no events says the teller is listening", []string{"events"}, "", 0, []int{0}, false},
+		{"a reconnect is told", []string{"events", "--reconnected"}, "", 0, []int{0}, true},
+		{"a line out of the contract is dropped alone", []string{"events"}, overlong + "\n" + `{"provider":"github_app","body":"x"}` + "\n" + push + "\n", 0, []int{1}, false},
+		{"a source is not named", []string{"events", "worker"}, "", 2, nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := len(bridge.Calls())
@@ -423,8 +426,11 @@ func TestEvents(t *testing.T) {
 			var posted []int
 			for _, made := range calls[before:] {
 				var batch runtime.InboundBatch
-				if made.Action != "events" || json.Unmarshal(made.Payload, &batch) != nil || string(batch.Source) != tc.args[1] {
+				if made.Action != "events" || json.Unmarshal(made.Payload, &batch) != nil || batch.Source != runtime.InboundSourceHost {
 					t.Fatalf("called %s %s", made.Action, made.Payload)
+				}
+				if batch.Reconnected != (tc.reconnected && len(posted) == 0) {
+					t.Errorf("batch %d says reconnected %t", len(posted), batch.Reconnected)
 				}
 				posted = append(posted, len(batch.Events))
 			}
