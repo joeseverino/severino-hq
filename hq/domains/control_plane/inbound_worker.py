@@ -3,7 +3,9 @@
 events HQ takes.
 
 ``routes.json`` is the one place the Worker and its tests learn each
-provider's route, and ``wrangler.jsonc`` requires each route's secret.
+provider's route, ``arrival.json`` the bridge contract's ``InboundArrival``,
+the one shape the Worker sends, and ``wrangler.jsonc`` requires each route's
+secret.
 """
 
 import json
@@ -13,6 +15,7 @@ from pathlib import Path
 from django.conf import settings
 
 from .provider_adapters import INBOUND
+lazy from .bridge_contract import contract
 
 # The Worker secret the listener's socket presents as its bearer: the
 # Worker's own, never a provider's, so no INBOUND declaration names it.
@@ -56,8 +59,21 @@ def routes() -> list[dict[str, object]]:
     ]
 
 
+def arrival() -> dict[str, object]:
+    """The contract's ``InboundArrival``, each member a reference names
+    resolved, so the Worker reads every member's bound in one place."""
+
+    schemas = contract()["components"]["schemas"]
+    shape = schemas["InboundArrival"]
+    members = {
+        name: schemas[member["$ref"].rpartition("/")[2]] if "$ref" in member else member
+        for name, member in shape["properties"].items()
+    }
+    return {**shape, "properties": members}
+
+
 def emitted() -> dict[Path, str]:
-    """Both files, with their content."""
+    """Every file, with its content."""
 
     worker = Path(settings.BASE_DIR) / "worker"
     served = routes()
@@ -66,4 +82,5 @@ def emitted() -> dict[Path, str]:
     return {
         worker / "wrangler.jsonc": HEADER + json.dumps(wrangler, indent=2) + "\n",
         worker / "src/generated/routes.json": json.dumps({"providers": served}, separators=(",", ":")) + "\n",
+        worker / "src/generated/arrival.json": json.dumps(arrival(), indent=2) + "\n",
     }

@@ -1,15 +1,24 @@
 import { DurableObject } from "cloudflare:workers";
+import arrival from "./generated/arrival.json";
 
 /** The path a host listener opens its socket to the Hub on. */
 export const SOCKET_PATH = "/socket";
 
-/** What reaches a listener for one verified delivery: its names, never its body. */
-export interface InboundEvent {
-  provider: string;
-  event: string;
-  subject: string;
-  delivery_id: string;
-  received_at: string;
+/**
+ * What reaches a listener for one verified delivery: its names, never its
+ * body, as the bridge contract's InboundArrival has them.
+ */
+export type InboundEvent = Record<keyof typeof arrival.properties, string>;
+
+/**
+ * Whether each member is within the length the contract bounds it to, in
+ * code points as JSON Schema counts them. HQ refuses a batch holding one
+ * event outside it, so such an event is refused here, alone.
+ */
+export function withinContract(event: InboundEvent): boolean {
+  return Object.entries(arrival.properties).every(
+    ([member, shape]) => !("maxLength" in shape) || [...event[member as keyof InboundEvent]].length <= shape.maxLength,
+  );
 }
 
 const encoder = new TextEncoder();

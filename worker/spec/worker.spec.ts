@@ -1,5 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it } from "vitest";
+import arrival from "../src/generated/arrival.json";
 import routes from "../src/generated/routes.json";
 import { SOCKET_PATH } from "../src/hub";
 import pullRequest from "./fixtures/pull_request.opened.json";
@@ -136,6 +137,24 @@ describe("a delivery that never reaches the listeners", () => {
     await deliver({ event: "push", payload: push, id: "delivery-after" });
 
     expect(refused.status).toBe(status);
+    expect(await listener.next()).toMatchObject({ delivery_id: "delivery-after" });
+  });
+});
+
+describe("a delivery whose names exceed the contract's bounds", () => {
+  const over = (member: "event" | "subject" | "delivery_id") => "x".repeat(arrival.properties[member].maxLength + 1);
+
+  it.each<[string, Omit<Delivery, "signature" | "length">]>([
+    ["its event", { event: "pull_request", payload: { ...pullRequest, action: over("event") }, id: "delivery-long" }],
+    ["its subject", { event: "push", payload: { ...push, repository: { ...push.repository, full_name: over("subject") } }, id: "delivery-long" }],
+    ["its delivery id", { event: "push", payload: push, id: over("delivery_id") }],
+  ])("is refused alone by %s", async (_, delivery) => {
+    const listener = await listen();
+
+    const refused = await deliver(delivery);
+    await deliver({ event: "push", payload: push, id: "delivery-after" });
+
+    expect(refused.status).toBe(400);
     expect(await listener.next()).toMatchObject({ delivery_id: "delivery-after" });
   });
 });

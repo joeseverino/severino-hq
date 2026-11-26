@@ -14,10 +14,11 @@
 //   rotation closes every socket opened with the old one.
 // - Only an event's names are forwarded (provider, event, subject, delivery
 //   id, time), never its body, so a valid sender can only make HQ re-read
-//   with its own credentials.
+//   with its own credentials. An event outside the bridge contract's bounds
+//   is answered 400 and never sent.
 // - Every secret is a Worker secret, named by the route that uses it.
 import routes from "./generated/routes.json";
-import { bearer, Hub, SOCKET_PATH, tag, type InboundEvent } from "./hub";
+import { bearer, Hub, SOCKET_PATH, tag, withinContract, type InboundEvent } from "./hub";
 import { VERIFIERS, type Verifier } from "./verify";
 
 export { Hub };
@@ -97,6 +98,7 @@ async function webhook(request: Request, env: Env, route: Route, verify: Verifie
     delivery_id: delivery,
     received_at: new Date().toISOString(),
   };
+  if (!withinContract(event)) return answer(400);
   // Answered whether or not a listener is connected: a listener re-reads on
   // every reconnect, which covers what it missed.
   await hub(env).broadcast(event);
