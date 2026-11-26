@@ -170,7 +170,6 @@ ACTIONS: dict[str, PostedAction] = {
     "control_plane:read_now": PostedAction(data=lambda s: {"kind": s.resource.kind}),
     "control_plane:visit": PostedAction(data=lambda _s: {"subject": "machine", "name": "lab-1"}),
     "dashboard_glance": PostedAction(),
-    "control_plane:playbooks_refresh": PostedAction(),
     "control_plane:playbooks_adopt": PostedAction(kwargs=lambda _s: {"pk": _newest_proposal()}),
     "control_plane:playbooks_reject": PostedAction(kwargs=lambda _s: {"pk": _newest_proposal()}),
 }

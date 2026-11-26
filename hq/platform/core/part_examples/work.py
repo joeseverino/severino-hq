@@ -37,7 +37,7 @@ def _example_runs():
                 ),
             ),
         ),
-        ("Refresh playbooks", "Queued", JobState.QUEUED.tone, "Waiting for HQ to start it.", RunEvidence()),
+        ("Scan playbooks", "Queued", JobState.QUEUED.tone, "Waiting for HQ to start it.", RunEvidence()),
         (
             "Run example.upgrade_packages",
             "Failed",

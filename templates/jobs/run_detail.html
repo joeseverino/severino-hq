@@ -23,7 +23,7 @@ press, approval and merge that set it going, linking the whole chain.
 {% layout %}
 {% section "Run" %}
   {% facts label="Run" %}
-    {% if playbook_url %}{% fact ran_label value=run.title url=playbook_url %}{% else %}{% fact ran_label value=run.title %}{% endif %}
+    {% if run.playbook %}{% fact "Playbook" value=run.title url=playbook_url %}{% endif %}
     {% fact "Asked by" value=asked_by.asker|or_empty detail=asked_by.approved detail_url=asked_by.approval_url %}
     {% fact "Asked" %}{{ run.created_at|when }}{% endfact %}
     {% if run.reason %}{% fact "Reason" value=run.reason %}{% endif %}

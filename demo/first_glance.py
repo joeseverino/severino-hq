@@ -43,8 +43,8 @@ def settle(owner) -> list[str]:
 
     person = web_principal(owner)
     _decide_held(person)
-    # A later Refresh read the commit adopted, so no scan stands failed or unadoptable.
-    automation.rescanned(owner)
+    # A later scan read the commit adopted, so no scan stands failed or unadoptable.
+    automation.rescanned()
     _finish_waiting()
     _run_again_what_did_not_finish(person)
     _swept_since()

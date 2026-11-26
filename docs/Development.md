@@ -151,10 +151,11 @@ open the second's link with `127.0.0.1` in place of `localhost`.
 
 `mise run dev` always serves the bridge and runs the real automation worker
 (`hq_runner`) beside it, and `mise run dev:scratch --seed showcase --runner`
-does the same for a scratch server. A Refresh on Playbooks is then scanned,
-its commit can be adopted, and a run is claimed, run by ansible-playbook and
-reported with each task's outcome, on the machine page and in Jobs. Without
-`--runner`, a scratch server's Refresh or run stays queued.
+does the same for a scratch server. A scan HQ asks for, once a reading of
+the repositories finds the source's branch moved, is then claimed, its commit
+can be adopted, and a run is claimed, run by ansible-playbook and reported
+with each task's outcome, on the machine page and in Jobs. Without
+`--runner`, a scratch server's scan or run stays queued.
 
 The server serves the bridge as the image does (`SEVERINO_BRIDGE_SOCKET`,
 and the worker's `SEVERINO_AUTOMATION_BRIDGE_SOCKET` beside it, which the worker

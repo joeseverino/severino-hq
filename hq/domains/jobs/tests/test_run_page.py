@@ -87,16 +87,12 @@ class RunPageTests(TestCase):
         self.assertEqual(said["Machines"][1], reverse("control_plane:machine", kwargs={"name": MACHINE}))
         self.assertEqual(said["Playbook"][1], reverse("command", args=[RUN]))
 
-    def test_a_scan_s_page_names_the_command_that_asked_for_it_and_decides_nothing(self):
-        from hq.platform.application.automation_sources import REFRESH
-
+    def test_a_scan_s_page_names_no_playbook_and_decides_nothing(self):
         scan = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN).exclude(proposal=None).first()
 
         html = self.page(run_page(scan.pk))
 
-        said = facts(html)
-        self.assertNotIn("Playbook", said, "a scan runs no playbook")
-        self.assertEqual(said["Command"][1], reverse("command", args=[REFRESH]))
+        self.assertNotIn("Playbook", facts(html), "a scan runs no playbook")
         posts = {element.attrs.get("formaction", "") for element in all_elements(html)}
         self.assertFalse({path for path in posts if path.endswith(("/adopt/", "/reject/"))})
 
@@ -313,10 +309,10 @@ class RunHereTests(TestCase):
         """Each run of a playbook still adopted, whose title is the same now as when it was asked."""
 
         from hq.platform.application.automation_adoption import playbook_titles
-        from hq.platform.application.work_runs import RUN as LISTED_RUN, hydrated, scan_title, work
+        from hq.platform.application.work_runs import RUN as LISTED_RUN, hydrated, work
         from hq.platform.core.models import AuditLog
 
-        titled = {*playbook_titles().values(), scan_title()}
+        titled = {*playbook_titles().values(), OperationRequest.Action.SCAN.label}
         listed = {
             row.id: row.title for row in hydrated(work().kept()) if row.source == LISTED_RUN and row.title in titled
         }

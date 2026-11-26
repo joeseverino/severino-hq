@@ -144,27 +144,19 @@ def _advised(owner) -> None:
 
 
 def _rescanned(owner) -> None:
-    """The example estate once a later Refresh found the commit adopted, so
+    """The example estate once a later scan found the commit adopted, so
     the procedures page has nothing to adopt."""
 
     _estate(owner)
-    example_estate.automation.rescanned(owner)
+    example_estate.automation.rescanned()
 
 
 def _unadoptable(owner) -> None:
-    """The example estate once a later Refresh read a commit HQ can't adopt,
+    """The example estate once a later scan read a commit HQ can't adopt,
     so the Playbooks page says why for the commit and each playbook."""
 
     _estate(owner)
-    example_estate.automation.unadoptable(owner)
-
-
-def _scanning(owner) -> None:
-    """The example estate while a Refresh is under way, so the procedures
-    page follows a scan."""
-
-    _estate(owner)
-    example_estate.automation.scanning(owner)
+    example_estate.automation.unadoptable()
 
 
 def _unattended(owner) -> None:
@@ -305,7 +297,6 @@ SEEDS: dict[str, Seed] = {
     "images-left": Seed(_images_left, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
     "unadoptable": Seed(_unadoptable, _SET_UP),
-    "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.

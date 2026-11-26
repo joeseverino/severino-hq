@@ -26,6 +26,7 @@ from .inventory import (
 from .read_requests import askers, settle_read_requests
 from .zones import RECORD_KIND, adopt_discovered_records
 lazy from . import outbound_work, problems
+lazy from .automation_sources import scan_when_due
 lazy from .first_seen import look_due
 lazy from .projects import sync_repositories
 lazy from .public_registry import registry_due
@@ -65,9 +66,10 @@ def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, An
         # otherwise its records would wait a whole sweep for no reason.
         adopted += adopt_discovered_records(principal=principal)["adopted"]
     # Every repository the GitHub App reads is a project, from the reading
-    # just stored.
+    # just stored, and a playbook source whose branch moved is scanned again.
     if REPOSITORY_KIND in payload:
         sync_repositories(principal=principal)
+        scan_when_due(principal=principal)
     # And everything already declared that the sweep just found unchanged, so
     # a declaration nothing touched still reads as observed.
     confirmed = confirm_observed(payload)

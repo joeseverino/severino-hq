@@ -33,7 +33,6 @@ from .routes import reverse
 from .tone import Tone, Toned
 lazy from .app_update_approval import PULLED, PULLED_KIND
 lazy from .automation_adoption import playbook_titles
-lazy from .automation_sources import REFRESH, capability_specs
 lazy from .cadence import automation_standing
 lazy from .entity_links import entity_link
 lazy from .history import Acts, asked_by, asking, who_did_each
@@ -96,7 +95,7 @@ RECENT = 10
 
 # A run's procedure is named on Jobs by the command it is run through: what
 # ``capability_name`` puts before and after the procedure's id. A scan is
-# named by the command that asks for one, Refresh.
+# named by its action.
 _RUN_KIND = tuple(capability_name("\0").split("\0"))
 # The automation work Jobs lists: a procedure's runs and the source's scans.
 _LISTED = (OperationRequest.Action.RUN, OperationRequest.Action.SCAN)
@@ -306,7 +305,11 @@ class WorkRun:
         """Its own page, for a run or a scan; "" for a job or any other
         operation (a merge, a reconcile), which has none."""
 
-        return run_url(self.id) if self.source == RUN and (operation_of(self.kind) or self.kind == REFRESH) else ""
+        return (
+            run_url(self.id)
+            if self.source == RUN and (operation_of(self.kind) or self.kind == OperationRequest.Action.SCAN)
+            else ""
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,14 +362,10 @@ def _job_title() -> Case:
     )
 
 
-def _scanned(then: str, default: Any) -> Case:
-    return Case(When(action=OperationRequest.Action.SCAN, then=Value(then)), default=default, output_field=CharField())
-
-
 def _run_title() -> Collate:
     """The run's playbook by its title, ``run_title`` of a procedure no longer
-    adopted, Refresh's title for a scan, or any other operation's action in
-    words, as SQL. Case-blind, so the list sorts by it as it reads."""
+    adopted, or any other operation's action in words (a scan's among them),
+    as SQL. Case-blind, so the list sorts by it as it reads."""
 
     operation = KT("input__operation")
     titled = (
@@ -381,9 +380,11 @@ def _run_title() -> Collate:
         output_field=CharField(),
     )
     acted = (
-        When(action=action, then=Value(action.label)) for action in OperationRequest.Action if action not in _LISTED
+        When(action=action, then=Value(action.label))
+        for action in OperationRequest.Action
+        if action != OperationRequest.Action.RUN
     )
-    return Collate(_scanned(scan_title(), Case(*acted, default=run, output_field=CharField())), "NOCASE")
+    return Collate(Case(*acted, default=run, output_field=CharField()), "NOCASE")
 
 
 def _shown_title(kind: str, title: str) -> str:
@@ -394,21 +395,18 @@ def _shown_title(kind: str, title: str) -> str:
     return playbook_titles().get(operation_of(kind)) or title
 
 
-def scan_title() -> str:
-    """A scan in words: the title of Refresh, the command that asks for one.
-
-    Read from its declaration rather than the registry, whose commands are
-    built from the adopted catalog, so listing work never builds them.
-    """
-
-    return next(spec.title for spec in capability_specs() if spec.name == REFRESH)
-
-
 def _run_kind() -> Case:
-    """``capability_name`` of the run's procedure, or Refresh for a scan, as SQL."""
+    """``capability_name`` of the run's procedure, or the action of a scan, as SQL."""
 
     start, end = _RUN_KIND
-    return _scanned(REFRESH, Concat(Value(start), KT("input__operation"), Value(end), output_field=CharField()))
+    return Case(
+        When(
+            action=OperationRequest.Action.RUN,
+            then=Concat(Value(start), KT("input__operation"), Value(end), output_field=CharField()),
+        ),
+        default=F("action"),
+        output_field=CharField(),
+    )
 
 
 def _jobs_latest() -> Exists:
@@ -742,11 +740,9 @@ def _run_row(
 
 def _kind_of(action: str, procedure: str) -> str:
     """What the list filters an operation by: the command a run's procedure
-    is run through, Refresh for a scan, else its action."""
+    is run through, else its action."""
 
-    if action == OperationRequest.Action.RUN:
-        return capability_name(procedure)
-    return REFRESH if action == OperationRequest.Action.SCAN else action
+    return capability_name(procedure) if action == OperationRequest.Action.RUN else action
 
 
 def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:

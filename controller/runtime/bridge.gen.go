@@ -2879,8 +2879,11 @@ type SourceCatalog struct {
 	Files      []ScannedFile      `json:"files"`
 	Procedures []ScannedProcedure `json:"procedures"`
 	Reaches    []RunnerReach      `json:"reaches"`
-	Revision   string             `json:"revision"`
-	Unpinned   []UnpinnedPath     `json:"unpinned"`
+
+	// Repository The repository read, owner/name, as the host's configuration names it.
+	Repository string         `json:"repository"`
+	Revision   string         `json:"revision"`
+	Unpinned   []UnpinnedPath `json:"unpinned"`
 
 	// Verification Whether GitHub verified the commit's signature, and the GitHub account that committed it.
 	Verification CommitVerification `json:"verification"`

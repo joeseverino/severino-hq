@@ -672,7 +672,7 @@ def judged(proposal_id: int) -> AdoptionPlan:
 
     proposal = SourceProposal.objects.filter(pk=proposal_id).first()
     if proposal is None:
-        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
+        raise RecordNotFound("No scan result has that ID.")
     unplaced = _commit_refusals(proposal)
     procedures, unadoptable = _procedures(proposal)
     current = adopted()
@@ -759,7 +759,7 @@ def plan(proposal_id: int, playbook: str = "") -> AdoptionPlan:
     refused = (*planned.unplaced, *(named.problems if named else ())) if playbook else planned.refused
     if refused:
         raise PolicyError(
-            "This can't be adopted; details.refused lists why. Fix it in the repository, then Refresh.",
+            "This can't be adopted; details.refused lists why. Fix it in the repository; HQ scans the push.",
             details={"refused": list(refused)},
         )
     return planned
@@ -811,7 +811,7 @@ def _decided(planned: AdoptionPlan, playbook: str | None) -> tuple[PlaybookChang
     if chosen:
         return chosen
     if playbook in planned.proposal.rejected_playbooks:
-        raise PolicyError("That playbook's change was rejected. Refresh to scan again.")
+        raise PolicyError("That playbook's change was rejected.")
     if playbook not in planned.procedures and playbook not in planned.before:
         raise RecordNotFound("No playbook of this scan result has that id.")
     return ()
@@ -885,11 +885,11 @@ class RejectProposal:
 def reject(command: RejectProposal, *, principal: Principal) -> Rejected:
     """Set aside the change a scan result makes to one playbook, which stays
     as adopted, or the whole scan result, so nothing of it waits to be
-    adopted until the next Refresh reads another."""
+    adopted until the next scan reads another commit."""
 
     proposal = SourceProposal.objects.select_for_update().filter(pk=command.proposal).first()
     if proposal is None:
-        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
+        raise RecordNotFound("No scan result has that ID.")
     if proposal.rejected_at is not None or command.playbook in proposal.rejected_playbooks:
         return {"ok": True, "rejected": False, "message": "Already rejected."}
     chosen = _decided(judged(proposal.pk), command.playbook)
@@ -923,10 +923,9 @@ def prune_proposals() -> int:
 
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:
-    """The automation source's commands: Refresh, which proposes, and Adopt and Reject, which decide."""
+    """The automation source's commands: Adopt and Reject, which decide on what a scan proposes."""
 
     return (
-        *automation_sources.capability_specs(),
         CapabilitySpec(
             ADOPT,
             "Adopt what a scanned commit changes in the playbooks HQ runs: one playbook's change, or every "
@@ -952,7 +951,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             REJECT,
             "Reject what a scanned commit changes: one playbook's change, which stays as adopted, or the whole "
-            "commit, so nothing waits to be adopted until a Refresh reads another. Only an operator rejects, "
+            "commit, so nothing waits to be adopted until a scan reads another. Only an operator rejects, "
             "and never through an agent.",
             Effect.REMOTE_WRITE,
             Capability.ADOPT_PLAYBOOKS,

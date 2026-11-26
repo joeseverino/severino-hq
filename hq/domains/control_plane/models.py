@@ -27,7 +27,6 @@ lazy from hq.platform.application.automation_runs import run_title
 lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.glance import _panel_names
 lazy from hq.platform.application.security import subject_parts
-lazy from hq.platform.application.work_runs import scan_title
 
 lazy from .providers import readout_rows, registry_label, resource_home, validate_spec
 
@@ -574,9 +573,10 @@ class OperationRequest(TimestampedModel):
         # handler for it (``provider_adapters.automation``).
         RUN = "run", "Run"
         # A read of the automation source's repository for the procedures it
-        # declares, claimed by the automation worker. Asked for by a person's
-        # Refresh, never on a timer.
-        SCAN = "scan", "Refresh"
+        # declares, claimed by the automation worker. HQ asks for one when the
+        # repository's default branch moves past the newest scan's commit
+        # (``automation_sources.scan_when_due``), never on a timer.
+        SCAN = "scan", "Scan playbooks"
         # A pull request merged once, at the head a person approved, by the
         # controller through HQ's GitHub App (``provider_adapters.github``).
         MERGE = "merge", "Merge"
@@ -657,7 +657,7 @@ class OperationRequest(TimestampedModel):
         if self.action == self.Action.RUN:
             return run_title(str((self.input or {}).get("operation") or ""), playbook_titles())
         if self.action == self.Action.SCAN:
-            return scan_title()
+            return self.get_action_display()
         return f"{self.get_action_display()}: {self.resource.key}"
 
 
@@ -696,6 +696,9 @@ class SourceProposal(TimestampedModel):
     """
 
     operation = models.OneToOneField(OperationRequest, on_delete=models.CASCADE, related_name="proposal")
+    # The repository read, owner/name, as the host's configuration names it,
+    # so a move of its default branch is known as this source's.
+    repository = models.CharField(max_length=140)
     branch = models.CharField(max_length=200)
     revision = models.CharField(max_length=40)
     verified = models.BooleanField()

@@ -6,7 +6,7 @@ person decides on marks each widening and each playbook HQ can't adopt; and
 every process's commands follow the catalog without a restart.
 
 Each catalog is in the bridge contract's ``SourceCatalog`` shape and arrives
-the way a scan's does: a Refresh, the worker's claim, and its report.
+the way a scan's does: HQ's ask, the worker's claim, and its report.
 """
 
 from contextlib import suppress
@@ -20,11 +20,12 @@ from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, Ope
 
 from ..approvals import ApprovalError, ApproveCommand, approve
 from ..automation_adoption import REJECT
+from ..automation_sources import queue_scan
 from ..capabilities import capability_spec, run_capability
 from ..machines import Machine
-from ..security import MCP_INTERFACE, Capability, Principal, agent_subject, mcp_principal
+from ..security import MCP_INTERFACE, Capability, Principal, agent_subject, internal_principal, mcp_principal
 from .test_approvals import an_operator
-from .test_automation_sources import RefreshTestCase
+from .test_automation_sources import DOORBELL, SOURCE, ScanTestCase
 
 ADOPT = "automation.source.adopt"
 OPERATOR = Principal(
@@ -87,6 +88,7 @@ def catalog(*procedures: dict[str, Any], revision: str = FIRST, changed: str = "
         }
     )
     return {
+        "repository": SOURCE,
         "branch": "main",
         "revision": revision,
         "verification": {"verified": True, "reason": "valid", "committer": "example-maintainer"},
@@ -108,14 +110,15 @@ def decided(held: ApprovalRequest) -> None:
         approve(ApproveCommand(str(held.id)), principal=an_operator())
 
 
-class AdoptionTestCase(RefreshTestCase):
+class AdoptionTestCase(ScanTestCase):
     scans = 0
 
     def proposed(self, found: dict[str, Any]) -> int:
         """The proposal a scan reporting ``found`` made."""
 
         type(self).scans += 1
-        self.refresh(key=f"example-refresh-{self.scans}")
+        with patch(DOORBELL), self.captureOnCommitCallbacks(execute=True):
+            queue_scan(principal=internal_principal("controller"), once=f"example-scan-{self.scans}")
         claimed = self.claim()
         answer = self.report(
             claimed["operation"]["id"],

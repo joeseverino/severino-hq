@@ -2549,6 +2549,11 @@
         "type": "object",
         "description": "The procedures an automation source's repository declares at the tip of its default branch, as the automation worker read them without running any: HQ stores it as a proposal and judges it.",
         "properties": {
+          "repository": {
+            "type": "string",
+            "maxLength": 140,
+            "description": "The repository read, owner/name, as the host's configuration names it."
+          },
           "branch": {
             "type": "string",
             "maxLength": 200
@@ -2591,6 +2596,7 @@
         },
         "additionalProperties": false,
         "required": [
+          "repository",
           "branch",
           "revision",
           "verification",

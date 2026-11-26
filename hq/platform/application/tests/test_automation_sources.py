@@ -1,6 +1,7 @@
-"""A Refresh queues one scan of the automation source for the worker, which
-claims it over the bridge and reports what the repository declares; HQ keeps
-that as a proposal, judged, and nothing of it becomes runnable.
+"""A push to the automation source's repository makes its scan due, and HQ
+asks for one itself; the worker claims it over the bridge and reports what
+the repository declares; HQ keeps that as a proposal, judged, and nothing of
+it becomes runnable.
 
 The catalog the worker reports is the one it records scanning the example
 project (``hq_runner/tests/recorded_scan.json``), so the two sides meet on one
@@ -9,30 +10,32 @@ fixture.
 
 import copy
 import json
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import call, patch
 
 from django.test import TestCase, tag
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.models import ManagedResource, OperationRequest, ReadRequest
+from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.tests import bridge_client
 from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AuditLog
 
-from ..capabilities import run_capability
-from ..security import Capability, Principal
+from ..report_testing import bridged
 
 RECORDED = Path(__file__).resolve().parents[4] / "hq_runner" / "tests" / "recorded_scan.json"
-REFRESH = "automation.source.refresh"
-OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-READER = Principal("example-reader", "web", frozenset({Capability.READ}))
 WORKER = "example-worker"
 SCANS = ["automation.source:scan"]
 # The file touch every doorbell rings through, which says which doorbell.
 DOORBELL = "hq.platform.application.cadence._ring"
+# The repository the host's configuration names as the source, as the
+# worker reports it (``hq_runner/tests/remote.py``).
+SOURCE = "example/automation"
 
 # A catalog in the contract's shape, small enough to read at a glance.
 CATALOG = {
+    "repository": SOURCE,
     "branch": "main",
     "revision": "0" * 40,
     "verification": {"verified": True, "reason": "valid", "committer": "web-flow"},
@@ -60,6 +63,17 @@ CATALOG = {
     "reaches": [],
 }
 
+# As the Worker forwards GitHub's push delivery: the X-GitHub-Event header,
+# the payload's repository.full_name and the X-GitHub-Delivery GUID GitHub's
+# docs show.
+PUSH = {
+    "provider": "github_app",
+    "event": "push",
+    "subject": SOURCE,
+    "delivery_id": "72d3162e-cc78-11e3-81ab-4c9367dc0958",
+    "received_at": "2026-01-15T12:00:00Z",
+}
+
 
 def proposals() -> type:
     from hq.domains.control_plane.models import SourceProposal
@@ -67,14 +81,27 @@ def proposals() -> type:
     return SourceProposal
 
 
-class RefreshTestCase(TestCase):
+def scans() -> list[OperationRequest]:
+    return list(OperationRequest.objects.filter(action=OperationRequest.Action.SCAN).order_by("created_at"))
+
+
+class ScanTestCase(TestCase):
     def setUp(self):
-        # The worker arrives and finds nothing, so a Refresh is taken.
+        # The worker arrives and finds nothing, so a scan HQ asks for is taken.
         self.claim()
 
-    def refresh(self, principal: Principal = OPERATOR, key: str = "example-refresh") -> dict:
+    def read(self, head: str, repository: str = SOURCE) -> None:
+        """The controller's reading of the repositories the GitHub App reads:
+        ``repository`` with its default branch at ``head``."""
+
+        record = {
+            "connection_ref": "example-github",
+            "repository": repository,
+            "url": f"https://github.com/{repository}",
+            "head": {"sha": head},
+        }
         with patch(DOORBELL) as self.rung, self.captureOnCommitCallbacks(execute=True):
-            return run_capability(REFRESH, {}, principal=principal, idempotency_key=key).answer
+            bridged("inventory", {REPOSITORY_KIND: {"ok": True, "records": [record]}}, controller_id="controller")
 
     def claim(self) -> dict:
         return bridge_client.call(
@@ -89,10 +116,11 @@ class RefreshTestCase(TestCase):
             app=bridge_client.worker(),
         )
 
-    def scanned(self, catalog: dict, key: str = "example-refresh") -> OperationRequest:
-        """A Refresh, its claim, and the worker's report of ``catalog``."""
+    def scanned(self, catalog: dict) -> OperationRequest:
+        """The reading of the source at ``catalog``'s commit, the scan HQ asks
+        for, its claim, and the worker's report of ``catalog``."""
 
-        self.refresh(key=key)
+        self.read(catalog["revision"])
         claimed = self.claim()
         operation = claimed["operation"]
         answer = self.report(
@@ -106,39 +134,68 @@ class RefreshTestCase(TestCase):
         return OperationRequest.objects.get(pk=operation["id"])
 
 
-class RefreshTests(RefreshTestCase):
-    def test_a_refresh_queues_one_scan_for_the_worker_and_rings_for_it(self):
-        answer = self.refresh()
+class ScanDueTests(ScanTestCase):
+    def test_a_push_to_the_source_makes_its_scan_due_and_hq_asks_for_it_itself(self):
+        from ..inbound import apply_events
 
-        self.assertTrue(answer.get("queued"), answer)
-        operation = OperationRequest.objects.get(pk=answer["operation"]["id"])
-        self.assertEqual((operation.resource.kind, operation.action), ("automation.source", "scan"))
+        self.scanned(CATALOG)
+        with patch(DOORBELL, return_value=True), self.captureOnCommitCallbacks(execute=True):
+            apply_events({"source": "worker", "events": [PUSH]})
+        self.assertIn(REPOSITORY_KIND, ReadRequest.objects.values_list("kind", flat=True))
+
+        self.read("1" * 40)
+
+        _, scan = scans()
+        self.assertEqual(scan.state, OperationRequest.State.QUEUED)
+        self.assertEqual((scan.requested_interface, scan.requested_actor), ("internal", "controller"))
         self.assertEqual(self.rung.call_args_list.count(call("automation")), 1)
+        self.assertIsNotNone(self.claim()["operation"])
 
-    def test_a_second_refresh_while_one_waits_is_answered_that_one(self):
-        first = self.refresh()
-        second = self.refresh(key="example-refresh-again")
+    def test_a_reading_of_the_commit_scanned_or_of_another_repository_asks_for_none(self):
+        self.scanned(CATALOG)
 
-        self.assertFalse(second["queued"])
-        self.assertEqual(second["operation"]["id"], first["operation"]["id"])
+        self.read(CATALOG["revision"])
+        self.read("1" * 40, repository="example/other")
+
+        self.assertEqual(len(scans()), 1)
         self.assertNotIn(call("automation"), self.rung.call_args_list)
 
-    def test_a_refresh_is_refused_to_someone_who_cannot_manage_infrastructure(self):
-        answer = self.refresh(READER)
+    def test_a_head_is_asked_for_once_while_its_scan_waits_and_once_a_day_after_it_failed(self):
+        self.scanned(CATALOG)
+        self.read("1" * 40)
+        self.read("1" * 40)
+        self.assertEqual(len(scans()), 2)
+        claimed = self.claim()
+        self.report(claimed["operation"]["id"], claimed["resource"]["generation"], success=False, message="Unread.")
 
-        self.assertEqual(answer["error"]["code"], "forbidden", answer)
-        self.assertFalse(OperationRequest.objects.exists())
+        self.read("1" * 40)
+        self.assertEqual(len(scans()), 2)
 
-    def test_a_refresh_takes_no_repository_or_anything_else(self):
-        answer = run_capability(
-            REFRESH, {"repository": "example/other"}, principal=OPERATOR, idempotency_key="example"
-        ).answer
+        with patch("django.utils.timezone.now", return_value=scans()[-1].created_at + timedelta(days=1)):
+            # The worker still arrives each pass, so what is asked of it is taken.
+            self.claim()
+            self.read("1" * 40)
+        self.assertEqual(len(scans()), 3)
 
-        self.assertEqual(answer["error"]["code"], "invalid_input", answer)
-        self.assertFalse(OperationRequest.objects.exists())
+    def test_before_any_scan_result_the_first_reading_asks_for_one(self):
+        self.read("1" * 40, repository="example/other")
+
+        (scan,) = scans()
+        self.assertEqual((scan.resource.kind, scan.resource.spec), ("automation.source", {"named_by": "host"}))
+
+    def test_while_no_worker_would_take_it_none_is_asked(self):
+        from hq.platform.core.models import UpstreamReading
+
+        from ..cadence import AUTOMATION_HEARTBEAT
+
+        UpstreamReading.objects.filter(key=AUTOMATION_HEARTBEAT).delete()
+
+        self.read("1" * 40)
+
+        self.assertEqual(scans(), [])
 
     def test_only_a_worker_claiming_scans_is_handed_one(self):
-        self.refresh()
+        self.read("1" * 40)
 
         runs = bridge_client.call(
             "claim",
@@ -152,14 +209,17 @@ class RefreshTests(RefreshTestCase):
         self.assertIsNotNone(self.claim()["operation"])
 
 
-class ProposalTests(RefreshTestCase):
+class ProposalTests(ScanTestCase):
     def test_what_a_scan_reports_is_kept_as_a_proposal_and_nothing_of_it_runs(self):
         operation = self.scanned(CATALOG)
 
         self.assertEqual(operation.state, OperationRequest.State.SUCCEEDED)
         proposal = proposals().objects.get(operation=operation)
         self.assertEqual(operation.result["proposal"], proposal.pk)
-        self.assertEqual((proposal.revision, proposal.verified, proposal.committer), ("0" * 40, True, "web-flow"))
+        self.assertEqual(
+            (proposal.repository, proposal.revision, proposal.verified, proposal.committer),
+            (SOURCE, "0" * 40, True, "web-flow"),
+        )
         ((check,),) = [proposal.procedures]
         self.assertEqual(check["problems"], [])
         self.assertFalse(ManagedResource.objects.filter(kind="automation.operation").exists())
@@ -171,8 +231,12 @@ class ProposalTests(RefreshTestCase):
         self.scanned(first)
         self.assertEqual(runner_reaches(), {("app.example.com", "read")})
 
-        later = {**CATALOG, "reaches": [{"machine": "DB.example.com", "profile": "example.service_control"}]}
-        self.scanned(later, key="example-refresh-later")
+        later = {
+            **CATALOG,
+            "revision": "1" * 40,
+            "reaches": [{"machine": "DB.example.com", "profile": "example.service_control"}],
+        }
+        self.scanned(later)
         self.assertEqual(runner_reaches(), {("db.example.com", "example.service_control")})
 
     def test_the_proposal_is_audited_under_the_source(self):
@@ -198,7 +262,7 @@ class ProposalTests(RefreshTestCase):
             self.assertIn("example.check", problems)
 
     def test_a_failed_scan_keeps_no_proposal(self):
-        self.refresh()
+        self.read("1" * 40)
         claimed = self.claim()
 
         answer = self.report(
@@ -209,7 +273,7 @@ class ProposalTests(RefreshTestCase):
         self.assertFalse(proposals().objects.exists())
 
     def test_a_scan_that_succeeded_without_a_catalog_is_refused(self):
-        self.refresh()
+        self.read("1" * 40)
         claimed = self.claim()
 
         answer = self.report(claimed["operation"]["id"], claimed["resource"]["generation"], success=True)
@@ -220,7 +284,7 @@ class ProposalTests(RefreshTestCase):
     def test_a_catalog_over_the_contract_is_refused_at_the_bridge(self):
         catalog = copy.deepcopy(CATALOG)
         catalog["procedures"][0]["title"] = "x" * 201
-        self.refresh()
+        self.read("1" * 40)
         claimed = self.claim()
 
         answer = self.report(
@@ -233,7 +297,7 @@ class ProposalTests(RefreshTestCase):
     def test_a_catalog_from_work_other_than_a_scan_is_refused(self):
         from ..controller import ControllerReport, report_operation
 
-        self.refresh()
+        self.read("1" * 40)
         operation = self.claim()["operation"]
         OperationRequest.objects.filter(pk=operation["id"]).update(action=OperationRequest.Action.RECONCILE)
 
@@ -246,8 +310,8 @@ class ProposalTests(RefreshTestCase):
 
 
 @tag("source")
-class ExampleProjectTests(RefreshTestCase):
-    def test_a_refresh_stores_the_example_project_s_procedures_as_hq_judged_them(self):
+class ExampleProjectTests(ScanTestCase):
+    def test_a_scan_stores_the_example_project_s_procedures_as_hq_judged_them(self):
         recorded = json.loads(RECORDED.read_text(encoding="utf-8"))
 
         proposal = proposals().objects.get(operation=self.scanned(recorded))

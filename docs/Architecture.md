@@ -1381,7 +1381,7 @@ never an action.
 An automation procedure (an Ansible playbook a worker runs against a host) is
 declared beside its playbook, in the repository the worker reads
 ([Declaring a playbook](#declaring-a-playbook)). HQ learns a repository's
-procedures by a Refresh, which proposes them as that repository's tip declares
+procedures by a scan, which proposes them as that repository's tip declares
 them, and runs one only once a person has adopted the proposal. Each procedure of the adopted commit is then an `OperationManifest`
 (`hq/platform/application/automation_manifest.py`), and an
 `OperationRegistry` is built from them. No extension supplies a manifest, and
@@ -1428,8 +1428,8 @@ know that Ansible has no word for. That is the manifest's `id`, `target_kinds`,
 `hosts`, `privilege`, `effect`, `timeout_seconds`, `recovery`, `retry`,
 `fixes` and `readings`, as the table above has them. It also holds `inputs`, which gives each text input
 its roles' argument specs declare a `pattern` and a `max_length`. The rest is
-Ansible's own, read from the playbook and its roles at the commit ([Refreshing
-the playbooks](#refreshing-the-playbooks)), and a sidecar names no playbook,
+Ansible's own, read from the playbook and its roles at the commit ([Scanning
+the playbooks](#scanning-the-playbooks)), and a sidecar names no playbook,
 revision or repository.
 
 A read-only playbook may declare `investigates` with the finding rule names it
@@ -1461,7 +1461,7 @@ the schema judges a sidecar with.
 
 The schema holds a sidecar's shape: every key, its type and range, the dotted
 names, the enumerations, and the inputs' names. What it cannot say HQ still
-refuses at a Refresh, naming each in the proposal. That is a read that names a
+refuses at a scan, naming each in the proposal. That is a read that names a
 privilege, a host not in HQ's spelling, a statement that is only whitespace, an
 input `pattern` Python cannot compile, a finding in `fixes` HQ raises none of,
 a kind in `readings` HQ declares no words for, and two sidecars with one id.
@@ -1722,8 +1722,8 @@ HQ knows the worker is there by its claims. Each claim of nothing but its
 work records its arrival (`cadence.note_automation`), so a worker that finds
 nothing to take still counts as seen, and never as the controller. One never
 seen, or not seen within two of its timer's floors while it holds no run's
-lease, is absent (`cadence.automation_standing`). Refresh and every
-playbook's run are then refused with the reason, a run or scan already
+lease, is absent (`cadence.automation_standing`). No scan is then asked
+for, every playbook's run is refused with the reason, a run or scan already
 waiting reads "Not started", and the finding `automation-worker-absent` says
 how to set one up.
 
@@ -1754,7 +1754,7 @@ reaches is refused before anything runs. HQ refuses it earlier, when the run is
 asked for. Each scan reports every machine and profile the worker has a login
 for, never an address, user or key, and a run is held to the newest scan's
 (`automation_runs.reached`). The refusal lists each missing pair in
-`details.missing`, and says that a login added since the last Refresh is seen
+`details.missing`, and says that a login added since the last scan is seen
 after the next one. That list is the worker's word, so a worker that lies can
 only make the early refusal wrong. The worker's own check at the claim still
 holds.
@@ -1867,12 +1867,19 @@ as unknown and never run again. `mise run smoke:runner` runs a real playbook
 on the local machine through its entry point, fetched from a repository on
 the same machine.
 
-### Refreshing the playbooks
+### Scanning the playbooks
 
-HQ learns which playbooks the worker's repository offers only when a person
-asks: `automation.source.refresh` (Refresh) queues one scan of the
-`automation.source` record and rings the doorbell, with no timer and no
-webhook. A Refresh while one waits is answered that one. The worker claims it
+HQ learns which playbooks the worker's repository offers by scanning it each
+time its default branch moves. A push to it is an inbound event that makes the
+repositories' reading due; once that reading is stored, a head of the
+repository other than the newest scan result's commit, or no scan result that
+names the repository, queues one scan of the `automation.source` record as HQ
+itself and rings the doorbell (`automation_sources.scan_when_due`, from
+`sweep.record_sweep`), with no timer of its own. The scan report names the
+repository it read (`SourceCatalog.repository`, from the host's
+configuration), which is how HQ knows a push as this source's. A head is asked
+for once while its scan waits and once a day after one failed, and nothing is
+asked while no worker would take it. The worker claims it
 as `automation.source:scan`, asks the repository which commit its default
 branch points at, fetches that commit as it fetches a run's, and runs nothing
 of it (`hq_runner/catalog.py`). A playbook HQ may run has a sidecar,
@@ -1895,7 +1902,7 @@ of the report still arrives.
 Each task the plays reach names its module in full, from `ansible.builtin` or a
 collection the worker ships, and one ansible-doc lists in the worker
 (`ansible.modules`). Any other is a problem of that playbook naming the file,
-the task and the module (`catalog.unshipped`), so it is refused at the Refresh,
+the task and the module (`catalog.unshipped`), so it is refused at the scan,
 before anything is offered for adoption. A short name is refused whatever a
 `collections:` keyword says, so the keyword resolves nothing the scan admits.
 `ansible.legacy` is refused, since Ansible looks for it beside the playbook
@@ -1958,7 +1965,7 @@ playbook it would replace.
 
 Adopting is a person's act. Adopt and `automation.source.reject` (Reject)
 take `adopt_playbooks`, which `security.HELD_ONLY_AT` keeps at the operator's
-own interfaces: an agent may refresh, and its adoption or rejection is refused
+own interfaces: an agent's adoption or rejection is refused
 before anything is held, whatever its grant or rules say. Reject sets aside
 the change to one playbook it names (`SourceProposal.rejected_playbooks`),
 which stays as adopted, or the whole proposal (`SourceProposal.rejected_at`,
@@ -1968,14 +1975,14 @@ rejected (`Reviewed.pending`).
 
 The Playbooks page (`control_plane:playbooks`) is the catalog adopted now,
 each playbook linking its command page, with the commit last adopted at
-under the title. Refresh is followed while its scan runs, and the same line
-says why the newest scan failed. While a commit waits, the table holds a row
+under the title. The same line names a newer commit while it waits for
+adoption, and says why the newest scan failed. While a commit waits, the table holds a row
 for every playbook, adopted or brought by the commit, its last column the
 change table's Status, and each changed row its own Adopt and Reject
 (`automation_sources.playbook_rows`); the head carries View diff, Adopt all
-(when HQ can adopt every change that waits) and Reject all, then Refresh
+(when HQ can adopt every change that waits) and Reject all
 (`automation_sources.decisions`). View diff opens the audit entry that records
-the scan's read (`automation_sources.entry_url`): who refreshed and when, the
+the scan's read (`automation_sources.entry_url`): the
 commit read and the commit adopted, the commit's own refusals, each changed
 playbook with its Adopt and Reject, and the comparison as the change table,
 with Adopt all and Reject all while it waits. Every value is the

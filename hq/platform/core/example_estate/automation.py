@@ -35,13 +35,19 @@ from hq.platform.application.approvals import APPROVE, is_held
 from hq.platform.application.automation_adoption import ADOPT, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
 from hq.platform.application.automation_runs import capability_name, operation_registry
-from hq.platform.application.automation_sources import REFRESH
+from hq.platform.application.automation_sources import queue_scan
 from hq.platform.application.cadence import AUTOMATION_HEARTBEAT, AUTOMATION_WORK, note_automation
 from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.machines import machine_catalog
 from hq.platform.application.refusal_status import refused
-from hq.platform.application.security import MCP_INTERFACE, Principal, cli_principal, web_principal
+from hq.platform.application.security import (
+    MCP_INTERFACE,
+    Principal,
+    cli_principal,
+    internal_principal,
+    web_principal,
+)
 from hq.platform.application.tokens import token_principal
 from hq.platform.core.audit import stamped
 from hq.platform.core.models import UpstreamReading
@@ -62,7 +68,8 @@ _APPLIES = uuid5(NAMESPACE_URL, "https://example.com/applies")
 CACHE_FLUSH = "example.cache_flush"
 DISK_REPORT = "example.disk_report"
 PACKAGE_UPGRADE = "example.package_upgrade"
-# The commit the example repository's scan reads.
+# The example repository the host names as its source, and the commit its scan reads.
+SOURCE_REPOSITORY = "example/playbooks"
 REVISION = hexed("playbooks", "revision", length=40)
 
 
@@ -188,6 +195,7 @@ def catalog(
     holding each plugins directory of ``plugins``."""
 
     return {
+        "repository": SOURCE_REPOSITORY,
         "branch": "main",
         "revision": revision,
         "verification": {"verified": True, "reason": "valid", "committer": "example-maintainer"},
@@ -261,30 +269,30 @@ UNREADY_REVISION = _commit("Move the upgrade onto a new role; add a cache warm."
 UNREADY_PLUGINS = ("collections",)
 
 
-def _scanned(
-    person: Principal, key: str, found: dict[str, Any] | None, message: str, ago: timedelta | None = None
-) -> OperationRequest:
-    """A Refresh asked by ``person``, claimed by its worker and reported:
-    reading ``found``, or failing with ``message`` when it found nothing.
-    Asked ``ago``, with every row it writes dated so, or now when not given,
-    so the estate's scans read on Jobs in the order they tell."""
+def _scanned(key: str, found: dict[str, Any] | None, message: str, ago: timedelta | None = None) -> OperationRequest:
+    """A scan HQ asked for as the repository's default branch moved, once
+    for ``key``, claimed by its worker and reported: reading ``found``, or
+    failing with ``message`` when it found nothing. Asked ``ago``, with
+    every row it writes dated so, or now when not given, so the estate's
+    scans read on Jobs in the order they tell."""
 
     at = back(ago, key) if ago is not None else None
     # Its worker reached HQ a moment ago, so what is asked of it is taken.
     note_automation()
     with stamped(lambda *_: {"created_at": at} if at is not None else None):
-        with doors.page("command", name="automation.source.refresh"):
-            queued = _ran(REFRESH, {}, principal=person, key=key)["operation"]
+        # Asked as a sweep's report asks it, by HQ itself.
+        with doors.controller("sweep"):
+            queued = queue_scan(principal=internal_principal(doors.CONTROLLER), once=key)
         with doors.controller("claim"):
             claimed = claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)["operation"]
-        if claimed is None or claimed["id"] != queued["id"]:
+        if queued is None or claimed is None or claimed["id"] != str(queued.pk):
             raise RuntimeError("The estate's scan was not the one its worker claimed.")
-        scan = OperationRequest.objects.get(pk=queued["id"])
+        scan = OperationRequest.objects.get(pk=queued.pk)
         report = ControllerReport(
             success=found is not None, observed_generation=scan.input["generation"], message=message, catalog=found
         )
         with doors.controller("report"):
-            report_operation(queued["id"], report, controller_id=WORKER)
+            report_operation(claimed["id"], report, controller_id=WORKER)
     if at is not None:
         OperationRequest.objects.filter(pk=scan.pk).update(created_at=at, updated_at=at)
         _dated(scan.pk, at)
@@ -294,10 +302,10 @@ def _scanned(
 
 
 def adopted(person: Principal) -> None:
-    """The example repository refreshed by ``person``, scanned by its worker,
-    and what it found adopted by ``person``."""
+    """The example repository scanned by its worker, and what it found
+    adopted by ``person``."""
 
-    scan = _scanned(person, "example-refresh", catalog(), "Read the playbooks.", timedelta(days=20))
+    scan = _scanned("example-scan", catalog(), "Read the playbooks.", timedelta(days=20))
     with doors.page("command", name="automation.source.adopt"):
         _ran(ADOPT, {"proposal": scan.result["proposal"]}, principal=person, key=f"example-adopt-{scan.pk}")
     # Adopted the day it was read, as the scan was.
@@ -343,10 +351,10 @@ def _apply(hosts: tuple[str, ...]) -> dict[str, Any]:
 
 def applies_updates(person: Principal, hosts: tuple[str, ...]) -> None:
     """A later commit of the example repository that adds the playbook
-    applying app updates on ``hosts``, refreshed and adopted by ``person``."""
+    applying app updates on ``hosts``, scanned and adopted by ``person``."""
 
     found = catalog((*PROCEDURES, _apply(hosts)), APPLY_REVISION)
-    scan = _scanned(person, "example-refresh-apply", found, "Read the playbooks.", timedelta(days=2))
+    scan = _scanned("example-scan-apply", found, "Read the playbooks.", timedelta(days=2))
     with doors.page("command", name="automation.source.adopt"):
         _ran(ADOPT, {"proposal": scan.result["proposal"]}, principal=person, key=f"example-adopt-{scan.pk}")
     catch_up()
@@ -367,59 +375,40 @@ def _applying(person: Principal, host: str) -> None:
         _asked(applier, host, person, ago, carried_out, approver=person, parameters=parameters)
 
 
-def proposed(person: Principal) -> None:
-    """The commits after the one adopted, each refreshed by ``person``: one
-    whose procedures HQ cannot adopt, then the newest, which widens what a
-    run may do and waits for a person to adopt or reject it; and a scan that
-    failed after them."""
+def proposed() -> None:
+    """The commits after the one adopted, each scanned as the branch moved:
+    one whose procedures HQ cannot adopt, then the newest, which widens what
+    a run may do and waits for a person to adopt or reject it; and a scan
+    that failed after them."""
 
     _scanned(
-        person,
-        "example-refresh-unready",
+        "example-scan-unready",
         catalog(UNREADY, UNREADY_REVISION, UNREADY_PLUGINS),
         "Read the playbooks.",
         timedelta(days=1),
     )
-    _scanned(
-        person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the playbooks.", timedelta(hours=3)
-    )
-    _scanned(person, "example-refresh-failed", None, "HQ couldn't reach your repository's host.", timedelta(minutes=25))
+    _scanned("example-scan-widened", catalog(WIDENED, WIDENED_REVISION), "Read the playbooks.", timedelta(hours=3))
+    _scanned("example-scan-failed", None, "HQ couldn't reach your repository's host.", timedelta(minutes=25))
 
 
-def rescanned(owner) -> None:
-    """A Refresh by ``owner`` after the estate's that found the commit adopted
-    now, so nothing waits to be adopted."""
+def rescanned() -> None:
+    """A scan after the estate's that found the commit adopted now, so
+    nothing waits to be adopted."""
 
-    _scanned(web_principal(owner), "example-refresh-again", catalog(), "Read the playbooks.")
-
-
-def unadoptable(owner) -> None:
-    """A Refresh by ``owner`` after the estate's that read the commit HQ
-    can't adopt again, so it is the one that waits."""
-
-    _scanned(
-        web_principal(owner),
-        "example-refresh-unadoptable",
-        catalog(UNREADY, UNREADY_REVISION, UNREADY_PLUGINS),
-        "Read the playbooks.",
-    )
+    _scanned("example-scan-again", catalog(), "Read the playbooks.")
 
 
-def scanning(owner) -> None:
-    """A Refresh by ``owner`` after the estate's, which its worker has
-    claimed and is reading now."""
+def unadoptable() -> None:
+    """A scan after the estate's that read the commit HQ can't adopt again,
+    so it is the one that waits."""
 
-    note_automation()
-    with doors.page("command", name="automation.source.refresh"):
-        _ran(REFRESH, {}, principal=web_principal(owner), key="example-refresh-scanning")
-    with doors.controller("claim"):
-        claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)
+    _scanned("example-scan-unadoptable", catalog(UNREADY, UNREADY_REVISION, UNREADY_PLUGINS), "Read the playbooks.")
 
 
 def unattended() -> None:
     """HQ's playbook worker last arrived three hours ago, longer than its
     timer lets pass, and its run's lease ran out then: the run that waits
-    reads as not started, and Refresh and each run are refused."""
+    reads as not started, and no scan is asked and each run is refused."""
 
     then = timezone.now() - timedelta(hours=3)
     UpstreamReading.objects.update_or_create(key=AUTOMATION_HEARTBEAT, defaults={"value": {}, "observed_at": then})
@@ -554,7 +543,7 @@ def runs(
     # Only a person approves an agent's held ask; the shell may not.
     approver = person if owner is not None else None
     adopted(person)
-    proposed(person)
+    proposed()
     supplied = procedures()
     first, *others = supplied
     endings: tuple[tuple[Principal, Callable[[OperationRequest], None], str], ...] = (

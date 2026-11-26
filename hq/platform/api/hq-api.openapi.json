@@ -7448,30 +7448,6 @@
         ],
         "type": "object"
       },
-      "AutomationSourceRefreshRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "additionalProperties": false,
-            "description": "A Refresh takes nothing but why it was asked: the repository is the\nhost's configuration.",
-            "properties": {
-              "reason": {
-                "default": "",
-                "description": "Why it is refreshed, kept with the scan.",
-                "maxLength": 300,
-                "type": "string"
-              }
-            },
-            "type": "object"
-          }
-        },
-        "required": [],
-        "type": "object"
-      },
       "AwaitingApproval": {
         "additionalProperties": false,
         "description": "A call held for approval, which is no error: nothing is written or queued until an operator approves.",
@@ -23031,7 +23007,7 @@
             "type": "string"
           },
           "reachable": {
-            "description": "The machines a run of it may name now, each by its name in HQ. HQ's runner has a login to each as it needs. A Refresh reads them anew.",
+            "description": "The machines a run of it may name now, each by its name in HQ. HQ's runner has a login to each as it needs. Each scan reads them anew.",
             "items": {
               "type": "string"
             },
@@ -33963,81 +33939,6 @@
         "x-hq-effect": "remote_write"
       }
     },
-    "/api/v2/capabilities/automation.source.refresh/": {
-      "post": {
-        "description": "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
-        "operationId": "automationSourceRefreshV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutomationSourceRefreshRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/OperationAskedSuccess"
-          },
-          "202": {
-            "$ref": "#/components/responses/AwaitingApprovalAccepted"
-          },
-          "400": {
-            "$ref": "#/components/responses/UntargetedChangeBadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ChangeForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ChangeNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ChangeConflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/ChangeTooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearer": [
-              "manage_infrastructure"
-            ]
-          }
-        ],
-        "summary": "Refresh playbooks",
-        "tags": [
-          "hq.jobs"
-        ],
-        "x-hq-capability": "automation.source.refresh",
-        "x-hq-effect": "remote_write"
-      }
-    },
     "/api/v2/capabilities/calendar.entry.create/": {
       "post": {
         "description": "Put an event on the calendar.",
@@ -37950,7 +37851,6 @@
                 "asset.delete",
                 "asset.update",
                 "automation.run.cancel",
-                "automation.source.refresh",
                 "calendar.entry.create",
                 "calendar.entry.delete",
                 "calendar.entry.update",

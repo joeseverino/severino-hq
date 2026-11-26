@@ -5,7 +5,7 @@ without running anything of it.
 
 The repository is the example project (``fakes.EXAMPLE_PROJECT``), committed to
 one on this machine (``remote``). Its catalog is ``recorded_scan.json``, which
-HQ's side reads to show a Refresh stores what the worker found; after a change
+HQ's side reads to show a scan stores what the worker found; after a change
 to the project, ``HQ_RUNNER_RECORD_SCAN=1 mise run test hq_runner.tests.test_catalog``
 writes it again.
 """

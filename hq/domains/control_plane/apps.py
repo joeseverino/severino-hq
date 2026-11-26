@@ -71,7 +71,7 @@ class ControlPlaneConfig(AppConfig):
             subject=Subject(lambda placement: placement.machine.key, Kind.RESOURCE),
             required=True,
         )
-        # What a Refresh found in the automation source, and who rejected it, under the source's key.
+        # What a scan found in the automation source, and who rejected it, under the source's key.
         register_audit(
             SourceProposal,
             "Playbook scan result",

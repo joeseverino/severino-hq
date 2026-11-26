@@ -1,11 +1,13 @@
 {% comment %}
 The title line of the Playbooks page: the commit the playbooks were adopted
-at, and whether HQ reaches the repository, from the newest scan that ended,
-so a Refresh still waiting leaves it standing. A failure says why, then when
-a scan last reached it, in the same line so the two never read as one event.
-With no scan at all, it says so.
-{% endcomment %}{% with catalog=sources.catalog %}{% if catalog or failed_tone or not sources.scan %}{% list kind="dots" muted=True %}
+at, the newer commit a scan read while it waits for adoption, and whether
+HQ reaches the repository, from the newest scan that ended, so a scan still
+waiting leaves it standing. A failure says why, then when a scan last reached
+it, in the same line so the two never read as one event. With no scan at all,
+it says so.
+{% endcomment %}{% with catalog=sources.catalog pending=sources.pending %}{% if catalog or pending or failed_tone or not sources.scan %}{% list kind="dots" muted=True %}
   {% if catalog %}<li data-adopted-commit>Commit {{ sources.revision }} on {% if catalog.committer %}{{ catalog.branch }} from {{ catalog.committer }},{% else %}{{ catalog.branch }},{% endif %} adopted {{ catalog.created_at|when }}.</li>{% endif %}
+  {% if pending %}<li data-commit-waits>Commit {{ pending.revision }} on {{ pending.proposal.branch }}, waiting for adoption.</li>{% endif %}
   {% if failed_tone %}<li data-scan-failed>{% status sources.reach.note tone=failed_tone pill=False %}{% if read_at %}{% dot %}{% include "partials/_reading_age.html" with at=read_at only %}{% endif %}</li>
   {% elif not sources.scan %}<li data-scan-none>No scan yet.</li>{% endif %}
 {% endlist %}{% endif %}{% endwith %}

@@ -325,7 +325,7 @@ def reached(manifest: OperationManifest, hosts: tuple[str, ...]) -> None:
     if missing:
         raise PolicyError(
             "HQ has no runner connection to a machine this names, as this playbook's profile; "
-            "details.missing lists each. A connection added since the last Refresh shows once you Refresh.",
+            "details.missing lists each. A connection added since the last scan shows once a scan reads it.",
             details={"missing": missing},
         )
 

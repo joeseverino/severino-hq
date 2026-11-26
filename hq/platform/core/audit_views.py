@@ -19,7 +19,7 @@ from hq.platform.application.projection import day_span, projection_scope
 from hq.platform.application.security import Capability, web_principal
 from hq.platform.application.tables import TableColumn
 from hq.platform.application.url_query import with_query
-lazy from hq.domains.control_plane.models import OperationRequest, SourceProposal
+lazy from hq.domains.control_plane.models import SourceProposal
 lazy from hq.platform.application.approvals import awaiting_ids
 lazy from hq.platform.application.automation_adoption import procedures as adopted_procedures
 lazy from hq.platform.application.automation_sources import adopted_revision, decisions, of_audit_entry, playbook_table
@@ -291,13 +291,11 @@ class AuditLogDetailView(PageMixin, DetailView):
             context["approval"] = approval
         if (scan := self.scan) is not None:
             proposal = scan.proposal
-            refreshed, rejected = history.who_did_each(
-                history.asking(OperationRequest, (proposal.operation,)),
+            (rejected,) = history.who_did_each(
                 history.asking(SourceProposal, (proposal,), changed="rejected_at"),
             )
             context.update(
                 scan=scan,
-                refreshed_by=refreshed.get(str(proposal.operation_id)),
                 rejected_by=rejected.get(str(proposal.pk)),
                 adopted_revision=adopted_revision(),
                 # Each playbook it changes, with Adopt and Reject while it waits.

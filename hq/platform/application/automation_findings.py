@@ -1,6 +1,6 @@
 """HQ's playbook worker, absent: never seen once a playbook source exists, or not seen within its timer's interval.
 
-Refresh and each run are refused while this stands, and this is what says how
+No scan is asked for and each run is refused while this stands, and this is what says how
 to set the worker up, in docs/Deployment.md's order, since HQ cannot read why
 the host declined to start one.
 """
@@ -63,9 +63,9 @@ def _standing() -> WorkerStanding | None:
 
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
     worker = _standing()
-    if worker is None or not worker.cannot("refresh", now=estate.now):
+    if worker is None or not worker.cannot("scan", now=estate.now):
         return ()
-    # The page whose Refresh and runs it refuses, where its setup is shown.
+    # The page whose scans and runs it holds, where its setup is shown.
     playbooks = opens("Open playbooks", reverse("control_plane:playbooks"))
     if worker.seen_at is None:
         return (
@@ -75,7 +75,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 read_capabilities=WORKER_READ,
                 title="Playbooks are not set up",
                 severity=Tone.ATTENTION,
-                explanation="Refresh and playbook runs are refused.",
+                explanation="Playbook scans and runs are refused.",
                 evidence=(("Last seen", "never"),),
                 steps=(*_ENTRY, _START),
                 primary=playbooks,
@@ -89,7 +89,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
             rule=RULE,
             unit=AUTOMATION_UNIT,
             title="Playbooks stopped reporting",
-            explanation="Refresh and playbook runs are refused.",
+            explanation="Playbook scans and runs are refused.",
             severity=Tone.SERIOUS,
             primary=playbooks,
             steps=(_START,),
