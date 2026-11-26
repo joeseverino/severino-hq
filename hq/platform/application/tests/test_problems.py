@@ -26,7 +26,7 @@ from ..projection import projection_scope
 from ..report_testing import bridged
 from ..resource_context import record_status
 from ..security import cli_principal
-from .finding_examples.delivery_findings import RUN, delivered
+from .finding_examples.delivery_findings import delivered
 from .host_only import host_only
 from .inventory_records import kind_read
 
@@ -232,10 +232,11 @@ class DeployInProgressTests(TestCase):
         self.assertEqual(resource_health(resource)["label"], "Deploy running")
         self.assertEqual(record_status(resource).tone, "attention")
 
-    def test_a_run_waiting_for_approval_is_something_to_do(self):
+    def test_a_run_waiting_for_approval_is_left_to_its_repository(self):
+        """The waiting run is the repository's github-waiting, so the delivery raises no deploy finding of its own."""
         self.delivery("Deploy run 9 is waiting for approval", "waiting")
 
-        item = self.item()
+        found = self.items()
 
-        self.assertFalse(item.notice)
-        self.assertEqual(item.primary.url, RUN)
+        self.assertFalse([item for item in found if finding_key(item).startswith("finding:deploy-")])
+        self.assertNotIn("serious", {item.severity for item in found})

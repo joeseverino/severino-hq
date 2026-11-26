@@ -16,7 +16,6 @@ from hq.domains.control_plane.provider_adapters.github import KIND as DELIVERY_K
 
 from .conditions import DEGRADED, held_since
 from .derivations import reached
-from .entity_links import web_url
 
 # How long a delivery may be behind production before that is a problem.
 STALLED_AFTER = timedelta(minutes=30)
@@ -34,7 +33,6 @@ class DeliveryProgress:
 
     state: str
     since: datetime | None
-    run_url: str = ""
     # The commits on their way, each an extension's that production does not run yet.
     admitted: str = ""
 
@@ -64,9 +62,8 @@ def delivery_progress(resource) -> DeliveryProgress | None:
     if not stages or ENDED in stages:
         return None
     state = WAITING if WAITING in stages else RUNNING if RUNNING in stages else STARTING
-    run_url = next((web_url(item.get("run_url")) for item in behind if _stage(item) == state), "")
     admitted = " ".join(sorted({str(item["admitted"]) for item in behind}))
-    return DeliveryProgress(state, held_since(resource.conditions, DEGRADED), run_url, admitted)
+    return DeliveryProgress(state, held_since(resource.conditions, DEGRADED), admitted)
 
 
 def on_its_way(progress: DeliveryProgress | None) -> bool:
