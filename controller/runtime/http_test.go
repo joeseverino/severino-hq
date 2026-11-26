@@ -253,3 +253,36 @@ func TestDownloadFollowsOnlyAnHTTPSLink(t *testing.T) {
 		t.Fatalf("err %v, served %v", err, served)
 	}
 }
+
+// The host serving a download link gets only the User-Agent, even on the
+// asking host's own name, where Go's client would send its Authorization,
+// and the answer is the asking host's, whose headers say what a rate limit
+// has left.
+func TestADownloadLinkGetsNoHeaderButTheUserAgent(t *testing.T) {
+	var got http.Header
+	signed := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		_, _ = w.Write([]byte("log"))
+	}))
+	defer signed.Close()
+	asking := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Ratelimit-Remaining", "41")
+		http.Redirect(w, r, signed.URL+"/signed", http.StatusFound)
+	}))
+	defer asking.Close()
+	h := &HTTPClient{Transport: signed.Client().Transport}
+	var read string
+	answer, err := h.Download(t.Context(), asking.URL+"/logs", map[string]string{"Authorization": "Bearer example", "User-Agent": "example-agent", "X-Example": "kept"}, 1<<10, func(body io.Reader) error {
+		data, err := io.ReadAll(body)
+		read = string(data)
+		return err
+	})
+	if err != nil || read != "log" || answer.Header.Get("X-Ratelimit-Remaining") != "41" {
+		t.Fatalf("read %q, answer %+v, err %v", read, answer, err)
+	}
+	for name := range got {
+		if name != "User-Agent" && name != "Accept-Encoding" {
+			t.Errorf("the link's host got %s", name)
+		}
+	}
+}
