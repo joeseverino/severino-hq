@@ -431,12 +431,12 @@ func TestAWorkerPastItsBoundIsRemoved(t *testing.T) {
 }
 
 // Nothing runs where there is nothing to run, or nothing to run it safely
-// with: no automation entry, a release with no worker image, a grant whose
+// with: no automation entry, a tree with no worker image, a grant whose
 // token is not placed yet, a table that cannot be loaded.
 func TestNoWorkerStartsWithoutWhatItNeeds(t *testing.T) {
 	for name, change := range map[string]func(w *worker) (fails bool){
 		"no automation entry": func(w *worker) bool { w.a.Project = nil; return false },
-		"no image":            func(w *worker) bool { _ = os.Remove(filepath.Join(w.a.Lib, AutomationImage)); return false },
+		"no image":            func(w *worker) bool { _ = os.Remove(filepath.Join(w.a.Lib, AutomationImage)); return true },
 		"no token yet":        func(w *worker) bool { _ = os.Remove(w.grant.Path); return true },
 		"no journal":          func(w *worker) bool { _ = os.Remove(w.a.Journal); return true },
 		"a journal that runs programs": func(w *worker) bool {
