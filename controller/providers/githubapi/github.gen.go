@@ -1686,8 +1686,9 @@ type Deployment struct {
 	Environment string `json:"environment"`
 
 	// ID Unique identifier of the deployment
-	ID  int    `json:"id"`
-	Sha string `json:"sha"`
+	ID      int             `json:"id"`
+	Payload json.RawMessage `json:"payload"`
+	Sha     string          `json:"sha"`
 }
 
 // DeploymentBranchPolicySettings The type of deployment branch policy for this environment. To allow all branches to deploy, set to `null`.

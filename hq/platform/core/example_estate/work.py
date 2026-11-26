@@ -147,6 +147,7 @@ def repositories():
                 {
                     "environment": "production",
                     "sha": head,
+                    "image": f"ghcr.io/example/hq@{HQ_DIGEST}",
                     "state": "success",
                     "created_at": iso(timedelta(days=1)),
                     "url": "https://github.com/example/hq/deployments/production",

@@ -3,6 +3,7 @@ package providers
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -206,6 +207,10 @@ type GitHubDeployment struct {
 	// CheckFailed is whether its status is an outcome deploy/outcomes.json
 	// declares with a check failed, as a release live with one failed is.
 	CheckFailed bool `json:"check_failed"`
+	// Image is the digest-pinned image its payload names, as Deploy records
+	// it: what production was asked to run, which HQ compares with the
+	// digest it runs.
+	Image string `json:"image,omitempty"`
 }
 
 type GitHubVerification struct {
@@ -639,7 +644,7 @@ func (g *githubRepository) deployments(ctx context.Context) ([]GitHubDeployment,
 		if err != nil {
 			return nil, err
 		}
-		record := GitHubDeployment{Environment: deployment.Environment, SHA: deployment.Sha, CreatedAt: deployment.CreatedAt, Verified: []GitHubVerification{}}
+		record := GitHubDeployment{Environment: deployment.Environment, SHA: deployment.Sha, CreatedAt: deployment.CreatedAt, Image: payloadImage(deployment.Payload), Verified: []GitHubVerification{}}
 		if len(statuses) > 0 {
 			record.State, record.URL = string(statuses[0].State), orDefault(statuses[0].LogURL, statuses[0].TargetURL)
 			outcome, declared := host.ReportedOutcome(record.State, statuses[0].Description)
@@ -651,6 +656,18 @@ func (g *githubRepository) deployments(ctx context.Context) ([]GitHubDeployment,
 		found = append(found, record)
 	}
 	return found, nil
+}
+
+// payloadImage is the image a deployment's payload names, or "" for a payload
+// of another shape: a creator may send any object or a string.
+func payloadImage(payload json.RawMessage) string {
+	var named struct {
+		Image string `json:"image"`
+	}
+	if json.Unmarshal(payload, &named) != nil {
+		return ""
+	}
+	return named.Image
 }
 
 // verifications is what the job that made a deployment verified before it

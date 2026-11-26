@@ -1,6 +1,7 @@
 """What HQ runs: the commit it was built from, the image that carries it, and
 where its repository stands against that."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -40,21 +41,32 @@ class Release:
     extensions: tuple[tuple[str, str], ...] = ()
 
     @property
+    def commit(self) -> str:
+        """The release's commit: the one production's deployment records while
+        this process runs the image it deployed, else the one its image names,
+        which for a release promoted from its pull request is that head."""
+
+        return self.deployed if self.runs_deployed else self.revision
+
+    @property
     def short(self) -> str:
-        return self.revision[:7]
+        return self.commit[:7]
 
     @property
     def commit_url(self) -> str:
-        return f"{self.source}/commit/{self.revision}" if self.source and self.revision else ""
+        return f"{self.source}/commit/{self.commit}" if self.source and self.commit else ""
 
     @property
     def head(self) -> str:
         return str(((self.repository.head if self.repository is not None else None) or {}).get("sha", ""))
 
     @property
+    def production(self) -> Mapping[str, Any]:
+        return (self.repository.production if self.repository is not None else None) or {}
+
+    @property
     def deployed(self) -> str:
-        production = self.repository.production if self.repository is not None else None
-        return str((production or {}).get("sha", ""))
+        return str(self.production.get("sha", ""))
 
     @property
     def behind(self) -> bool | None:
@@ -64,11 +76,12 @@ class Release:
 
     @property
     def runs_deployed(self) -> bool | None:
-        """Whether this process is the commit production last deployed."""
+        """Whether this process runs the image production last deployed, by digest."""
 
-        if not self.revision or not self.deployed:
+        _, _, deployed = str(self.production.get("image", "")).partition("@")
+        if not self.digest or not deployed:
             return None
-        return self.deployed.startswith(self.revision) or self.revision.startswith(self.deployed)
+        return self.digest == deployed
 
     @property
     def standing(self) -> str:
@@ -145,9 +158,9 @@ def release_tile(release: Release) -> Tile:
     return Tile(
         "Release",
         release.short or "Not stamped",
-        release.standing if release.revision else "This build does not say which commit it is.",
+        release.standing if release.commit else "This build does not say which commit it is.",
         release.commit_url,
-        release.tone if release.revision else Tone.NEUTRAL,
+        release.tone if release.commit else Tone.NEUTRAL,
         "deploy",
     )
 
@@ -155,7 +168,7 @@ def release_tile(release: Release) -> Tile:
 def release_json(release: Release) -> dict[str, Any]:
     repository = release.repository
     return {
-        "revision": release.revision,
+        "revision": release.commit,
         "source": release.source,
         "standing": release.standing or None,
         "image": release.image,

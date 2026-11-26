@@ -515,7 +515,8 @@
               "conclusion": "example"
             }
           ],
-          "check_failed": true
+          "check_failed": true,
+          "image": "example"
         }
       ],
       "alerts": {
