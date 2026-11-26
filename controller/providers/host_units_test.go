@@ -318,7 +318,7 @@ StatusText=Uploading to example.com
 
 func hostUnitsRestarting(t *testing.T, restarting string) ([]any, error) {
 	t.Helper()
-	env := runtime.Environment{HostUnits: writeHostUnits(t, hostUnitsShown), HostRestartingUnits: restarting}
+	env := runtime.Environment{HostUnits: writeHostUnits(t, hostUnitsShown), HostForeignUnits: restarting}
 	return New(env, supplied(), &fakeHTTP{}).hostUnits(t.Context())
 }
 
@@ -352,7 +352,7 @@ func TestHostUnitsSayWhenSystemdWasNotAskedWhatRestarts(t *testing.T) {
 	if err != nil || len(records) != 3 {
 		t.Fatalf("nothing restarting: %d records, %v", len(records), err)
 	}
-	absent := filepath.Join(t.TempDir(), "units-restarting")
+	absent := filepath.Join(t.TempDir(), "units-foreign")
 	if records, err := hostUnitsRestarting(t, absent); err == nil || strings.Contains(err.Error(), absent) {
 		t.Errorf("an unmounted answer read as %+v, %v", records, err)
 	}

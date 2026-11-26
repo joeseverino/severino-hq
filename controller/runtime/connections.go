@@ -57,9 +57,9 @@ type Environment struct {
 	RenderStatus string `env:"SEVERINO_RENDER_STATUS"`
 	// HostUnits is what `systemctl show` printed for the shipped units.
 	HostUnits string `env:"SEVERINO_HOST_UNITS"`
-	// HostRestartingUnits is what it printed for the services outside that
-	// set that systemd has restarted on its own.
-	HostRestartingUnits string `env:"SEVERINO_HOST_RESTARTING_UNITS"`
+	// HostForeignUnits is what it printed for the services outside that set
+	// that systemd has restarted on its own or holds as failed.
+	HostForeignUnits string `env:"SEVERINO_HOST_FOREIGN_UNITS"`
 	// HostFilesystems is root's statfs of each real filesystem on the
 	// machine (hostcore.FilesystemReading).
 	HostFilesystems string `env:"SEVERINO_HOST_FILESYSTEMS"`

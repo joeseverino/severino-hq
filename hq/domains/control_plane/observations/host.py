@@ -438,12 +438,18 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
 )
 
 # What HQ's own host jobs say happened: a unit that failed, which every
-# severino-hq unit's OnFailure= reports (``host_work.units.read``), and a
-# container on HQ's host that changed, with Docker's action after a dot,
-# which severino-hq-events-docker.service hears from Docker.
+# severino-hq unit's OnFailure= reports (``host_work.units.read``); a job
+# systemd ended on HQ's host, for any unit, with its result after a dot; and a
+# container on HQ's host that changed, with Docker's action after a dot. The
+# last two are what severino-hq-events.service hears.
 UNIT_FAILED = "unit.failed"
+UNIT_JOB = "unit.job"
 DOCKER_CONTAINER = "docker.container"
-INBOUND = {"host": InboundSpec({UNIT_FAILED: (UNIT_KIND,), DOCKER_CONTAINER: (ENVIRONMENT_KIND,)})}
-# The event severino-hq-events-docker.service tells, which the controller
-# spells from the contract.
-SHARED = (SharedValue("HostEvent", (DOCKER_CONTAINER,), "An event HQ's own host tells it of from the controller."),)
+INBOUND = {
+    "host": InboundSpec({UNIT_FAILED: (UNIT_KIND,), UNIT_JOB: (UNIT_KIND,), DOCKER_CONTAINER: (ENVIRONMENT_KIND,)})
+}
+# The events severino-hq-events.service tells, which the controller spells
+# from the contract.
+SHARED = (
+    SharedValue("HostEvent", (UNIT_JOB, DOCKER_CONTAINER), "An event HQ's own host tells it of from the controller."),
+)

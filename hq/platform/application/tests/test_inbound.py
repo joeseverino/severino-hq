@@ -22,7 +22,7 @@ PUSH = {
     "received_at": "2026-01-15T12:00:00Z",
 }
 
-# As severino-hq-events-docker.service tells of one Docker event: the
+# As severino-hq-events.service tells of one Docker event: the
 # container's name, and Docker's own id, time and action as the delivery.
 DIED = {
     "provider": "host",
@@ -74,6 +74,18 @@ class ApplyEventsTests(TestCase):
 
         self.assertEqual(asked(), [ENVIRONMENT_KIND])
         self.assertEqual(set(InboundEvent.objects.values_list("outcome", flat=True)), {"applied"})
+
+    def test_a_job_systemd_ended_failed_makes_the_unit_reading_due(self):
+        """For any unit on the host, HQ's or not, as severino-hq-events.service
+        tells of systemd's JobRemoved: the unit's name, and the job's id and
+        when it was heard as the delivery."""
+
+        self.apply({"source": "host", "events": [{
+            "provider": "host", "event": "unit.job.failed", "subject": "example-pull@7ad6909.service",
+            "delivery_id": "job-4021-1764158400000000000", "received_at": "2026-11-26T12:00:00Z",
+        }]})  # fmt: skip
+
+        self.assertEqual(asked(), ["host.unit"])
 
     def test_a_host_event_outside_the_declaration_makes_nothing_due(self):
         from hq.domains.control_plane.models import InboundEvent

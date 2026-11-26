@@ -223,7 +223,7 @@ are in [Secrets](Secrets.md#how-hq-reads-it).
 
 `host.unit` is the state of every systemd unit the repository ships
 (`SEVERINO_HOST_UNITS`), and of every other service systemd keeps restarting
-(`SEVERINO_HOST_RESTARTING_UNITS`): one record per unit. The shipped set is
+or holds as failed (`SEVERINO_HOST_FOREIGN_UNITS`): one record per unit. The shipped set is
 derived, never listed: `Reported` in `controller/host/readings.go` walks
 `deploy/systemd` in the root-owned tree. It takes each shipped unit that is not
 a template, and each instance of a shipped template that a shipped file starts
@@ -235,7 +235,7 @@ unit name, a systemd state word, a number or an instant. The one property of
 words is `Description`, the title the unit file gives it, read so a page names
 a unit as a person reads it rather than by a name systemd escapes
 (`run-severino\x2dhq\x2dsecrets.mount`). The repository writes every shipped
-unit's title, and another package a restarting service's. The contract admits
+unit's title, and another package a foreign service's. The contract admits
 one only as bounded, printable ASCII on one line, with no slash, equals sign or
 bar. Any other is left out, and the page shows the unit's name.
 

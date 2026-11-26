@@ -14,6 +14,7 @@ require (
 	filippo.io/age v1.3.2
 	github.com/coder/websocket v1.8.15
 	github.com/compose-spec/compose-go/v2 v2.17.0
+	github.com/godbus/dbus/v5 v5.2.4
 	github.com/oapi-codegen/runtime v1.9.1
 	golang.org/x/crypto v0.59.0
 	golang.org/x/sync v0.25.0

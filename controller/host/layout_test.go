@@ -130,8 +130,8 @@ func TestARefreshDuringAGlanceStartsTheNext(t *testing.T) {
 
 // The resident units, which only these tests name.
 const (
-	listenerUnit     = "severino-hq-listener.service"
-	dockerEventsUnit = "severino-hq-events-docker.service"
+	listenerUnit = "severino-hq-listener.service"
+	eventsUnit   = "severino-hq-events.service"
 )
 
 // The glance and listener units are given no more than the controller unit:
@@ -188,21 +188,21 @@ func TestThelistenerUnitHoldsTheSocketWhileHQRuns(t *testing.T) {
 	}
 }
 
-// The Docker watcher holds Docker's socket, so it is given the shared
+// The events watcher holds Docker's socket and the system bus, so it is given the shared
 // sandbox and nothing more: no network, no address family but AF_UNIX, no
 // capability, nowhere to write and no credential. It holds the stream while
 // HQ runs, and restarts with it.
-func TestTheDockerWatcherRunsInTheSharedSandboxAlone(t *testing.T) {
+func TestTheEventsWatcherRunsInTheSharedSandboxAlone(t *testing.T) {
 	shipped, err := Shipped(shippedUnits)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range dropInsOf(dockerEventsUnit, shipped) {
+	for _, name := range dropInsOf(eventsUnit, shipped) {
 		if !strings.HasPrefix(name, "severino-hq-.service.d/") {
-			t.Errorf("%s is widened by %s", dockerEventsUnit, name)
+			t.Errorf("%s is widened by %s", eventsUnit, name)
 		}
 	}
-	setting := func(key string) (string, []string) { return effective(t, shippedUnits, dockerEventsUnit, key) }
+	setting := func(key string) (string, []string) { return effective(t, shippedUnits, eventsUnit, key) }
 	if net, _ := setting("PrivateNetwork"); !systemdTrue(net) {
 		t.Errorf("the watcher reaches the host's network (PrivateNetwork=%q)", net)
 	}
@@ -217,7 +217,7 @@ func TestTheDockerWatcherRunsInTheSharedSandboxAlone(t *testing.T) {
 			t.Errorf("the watcher is given %s=%s", key, value)
 		}
 	}
-	service := filepath.Join(shippedUnits, dockerEventsUnit)
+	service := filepath.Join(shippedUnits, eventsUnit)
 	if got := unitValue(t, service, "ExecStart"); got != HostProgram+" events" {
 		t.Errorf("the watcher unit runs %q", got)
 	}

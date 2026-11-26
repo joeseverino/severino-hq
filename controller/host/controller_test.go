@@ -36,7 +36,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_RUNS", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
-	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS", "SEVERINO_HOST_FILESYSTEMS", "SEVERINO_HOST_REBOOT",
+	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_FOREIGN_UNITS", "SEVERINO_HOST_FILESYSTEMS", "SEVERINO_HOST_REBOOT",
 	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET", "HQ_CONTROLLER_GRANTS",
 }
 
@@ -328,7 +328,7 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	for _, want := range []string{
 		"SEVERINO_RENDER_STATUS=hq=/run/severino-hq/render-status/hq.json",
 		"SEVERINO_HOST_UNITS=/run/severino-hq/units",
-		"SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting",
+		"SEVERINO_HOST_FOREIGN_UNITS=/run/severino-hq/units-foreign",
 		"SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json",
 		"SEVERINO_HOST_FILESYSTEMS=/run/severino-hq/filesystems.json",
 		"SEVERINO_HOST_REBOOT=/run/severino-hq/reboot.json",
@@ -339,7 +339,7 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	}
 	for target := range l.mounted {
 		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || slices.Contains([]string{
-			"/run/severino-hq/units", "/run/severino-hq/units-restarting",
+			"/run/severino-hq/units", "/run/severino-hq/units-foreign",
 			"/run/severino-hq/tailnet-lock.json", "/run/severino-hq/filesystems.json", "/run/severino-hq/reboot.json",
 		}, target) {
 			t.Errorf("%s was mounted with nothing to mount", target)

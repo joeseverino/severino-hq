@@ -13,7 +13,7 @@ RULE = "event-channel-silent"
 # The unit on HQ's machine that runs each channel's reader (deploy/systemd).
 READERS = {
     InboundSource.WORKER: "severino-hq-listener.service",
-    InboundSource.HOST: "severino-hq-events-docker.service",
+    InboundSource.HOST: "severino-hq-events.service",
 }
 
 

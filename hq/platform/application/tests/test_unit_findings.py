@@ -4,7 +4,7 @@ import re
 from datetime import UTC, timedelta
 from pathlib import Path
 
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase, TestCase, tag
 from django.utils import timezone
 
 from hq.domains.control_plane.bridge_contract import contract
@@ -12,7 +12,10 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.host import UNIT_KIND
 
 from .. import unit_findings as rules
+from ..findings import estate_findings
 from ..inventory_testing import store
+from ..projection import projection_scope
+from .test_tailnet_posture import EVERYTHING
 
 ROOT = Path(__file__).resolve().parents[4]
 UNITS = ROOT / "deploy" / "systemd"
@@ -89,6 +92,21 @@ class RecordTests(SimpleTestCase):
             for name, pattern in patterns.items():
                 if pattern and name not in allowed:
                     self.assertIsNone(re.search(pattern, refused), (name, refused))
+
+
+class ForeignTests(TestCase):
+    def test_a_failed_instance_hq_does_not_ship_is_a_failed_job(self):
+        """A oneshot instance another package starts, read because systemd
+        holds it as failed though it never restarted it."""
+
+        unit = "example-pull@7ad6909.service"
+        sweep(failed(unit, foreign=True), service())
+
+        with projection_scope():
+            found = [found for found in estate_findings(principal=EVERYTHING) if found.rule == rules.FAILED]
+
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(("Job", unit), found[0].evidence)
 
 
 @tag("source")

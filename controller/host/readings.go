@@ -85,33 +85,36 @@ func (m *Machine) UnitState(ctx context.Context, units []string) ([]byte, error)
 	return m.show(ctx, UnitProperties, units...)
 }
 
-// Restarting is the state of each service outside the reported set that
-// systemd has restarted on its own, as UnitState answers it, or nothing when
-// no such service is loaded. A unit HQ does not ship can loop for days with
-// nothing else watching it.
-func (m *Machine) Restarting(ctx context.Context, reported []string) ([]byte, error) {
+// Foreign is the state of each service outside the reported set that
+// systemd has restarted on its own or holds as failed, as UnitState answers
+// it, or nothing when no such service is loaded. A unit HQ does not ship can
+// loop for days, or a oneshot stay failed, with nothing else watching it.
+func (m *Machine) Foreign(ctx context.Context, reported []string) ([]byte, error) {
 	// A glob matches only the units systemd holds in memory, so the services
 	// that are loaded (systemctl(1), Parameter Syntax).
-	counts, err := m.show(ctx, []string{"Id", "NRestarts"}, "*.service")
+	shown, err := m.show(ctx, []string{"Id", "NRestarts", "ActiveState"}, "*.service")
 	if err != nil {
 		return nil, err
 	}
-	restarting := Restarted(counts, reported)
-	if len(restarting) == 0 {
+	troubled := Troubled(shown, reported)
+	if len(troubled) == 0 {
 		return []byte{}, nil
 	}
-	return m.UnitState(ctx, restarting)
+	return m.UnitState(ctx, troubled)
 }
 
-// Restarted is each unit `systemctl show --property=Id,NRestarts` printed with
-// a count above zero, outside the reported set. NRestarts counts systemd's
-// own restarts since the unit was last started deliberately, which a start or
-// `systemctl reset-failed` sets back to zero.
-func Restarted(shown []byte, reported []string) []string {
-	restarted := []string{}
+// Troubled is each unit `systemctl show --property=Id,NRestarts,ActiveState`
+// printed, outside the reported set, that systemd restarted on its own or
+// holds as failed. NRestarts counts systemd's own restarts since the unit was
+// last started deliberately, which a start or `systemctl reset-failed` sets
+// back to zero; a oneshot that failed was never restarted, so only its state
+// says so.
+func Troubled(shown []byte, reported []string) []string {
+	troubled := []string{}
 	for block := range strings.SplitSeq(string(shown), "\n\n") {
 		var id string
 		var count int
+		var failed bool
 		for line := range strings.Lines(block) {
 			property, value, _ := strings.Cut(strings.TrimSpace(line), "=")
 			switch property {
@@ -119,14 +122,16 @@ func Restarted(shown []byte, reported []string) []string {
 				id = value
 			case "NRestarts":
 				count, _ = strconv.Atoi(value)
+			case "ActiveState":
+				failed = value == "failed"
 			}
 		}
-		if id != "" && count > 0 && !slices.Contains(reported, id) && !slices.Contains(restarted, id) {
-			restarted = append(restarted, id)
+		if id != "" && (count > 0 || failed) && !slices.Contains(reported, id) && !slices.Contains(troubled, id) {
+			troubled = append(troubled, id)
 		}
 	}
-	slices.Sort(restarted)
-	return restarted
+	slices.Sort(troubled)
+	return troubled
 }
 
 // show is `systemctl show` of properties of units, in UTC with instants in

@@ -179,7 +179,7 @@ func unitInstant(field *string, value string) bool {
 
 // hostUnits is one record per unit the launcher asked systemd about: the
 // shipped set, then each service outside it that systemd restarted on its
-// own. The refusal of a file that is not that answer names no line of it.
+// own or holds as failed. The refusal of a file that is not that answer names no line of it.
 func (r *Registry) hostUnits(context.Context) ([]any, error) {
 	if r.Env.HostUnits == "" {
 		return nil, &ProviderError{Message: "no unit state was mounted"}
@@ -193,12 +193,12 @@ func (r *Registry) hostUnits(context.Context) ([]any, error) {
 		return nil, &ProviderError{Message: err.Error()}
 	}
 	// A launcher that names no such file asks about the shipped set alone.
-	if r.Env.HostRestartingUnits != "" {
-		text, readAt, err := readHostUnits(r.Env.HostRestartingUnits, "the launcher could not ask systemd which services restart")
+	if r.Env.HostForeignUnits != "" {
+		text, readAt, err := readHostUnits(r.Env.HostForeignUnits, "the launcher could not ask systemd which services restart or failed")
 		if err != nil {
 			return nil, err
 		}
-		records = append(records, restartingHostUnits(text, readAt, records)...)
+		records = append(records, foreignHostUnits(text, readAt, records)...)
 	}
 	found := make([]any, len(records))
 	for i, record := range records {
@@ -247,10 +247,10 @@ func parseHostUnits(text, readAt string) ([]runtime.HostUnitRecord, error) {
 	return records, nil
 }
 
-// restartingHostUnits reads the services HQ does not ship, each marked so.
+// foreignHostUnits reads the services HQ does not ship, each marked so.
 // Their names and words are another package's, so a unit the contract does
 // not admit is passed over, never a refusal of the units HQ ships.
-func restartingHostUnits(text, readAt string, shipped []runtime.HostUnitRecord) []runtime.HostUnitRecord {
+func foreignHostUnits(text, readAt string, shipped []runtime.HostUnitRecord) []runtime.HostUnitRecord {
 	seen := map[string]bool{}
 	for _, record := range shipped {
 		seen[record.Unit] = true

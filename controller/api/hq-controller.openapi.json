@@ -5032,9 +5032,11 @@
         "type": "string",
         "description": "An event HQ's own host tells it of from the controller.",
         "enum": [
+          "unit.job",
           "docker.container"
         ],
         "x-enum-varnames": [
+          "HostEventUnitJob",
           "HostEventDockerContainer"
         ]
       },

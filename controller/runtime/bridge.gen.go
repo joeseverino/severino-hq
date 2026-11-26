@@ -443,12 +443,15 @@ func (e GlancePanelID) Valid() bool {
 // Defines values for HostEvent.
 const (
 	HostEventDockerContainer HostEvent = "docker.container"
+	HostEventUnitJob         HostEvent = "unit.job"
 )
 
 // Valid indicates whether the value is a known member of the HostEvent enum.
 func (e HostEvent) Valid() bool {
 	switch e {
 	case HostEventDockerContainer:
+		return true
+	case HostEventUnitJob:
 		return true
 	default:
 		return false

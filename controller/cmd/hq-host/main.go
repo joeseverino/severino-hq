@@ -5,7 +5,7 @@
 //	hq-host controller       one controller pass, planning; --apply to apply,
 //	                         --glance to read only the dashboard panels HQ waits on,
 //	                         --events to hold the inbound-events socket until stopped
-//	hq-host events           tell HQ of each change to a container here, until stopped
+//	hq-host events           tell HQ of each change to a container and each failed job here, until stopped
 //	hq-host renovate         run the dependency handoff a pass spooled
 //	hq-host automation       run the automation worker until no run is queued
 //	hq-host install          set the host up for the release in the root-owned tree;
@@ -44,7 +44,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/host"
-	"github.com/joeseverino/severino-hq/controller/host/dockerevents"
+	"github.com/joeseverino/severino-hq/controller/host/hostevents"
 	"github.com/joeseverino/severino-hq/controller/host/unit"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
@@ -116,7 +116,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 			fmt.Fprintln(stderr, usage)
 			return 2
 		}
-		dockerevents.New(dockerevents.Socket, dockerevents.TellHQ, log).Run(ctx)
+		hostevents.New(hostevents.TellHQ, log, hostevents.Docker(hostevents.DockerSocket, log), hostevents.Systemd()).Run(ctx)
 	case "renovate":
 		if len(args) != 1 {
 			fmt.Fprintln(stderr, usage)

@@ -544,16 +544,16 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 					return nil, err
 				}
 			}
-			// Empty when nothing restarts; absent when systemd did not say.
-			if state, err := c.Restarting(ctx, units); err == nil {
-				if err := give("units-restarting", state, "/run/severino-hq/units-restarting"); err != nil {
+			// Empty when nothing restarts or failed; absent when systemd did not say.
+			if state, err := c.Foreign(ctx, units); err == nil {
+				if err := give("units-foreign", state, "/run/severino-hq/units-foreign"); err != nil {
 					return nil, err
 				}
 			}
 		}
 	}
 	args = append(args, "--env", "SEVERINO_HOST_UNITS=/run/severino-hq/units",
-		"--env", "SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting")
+		"--env", "SEVERINO_HOST_FOREIGN_UNITS=/run/severino-hq/units-foreign")
 
 	// Root reads each filesystem's space here, since a statfs in the
 	// container answers for its overlay. Named whether or not it could be
