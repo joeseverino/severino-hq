@@ -166,8 +166,11 @@ HQ:
    it, then generate a private key and store it in 1Password as an SSH Key
    item.
 2. Install it on the host repository alone.
-3. Point its webhook at the inbound-events Worker, with the secret the Worker
-   verifies, then tick Active on its settings page as the command says:
+3. Wire it: the command points its webhook at the inbound-events Worker
+   with the secret the Worker verifies, stores its ID as the `HQ_REVIEW_APP_ID`
+   secret, and makes the `release` environment `main` only, administrators
+   allowed to bypass its rules, with the review App as its protection rule.
+   Then tick Active on the App's settings page as the command says:
 
    ```sh
    mise run wire-github-app --review --vault 'Example Vault' --item 'example review app' --client-id EXAMPLE_CLIENT_ID --webhook-secret 'op://Example Vault/example events/GITHUB_WEBHOOK_SECRET'
@@ -175,9 +178,10 @@ HQ:
 
 4. Store its connection item as [Connections](Connections.md#github-deploy-review-app)
    lays it out, `manages` set.
-5. Create the `release` environment, `main` only, administrators allowed to
-   bypass its rules, and enable the review App as its deployment protection
-   rule.
+
+Deploy's Resolve refuses to go on until `release` is so, naming what is
+missing: GitHub makes an environment a job names on first use, unprotected,
+so a run before this setup would otherwise pass Approve with no person.
 
 ### When a run fails
 

@@ -4,7 +4,8 @@ name: Deploy
 # for a commit on main, handed that commit; or by a person, to redeploy or roll
 # back: choose "Run workflow" and give it the commit.
 #
-#   Resolve  finds the signed image for the commit, and records a deployment
+#   Resolve  refuses unless release waits on the deploy review App and main
+#            alone, finds the signed image for the commit, and records a deployment
 #            of that commit to the production environment
 #   Approve  waits on the release environment, whose protection rule is HQ's
 #            deploy review App: a person's Approve in HQ releases it, and an
@@ -51,6 +52,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
+      # Reading the release environment and its rules.
+      actions: read
       contents: read
       packages: read
     outputs:
@@ -58,6 +61,35 @@ jobs:
       commit: ${{ steps.find.outputs.commit }}
       deployment: ${{ steps.record.outputs.deployment }}
     steps:
+      # GitHub makes an environment a job names on first use, with no
+      # protection, where Approve would pass with no person. So nothing goes
+      # on until release is as decided: main alone may deploy, and the deploy
+      # review App, whose ID HQ_REVIEW_APP_ID holds, is an enabled rule. Each
+      # read takes Actions read (GitHub's "Permissions required for
+      # fine-grained personal access tokens"; REST "Get an environment",
+      # "List deployment branch policies", "Get all deployment protection
+      # rules for an environment").
+      - name: Check that release waits on HQ
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_APP: ${{ secrets.HQ_REVIEW_APP_ID }}
+        run: |
+          set -euo pipefail
+          refuse() {
+            echo "::error title=Release is not protected::$1 Run mise run wire-github-app --review (docs/Deployment.md, Releasing a deploy)."
+            exit 1
+          }
+          [[ "$REVIEW_APP" =~ ^[0-9]+$ ]] || refuse "HQ_REVIEW_APP_ID does not hold the deploy review App's ID."
+          release="repos/$GITHUB_REPOSITORY/environments/release"
+          policy="$(gh api "$release" --jq '.deployment_branch_policy | "\(.protected_branches) \(.custom_branch_policies)"')" \
+            || refuse "The release environment cannot be read, or does not exist."
+          [ "$policy" = "false true" ] || refuse "The release environment does not limit deploys to main."
+          branches="$(gh api "$release/deployment-branch-policies" --jq '[.branch_policies[] | "\(.type):\(.name)"] | join(" ")')" \
+            || refuse "The release environment's branch policies cannot be read."
+          [ "$branches" = "branch:main" ] || refuse "The release environment lets ${branches:-nothing} deploy, not main alone."
+          gh api "$release/deployment_protection_rules" \
+            | jq -e --argjson app "$REVIEW_APP" 'any(.custom_deployment_protection_rules[]; .enabled and .app.id == $app)' >/dev/null \
+            || refuse "The deploy review App is not an enabled protection rule of release."
       - name: Log in to GHCR
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

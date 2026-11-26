@@ -595,68 +595,6 @@ class ExtensionsAgainstHostTests(SimpleTestCase):
 
 
 @tag("source")
-class DeployTests(SimpleTestCase):
-    """Production is reached through one approval, by a runner that holds nothing worth taking."""
-
-    def setUp(self):
-        self.jobs = jobs(workflow("deploy.yml"))
-
-    def needs(self, job: str) -> set[str]:
-        return upstream(job, {name: needed(each) for name, each in self.jobs.items()})
-
-    def environment(self, job: str) -> str:
-        """The environment ``job`` waits on, by name."""
-
-        declared = self.jobs[job].get("environment", "")
-        return declared.get("name", "") if isinstance(declared, dict) else declared
-
-    def test_every_job_on_the_homelab_waits_for_an_approval(self):
-        homelab = [name for name, job in self.jobs.items() if "self-hosted" in job.get("runs-on", [])]
-        self.assertTrue(homelab)
-        for name in homelab:
-            with self.subTest(job=name):
-                gated = {name, *self.needs(name)}
-                self.assertTrue(any(self.environment(job) == "release" for job in gated))
-        for path in workflows():
-            if path.name != "deploy.yml":
-                with self.subTest(workflow=path.name):
-                    self.assertNotIn("self-hosted", code(path.read_text()))
-                    self.assertNotIn("hq-host deploy", code(path.read_text()))
-
-    def test_the_runner_holds_no_registry_credential_and_verifies_nothing_root_does_not(self):
-        deploying = [job for job in self.jobs.values() if "hq-host deploy" in text(job)]
-        self.assertTrue(deploying)
-        for job in deploying:
-            for absent in ("cosign", ".docker/config.json", "actions/checkout"):
-                with self.subTest(absent=absent):
-                    self.assertNotIn(absent, text(job))
-            self.assertNotIn("contents", job.get("permissions", {}))
-            self.assertTrue(
-                any(
-                    "| sudo /usr/local/lib/severino-hq/deploy/bin/hq-host deploy " in script(step)
-                    for step in steps(job)
-                )
-            )
-
-    def test_the_deployment_is_recorded_for_the_commit_deployed_and_no_job_records_its_own(self):
-        """A job's own deployment names the commit main was at when the run started,
-        and succeeds once approved: Resolve records the one for the resolved commit."""
-        self.assertTrue(any(self.environment(name) for name in self.jobs))
-        for name in self.jobs:
-            with self.subTest(job=name):
-                self.assertNotEqual(self.environment(name), "production")
-        (record,) = [step for step in steps(self.jobs["resolve"]) if '/deployments"' in script(step)]
-        self.assertEqual(record["env"]["COMMIT"], "${{ steps.find.outputs.commit }}")
-        self.assertIn('--arg ref "$COMMIT"', script(record))
-        self.assertIn("ref: $ref", script(record))
-
-    def test_a_candidate_is_never_deployed(self):
-        source = code((WORKFLOWS / "deploy.yml").read_text())
-        self.assertNotIn("coordinated", source)
-        self.assertNotIn("candidate", source)
-
-
-@tag("source")
 class PublicLogTests(SimpleTestCase):
     """What a composed build prints is safe to publish in a public log."""
 

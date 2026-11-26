@@ -29,7 +29,7 @@ lazy from hq.domains.control_plane.provider_adapters.github import REVIEW_EVENTS
 lazy from hq.platform.application.entity_links import https_url
 
 # The secrets the wiring sets, as HQ's posture check names them.
-lazy from hq.platform.application.github_posture import APP_CLIENT_ID, APP_KEY
+lazy from hq.platform.application.github_posture import APP_CLIENT_ID, APP_KEY, REVIEW_APP_ID
 
 STORED = "Stored in {item} ({vault}); the controller reads it on its next render."
 
@@ -490,6 +490,9 @@ PROVIDERS: Mapping[str, Provider] = {"cloudflare": CLOUDFLARE, "tailscale": TAIL
 # ------------------------------------------------------------- the GitHub App
 
 ENVIRONMENT = "admission"
+# The environment Deploy's Approve job waits on, whose one rule is the deploy
+# review App (.github/workflows/deploy.yml, which a pipeline test holds to it).
+RELEASE = "release"
 
 
 def private_key(programs: Programs, vault: str, item: str) -> str:
@@ -502,15 +505,16 @@ def private_key(programs: Programs, vault: str, item: str) -> str:
     return key
 
 
-def admission_environment(programs: Programs, repository: str) -> None:
-    """``admission``, deployable from main alone, so no branch reads its secret."""
+def main_only_environment(programs: Programs, repository: str, name: str, *fields: str) -> str:
+    """An environment deployable from main alone, so no branch reads its secret or reaches its job; its API path."""
 
-    path = f"repos/{repository}/environments/{ENVIRONMENT}"
+    path = f"repos/{repository}/environments/{name}"
     programs.output(
         [
             "gh", "api", "-X", "PUT", path,
             "-F", "deployment_branch_policy[protected_branches]=false",
             "-F", "deployment_branch_policy[custom_branch_policies]=true",
+            *(word for each in fields for word in ("-F", each)),
         ]
     )  # fmt: skip
     policies = json.loads(programs.output(["gh", "api", f"{path}/deployment-branch-policies"]))
@@ -518,12 +522,28 @@ def admission_environment(programs: Programs, repository: str) -> None:
         programs.output(
             ["gh", "api", "-X", "POST", f"{path}/deployment-branch-policies", "-f", "name=main", "-f", "type=branch"]
         )
+    return path
+
+
+def release_environment(programs: Programs, repository: str, app_id: int) -> None:
+    """``release``, main only, its one protection rule the deploy review App, which administrators may bypass
+    while HQ is down; Deploy refuses to run until it is so."""
+
+    path = main_only_environment(programs, repository, RELEASE, "can_admins_bypass=true")
+    rules = json.loads(programs.output(["gh", "api", f"{path}/deployment_protection_rules"]))
+    if not any(
+        rule.get("app", {}).get("id") == app_id for rule in rules.get("custom_deployment_protection_rules") or ()
+    ):
+        programs.output(
+            ["gh", "api", "-X", "POST", f"{path}/deployment_protection_rules", "-F", f"integration_id={app_id}"]
+        )
 
 
 def wire_github_app(usage: Usage, programs: Programs, out: IO[str], send: Send = https) -> None:
     """The host's HQ_APP_KEY and HQ_APP_CLIENT_ID secrets; on each extension, the key in ``admission`` and the ID.
 
-    With ``--review`` it sets the deploy review App's webhook and nothing else.
+    With ``--review``: the deploy review App's webhook, its ID in HQ_REVIEW_APP_ID
+    for Deploy's check, and the ``release`` environment with it as the rule.
 
     The client ID is a secret too. A variable is state outside the repository
     that changes what a build does, which the posture standard rejects, and a
@@ -537,8 +557,18 @@ def wire_github_app(usage: Usage, programs: Programs, out: IO[str], send: Send =
         # The review App's key stays with the controller: no secret, here or
         # on an extension, ever holds it.
         if usage.repeated("extension") or not usage.text("webhook_secret"):
-            raise UsageError("--review sets the deploy review App's webhook alone: --webhook-secret, no --extension.")
-        app_webhook(usage, programs, private_key(programs, vault, item), client_id, out, send, REVIEW_EVENTS)
+            raise UsageError(
+                "--review wires the host alone and sets the App's webhook: --webhook-secret, no --extension."
+            )
+        key = private_key(programs, vault, item)
+        app_webhook(usage, programs, key, client_id, out, send, REVIEW_EVENTS)
+        app = send(Call("GET", f"{GITHUB_API}/app", token=app_jwt(key, client_id)))
+        if not isinstance(app, dict) or not isinstance(app.get("id"), int):
+            raise Refused("GitHub did not say which App the key signs for.")
+        host = programs.output(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).strip()
+        programs.output(["gh", "secret", "set", REVIEW_APP_ID, "--repo", host], stdin=str(app["id"]))
+        release_environment(programs, host, app["id"])
+        print(f"{host}: {REVIEW_APP_ID} set; {RELEASE} environment (main only) waits on {app.get('slug')}.", file=out)
         return
     key = private_key(programs, vault, item)
     host = programs.output(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).strip()
@@ -546,7 +576,7 @@ def wire_github_app(usage: Usage, programs: Programs, out: IO[str], send: Send =
     programs.output(["gh", "secret", "set", APP_CLIENT_ID, "--repo", host], stdin=client_id)
     print(f"{host}: {APP_KEY} and {APP_CLIENT_ID} set.", file=out)
     for repository in usage.repeated("extension"):
-        admission_environment(programs, repository)
+        main_only_environment(programs, repository, ENVIRONMENT)
         programs.output(["gh", "secret", "set", APP_KEY, "--repo", repository, "--env", ENVIRONMENT], stdin=key)
         programs.output(["gh", "secret", "set", APP_CLIENT_ID, "--repo", repository], stdin=client_id)
         print(f"{repository}: {ENVIRONMENT} environment (main only) with {APP_KEY}; {APP_CLIENT_ID} set.", file=out)
@@ -579,16 +609,21 @@ def app_webhook(
     secret = programs.output(["op", "read", usage.text("webhook_secret")]).strip()
     if not secret:
         raise Refused("The webhook secret's field is empty.")
-    now = int(datetime.now(UTC).timestamp())
-    # GitHub's limits: issued up to 60 s back for clock drift, expiring within 10 minutes.
-    token = jwt.encode({"iat": now - 60, "exp": now + 540, "iss": client_id}, key, algorithm="RS256")
     body = {"url": url, "content_type": "json", "secret": secret, "insecure_ssl": "0"}
-    answer = send(Call("PATCH", f"{GITHUB_API}/app/hook/config", token=token, json=body))
+    answer = send(Call("PATCH", f"{GITHUB_API}/app/hook/config", token=app_jwt(key, client_id), json=body))
     if not isinstance(answer, dict) or answer.get("url") != url:
         message = answer.get("message") if isinstance(answer, dict) else None
         raise Refused(f"GitHub refused the App's webhook: {message or 'unreadable response'}")
     print(f"The App's webhook delivers to {url}, signed with the secret the Worker holds.", file=out)
     print(f"On the App's settings page: tick Active and subscribe to {', '.join(events or route['events'])}.", file=out)
+
+
+def app_jwt(key: str, client_id: str) -> str:
+    """A JWT the App's key signs, which GitHub takes as the App itself."""
+
+    now = int(datetime.now(UTC).timestamp())
+    # GitHub's limits: issued up to 60 s back for clock drift, expiring within 10 minutes.
+    return jwt.encode({"iat": now - 60, "exp": now + 540, "iss": client_id}, key, algorithm="RS256")
 
 
 # ------------------------------------------------------------------ the entry

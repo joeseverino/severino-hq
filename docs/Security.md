@@ -795,6 +795,11 @@ Who holds which key:
   else, so its key reaches no code, secret or other repository. A stolen main
   key still mints Deployments write on the host, which records deployments
   but answers no rule.
+- Deploy fails closed: Resolve reads `release` before anything is recorded
+  and refuses unless main alone may deploy and the review App, by the ID in
+  `HQ_REVIEW_APP_ID`, is an enabled rule. GitHub makes an environment a job
+  names on first use, with no protection, so without this check a run before
+  the setup would pass Approve with no person.
 - With HQ down, the run waits up to 30 days, then fails; it never releases
   itself. A repository administrator releases it without HQ by "Start all
   waiting jobs" on the run, as long as the environment lets administrators

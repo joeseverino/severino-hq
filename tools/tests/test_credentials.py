@@ -391,11 +391,21 @@ class AppWebhookTests(SimpleTestCase):
 
     def send(self, call: Call):
         self.calls.append(call)
+        if call.method == "GET":
+            # GitHub's "Get the authenticated app" response, as much as is read.
+            return {"id": 4242, "slug": "example-review", "name": "Example review"}
         return {"url": call.json["url"], "content_type": "json", "secret": "********", "insecure_ssl": "0"}
 
-    def wire(self, **flags: str) -> tuple[Commands, str]:
+    def wire(self, rules: str = '{"total_count": 0, "custom_deployment_protection_rules": []}', **flags: str):
+        release = "repos/example/host/environments/release"
         commands = Commands(
-            {("op", "document", "get"): self.key, ("gh", "repo", "view"): "example/host\n", ("op", "read"): self.SECRET}
+            {
+                ("op", "document", "get"): self.key,
+                ("gh", "repo", "view"): "example/host\n",
+                ("op", "read"): self.SECRET,
+                ("gh", "api", f"{release}/deployment-branch-policies"): '{"total_count": 0, "branch_policies": []}',
+                ("gh", "api", f"{release}/deployment_protection_rules"): rules,
+            }
         )
         out = io.StringIO()
         usage = Usage({"vault": "Example Vault", "item": "example app", "client_id": "Iv1.example", **flags})
@@ -428,13 +438,45 @@ class AppWebhookTests(SimpleTestCase):
         for event in github["events"]:
             self.assertIn(event, out)
 
-    def test_the_review_app_gets_its_webhook_and_its_key_goes_nowhere_else(self):
+    def test_the_review_app_becomes_releases_rule_and_its_key_goes_nowhere_else(self):
         commands, out = self.wire(review="true", webhook_secret=self.REFERENCE, webhook_host="events.example.com")
 
-        (call,) = self.calls
-        self.assertEqual(call.url, "https://api.github.com/app/hook/config")
-        self.assertFalse([argv for argv in commands.argv if argv[:2] == ["gh", "secret"]])
+        self.assertEqual(self.calls[0].url, "https://api.github.com/app/hook/config")
+        secrets = [
+            (argv, stdin)
+            for argv, stdin in zip(commands.argv, commands.stdin, strict=True)
+            if argv[:2] == ["gh", "secret"]
+        ]
+        self.assertEqual(secrets, [(["gh", "secret", "set", "HQ_REVIEW_APP_ID", "--repo", "example/host"], "4242")])
+        release = "repos/example/host/environments/release"
+        self.assertIn(
+            ["gh", "api", "-X", "POST", f"{release}/deployment_protection_rules", "-F", "integration_id=4242"],
+            commands.argv,
+        )
+        (put,) = [argv for argv in commands.argv if argv[:5] == ["gh", "api", "-X", "PUT", release]]
+        self.assertIn("can_admins_bypass=true", put)
+        self.assertIn("deployment_branch_policy[custom_branch_policies]=true", put)
+        self.assertIn(
+            [
+                "gh",
+                "api",
+                "-X",
+                "POST",
+                f"{release}/deployment-branch-policies",
+                "-f",
+                "name=main",
+                "-f",
+                "type=branch",
+            ],
+            commands.argv,
+        )
         self.assertIn("subscribe to deployment_protection_rule.", out)
+
+    def test_a_rule_already_in_place_is_not_added_again(self):
+        rules = '{"total_count": 1, "custom_deployment_protection_rules": [{"id": 3, "enabled": true, "app": {"id": 4242, "slug": "example-review"}}]}'
+        commands, _ = self.wire(rules, review="true", webhook_secret=self.REFERENCE, webhook_host="events.example.com")
+
+        self.assertFalse([argv for argv in commands.argv if argv[-1:] == ["integration_id=4242"]])
 
     def test_the_review_app_is_refused_an_extension_or_no_webhook(self):
         for flags in ({"extension": "example/ext", "webhook_secret": self.REFERENCE}, {}):
