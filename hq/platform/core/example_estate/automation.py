@@ -7,7 +7,6 @@ seed can ask for a run knowing only its id.
 """
 
 import hashlib
-import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -31,6 +30,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.agent_registry import observe
+from hq.platform.application.app_update_approval import APPROVE as APPROVE_UPDATE
 from hq.platform.application.approvals import APPROVE, is_held
 from hq.platform.application.automation_adoption import ADOPT, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
@@ -363,16 +363,35 @@ def applies_updates(person: Principal, hosts: tuple[str, ...]) -> None:
 
 
 def _applying(person: Principal, host: str) -> None:
-    """The applier's runs on ``host``, asked by ``person`` once the estate's
-    working run there ended: one that released two apps and rolled one back,
-    and one releasing now."""
+    """The applier's run on ``host``, asked by ``person`` once the estate's
+    working run there ended, which applied its commit; nothing holds the
+    applier after it, so each update it applies is offered its press."""
 
     for held in OperationHost.objects.filter(host=host, operation__state=OperationRequest.State.CLAIMED):
         _reported(DONE)(held.operation)
     applier = operation_registry()[APPS_APPLY]
-    parameters = {"revision": APPLY_REVISION}
-    for ago, carried_out in ((timedelta(hours=2), _reported(APPLIED)), (timedelta(minutes=2), _working(RELEASING))):
-        _asked(applier, host, person, ago, carried_out, approver=person, parameters=parameters)
+    _asked(
+        applier,
+        host,
+        person,
+        timedelta(hours=2),
+        _reported(APPLIED),
+        approver=person,
+        parameters={"revision": APPLY_REVISION},
+    )
+
+
+def asks_to_approve(update: dict[str, Any], repository: str) -> None:
+    """The agent asks to approve ``update``, open in ``repository``, which
+    waits for a person whatever its rules."""
+
+    agent = token_principal(CLAIMS, MCP_INTERFACE)
+    asked = {"repository": repository, "number": update["number"], "head_sha": update["head"]}
+    with doors.mcp():
+        observe(agent)
+        answer = run_capability(APPROVE_UPDATE, asked, principal=agent, idempotency_key="example-approve-update").answer
+    if not is_held(answer):
+        raise RuntimeError(f"The agent's approval was not held for a person: {answer}")
 
 
 def proposed() -> None:
@@ -495,19 +514,6 @@ APPLIED = Ended(
         "apps.pull": RELEASES,
         "apps.receipt": [{"revision": APPLY_REVISION, "last_attempt": APPLY_REVISION, "ok": True}],
     },
-)
-# How far the applier has got releasing the next commit: the host's pull
-# started, and its follow's latest pass, one app released and the next under way.
-RELEASING = (
-    ("Start the host's pull unit for the revision", "changed", ""),
-    (
-        "Follow the pull unit until it ends",
-        "started",
-        json.dumps(
-            {"running": True, "result": "success", "releasing": "immich", "ended": {"forgejo": "ok"}},
-            separators=(",", ":"),
-        ),
-    ),
 )
 
 

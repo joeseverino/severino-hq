@@ -47,6 +47,9 @@ FAILING = "homelab"
 # and the app its open update moves to the newer release.
 APPS = "homelab"
 UPDATED_APP = "home-automation"
+# The app whose update the apps repository holds open beside it once each app
+# stands in a state of its own: the DNS server every name resolves through.
+RESOLVER_APP = "adguard"
 # The repositories HQ opens dependency updates for: each with an update open.
 OPTED_IN = (UPDATED, APPS)
 # The apps whose Compose files the apps repository holds: every container but
@@ -343,44 +346,44 @@ def _watched():
 UPDATER = "example-hq[bot]"
 
 
-def _app_update(name):
-    """Renovate's update of one app's pin to the newer release, checks
-    passing, as GitHub lists the pull request and the reading loads its
-    Compose file at base and head."""
+def _app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
+    """Renovate's update of ``app``'s pin to the release ``newer`` names,
+    checks passing, as GitHub lists the pull request and the reading loads
+    its Compose file at base and head."""
 
-    image = next(image for container, _port, image in CONTAINERS if container == UPDATED_APP)
+    image = next(image for container, _port, image in CONTAINERS if container == app)
     ref = ImageRef.parse(image)
-    after = f"{ref.name}:{NEWER[UPDATED_APP]}@{digest(ref.name, NEWER[UPDATED_APP])}"
+    after = f"{ref.name}:{newer[app]}@{digest(ref.name, newer[app])}"
     url = f"https://github.com/example/{name}"
     return {
-        "number": 58,
-        "title": f"Update {ref.repository} Docker tag to {NEWER[UPDATED_APP]}",
-        "url": f"{url}/pull/58",
+        "number": number,
+        "title": f"Update {ref.repository} Docker tag to {newer[app]}",
+        "url": f"{url}/pull/{number}",
         "author": UPDATER,
         "draft": False,
         "created_at": iso(timedelta(days=2)),
         "updated_at": iso(timedelta(hours=4)),
-        "head": hexed("update", name, UPDATED_APP, length=40),
+        "head": hexed("update", name, app, length=40),
         "base": hexed("head", name, length=40),
-        "branch": f"renovate/{UPDATED_APP}",
+        "branch": f"renovate/{app}",
         "head_repository": f"example/{name}",
         "labels": ["dependencies"],
         "checks": {"state": "success", "total": 2, "failing": [], "running": 0, "names": ["validate", "scan"]},
         "files": [
             {
-                "path": f"compose/{UPDATED_APP}/compose.yaml",
+                "path": f"compose/{app}/compose.yaml",
                 "status": "modified",
                 "additions": 1,
                 "deletions": 1,
-                "app": UPDATED_APP,
+                "app": app,
             }
         ],
         "changed_files": 1,
         "apps": [
             {
-                "app": UPDATED_APP,
+                "app": app,
                 "read": True,
-                "images": [{"service": UPDATED_APP, "before": f"{image}@{digest(ref.name, ref.tag)}", "after": after}],
+                "images": [{"service": app, "before": f"{image}@{digest(ref.name, ref.tag)}", "after": after}],
             }
         ],
     }
@@ -767,6 +770,12 @@ def update_states(newer: dict[str, str]) -> None:
     )
 
 
+def resolver_update(newer: dict[str, str]) -> dict:
+    """The apps repository's open update of the DNS server, to the release ``newer`` names."""
+
+    return _app_update(APPS, RESOLVER_APP, 59, newer)
+
+
 def _built() -> dict:
     """The service of the apps repository whose image its host builds."""
 
@@ -779,6 +788,7 @@ def _states(record: dict, newer: dict[str, str]) -> dict:
     kept = [path for path in record["compose"] if path.split("/")[1] not in (UNMATCHED_APP, UNHELD_APP)]
     return {
         **record,
+        "pull_requests": [*record["pull_requests"], resolver_update(newer)],
         "compose": [*kept, f"compose/{UNMATCHED_APP}/docker-compose.yml"],
         "compose_images": [
             _built(),
@@ -849,7 +859,13 @@ def approval(owner, ended: str) -> None:
         "run",
         "failed" if failed else "succeeded",
         asked={**applies, "parameters": {"revision": merged}},
-        result={"message": "A task failed.", "events": events} if failed else {"message": "Applied."},
+        result={"message": "A task failed.", "events": events}
+        if failed
+        else {
+            "stated": {
+                "readings": {MACHINE: {"apps.receipt": [{"revision": merged, "last_attempt": merged, "ok": True}]}}
+            }
+        },
     )
     record(
         pull,

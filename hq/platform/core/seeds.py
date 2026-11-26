@@ -247,7 +247,8 @@ def _unlisted(owner) -> None:
 def _updates(on: str = "") -> Callable[[Any], None]:
     """The example estate with an update of each app in a state of its own
     (``example_estate.work.update_states``), applied by a playbook written
-    for its machine, or, given ``on``, only for that other machine."""
+    for its machine, or, given ``on``, only for that other machine; the
+    agent's approval of the DNS server's update waits for a person."""
 
     def seed(owner) -> None:
         from hq.platform.application.security import web_principal
@@ -259,6 +260,8 @@ def _updates(on: str = "") -> Callable[[Any], None]:
         example_estate.docker.updates_out()
         example_estate.work.update_states(example_estate.docker.UPDATES)
         example_estate.automation.applies_updates(web_principal(owner), (on or example_estate.names.MACHINE,))
+        update = example_estate.work.resolver_update(example_estate.docker.UPDATES)
+        example_estate.automation.asks_to_approve(update, f"example/{example_estate.work.APPS}")
 
     return seed
 
