@@ -33,12 +33,11 @@ type GitHubFailure struct {
 	Log   []string `json:"log"`
 }
 
-// The bounds of what a failure keeps: lines of output before the error, the
-// characters of each, and the bytes of a step's log read to find them.
+// The bounds of what a failure keeps: lines of output before the error, each
+// said as runtime.Line, and the bytes of a step's log read to find them.
 const (
-	githubLogLines     = 30
-	githubLogLineRunes = 240
-	githubLogRead      = 4 << 20
+	githubLogLines = 30
+	githubLogRead  = 4 << 20
 )
 
 var (
@@ -102,14 +101,14 @@ func githubLogError(body io.Reader) (string, []string, error) {
 		line := githubLogLine(scanner.Text())
 		switch {
 		case strings.HasPrefix(line, "##[error]"):
-			return githubCut(strings.TrimPrefix(line, "##[error]")), lines, nil
+			return runtime.Line(strings.TrimPrefix(line, "##[error]")), lines, nil
 		case strings.HasPrefix(line, "##[group]"):
 			command = strings.HasPrefix(line, "##[group]Run ")
 		case strings.HasPrefix(line, "##[endgroup]"):
 			command = false
 		case command, strings.HasPrefix(line, "##["), strings.TrimSpace(line) == "":
 		default:
-			lines = append(lines, githubCut(line))
+			lines = append(lines, runtime.Line(line))
 			if len(lines) > githubLogLines {
 				lines = lines[1:]
 			}
@@ -135,15 +134,6 @@ func githubLogLine(line string) string {
 		}
 		return r
 	}, line), unicode.IsSpace)
-}
-
-// githubCut is a line cut to githubLogLineRunes characters.
-func githubCut(line string) string {
-	runes := []rune(line)
-	if len(runes) <= githubLogLineRunes {
-		return line
-	}
-	return string(runes[:githubLogLineRunes-1]) + "…"
 }
 
 // githubArtifactProblem is the heading of the comment Renovate leaves on its
@@ -183,7 +173,7 @@ func githubFenced(body string) []string {
 			continue
 		}
 		if text := githubLogLine(line); fenced && strings.TrimSpace(text) != "" {
-			lines = append(lines, githubCut(text))
+			lines = append(lines, runtime.Line(text))
 		}
 	}
 	return lines[max(0, len(lines)-githubLogLines):]

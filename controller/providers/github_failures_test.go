@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -75,11 +76,13 @@ var (
 // A failing job says why from its failed step's log: GitHub's error and the
 // output before it, read through the signed link with no credential sent
 // past it, its times, terminal colors and the step's command left out, and
-// cut to its bound however long the log runs.
+// cut to its bound however long the log runs, with every secret the
+// controller learned struck.
 func TestAFailingJobSaysWhyFromItsStepsLog(t *testing.T) {
+	mask.Learn("example-learned-secret")
 	long := []string{}
 	for i := range githubLogLines * 3 {
-		long = append(long, "line "+strconv.Itoa(i)+" "+strings.Repeat("x", githubLogLineRunes))
+		long = append(long, "line "+strconv.Itoa(i)+" "+strings.Repeat("x", runtime.SaidLimit))
 	}
 	for _, test := range []struct {
 		name, log, error string
@@ -103,6 +106,7 @@ func TestAFailingJobSaysWhyFromItsStepsLog(t *testing.T) {
 			"Your code is affected by 1 vulnerability from the Go standard library.",
 			"Use '-show verbose' for more details.",
 		}},
+		{"a secret the controller learned", githubLog("token example-learned-secret", "##[error]Process completed with exit code 1."), "Process completed with exit code 1.", []string{"token " + mask.Redacted}},
 		{"a log longer than its bound", githubLog(append(long, "##[error]Process completed with exit code 1.")...), "Process completed with exit code 1.", nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -126,7 +130,7 @@ func TestAFailingJobSaysWhyFromItsStepsLog(t *testing.T) {
 				t.Errorf("kept %d lines", len(failure.Log))
 			}
 			for _, line := range failure.Log {
-				if len([]rune(line)) > githubLogLineRunes {
+				if len([]rune(line)) > runtime.SaidLimit {
 					t.Errorf("kept a line of %d characters", len([]rune(line)))
 				}
 			}
