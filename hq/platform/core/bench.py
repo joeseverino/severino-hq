@@ -22,6 +22,9 @@ from hq.domains.calendars.models import Entry
 from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import (
     ApprovalRequest,
+    InboundEvent,
+    InboundOutcome,
+    InboundSource,
     ManagedResource,
     OperationRequest,
     ProviderConnection,
@@ -387,6 +390,30 @@ def _jobs(scale: float, user) -> list[Job]:
     return jobs
 
 
+def _events(scale: float) -> None:
+    """Events of both channels and both outcomes, one an hour back: more than
+    the page holds at every size, so each size draws a page and its next."""
+
+    now = timezone.now()
+    sources, outcomes = tuple(InboundSource), tuple(InboundOutcome)
+    InboundEvent.objects.bulk_create(
+        [
+            InboundEvent(
+                provider="example",
+                event=f"example.event.{index % 4}",
+                subject=f"example/repo-{index % 9}",
+                delivery_id=f"delivery-{index}",
+                source=sources[index % len(sources)],
+                received_at=now - timedelta(hours=index),
+                outcome=outcomes[index % len(outcomes)],
+                reads=[],
+            )
+            for index in range(_count(scale, 1200))
+        ],
+        batch_size=500,
+    )
+
+
 def _analytics(rng, scale, today: date) -> None:
     now = timezone.now()
     dimensions = {
@@ -692,6 +719,7 @@ def seed(scale: float = 1.0, owner: Any = None) -> Seeded:
     entries = _entries(scale, today)
     history = _history(scale, user, expenses, assets)
     jobs = _jobs(scale, user)
+    _events(scale)
     _analytics(rng, scale, today)
     resources = _infrastructure(scale)
     _operations(scale, resources)

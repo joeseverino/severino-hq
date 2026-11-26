@@ -10,7 +10,7 @@ from hq.platform.application.controller_page import controller_page
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.freshness import reading_age
 from hq.platform.application.hq_context.sight_part import sight
-from hq.platform.application.inbound_events import channel_standing
+from hq.platform.application.inbound_events import channel_standing, setup_guide
 from hq.platform.application.moments import when
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
@@ -73,7 +73,8 @@ class ControllerView(PageMixin, TemplateView):
         controller = context["controller"] = controller_page()
         # How current the readings are, counted as HQ's own page counts them.
         context["sight"] = sight()
-        context["listener"] = channel_standing(InboundSource.WORKER)
+        listener = context["listener"] = channel_standing(InboundSource.WORKER)
+        context["listener_guide"] = setup_guide(listener)
         context["pending"] = DataTable.of("Pending changes", PENDING, controller.queue)
         context["readings"] = DataTable.of("Readings", READINGS, controller.readings)
         context["start_guide"] = docs_url("Install.md", "11-the-controllers-first-reading")

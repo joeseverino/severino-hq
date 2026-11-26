@@ -17,7 +17,7 @@ for it. Nothing here asks it anything.
   {% fact listener.named|capfirst icon="bell" %}
     {% status listener.state dot=True ink="context" %}
   {% detail %}
-    {% if listener.known %}<small>Last heard {{ listener.seen_at|when }}.</small>{% endif %}
+    {% if listener.known %}<small>Last heard {{ listener.seen_at|when }}.</small>{% elif listener_guide %}<small>{% entity listener_guide|outside label="Setup guide" %}</small>{% endif %}
   {% endfact %}
   {% fact "Reading" icon="eye" tone=sight.tone %}
     {% include "partials/_reading_age.html" with at=controller.swept_at only %}

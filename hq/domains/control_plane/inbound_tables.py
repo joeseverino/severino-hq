@@ -7,12 +7,14 @@ from typing import Any
 from hq.domains.control_plane.models import InboundOutcome, InboundSource
 from hq.platform.application.entity_links import kind_label
 from hq.platform.application.moments import moment
+from hq.platform.application.quoted import Quoted
 from hq.platform.application.tables import Cell, DataTable, Group, Row, TableColumn
 from hq.platform.application.tone import Tone
 
 
 def _event(item: dict[str, Any]) -> Cell:
-    """The event by the provider's name for it, and who sent it."""
+    """The event by the provider's name for it, and who sent it. Plain text,
+    as a readout would draw "push" in words and "pull_request" in code."""
 
     return Cell(item["event"], lines=(Cell(item["provider_label"], muted=True),))
 
@@ -25,7 +27,7 @@ def _outcome(item: dict[str, Any]) -> Cell:
 EVENT_COLUMNS = (
     TableColumn("Event", kind="identifier", cell=_event),
     # Text HQ did not write: shown as the provider wrote it, and never a link.
-    TableColumn("Subject", kind="identifier", drop=2, cell=lambda item: Cell(item["subject"], readout=True, cut=True)),
+    TableColumn("Subject", kind="identifier", drop=2, cell=lambda item: Cell(Quoted(item["subject"]), cut=True)),
     TableColumn(
         "Made due", drop=3, cell=lambda item: Cell(", ".join(kind_label(kind) for kind in item["reads"]), muted=True)
     ),
@@ -44,9 +46,5 @@ def grouped(table: DataTable, items: list[dict[str, Any]]) -> DataTable:
     return replace(
         table,
         rows=(),
-        groups=tuple(
-            Group(source.label, tuple(by_source[source]))
-            for source in InboundSource
-            if source in by_source
-        ),
+        groups=tuple(Group(source.label, tuple(by_source[source])) for source in InboundSource if source in by_source),
     )

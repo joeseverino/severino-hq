@@ -11,6 +11,8 @@ from .describe import Describe, listed
 from .integration_specs import ListFilter, ListRead, ListSort, ResourceSpec
 from .labels import human_label
 from .projection import guarded, iso, page_of
+from .record_errors import RecordNotFound
+from .record_fields import RecordId
 from .resources import BoundedQuery
 from .security import Capability
 from .ui import ended
@@ -21,6 +23,7 @@ INBOUND_EVENTS = "inbound_events"
 class InboundEventItem(TypedDict):
     """One event a provider or HQ's host said happened, and what it made due."""
 
+    id: Annotated[int, Describe("The event's id in HQ.")]
     provider: Annotated[str, Describe("The provider that sent it, by its name in HQ's declarations.")]
     provider_label: Annotated[str, Describe("That provider, as HQ's pages name it.")]
     event: Annotated[
@@ -45,6 +48,7 @@ class InboundEventItem(TypedDict):
 
 def _item(event: InboundEvent) -> dict[str, Any]:
     return {
+        "id": event.pk,
         "provider": event.provider,
         "provider_label": CONNECTION_LABELS.get(event.provider, human_label(event.provider)),
         "event": event.event,
@@ -62,6 +66,15 @@ def list_events(*, limit: int = 50) -> dict[str, Any]:
     """The events kept, newest first."""
 
     return page_of(guarded(InboundEvent.objects.all()), limit, each=_item)
+
+
+def get_event(identifier: int) -> dict[str, Any]:
+    """One event by its id."""
+
+    event = InboundEvent.objects.filter(pk=identifier).first()
+    if event is None:
+        raise RecordNotFound("HQ keeps no event by that id.")
+    return _item(event)
 
 
 def resources() -> tuple[ResourceSpec, ...]:
@@ -84,6 +97,10 @@ def resources() -> tuple[ResourceSpec, ...]:
                     ListFilter("outcome", "Outcome", InboundOutcome.choices),
                 ),
             ),
+            detail_handler=get_event,
+            identifier="id",
+            identifier_type=RecordId,
             web_route="control_plane:events",
+            record_type=InboundEventItem,
         ),
     )

@@ -120,6 +120,7 @@ STORED_PAGES = (
     "control_plane:services",
     "control_plane:service",
     "control_plane:connections",
+    "control_plane:events",
     "control_plane:containers",
     "control_plane:machines",
     "hq_self",

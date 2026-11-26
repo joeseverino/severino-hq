@@ -212,6 +212,9 @@ class WorkerState(Toned):
     SILENT = "silent", Tone.ATTENTION
     # Never run is known to be neither online nor silent.
     NOT_CONFIGURED = Absent.NOT_SET_UP
+    # Never heard from, though it is always there: one that speaks only when
+    # something happens.
+    UNHEARD = "nothing yet", Tone.NEUTRAL
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +228,8 @@ class WorkerStanding:
     # by readings that may have come with a database copied from elsewhere.
     here: bool = False
     named: Sentence = CONTROLLER_NAMED
+    # What never heard from means of it.
+    unheard: WorkerState = WorkerState.NOT_CONFIGURED
 
     @property
     def known(self) -> bool:
@@ -234,7 +239,7 @@ class WorkerStanding:
     def state(self) -> WorkerState:
         if self.silent:
             return WorkerState.SILENT
-        return WorkerState.ONLINE if self.known else WorkerState.NOT_CONFIGURED
+        return WorkerState.ONLINE if self.known else self.unheard
 
     @property
     def takes_reads(self) -> bool:
