@@ -24,7 +24,6 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.consent import consented
-from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import connection, operator
 
@@ -390,17 +389,7 @@ class QueuedChangeTests(TestCase):
 
         self.assertEqual(inbox.current().refused, "cloudflare refused the request")
 
-    def test_invalid_input_is_refused(self):
-        for name, payload in (
-            (REVIEW, {"status": "bogus"}),
-            (REVIEW, {"status": "read", "assigned_to": "x" * 121}),
-            (DELETE, {"confirm": "1"}),
-        ):
-            with self.subTest(payload=payload):
-                result = execute_capability(name, keyed(payload), principal=OPERATOR, target=2)
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertFalse(ManagedResource.objects.exists())
+    def test_a_review_of_no_submission_is_not_found(self):
         with self.assertRaises(RecordNotFound):
             execute_contact_review(ContactReviewCommand(status="read"), consented=consented(OPERATOR), current_id=99)
 

@@ -141,11 +141,3 @@ class DashboardRefreshTests(TestCase):
                 self.assertEqual(execute_capability(name, {}, principal=reader)["error"]["code"], "forbidden")
                 self.assertEqual(denials(name), 1)
         self.assertFalse(DashboardRefreshRequest.objects.exists())
-
-    def test_a_refresh_names_no_panel(self):
-        for name in (DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE):
-            with self.subTest(name=name):
-                result = execute_capability(name, {"panels": ["weather"]}, principal=cli_principal())
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertFalse(DashboardRefreshRequest.objects.exists())

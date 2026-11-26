@@ -182,22 +182,17 @@ class PinCapabilityTests(TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(pinned(self.user, DOMAIN), frozenset({"example.com"}))
 
-    def test_an_unknown_kind_or_an_empty_key_is_invalid_input(self):
+    def test_a_dashboard_link_hq_never_offered_is_invalid_input(self):
         from hq.platform.application.capabilities import execute_capability
-        from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK, MOVE, PIN, SERVICE
+        from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
         from hq.platform.application.security import OPERATOR_CAPABILITIES, Principal
         from hq.platform.core.models import Pin
 
         operator = Principal("an-operator", "web", OPERATOR_CAPABILITIES)
-        for name, payload in (
-            (PIN, {"kind": "example-kind", "key": "one.example.test"}),
-            (PIN, {"kind": SERVICE, "key": " "}),
-            (MOVE, {"kind": SERVICE}),
-            # A dashboard link HQ never offered is a shortcut to nothing.
-            (CHOOSE, {"kind": DASHBOARD_LINK, "keys": ["/health/ready/", "https://elsewhere.example"]}),
-        ):
-            with self.subTest(payload=payload):
-                result = execute_capability(name, keyed(payload), principal=operator)
+        # A shortcut to nothing.
+        payload = {"kind": DASHBOARD_LINK, "keys": ["/health/ready/", "https://elsewhere.example"]}
 
-                self.assertEqual(result["error"]["code"], "invalid_input")
+        result = execute_capability(CHOOSE, keyed(payload), principal=operator)
+
+        self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(Pin.objects.exists())

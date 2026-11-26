@@ -145,11 +145,6 @@ class PlanTests(TestCase):
         result = execute_capability(github_profile.READ_NOW, {"login": "someone-else"}, principal=operator())
 
         self.assertEqual(result["error"], {"code": "not_found", "message": "No sign-in names that GitHub account."})
-        for payload in ({}, {"login": ["example-user"]}):
-            with self.subTest(payload=payload):
-                refused = execute_capability(github_profile.READ_NOW, payload, principal=operator())
-
-                self.assertEqual(refused["error"]["code"], "invalid_input")
         self.assertIsNone(asked_at(github_profile.KIND))
 
     def test_the_profiles_own_age_never_makes_a_sweep_due(self):

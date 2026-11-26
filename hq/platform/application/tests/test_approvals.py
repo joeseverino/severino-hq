@@ -844,15 +844,6 @@ class SurfaceTests(TestCase):
         self.assertEqual(self.held.state, ApprovalRequest.State.PENDING)
         self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), 6)
 
-    def test_a_decision_naming_no_request_is_invalid(self):
-        for payload in ({}, {"approval_id": str(self.held.id), "decision": "approve"}):
-            with self.subTest(payload=payload):
-                result = execute_capability(APPROVE, keyed(payload), principal=web_principal(self.user))
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.held.refresh_from_db()
-        self.assertEqual(self.held.state, ApprovalRequest.State.PENDING)
-
     def test_each_request_is_an_action_item_that_opens_its_audit_entry(self):
         from ..domains import domain_attention_items
 

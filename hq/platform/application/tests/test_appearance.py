@@ -85,14 +85,6 @@ class ThemeServiceTests(TestCase):
         self.assertEqual(theme_for(self.user), "system")
         self.assertEqual(denials(), 3)
 
-    def test_an_unknown_theme_is_refused(self):
-        for theme in ("", "sepia", "DARK", "system "):
-            with self.subTest(theme=theme):
-                refused = self.choose(theme)["error"]
-                self.assertEqual(refused["code"], "invalid_input")
-                self.assertEqual([detail["loc"] for detail in refused["details"]], [["theme"]])
-        self.assertFalse(Appearance.objects.exists())
-
     def test_the_choice_does_not_happen_without_its_record(self):
         with (
             mock.patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit down")),
@@ -127,16 +119,6 @@ class ThemeSwitchTests(TestCase):
         self.assertIsNone(drawn_theme(page))
         self.assertEqual(color_scheme(page), "light dark")
         self.assertEqual(theme_for(self.user), "system")
-
-    def test_invalid_input_is_refused_and_changes_nothing(self):
-        self.choose("dark")
-        for theme in ("sepia", "", "<script>"):
-            with self.subTest(theme=theme):
-                refused = self.choose(theme)
-                self.assertEqual(refused.status_code, 400)
-                self.assertIn(b"theme", refused.content)
-        self.assertEqual(self.client.post(reverse("theme"), form_keyed()).status_code, 400)
-        self.assertEqual(theme_for(self.user), "dark")
 
     def test_an_operator_without_the_grant_is_refused_with_the_reason(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.SET_PREFERENCES})

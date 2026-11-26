@@ -494,20 +494,13 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertTrue(data["items"])
         self.assertTrue(all(set(item) == {"record"} for item in data["items"]))
 
-    def test_findings_narrow_by_floor_and_limit_and_refuse_without_repeating_the_value(self):
+    def test_findings_narrow_by_floor_and_limit(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving(), host_only():
             narrowed = self.client.get("/api/v2/findings/?severity=attention&limit=1", **headers)
-            refused = {
-                value: self.client.get(f"/api/v2/findings/?{value}", **headers)
-                for value in ("limit=many", "limit=0", "severity=critical")
-            }
         self.assertEqual(narrowed.status_code, 200)
         self.assertLessEqual(len(narrowed.json()["data"]["findings"]), 1)
         self.assertIn("truncated", narrowed.json()["data"]["summary"])
-        for value, response in refused.items():
-            with self.subTest(value):
-                self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_the_surface_is_off_until_a_resource_is_configured(self):

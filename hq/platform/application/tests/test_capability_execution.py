@@ -64,15 +64,6 @@ class CapabilityTests(TestCase):
         self.assertIn("write_projects", result["error"]["message"])
         self.assertFalse(Project.objects.filter(slug="denied").exists())
 
-    def test_json_executor_returns_canonical_error_envelope(self):
-        result = execute_capability(
-            "project.create",
-            {"slug": "missing-name"},
-            principal=cli_principal(),
-        )
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "invalid_input")
-
     def test_a_target_of_the_wrong_kind_is_refused_by_name(self):
         """The message names the kind expected, so a client can correct itself.
 

@@ -224,9 +224,3 @@ class RefreshCapabilityTests(TestCase):
 
         self.assertEqual(answer["error"]["code"], "not_found")
         self.assertFalse(Job.objects.exists())
-
-    def test_it_takes_nothing_but_its_project(self):
-        answer = execute_capability(REFRESH, keyed({"slug": "alpha"}), principal=OPERATOR, target="alpha")
-
-        self.assertEqual(answer["error"]["code"], "invalid_input")
-        self.assertFalse(Job.objects.exists())

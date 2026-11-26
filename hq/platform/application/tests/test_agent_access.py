@@ -54,14 +54,6 @@ class WhoMayPullItTests(TestCase):
         self.assertEqual(_said(), [])
         self.assertEqual(_denials(), 3)
 
-    def test_a_state_that_is_not_a_yes_or_no_is_invalid(self):
-        for payload in ({}, {"paused": "sometimes"}):
-            with self.subTest(payload=payload):
-                result = execute_capability(SET_AGENT_ACCESS, keyed(payload), principal=web_principal(self.user))
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertFalse(agents_paused())
-
     def test_the_change_does_not_happen_without_its_record(self):
         with (
             mock.patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit down")),

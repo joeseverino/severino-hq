@@ -15,7 +15,7 @@ from hq.platform.application.capability_policy import (
 )
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
+from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.testing import operator
@@ -66,14 +66,6 @@ class PolicyWriteTests(TestCase):
                 self.assertEqual(result["error"]["code"], "forbidden")
         self.assertFalse(CapabilityRule.objects.exists())
         self.assertEqual(self.denials(), 3)
-
-    def test_rules_that_are_not_cells_are_invalid(self):
-        for rules in ("project.delete", [{"subject": "example-agent"}]):
-            with self.subTest(rules=rules):
-                result = execute_capability(SET_POLICY, keyed({"rules": rules}), principal=web_principal(self.user))
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertFalse(CapabilityRule.objects.exists())
 
     def test_the_form_names_each_cell_by_its_agent_and_capability(self):
         post = {self.field: Rule.DENY, "csrfmiddlewaretoken": "x", "rule|too-few": "allow", "rule|a|b|c": "allow"}

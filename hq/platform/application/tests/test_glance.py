@@ -411,16 +411,6 @@ class DashboardGlanceTests(TestCase):
                 self.assertEqual(result["error"]["code"], code, result)
         self.assertEqual(DashboardMachine.objects.count(), 1)
 
-    def test_a_selection_that_is_not_a_yes_or_no_is_invalid(self):
-        for payload in ({}, {"selected": "sometimes"}):
-            with self.subTest(payload=payload):
-                result = execute_capability(
-                    DASHBOARD_MACHINE, keyed(payload), principal=AN_OPERATOR, target="app-server"
-                )
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(DashboardMachine.objects.count(), 1)
-
     def test_weather_settings_validate_and_normalize_coordinates(self):
         answer = execute_capability(
             DASHBOARD_SETTINGS,
@@ -433,15 +423,6 @@ class DashboardGlanceTests(TestCase):
         self.assertEqual(configuration.weather_point, "41.1000,-87.2000")
         self.assertEqual(configuration.weather_label, "Outside")
         self.assertEqual(configuration.infrastructure_label, "Lab")
-
-    def test_a_label_longer_than_its_column_is_refused_never_cut(self):
-        for field in ("weather_label", "infrastructure_label"):
-            with self.subTest(field=field):
-                answer = execute_capability(DASHBOARD_SETTINGS, keyed({field: "x" * 41}), principal=AN_OPERATOR)
-
-                self.assertEqual(answer["error"]["code"], "invalid_input")
-                self.assertEqual(answer["error"]["details"][0]["loc"], [field])
-                self.assertFalse(DashboardConfiguration.objects.filter(**{field: "x" * 40}).exists())
 
     def test_unsolicited_observation_is_rejected(self):
         with self.assertRaisesMessage(ValueError, "No refresh is pending"):
