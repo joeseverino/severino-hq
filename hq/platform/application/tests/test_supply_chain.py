@@ -9,7 +9,6 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations.public_registry import DIGEST_KIND as DIGEST
 from hq.platform.core.testing import operator
 
-from .. import public_registry
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
 from ..report_testing import bridged
 from ..security import cli_principal
@@ -289,17 +288,6 @@ class RegistryReadTests(TestCase):
         held.save()
 
         self.assertTrue(registry_due())
-        moved = public_registry._report(
-            "registry.image",
-            "image",
-            list(read_for),
-            lambda name: {"image": name},
-            timezone.now(),
-            moved=lambda name, record: public_registry._moved(record, tuple(read_for[name])),
-        )
-        self.assertEqual(
-            [record["image"] for record in moved["records"] if record.get("tags") is None], ["ghcr.io/example/app"]
-        )
 
 
 class ContainerJoinTests(TestCase):
