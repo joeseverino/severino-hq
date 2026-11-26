@@ -26,6 +26,9 @@ REPOSITORY_KIND = "github.repository"
 # nothing new: the bound on how stale what the query cannot see gets (alerts,
 # variables, runners, environments, branch rules, access, artifacts).
 FULL_READ_EVERY = timedelta(hours=1)
+# The App's events about what the change query cannot see, so one makes its
+# repository's full read due (``github_repositories.plan``).
+UNPROBED_EVENTS: tuple[str, ...] = ("dependabot_alert", "code_scanning_alert", "secret_scanning_alert")
 
 # Refusable one at a time: a private repository on a free plan has no code
 # scanning, and that should not hide its pull requests.

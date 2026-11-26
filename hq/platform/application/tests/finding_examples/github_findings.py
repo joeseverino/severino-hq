@@ -108,7 +108,17 @@ EXAMPLES = (
             ),
             # Subscribed to some of what HQ takes, so set up, and missing the rest.
             hooked(
-                events=["push", "workflow_run", "check_suite", "pull_request", "deployment_status"],
+                events=[
+                    "push",
+                    "workflow_run",
+                    "check_suite",
+                    "pull_request",
+                    "deployment_status",
+                    "merge_group",
+                    "dependabot_alert",
+                    "code_scanning_alert",
+                    "secret_scanning_alert",
+                ],
                 raises=(
                     Raised(
                         title="The GitHub App does not send deployment_review",

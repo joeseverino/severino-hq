@@ -441,7 +441,7 @@ func TestGitHubProbe(t *testing.T) {
 // The app is registered with exactly what the controller's code asks for,
 // a dependency update run's grant included, plus the pipeline's: Actions
 // write for an admission starting the host's composition, and Deployments
-// write for Deploy recording production's deployment.
+// write for Deploy recording production's deployment, and the webhook's.
 func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 	data, err := os.ReadFile("../../deploy/github-apps.json")
 	if err != nil {
@@ -466,6 +466,9 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 			}
 		}
 	}
+	// No token asks for it, but GitHub sends the webhook's merge_group
+	// events only to an App holding it (HQ's INBOUND requires).
+	wanted["merge_queues"] = "read"
 	if len(registered.Apps) != 1 {
 		t.Fatalf("apps %v", registered.Apps)
 	}

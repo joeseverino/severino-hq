@@ -13,6 +13,7 @@
         "contents": "write",
         "deployments": "write",
         "issues": "write",
+        "merge_queues": "read",
         "metadata": "read",
         "packages": "read",
         "pull_requests": "write",

@@ -729,7 +729,8 @@ path from the public internet. Setting it up is
 - GitHub signs the body alone, so the delivery and event headers are outside
   the signature: a captured signed body can be sent again under a new
   delivery id, and each is a new event. Its cost is bounded by the read it
-  asks, coalesced with any already asked.
+  asks, coalesced with any already asked: an alert's, one full read of its
+  repository.
 - Tailscale signs its time with the body (`Tailscale-Webhook-Signature`,
   `t=<time>,v1=<HMAC-SHA256 of "<time>.<body>">`), and a request signed more
   than five minutes from the Worker's clock is refused, so a captured one

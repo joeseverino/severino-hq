@@ -102,6 +102,7 @@ class GitHub(Permission):
     DEPLOYMENTS_READ = "Deployments", "read"
     ISSUES_READ = "Issues", "read"
     ISSUES_WRITE = "Issues", "write"
+    MERGE_QUEUES_READ = "Merge queues", "read"
     METADATA_READ = "Metadata", "read"
     PACKAGES_READ = "Packages", "read"
     PULL_REQUESTS_READ = "Pull requests", "read"
