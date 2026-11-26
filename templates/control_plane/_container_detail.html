@@ -47,8 +47,8 @@ limits. Each said once; the band above has its version and standing.
 {% endif %}
 
 {% comment %}
-Source and Runtime each across the page: Runtime holds its fix (the patch)
-and many more checks than Source, so beside it Source would stretch empty.
+Source and Runtime each across the page: Runtime holds many more checks
+than Source, each with its fix, so beside it Source would stretch empty.
 {% endcomment %}
 {% with chain=item.supply_chain standing=item.standing %}
 {% section "Source" id="supply-chain" %}
@@ -66,16 +66,6 @@ and many more checks than Source, so beside it Source would stretch empty.
 {% with posture=item.posture %}
 {% section "Runtime" id="how-it-runs" %}
   {% if posture.findings %}{% include "partials/_work_queue.html" with items=posture.finding_rows grouped=True here=True only %}{% endif %}
-  {% with patch=item.hardening %}{% if patch.any %}
-  {% command id="hardening" %}{% if patch.yaml %}{{ patch.yaml }}{% endif %}
-  {% title %}Add to {% if patch.compose_file %}<code>{{ patch.compose_file }}</code>{% else %}its compose file{% endif %}
-  {% detail %}Where its service already has one of these keys, replace it. Then run <code>docker compose up -d {{ patch.service }}</code> in that directory.
-  {% notes %}
-    {% for removal in patch.removals %}<li><strong>Remove</strong> {% for line in removal.lines %}<code>{{ line }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% if removal.caution %} {% muted %}{{ removal.caution }}{% endmuted %}{% endif %}</li>{% endfor %}
-    {% for change in patch.cautions %}<li><code>{{ change.key }}</code> {% muted %}{{ change.caution }}{% endmuted %}</li>{% endfor %}
-    {% for gap in patch.unwritten %}<li class="prose"><strong>Not included</strong> {% muted %}{{ gap.reason }}{% endmuted %}{% if gap.check == "no-docker-socket" and patch.socket_link %} <a href="{{ patch.socket_link.url }}">{{ patch.socket_link.label }}</a>{% endif %}</li>{% endfor %}
-  {% endcommand %}
-  {% endif %}{% endwith %}
   {% facts %}
     {% if item.compose_files or item.running.stack %}{% fact "Defined in" %}{% if item.running.stack %}{{ item.running.stack }}{% if item.compose_files %}{% muted %}{% dot %}{% endmuted %} {% endif %}{% endif %}{% for path in item.compose_files %}<code>{{ path }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
     {% if item.running.published %}{% fact "Ports" value=item.running.published %}{% endif %}

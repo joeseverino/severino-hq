@@ -4,10 +4,11 @@ every container action item: a button, the exact config, or a stated reason."""
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.platform.application.markup_testing import select, text
+from hq.platform.application.markup_testing import copied, elements
 from hq.platform.core.testing import operator
 
 from ..attention import infrastructure
+from ..container_standard import STANDARD
 from ..containers import containers
 from ..derivation_testing import uncached
 from ..findings import finding_key, rule_of
@@ -15,6 +16,7 @@ from ..pages import command_reach
 from .test_container_standard import KEPT, runtime
 from .test_containers import container, estate, inventory
 
+CHECKS = {check.id: check for check in STANDARD}
 SOCKET = {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
 
 
@@ -24,18 +26,16 @@ class HardeningTests(TestCase):
         inventory("portainer.runtime", [runtime(name, **fields)])
         return next(item.hardening for item in containers() if item.running.name == name)
 
-    def test_a_container_meeting_every_check_is_given_nothing(self):
-        found = self.hardening(**KEPT)
+    def nothing(self, found):
+        return not (found.changes or found.removals or found.unwritten)
 
-        self.assertFalse(found.any)
-        self.assertEqual(found.yaml, "")
+    def test_a_container_meeting_every_check_is_given_nothing(self):
+        self.assertTrue(self.nothing(self.hardening(**KEPT)))
 
     def test_what_was_not_read_is_given_nothing(self):
         estate()
 
-        found = next(item.hardening for item in containers() if item.running.name == "web")
-
-        self.assertFalse(found.any)
+        self.assertTrue(self.nothing(next(item.hardening for item in containers() if item.running.name == "web")))
 
     def test_only_the_unmet_check_gets_a_line(self):
         found = self.hardening(**{**KEPT, "security_opt": ["label=disable"]})
@@ -44,7 +44,7 @@ class HardeningTests(TestCase):
         self.assertEqual(change.key, "security_opt")
         self.assertEqual(change.checks, ("no-new-privileges",))
         self.assertIn('"label=disable"', change.yaml)
-        self.assertTrue(found.yaml.startswith("services:\n  web:\n"))
+        self.assertTrue(found.step(CHECKS["no-new-privileges"]).value.startswith("services:\n  web:\n"))
 
     def test_every_hardening_gap_is_written_for_its_own_service(self):
         found = self.hardening(
@@ -57,21 +57,12 @@ class HardeningTests(TestCase):
         )
 
         self.assertEqual(
-            found.yaml,
-            "services:\n"
-            "  frontend:\n"
-            "    security_opt:\n"
-            '      - "no-new-privileges:true"\n'
-            '    user: "1000:1000"\n'
-            "    ports:\n"
-            '      - "127.0.0.1:8080:80"\n'
-            "    mem_limit: 512m\n"
-            "    healthcheck:\n"
-            '      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:80/ || exit 1"]\n'
-            "      interval: 30s\n"
-            "      timeout: 5s\n"
-            "      retries: 3\n",
+            [change.key for change in found.changes], ["security_opt", "user", "ports", "mem_limit", "healthcheck"]
         )
+        for change in found.changes:
+            (check,) = change.checks
+            self.assertTrue(found.step(CHECKS[check]).value.startswith("services:\n  frontend:\n"), check)
+        self.assertIn('"127.0.0.1:8080:80"', found.step(CHECKS["ports-bound"]).value)
         self.assertEqual(found.removals, ())
         self.assertTrue(all(change.caution for change in found.changes))
 
@@ -153,10 +144,9 @@ class HardeningTests(TestCase):
         (found,) = (item.hardening for item in containers() if item.running.name == "web")
         bridged = self.hardening(**{**on_host, "network_mode": "bridge", "exposed_ports": [53]})
 
-        (change,) = [change for change in found.changes if "not-root" in change.checks]
-        self.assertIn('cap_add:\n  - "NET_BIND_SERVICE"', change.yaml)
+        self.assertIn('cap_add:\n      - "NET_BIND_SERVICE"', found.step(CHECKS["not-root"]).value)
         # In a network of its own any user binds a low port.
-        self.assertNotIn("cap_add", bridged.yaml)
+        self.assertNotIn("cap_add", bridged.step(CHECKS["not-root"]).value)
 
     def test_a_limit_is_derived_from_what_it_uses_when_that_was_read(self):
         found = self.hardening(**{**KEPT, "memory_limit": 0, "memory_usage": 100 * 1024 * 1024})
@@ -213,19 +203,18 @@ class HardeningTests(TestCase):
         self.assertEqual((found.changes, found.removals), ((), ()))
         (gap,) = found.unwritten
         self.assertEqual(gap.check, "no-docker-socket")
-        self.assertIsNone(found.socket_link)
 
     def test_a_declared_socket_holder_is_given_nothing(self):
         container("web", holds_docker_socket=True)
 
-        self.assertFalse(self.hardening(**{**KEPT, "mounts": [SOCKET]}).any)
+        self.assertTrue(self.nothing(self.hardening(**{**KEPT, "mounts": [SOCKET]})))
 
 
 class PageTests(TestCase):
     def setUp(self):
         operator(self.client, "owner", email="owner@example.test")
 
-    def test_the_container_page_shows_the_block_for_its_compose_file(self):
+    def test_each_finding_on_the_container_page_carries_its_own_fix(self):
         estate()
         container("web")
         inventory("portainer.runtime", [runtime("web", stack="web", **{**KEPT, "user": "", "mounts": [SOCKET]})])
@@ -243,19 +232,12 @@ class PageTests(TestCase):
 
         page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))
 
-        self.assertTrue(select(page, "id", "hardening"))
-        self.assertIn("/opt/example/web/docker-compose.yml", text(page))
-        self.assertIn('user: "1000:1000"', text(page))
+        (root,) = [row for row in elements(page, "tr") if "Runs as root" in row.words]
+        fixes = [copied(block) for block in elements(page, "pre") if block.inside(root)]
+        under = " ".join(element.words for element in elements(page, "strong") if element.inside(root))
+        self.assertEqual(fixes, ['services:\n  web:\n    user: "1000:1000"'])
+        self.assertIn("/opt/example/web/docker-compose.yml", under)
         self.assertContains(page, command_reach("infrastructure.resource.update", "example-box-web")[0])
-
-    def test_a_container_meeting_every_check_has_no_block(self):
-        estate()
-        container("web")
-        inventory("portainer.runtime", [runtime("web", **KEPT)])
-
-        page = self.client.get(reverse("control_plane:detail", args=["example-box-web"]))
-
-        self.assertFalse(select(page, "id", "hardening"))
 
 
 class FindingHelpTests(TestCase):
@@ -307,14 +289,12 @@ class FindingHelpTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(page.context["resource"].key, "example-box-web")
 
-    def test_every_other_reach_item_links_its_container_to_its_compose_change(self):
-        """The detector's own read link stands beside the machine's own."""
-
+    def test_every_other_reach_item_carries_its_compose_change(self):
         estate()
         container("web")
         inventory("portainer.runtime", [runtime("web", **{**KEPT, "privileged": True})])
 
         item = self.items()["container-hardening", "web"]
 
-        self.assertTrue(any(link.url.endswith("/example-box-web/#hardening") for link in item.pages))
+        self.assertIn("privileged: false", next(step.value for step in item.steps if step.kind == "do"))
         self.assertIn(item.subject_link.url, {link.url for link in item.pages})

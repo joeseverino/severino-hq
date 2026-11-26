@@ -7,12 +7,14 @@ socket, and the page says so as plainly as for anything else.
 """
 
 from collections.abc import Mapping
+from functools import partial
 from types import SimpleNamespace as Row
 from typing import Any
 
 from django.utils.text import get_text_list
 
 from .standards import Check, Examples, Measurement, Reading, measure
+lazy from .container_findings import help_for
 lazy from .container_hardening import hardening_of
 lazy from .containers import Container, ImageStanding, by_design, socket_holders
 lazy from .exposure import listening_ports
@@ -290,7 +292,7 @@ STANDARD: tuple[Check, ...] = (
 
 def posture_of(container: Any) -> Measurement:
     declared = by_design().get((container.machine.name, container.running.name)) or {}
-    return measure(container, STANDARD, {**_required(container), **declared})
+    return measure(container, STANDARD, {**_required(container), **declared}, helps=partial(help_for, container))
 
 
 def _required(container: Any) -> dict[str, str]:

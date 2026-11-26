@@ -9,7 +9,7 @@ from unittest import skipUnless
 from django.test import TestCase
 
 from hq.platform.application.containers import containers
-from hq.platform.application.markup_testing import copied, within
+from hq.platform.application.markup_testing import copied, elements
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.tests.browser.estate import ask_as_production, owner_client
 
@@ -32,17 +32,26 @@ class ComposeChangeTests(TestCase):
             with self.subTest(set=name), throwaway_media(), owner_client(name) as client:
                 for item in containers():
                     hardening = item.hardening
-                    if not hardening.yaml:
+                    fixed = [
+                        [change for change in hardening.changes if result.check.id in change.checks]
+                        for result in item.posture.unmet
+                    ]
+                    if not any(fixed):
                         continue
-                    meant: dict = {}
-                    for change in hardening.changes:
-                        written = yaml.safe_load(change.yaml)
-                        self.assertIn(change.key, written)
-                        self.assertFalse(meant.keys() & written.keys(), change.key)
-                        meant.update(written)
                     page = ask_as_production(client, item.url)
-                    (block,) = [element for element in within(page, "id", "hardening") if element.tag == "pre"]
+                    drawn = [
+                        yaml.safe_load(copied(block))
+                        for block in elements(page, "pre")
+                        if copied(block).startswith("services:")
+                    ]
+                    for changes in filter(None, fixed):
+                        meant: dict = {}
+                        for change in changes:
+                            written = yaml.safe_load(change.yaml)
+                            self.assertIn(change.key, written)
+                            self.assertFalse(meant.keys() & written.keys(), change.key)
+                            meant.update(written)
 
-                    self.assertEqual(yaml.safe_load(copied(block)), {"services": {hardening.service: meant}}, item.url)
-                    seen += 1
+                        self.assertIn({"services": {hardening.service: meant}}, drawn, item.url)
+                        seen += 1
         self.assertTrue(seen, "No set raises a compose change")

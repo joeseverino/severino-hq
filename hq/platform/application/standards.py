@@ -229,6 +229,9 @@ class Measurement:
     results: tuple[CheckResult, ...]
     # Whether an unmet check is a fault (Advanced HQ posture, for HQ's own).
     enforced: bool = True
+    # What a finding about one check offers (``standard_findings.Help``), for
+    # a standard whose subject has its fix written for it.
+    helps: Callable[[Check], Any] | None = None
 
     @property
     def met(self) -> int:
@@ -289,7 +292,15 @@ class Measurement:
         fails by design with why."""
 
         unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
-        return tuple(worded(_rule(result.check), (result.check,), [(None, result)]) for result in unmet) + tuple(
+        return tuple(
+            worded(
+                _rule(result.check),
+                (result.check,),
+                [(None, result)],
+                said=[self.helps(result.check)] if self.helps else None,
+            )
+            for result in unmet
+        ) + tuple(
             Finding(
                 rule=_rule(result.check),
                 subject="",
@@ -319,11 +330,12 @@ def measure(
     *,
     enforced: bool = True,
     quiet: tuple[Check, ...] = (),
+    helps: Callable[[Check], Any] | None = None,
 ) -> Measurement:
     """``subject`` against every check in ``standard`` that applies to it.
     ``intended`` maps a check it fails on purpose to why; with ``enforced``
     false an unmet check is an open item rather than a fault, as it is for
-    each check in ``quiet``."""
+    each check in ``quiet``; ``helps`` words each finding's fix."""
 
     results = []
     for check in standard:
@@ -332,7 +344,7 @@ def measure(
         reading = check.test(subject)
         reason = (intended or {}).get(check.id, "") if reading.standing is Standing.UNMET else ""
         results.append(CheckResult(check, reading, reason, enforced and not any(check is held for held in quiet)))
-    return Measurement(subject, tuple(results), enforced)
+    return Measurement(subject, tuple(results), enforced, helps)
 
 
 def _rule(check: Check) -> str:

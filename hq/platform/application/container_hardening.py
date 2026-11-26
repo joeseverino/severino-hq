@@ -14,9 +14,9 @@ from typing import Any
 from django.utils.text import get_text_list
 
 from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
-from .standards import Standing
+from .finding_steps import Do
+from .standards import Check, Standing
 from .ui import ended
-lazy from .container_findings import socket_holder_link
 lazy from .exposure import listening_ports
 lazy from .upgrades import data_of
 
@@ -75,32 +75,25 @@ class Hardening:
         files = self.container.compose_files
         return files[0] if files else ""
 
-    @property
-    def yaml(self) -> str:
-        """Every change, under its service, as one block to paste."""
+    def step(self, check: Check) -> Do | None:
+        """Its fix for ``check`` as one step under that check's finding: the
+        compose lines that meet it, with what they can break, or why HQ cannot
+        write them."""
 
-        if not self.changes:
-            return ""
-        body = "\n".join(_indent(change.yaml, 4) for change in self.changes)
-        return f"services:\n  {self.service}:\n{body}\n"
-
-    @property
-    def cautions(self) -> tuple[Change, ...]:
-        return tuple(change for change in self.changes if change.caution)
-
-    @property
-    def any(self) -> bool:
-        return bool(self.changes or self.removals or self.unwritten)
-
-    @property
-    def socket_link(self) -> Any:
-        """The update that marks it as holding the socket, when HQ watches it
-        and the socket is what it fails."""
-
-        if not self.container.running.watcher or not any(item.check == "no-docker-socket" for item in self.unwritten):
-            return None
-
-        return socket_holder_link(self.container)
+        where = self.compose_file or "its compose file"
+        then = f"Then run docker compose up -d {self.service} in its directory."
+        if changes := [change for change in self.changes if check.id in change.checks]:
+            body = "\n".join(_indent(change.yaml, 4) for change in changes)
+            cautions = tuple(change.caution for change in changes if change.caution)
+            return Do(f"Set in {where}", value=f"services:\n  {self.service}:\n{body}", notes=(*cautions, then))
+        for removal in self.removals:
+            if removal.check == check.id:
+                cautions = (removal.caution,) if removal.caution else ()
+                return Do(f"Remove from {where}", value="\n".join(removal.lines), notes=(*cautions, then))
+        for gap in self.unwritten:
+            if gap.check == check.id:
+                return Do(check.fix, notes=(gap.reason,))
+        return None
 
     def covers(self, check_id: str) -> bool:
         """Whether HQ wrote a change (or a removal) that meets ``check_id``."""
