@@ -8,7 +8,7 @@ HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from django.utils.text import capfirst, get_text_list
 
@@ -62,6 +62,15 @@ class Plan:
         return not self.blockers
 
     @property
+    def waits_on(self) -> tuple[Blocker, ...]:
+        """Why it would not apply without a person, less what the page's own
+        facts already say: the size of the move, what checks it afterwards and
+        its exact build."""
+
+        said = {"not-a-patch", "unverifiable", "no-target-digest"}
+        return tuple(blocker for blocker in self.not_automatic if blocker.id not in said)
+
+    @property
     def recommended(self) -> bool:
         """Whether moving to the target is worth doing: it brings no known
         vulnerability of its own and, where the running version has some,
@@ -84,11 +93,20 @@ class Plan:
 
     @property
     def data_said(self) -> Answer:
-        return data_said(self.data, Tone.ATTENTION)
+        """The data it keeps, each mount named, in attention: a new version may rewrite it."""
+
+        if not self.data:
+            return Answer("Keeps no data", ("It has no writable mount",))
+        sources = tuple(Code(str(mount.get("source", ""))) for mount in self.data)
+        return Answer(counted(len(self.data), "mount"), ("A new version may rewrite it", *sources), Tone.ATTENTION)
 
     @property
     def verified_said(self) -> Answer:
-        return verified_said(self.verified_by)
+        """What would show the new version works: the first over the rest, or nothing, in attention."""
+
+        if not self.verified_by:
+            return Answer("Nothing", ("HQ can only see that it stays running",), Tone.ATTENTION)
+        return Answer(capfirst(self.verified_by[0]), tuple(capfirst(what) for what in self.verified_by[1:]))
 
     @property
     def risk(self) -> str:
@@ -300,98 +318,13 @@ def _not_automatic(change: str, verified_by, blockers, unvetted=()) -> tuple[Blo
         found.append(
             Blocker("unverifiable", "Nothing would show that the new version works, other than that it stays running.")
         )
-    found.append(Blocker("not-opted-in", "Automatic upgrades are not turned on for this container."))
     return tuple(found)
-
-
-@dataclass(frozen=True, slots=True)
-class Readiness:
-    """What an upgrade of this container would take, before any is published:
-    what would verify it, the data it keeps, and what keeps it from
-    applying on its own. The same answer a plan gives, without a target."""
-
-    container: Container
-    data: tuple[Mapping[str, Any], ...]
-    verified_by: tuple[str, ...]
-    blockers: tuple[Blocker, ...]
-    not_automatic: tuple[Blocker, ...]
-
-    @property
-    def automatic(self) -> bool:
-        return not self.not_automatic
-
-    @property
-    def data_said(self) -> Answer:
-        return data_said(self.data)
-
-    @property
-    def verified_said(self) -> Answer:
-        return verified_said(self.verified_by, Tone.GOOD)
-
-    @property
-    def automatic_said(self) -> Answer:
-        if self.automatic:
-            return Answer("Patch updates apply", tone=Tone.GOOD)
-        return Answer("Not yet", (f"{counted(len(self.not_automatic), 'reason')}, listed below",))
 
 
 def fixes_said(fixes: tuple[Mapping[str, Any], ...]) -> Answer:
     """What a move fixes, counted, over the first two it names."""
 
     return Answer(counted(len(fixes), "known vulnerability", "known vulnerabilities"), named(fixes), Tone.GOOD)
-
-
-# Why a container's data is a reason to look before it is upgraded.
-DATA_RISK = "A new version may rewrite it"
-
-
-def data_said(data: tuple[Mapping[str, Any], ...], tone: Tone | Literal[""] = "") -> Answer:
-    """The data a container keeps as its fact says it: how many mounts hold
-    it, each named, in ``tone`` with its reason where an upgrade risks it."""
-
-    if not data:
-        return Answer("Keeps no data", ("It has no writable mount",))
-    sources = tuple(Code(str(mount.get("source", ""))) for mount in data)
-    return Answer(counted(len(data), "mount"), (DATA_RISK, *sources) if tone else sources, tone)
-
-
-def verified_said(verified_by: tuple[str, ...], tone: Tone | Literal[""] = "") -> Answer:
-    """What would show a new version works, as its fact says it: the first
-    over the rest, in ``tone``; nothing, in attention, with what HQ sees instead."""
-
-    if not verified_by:
-        return Answer("Nothing", ("HQ can only see that it stays running",), Tone.ATTENTION)
-    return Answer(capfirst(verified_by[0]), tuple(capfirst(what) for what in verified_by[1:]), tone)
-
-
-def readiness_of(item: Container) -> Readiness:
-    data = data_of(item.mounts)
-    verified_by = _verified_by(item)
-    blockers = tuple(
-        blocker
-        for blocker in _blockers(item, item.standing, ())
-        if blocker.id not in ("no-target-digest", "target-affected")
-    )
-    not_automatic = tuple(
-        blocker
-        for blocker in _not_automatic(PATCH, verified_by, blockers, _uncheckable(item.standing))
-        if blocker.id != "not-a-patch"
-    )
-    return Readiness(item, data, verified_by, blockers, not_automatic)
-
-
-def _uncheckable(standing: Any) -> tuple[Blocker, ...]:
-    """Whether a release of this image could be checked when one lands: its
-    publisher lists the packages of what runs now, or it does not."""
-
-    attested = standing.attested
-    if attested is None or attested.get("unread"):
-        return (Blocker("attestations-unread", "Its package list and build record have not been read yet."),)
-    if not attested.get("packages"):
-        return (
-            Blocker("no-package-list", "Its publisher provides no package list, so a new release cannot be checked."),
-        )
-    return ()
 
 
 def plans() -> list[Plan]:

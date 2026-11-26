@@ -6,7 +6,7 @@ move it (application.app_updates.AppUpdate, the app_updates resource's), and
 how it is run against the container standard, with what it uses beside its
 limits. Each said once; the band above has its version and standing.
 {% endcomment %}
-{% if plan or readiness or state %}
+{% if plan or state %}
 {% section "Upgrade" id="upgrade" data_fragment=state.standing.live data_fragment_poll=state.standing.live|follow_every %}
   {% facts layout="band" %}
     {% if update %}
@@ -37,16 +37,12 @@ limits. Each said once; the band above has its version and standing.
     {% if plan %}
     {% fact "Data" icon="layers" value=plan.data_said %}
     {% fact "Checked afterwards by" icon="check-circle" value=plan.verified_said %}
-    {% elif readiness %}
-    {% fact "Checked afterwards by" icon="check-circle" value=readiness.verified_said %}
-    {% fact "Data" icon="layers" value=readiness.data_said %}
-    {% fact "Automatic upgrades" icon="deploy" value=readiness.automatic_said %}
     {% endif %}
   {% endfacts %}
   {% if held or act %}{% button_row %}{% if act %}{% include "partials/_page_action.html" with action=act only %}{% muted %}{{ state.said }}{% endmuted %}{% else %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% endbutton_row %}
-  {% elif not plan and readiness.not_automatic %}{% list %}{% for blocker in readiness.not_automatic %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
+  {% elif plan.waits_on %}{% list %}{% for blocker in plan.waits_on %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
   {% endif %}
-{% aside %}{% muted %}{% if plan %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% elif readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}{% endmuted %}
+{% aside %}{% if plan %}{% muted %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}
 
