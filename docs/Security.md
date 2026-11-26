@@ -706,13 +706,27 @@ path from the public internet. Setting it up is
   (`workers_dev: false`). The hostname and the account reach the deploy from
   its environment (`HQ_INBOUND_HOSTNAME`, `CLOUDFLARE_ACCOUNT_ID`), never
   from this repository.
-- A webhook's signature is checked over the raw body before anything parses
-  it, and a request that fails it never reaches the Durable Object. A
-  listener's socket is accepted only with the `SOCKET_TOKEN` bearer, compared
-  in constant time.
+- A webhook's body is read only when its `Content-Length` is within the
+  largest its provider's route declares (GitHub's 25 MB). Its signature is
+  checked over the raw body before anything parses it, and a request that
+  fails it never reaches the Durable Object.
+- A listener's socket is accepted only with the `SOCKET_TOKEN` bearer,
+  compared in constant time, and tagged with the token's SHA-256. An event
+  goes only to the sockets tagged with the token the Worker holds now, and
+  closes every other, so a rotation evicts a socket opened with the old
+  token, which a hibernated socket would otherwise outlive.
 - An event forwards its names alone (provider, event, subject, delivery id,
-  time), never its body. A valid sender can only make HQ re-read a source
-  with HQ's own credentials.
+  time), never its body, each within the bound the contract's
+  `InboundArrival` gives it (`worker/src/generated/arrival.json`); one over
+  its bound is refused alone, never sent. A valid sender can only make HQ
+  re-read a source with HQ's own credentials.
+- GitHub signs the body alone, so the delivery and event headers are outside
+  the signature: a captured signed body can be sent again under a new
+  delivery id, and each is a new event. Its cost is bounded by the read it
+  asks, coalesced with any already asked.
+- Workers Logs records each request as its method, path and status, which
+  the Worker logs itself. Invocation logs are off, since they keep the
+  request's headers, the bearer among them.
 - Its secrets, `GITHUB_WEBHOOK_SECRET` and `SOCKET_TOKEN`, live in a
   1Password item of the operator's, and the listener holds the same
   `SOCKET_TOKEN` as the `cloudflare_events` connection's credential. They
@@ -763,10 +777,13 @@ takes nothing down. A workflow on any other branch, a pull request's
 included, never reaches the token. The job's own permissions stay at read. The token carries one
 permission, Workers Scripts Write on the account
 (`mise-tasks/worker/deploy.permissions`, minted by `mint:cloudflare`), which
-uploads the Worker and attaches its custom domain, and grants nothing on a
-zone. A deploy with no terminal replaces any DNS record already on that
-hostname, so the name is kept for the Worker alone. Cloudflare never returns
-a Worker secret's value, so the token cannot read the Worker's secrets.
+uploads the Worker and attaches its custom domain. It reaches as far as the
+account does: it can upload a script that returns the Worker's secrets,
+since every deploy keeps them bound, attach a custom domain on any of the
+account's zones, and replace any Worker on the account. So it is held as
+the Worker's secrets are, on the one environment only `main` deploys from.
+A deploy with no terminal replaces any DNS record already on that hostname,
+so the name is kept for the Worker alone.
 
 ## A leaked GitHub App credential
 
