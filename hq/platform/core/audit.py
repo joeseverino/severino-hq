@@ -39,9 +39,21 @@ from .models import AuditLog
 logger = getLogger("severino.audit")
 
 _AUDITED_MODELS: dict[type, str] = {}
-# The record a registered model's rows are about, by its key, where that is
-# not the row itself: an operation or a decision on a managed resource.
-_SUBJECTS: dict[type, Callable[[Any], str]] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class Subject:
+    """What a registered model's rows are about, where that is not the row
+    itself: the key ``key`` reads off the row's record, and ``kind``, the
+    ``entity_links`` kind of record that key names, whose page a row opens.
+    None for a key no page is addressed by, such as a provider's own name
+    for what an event is about."""
+
+    key: Callable[[Any], str]
+    kind: str | None
+
+
+_SUBJECTS: dict[type, Subject] = {}
 # The connection a registered model's rows went through, where it names one.
 _CONNECTIONS: dict[type, Callable[[Any], str]] = {}
 _connection_context: ContextVar[str] = ContextVar("hq_audit_connection", default="")
@@ -289,7 +301,7 @@ def register_audit(
     observation: Iterable[str] = (),
     connection: Callable[[Any], str] | None = None,
     redact_for: Callable[[Any], Iterable[str]] | None = None,
-    subject: Callable[[Any], str] | None = None,
+    subject: Subject | None = None,
     required: bool = False,
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
@@ -303,6 +315,9 @@ def register_audit(
 
     if model in _AUDITED_MODELS:
         return
+    # A row names its model by its label alone, so one label's rows are about one kind.
+    if subject is not None and (other := _labeled(type_label)) is not None and other.kind != subject.kind:
+        raise ValueError(f"The audit label {type_label!r} is about a {other.kind}, not a {subject.kind}.")
     _AUDITED_MODELS[model] = type_label
     if subject is not None:
         _SUBJECTS[model] = subject
@@ -384,17 +399,29 @@ def _connection_of(extract: Callable[[Any], str] | None, instance) -> str:
         return ""
 
 
+def subject_kind(type_label: str) -> str | None:
+    """The kind of record the rows filed under ``type_label`` are about, as
+    their model declared it (``Subject.kind``), or None."""
+
+    subject = _labeled(type_label)
+    return subject.kind if subject is not None else None
+
+
+def _labeled(type_label: str) -> Subject | None:
+    return next((subject for model, subject in _SUBJECTS.items() if _AUDITED_MODELS[model] == type_label), None)
+
+
 def subject_of(obj: Model | None) -> str | None:
     """The key of the record a row about ``obj`` is about, in the words its
     model registered (``register_audit``'s ``subject``), or None."""
 
     if obj is None:
         return None
-    extract = _SUBJECTS.get(type(obj))
-    if extract is None:
+    subject = _SUBJECTS.get(type(obj))
+    if subject is None:
         return None
     try:
-        return str(extract(obj) or "") or None
+        return str(subject.key(obj) or "") or None
     except Exception:  # attribution never blocks the event
         logger.exception("Could not name the subject of an audited %s", type(obj))
         return None

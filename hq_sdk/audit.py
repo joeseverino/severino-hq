@@ -6,6 +6,7 @@ runner by its job. An extension binds neither, so it has no binding to call.
 """
 
 from hq.platform.core.audit import (
+    Subject,
     audit_events,
     record_event,
     record_operation,
@@ -30,6 +31,7 @@ __all__ = [
     "Counts",
     "Failure",
     "Source",
+    "Subject",
     "audit_events",
     "record_event",
     "record_operation",

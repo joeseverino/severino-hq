@@ -37,7 +37,7 @@ from django.utils import timezone
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 lazy from hq.domains.control_plane.models import ApprovalRequest, OperationRequest, ReadRequest
-lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
+lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels, subject_kind
 lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
 
@@ -49,7 +49,6 @@ from .labels import lower_first, plural
 from .moments import duration, epoch, moment
 from .projection import read_once
 from .quoted import Quoted
-from .references import Kind
 from .routes import reverse
 from .tables import Cell, DataTable, Group, Row, TableColumn
 from .ui import counted
@@ -696,10 +695,17 @@ def _uuid(operation: str) -> UUID | None:
 
 def _record_page(line: HistoryLine) -> str:
     """The page of the record a step is about (its own rows' ``subject``, else
-    the rest's: a merge's, never the run it queued), else none."""
+    the rest's: a merge's, never the run it queued), of the kind its model
+    declares it (``Subject.kind``), else none."""
 
-    subject = next((row.subject for row in (*line.own, *line.events) if row.subject), "")
-    return entity_link(Kind.RESOURCE, subject).url if subject else ""
+    return next(
+        (
+            entity_link(kind, row.subject).url
+            for row in (*line.own, *line.events)
+            if row.subject and (kind := subject_kind(row.object_type))
+        ),
+        "",
+    )
 
 
 def runs(found: Iterable[Moment]) -> list[HistoryLine]:

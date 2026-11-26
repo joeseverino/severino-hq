@@ -1,20 +1,22 @@
 """What changed, when, and what happened near it: one history, on the audit log."""
 
 from datetime import timedelta
+from uuid import uuid7
 
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource, ProviderInventory
 from hq.platform.application.markup_testing import text
 from hq.platform.core import append_only
+from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..conditions import held_since, stamped
-from ..history import moments, near
+from ..history import chain, moments, near
 from ..inventory import READING_AUDIT_TYPE, record_inventory
 from ..topology_facts import add_observed_facts
 
@@ -353,6 +355,34 @@ class AuditHistoryPageTests(TestCase):
             draw=draw,
             rows=distinct(r"\bentry-\d+\b"),
         )
+
+
+class StepPageTests(TestCase):
+    """A step opens the page of the kind of record its model says it is about."""
+
+    def test_an_event_about_a_unit_opens_no_resource_and_a_declaration_opens_its_own(self):
+        told, declared = uuid7().hex, uuid7().hex
+        with operation_context(
+            interface="controller", actor="controller", operation="bridge.events", operation_id=told
+        ):
+            InboundEvent.objects.create(
+                provider="host",
+                event="unit.failed",
+                subject="example-upload.service",
+                delivery_id="example-delivery",
+                source=InboundSource.HOST,
+                received_at=timezone.now(),
+                outcome=InboundOutcome.APPLIED,
+                reads=["host.unit"],
+            )
+        with operation_context(interface="web", actor="owner", operation="example.declare", operation_id=declared):
+            declare("example-web", "example.record")
+
+        (event,) = chain(told)
+        (declaration,) = chain(declared)
+
+        self.assertEqual(event.opens, "")
+        self.assertEqual(declaration.opens, reverse("control_plane:detail", kwargs={"key": "example-web"}))
 
 
 class NoSecondHistoryTests(TestCase):
