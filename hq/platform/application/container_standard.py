@@ -298,7 +298,7 @@ def _required(container: Any) -> dict[str, str]:
     for a port a role of its machine is reached on, since there it answers at
     the machine's own address and sees each client's."""
 
-    if (container.runtime or {}).get("network_mode") != "host":
+    if container.running.network_mode != "host":
         return {}
     answered = set(listening_ports(container))
     for role in container.machine.roles:

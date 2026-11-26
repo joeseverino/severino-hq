@@ -11,10 +11,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from django.utils.text import get_text_list
+
 from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
 from .standards import Standing
 from .ui import ended
 lazy from .container_findings import socket_holder_link
+lazy from .exposure import listening_ports
 lazy from .upgrades import data_of
 
 # Where HQ has no reading of what it uses: enough for most small services,
@@ -195,11 +198,11 @@ def _system_paths(container, _runtime, unmet):
     )
 
 
-def _capabilities(_container, runtime, unmet):
+def _capabilities(container, runtime, unmet):
     if "no-powerful-capability" not in unmet:
         return
     added = [str(cap) for cap in runtime.get("cap_add") or ()]
-    kept = [cap for cap in added if cap not in POWERFUL_CAPABILITIES]
+    kept = [cap for cap in added if cap not in POWERFUL_CAPABILITIES] + _bind_capability(container, runtime, unmet)
     powerful = [cap for cap in added if cap in POWERFUL_CAPABILITIES]
     yaml = 'cap_drop:\n  - "ALL"\n' + (_listed("cap_add", kept) if kept else "cap_add: []")
     yield Change(
@@ -314,21 +317,39 @@ def _user(container, runtime, unmet):
         return
 
     data = [str(mount.get("source")) for mount in data_of(container.mounts) if mount.get("type") == "bind"]
-    low = sorted(
-        {
-            port
-            for binding in runtime.get("port_bindings") or ()
-            if (port := _port(binding)).isdigit() and int(port) < 1024
-        }
-    )
     caution = (
         f"Its files must be readable by {NON_ROOT} and its data writable: chown -R {NON_ROOT} {' '.join(data)} first."
         if data
         else "An image that expects root (installing or changing owners as it starts) refuses to run."
     )
-    if low:
-        caution += f" It listens on {', '.join(low)}, which only root binds without NET_BIND_SERVICE."
-    yield Change(("not-root",), "user", f'user: "{NON_ROOT}"', caution)
+    yaml = f'user: "{NON_ROOT}"'
+    if low := _low_ports(container):
+        caution += (
+            f" It binds {get_text_list(low, 'and')} on the host's network, which takes NET_BIND_SERVICE, "
+            "and its image must grant that to its program."
+        )
+        if "no-powerful-capability" not in unmet and (needed := _bind_capability(container, runtime, unmet)):
+            yaml += "\n" + _listed("cap_add", [*(str(cap) for cap in runtime.get("cap_add") or ()), *needed])
+    yield Change(("not-root",), "user", yaml, caution)
+
+
+def _low_ports(container) -> list[str]:
+    """The ports under 1024 it binds on the host's own network. In a network
+    of its own Docker lets any user bind them (moby's daemon/oci_linux.go sets
+    net.ipv4.ip_unprivileged_port_start to 0 for a private network only)."""
+
+    if container.running.network_mode != "host":
+        return []
+    return [str(port) for port in sorted(listening_ports(container)) if port < 1024]
+
+
+def _bind_capability(container, runtime, unmet) -> list[str]:
+    """NET_BIND_SERVICE, where the user its fix sets binds a low port on the
+    host's network and nothing it adds already grants it."""
+
+    if "not-root" not in unmet or "NET_BIND_SERVICE" in (runtime.get("cap_add") or ()):
+        return []
+    return ["NET_BIND_SERVICE"] if _low_ports(container) else []
 
 
 def _socket(_container, _runtime, unmet):

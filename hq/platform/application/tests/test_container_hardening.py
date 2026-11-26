@@ -143,6 +143,21 @@ class HardeningTests(TestCase):
         self.assertEqual(change.yaml, 'user: "1000:1000"')
         self.assertIn("chown -R 1000:1000 /opt/example/data", change.caution)
 
+    def test_a_non_root_user_keeps_the_low_port_it_binds_on_the_host_network(self):
+        from .test_containers import running
+
+        on_host = {**KEPT, "user": "", "cap_drop": ["ALL"], "network_mode": "host", "port_bindings": []}
+        estate()
+        inventory("portainer.container", [running("web", "example/web:1.0.0") | {"network_mode": "host"}])
+        inventory("portainer.runtime", [runtime("web", **on_host, exposed_ports=[53, 3000])])
+        (found,) = (item.hardening for item in containers() if item.running.name == "web")
+        bridged = self.hardening(**{**on_host, "network_mode": "bridge", "exposed_ports": [53]})
+
+        (change,) = [change for change in found.changes if "not-root" in change.checks]
+        self.assertIn('cap_add:\n  - "NET_BIND_SERVICE"', change.yaml)
+        # In a network of its own any user binds a low port.
+        self.assertNotIn("cap_add", bridged.yaml)
+
     def test_a_limit_is_derived_from_what_it_uses_when_that_was_read(self):
         found = self.hardening(**{**KEPT, "memory_limit": 0, "memory_usage": 100 * 1024 * 1024})
 
