@@ -29,9 +29,5 @@ class Command(DerivedFileCommand):
     source = "the host's templates"
 
     @override
-    def target(self) -> Path:
-        return shared_ui_doc()
-
-    @override
-    def derive(self) -> str:
-        return HEAD + template_contract.markdown(template_contract.describe())
+    def emitted(self) -> dict[Path, str]:
+        return {shared_ui_doc(): HEAD + template_contract.markdown(template_contract.describe())}

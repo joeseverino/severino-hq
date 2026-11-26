@@ -24,12 +24,8 @@ class Example(DerivedFileCommand):
         self.path = path
 
     @override
-    def target(self) -> Path:
-        return self.path
-
-    @override
-    def derive(self) -> str:
-        return DERIVED
+    def emitted(self) -> dict[Path, str]:
+        return {self.path: DERIVED}
 
 
 class DerivedFileCommandTests(SimpleTestCase):

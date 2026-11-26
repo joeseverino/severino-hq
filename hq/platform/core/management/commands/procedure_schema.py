@@ -12,9 +12,5 @@ class Command(DerivedFileCommand):
     source = "ProcedureDeclaration"
 
     @override
-    def target(self) -> Path:
-        return procedure_schema.SCHEMA_PATH
-
-    @override
-    def derive(self) -> str:
-        return procedure_schema.render()
+    def emitted(self) -> dict[Path, str]:
+        return {procedure_schema.SCHEMA_PATH: procedure_schema.render()}
