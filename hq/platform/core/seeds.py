@@ -247,6 +247,11 @@ def _approved(ended: str) -> Callable[[Any], None]:
     return seed
 
 
+def _unlisted(owner) -> None:
+    _estate(owner)
+    example_estate.work.unlisted()
+
+
 def _updates(on: str = "") -> Callable[[Any], None]:
     """The example estate with an update of each app in a state of its own
     (``example_estate.work.update_states``), applied by a playbook written
@@ -313,7 +318,12 @@ SEEDS: dict[str, Seed] = {
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
-    **{f"update-{ended}": Seed(_approved(ended), _SET_UP) for ended in ("preview-failed", "not-applied", "applied")},
+    **{
+        f"update-{ended}": Seed(_approved(ended), _SET_UP)
+        for ended in ("queued", "preview-failed", "not-applied", "applied")
+    },
+    # The open app update's new image, whose publisher attaches no package list.
+    "update-unlisted": Seed(_unlisted, _SET_UP),
     "app-updates": Seed(_updates(), _SET_UP),
     # Applied only by a playbook written for another machine.
     "app-updates-elsewhere": Seed(_updates("edge-01"), _SET_UP),

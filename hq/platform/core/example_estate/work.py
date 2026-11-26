@@ -727,8 +727,9 @@ def worker_image_missing() -> None:
 
 
 # How the app update's approval ends in each seed that draws one: its preview
-# refused on the host, its merge made and the apply refused, or applied.
-PREVIEW_FAILED, NOT_APPLIED = "preview-failed", "not-applied"
+# waiting for the playbook worker, refused on the host, its merge made and the
+# apply refused, or applied.
+PREVIEW_QUEUED, PREVIEW_FAILED, NOT_APPLIED = "queued", "preview-failed", "not-applied"
 # The steps a run stops on when the host refuses to start the pull.
 _REFUSED = (
     ("Ask sudo whether the deploy login may start the pull unit", "ok", ""),
@@ -740,6 +741,19 @@ _REFUSED = (
 # open one does not: merged and not applied, held by Renovate, and a Compose
 # file HQ can't match; and the app it no longer holds, moved by hand.
 MERGED_APP, HELD_APP, UNMATCHED_APP, UNHELD_APP = "immich", "jellyfin", "nginx-proxy-manager", "portainer"
+
+
+def unlisted() -> None:
+    """The open app update's new pin as a publisher that attaches no package
+    list leaves it: read, with nothing a scan can check."""
+
+    from hq.domains.control_plane.observations.public_registry import DIGEST_KIND, VULNERABILITY_KIND
+
+    image = ImageRef.parse(next(image for name, _port, image in CONTAINERS if name == UPDATED_APP))
+    pinned = f"{image.name}@{digest(image.name, NEWER[UPDATED_APP])}"
+    held = {kind: ProviderInventory.objects.get(kind=kind).records for kind in (DIGEST_KIND, VULNERABILITY_KIND)}
+    store(DIGEST_KIND, *({**each, "packages": []} if each["digest"] == pinned else each for each in held[DIGEST_KIND]))
+    store(VULNERABILITY_KIND, *(each for each in held[VULNERABILITY_KIND] if each["digest"] != pinned))
 
 
 def update_states(newer: dict[str, str]) -> None:
@@ -816,8 +830,11 @@ def approval(owner, ended: str) -> None:
         return operation
 
     merging = {"head_sha": update["head"], "apps": [UPDATED_APP], THEN: applies}
+    previewed = {**applies, "parameters": {"revision": update["head"]}, CHECK: True, THEN: merging}
+    if ended == PREVIEW_QUEUED:
+        enqueue("run", lambda: (playbook, asked_fields(web_principal(owner), reason="", **previewed)))
+        return
     if ended == PREVIEW_FAILED:
-        previewed = {**applies, "parameters": {"revision": update["head"]}, CHECK: True, THEN: merging}
         record(playbook, "run", "failed", asked=previewed, result={"message": "A task failed.", "events": events})
         return
     pull = ManagedResource.objects.create(
