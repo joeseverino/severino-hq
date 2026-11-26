@@ -157,8 +157,14 @@ func (m *Machine) CheckSetup(ctx context.Context, tree, callback string, out io.
 	if err != nil {
 		return err
 	}
+	// copy (and template, through it) refuses a destination its process may
+	// not write before it asks whether anything would change, even in check
+	// mode, and a read-only mount is never writable. unsafe_writes is what
+	// lets it past that refusal (ansible.builtin.copy's main); a check writes
+	// nothing, so it only ever reads.
 	confine := []string{"--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
-		"--env", "ANSIBLE_REMOTE_TMP=/tmp/ansible/remote", "--env", "ANSIBLE_STDOUT_CALLBACK=" + callback, "--env", "ANSIBLE_JSON_INDENT=0"}
+		"--env", "ANSIBLE_REMOTE_TMP=/tmp/ansible/remote", "--env", "ANSIBLE_STDOUT_CALLBACK=" + callback, "--env", "ANSIBLE_JSON_INDENT=0",
+		"--env", "ANSIBLE_UNSAFE_WRITES=1"}
 	for _, dir := range []string{tree, m.Systemd, m.Tmpfiles, m.Sudoers} {
 		confine = append(confine, "--mount", readOnly(dir, dir))
 	}
