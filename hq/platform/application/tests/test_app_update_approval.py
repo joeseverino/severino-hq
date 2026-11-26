@@ -215,7 +215,7 @@ class ApproveUpdateTests(TestCase):
 
         self.assertFalse(approve.disabled, approve.title)
         # Beside it, what the press does.
-        self.assertEqual(page.context["container"]["state"].said, f"Merges #7, then applies it on {APP}.")
+        self.assertEqual(page.context["container"]["state"].said, f"Merges #7 and applies its merge commit on {APP}.")
         self.assertContains(page, "/approve/?next=")
         self.assertEqual(self.client.post(approve.url, {"__retry_key": "example-press"}).status_code, 302)
         self.assertEqual(self.preview().input["parameters"], {"revision": HEAD})
@@ -225,12 +225,53 @@ class ApproveUpdateTests(TestCase):
 
         self.assertEqual(answer.get("status"), "awaiting_approval", answer)
         self.assertFalse(OperationRequest.objects.exists())
-        # The person deciding sees each pin it moves, and every file it changes a link away.
+        # The person deciding sees each pin it moves as the release it names, and every file it changes a link away.
         from ..approval_review import preview
 
         shown = preview(ApprovalRequest.objects.get())
-        self.assertEqual([(row.label, row.change) for row in shown.rows], [("app app", "changed")])
+        self.assertEqual(
+            [(row.label, row.before, row.after, row.change) for row in shown.rows],
+            [("app app", "v1.2.0", "v1.2.1", "changed")],
+        )
         self.assertEqual(shown.more_url, "https://github.com/example/alpha/pull/7/files")
+
+    def test_the_preview_names_each_name_the_apply_interrupts_through_the_container_it_restarts(self):
+        from hq.platform.core.testing import connection, declare, operator
+
+        from ..approval_review import preview
+
+        # The app's container is the DNS server and the proxy, through the
+        # connections whose endpoints are in it, and the origin of one name.
+        declare("example-box", "machine", {"name": APP, "addresses": ["192.0.2.5"]})
+        spec = {"host": APP, "name": "app", "connection_ref": "example-portainer", "serves_ports": [81, 3000, 8080]}
+        declare("example-box-app", "portainer.container", spec)
+        connection("adguard", endpoint="http://192.0.2.5:3000")
+        connection("npm", endpoint="http://192.0.2.5:81")
+        spec = {"domain": "hq.example.com", "answer": "192.0.2.10", "connection_ref": "example-adguard"}
+        declare("example-hq-dns", "adguard.rewrite", spec)
+        spec = {"domain_names": ["wiki.example.com"], "forward_scheme": "http", "forward_host": "192.0.2.5"}
+        declare("example-wiki-proxy", "npm.proxy_host", {**spec, "forward_port": 8080})
+        # A second DNS server elsewhere resolves what it holds.
+        connection("adguard", "example-adguard-2", endpoint="http://192.0.2.99:3000")
+        spec = {"domain": "other.example.com", "answer": "192.0.2.20", "connection_ref": "example-adguard-2"}
+        declare("example-elsewhere", "adguard.rewrite", spec)
+        self.press(principal=AGENT)
+
+        shown = preview(ApprovalRequest.objects.get())
+
+        interrupts = {row.label: row.after for row in shown.rows if row.label.startswith("Interrupts")}
+        self.assertEqual(
+            interrupts,
+            {
+                "Interrupts resolving": "hq.example.com",
+                "Interrupts routing": "wiki.example.com",
+                "Interrupts serving": "wiki.example.com",
+            },
+        )
+        # The press says so before it is made.
+        operator(self.client)
+        page = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
+        self.assertIn("Interrupts resolving 1 name", page.context["container"]["state"].said)
 
     def test_an_approved_agents_call_previews_and_merges_as_approved(self):
         from django.contrib.auth import get_user_model

@@ -65,6 +65,12 @@ class ImageRef:
         return self.name
 
     @property
+    def said(self) -> str:
+        """As a person names the release: its tag, or ``short`` where it has none."""
+
+        return self.tag or self.short
+
+    @property
     def exact(self) -> str:
         """``short``, pinned to its digest when the reference names one."""
 

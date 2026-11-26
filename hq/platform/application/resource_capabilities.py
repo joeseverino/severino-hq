@@ -24,11 +24,9 @@ from hq.domains.control_plane.providers import (
 from .adoption import WriteGap, manages_through, observes_only as observes_through, write_gap
 lazy from . import resource_operations
 lazy from .capabilities import capability_words
-lazy from .connections import connection_rows
 lazy from .finding_model import on_machine
-lazy from .machines import container_context
+lazy from .machines import connections_inside, container_context
 lazy from .pages import PageAction
-lazy from .whereabouts import locate, whereabouts
 
 # Actions a person starts from a resource's page, in the order they lead.
 PAGE_VERBS = ("start", "stop", "restart", "reconcile", "renew")
@@ -288,8 +286,7 @@ class ConnectionInside:
 
 
 def channels_inside(resource: ManagedResource) -> tuple[ConnectionInside, ...]:
-    """The connections whose endpoint is this container, placed the way every
-    address HQ holds is placed (``whereabouts.locate``)."""
+    """The connections whose endpoint is this container (``machines.connections_inside``)."""
 
     spec = resource.spec or {}
     host = str(spec.get("host", "")).strip()
@@ -308,20 +305,14 @@ def channels_inside(resource: ManagedResource) -> tuple[ConnectionInside, ...]:
         if supervised is not None
         else f"docker start {shlex.quote(name)}",
     )
-    at = whereabouts()
-    found: dict[str, ConnectionInside] = {}
-    for row in connection_rows():
-        if not row.endpoint or row.connection_ref in found:
-            continue
-        # The endpoint is as the controller reading it was given it, so a
-        # loopback one is the controller's own machine.
-        origin = locate(row.endpoint, at=at, loopback_on=row.controller_id)
-        if origin.host.lower() != host.lower() or origin.container != name:
-            continue
-        found[row.connection_ref] = ConnectionInside(
+    inside = (rows for (on, named), rows in connections_inside().items() if (on.lower(), named) == (host.lower(), name))
+    return tuple(
+        ConnectionInside(
             connection_ref=row.connection_ref,
             machines=tuple(dict.fromkeys(str(item) for item in row.reaches or () if item)),
             carries_its_verbs=row.provider in acts_through and own_ref in ("", row.connection_ref),
             start_command=start_command,
         )
-    return tuple(found.values())
+        for rows in inside
+        for row in rows
+    )

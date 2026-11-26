@@ -84,7 +84,7 @@ class Pin:
     def said(self) -> str:
         """``v1.2.0 to v1.2.1``, or the new tag alone where the line is new."""
 
-        return f"{self.before.tag or self.before.short} to {self.after.tag}" if self.before else self.after.tag
+        return f"{self.before.said} to {self.after.tag}" if self.before else self.after.tag
 
 
 @dataclass(frozen=True, slots=True)

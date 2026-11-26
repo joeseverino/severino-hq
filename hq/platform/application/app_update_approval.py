@@ -55,7 +55,9 @@ lazy from .capability_policy import Rule, decide
 lazy from .container_findings import UPDATE
 lazy from .containers import Container
 lazy from .entity_links import web_url
+lazy from .machines import served_by
 lazy from .github_estate import repositories
+lazy from .images import ImageRef
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
 lazy from .labels import dotted, lower_first
 lazy from .moments import when
@@ -165,30 +167,58 @@ def _measured(command: ApproveUpdateCommand) -> ApprovalSubject | None:
 FILES = "Files changed"
 
 
-def _shown(held: Any) -> ChangePreview:
-    """Each pin it moves, and the files it changes one link away, on GitHub."""
+# What an apply interrupts while a container restarts, by what the container
+# does for each name (``machines.Serving``), in the words that say it.
+_INTERRUPTS = {"serves": "serving", "resolves": "resolving", "routes": "routing"}
 
-    rows = tuple(
+
+def interrupted(items: tuple[Container, ...]) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """What applying ``items`` briefly interrupts as each restarts: the names
+    each serves, resolves or routes, by that word (``_INTERRUPTS``)."""
+
+    serving = served_by()
+    found: dict[str, set[str]] = {}
+    for item in items:
+        held = serving.get((item.machine.name, item.running.name))
+        for does, names in (("serves", held.names), *held.through) if held else ():
+            found.setdefault(_INTERRUPTS[does], set()).update(names)
+    return tuple((doing, tuple(sorted(names))) for doing, names in sorted(found.items()) if names)
+
+
+def _shown(held: Any) -> ChangePreview:
+    """Each pin it moves and what applying it interrupts, and the files it
+    changes one link away, on GitHub."""
+
+    pins = tuple(
         ChangeRow(
             label=f"{pin.get('app', '')} {pin.get('service', '')}".strip(),
-            before=str(pin.get("before") or ""),
-            after=str(pin.get("after") or ""),
+            before=_release(pin.get("before")),
+            after=_release(pin.get("after")),
             change="changed" if pin.get("before") else "added",
         )
         for pin in held.baseline.get("pins") or ()
     )
     # Its subject is the pull request, `owner/name#number`, whose files GitHub shows under its address.
-    pull = next(
-        (
-            web_url(update.url)
-            for update in app_updates()
-            if f"{update.repository}#{update.number}" == held.resource_key
-        ),
-        "",
+    update = next((each for each in app_updates() if f"{each.repository}#{each.number}" == held.resource_key), None)
+    interrupts = tuple(
+        ChangeRow(label=f"Interrupts {doing}", before="", after=", ".join(names), change="")
+        for doing, names in interrupted(update.containers if update else ())
     )
+    pull = web_url(update.url) if update else ""
     return ChangePreview(
-        label="Pins", rows=rows, lines=(), more_label=FILES if pull else "", more_url=f"{pull}/files" if pull else ""
+        label="Would change",
+        rows=(*pins, *interrupts),
+        lines=(),
+        more_label=FILES if pull else "",
+        more_url=f"{pull}/files" if pull else "",
     )
+
+
+def _release(reference: Any) -> str:
+    """A pin the consent holds whole, said as the release it names."""
+
+    image = ImageRef.parse(reference)
+    return image.said if image else ""
 
 
 def _may_run(manifest: OperationManifest, principal: Any) -> None:
@@ -741,7 +771,10 @@ def approval_of(update: AppUpdate) -> Approval:
     approval resolves it (``applier``), so no surface offers a press it refuses."""
 
     return _approval(
-        merge_standing(update), update.containers, _unapprovable(update), f"Merges {update.label}, then applies it"
+        merge_standing(update),
+        update.containers,
+        _unapprovable(update),
+        f"Merges {update.label} and applies its merge commit",
     )
 
 
@@ -774,4 +807,8 @@ def _approval(standing: MergeStanding | None, items: tuple[Container, ...], refu
     # A press while another run holds the playbook or its machines is refused (``queue_run``).
     if busy := run_in_way(manifest, hosts):
         return Approval(standing, busy)
-    return Approval(standing, said=ended(f"{does} on {get_text_list(list(hosts), 'and')}"))
+    interrupts = [f"{doing} {counted(len(names), 'name')}" for doing, names in interrupted(items)]
+    said = ended(f"{does} on {get_text_list(list(hosts), 'and')}")
+    return Approval(
+        standing, said=ended(f"{said} Interrupts {get_text_list(interrupts, 'and')}") if interrupts else said
+    )

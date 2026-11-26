@@ -51,7 +51,7 @@ lazy from .freshness import Freshness, freshness
 lazy from .github_estate import build_of, repositories
 lazy from .infrastructure import enabled_resources
 lazy from .inventory import record_token
-lazy from .machines import machine as machine_named, served_by
+lazy from .machines import Serving, machine as machine_named, served_by
 lazy from .projects import projects_by_repository, repository_key
 lazy from .supply_chain import supply_chain_of
 
@@ -601,7 +601,7 @@ def _containers() -> list[Container]:
                 running=running,
                 machine=machine,
                 standing=_standing(running.image, machine.name, running.name),
-                serves=tuple(sorted(serves.get((machine.name, running.name), ()))),
+                serves=serves.get((machine.name, running.name), Serving()).names,
                 runtime=_runtimes().get((machine.name, running.name)),
             )
             for running in machine.containers
