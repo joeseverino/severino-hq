@@ -482,11 +482,12 @@ no glob can say. `mise run --tag fast --affected --affected-base <ref>
 --affected-json` names each gate it would pick and why, running none. A lint gate that reaches the network, or whose check
 fast makes another way, is left untagged, and so is one whose input is the
 whole tree whatever changed: the `lint:drift-*` gates a Django command
-writes, `lint:deploycheck`, `lint:deptry`, `lint:imports`,
+writes, `lint:deploycheck`, `lint:deptry`,
 `lint:sdk-breaking`, `lint:structural` and `test:migrations`. CI's Lint and
 Test jobs and `mise run check` run them. `lint:mypy` stays, since mypy's
 cache rechecks only a changed module and those whose imports' interfaces
-changed.
+changed, and so does `lint:imports`, which reads the import graph in about a
+second whenever a Python file changes.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
 `lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:file-rules`, `lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
