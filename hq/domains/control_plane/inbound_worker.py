@@ -1,6 +1,6 @@
 """The inbound-events Worker's configuration, derived from the providers'
-``INBOUND`` declarations, so the Worker verifies and forwards exactly the
-events HQ takes.
+``INBOUND`` declarations, so the Worker verifies each provider's requests
+and the operator subscribes each provider to exactly the events HQ takes.
 
 ``routes.json`` is the one place the Worker and its tests learn each
 provider's route, ``arrival.json`` the bridge contract's ``InboundArrival``,
@@ -54,7 +54,8 @@ def _plain(value: object) -> object:
 
 def routes() -> list[dict[str, object]]:
     """Each provider the Worker receives events from: its route, then the
-    events it forwards. A source that reports over the bridge alone has none."""
+    events HQ takes, which ``wire-github-app`` and the install guide name to
+    subscribe to. A source that reports over the bridge alone has none."""
 
     return [
         {

@@ -15,10 +15,12 @@
 //   constant time before the upgrade reaches the Hub, and an event reaches
 //   only a socket that presented the token the Worker holds now, so a
 //   rotation closes every socket opened with the old one.
-// - Only an event's names are forwarded (provider, event, subject, delivery
-//   id, time), never its body, so a valid sender can only make HQ re-read
-//   with its own credentials. An event outside the bridge contract's bounds
-//   is answered 400 and never sent.
+// - Every event a verified request carries is forwarded, one HQ takes or
+//   not: HQ records one it does not take and reads nothing for it. Only an
+//   event's names are forwarded (provider, event, subject, delivery id,
+//   time), never its body, so a valid sender can only make HQ re-read with
+//   its own credentials. An event outside the bridge contract's bounds (a
+//   name or delivery id empty or too long) is answered 400 and never sent.
 // - Every secret is a Worker secret, named by the route that uses it.
 // - A request is logged as its method, path and status alone, never a header
 //   or the body.
@@ -89,18 +91,16 @@ async function webhook(request: Request, env: Env, route: Route): Promise<Respon
   if (!Array.isArray(sent)) return answer(400);
   const header = (name: string) => (name ? request.headers.get(name) : null);
   const named = header(route.event_header);
-  const taken = sent
-    .map((item: unknown, index) => ({ item, index, name: named ?? text(pointer(item, route.event_pointer)) }))
-    .filter(({ name }) => route.events.includes(name));
-  if (!taken.length) return answer(202);
   // A provider that names no delivery has it named by the body it signed, so
   // the same body sent again is the event already stored.
   const delivery = route.delivery_header
-    ? header(route.delivery_header)
+    ? (header(route.delivery_header) ?? "")
     : new Uint8Array(await crypto.subtle.digest("SHA-256", body)).toHex();
-  if (!delivery) return answer(400);
   const received_at = new Date().toISOString();
-  const events = taken.map(({ item, index, name }): InboundEvent => {
+  // Every event a verified request carries is sent, one HQ takes or not, so
+  // a provider's test event or a new event type shows in HQ.
+  const events = sent.map((item: unknown, index): InboundEvent => {
+    const name = named ?? text(pointer(item, route.event_pointer));
     const action = route.action_pointer ? text(pointer(item, route.action_pointer)) : "";
     return {
       provider: route.provider,

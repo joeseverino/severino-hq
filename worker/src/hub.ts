@@ -11,13 +11,17 @@ export const SOCKET_PATH = "/socket";
 export type InboundEvent = Record<keyof typeof arrival.properties, string>;
 
 /**
- * Whether each member is within the length the contract bounds it to, in
- * code points as JSON Schema counts them. HQ refuses a batch holding one
+ * Whether the event is named, as HQ stores only a named event under a named
+ * delivery, and each member is within the length the contract bounds it to,
+ * in code points as JSON Schema counts them. HQ refuses a batch holding one
  * event outside it, so such an event is refused here, alone.
  */
 export function withinContract(event: InboundEvent): boolean {
-  return Object.entries(arrival.properties).every(
-    ([member, shape]) => !("maxLength" in shape) || [...event[member as keyof InboundEvent]].length <= shape.maxLength,
+  return (
+    Boolean(event.event && event.delivery_id) &&
+    Object.entries(arrival.properties).every(
+      ([member, shape]) => !("maxLength" in shape) || [...event[member as keyof InboundEvent]].length <= shape.maxLength,
+    )
   );
 }
 

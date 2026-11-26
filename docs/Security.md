@@ -718,10 +718,13 @@ path from the public internet. Setting it up is
   goes only to the sockets tagged with the token the Worker holds now, and
   closes every other, so a rotation evicts a socket opened with the old
   token, which a hibernated socket would otherwise outlive.
-- An event forwards its names alone (provider, event, subject, delivery id,
-  time), never its body, each within the bound the contract's
-  `InboundArrival` gives it (`worker/src/generated/arrival.json`); one over
-  its bound is refused alone, never sent. A valid sender can only make HQ
+- Every event a verified request carries is forwarded, one HQ takes or not,
+  so a provider's test event shows on Events; HQ records one it does not
+  take as ignored and reads nothing for it. An event forwards its names alone
+  (provider, event, subject, delivery id, time), never its body, each within
+  the bound the contract's `InboundArrival` gives it
+  (`worker/src/generated/arrival.json`); one over its bound, or with no name
+  or delivery id, is refused alone, never sent. A valid sender can only make HQ
   re-read a source with HQ's own credentials.
 - GitHub signs the body alone, so the delivery and event headers are outside
   the signature: a captured signed body can be sent again under a new

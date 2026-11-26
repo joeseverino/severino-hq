@@ -544,7 +544,7 @@ def wire_github_app(usage: Usage, programs: Programs, out: IO[str], send: Send =
         app_webhook(usage, programs, key, client_id, out, send)
 
 
-# The routes the inbound-events Worker serves, one per provider: its path and the events it forwards.
+# The routes the inbound-events Worker serves, one per provider: its path and the events HQ takes from it.
 ROUTES = Path(__file__).resolve().parents[1] / "worker" / "src" / "generated" / "routes.json"
 GITHUB_API = "https://api.github.com"
 
