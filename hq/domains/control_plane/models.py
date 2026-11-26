@@ -25,7 +25,7 @@ lazy from hq.platform.application.approval_review import title as approval_title
 lazy from hq.platform.application.automation_adoption import adopted_procedures, playbook_titles
 lazy from hq.platform.application.automation_runs import run_title
 lazy from hq.platform.application.capabilities import capability_title
-lazy from hq.platform.application.glance import _panel_names
+lazy from hq.platform.application.glance_refresh import _panel_names
 lazy from hq.platform.application.security import subject_parts
 
 lazy from .providers import readout_rows, registry_label, resource_home, validate_spec

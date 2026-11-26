@@ -24,7 +24,8 @@ image (`audit_image.py`), `audit:supports`'s asker of the gates' engines
 (`audit_supports.py`), `audit:fact-values`'s reader of every fact value a
 template writes (`audit_fact_values.py`), `lint:sdk-breaking`, which holds `hq_sdk` to
 its base's extensions (`sdk_breaking.py`), `lint:file-lines`, which holds each
-source file to the line ceiling (`file_lines.py`), `lint:source-scans`, which
+source file to the line ceiling (`file_lines.py`), `lint:lazy-imports`, which
+holds each `lazy from` import to a name its module defines (`lazy_imports.py`), `lint:source-scans`, which
 refuses a command form that breaks something in any tracked text file
 (`source_scans.py`), and the check-or-write every
 derived file's writer outside Django runs as its `lint:drift-*` gate
