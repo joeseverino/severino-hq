@@ -33,6 +33,11 @@ DIED = {
 }
 
 
+# What a GitHub delivery makes due: the repositories it is about, and the
+# webhook's delivery log, which now holds a delivery that arrived.
+PUSHED = ["github.repository", "github.webhook"]
+
+
 def worker(*events: dict) -> dict:
     return {"source": "worker", "events": list(events)}
 
@@ -57,13 +62,13 @@ class ApplyEventsTests(TestCase):
         event = InboundEvent.objects.get()
         self.assertEqual((event.provider, event.event, event.subject), ("github_app", "push", "example/app"))
         self.assertEqual((event.source, event.outcome), ("worker", "applied"))
-        self.assertEqual(asked(), ["github.repository"])
+        self.assertEqual(asked(), PUSHED)
         self.assertEqual(answer["applied"], 1)
 
     def test_an_action_of_a_declared_event_is_that_event(self):
         self.apply(worker({**PUSH, "event": "pull_request.opened"}))
 
-        self.assertEqual(asked(), ["github.repository"])
+        self.assertEqual(asked(), PUSHED)
 
     def test_a_container_change_makes_the_container_readings_due(self):
         from hq.domains.control_plane.models import InboundEvent
@@ -144,8 +149,8 @@ class ApplyEventsTests(TestCase):
     def test_a_reconnect_asks_every_reading_the_worker_carries(self):
         answer = self.apply({**worker(), "reconnected": True})
 
-        self.assertEqual(asked(), ["github.repository"])
-        self.assertEqual(answer["asked"], ["github.repository"])
+        self.assertEqual(asked(), PUSHED)
+        self.assertEqual(sorted(answer["asked"]), PUSHED)
         ReadRequest.objects.all().delete()
 
         self.apply({**worker(), "reconnected": False})
@@ -173,12 +178,14 @@ class ApplyEventsTests(TestCase):
             with at(moment):
                 if sweep_due()["due"]:
                     passes.append(moment)
-                    ProviderInventory.objects.update_or_create(
-                        kind="github.repository", defaults={"records": [], "reachable": True, "observed_at": moment}
-                    )
+                    for kind in PUSHED:
+                        ProviderInventory.objects.update_or_create(
+                            kind=kind, defaults={"records": [], "reachable": True, "observed_at": moment}
+                        )
 
         with at(start - timedelta(hours=1)):
-            ProviderInventory.objects.create(kind="github.repository", records=[], reachable=True)
+            for kind in PUSHED:
+                ProviderInventory.objects.create(kind=kind, records=[], reachable=True)
         for second in range(25):
             with at(start + timedelta(seconds=second)):
                 self.apply(worker({**PUSH, "delivery_id": f"burst-{second}"}))
@@ -188,8 +195,9 @@ class ApplyEventsTests(TestCase):
 
         self.assertEqual(passes[0], start, "the first event reads at once")
         self.assertLessEqual(len(passes), 2)
-        read = ProviderInventory.objects.get(kind="github.repository").updated_at
-        self.assertGreater(read, ReadRequest.objects.get().requested_at, "the last event's ask was read")
+        for request in ReadRequest.objects.all():
+            read = ProviderInventory.objects.get(kind=request.kind).updated_at
+            self.assertGreater(read, request.requested_at, "the last event's ask was read")
 
     def test_events_stored_before_the_routine_window_are_deleted_whatever_their_sender_said(self):
         from hq.domains.control_plane.models import InboundEvent
@@ -228,4 +236,4 @@ class BridgeEventsTests(TestCase):
             bridge_client.call("events", worker(PUSH), app=bridge_client.events())
 
         self.assertEqual(InboundEvent.objects.get().delivery_id, PUSH["delivery_id"])
-        self.assertEqual(asked(), ["github.repository"])
+        self.assertEqual(asked(), PUSHED)

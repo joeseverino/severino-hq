@@ -265,14 +265,16 @@ CONNECTIONS = {
 }
 
 # What one App webhook sends from every installation, each event making the
-# repositories' reading due; GitHub's docs name the permission each needs
+# repositories' reading due, and the webhook's own, since a delivery that
+# arrived is one GitHub's log no longer counts as failing; GitHub's docs name
+# the permission each needs
 # (https://docs.github.com/en/webhooks/webhook-events-and-payloads). A
 # deployment review is requested the moment a run starts waiting on a reviewer.
 INBOUND = {
     PROVIDER: InboundSpec(
         dict.fromkeys(
             ("push", "workflow_run", "check_suite", "pull_request", "deployment_status", "deployment_review"),
-            (readings.REPOSITORY_KIND,),
+            (readings.REPOSITORY_KIND, readings.WEBHOOK_KIND),
         ),
         path="/github",
         scheme="github-hmac-sha256",
