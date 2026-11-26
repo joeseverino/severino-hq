@@ -18,6 +18,8 @@ describe("github-hmac-sha256", () => {
     ["no signature", SECRET, null],
     ["a SHA-1 signature", SECRET, "sha1=01dc10d0c83e72ed246219cdd91669667fe2ca59"],
     ["a truncated digest", SECRET, SIGNATURE.slice(0, -2)],
+    ["an odd number of hex digits", SECRET, SIGNATURE.slice(0, -1)],
+    ["a digit that is not hex", SECRET, SIGNATURE.slice(0, -1) + "g"],
     ["no secret", "", SIGNATURE],
   ])("refuses %s", async (_, secret, signature) => {
     expect(await verify(secret, signature, PAYLOAD)).toBe(false);

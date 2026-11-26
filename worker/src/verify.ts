@@ -6,18 +6,20 @@ export type Verifier = (secret: string, signature: string | null, body: BufferSo
 
 const encoder = new TextEncoder();
 
-/** The bytes of a hex string, or null when it is not exactly that. */
-function hexBytes(hex: string): Uint8Array<ArrayBuffer> | null {
-  if (hex.length % 2 !== 0 || !/^[0-9a-f]*$/i.test(hex)) return null;
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return bytes;
+/** The bytes a `<prefix><hex>` signature carries, or null when it is not exactly that. */
+function digestOf(signature: string | null, prefix: string): Uint8Array<ArrayBuffer> | null {
+  if (!signature?.startsWith(prefix)) return null;
+  try {
+    return Uint8Array.fromHex(signature.slice(prefix.length));
+  } catch {
+    return null;
+  }
 }
 
 // GitHub signs the exact payload with HMAC-SHA256 and sends `sha256=<hex>`.
 // subtle.verify compares in constant time.
 const githubHmacSha256: Verifier = async (secret, signature, body) => {
-  const digest = signature?.startsWith("sha256=") ? hexBytes(signature.slice("sha256=".length)) : null;
+  const digest = digestOf(signature, "sha256=");
   if (!secret || !digest || digest.length !== 32) return false;
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
     "verify",
