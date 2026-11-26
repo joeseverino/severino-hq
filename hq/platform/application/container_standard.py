@@ -10,10 +10,14 @@ from collections.abc import Mapping
 from types import SimpleNamespace as Row
 from typing import Any
 
+from django.utils.text import get_text_list
+
 from .standards import Check, Examples, Measurement, Reading, measure
 lazy from .container_hardening import hardening_of
 lazy from .containers import Container, ImageStanding, by_design, socket_holders
+lazy from .exposure import listening_ports
 lazy from .images import ImageRef
+lazy from .ui import ended
 
 # Host paths whose write access is the machine's, not the container's: the
 # path and everything under it.
@@ -285,7 +289,22 @@ STANDARD: tuple[Check, ...] = (
 
 
 def posture_of(container: Any) -> Measurement:
-    return measure(container, STANDARD, by_design().get((container.machine.name, container.running.name)))
+    declared = by_design().get((container.machine.name, container.running.name)) or {}
+    return measure(container, STANDARD, {**_required(container), **declared})
+
+
+def _required(container: Any) -> dict[str, str]:
+    """The checks its job requires it to fail, each with why: the host network,
+    for a port a role of its machine is reached on, since there it answers at
+    the machine's own address and sees each client's."""
+
+    if (container.runtime or {}).get("network_mode") != "host":
+        return {}
+    answered = set(listening_ports(container))
+    for role in container.machine.roles:
+        if owned := [str(port) for port in role.ports if port in answered]:
+            return {"own-network": ended(f"{role.detail.removesuffix('.')} on port {get_text_list(owned, 'and')}")}
+    return {}
 
 
 CHECK_IDS = frozenset(check.id for check in STANDARD)
@@ -299,8 +318,8 @@ def example(runtime: Mapping[str, Any] | None = None, **standing: Any) -> Any:
     record = dict(runtime or {})
     serves = tuple(record.pop("serves", ()))
     return Container(
-        running=Row(name="web", check=None, watcher=""),
-        machine=Row(name="example-box"),
+        running=Row(name="web", check=None, watcher="", network_mode=record.get("network_mode", ""), ports=()),
+        machine=Row(name="example-box", roles=()),
         standing=ImageStanding(
             **{"image": ImageRef("ghcr.io", "example/web", "1.0"), "tag": "1.0", "pinned": True, **standing}
         ),

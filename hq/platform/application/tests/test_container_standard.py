@@ -35,6 +35,28 @@ class StandardTests(TestCase):
         # What it did not declare is still a gap.
         self.assertEqual([result.check.id for result in found.unmet], ["not-root"])
 
+    def on_the_host_network(self, *, nameservers):
+        from .test_containers import running
+        from .test_estate import device, devices
+
+        estate()
+        devices(device("example-box", addresses=["100.64.0.5"]), nameservers=nameservers)
+        inventory("portainer.container", [running("web", "example/web:1.0.0") | {"network_mode": "host"}])
+        on_host = {**KEPT, "network_mode": "host", "port_bindings": [], "exposed_ports": [53, 3000]}
+        inventory("portainer.runtime", [runtime("web", **on_host)])
+        return next(item.posture for item in containers() if item.running.name == "web")
+
+    def test_a_port_its_machine_is_reached_on_keeps_it_on_the_host_network(self):
+        found = self.on_the_host_network(nameservers=["100.64.0.5"])
+
+        self.assertEqual(found.state_of("own-network"), INTENDED)
+        (intended,) = found.intended
+        self.assertIn("53", intended.reason)
+        self.assertNotIn("own-network", {gap.check for gap in found.subject.hardening.removals})
+
+    def test_the_host_network_with_no_port_its_machine_is_reached_on_is_a_gap(self):
+        self.assertEqual(self.on_the_host_network(nameservers=["100.64.0.9"]).state_of("own-network"), Standing.UNMET)
+
     def test_by_design_names_real_checks_and_says_why(self):
         from pydantic import ValidationError
 

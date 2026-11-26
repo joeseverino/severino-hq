@@ -3,7 +3,7 @@
 One primitive for every standard HQ keeps (HQ's own, a repository's access and
 settings, how a container is run), so each check says why it matters and how
 to fix it. "Cannot read" is never "not met", and a check a subject's job
-requires it to fail, declared with the reason, is "by design" and never a gap.
+requires it to fail, declared or derived with the reason, is "by design" and never a gap.
 """
 
 from collections.abc import Callable, Mapping

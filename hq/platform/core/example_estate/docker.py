@@ -52,6 +52,11 @@ PACKAGES = ("pkg:apk/alpine/musl@1.2.5-r1", "pkg:apk/alpine/openssl@3.3.2-r1", "
 # The one container its compose file starts by tag alone, so the machine holds
 # the digest it could be pinned to and HQ names that pin.
 BY_TAG = "nginx-proxy-manager"
+# The DNS server tailnet devices use, on the host's network its job needs and
+# as root, as its image starts it: binding port 53 there takes NET_BIND_SERVICE,
+# which its dropped capabilities leave out.
+HOST_NETWORK = "adguard"
+DNS_PORT = 53
 
 
 def containers():
@@ -119,8 +124,9 @@ def _running(name, port, image):
         "image": started_by(name, image),
         "state": "running",
         "status": "Up 12 days (healthy)",
-        "ports": [port],
-        "network_mode": "bridge",
+        # Docker reports no published port on the host's network.
+        "ports": [] if name == HOST_NETWORK else [port],
+        "network_mode": "host" if name == HOST_NETWORK else "bridge",
         "portainer_managed": False,
     }
 
@@ -169,15 +175,16 @@ def _runtime(name, port):
         mounts.append(
             {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
         )
+    on_host = name == HOST_NETWORK
     return _on_machine(
         container=name,
         stack=name,
         service=name,
         image_id=digest("image-id", name),
-        **KEPT,
+        **KEPT | ({"network_mode": "host", "user": ""} if on_host else {}),
         mounts=mounts,
-        port_bindings=[{"container_port": f"{port}/tcp", "host_ip": LAN, "host_port": str(port)}],
-        exposed_ports=[port],
+        port_bindings=[] if on_host else [{"container_port": f"{port}/tcp", "host_ip": LAN, "host_port": str(port)}],
+        exposed_ports=[DNS_PORT, port] if on_host else [port],
         started_at=iso(UP_FOR),
         # What it used at the last sweep: a few hundred megabytes, a little CPU.
         memory_usage=(48 + 16 * len(name)) * 1_048_576,

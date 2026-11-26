@@ -33,6 +33,9 @@ class MachineRole:
     label: str
     detail: str
     applies: Callable[[Machine, RoleContext], bool]
+    # The ports the role is reached on at the machine's own address: the one
+    # a container doing the job must answer there.
+    ports: tuple[int, ...] = ()
 
 
 def _exit_node(machine: Machine, _context: RoleContext) -> bool:
@@ -62,6 +65,7 @@ ROLES: tuple[MachineRole, ...] = (
         "Tailnet DNS",
         "Tailnet devices use it for DNS.",
         _tailnet_dns,
+        ports=(53,),
     ),
 )
 
