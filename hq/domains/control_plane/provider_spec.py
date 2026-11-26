@@ -192,15 +192,22 @@ class InboundSpec:
     source that reports over the bridge alone (HQ's own host jobs) has none.
     """
 
-    # Each event by the provider's name for it (a webhook's event header), or
-    # that name and the payload's action joined by a dot where one action
-    # differs from the rest; the readings it makes due.
+    # Each event by the provider's name for it, or that name and the
+    # payload's action joined by a dot where one action differs from the
+    # rest; the readings it makes due.
     events: Mapping[str, tuple[str, ...]]
     path: str = ""
     scheme: SignatureScheme | None = None
+    # Whether the body is a JSON array of events, each read on its own.
+    batched: bool = False
+    # The header that names the delivery, which a repeat keeps; without one,
+    # an event is named by the body's SHA-256 and its place in the body, so
+    # a body sent again is the event already stored.
     delivery_header: str = ""
+    # Where the event's name is: a header, or a JSON pointer into the event.
     event_header: str = ""
-    # JSON pointers into the request's body.
+    event_pointer: str = ""
+    # JSON pointers into the event.
     action_pointer: str = ""
     subject_pointer: str = ""
     # The Worker secret the signature is checked with.
@@ -221,9 +228,12 @@ class InboundSpec:
             raise ValueError("An inbound declaration names each event's readings.")
         if not set(self.complete) <= {kind for kinds in self.events.values() for kind in kinds}:
             raise ValueError("An inbound declaration is complete only for readings its events name.")
-        route = (self.path, self.scheme, self.delivery_header, self.event_header)
-        if any(route) and not all((*route, self.secret_binding, self.max_body_bytes)):
-            raise ValueError(f"The route {self.path!r} names its scheme, its headers, its secret and its largest body.")
+        named = (self.event_header, self.event_pointer)
+        route = (self.path, self.scheme, self.secret_binding, self.max_body_bytes)
+        if any((*route, *named)) and not (all(route) and sum(map(bool, named)) == 1):
+            raise ValueError(
+                f"The route {self.path!r} names its scheme, its secret, its largest body and where an event's name is."
+            )
 
     def reads(self, event: str) -> tuple[str, ...]:
         """The readings ``event`` makes due: its own entry, else its name's

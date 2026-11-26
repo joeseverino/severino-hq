@@ -410,11 +410,13 @@ They keep `OWNER/REPO`, `events.example.com` for the name on your zone the
 Worker answers on, `0123abcd` for your Cloudflare account ID, and the vault
 and item names for you to fill in.
 
-1. Create the item holding the Worker's secrets, `GITHUB_WEBHOOK_SECRET` and
-   `SOCKET_TOKEN`:
+1. Create the item holding the Worker's secrets, `GITHUB_WEBHOOK_SECRET`,
+   `TAILSCALE_WEBHOOK_SECRET` and `SOCKET_TOKEN`. Tailscale makes its own
+   secret (step 6), so until then that field holds one nobody signs with,
+   and the Worker's Tailscale route takes nothing:
 
    ```sh
-   op item create --vault 'Example Vault' --category password --title 'example events' "GITHUB_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "SOCKET_TOKEN[password]=$(openssl rand -hex 32)"
+   op item create --vault 'Example Vault' --category password --title 'example events' "GITHUB_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "TAILSCALE_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "SOCKET_TOKEN[password]=$(openssl rand -hex 32)"
    ```
 
 2. Mint the Worker's deploy token, Workers Scripts Write alone, into an API
@@ -457,7 +459,7 @@ and item names for you to fill in.
    them; run this again after rotating one:
 
    ```sh
-   CLOUDFLARE_API_TOKEN='op://Example Vault/example worker deploy/credential' CLOUDFLARE_ACCOUNT_ID=0123abcd HQ_INBOUND_HOSTNAME=events.example.com GITHUB_WEBHOOK_SECRET='op://Example Vault/example events/GITHUB_WEBHOOK_SECRET' SOCKET_TOKEN='op://Example Vault/example events/SOCKET_TOKEN' op run -- mise run worker:deploy --with-secrets
+   CLOUDFLARE_API_TOKEN='op://Example Vault/example worker deploy/credential' CLOUDFLARE_ACCOUNT_ID=0123abcd HQ_INBOUND_HOSTNAME=events.example.com GITHUB_WEBHOOK_SECRET='op://Example Vault/example events/GITHUB_WEBHOOK_SECRET' TAILSCALE_WEBHOOK_SECRET='op://Example Vault/example events/TAILSCALE_WEBHOOK_SECRET' SOCKET_TOKEN='op://Example Vault/example events/SOCKET_TOKEN' op run -- mise run worker:deploy --with-secrets
    ```
 
 5. Point HQ's GitHub App's webhook at the Worker: the command from [step
@@ -469,7 +471,20 @@ and item names for you to fill in.
 
    Then, on the App's settings page, tick Active and subscribe to the events
    the command prints. GitHub has no API for either.
-6. Add the `cloudflare_events` connection, which the listener waits for
+6. With a Tailscale connection, point the tailnet's webhook at the Worker.
+   In the admin console, under Settings, Webhooks, add an endpoint,
+   `https://events.example.com/tailscale`, with the events
+   `worker/src/generated/routes.json` lists for `tailscale`. Tailscale shows
+   its secret once: put it in the item's `TAILSCALE_WEBHOOK_SECRET` field,
+   then set it on the Worker, which keeps every other secret it holds:
+
+   ```sh
+   cd worker && CLOUDFLARE_API_TOKEN='op://Example Vault/example worker deploy/credential' CLOUDFLARE_ACCOUNT_ID=0123abcd TAILSCALE_WEBHOOK_SECRET='op://Example Vault/example events/TAILSCALE_WEBHOOK_SECRET' op run -- sh -c 'printf %s "$TAILSCALE_WEBHOOK_SECRET" | ./node_modules/.bin/wrangler secret put TAILSCALE_WEBHOOK_SECRET'
+   ```
+
+   Then send the console's test event: the Worker answers it 202 and
+   forwards nothing, since HQ takes no `test` event.
+7. Add the `cloudflare_events` connection, which the listener waits for
    before it starts: an item in the vault `host.json` names, laid out as
    [Connections](Connections.md#cloudflare-inbound-events) says, its
    `credential` the `SOCKET_TOKEN` from step 1 and its `website` the Worker's

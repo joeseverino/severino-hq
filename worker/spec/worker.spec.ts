@@ -5,8 +5,10 @@ import routes from "../src/generated/routes.json";
 import { SOCKET_PATH } from "../src/hub";
 import pullRequest from "./fixtures/pull_request.opened.json";
 import push from "./fixtures/push.json";
+import tailscaleEvents from "./fixtures/tailscale.json";
 
 const github = routes.providers.find((route) => route.provider === "github_app")!;
+const tailscale = routes.providers.find((route) => route.provider === "tailscale")!;
 const ORIGIN = "https://example.com";
 
 /** A listener: each message its socket has been sent, in order. */
@@ -43,17 +45,16 @@ async function listen(): Promise<Listener> {
   };
 }
 
-async function signature(body: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(env.GITHUB_WEBHOOK_SECRET),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
-  return `sha256=${Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+/** The HMAC-SHA256 of `message` under `secret`, in hex. */
+async function hmac(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+  ]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(message))).toHex();
 }
+
+const signature = async (body: string) => `sha256=${await hmac(env.GITHUB_WEBHOOK_SECRET, body)}`;
 
 interface Delivery {
   event: string;
@@ -156,6 +157,66 @@ describe("a delivery whose names exceed the contract's bounds", () => {
 
     expect(refused.status).toBe(400);
     expect(await listener.next()).toMatchObject({ delivery_id: "delivery-after" });
+  });
+});
+
+/**
+ * POSTs `events` as Tailscale sends them (tailscale.com/kb/1213/webhooks): one
+ * JSON array, signed "t=<time>,v1=<hex>" over "<time>.<body>", `age` seconds
+ * ago, unless `signed` gives the header or null for none.
+ */
+async function tailscaleDelivery(events: unknown[], { age = 0, signed }: { age?: number; signed?: string | null } = {}) {
+  const body = JSON.stringify(events);
+  const at = Math.floor(Date.now() / 1000) - age;
+  const header = signed === undefined ? `t=${at},v1=${await hmac(env.TAILSCALE_WEBHOOK_SECRET, `${at}.${body}`)}` : signed;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (header !== null) headers[tailscale.scheme.header] = header;
+  return exports.default.fetch(`${ORIGIN}${tailscale.path}`, { method: "POST", headers, body });
+}
+
+describe("a Tailscale delivery", () => {
+  it("reaches a listener as each event it takes, by name alone", async () => {
+    const listener = await listen();
+
+    const response = await tailscaleDelivery(tailscaleEvents);
+
+    expect(response.status).toBe(202);
+    const created = await listener.next();
+    const needs = await listener.next();
+    expect(created).toStrictEqual({
+      provider: "tailscale",
+      event: "nodeCreated",
+      subject: "example.com",
+      delivery_id: expect.any(String),
+      received_at: expect.any(String),
+    });
+    expect(needs).toMatchObject({ event: "nodeNeedsApproval", subject: "example.com" });
+    expect((created as { delivery_id: string }).delivery_id).not.toBe((needs as { delivery_id: string }).delivery_id);
+  });
+
+  it("sent again is each event under the delivery id it first had", async () => {
+    const listener = await listen();
+
+    await tailscaleDelivery(tailscaleEvents);
+    const first = [await listener.next(), await listener.next()];
+    await tailscaleDelivery(tailscaleEvents, { age: 60 });
+    const again = [await listener.next(), await listener.next()];
+
+    expect(again).toMatchObject(first.map((event) => ({ delivery_id: (event as { delivery_id: string }).delivery_id })));
+  });
+
+  it.each<[string, { age?: number; signed?: string | null }]>([
+    ["a wrong signature", { signed: `t=${Math.floor(Date.now() / 1000)},v1=${"0".repeat(64)}` }],
+    ["a signature older than its window", { age: tailscale.scheme.window_seconds + 60 }],
+    ["no signature", { signed: null }],
+  ])("with %s never reaches a listener", async (_, delivery) => {
+    const listener = await listen();
+
+    const refused = await tailscaleDelivery(tailscaleEvents, delivery);
+    await tailscaleDelivery([{ ...tailscaleEvents[1], type: "policyUpdate" }]);
+
+    expect(refused.status).toBe(401);
+    expect(await listener.next()).toMatchObject({ event: "policyUpdate" });
   });
 });
 

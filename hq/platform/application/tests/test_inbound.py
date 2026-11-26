@@ -164,10 +164,16 @@ class ApplyEventsTests(TestCase):
         self.assertIsNone(channel_standing(InboundSource.HOST).seen_at)
 
     def test_a_reconnect_asks_every_reading_the_worker_carries(self):
+        from hq.domains.control_plane.provider_adapters import INBOUND
+
+        routed = sorted(
+            {kind for spec in INBOUND.values() if spec.path for kinds in spec.events.values() for kind in kinds}
+        )
+
         answer = self.apply({**worker(), "reconnected": True})
 
-        self.assertEqual(asked(), PUSHED)
-        self.assertEqual(sorted(answer["asked"]), PUSHED)
+        self.assertEqual(asked(), routed)
+        self.assertEqual(sorted(answer["asked"]), routed)
         ReadRequest.objects.all().delete()
 
         self.apply({**worker(), "reconnected": False})

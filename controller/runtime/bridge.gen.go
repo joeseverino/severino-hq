@@ -507,6 +507,7 @@ func (e HostRenderStatusRecordState) Valid() bool {
 const (
 	InboundProviderGitHubApp InboundProvider = "github_app"
 	InboundProviderHost      InboundProvider = "host"
+	InboundProviderTailscale InboundProvider = "tailscale"
 )
 
 // Valid indicates whether the value is a known member of the InboundProvider enum.
@@ -515,6 +516,8 @@ func (e InboundProvider) Valid() bool {
 	case InboundProviderGitHubApp:
 		return true
 	case InboundProviderHost:
+		return true
+	case InboundProviderTailscale:
 		return true
 	default:
 		return false

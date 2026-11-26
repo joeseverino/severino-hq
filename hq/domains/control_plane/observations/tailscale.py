@@ -57,6 +57,9 @@ SETTING_PARTS = {
 }
 
 
+USER_KIND = "tailscale.user"
+
+
 # Personal data, stored for the estate view: who holds access to the tailnet
 # and in what role.
 class TailnetUserRecord(ObservationRecord):
@@ -101,7 +104,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         relation="Tailnet settings",
     ),
     ObservationSpec(
-        "tailscale.user",
+        USER_KIND,
         "tailscale",
         "Tailnet user",
         TailnetUserRecord,

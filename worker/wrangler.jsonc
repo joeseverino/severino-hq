@@ -32,6 +32,7 @@
   "secrets": {
     "required": [
       "GITHUB_WEBHOOK_SECRET",
+      "TAILSCALE_WEBHOOK_SECRET",
       "SOCKET_TOKEN"
     ]
   }
