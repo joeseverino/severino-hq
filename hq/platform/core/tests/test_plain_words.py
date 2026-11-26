@@ -133,9 +133,12 @@ class ValeRuleTests(SimpleTestCase):
         self.assertEqual(vale({"page.html": page}), [("page.html", 1, "Expiry")])
 
     def test_a_retired_name_is_found_as_written(self):
-        page = "".join(f"<p>{name}</p>\n" for name in RETIRED)
+        import yaml
 
-        self.assertEqual(rules({"page.html": page}).count("Retired"), len(RETIRED))
+        retired = yaml.safe_load((VALE / "styles/Plain/Retired.yml").read_text(encoding="utf-8"))["swap"]
+        page = "".join(f"<p>{name}</p>\n" for name in retired)
+
+        self.assertEqual(rules({"page.html": page}).count("Retired"), len(retired))
         self.assertEqual(rules({"page.html": "<p>3 things need you. Refresh all.</p>"}), [])
 
     def test_python_is_read_for_sentences_and_not_for_names(self):
@@ -369,34 +372,3 @@ class DerivedLabelTests(SimpleTestCase):
         found = plain_words.refused([("example.create.spec", field_label("spec")), ("example.create.note", "Note")])
 
         self.assertEqual([line.split(": ")[:2] for line in found], [["example.create.spec", "Plain.Spec"]])
-
-
-RETIRED = (
-    "Action items",
-    "Command Center",
-    "Command center",
-    "Request fresh sweep",
-    "Read now and check again",
-    "Check again",
-    "Read now",
-    "Read them now",
-    "Read all now",
-    "Read everything now",
-    "Refresh now",
-    "Reading…",
-    "Reading failed",
-    "Refresh controller readings",
-    "Run updates now",
-    "Run dependency updates now",
-    "Run the controller",
-    "Run a pass now",
-    "Apply HQ's settings",
-    "Apply again",
-    "Restore HQ's version",
-    "Request renewal",
-    "Open the deploy",
-    "Sync the vault",
-    "Sync documentation",
-    "Topology",
-    "topology",
-)
