@@ -764,8 +764,8 @@ It holds Docker's socket, which the controller's units hold already, under
 the shared sandbox alone: no network, no address family but `AF_UNIX`, no
 capability and no credential. It reads only Docker's event stream, and tells
 HQ only names (the container's, Docker's action, id and time) through
-`hq-controller events host`, so a forged event costs one read of the
-containers, and a replayed one is the stored delivery and asks nothing.
+`hq-controller events`, so a forged event costs one read of the
+containers.
 
 The deploy token is the one standing secret a workflow holds. Every other
 write a workflow makes is a GitHub token minted for one permission and one

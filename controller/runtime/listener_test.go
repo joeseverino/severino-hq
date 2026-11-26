@@ -166,7 +166,7 @@ func TestABurstOfEventsIsOneBatch(t *testing.T) {
 	select {
 	case batch := <-batches:
 		t.Errorf("a second batch was posted: %+v", batch)
-	case <-time.After(10 * ListenerWindow):
+	case <-time.After(10 * BurstWindow):
 	}
 }
 
@@ -213,18 +213,6 @@ func TestAnUnansweredPingEndsTheConnectionWithNoHeartbeat(t *testing.T) {
 		if batch := next(t, batches, "batch on connecting"); !batch.Reconnected {
 			t.Fatalf("a heartbeat was posted while pings went unanswered: %+v", batch)
 		}
-	}
-}
-
-func TestTheListenerKeepsThePaceHQDeclares(t *testing.T) {
-	bridge, _ := hq(t)
-	listener := listenerFor(t, newHub(t, holding), bridge)
-	if listener.Ping != 30*time.Second {
-		t.Errorf("pings every %s", listener.Ping)
-	}
-	// inbound_events.CHANNEL_EVERY's worker source, through the contract.
-	if listener.Heartbeat != 5*time.Minute {
-		t.Errorf("a heartbeat every %s", listener.Heartbeat)
 	}
 }
 

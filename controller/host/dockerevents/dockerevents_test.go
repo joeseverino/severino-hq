@@ -91,12 +91,19 @@ func fakeEngine(t *testing.T, streams ...stream) (socket string, asked chan url.
 	return socket, asked
 }
 
-// watch runs the watcher on socket until the test ends; each batch it tells
-// HQ arrives on the channel.
-func watch(t *testing.T, socket string) chan []byte {
+// watch runs the watcher on socket until the test ends; each batch of
+// events it tells HQ arrives on told, and each reconnect on reconnected.
+func watch(t *testing.T, socket string) (told chan []byte, reconnected chan struct{}) {
 	t.Helper()
-	told := make(chan []byte, 8)
-	watcher := New(socket, func(_ context.Context, lines []byte) error {
+	told, reconnected = make(chan []byte, 8), make(chan struct{}, 8)
+	watcher := New(socket, func(_ context.Context, again bool, lines []byte) error {
+		if again {
+			if len(lines) != 0 {
+				t.Errorf("a reconnect carried %s", lines)
+			}
+			reconnected <- struct{}{}
+			return nil
+		}
 		told <- bytes.Clone(lines)
 		return nil
 	}, slog.New(slog.DiscardHandler))
@@ -107,7 +114,7 @@ func watch(t *testing.T, socket string) chan []byte {
 	done := make(chan struct{})
 	go func() { watcher.Run(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
-	return told
+	return told, reconnected
 }
 
 func arrived[T any](t *testing.T, from chan T) T {
@@ -138,7 +145,7 @@ func arrivals(t *testing.T, lines []byte) []runtime.InboundArrival {
 
 func TestTheWatcherAsksDockerForTheContainerChangesHQReads(t *testing.T) {
 	socket, asked := fakeEngine(t)
-	watch(t, socket)
+	_, _ = watch(t, socket)
 
 	query := arrived(t, asked)
 	var filters map[string][]string
@@ -156,7 +163,7 @@ func TestTheWatcherAsksDockerForTheContainerChangesHQReads(t *testing.T) {
 		t.Errorf("filters %v name more than the type and the events", filters)
 	}
 	if query.Has("since") {
-		t.Errorf("a first read asks from %q", query.Get("since"))
+		t.Errorf("a read asks Docker to replay from %q", query.Get("since"))
 	}
 }
 
@@ -166,7 +173,7 @@ func TestABurstIsOneBatchOfEventsHQReads(t *testing.T) {
 		lines: engineMessage("die", at) + engineMessage("health_status: unhealthy", at+1) + engineMessage("start", at+2),
 		hold:  true,
 	})
-	told := watch(t, socket)
+	told, _ := watch(t, socket)
 
 	events := arrivals(t, arrived(t, told))
 	if len(events) != 3 {
@@ -199,7 +206,7 @@ func TestHQsOwnRunsAreNeverTold(t *testing.T) {
 		lines: passMessage("start", at) + passMessage("die", at+1) + passMessage("destroy", at+2) + engineMessage("die", at+3),
 		hold:  true,
 	})
-	told := watch(t, socket)
+	told, _ := watch(t, socket)
 
 	events := arrivals(t, arrived(t, told))
 	if len(events) != 1 || events[0].Subject != "my-container" {
@@ -207,24 +214,18 @@ func TestHQsOwnRunsAreNeverTold(t *testing.T) {
 	}
 }
 
-// Docker replays from since inclusively, so the stream read again repeats
-// the last event HQ stored, as the same delivery.
-func TestADroppedStreamIsReadAgainFromTheLastEventHQStored(t *testing.T) {
+// The watcher's own start, and each stream it loses, are a gap HQ closes by
+// reading again: each read of the stream begins by telling HQ it reconnected.
+func TestEachReadOfTheStreamTellsHQItReconnected(t *testing.T) {
 	const at = int64(1461943101381709551)
-	first, second := engineMessage("die", at), engineMessage("destroy", at+5)
-	socket, asked := fakeEngine(t, stream{lines: first}, stream{lines: first + second, hold: true})
-	told := watch(t, socket)
+	socket, asked := fakeEngine(t, stream{lines: engineMessage("die", at)}, stream{hold: true})
+	told, reconnected := watch(t, socket)
 
-	stored := arrivals(t, arrived(t, told))
 	arrived(t, asked)
-	if since := arrived(t, asked).Get("since"); since != "1461943101.381709551" {
-		t.Errorf("read again from %q, the last event was at 1461943101.381709551", since)
+	arrived(t, reconnected)
+	if events := arrivals(t, arrived(t, told)); len(events) != 1 {
+		t.Fatalf("told %+v", events)
 	}
-	replayed := arrivals(t, arrived(t, told))
-	if len(replayed) != 2 || replayed[0] != stored[0] {
-		t.Errorf("the replay %+v is not the event HQ stored, %+v, then the next", replayed, stored)
-	}
-	if replayed[1].Event != string(runtime.HostEventDockerContainer)+".destroy" {
-		t.Errorf("then told %q", replayed[1].Event)
-	}
+	arrived(t, asked)
+	arrived(t, reconnected)
 }

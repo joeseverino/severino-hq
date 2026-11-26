@@ -22,8 +22,6 @@ const (
 	// ListenerPing is how often the socket is pinged; a ping unanswered by the
 	// next one ends the connection.
 	ListenerPing = 30 * time.Second
-	// ListenerWindow is how long a burst of events is gathered into one batch.
-	ListenerWindow = 100 * time.Millisecond
 	// listenerReadLimit bounds one message: an event is its names alone.
 	listenerReadLimit = 16 << 10
 )
@@ -50,7 +48,8 @@ type Listener struct {
 	// Post is the bridge's events action.
 	Post func(context.Context, InboundBatch) error
 	Log  *slog.Logger
-	// The pace, ListenerPing and the rest unless a test sets its own.
+	// The pace, ListenerPing, BurstWindow and ListenerHeartbeat unless a test
+	// sets its own.
 	Ping, Window, Heartbeat time.Duration
 	Reconnect
 }
@@ -65,7 +64,7 @@ func NewListener(connection connections.Connection, client *http.Client, post fu
 	}
 	return &Listener{
 		URL: connection.APIToken.URL, Token: connection.APIToken.APIToken, Client: client, Post: post, Log: log,
-		Ping: ListenerPing, Window: ListenerWindow, Heartbeat: ListenerHeartbeat, Reconnect: NewReconnect(),
+		Ping: ListenerPing, Window: BurstWindow, Heartbeat: ListenerHeartbeat, Reconnect: NewReconnect(),
 	}, nil
 }
 
@@ -146,8 +145,7 @@ func (l *Listener) session(ctx context.Context) error {
 		}
 	}()
 
-	var batch []InboundArrival
-	var window <-chan time.Time
+	burst := Burst{Window: l.Window}
 	for {
 		select {
 		case <-ctx.Done():
@@ -158,23 +156,18 @@ func (l *Listener) session(ctx context.Context) error {
 				l.Log.Warn("event dropped", slog.String("event", "listener.unreadable"), slog.Any("error", err))
 				continue
 			}
-			batch = append(batch, event)
-			if window == nil {
-				window = time.After(l.Window)
-			}
-			if len(batch) < MaxInboundEvents {
+			if !burst.Add(event) {
 				continue
 			}
-		case <-window:
+		case <-burst.Due():
 		case <-answered:
-			if batch != nil || time.Since(posted) < l.Heartbeat {
+			if burst.Held() || time.Since(posted) < l.Heartbeat {
 				continue
 			}
 		}
-		if err := post(InboundBatch{Events: batch}); err != nil {
+		if err := post(InboundBatch{Events: burst.Take()}); err != nil {
 			return err
 		}
-		batch, window = nil, nil
 	}
 }
 
