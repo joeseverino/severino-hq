@@ -16,6 +16,13 @@ hide = true
 usage = 'arg "<path>" help="A Python file in the repository"'
 run = '''graph="$(uv run ruff analyze graph --direction dependents --detect-string-imports .)" && printf '%s' "${graph}" | jq --arg path "${usage_path}" '.[$path]' '''
 
+["audit:fact-values"]
+extends = "audit"
+description = "Every fact whose value a template writes as a sentence, and every value drawn from a domain object's wording, counted, read-only"
+hide = true
+usage = 'arg "[roots]" var=#true help="Folders of templates to read (the packages of an extension checkout); templates/ without"'
+run = 'uv run python -m tools.audit_fact_values ${usage_roots:-}'
+
 # Each run read by tools/pipeline/ci_timings.py, the module refusing any word that is not a
 # run id, so the unquoted list can reach gh as nothing but ids.
 ["audit:ci-timings"]

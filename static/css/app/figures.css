@@ -368,8 +368,9 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 :is(.facts-band, .facts-inline) > .fact:has(> .fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); background: var(--surface-2); outline: var(--space-3) solid var(--surface-2); }
 /* Under the value, running words: its lines are the ones its markup declares, small print (`<small>`, a `detail=` given as lines), read by their color. A flex or grid box would make each run of words between two elements a row of its own. */
 .facts-band .fact-detail { min-width: 0; margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
-.facts-band .fact-detail > small { display: block; font-size: inherit; }
-.facts-band .fact-detail > small + small { margin-block-start: var(--space-1); }
+:is(.facts-band, .facts-list) .fact-detail > small { display: block; }
+.facts-band .fact-detail > small { font-size: inherit; }
+:is(.facts-band, .facts-list) .fact-detail > small + small { margin-block-start: var(--space-1); }
 /* A detail's link, or a word that opens its tip, is a box a target tall (`--target-min`), however few words share its line, set on the baseline of the words beside it; one set by its top would stand off their baseline by the difference between its line and theirs. */
 .facts-band .fact-detail :is(a, [tabindex]) { display: inline-block; line-height: var(--target-min); }
 /* A figure that counts nothing is quiet, so the figures that count something are read first. */

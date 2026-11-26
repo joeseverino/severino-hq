@@ -57,10 +57,8 @@ uptime and how the request came.
   {% facts %}
     {% if release.repository %}{% with repository=release.repository %}
     {% fact repository.default_branch|default:"Branch"|capfirst %}<span class="prose">
-        {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7" }},</code> production runs <code>{{ release.deployed|slice:":7" }}</code>
-        {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7" }}</code>
-        {% else %}{% muted %}Not read{% endmuted %}{% endif %}
-      </span>{% detail %}{% list kind="dots" %}<li>{% entity repository.url|outside label=repository.name %}</li><li>{% include "partials/_reading_age.html" with reading=repository.reading only %}</li>{% endlist %}{% endfact %}
+        {% if release.behind %}Ahead of production{% elif release.behind is False %}In production{% else %}{% muted %}Not read{% endmuted %}{% endif %}
+      </span>{% detail %}{% if release.behind %}<small><code>{{ release.head|slice:":7" }}</code></small><small>Production runs <code>{{ release.deployed|slice:":7" }}</code></small>{% elif release.behind is False %}<small><code>{{ release.head|slice:":7" }}</code></small>{% endif %}{% list kind="dots" %}<li>{% entity repository.url|outside label=repository.name %}</li><li>{% include "partials/_reading_age.html" with reading=repository.reading only %}</li>{% endlist %}{% endfact %}
     {% endwith %}{% endif %}
     {% if release.image %}
     {% fact "Image" %}
@@ -68,7 +66,7 @@ uptime and how the request came.
     {% detail %}{% if release.built %}Built {{ release.built|when }}{% endif %}
     {% endfact %}
     {% fact "Signature" %}{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}{% muted %}{% include "partials/_reading_age.html" with unread=release.signed_unread only %}{% endmuted %}{% endif %}{% endfact %}
-    {% fact "Vulnerabilities" %}<span class="prose">{% if release.vulnerabilities_unread %}{% muted %}{% include "partials/_reading_age.html" with unread=release.vulnerabilities_unread only %}{% endmuted %}{% else %}{{ release.vulnerabilities|capfirst }}{% if release.vulnerabilities_note %} {% muted %}{{ release.vulnerabilities_note }}{% endmuted %}{% endif %}{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}
+    {% fact "Vulnerabilities" %}<span class="prose">{% if release.vulnerabilities_unread %}{% muted %}{% include "partials/_reading_age.html" with unread=release.vulnerabilities_unread only %}{% endmuted %}{% else %}{{ release.vulnerabilities|capfirst }}{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% detail %}{% if release.vulnerabilities_note and not release.vulnerabilities_unread %}<small>{{ release.vulnerabilities_note }}</small>{% endif %}{% endfact %}
     {% endif %}
     {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name }} {% muted %}{{ version }}{% endmuted %}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
   {% endfacts %}

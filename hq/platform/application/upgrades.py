@@ -13,10 +13,10 @@ from typing import Annotated, Any, Literal
 from django.utils.text import capfirst, get_text_list
 
 from .card_items import Answer
+from .container_words import named
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .describe import Describe
 from .display_words import Code
-from .entity_links import EntityLink, declared_link
 from .images import affected, version
 from .tone import Tone
 from .ui import counted, ended
@@ -339,14 +339,6 @@ def fixes_said(fixes: tuple[Mapping[str, Any], ...]) -> Answer:
     """What a move fixes, counted, over the first two it names."""
 
     return Answer(counted(len(fixes), "known vulnerability", "known vulnerabilities"), named(fixes), Tone.GOOD)
-
-
-def named(advisories: tuple[Mapping[str, Any], ...]) -> tuple[EntityLink, ...]:
-    """The first two of ``advisories``, each linked by its id: a fact's reasons."""
-
-    return tuple(
-        declared_link(str(each.get("id", "")), str(each.get("url", "")), "dependency") for each in advisories[:2]
-    )
 
 
 # Why a container's data is a reason to look before it is upgraded.

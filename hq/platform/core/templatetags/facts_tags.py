@@ -6,6 +6,7 @@ from typing import NamedTuple
 
 from django import template
 from django.template.base import token_kwargs
+from django.utils.text import capfirst
 
 from hq.platform.application.card_items import Answer
 from hq.platform.application.display_words import Code
@@ -62,10 +63,16 @@ class Line(NamedTuple):
 
 
 def _lines(given: Iterable[object]) -> tuple[Line, ...]:
+    """Each line as drawn, words after a finished sentence raised to start
+    their own."""
+
     drawn: list[Line] = []
     for line in given:
-        if isinstance(line, str):
-            drawn.append(Line(line, code=isinstance(line, Code)))
+        if isinstance(line, Code):
+            drawn.append(Line(line, code=True))
+        elif isinstance(line, str):
+            follows = bool(drawn) and drawn[-1].text.rstrip().endswith((".", "!", "?"))
+            drawn.append(Line(capfirst(line) if follows else line))
         elif drawn and drawn[-1].links:
             drawn[-1] = drawn[-1]._replace(links=(*drawn[-1].links, line))
         else:

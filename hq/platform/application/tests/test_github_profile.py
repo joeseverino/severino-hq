@@ -400,6 +400,6 @@ class AppProofTests(TestCase):
         response = self.client.get(reverse("watching"))
 
         self.assertIn("HQ's GitHub App is installed on it.", tips(response))
-        self.assertContains(response, "reading 1 of your repositories")
+        self.assertContains(response, "Reading 1 of your repositories")
         self.assertContains(response, "(private)")
         self.assertNotContains(response, "someone-else/thing")

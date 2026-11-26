@@ -33,7 +33,7 @@ declaration's machinery: the controller's actions are the buttons above, and
 "declared" says nothing a container page is opened to learn.
 {% endcomment %}
 {% if container.standing %}
-  {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine edit=container.edit %}
+  {% include "control_plane/_container_band.html" with standing=container.standing running=container.running machine=container.machine %}
   {% if container.running.unit %}{% muted element="p" data_run_by_unit=container.running.unit %}The systemd unit <code>{{ container.running.unit }}</code> runs it, and Start, Stop and Restart go through that unit.{% endmuted %}{% endif %}
   {% if container.item %}{% include "control_plane/_container_detail.html" with item=container.item plan=container.plan update=container.state.update state=container.state act=container.act held=container.held readiness=container.readiness managed=container.managed edit=container.edit %}{% endif %}
 {% endif %}
@@ -137,7 +137,7 @@ where it is saved and how it relates follow, short cards sharing rows.
           {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
           {% fact "Reading" %}{% include "partials/_reading_age.html" with at=container.running.observed_at only %}{% endfact %}
         {% else %}
-          {% fact "State" %}{% muted %}Not read yet.{% endmuted %}{% endfact %}
+          {% fact "State" value="Not read yet" %}
         {% endif %}
         {% if container.running.unit %}
           {% fact "Run by" %}<code data-run-by-unit="{{ container.running.unit }}">{{ container.running.unit }}</code>{% detail %}Start, Stop and Restart go through this systemd unit.{% endfact %}

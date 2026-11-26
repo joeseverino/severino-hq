@@ -91,10 +91,10 @@ last done to it is read before its parts.
     rows saying "no" on every machine page is how a page stops being read.
     {% endcomment %}
     {% if machine.presence.ssh_enabled %}{% fact "Tailscale SSH" value="Enabled" %}{% endif %}
-    {% if machine.presence.blocks_incoming %}{% fact "Shields" value="Up. Blocks all inbound connections." %}{% endif %}
+    {% if machine.presence.blocks_incoming %}{% fact "Shields" value="Up" detail="Blocks all inbound connections" %}{% endif %}
     {% if machine.presence.external %}{% fact "Belongs to" value="Another tailnet (shared in)" %}{% endif %}
-    {% if not machine.presence.authorized %}{% fact "Authorized" %}<strong>No</strong>. It cannot connect until you approve it.{% endfact %}{% endif %}
-    {% if machine.presence.lock_error %}{% fact "Tailnet lock" %}<strong>Not signed</strong>: {{ machine.presence.lock_error }}{% endfact %}{% elif machine.presence.signs_tailnet_lock %}{% fact "Tailnet lock" value="Signing device" %}{% endif %}
+    {% if not machine.presence.authorized %}{% fact "Authorized" value="No" detail="It cannot connect until you approve it" tone="attention" %}{% endif %}
+    {% if machine.presence.lock_error %}{% fact "Tailnet lock" value="Not signed" detail=machine.presence.lock_error tone="attention" %}{% elif machine.presence.signs_tailnet_lock %}{% fact "Tailnet lock" value="Signing device" %}{% endif %}
     {% comment %}
     Offered and approved, never one of the two. A route is advertised by the
     machine and then has to be approved in the coordination server; until it
@@ -157,12 +157,14 @@ last done to it is read before its parts.
       {% facts %}
         {% fact "Handshake" %}Completed {{ peering.last_handshake|when }}{% if peering.active %}{% dot %}active{% endif %}{% endfact %}
         {% fact "Path" %}
+          {% if peering.path == "direct" %}Direct{% elif peering.path == "relayed" %}Relayed{% else %}None yet{% endif %}
+        {% detail %}
           {% if peering.path == "direct" %}
-            Direct: {% with mark=peering.relay|then:"," %}<code>{{ peering.direct_endpoint|breakable:mark }}</code>{% endwith %}{% if peering.relay %} fallback relay <code>{{ peering.relay }}</code>{% endif %}
+            <small><code>{{ peering.direct_endpoint|breakable }}</code></small>{% if peering.relay %}<small>Fallback relay <code>{{ peering.relay }}</code></small>{% endif %}
           {% elif peering.path == "relayed" %}
-            Relayed through <code>{{ peering.relay }}</code> because no direct path was found. It is still encrypted end to end.
+            <small>Through <code>{{ peering.relay }}</code></small><small>No direct path was found, and it is still encrypted end to end</small>
           {% else %}
-            No path yet. One is set up when traffic starts.
+            <small>One is set up when traffic starts</small>
           {% endif %}
         {% endfact %}
         {% fact "Traffic" %}{{ peering.rx_bytes|bytes }} in{% dot %}{{ peering.tx_bytes|bytes }} out{% endfact %}

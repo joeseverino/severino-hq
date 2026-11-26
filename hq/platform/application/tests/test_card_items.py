@@ -96,16 +96,17 @@ class AnswerTests(SimpleTestCase):
             Context({"answer": answer})
         )
 
-    def test_the_short_answer_is_the_value_and_its_reasons_the_detail(self):
+    def test_the_short_answer_is_the_value_and_its_reasons_the_detail_each_sentence_raised(self):
         from ..card_items import Answer
 
-        drawn = self._fact(Answer("Waiting", ("The worker has not taken it yet.",), "attention"))
+        drawn = self._fact(Answer("Waiting", ("The worker has not taken it yet.", "asked just now"), "attention"))
 
         (fact,) = with_class(drawn, "fact")
         self.assertIn("tone-attention", fact.classes)
         self.assertEqual([value.words for value in with_class(drawn, "fact-value")], ["Waiting"])
         self.assertEqual(
-            [detail.words for detail in with_class(drawn, "fact-detail")], ["The worker has not taken it yet."]
+            [detail.words for detail in with_class(drawn, "fact-detail")],
+            ["The worker has not taken it yet. Asked just now"],
         )
 
     def test_a_reason_that_opens_with_the_answer_again_is_dropped(self):

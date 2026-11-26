@@ -72,7 +72,7 @@ reading; nothing here calls GitHub.
         {% endfacts %}
       {% endfact %}
     {% elif "branch_rules" in repo.refused %}
-      {% fact "Changes to "|add:repo.default_branch %}{% muted %}Not offered on this plan{% endmuted %}{% endfact %}
+      {% fact "Changes to "|add:repo.default_branch value="Not on this plan" %}
     {% endif %}
     {% if environment %}
       {% fact "Deploy rules" %}

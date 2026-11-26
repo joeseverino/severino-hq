@@ -19,6 +19,7 @@ from django.utils.text import capfirst
 from hq.domains.control_plane.models import OperationRequest
 
 from .card_items import Answer
+from .container_words import named
 from .containers import Container, containers, published_digest, ranked, standing_of
 from .entity_links import EntityLink
 from .github_estate import UPDATE_BRANCH, PullChecks, Repository, pull_checks, repositories
@@ -26,7 +27,7 @@ from .images import ImageRef
 from .projection import projection_scope, read_once
 from .tone import Tone
 from .ui import counted, ended
-from .upgrades import fixes_said, named, plan_for, weigh
+from .upgrades import fixes_said, plan_for, weigh
 lazy from .app_update_approval import (
     APPLY,
     APPROVE,

@@ -5,9 +5,14 @@ newer one is published. ``containers.ImageStanding`` carries the facts and takes
 these from here, so each phrase has one owner.
 """
 
+from collections.abc import Mapping
+from dataclasses import replace
+from typing import Any
+
 from django.utils.text import capfirst, get_text_list
 
 from .card_items import Answer
+from .entity_links import EntityLink, declared_link
 from .images import version
 from .ui import counted
 
@@ -76,9 +81,15 @@ class ImageStandingWords:
 
     @property
     def vulnerabilities_said(self) -> Answer:
-        """``vulnerabilities`` as a fact says it, over its sentence, in its tone."""
+        """``vulnerabilities`` as a fact says it, over its sentence and the
+        first of what is known against it, in its tone."""
 
-        return Answer(capfirst(self.vulnerabilities), (self.vulnerabilities_note,), self.vulnerability_tone)
+        lower = (f"{len(self.findings)} of lower severity",) if self.findings and not self.urgent else ()
+        return Answer(
+            capfirst(self.vulnerabilities),
+            (*lower, self.vulnerabilities_note, *named(self.known_vulnerabilities)),
+            self.vulnerability_tone,
+        )
 
     @property
     def update_state(self) -> str:
@@ -128,3 +139,19 @@ class ImageStandingWords:
         if not version(self.tag):
             return f"Cannot compare. The tag {self.tag} is not a version number."
         return "Its registry has not been read yet."
+
+
+def named(advisories: tuple[Mapping[str, Any], ...]) -> tuple[EntityLink, ...]:
+    """The first two of ``advisories``, each linked by its id with its
+    severity and package beside it: a fact's reasons."""
+
+    return tuple(
+        replace(
+            declared_link(str(each.get("id", "")), str(each.get("url", "")), "dependency"),
+            detail=" ".join(
+                filter(None, (str(each.get("severity") or ""), f"in {each['package']}" if each.get("package") else ""))
+            )
+            or "advisory",
+        )
+        for each in advisories[:2]
+    )

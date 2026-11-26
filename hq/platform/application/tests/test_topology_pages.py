@@ -202,8 +202,8 @@ class TopologyPageTests(TestCase):
         # Age, not an ISO timestamp.
         self.assertContains(response, "3\xa0hours ago")
         # A kind a sweep reads is not observed yet; one no sweep reads never is.
-        self.assertNotContains(disabled, "HQ does not read this.")
-        self.assertContains(unswept, "HQ does not read this.")
+        self.assertNotContains(disabled, "HQ does not read this")
+        self.assertContains(unswept, "HQ does not read this")
 
     def test_the_whole_map_leaves_out_quiet_lanes_and_unlinked_cards_until_asked(self):
         from ..topology_lenses import QUIET_KINDS
@@ -299,7 +299,7 @@ class FocusedPageTests(TestCase):
         detail = response.context["topology_detail"]
         self.assertEqual(detail["observed_age"], read)
         self.assertContains(response, "2\xa0hours ago")
-        self.assertNotContains(response, "HQ does not read this.")
+        self.assertNotContains(response, "HQ does not read this")
 
     def test_a_card_says_what_its_number_counts(self):
         response = self.page("zone:example.com")

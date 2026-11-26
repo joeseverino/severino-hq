@@ -14,14 +14,14 @@ how many links it has, how it stands and the way to its own page.
     {% if item.node.pageviews is not None %}
       {% fact "Traffic" %}{{ item.node.pageviews|counted:"pageview" }} from {{ item.node.visits|counted:"visit" }}{% detail %}in the last {{ traffic_window_days|counted:"day" }}{% endfact %}
     {% endif %}
-    {% if not item.node.managed %}{% fact "Changes" value="HQ only reads this. It does not change it." %}{% endif %}
+    {% if not item.node.managed %}{% fact "Changes" value="Read only" detail="HQ does not change it" %}{% endif %}
     {% if item.node.declared_revision or item.node.observed_revision %}
       {% fact "Settings" %}{% if not item.node.observed_revision %}{% status "Applied, not yet checked" tone="attention" %}{% elif item.node.observed_revision == item.node.declared_revision %}{% status "Applied and checked" tone="good" %}{% else %}{% status "Your last change is not applied yet" tone="attention" %}{% endif %}{% endfact %}
     {% endif %}
     {% if item.node.unconfirmed_fields %}
       {% fact "HQ could not check" %}{% for field in item.node.unconfirmed_fields %}<code>{{ field|breakable:forloop }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}
     {% endif %}
-    {% fact "Reading" %}{% if item.observable %}{% include "partials/_reading_age.html" with at=item.observed_age only %}{% else %}{% muted %}HQ does not read this.{% endmuted %}{% endif %}{% endfact %}
+    {% fact "Reading" %}{% if item.observable %}{% include "partials/_reading_age.html" with at=item.observed_age only %}{% else %}None{% endif %}{% detail %}{% if not item.observable %}<small>HQ does not read this</small>{% endif %}{% endfact %}
   {% endfacts %}
 
   {% comment %}Every row walks the graph to the other end.{% endcomment %}
