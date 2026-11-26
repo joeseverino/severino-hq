@@ -8,13 +8,15 @@
 //   anything parses it; a request that fails is answered 401 and never
 //   reaches the Hub.
 // - A socket is accepted only with the SOCKET_TOKEN bearer, compared in
-//   constant time before the upgrade reaches the Hub.
+//   constant time before the upgrade reaches the Hub, and an event reaches
+//   only a socket that presented the token the Worker holds now, so a
+//   rotation closes every socket opened with the old one.
 // - Only an event's names are forwarded (provider, event, subject, delivery
 //   id, time), never its body, so a valid sender can only make HQ re-read
 //   with its own credentials.
 // - Every secret is a Worker secret, named by the route that uses it.
 import routes from "./generated/routes.json";
-import { Hub, SOCKET_PATH, type InboundEvent } from "./hub";
+import { bearer, Hub, SOCKET_PATH, tag, type InboundEvent } from "./hub";
 import { VERIFIERS, type Verifier } from "./verify";
 
 export { Hub };
@@ -47,10 +49,10 @@ const text = (value: unknown): string => (typeof value === "string" ? value : ""
 
 /** Whether `header` is `Bearer <token>` for a configured token, compared in constant time. */
 async function bearerMatches(header: string | null, token: string): Promise<boolean> {
-  if (!token || !header?.startsWith("Bearer ")) return false;
-  // Digests of equal length, so the comparison reveals neither value's length.
-  const digest = (value: string) => crypto.subtle.digest("SHA-256", encoder.encode(value));
-  return crypto.subtle.timingSafeEqual(await digest(header.slice("Bearer ".length)), await digest(token));
+  const presented = bearer(header);
+  if (!token || presented === null) return false;
+  // Tags of equal length, so the comparison reveals neither value's length.
+  return crypto.subtle.timingSafeEqual(encoder.encode(await tag(presented)), encoder.encode(await tag(token)));
 }
 
 const answer = (status: number): Response => new Response(null, { status });

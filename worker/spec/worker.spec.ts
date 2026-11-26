@@ -141,4 +141,25 @@ describe("a listener's socket", () => {
     expect(response.status).toBe(401);
     expect(response.webSocket).toBeNull();
   });
+
+  it("opened with a token since rotated is closed at the next event and hears nothing", async () => {
+    // The Hub as a new version finds it: a socket the Worker let through
+    // under the token it held before.
+    const opened = await env.HUB.getByName("hub").fetch(`${ORIGIN}${SOCKET_PATH}`, {
+      headers: { Upgrade: "websocket", Authorization: "Bearer example-rotated-token" },
+    });
+    const stale = opened.webSocket!;
+    stale.accept();
+    open.push(stale);
+    const heard: unknown[] = [];
+    stale.addEventListener("message", (message) => heard.push(message.data));
+    const closed = new Promise<number>((resolve) => stale.addEventListener("close", (close) => resolve(close.code)));
+    const current = await listen();
+
+    await deliver({ event: "push", payload: push, id: "delivery-rotated" });
+
+    expect(await current.next()).toMatchObject({ delivery_id: "delivery-rotated" });
+    expect(await closed).toBe(1008);
+    expect(heard).toStrictEqual([]);
+  });
 });
