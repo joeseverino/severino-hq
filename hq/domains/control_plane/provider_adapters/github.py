@@ -21,7 +21,16 @@ from ..connection_shapes import GITHUB_APP
 from ..observations import github as readings
 from ..observations.github import PROVIDER
 from ..permissions import GitHub
-from ..provider_spec import ConnectionKind, InboundSpec, ProviderModel, ProviderSpec, SharedValue, applies, locked
+from ..provider_spec import (
+    ConnectionKind,
+    InboundSpec,
+    ProviderModel,
+    ProviderSpec,
+    SharedValue,
+    SignatureScheme,
+    applies,
+    locked,
+)
 
 KIND = "github.delivery"
 # Shared values (``SHARED``): the controller reports a sweep's record with the
@@ -277,8 +286,9 @@ INBOUND = {
             (readings.REPOSITORY_KIND, readings.WEBHOOK_KIND),
         ),
         path="/github",
-        scheme="github-hmac-sha256",
-        signature_header="X-Hub-Signature-256",
+        # "sha256=<hex>" over the body alone (docs.github.com, validating
+        # webhook deliveries).
+        scheme=SignatureScheme("X-Hub-Signature-256", "sha256"),
         delivery_header="X-GitHub-Delivery",
         event_header="X-GitHub-Event",
         action_pointer="/action",

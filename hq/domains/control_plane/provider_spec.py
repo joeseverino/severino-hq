@@ -157,9 +157,29 @@ class ConnectionKind:
     gives: str = ""
 
 
-# How a provider signs the request that carries an event, as the Worker
-# verifies it before anything else is read.
-type InboundScheme = Literal["github-hmac-sha256"]
+@dataclass(frozen=True, slots=True)
+class SignatureScheme:
+    """How a provider signs the request that carries an event, as the Worker
+    verifies it before anything else is read (``worker/src/verify.ts``).
+
+    The signature is an HMAC-SHA256 in hex, keyed by the route's secret, in a
+    header of comma-separated ``key=value`` parts.
+    """
+
+    header: str
+    # The part that holds a digest. Several are any one matching, as a sender
+    # rotating its secret signs with both.
+    digest: str
+    # The part that holds the Unix time it was signed at, which is then
+    # signed too, as ``<time>.<body>``; none signs the body alone.
+    timestamp: str = ""
+    # How far that time may be from the Worker's clock before the request is
+    # refused as a replay.
+    window_seconds: int = 0
+
+    def __post_init__(self) -> None:
+        if not (self.header and self.digest) or bool(self.timestamp) != (self.window_seconds > 0):
+            raise ValueError("A signature names its header and digest, and a signed time with its window.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,8 +197,7 @@ class InboundSpec:
     # differs from the rest; the readings it makes due.
     events: Mapping[str, tuple[str, ...]]
     path: str = ""
-    scheme: InboundScheme | None = None
-    signature_header: str = ""
+    scheme: SignatureScheme | None = None
     delivery_header: str = ""
     event_header: str = ""
     # JSON pointers into the request's body.
@@ -202,7 +221,7 @@ class InboundSpec:
             raise ValueError("An inbound declaration names each event's readings.")
         if not set(self.complete) <= {kind for kinds in self.events.values() for kind in kinds}:
             raise ValueError("An inbound declaration is complete only for readings its events name.")
-        route = (self.path, self.scheme, self.signature_header, self.delivery_header, self.event_header)
+        route = (self.path, self.scheme, self.delivery_header, self.event_header)
         if any(route) and not all((*route, self.secret_binding, self.max_body_bytes)):
             raise ValueError(f"The route {self.path!r} names its scheme, its headers, its secret and its largest body.")
 

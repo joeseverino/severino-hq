@@ -77,7 +77,7 @@ async function deliver({ event, payload, id, signature: sent, length }: Delivery
     [github.delivery_header]: id,
   };
   const signed = sent === undefined ? await signature(body) : sent;
-  if (signed !== null) headers[github.signature_header] = signed;
+  if (signed !== null) headers[github.scheme.header] = signed;
   if (length) headers["Content-Length"] = length;
   // A string states its own length; a stream, as a chunked request sends it, none.
   const streamed = length === null ? new Response(body).body!.pipeThrough(new TransformStream()) : body;

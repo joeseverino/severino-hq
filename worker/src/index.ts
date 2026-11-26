@@ -21,19 +21,13 @@
 //   or the body.
 import routes from "./generated/routes.json";
 import { bearer, Hub, SOCKET_PATH, tag, withinContract, type InboundEvent } from "./hub";
-import { VERIFIERS, type Verifier } from "./verify";
+import { verify } from "./verify";
 
 export { Hub };
 
 type Route = (typeof routes.providers)[number];
 
-const ROUTES = new Map(
-  routes.providers.map((route): [string, { route: Route; verify: Verifier }] => {
-    const verify = VERIFIERS[route.scheme];
-    if (!verify) throw new Error(`${route.provider}: no verifier for scheme ${route.scheme}`);
-    return [route.path, { route, verify }];
-  }),
-);
+const ROUTES = new Map(routes.providers.map((route): [string, Route] => [route.path, route]));
 
 const encoder = new TextEncoder();
 
@@ -71,16 +65,16 @@ async function socket(request: Request, env: Env): Promise<Response> {
   return hub(env).fetch(request);
 }
 
-async function webhook(request: Request, env: Env, route: Route, verify: Verifier): Promise<Response> {
+async function webhook(request: Request, env: Env, route: Route): Promise<Response> {
   if (request.method !== "POST") return answer(405);
   // Bounded before the body is read: a provider states its length, and
   // sends nothing larger than its declared cap.
   const length = request.headers.get("Content-Length") ?? "";
   if (!/^\d+$/.test(length)) return answer(411);
   if (Number(length) > route.max_body_bytes) return answer(413);
-  const body = await request.arrayBuffer();
+  const body = new Uint8Array(await request.arrayBuffer());
   const secret = (env as unknown as Record<string, unknown>)[route.secret_binding];
-  if (!(await verify(text(secret), request.headers.get(route.signature_header), body))) return answer(401);
+  if (!(await verify(route.scheme, text(secret), request.headers.get(route.scheme.header), body))) return answer(401);
 
   const name = request.headers.get(route.event_header) ?? "";
   const delivery = request.headers.get(route.delivery_header);
@@ -109,8 +103,8 @@ async function webhook(request: Request, env: Env, route: Route, verify: Verifie
 
 function answered(request: Request, env: Env, path: string): Promise<Response> | Response {
   if (path === SOCKET_PATH) return socket(request, env);
-  const provider = ROUTES.get(path);
-  return provider ? webhook(request, env, provider.route, provider.verify) : answer(404);
+  const route = ROUTES.get(path);
+  return route ? webhook(request, env, route) : answer(404);
 }
 
 export default {

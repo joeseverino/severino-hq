@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { VERIFIERS } from "../src/verify";
+import routes from "../src/generated/routes.json";
+import { verify } from "../src/verify";
+
+const scheme = (provider: string) => routes.providers.find((route) => route.provider === provider)!.scheme;
 
 // GitHub's published test vector (docs.github.com, "Validating webhook deliveries").
 const SECRET = "It's a Secret to Everybody";
 const PAYLOAD = new TextEncoder().encode("Hello, World!");
 const SIGNATURE = "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17";
 
-describe("github-hmac-sha256", () => {
-  const verify = VERIFIERS["github-hmac-sha256"]!;
+describe("GitHub's signature", () => {
+  const github = scheme("github_app");
 
   it("verifies GitHub's published test vector", async () => {
-    expect(await verify(SECRET, SIGNATURE, PAYLOAD)).toBe(true);
+    expect(await verify(github, SECRET, SIGNATURE, PAYLOAD)).toBe(true);
   });
 
   it.each([
@@ -22,6 +25,6 @@ describe("github-hmac-sha256", () => {
     ["a digit that is not hex", SECRET, SIGNATURE.slice(0, -1) + "g"],
     ["no secret", "", SIGNATURE],
   ])("refuses %s", async (_, secret, signature) => {
-    expect(await verify(secret, signature, PAYLOAD)).toBe(false);
+    expect(await verify(github, secret, signature, PAYLOAD)).toBe(false);
   });
 });

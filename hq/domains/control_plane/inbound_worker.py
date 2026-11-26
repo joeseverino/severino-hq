@@ -9,7 +9,7 @@ secret.
 """
 
 import json
-from dataclasses import fields
+from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
 
 from django.conf import settings
@@ -48,6 +48,10 @@ SETTINGS = {
 OFF_ROUTE = {"events", "complete", "requires"}
 
 
+def _plain(value: object) -> object:
+    return asdict(value) if is_dataclass(value) and not isinstance(value, type) else value
+
+
 def routes() -> list[dict[str, object]]:
     """Each provider the Worker receives events from: its route, then the
     events it forwards. A source that reports over the bridge alone has none."""
@@ -55,7 +59,7 @@ def routes() -> list[dict[str, object]]:
     return [
         {
             "provider": provider,
-            **{field.name: getattr(spec, field.name) for field in fields(spec) if field.name not in OFF_ROUTE},
+            **{field.name: _plain(getattr(spec, field.name)) for field in fields(spec) if field.name not in OFF_ROUTE},
             "events": list(spec.events),
         }
         for provider, spec in INBOUND.items()
