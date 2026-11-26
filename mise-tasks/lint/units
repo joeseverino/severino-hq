@@ -26,7 +26,7 @@ bar() {
         severino-hq-events-docker.service) echo 7 ;;
         severino-hq-glance.service) echo 12 ;;
         severino-hq-job@.service) echo 7 ;;
-        severino-hq-listener.service) echo 12 ;;
+        severino-hq-listener.service) echo 19 ;;
         severino-hq-renovate.service) echo 14 ;;
         severino-hq-script-drift.service) echo 9 ;;
         severino-hq-secrets.service) echo 19 ;;
