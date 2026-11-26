@@ -116,13 +116,13 @@ def _answer(state: ReviewState):
     def review(command: ReviewDeploymentCommand, *, consented: Consented) -> OperationAsked:
         run = waiting_run(command.repository, command.run_id, command.environment)
         if run is None:
-            raise RecordNotFound(f"No run of {command.repository} waits to deploy to {command.environment}.")
+            raise RecordNotFound("That run no longer waits to deploy.")
         if not hq_rules(command.repository, command.environment):
-            raise PolicyError(f"HQ is not a protection rule on {command.environment}. Answer the run on GitHub.")
+            raise PolicyError("HQ is not a protection rule on that environment. Answer the run on GitHub.")
         if run.get("sha") != command.head_sha:
             raise PolicyError("The run deploys another commit since you saw it. Review it again.")
         if state == "approved" and production_runs(command.repository, command.head_sha):
-            raise PolicyError(f"Production already runs {command.head_sha[:7]}. Reject it instead.")
+            raise PolicyError("Production already runs that commit. Reject it instead.")
         spec = {
             "repository": command.repository,
             "run_id": command.run_id,
