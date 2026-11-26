@@ -129,27 +129,16 @@ class ApplyEventsTests(TestCase):
         self.assertIsNotNone(channel_standing(InboundSource.WORKER).seen_at)
         self.assertIsNone(channel_standing(InboundSource.HOST).seen_at)
 
-    def test_a_reconnect_asks_every_reading_the_worker_carries_once_a_minute(self):
-        from hq.platform.core.models import UpstreamReading
-
-        reconnected = {**worker(), "reconnected": True}
-
-        answer = self.apply(reconnected)
+    def test_a_reconnect_asks_every_reading_the_worker_carries(self):
+        answer = self.apply({**worker(), "reconnected": True})
 
         self.assertEqual(asked(), ["github.repository"])
         self.assertEqual(answer["asked"], ["github.repository"])
         ReadRequest.objects.all().delete()
 
-        self.apply(reconnected)
         self.apply({**worker(), "reconnected": False})
 
         self.assertEqual(asked(), [])
-
-        UpstreamReading.objects.update(observed_at=timezone.now() - timedelta(minutes=2))
-
-        self.apply(reconnected)
-
-        self.assertEqual(asked(), ["github.repository"])
 
     @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=3600, SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200)
     def test_a_burst_of_events_is_read_at_once_and_once_after_it(self):

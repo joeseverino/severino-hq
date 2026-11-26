@@ -11,9 +11,9 @@ acts on what it claims; it asks for readings it would take anyway and reads
 them with its own credentials. A forged event costs one read, coalesced with
 any already asked; a replayed delivery is the stored event and asks nothing;
 an event no declaration names is recorded as ignored and asks nothing; a
-reconnect asks every reading its source carries once a minute at most; a
-provider no declaration names, or a batch outside the contract's
-``InboundBatch``, is refused whole. Only the bridge's action, which serves the
+reconnect asks every reading its source carries, bounded by the reconnect's
+own backoff and ``ask``'s one request per kind; a provider no declaration
+names, or a batch outside the contract's ``InboundBatch``, is refused whole. Only the bridge's action, which serves the
 controller's account alone on a 0700 socket, and the host's jobs may import
 this (``lint:imports``), and each write is audited under its door's title.
 """
@@ -39,9 +39,6 @@ lazy from .cadence import ask
 BATCH = "InboundBatch"
 # A channel reports far more often than an age is worded.
 _NOTED_EVERY = timedelta(minutes=1)
-# A link that flaps reconnects often, and each reconnect within this of the
-# last is the re-read already asked.
-_REREAD_EVERY = timedelta(minutes=1)
 
 
 def _carried(source: InboundSource) -> list[str]:
@@ -75,7 +72,7 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
     readings.note(channel(source), every=_NOTED_EVERY)
     counts = dict.fromkeys(("applied", "repeated", "ignored"), 0)
     asked: dict[str, None] = {}
-    if batch.get("reconnected") and readings.note(f"{channel(source)}-reconnected", every=_REREAD_EVERY):
+    if batch.get("reconnected"):
         asked.update(dict.fromkeys(_carried(source)))
     for arrived in batch["events"]:
         provider, delivery = arrived["provider"], arrived["delivery_id"]
