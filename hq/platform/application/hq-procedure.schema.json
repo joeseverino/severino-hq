@@ -109,6 +109,18 @@
       ],
       "type": "string"
     },
+    "settled_by": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "target_kinds": {
       "items": {
         "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",

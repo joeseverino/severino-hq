@@ -10,11 +10,15 @@ from typing import Any
 from django.utils.text import slugify
 
 from hq.platform.application import action_items
-from hq.platform.application.asks import following
+from hq.platform.application.action_links import read_now_link
+from hq.platform.application.asks import Ask, following
+from hq.platform.application.cadence import CONTROLLER_REFRESH
 from hq.platform.application.decisions import decision
 from hq.platform.application.moments import duration
+from hq.platform.application.security import Principal
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, StatusMark, TableColumn
 from hq.platform.application.tone import Tone
+from hq.platform.application.url_query import with_query
 from hq.platform.core.included_queue import ICON_LINKS, INSIGHT_FACTS, OPERATOR_STEPS, ORIGIN_PANEL
 from hq.platform.core.templatetags.action_tags import remedies, triage
 from hq.platform.core.templatetags.status_tags import origin_tip, urgency_tone
@@ -180,3 +184,30 @@ def _below(item: Mapping[str, Any]) -> tuple[Below, ...]:
     if item.get("links"):
         lines.append(Cell(piece=Piece(ICON_LINKS, {"links": item["links"]}, words=ICON_LINKS.about)))
     return (Below("", tuple(lines)),) if lines else ()
+
+
+def refresh(items: Iterable[Mapping[str, Any]], principal: Principal, here: str) -> Ask | None:
+    """The one press over a queue that reads again what its rows rest on
+    (each item's ``read_now``), then shows ``here`` anew; None when no row
+    rests on a reading or its reader may not ask for one.
+
+    A row never carries its own: the press asks, in one call, for every
+    connection and kind the rows it stands over rest on, or for every
+    connection where one of them does.
+    """
+
+    asked = [item["read_now"] for item in items if item.get("read_now")]
+    if not asked:
+        return None
+    every = any(read.get("every_connection") for read in asked)
+    read = read_now_link(
+        principal,
+        connection_refs=()
+        if every
+        else dict.fromkeys(ref for read in asked for ref in read.get("connection_refs", ())),
+        kinds=() if every else dict.fromkeys(kind for read in asked for kind in read.get("kinds", ())),
+        every_connection=every,
+    )
+    if read is None:
+        return None
+    return Ask(CONTROLLER_REFRESH.words(), with_query(read.url, {"next": here}), title=read.reason, compact=True)

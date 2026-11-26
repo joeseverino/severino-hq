@@ -161,11 +161,18 @@ class VisitRefreshTests(TestCase):
         self.assertEqual(rung(watch), 1)
 
     def test_opening_the_dashboard_asks_again_for_what_its_queue_says_github_holds(self):
+        """Unless the App's webhook keeps it current: while its listener is
+        heard, opening the page asks nothing of GitHub."""
+
         store(REPOSITORY_KIND, age=OLD)
+        testing.channel_heard()
 
-        result = request_visit_refresh(VisitRefreshCommand("page", "dashboard"), principal=cli_principal())
+        def opened():
+            return request_visit_refresh(VisitRefreshCommand("page", "dashboard"), principal=cli_principal())
 
-        self.assertEqual(result["requested"], [REPOSITORY_KIND])
+        self.assertEqual(opened()["requested"], [])
+        testing.channel_heard(silent=True)
+        self.assertEqual(opened()["requested"], [REPOSITORY_KIND])
 
     def test_opening_the_connection_panel_asks_for_what_it_shows_and_never_github(self):
         shown = ("tailscale.device", "tailscale.policy", "portainer.container", "host.firewall", "host.tailnet_lock")

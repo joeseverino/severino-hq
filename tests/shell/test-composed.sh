@@ -76,7 +76,7 @@ run() { # run <uv behavior> [NAME=value...]; prints the task's exit status
     # MISE_CONFIG_ROOT. No extension set unless a case names one.
     (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
         TEST_UV="${behavior}" TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" \
-        MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= HQ_LOCAL_PYTHONPATH= REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= "$@" "./${task}") >/dev/null 2>&1 || status=$?
+        MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= HQ_LOCAL_PYTHONPATH= HQ_EXTENSIONS_SAID= "$@" "./${task}") >/dev/null 2>&1 || status=$?
     echo "${status}"
 }
 
@@ -97,21 +97,13 @@ done
 # The run's verdict is its closing line, kept whole where the line above names.
 rm -f "${fixture}/var/gate/test-composed.txt"
 (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
-    TEST_UV=3 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= HQ_LOCAL_PYTHONPATH= REQUIRE_COMPOSED= \
+    TEST_UV=3 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy HQ_LOCAL_PLUGINS= HQ_LOCAL_PYTHONPATH= \
     "./${task}") >"${work}/out" 2>&1 || true
 kept="$(cd "${fixture}" && pwd -P)/var/gate/test-composed.txt"
 [ -f "${kept}" ] || fail "the run kept no verdict in var/gate"
 grep -qF "verdict kept in ${kept}" "${work}/out" || fail "the output does not name the file that keeps the verdict"
 case "$(grep "^\[test:composed\]" "${work}/out" | head -n 1)" in *" ${kept}") ;; *) fail "the run does not open on the file that keeps its verdict" ;; esac
 case "$(grep "^\[test:composed\]" "${work}/out" | tail -n 1)" in "[test:composed] FAILED"*) ;; *) fail "the run does not end on its verdict" ;; esac
-
-# Required without an extension set, it refuses before the suite runs; with
-# one, it runs.
-rm -f "${work}/seen"
-[ "$(run 0 REQUIRE_COMPOSED=1)" = 1 ] || fail "required without an extension set, the task did not refuse"
-[ ! -e "${work}/seen" ] || fail "required without an extension set, the suite ran anyway"
-[ "$(run 0 REQUIRE_COMPOSED=1 HQ_LOCAL_PLUGINS=example_alpha.plugin:plugin)" = 0 ] ||
-    fail "required with an extension set, the task did not run"
 
 # A composed run's first line names the tree each package is imported from,
 # and the suite imports from there.
@@ -121,7 +113,7 @@ echo "${SEVERINO_HQ_PLUGINS}|${PYTHONPATH}" >"${TEST_SEEN}.set"
 STUB
 sources="${work}/alpha/src:${work}/beta-worktree/src"
 (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
-    TEST_UV=0 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= \
+    TEST_UV=0 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy HQ_EXTENSIONS_SAID= \
     HQ_LOCAL_PLUGINS=example_alpha.plugin:plugin,example_beta.plugin:plugin HQ_LOCAL_PYTHONPATH="${sources}" \
     "./${task}") >"${work}/out" 2>&1 || fail "a composed run failed"
 first="$(head -n 1 "${work}/out")"
@@ -134,7 +126,7 @@ case "${first}" in *"${work}/alpha/src, ${work}/beta-worktree/src"*) ;; *) fail 
 # stands: the suite imports its repository's newest commit at the host's API
 # made before the host moved on from the commit it stands on (an extension's
 # later commit at that API may use what the host added since), else no
-# extension, which a required run refuses.
+# extension.
 extensions="${work}/extensions"
 mkdir -p "${extensions}/packages/alpha/src/example_alpha"
 printf '[project]\nname = "example-alpha"\n' >"${extensions}/packages/alpha/pyproject.toml"
@@ -156,7 +148,7 @@ composed() { # composed <host api> [NAME=value...]: the task's status; what the 
     rm -f "${work}/seen.set"
     status=0
     (cd "${fixture}" && env PATH="${work}/bin:${PATH}" TMPDIR="${work}/tmp" \
-        TEST_UV=0 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy REQUIRE_COMPOSED= HQ_EXTENSIONS_SAID= \
+        TEST_UV=0 TEST_SEEN="${work}/seen" MISE_CONFIG_ROOT="${fixture}" MISE_TASK_LOCKS=heavy HQ_EXTENSIONS_SAID= \
         HQ_LOCAL_PLUGINS=example_alpha.plugin:plugin HQ_LOCAL_PYTHONPATH="${extensions}/packages/alpha/src" "$@" \
         "./${task}") >"${work}/out" 2>&1 || status=$?
     echo "${status}"
@@ -186,8 +178,6 @@ grep -qF "${at_one%"${at_one#????????????}"}" "${work}/out" || fail "the run doe
 [ "$(composed 3)" = 0 ] || fail "a host ahead of every commit did not run alone"
 [ "$(cat "${work}/seen.set")" = "|" ] || fail "a host ahead of every commit composed $(cat "${work}/seen.set")"
 grep -q "No extension composed" "${work}/out" || fail "a run that composes no extension does not say why"
-[ "$(composed 3 REQUIRE_COMPOSED=1)" = 1 ] || fail "required, a host no commit matches did not refuse"
-[ ! -e "${work}/seen.set" ] || fail "required, a host no commit matches ran the suite anyway"
 echo 'PLUGIN_API_VERSION = 1' >"${fixture}/hq/platform/application/plugins.py"
 
 # The copy holds what the image admits and only that.

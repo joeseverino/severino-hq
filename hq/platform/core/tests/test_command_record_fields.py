@@ -19,7 +19,7 @@ from hq.platform.application.references import NO_LONGER_OFFERED
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
-from hq.platform.core.testing import SignedInTestCase
+from hq.platform.core.testing import SignedInTestCase, connection
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 
@@ -46,13 +46,11 @@ class RecordFieldTests(SignedInTestCase):
                     self.assertTrue(declared.get("key") or resource.identifier)
 
     def test_refresh_offers_connections_and_reading_types_to_choose(self):
+        connection("tailscale", "example-tailnet")
         page = self.client.get("/commands/infrastructure.controller.refresh/")
 
-        for name in ("connection_ref", "kind"):
-            with self.subTest(field=name):
-                (control,) = select(page, "name", name)
-                self.assertEqual(control.tag, "select")
-        self.assertLessEqual(set(OBSERVATIONS), set(option_values(page, "kind")))
+        self.assertIn("example-tailnet", option_values(page, "connection_refs"))
+        self.assertLessEqual(set(OBSERVATIONS), set(option_values(page, "kinds")))
 
     def test_a_relation_offers_the_records_and_refuses_any_other(self):
         Project.objects.create(name="Example project", slug="example-project")

@@ -80,7 +80,7 @@ def _many_actions() -> DataTable:
             actions=(
                 PageAction("Mark as intended", f"/example/{at}/edit/"),
                 PageAction("Open containers", "/example/containers/"),
-                PageAction._built(label="Check again", url=f"/example/{at}/check/", method="post"),
+                PageAction._built(label="Restart", url=f"/example/{at}/restart/", method="post"),
             ),
         )
         for at in (1, 2)

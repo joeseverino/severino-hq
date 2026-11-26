@@ -5,15 +5,17 @@
 //	hq-host controller       one controller pass, planning; --apply to apply,
 //	                         --glance to read only the dashboard panels HQ waits on,
 //	                         --events to hold the inbound-events socket until stopped
-//	hq-host events           tell HQ of each change to a container here, until stopped
+//	hq-host events           tell HQ of each change to a container and each failed job here, until stopped
 //	hq-host renovate         run the dependency handoff a pass spooled
 //	hq-host automation       run the automation worker until no run is queued
-//	hq-host install          install the release in the root-owned tree
+//	hq-host install          set the host up for the release in the root-owned tree;
+//	                         --check to print what that would change, changing nothing
+//	hq-host setup RUNNER     apply the tree's setup in RUNNER, a digest this host holds,
+//	                         verified by nothing here: install's second half
 //	hq-host deploy IMAGE     verify and pull IMAGE, then hand over to its hq-host
 //	hq-host release IMAGE    switch HQ to IMAGE, install it, or roll back
 //	hq-host sync IMAGE       replace the root-owned tree with IMAGE's
 //	hq-host verify           report where the host differs from its release
-//	hq-host bootstrap        write the host's own configuration from host.json
 //	hq-host backup           back up HQ's volumes: database, uploads and exports
 //	hq-host unit --serve     stop, start or restart the unit a container names (package unit)
 //	hq-host check            the deploy host's half of a preflight, as any account
@@ -42,18 +44,18 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/host"
-	"github.com/joeseverino/severino-hq/controller/host/dockerevents"
+	"github.com/joeseverino/severino-hq/controller/host/hostevents"
 	"github.com/joeseverino/severino-hq/controller/host/unit"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance | --events] | events | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | unit --serve | check --release DIR | edge-receiver | dry-run | verified DIR"
+const usage = "usage: hq-host run-web | controller [--apply | --glance | --events] | events | renovate | automation | install [--check] | setup RUNNER | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | backup | unit --serve | check | edge-receiver | dry-run | verified DIR"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
 var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance, "--events": host.Listen}
 
-// hostConfig is the host's own configuration, which bootstrap reads.
+// hostConfig is the host's own configuration.
 const hostConfig = "/etc/severino-hq/host.json"
 
 func main() {
@@ -114,7 +116,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 			fmt.Fprintln(stderr, usage)
 			return 2
 		}
-		dockerevents.New(dockerevents.Socket, dockerevents.TellHQ, log).Run(ctx)
+		hostevents.New(hostevents.TellHQ, log, hostevents.Docker(hostevents.DockerSocket, log), hostevents.Systemd()).Run(ctx)
 	case "renovate":
 		if len(args) != 1 {
 			fmt.Fprintln(stderr, usage)
@@ -128,7 +130,24 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		}
 		err = automation(stdout, stderr).Run(ctx)
 	case "install":
-		err = machine(stdout).Install(ctx, requireConnections)
+		switch strings.Join(args[1:], " ") {
+		case "":
+			err = deployer(stdout).Install(ctx)
+		case "--check":
+			err = machine(stdout).CheckSetup(ctx, host.Lib, "ansible.builtin.default", stdout)
+		default:
+			fmt.Fprintln(stderr, usage)
+			return 2
+		}
+	case "setup":
+		if len(args) != 2 {
+			fmt.Fprintln(stderr, usage)
+			return 2
+		}
+		var runner string
+		if runner, err = host.Pinned(args[1]); err == nil {
+			err = machine(stdout).Setup(ctx, runner, host.Lib)
+		}
 	case "deploy":
 		if len(args) != 2 {
 			fmt.Fprintln(stderr, usage)
@@ -152,18 +171,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 			return 1
 		}
 		if err == nil {
-			fmt.Fprintln(stdout, "The host is its release: the tree, the units, the runner's sudo rules and nothing else.")
+			fmt.Fprintln(stdout, "The host is its release: the tree, its setup, the runner's sudo rules and nothing else.")
 		}
 	case "backup":
 		err = machine(stdout).Backup(ctx, getenv)
-	case "bootstrap":
-		var data []byte
-		if data, err = os.ReadFile(hostConfig); err == nil {
-			var config host.Config
-			if config, err = host.ReadConfig(data); err == nil {
-				err = machine(stdout).Bootstrap(ctx, config)
-			}
-		}
 	default:
 		fmt.Fprintln(stderr, usage)
 		return 2
@@ -215,24 +226,18 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 	return runner.Run(ctx)
 }
 
-// check is the deploy host's half of a preflight: --release is the unit
-// directory this release ships.
+// check is the deploy host's half of a preflight.
 func check(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	options := flag.NewFlagSet("check", flag.ContinueOnError)
-	options.SetOutput(stderr)
-	release := options.String("release", "", "the unit directory this release ships")
-	if err := options.Parse(args); err != nil || options.NArg() != 0 || *release == "" {
+	if len(args) != 0 {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	checker := hostChecker(stdout)
-	checker.Release = *release
-	return checker.Check(ctx)
+	return hostChecker(stdout).Check(ctx)
 }
 
 func hostChecker(out io.Writer) *host.Checker {
 	return &host.Checker{
-		Lib: host.Lib, Systemd: "/etc/systemd/system", RootUID: 0,
+		Lib: host.Lib, RootUID: 0,
 		FreeBytes: host.DeployFreeBytes, Free: host.Free,
 		Command: hostcore.Command, Out: out,
 	}
@@ -308,6 +313,7 @@ func machine(stdout io.Writer) *host.Machine {
 		Runtime:    runtimeDir(),
 		Runs:       host.RunsDir,
 		Sudoers:    "/etc/sudoers.d",
+		HostConfig: hostConfig,
 		Command:    hostcore.Command,
 		Own:        func(path string) error { return os.Lchown(path, 0, 0) },
 		Owner:      func(root *os.Root, name string) error { return root.Lchown(name, hostcore.WebUID, hostcore.WebGID) },

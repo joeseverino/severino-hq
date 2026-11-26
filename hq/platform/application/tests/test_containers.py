@@ -270,7 +270,7 @@ class BuiltHereTests(TestCase):
 
         checked = {result.check.id for result in self.thumb().supply_chain.results}
 
-        self.assertFalse(checked & {"pinned", "source-known", "provenance", "sbom", "tag-current"})
+        self.assertFalse(checked & {"pinned", "source-known", "tag-current"})
         self.assertIn("no-urgent", checked)
 
     def test_an_image_a_registry_digest_names_or_a_service_that_builds_nothing_is_pulled(self):
@@ -287,7 +287,7 @@ class BuiltHereTests(TestCase):
 class ToneTests(TestCase):
     """Each fact's tone, decided where the fact is built."""
 
-    def test_a_vulnerability_is_serious_when_high_attention_when_lower_and_a_clean_check_good(self):
+    def test_a_vulnerability_is_serious_when_high_attention_when_lower_and_a_clean_package_check_good(self):
         estate(advisories=[HIGH])
         app = next(item.standing for item in containers() if item.running.name == "app")
         self.assertEqual(app.vulnerability_tone, "serious")
@@ -298,8 +298,18 @@ class ToneTests(TestCase):
 
         estate()
         found = {item.running.name: item.standing for item in containers()}
-        # Kuma names no source and no package list: nothing was checked.
-        self.assertEqual((found["app"].vulnerability_tone, found["kuma"].vulnerability_tone), ("good", ""))
+        # App's project's advisories alone were read, which miss what its
+        # image adds; Kuma names no source and no package list.
+        self.assertEqual((found["app"].vulnerability_tone, found["kuma"].vulnerability_tone), ("", ""))
+        self.assertIn("advisories", found["app"].vulnerabilities_said.because[0])
+
+        now = timezone.now().isoformat()
+        inventory(
+            "registry.vulnerabilities",
+            [{"digest": "ghcr.io/example/app@sha256:aaa", "checked": 3, "findings": [], "read_at": now}],
+        )
+        app = next(item.standing for item in containers() if item.running.name == "app")
+        self.assertEqual(app.vulnerability_tone, "good")
 
     def test_a_newer_version_asks_for_attention_and_a_newest_one_is_good(self):
         estate()
@@ -498,7 +508,7 @@ class PageTests(SignedInTestCase):
         detail = self.client.get(reverse("control_plane:detail", args=["example-box-kuma"]))
 
         self.assertContains(listing, reverse("control_plane:detail", args=["example-box-kuma"]))
-        self.assertIn("1 newer release available", text(detail))
+        self.assertIn("Update 2", text(detail))
         self.assertIn("Cannot check", text(detail))
 
     def test_a_machine_shows_each_container_standing_as_the_containers_page_does(self):

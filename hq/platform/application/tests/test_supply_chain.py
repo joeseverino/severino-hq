@@ -98,6 +98,20 @@ class SourceTests(TestCase):
         self.assertEqual(standing.commit_url, "https://github.com/example/web/commit/abc1234")
         self.assertEqual(standing.built_on, ("alpine:3.23",))
 
+    def test_what_only_its_publisher_can_attach_is_a_fact_and_never_a_failed_check(self):
+        estate()
+        container("app")
+        inventory("registry.digest", [attested(APP, packages=(), revision="")])
+        operator(self.client)
+
+        chain = item("app").supply_chain
+        page = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
+
+        self.assertEqual(chain.unmet, ())
+        self.assertEqual(chain.met, chain.measured)
+        self.assertContains(page, "None listed by its publisher")
+        self.assertContains(page, "None from its publisher")
+
     def test_an_image_in_githubs_registry_is_known_by_its_registry_last(self):
         estate()
         inventory(
@@ -252,6 +266,28 @@ class RegistryReadTests(TestCase):
         with mock.patch("hq.platform.application.outbound_work.start_for_host") as start:
             self.sweep()
         start.assert_not_called()
+
+    def test_an_image_running_as_another_reference_than_it_was_read_for_is_read_again(self):
+        from ..public_registry import registry_due, wanted_images
+
+        estate()
+        inventory("registry.digest", [attested(APP), attested("docker.io/example/kuma@sha256:bbb")])
+        held = ProviderInventory.objects.get(kind="registry.image")
+        read_for = {name: list(references) for name, references in wanted_images().items()}
+        held.records = [{**record, "references": read_for.get(record["image"], [])} for record in held.records]
+        held.save()
+        self.assertFalse(registry_due())
+
+        # An upgrade applied: the container now runs a tag the image was not read for.
+        held.records = [
+            {**record, "references": ["ghcr.io/example/app:v1.1.0"]}
+            if record["image"] == "ghcr.io/example/app"
+            else record
+            for record in held.records
+        ]
+        held.save()
+
+        self.assertTrue(registry_due())
 
 
 class ContainerJoinTests(TestCase):

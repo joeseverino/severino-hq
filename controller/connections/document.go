@@ -6,9 +6,9 @@
 package connections
 
 import (
-	"bytes"
 	"cmp"
 	"encoding/json"
+	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -20,6 +20,8 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // SchemaVersion is the only document version either side accepts.
@@ -129,10 +131,20 @@ func (c Connection) Shape() string {
 	return found[0].Name
 }
 
+// holds reports whether check holds of one setting's value, a secret one
+// read without its text leaving it.
+func holds(field reflect.Value, check func(string) bool) bool {
+	if value, ok := reflect.TypeAssert[secret.Value](field); ok {
+		return value.Holds(check)
+	}
+	return check(field.String())
+}
+
 // WithSettings is the connection holding settings under the named shape, by
 // each setting's registry name. An unknown shape, or a name the shape does not
-// declare, is an error.
-func (c Connection) WithSettings(shape string, settings map[string]string) (Connection, error) {
+// declare, is an error. A value is a secret until it is written into a setting
+// the shape does not declare secret.
+func (c Connection) WithSettings(shape string, settings map[string]secret.Value) (Connection, error) {
 	for _, declared := range shapes {
 		if declared.Name != shape {
 			continue
@@ -141,7 +153,11 @@ func (c Connection) WithSettings(shape string, settings map[string]string) (Conn
 		known := 0
 		for _, setting := range declared.Settings {
 			if value, given := settings[setting.Name]; given {
-				target.Elem().Field(setting.index).SetString(value)
+				if field := target.Elem().Field(setting.index); field.Type() == reflect.TypeFor[secret.Value]() {
+					field.Set(reflect.ValueOf(value))
+				} else {
+					field.SetString(value.Reveal())
+				}
 				known++
 			}
 		}
@@ -166,7 +182,11 @@ func (c Connection) Trimmed() Connection {
 		copied.Elem().Set(member.Elem())
 		for _, setting := range shape.Settings {
 			field := copied.Elem().Field(setting.index)
-			field.SetString(strings.TrimSpace(field.String()))
+			if value, ok := reflect.TypeAssert[secret.Value](field); ok {
+				field.Set(reflect.ValueOf(value.Trimmed()))
+			} else {
+				field.SetString(strings.TrimSpace(field.String()))
+			}
 		}
 		member.Set(copied)
 	}
@@ -182,7 +202,7 @@ func (c Connection) Complete() bool {
 		return false
 	}
 	for _, setting := range found[0].Settings {
-		if setting.Required && strings.TrimSpace(settings[0].Field(setting.index).String()) == "" {
+		if setting.Required && holds(settings[0].Field(setting.index), func(value string) bool { return strings.TrimSpace(value) == "" }) {
 			return false
 		}
 	}
@@ -207,8 +227,7 @@ func (c Connection) validate(index int) error {
 		return invalid("connection %d does not hold exactly one shape", index)
 	}
 	for _, setting := range found[0].Settings {
-		value := settings[0].Field(setting.index).String()
-		if (value == "" && setting.Required) || !singleLine(value) {
+		if holds(settings[0].Field(setting.index), func(value string) bool { return (value == "" && setting.Required) || !singleLine(value) }) {
 			return invalid("connection %d has an empty or multi-line value", index)
 		}
 	}
@@ -265,17 +284,17 @@ func (d Document) Encode() ([]byte, error) {
 	}
 	sorted := Document{SchemaVersion: d.SchemaVersion, Connections: append([]Connection{}, d.Connections...)}
 	slices.SortFunc(sorted.Connections, func(a, b Connection) int { return cmp.Compare(a.Ref, b.Ref) })
-	var out bytes.Buffer
-	encoder := json.NewEncoder(&out)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(sorted); err != nil {
+	// The document is the file each secret setting is used from.
+	out, err := jsonv2.Marshal(sorted, json.DefaultOptionsV1(), jsontext.EscapeForHTML(false), secret.Revealing)
+	if err != nil {
 		return nil, invalid("not encodable")
 	}
+	out = append(out, '\n')
 	// What Decode would refuse is never written.
-	if out.Len() > MaxBytes {
+	if len(out) > MaxBytes {
 		return nil, invalid("larger than %d bytes", MaxBytes)
 	}
-	return out.Bytes(), nil
+	return out, nil
 }
 
 // Decode reads one document strictly: an unknown or repeated field, a second
@@ -348,4 +367,19 @@ func ReadFile(path string, uid int) (Document, error) {
 		return Document{}, invalid("not readable")
 	}
 	return Decode(data)
+}
+
+// Secrets is the value of each secret setting the connection holds, which
+// the controller learns (mask.Learn) as it is handed the connection.
+func (c Connection) Secrets() []string {
+	_, settings := c.held()
+	found := []string{}
+	for _, held := range settings {
+		for _, field := range held.Fields() {
+			if value, ok := reflect.TypeAssert[secret.Value](field); ok {
+				found = append(found, value.Reveal())
+			}
+		}
+	}
+	return found
 }

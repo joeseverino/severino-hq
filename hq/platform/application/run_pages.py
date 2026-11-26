@@ -26,7 +26,7 @@ from .work_runs import NOT_STARTED
 
 def run_context(record: dict[str, Any], *, user: Any) -> dict[str, Any]:
     """The run page's context for ``user``, who may open Jobs, beside the run's
-    record: the page of the command it is run through, the chain it ran in
+    record: the page of the playbook it is run through, the chain it ran in
     (the press, approval and merge that set it going) where they may read the
     audit log, and, while it has not started because no worker reports, the
     problem that says how to set one up."""
@@ -40,8 +40,6 @@ def run_context(record: dict[str, Any], *, user: Any) -> dict[str, Any]:
         "events": (HistoryGroup(steps),) if steps else (),
         "events_heading": EVENTS,
         "events_url": chain_url(steps[0].events[0].trace) if steps else "",
-        # A scan runs no playbook: what it ran is the command that asked for it.
-        "ran_label": "Playbook" if record["playbook"] else "Command",
         # A playbook no longer adopted has no command to link to.
         "playbook_url": command_url(capability) if capability_spec(capability) else "",
         "problems": worker_problems(web_principal(user)) if record["state_label"] == NOT_STARTED else (),

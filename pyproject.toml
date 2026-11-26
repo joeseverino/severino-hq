@@ -238,8 +238,8 @@ name = "Only a door, the capability runner and the attribution core name an oper
 type = "protected"
 protected_modules = ["hq.platform.core.bindings"]
 # The doors (a request, a token's call, the shell, the controller's bridge,
-# the example estate's), the runner, and an export and a sweep's adoption,
-# each HQ's own act at the door it serves.
+# the example estate's), the runner, and an export and a sweep's adoption
+# and scan, each HQ's own act at the door it serves.
 allowed_importers = [
   "hq.**.tests",
   "hq.domains.control_plane.bridge_application",

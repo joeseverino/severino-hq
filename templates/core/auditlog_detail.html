@@ -13,7 +13,6 @@
     {% if operation or operation_id %}{% fact "Operation" %}{{ operation }}{% if operation and operation_id %} {% endif %}{% if operation_id %}<code>{{ operation_id }}</code>{% endif %}{% endfact %}{% endif %}
     {% if event.message %}{% fact "Message" value=event.message %}{% endif %}
     {% if scan %}
-      {% fact "Refreshed by" value=refreshed_by.words|or_empty %}
       {% fact "Commit read" %}{{ scan.revision }} on {{ scan.proposal.branch }}{% if scan.proposal.committer %} from {{ scan.proposal.committer }}{% endif %}{% endfact %}
       {% fact "Commit adopted" value=adopted_revision|or_empty %}
       {% if scan.proposal.rejected_at %}

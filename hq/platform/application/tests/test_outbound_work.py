@@ -622,8 +622,10 @@ class ShippedUnitTests(TestCase):
             for match in INSTANCE.finditer(unit.read_text())
         }
 
-    def test_the_units_ask_for_exactly_the_hosts_work_without_a_cadence(self):
-        self.assertEqual(self.asked_for(), {work.name for work in outbound_work.host_work() if work.every is None})
+    def test_the_units_ask_for_exactly_the_hosts_work_without_a_cadence_or_a_reading(self):
+        self.assertEqual(
+            self.asked_for(), {work.name for work in outbound_work.host_work() if work.every is None and not work.reads}
+        )
 
     def test_work_with_a_cadence_is_asked_for_by_no_unit_of_its_own(self):
         clocked = {work.name for work in outbound_work.host_work() if work.every is not None}

@@ -1,6 +1,6 @@
 """What the worker's repository offers at the tip of its default branch: each
 procedure it declares, read without running any of it. The worker reads; HQ
-judges. What the scan reads and reports: docs/Architecture.md, "Refreshing
+judges. What the scan reads and reports: docs/Architecture.md, "Scanning
 the playbooks".
 """
 
@@ -575,6 +575,7 @@ def scan(
     files = frozenset(paths)
     known = frozenset(modules()) if sidecars else frozenset()
     return {
+        "repository": project.repository,
         "branch": tip.branch,
         "revision": tip.revision,
         "verification": dict(verify(tip.revision)),

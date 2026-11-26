@@ -300,7 +300,7 @@ def request_app_read(repository_url: str, *, principal: Principal) -> dict[str, 
     # to once, so a key of its own is fresh each time.
     answer = capabilities.run_capability(
         READ_NOW_CAPABILITY,
-        {"connection_ref": connection_ref},
+        {"connection_refs": [connection_ref]},
         principal=principal,
         idempotency_key=f"refresh:{secrets.token_urlsafe(18)}",
     ).answer

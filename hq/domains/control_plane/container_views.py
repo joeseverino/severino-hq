@@ -18,7 +18,7 @@ lazy from hq.platform.application.container_findings import needs_you
 lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containers, standing_of, tally
 lazy from hq.platform.application.machines import container_context
 lazy from hq.platform.application.resource_capabilities import offered_changes
-lazy from hq.platform.application.upgrades import plan_for, readiness_of
+lazy from hq.platform.application.upgrades import plan_for
 
 from .container_tables import every_container, need_table
 
@@ -43,7 +43,6 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
             "state": None,
             "act": None,
             "held": "",
-            "readiness": None,
             "managed": None,
             "edit": None,
         }
@@ -65,17 +64,11 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
         "state": state,
         "act": state.action.control(request.get_full_path()) if state is not None and state.action else None,
         "held": _held(state),
-        # A build on its host is released by its repository's merges, never by a registry's tags.
-        "readiness": readiness_of(item) if item is not None and _pulled(item.standing) else None,
         # The repository whose Compose files build its image on its host.
         "managed": managed_by(item) if item is not None and item.standing.built_here else None,
         # Where the operator names what its image is built from, when the image does not say.
         "edit": offered_changes([resource])[resource.key].edit(resource.key, next=request.get_full_path()),
     }
-
-
-def _pulled(standing: Any) -> bool:
-    return standing.repository is None and not standing.built_here
 
 
 def _held(state: Any) -> str:

@@ -13,7 +13,6 @@ from .action_links import ActionLink
 from .command_fields import Describe
 from .display_words import QUOTED, display
 from .json_schemas import Written
-from .workflows import WrittenAction
 
 type StepNotes = Annotated[tuple[str, ...], Describe("What to know before or after it, a sentence each.")]
 
@@ -88,8 +87,4 @@ type WrittenSteps = Annotated[
 ]
 type WrittenReason = Annotated[
     str, Describe("Why HQ can neither run a fix nor name an exact command for it; empty when it can do either.")
-]
-type WrittenCheck = Annotated[
-    WrittenAction | None,
-    Describe("The press that reads again what it rests on and runs its check; null where there is none."),
 ]

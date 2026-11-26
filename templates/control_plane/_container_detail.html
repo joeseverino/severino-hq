@@ -6,7 +6,7 @@ move it (application.app_updates.AppUpdate, the app_updates resource's), and
 how it is run against the container standard, with what it uses beside its
 limits. Each said once; the band above has its version and standing.
 {% endcomment %}
-{% if plan or readiness or state %}
+{% if plan or state %}
 {% section "Upgrade" id="upgrade" data_fragment=state.standing.live data_fragment_poll=state.standing.live|follow_every %}
   {% facts layout="band" %}
     {% if update %}
@@ -18,111 +18,65 @@ limits. Each said once; the band above has its version and standing.
     {% endfact %}
     {% endwith %}
     {% fact "Pin" icon="deploy" %}
-      {% for pin in update.pins %}{% if pin.before %}{% include "partials/_change.html" with from=pin.before.tag to=pin.after.tag code=True only %}{% else %}<code>{{ pin.after.tag }}</code>{% endif %}{% empty %}Diff too large to read{% endfor %}
+      {% for pin in update.pins %}{% if pin.before %}{% include "partials/_change.html" with from=pin.before.tag to=pin.after.tag code=True only %}{% else %}<code>{{ pin.after.tag }}</code>{% endif %}{% empty %}Not read{% endfor %}
     {% detail %}
-      {% for pin in update.pins %}<small>{% if pin.digest %}{% muted tip=pin.digest %}{{ pin.digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}</small>{% endfor %}
+      {% for pin in update.pins %}<small>{% if pin.digest %}{% muted tip=pin.digest %}{{ pin.digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}</small>{% empty %}<small>Its diff is too large to read</small>{% endfor %}
     {% endfact %}
-    {% fact "Fixes" icon="shield" tone=update.fixes_tone %}
-      {{ update.fixes_said }}
-    {% detail %}
-      {% if update.fixes %}{% list kind="dots" %}{% for advisory in update.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% endif %}
-    {% endfact %}
-    {% fact "New vulnerabilities" icon="info" tone=update.brings_tone %}
-      {{ update.brings_said }}
-    {% detail %}
-      {% if update.brings %}{% list kind="dots" %}{% for finding in update.brings|slice:":2" %}<li>{% entity finding.url|outside label=finding.id %}</li>{% endfor %}{% endlist %}{% endif %}
-    {% endfact %}
+    {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=update.fixes_said %}{% endif %}
+    {% fact "New vulnerabilities" icon="info" value=update.brings_said %}
     {% elif plan %}
     {% fact "To" icon="deploy" %}
       {% entity plan.release.url|outside label=plan.target_tag code=True %}
     {% detail %}
       <small>{% if plan.target_digest %}{% muted tip=plan.target_digest %}{{ plan.target_digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}{% if plan.release.published %}{% dot %}released {{ plan.release.published|when_text }}{% endif %}</small>
     {% endfact %}
-    {% fact "Fixes" icon="shield" tone=plan.fixes_tone %}
-      {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.known_vulnerabilities %}None of {{ item.standing.known_vulnerabilities|length }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
-    {% detail %}
-      {% if plan.fixes %}{% list kind="dots" %}{% for advisory in plan.fixes|slice:":2" %}<li>{% entity advisory.url|outside label=advisory.id %}</li>{% endfor %}{% endlist %}{% elif not item.standing.known_vulnerabilities %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
-    {% endfact %}
+    {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=plan.fixes_said %}{% endif %}
     {% endif %}
-    {% if state and not update %}{% fact "Update" icon="deploy" value=state.words %}{% endif %}
-    {% with merge=state.standing %}{% if merge %}{% fact state.standing_label icon="commit" value=merge.words url=merge.run_url tone=merge.tone detail=merge.lines %}{% endif %}{% endwith %}
+    {% if state and not update %}{% fact "Pull request" icon="commit" value=state.answer %}{% endif %}
+    {% with merge=state.standing %}{% if merge %}{% fact state.standing_label icon="commit" value=merge.answer url=merge.run_url %}{% endif %}{% endwith %}
     {% if plan %}
-    {% fact "Data" icon="layers" tone=plan.data_tone %}
-      {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }}{% else %}Keeps no data{% endif %}
-    {% detail %}
-      <small>{% for mount in plan.data %}<code>{{ mount.source }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
-    {% endfact %}
-    {% fact "Checked afterwards by" icon="check-circle" tone=plan.verified_tone %}
-      {% if plan.verified_by %}{{ plan.verified_by.0|capfirst }}{% else %}Nothing{% endif %}
-    {% detail %}
-      <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
-    {% endfact %}
-    {% elif readiness %}
-    {% fact "Checked afterwards by" icon="check-circle" tone=readiness.verified_tone %}
-      {% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst }}{% else %}Nothing{% endif %}
-    {% detail %}
-      <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not readiness.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
-    {% endfact %}
-    {% fact "Data" icon="layers" %}
-      {% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }}{% else %}Keeps no data{% endif %}
-    {% detail %}
-      <small>{% for mount in readiness.data %}<code>{{ mount.source }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
-    {% endfact %}
-    {% fact "Automatic upgrades" icon="deploy" tone=readiness.automatic_tone %}
-      {% if readiness.automatic %}Patch updates apply{% else %}Not yet{% endif %}
-    {% detail %}
-      {% if readiness.not_automatic %}<small>{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below</small>{% endif %}
-    {% endfact %}
+    {% fact "Data" icon="layers" value=plan.data_said %}
+    {% fact "Checked afterwards by" icon="check-circle" value=plan.verified_said %}
     {% endif %}
   {% endfacts %}
   {% if held or act %}{% button_row %}{% if act %}{% include "partials/_page_action.html" with action=act only %}{% muted %}{{ state.said }}{% endmuted %}{% else %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% endbutton_row %}
-  {% elif not plan and readiness.not_automatic %}{% list %}{% for blocker in readiness.not_automatic %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
+  {% elif plan.waits_on %}{% list %}{% for blocker in plan.waits_on %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
   {% endif %}
-{% aside %}{% muted %}{% if plan %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% elif readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}{% endmuted %}
+{% aside %}{% if plan %}{% muted %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}
 
 {% comment %}
-Source and Runtime each across the page: Runtime holds its fix (the patch)
-and many more checks than Source, so beside it Source would stretch empty.
+Source and Runtime each across the page: Runtime holds many more checks
+than Source, each with its fix, so beside it Source would stretch empty.
 {% endcomment %}
 {% with chain=item.supply_chain standing=item.standing %}
 {% section "Source" id="supply-chain" %}
   {% if chain.findings %}{% include "partials/_work_queue.html" with items=chain.finding_rows grouped=True here=True only %}{% endif %}
   {% facts %}
-    {% fact "Built from" %}<span class="prose">{% if standing.source|web_url %}{% entity standing.source|outside label=standing.upstream %} {% muted %}{{ standing.source_known_by }}{% endmuted %}{% elif managed %}{% entity managed.url|outside label=managed.repository %} {% muted %}compose/{{ managed.app }}{% endmuted %}{% elif edit %}<a href="{{ edit.url }}">Name the source</a>{% muted %}{% dot %}the image does not say{% endmuted %}{% else %}{% muted %}The image does not say.{% endmuted %}{% endif %}</span>{% endfact %}
-    {% if standing.commit_url or standing.provenance.builder or standing.built_on %}{% fact "Built" %}<span class="prose">{% if standing.commit_url|web_url %}{% muted %}at{% endmuted %} {% entity standing.commit_url|outside code=True label=standing.provenance.revision|slice:":7" %} {% endif %}{% if standing.provenance.builder|web_url %}{% muted %}by{% endmuted %} {% entity standing.provenance.builder|outside label="a workflow run" %} {% endif %}{% if standing.built_on %}{% muted %}on{% endmuted %} {% for base in standing.built_on %}<code>{{ base }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% endfact %}{% endif %}
-    {% if standing.packages %}{% fact "Packages" %}{{ standing.packages }} {% muted %}listed by its publisher{% if standing.checked %}, checked against {% entity "https://osv.dev"|outside label="OSV" %}{% if standing.checked_at %} {{ standing.checked_at|when_text }}{% endif %}{% endif %}{% endmuted %}{% endfact %}{% endif %}
+    {% fact "Built from" %}<span class="prose">{% if standing.source|web_url %}{% entity standing.source|outside label=standing.upstream %} {% muted %}{{ standing.source_known_by }}{% endmuted %}{% elif managed %}{% entity managed.url|outside label=managed.repository %} {% muted %}compose/{{ managed.app }}{% endmuted %}{% elif edit %}<a href="{{ edit.url }}">Name the source</a>{% else %}Unknown{% endif %}</span>{% detail %}{% if not standing.source|web_url and not managed %}<small>The image does not say</small>{% endif %}{% endfact %}
+    {% if standing.commit_url or standing.provenance.builder or standing.built_on %}{% fact "Built" %}<span class="prose">{% if standing.commit_url|web_url %}{% entity standing.commit_url|outside code=True label=standing.provenance.revision|slice:":7" lead="at" %} {% endif %}{% if standing.provenance.builder|web_url %}{% entity standing.provenance.builder|outside label="a workflow run" lead="by" %} {% endif %}{% if standing.built_on %}{% muted %}on{% endmuted %} {% for base in standing.built_on %}<code>{{ base }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% endfact %}{% elif standing.attestations_read %}{% fact "Provenance" value="None from its publisher" %}{% endif %}
+    {% if standing.packages %}{% fact "Packages" %}{{ standing.packages }}{% detail %}<small>Listed by its publisher{% if standing.checked %}, checked against {% entity "https://osv.dev"|outside label="OSV" %}{% if standing.checked_at %} {{ standing.checked_at|when_text }}{% endif %}{% endif %}</small>{% endfact %}{% elif standing.attestations_read %}{% fact "Packages" value="None listed by its publisher" %}{% endif %}
     {% if standing.findings %}{% fact "Known in them" %}{% list %}{% for finding in standing.findings|slice:":6" %}<li class="prose">{% entity finding.url|outside label=finding.id %} {% muted %}{{ finding.package }} {% with mark=finding.severity|then:"·" %}{% if finding.fixed %}{% include "partials/_change.html" with from=finding.installed to=finding.fixed|join:", " mark=mark %}{% else %}{{ finding.installed|breakable:mark }}{% endif %}{% endwith %}{{ finding.severity }}{% endmuted %}</li>{% endfor %}{% if standing.findings|length > 6 %}<li>{% muted %}and {{ standing.findings|length|add:"-6"|measured:"more" }}{% endmuted %}</li>{% endif %}{% endlist %}{% endfact %}{% endif %}
   {% endfacts %}
-{% aside %}{% muted %}{% if chain.measured %}{{ chain.met }} of {{ chain.measured|counted:"check passes,checks pass" }}{% dot %}{% endif %}{% if standing.built_here %}built on its host{% else %}read from its public registry{% if standing.checked %} and OSV{% endif %} without a login{% endif %}{% endmuted %}
+{% aside %}{% muted %}{% if chain.measured %}{{ chain.met }} of {{ chain.measured|counted:"check passes,checks pass" }}{% dot %}{% endif %}{% if standing.built_here %}built on its host{% else %}read from its public registry{% if standing.checked %} and OSV{% endif %} without a login{% endif %}{% endmuted %}{% include "partials/_work_queue.html#refresh" with items=chain.finding_rows only %}
 {% endsection %}
 {% endwith %}
 
 {% with posture=item.posture %}
 {% section "Runtime" id="how-it-runs" %}
   {% if posture.findings %}{% include "partials/_work_queue.html" with items=posture.finding_rows grouped=True here=True only %}{% endif %}
-  {% with patch=item.hardening %}{% if patch.any %}
-  {% command id="hardening" %}{% if patch.yaml %}{{ patch.yaml }}{% endif %}
-  {% title %}Add to {% if patch.compose_file %}<code>{{ patch.compose_file }}</code>{% else %}its compose file{% endif %}
-  {% detail %}Where its service already has one of these keys, replace it. Then run <code>docker compose up -d {{ patch.service }}</code> in that directory.
-  {% notes %}
-    {% for removal in patch.removals %}<li><strong>Remove</strong> {% for line in removal.lines %}<code>{{ line }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% if removal.caution %} {% muted %}{{ removal.caution }}{% endmuted %}{% endif %}</li>{% endfor %}
-    {% for change in patch.cautions %}<li><code>{{ change.key }}</code> {% muted %}{{ change.caution }}{% endmuted %}</li>{% endfor %}
-    {% for gap in patch.unwritten %}<li class="prose"><strong>Not included</strong> {% muted %}{{ gap.reason }}{% endmuted %}{% if gap.check == "no-docker-socket" and patch.socket_link %} <a href="{{ patch.socket_link.url }}">{{ patch.socket_link.label }}</a>{% endif %}</li>{% endfor %}
-  {% endcommand %}
-  {% endif %}{% endwith %}
   {% facts %}
     {% if item.compose_files or item.running.stack %}{% fact "Defined in" %}{% if item.running.stack %}{{ item.running.stack }}{% if item.compose_files %}{% muted %}{% dot %}{% endmuted %} {% endif %}{% endif %}{% for path in item.compose_files %}<code>{{ path }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
     {% if item.running.published %}{% fact "Ports" value=item.running.published %}{% endif %}
     {% if item.serves %}{% fact "Serves" %}{% for hostname in item.serves %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
     {% if item.mounts %}{% with shared=item.shared_mounts %}{% fact "Mounts" %}{% list %}{% for mount in item.mounts %}<li class="prose">{% with others=shared|dictkey:mount.source %}{% if mount.read_only %}{% include "partials/_change.html" with from=mount.source to=mount.destination code=True word="mounted at" only %}{% else %}{% include "partials/_change.html" with from=mount.source to=mount.destination code=True word="mounted at" mark=others|then:"·" only %}{% endif %}{% if mount.read_only %} {% muted %}<span class="whole">read-only</span>{% if others %}{% dot %}{% endif %}{% endmuted %}{% endif %}{% if others %}{% muted %}also{% endmuted %} {% for other in others %}<a href="{{ other.url }}">{{ other.running.name|breakable:forloop }}</a>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endwith %}</li>{% endfor %}{% endlist %}{% endfact %}{% endwith %}{% endif %}
     {% with usage=item.usage %}{% if usage %}
-    {% fact "Memory" %}<span data-usage="memory">{{ usage.memory|bytes }} {% muted %}{{ usage.memory_basis|breakable:"·" }}{% if usage.memory_limit %}{{ usage.memory_of_limit|measured:"%,-1" }} of its {{ usage.memory_limit|bytes }} limit{% else %}no limit{% endif %}{% endmuted %}</span>{% endfact %}
-    {% fact "CPU" %}<span data-usage="cpu">{% if usage.cpu_percent is not None %}{{ usage.cpu_percent|measured:"%,-1" }} of one core {% endif %}{% muted %}{% if usage.cpu_percent is not None %}since the read before{% else %}Measured once HQ has read it twice{% endif %}{% dot %}{% if usage.cpu_limit %}limit {{ usage.cpu_limit|measured:"CPUs,-2" }}{% else %}no limit{% endif %}{% endmuted %}</span>{% endfact %}
+    {% fact "Memory" data_usage="memory" %}{{ usage.memory|bytes }}{% detail %}<small>{{ usage.memory_basis|capfirst }}</small><small>{% if usage.memory_limit %}{{ usage.memory_of_limit|measured:"%,-1" }} of its {{ usage.memory_limit|bytes }} limit{% else %}No limit{% endif %}</small>{% endfact %}
+    {% fact "CPU" data_usage="cpu" %}{% if usage.cpu_percent is not None %}{{ usage.cpu_percent|measured:"%,-1" }} of one core{% else %}Not measured yet{% endif %}{% detail %}<small>{% if usage.cpu_percent is not None %}Since the read before{% else %}Measured once HQ has read it twice{% endif %}</small><small>{% if usage.cpu_limit %}Limit {{ usage.cpu_limit|measured:"CPUs,-2" }}{% else %}No limit{% endif %}</small>{% endfact %}
     {% endif %}{% endwith %}
-    {% if posture.measured < posture.results|length %}{% fact "Checks not read" %}<span tabindex="0" data-tip="{% for result in posture.results %}{% if result.state == 'unavailable' %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">{{ posture.unread }}</span> {% muted %}until its runtime is read{% endmuted %}{% endfact %}{% endif %}
+    {% if posture.measured < posture.results|length %}{% fact "Checks not read" %}<span tabindex="0" data-tip="{% for result in posture.results %}{% if result.state == 'unavailable' %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">{{ posture.unread }}</span>{% detail %}<small>Until its runtime is read</small>{% endfact %}{% endif %}
   {% endfacts %}
-{% aside %}{% muted %}{% if posture.measured %}{{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}{% if posture.intended %}, {{ posture.intended|length }} by design{% endif %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=item.running.observed_at only %}{% endmuted %}
+{% aside %}{% muted %}{% if posture.measured %}{{ posture.met }} of {{ posture.measured|counted:"check passes,checks pass" }}{% if posture.intended %}, {{ posture.intended|length }} by design{% endif %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=item.running.observed_at only %}{% endmuted %}{% include "partials/_work_queue.html#refresh" with items=posture.finding_rows only %}
 {% endsection %}
 {% endwith %}

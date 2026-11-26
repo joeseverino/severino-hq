@@ -31,15 +31,11 @@ const DriftUnit = "severino-hq-script-drift.service"
 // prints verdicts, never file contents, and of sudo's rules only a command
 // it fails. Its sudo never prompts.
 type Checker struct {
-	// Lib and Systemd are where the tree and the units are installed.
-	Lib, Systemd string
+	// Lib is where the tree is installed.
+	Lib string
 	// RootUID owns every program a sudo rule names, and the directories
 	// above it.
 	RootUID uint32
-	// Release is the unit directory this release ships. A unit it shares
-	// with the release installed in Lib is already installed; one new to it
-	// is the deploy's to install.
-	Release string
 	// FreeBytes is the free space a deploy needs on /, as Free reads it.
 	FreeBytes uint64
 	Free      func(path string) (uint64, error)
@@ -72,7 +68,6 @@ func (c *Checker) Check(ctx context.Context) int {
 	c.egress(ctx)
 	c.rootsAlone(hostRelative, "a sudo rule runs %s as root")
 	c.rootsAlone(edgeRelative, "an edge installs %s as its root receiver")
-	c.units()
 	c.room()
 	switch {
 	case c.failed:
@@ -213,33 +208,6 @@ func (c *Checker) rootsAlone(relative, runs string) {
 	}
 	if alone {
 		c.ok("%s is root's alone", program)
-	}
-}
-
-// units: every unit the release expects to find already installed, which is
-// each one the host's installed release ships too. Main is no stand-in for
-// that, since a merge whose deploy failed puts on main a unit no host has.
-func (c *Checker) units() {
-	release, err := Shipped(c.Release)
-	if err == nil {
-		var installed []string
-		if installed, err = Shipped(filepath.Join(c.Lib, "deploy", "systemd")); err == nil {
-			release = slices.DeleteFunc(release, func(unit string) bool { return !slices.Contains(installed, unit) })
-		}
-	}
-	if err != nil {
-		c.bad("the units this release ships cannot be read: %v", err)
-		return
-	}
-	missing := false
-	for _, unit := range release {
-		if info, err := os.Stat(filepath.Join(c.Systemd, unit)); err != nil || !info.Mode().IsRegular() {
-			c.bad("%s is not installed", filepath.Join(c.Systemd, unit))
-			missing = true
-		}
-	}
-	if !missing {
-		c.ok("every established unit is installed")
 	}
 }
 

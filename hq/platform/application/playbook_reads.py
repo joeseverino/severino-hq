@@ -49,7 +49,7 @@ class PlaybookRow(TypedDict):
         list[str],
         Describe(
             "The machines a run of it may name now, each by its name in HQ. HQ's runner has a login to each "
-            "as it needs. A Refresh reads them anew."
+            "as it needs. Each scan reads them anew."
         ),
     ]
 
@@ -172,7 +172,7 @@ def _scanned(proposal: int | None) -> dict[str, Any] | None:
 
 
 def list_scans() -> dict[str, Any]:
-    """The newest scan result, the one there is to decide on; none before the first Refresh."""
+    """The newest scan result, the one there is to decide on; none before the first scan."""
 
     newest = _scanned(None)
     return page_of([newest] if newest is not None else [])
@@ -183,7 +183,7 @@ def get_scan(scan_id: int) -> dict[str, Any]:
 
     found = _scanned(scan_id)
     if found is None:
-        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
+        raise RecordNotFound("No scan result has that ID.")
     return found
 
 

@@ -14,11 +14,13 @@
       "description": "A provider whose events HQ takes, as an admitted module's INBOUND declares it.",
       "enum": [
         "github_app",
-        "host"
+        "host",
+        "tailscale"
       ],
       "x-enum-varnames": [
         "InboundProviderGitHubApp",
-        "InboundProviderHost"
+        "InboundProviderHost",
+        "InboundProviderTailscale"
       ]
     },
     "event": {

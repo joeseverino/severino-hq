@@ -151,10 +151,11 @@ open the second's link with `127.0.0.1` in place of `localhost`.
 
 `mise run dev` always serves the bridge and runs the real automation worker
 (`hq_runner`) beside it, and `mise run dev:scratch --seed showcase --runner`
-does the same for a scratch server. A Refresh on Playbooks is then scanned,
-its commit can be adopted, and a run is claimed, run by ansible-playbook and
-reported with each task's outcome, on the machine page and in Jobs. Without
-`--runner`, a scratch server's Refresh or run stays queued.
+does the same for a scratch server. A scan HQ asks for, once a reading of
+the repositories finds the source's branch moved, is then claimed, its commit
+can be adopted, and a run is claimed, run by ansible-playbook and reported
+with each task's outcome, on the machine page and in Jobs. Without
+`--runner`, a scratch server's scan or run stays queued.
 
 The server serves the bridge as the image does (`SEVERINO_BRIDGE_SOCKET`,
 and the worker's `SEVERINO_AUTOMATION_BRIDGE_SOCKET` beside it, which the worker
@@ -458,7 +459,7 @@ A test tagged `tree` finds its files by walking this checkout, or loads what a
 fresh process starts with (the startup budgets), so whatever the change, it
 reads the whole tree: fast's runs leave it out (`--exclude-tag tree`), and
 CI's `lint:source` runs it. So does the composed suite with the extensions,
-which is `mise run check --release`'s.
+which a pull request's Composition job runs.
 
 A run runs its selection however wide it is. `--whole` runs the whole suite
 (the tests tagged `tree` aside) with every quick gate instead, whatever
@@ -481,11 +482,12 @@ no glob can say. `mise run --tag fast --affected --affected-base <ref>
 --affected-json` names each gate it would pick and why, running none. A lint gate that reaches the network, or whose check
 fast makes another way, is left untagged, and so is one whose input is the
 whole tree whatever changed: the `lint:drift-*` gates a Django command
-writes, `lint:deploycheck`, `lint:deptry`, `lint:imports`,
+writes, `lint:deploycheck`, `lint:deptry`,
 `lint:sdk-breaking`, `lint:structural` and `test:migrations`. CI's Lint and
 Test jobs and `mise run check` run them. `lint:mypy` stays, since mypy's
 cache rechecks only a changed module and those whose imports' interfaces
-changed.
+changed, and so does `lint:imports`, which reads the import graph in about a
+second whenever a Python file changes.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
 `lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:file-rules`, `lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
@@ -582,11 +584,12 @@ reads round-trips or keeps the invariant it documents. An input a run finds
 failing is kept in that package's `testdata/fuzz` with its fix.
 
 A setting whose default follows `DEBUG` is held by a test that loads the
-settings both ways. The suite inside an image runs once, in Compose, on the
-composed image production runs.
+settings both ways. The suite inside an image runs once, in the pull
+request's Composition job, on the composed image production runs: its release
+promotes that image ([Deployment](Deployment.md#checked-once)).
 
-`mise run check --release` then runs the composed suite with the extensions
-required and checks the deploy host, read-only, on the committed `HEAD`. Its
+`mise run check --release` then checks the deploy host, read-only, on the
+committed `HEAD`. Its
 verdict is kept apart, in `var/gate/check-release.txt`.
 `mise tasks info check` says what `--remote` and `--skip-host` do
 ([Deployment](Deployment.md)).
@@ -715,8 +718,7 @@ the files `Dockerfile.dockerignore` admits, less what the Dockerfile's
 stamped and only the runtime dependencies (`.venv-image`). A test that reads a
 file the image leaves out, or loads a development tool, fails here.
 
-Without a set it runs the host alone and says so; with `REQUIRE_COMPOSED=1`,
-as `mise run check --release` runs it, it fails instead.
+Without a set it runs the host alone and says so.
 
 That copy is read from the two files by `tools/lib/image-tree.sh`.
 `image:verify:tree`, one of the checks `mise run build` runs, holds it to the

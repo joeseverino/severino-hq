@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // examplePull is a placed grant as a host's configuration declares one.
@@ -70,7 +72,7 @@ func TestAGrantIsDueAgainHalfwayThroughItsToken(t *testing.T) {
 	if !grant.Due(now) {
 		t.Fatal("a grant with no token is not due")
 	}
-	if err := place(grant.Path, exampleToken); err != nil {
+	if err := place(grant.Path, secret.New(exampleToken)); err != nil {
 		t.Fatal(err)
 	}
 	now = time.Now()
@@ -90,7 +92,7 @@ func TestAGrantIsDueAgainHalfwayThroughItsToken(t *testing.T) {
 // enters, replacing what was there whole.
 func TestAValidHandoffPlacesTheTokenForRootAlone(t *testing.T) {
 	l, grant, stderr := newGrantLaunch(t)
-	if err := place(grant.Path, "ghs_the-last-token"); err != nil {
+	if err := place(grant.Path, secret.New("ghs_the-last-token")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chtimes(grant.Path, time.Now().Add(-TokenRefresh), time.Now().Add(-TokenRefresh)); err != nil {
@@ -231,7 +233,7 @@ func TestAHostsGrantsAreReadStrictly(t *testing.T) {
 // them.
 func TestAPlacedGrantAdmitsItsRepositoriesInAnyCase(t *testing.T) {
 	grant := Grant{Name: "example-pull", Repositories: []string{"example/Zed", "example/alpha"}}
-	run := HandoffRun{Owner: "example", Repositories: []string{"example/alpha", "example/zed"}, Token: exampleToken}
+	run := HandoffRun{Owner: "example", Repositories: []string{"example/alpha", "example/zed"}, Token: secret.New(exampleToken)}
 	if err := grant.admits(Handoff{Version: handoffV1, Runs: []HandoffRun{run}}); err != nil {
 		t.Fatalf("refused its own repositories: %v", err)
 	}

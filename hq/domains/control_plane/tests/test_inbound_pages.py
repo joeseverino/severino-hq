@@ -10,9 +10,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource
-from hq.platform.application import readings
-from hq.platform.application.inbound_events import channel
-from hq.platform.core.testing import operator
+from hq.platform.core.testing import channel_heard, operator
 
 SOURCE = override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq")
 GUIDE = "docs/Install.md#12-hear-providers-events"
@@ -29,10 +27,6 @@ def told(source: InboundSource, event: str, *, hours: int, outcome: InboundOutco
         applied_at=timezone.now() - timedelta(hours=hours),
         outcome=outcome,
     )
-
-
-def heard(source: InboundSource) -> None:
-    readings.record(readings.heartbeat(channel(source)), {})
 
 
 @SOURCE
@@ -54,7 +48,7 @@ class EventsPageTests(TestCase):
 
     def test_a_listener_never_heard_points_to_its_setup_and_the_host_is_not_called_unset(self):
         empty = self.client.get(reverse("control_plane:events"))
-        heard(InboundSource.WORKER)
+        channel_heard(InboundSource.WORKER)
         listening = self.client.get(reverse("control_plane:events"))
 
         self.assertContains(empty, "No events yet.")
@@ -65,7 +59,7 @@ class EventsPageTests(TestCase):
 
     def test_the_controller_page_shows_the_listener_beside_the_controller(self):
         never = self.client.get(reverse("control_plane:controller"))
-        heard(InboundSource.WORKER)
+        channel_heard(InboundSource.WORKER)
         arrived = self.client.get(reverse("control_plane:controller"))
 
         self.assertContains(never, GUIDE)

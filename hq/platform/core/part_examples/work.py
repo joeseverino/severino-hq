@@ -37,7 +37,7 @@ def _example_runs():
                 ),
             ),
         ),
-        ("Refresh playbooks", "Queued", JobState.QUEUED.tone, "Waiting for HQ to start it.", RunEvidence()),
+        ("Scan playbooks", "Queued", JobState.QUEUED.tone, "Waiting for HQ to start it.", RunEvidence()),
         (
             "Run example.upgrade_packages",
             "Failed",
@@ -77,13 +77,20 @@ def _example_runs():
                         "host": "example-01",
                         "kind": "apps.pull",
                         "records": [
-                            {"project": "example-app", "result": "ok", "health": "healthy"},
+                            {"project": "example-app", "result": "ok", "health": "healthy", "changed": True},
+                            {"project": "example-app-left-alone", "result": "ok", "changed": False},
                             {
                                 "project": "example-app-with-a-longer-name",
                                 "result": "rolled_back",
                                 "health": "unhealthy: restarted 3 times in its settle window",
+                                "changed": True,
                             },
                         ],
+                    },
+                    {
+                        "host": "example-01",
+                        "kind": "apps.receipt",
+                        "records": [{"revision": "c" * 40, "last_attempt": "c" * 40, "ok": False}],
                     },
                     {"host": "example-01", "kind": "example.reading_with_a_longer_name", "records": [{}, {}]},
                 ),

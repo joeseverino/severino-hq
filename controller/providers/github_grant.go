@@ -17,6 +17,7 @@ import (
 
 	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -39,10 +40,10 @@ type TokenHandoff struct {
 }
 
 type TokenHandoffRun struct {
-	Owner        string   `json:"owner"`
-	Repositories []string `json:"repositories"`
-	Token        string   `json:"token"`
-	ExpiresAt    string   `json:"expires_at"`
+	Owner        string       `json:"owner"`
+	Repositories []string     `json:"repositories"`
+	Token        secret.Value `json:"token"`
+	ExpiresAt    string       `json:"expires_at"`
 }
 
 // grantPermissions is a grant's permissions as GitHub's token request names
@@ -139,7 +140,7 @@ func (r *Registry) mintFor(ctx context.Context, c githubConnection, app GitHubAp
 		return TokenHandoffRun{}, &ProviderError{Message: "GitHub did not say when the token for " + owner.Owner + " expires"}
 	}
 	return TokenHandoffRun{
-		Owner: owner.Owner, Repositories: owner.Repositories, Token: minted.Token, ExpiresAt: expires.UTC().Format(time.RFC3339),
+		Owner: owner.Owner, Repositories: owner.Repositories, Token: secret.New(minted.Token), ExpiresAt: expires.UTC().Format(time.RFC3339),
 	}, nil
 }
 
@@ -162,9 +163,10 @@ func (r *Registry) notInstalledOn(ctx context.Context, c githubConnection, owner
 }
 
 // writeTokenHandoff puts grant's hand-off in dir, readable by its owner
-// alone, all at once: root never sees half a file.
+// alone, all at once: root never sees half a file. It is the file root reads
+// each token from.
 func writeTokenHandoff(dir, grant string, handoff TokenHandoff) error {
-	data, err := json.Marshal(handoff)
+	data, err := jsonv2.Marshal(handoff, json.DefaultOptionsV1(), secret.Revealing)
 	if err != nil {
 		return err
 	}

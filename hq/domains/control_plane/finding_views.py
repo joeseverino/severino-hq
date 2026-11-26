@@ -1,6 +1,7 @@
 """Infrastructure findings."""
 
 from collections import Counter
+from functools import cached_property
 from typing import override
 
 from django.views.generic import TemplateView
@@ -11,6 +12,7 @@ from hq.platform.application.findings import coverage, estate_findings, finding_
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
+from hq.platform.core import queue_table
 
 # The queue's source for findings: the domain whose pages they are about.
 SOURCE_ID, SOURCE = "hq.infrastructure", "Infrastructure"
@@ -22,9 +24,25 @@ class FindingsView(PageMixin, TemplateView):
     template_name = "control_plane/findings.html"
     page_title = "Findings"
 
+    @cached_property
+    def _shown(self):
+        """Every problem, those of the rule viewed, and those as the queue's rows."""
+
+        principal = web_principal(self.request.user)
+        active_rule = rule_for(self.request.GET.get("rule", "").strip())
+        # Every problem, so the bar counts the shown ones out of all of them
+        # and offers each rule that raised one, whichever is viewed.
+        every = estate_findings(principal=principal)
+        raised = tuple(finding for finding in every if not active_rule or finding.rule == active_rule.name)
+        # The queue's own cards: one renderer for a problem wherever it is drawn.
+        return principal, active_rule, every, raised, finding_rows(SOURCE_ID, SOURCE, raised)
+
     @override
     def get_page_actions(self):
+        principal, *_, entries = self._shown
+        refresh = queue_table.refresh(entries, principal, self.request.get_full_path())
         return (
+            *((refresh,) if refresh else ()),
             PageAction("Needs you", reverse("action_items")),
             PageAction("Map", reverse("control_plane:topology")),
             PageAction("Checks", reverse("control_plane:checks")),
@@ -33,15 +51,7 @@ class FindingsView(PageMixin, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        principal = web_principal(self.request.user)
-        requested_rule = self.request.GET.get("rule", "").strip()
-        active_rule = rule_for(requested_rule)
-        # Every problem, so the bar counts the shown ones out of all of them
-        # and offers each rule that raised one, whichever is viewed.
-        every = estate_findings(principal=principal)
-        raised = tuple(finding for finding in every if not active_rule or finding.rule == active_rule.name)
-        # The queue's own cards: one renderer for a problem wherever it is drawn.
-        entries = finding_rows(SOURCE_ID, SOURCE, raised)
+        principal, active_rule, every, raised, entries = self._shown
 
         counts = Counter(finding.severity for finding in raised)
         context.update(

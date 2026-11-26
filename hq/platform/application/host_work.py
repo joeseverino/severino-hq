@@ -16,7 +16,9 @@ lazy from django.core.management import call_command
 
 lazy from hq.domains.content.content_sync import ContentSyncError, sync_content_index
 lazy from hq.domains.control_plane.models import InboundSource
-lazy from hq.domains.control_plane.observations.host import UNIT_FAILED
+lazy from hq.domains.control_plane.names import normalized_hostname
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.observations.host import AUTOMATION_HELD, UNIT_FAILED
 lazy from hq.domains.jobs import runner
 lazy from hq.domains.jobs.runner import Failed
 lazy from hq.platform.core.audit import prune_routine, record_operation
@@ -24,12 +26,15 @@ lazy from hq.platform.core.database import optimize
 lazy from hq.platform.core.models import AuditLog
 
 from .outbound_work import OutboundWork
-from .record_errors import RecordConflict
+from .record_errors import PolicyError, RecordConflict
 from .ui import counted
-lazy from . import approvals, outbound_work
+lazy from . import approvals, outbound_work, public_registry
 lazy from .automation_adoption import prune_proposals
+lazy from .automation_runs import held_runs, queue_settling
+lazy from .hq_self import own_machine
 lazy from .inbound import apply_events, prune_events
 lazy from .public_registry import refresh
+lazy from .resource_operations import HANDOFF
 
 
 def prune_audit(_progress: Any = None, *, subject: str = "", principal: Any = None) -> dict[str, Any]:
@@ -63,8 +68,18 @@ def _clear_sessions(_progress: Any, *, subject: str, principal: Any) -> dict[str
     return {"deleted": before - Session.objects.count()}
 
 
-def _content_index(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
+# What a content sync says on a host that names no index.
+NO_CONTENT_INDEX = "No content index set."
+
+
+def _content_index(progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
+    """The site's content index, synced: a host that names none has no
+    content source, which is no failure (settings.CONTENT_INDEX_URL)."""
+
     del subject, principal
+    if not settings.CONTENT_INDEX_URL:
+        progress(NO_CONTENT_INDEX)
+        return {}
     try:
         return sync_content_index()
     except ContentSyncError as exc:
@@ -91,6 +106,27 @@ def _unit_state(progress: Any, *, subject: str, principal: Any) -> dict[str, Any
         "received_at": timezone.now().isoformat(),
     }
     return apply_events({"source": InboundSource.HOST, "events": [event]})
+
+
+def _held(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
+    """Ask the settling read of each run held on a unit of HQ's own machine:
+    a job there ended, so one of them may have. The read says whether it did;
+    which job ended is never read. A held run elsewhere settles at its bound."""
+
+    del subject, principal
+    here = own_machine()
+    mine = normalized_hostname(here.name) if here is not None else None
+    asked: dict[str, str] = {}
+    for held in held_runs():
+        if mine in {normalized_hostname(machine) for machine in held.result[HANDOFF]}:
+            # One that cannot be asked now is asked again at its bound, which ends it.
+            try:
+                read = queue_settling(held)
+            except PolicyError as refused:
+                asked[str(held.pk)] = f"refused: {refused}"
+            else:
+                asked[str(held.pk)] = str(read.pk) if read else "in flight"
+    return {"asked": asked}
 
 
 def _due(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
@@ -120,8 +156,14 @@ def _due(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
 DAILY = timedelta(days=1)
 
 
-def _own(name: str, label: str, run: Any, every: timedelta | None = None) -> OutboundWork:
-    return OutboundWork(name, label, "", "", run, every=every, offered=False)
+def _own(name: str, label: str, run: Any, every: timedelta | None = None, **reading: Any) -> OutboundWork:
+    return OutboundWork(name, label, "", "", run, every=every, offered=False, **reading)
+
+
+def _read_here() -> tuple[str, ...]:
+    """The readings HQ takes itself, each from a public registry (``read_by``)."""
+
+    return tuple(kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "hq")
 
 
 def outbound() -> tuple[OutboundWork, ...]:
@@ -132,10 +174,17 @@ def outbound() -> tuple[OutboundWork, ...]:
 
     return (
         _own("audit.prune", "Log cleanup", prune_audit, every=DAILY),
+        _own(
+            "automation.settle",
+            "Held runs",
+            _held,
+            reads=(AUTOMATION_HELD,),
+            reads_due=lambda: held_runs().exists(),
+        ),
         _own("content.sync", "Content sync", _content_index, every=DAILY),
         _own("due", "Scheduled work", _due),
         _own("events.prune", "Event cleanup", prune_events, every=DAILY),
-        _own("registry.refresh", "Registry refresh", _public_registry, every=DAILY),
+        _own(public_registry.REFRESH, "Registry refresh", _public_registry, every=DAILY, reads=_read_here()),
         _own("sessions.clear", "Session cleanup", _clear_sessions, every=DAILY),
         _own("units.read", "Service check", _unit_state),
     )

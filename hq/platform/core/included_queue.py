@@ -34,9 +34,15 @@ WORK_QUEUE = _part(
       says what was read, in the past tense, as a notice. These are words under the title, not a
       column: most rows have none. Since when (`Insight(since=...)`) is said in the origin panel, never
       on the row;
-    - buttons: the owner's actions, the first step that can be taken now when the owner offered none,
-      and the check that reads again. At most one is primary. Where the reader sorts their own queue,
-      Dismiss or Restore is the last of them (`row_actions put_away=`).
+    - buttons: the owner's actions, and the first step that can be taken now when the owner offered
+      none. At most one is primary. Where the reader sorts their own queue, Dismiss or Restore is the
+      last of them (`row_actions put_away=`).
+
+    **A queue refreshes from its top.** No row reads its own subject again. The card that holds a queue
+    draws one Refresh in its section's aside (`partials/_work_queue.html#refresh`), beside a Dismiss
+    all where there is one. It asks the controller to read what every row rests on
+    (`Finding.read_now`) in one press (`queue_table.refresh`), and draws nothing where no row rests on
+    a reading or its reader may not ask.
 
     Closed, a row is one line where its words fit. Everything taller is the row's `row-below`, opened
     by its toggle into the line beneath, from the title's edge to the table's. A row toggles only where

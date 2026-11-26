@@ -443,12 +443,39 @@ func (e GlancePanelID) Valid() bool {
 // Defines values for HostEvent.
 const (
 	HostEventDockerContainer HostEvent = "docker.container"
+	HostEventUnitJob         HostEvent = "unit.job"
 )
 
 // Valid indicates whether the value is a known member of the HostEvent enum.
 func (e HostEvent) Valid() bool {
 	switch e {
 	case HostEventDockerContainer:
+		return true
+	case HostEventUnitJob:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for HostJobResult.
+const (
+	HostJobResultCanceled HostJobResult = "canceled"
+	HostJobResultDone     HostJobResult = "done"
+	HostJobResultFailed   HostJobResult = "failed"
+	HostJobResultTimeout  HostJobResult = "timeout"
+)
+
+// Valid indicates whether the value is a known member of the HostJobResult enum.
+func (e HostJobResult) Valid() bool {
+	switch e {
+	case HostJobResultCanceled:
+		return true
+	case HostJobResultDone:
+		return true
+	case HostJobResultFailed:
+		return true
+	case HostJobResultTimeout:
 		return true
 	default:
 		return false
@@ -504,6 +531,7 @@ func (e HostRenderStatusRecordState) Valid() bool {
 const (
 	InboundProviderGitHubApp InboundProvider = "github_app"
 	InboundProviderHost      InboundProvider = "host"
+	InboundProviderTailscale InboundProvider = "tailscale"
 )
 
 // Valid indicates whether the value is a known member of the InboundProvider enum.
@@ -512,6 +540,8 @@ func (e InboundProvider) Valid() bool {
 	case InboundProviderGitHubApp:
 		return true
 	case InboundProviderHost:
+		return true
+	case InboundProviderTailscale:
 		return true
 	default:
 		return false
@@ -2179,6 +2209,9 @@ type HostFirewallRecord struct {
 	Record                  string `json:"record"`
 }
 
+// HostJobResult How a job HQ's host tells it of ended, as systemd says it.
+type HostJobResult string
+
 // HostPerimeterRecord One host.perimeter record: Open-port test.
 type HostPerimeterRecord struct {
 	AnsweredPublicly []int    `json:"answered_publicly,omitempty"`
@@ -2831,6 +2864,9 @@ type RunProgress struct {
 
 // RunStated What a playbook stated with set_stats beside its result, keyed by the machines of its run alone. Its compact JSON is at most StatedBytes' maxLength bytes.
 type RunStated struct {
+	// Handoff Each machine's systemd unit the run started and left running, whose job's end HQ settles the run at, by a read its procedure names (settled_by). The worker holds it to UnitName; the contract holds no pattern a request's string could be struck out of.
+	Handoff map[string]string `json:"handoff,omitempty"`
+
 	// Preview Each machine's lines of what a change would do.
 	Preview map[string][]string `json:"preview,omitempty"`
 
@@ -2876,8 +2912,11 @@ type SourceCatalog struct {
 	Files      []ScannedFile      `json:"files"`
 	Procedures []ScannedProcedure `json:"procedures"`
 	Reaches    []RunnerReach      `json:"reaches"`
-	Revision   string             `json:"revision"`
-	Unpinned   []UnpinnedPath     `json:"unpinned"`
+
+	// Repository The repository read, owner/name, as the host's configuration names it.
+	Repository string         `json:"repository"`
+	Revision   string         `json:"revision"`
+	Unpinned   []UnpinnedPath `json:"unpinned"`
 
 	// Verification Whether GitHub verified the commit's signature, and the GitHub account that committed it.
 	Verification CommitVerification `json:"verification"`
@@ -2911,8 +2950,11 @@ type StepFailure struct {
 // SweepVerdict defines model for SweepVerdict.
 type SweepVerdict struct {
 	// AgeSeconds Absent before anything has been swept.
-	AgeSeconds      int            `json:"age_seconds,omitempty"`
-	Carry           []string       `json:"carry"`
+	AgeSeconds int      `json:"age_seconds,omitempty"`
+	Carry      []string `json:"carry"`
+
+	// CarryKinds Kinds events keep current that the sweep reports as carried, asking nothing of their provider.
+	CarryKinds      []ResourceKind `json:"carry_kinds"`
 	Due             bool           `json:"due"`
 	Forced          []ForcedRead   `json:"forced"`
 	IntervalSeconds int            `json:"interval_seconds"`
@@ -2972,6 +3014,9 @@ type TailscaleUserRecord struct {
 	Role        string `json:"role,omitempty"`
 	Status      string `json:"status,omitempty"`
 }
+
+// UnitName A systemd unit's name, as systemd spells it.
+type UnitName = string
 
 // UnpinnedPath A path Ansible would read beyond a playbook and its roles: a configuration, plugins or shared variables.
 type UnpinnedPath struct {

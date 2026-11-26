@@ -17,6 +17,19 @@ def runtime(container="web", **fields):
 KEPT = dict(EXAMPLES.kept)
 
 
+def on_the_host_network(*, nameservers=(), **fields):
+    """The web container on its machine's network, listening on ports 53 and 3000."""
+    from .test_containers import running
+    from .test_estate import device, devices
+
+    estate()
+    devices(device("example-box", addresses=["100.64.0.5"]), nameservers=nameservers)
+    inventory("portainer.container", [running("web", "example/web:1.0.0") | {"network_mode": "host"}])
+    on_host = {**KEPT, "network_mode": "host", "port_bindings": [], "exposed_ports": [53, 3000], **fields}
+    inventory("portainer.runtime", [runtime("web", **on_host)])
+    return next(item for item in containers() if item.running.name == "web")
+
+
 class StandardTests(TestCase):
     def posture(self, name="web", **fields):
         estate()
@@ -34,6 +47,26 @@ class StandardTests(TestCase):
         self.assertEqual(intended.reason, "It answers DNS on the host's port 53.")
         # What it did not declare is still a gap.
         self.assertEqual([result.check.id for result in found.unmet], ["not-root"])
+
+    def test_a_port_its_machine_is_reached_on_keeps_it_on_the_host_network(self):
+        found = on_the_host_network(nameservers=["100.64.0.5"]).posture
+
+        self.assertEqual(found.state_of("own-network"), INTENDED)
+        (intended,) = found.intended
+        self.assertIn("53", intended.reason)
+        self.assertNotIn("own-network", {gap.check for gap in found.subject.hardening.removals})
+
+    def test_root_with_only_the_capability_its_low_port_takes_is_root_by_necessity(self):
+        held = on_the_host_network(cap_drop=["ALL"], cap_add=["NET_BIND_SERVICE"], user="").posture
+        wider = on_the_host_network(cap_drop=["ALL"], cap_add=["CHOWN"], user="").posture
+
+        self.assertEqual(held.state_of("not-root"), INTENDED)
+        self.assertEqual(wider.state_of("not-root"), Standing.UNMET)
+
+    def test_the_host_network_with_no_port_its_machine_is_reached_on_is_a_gap(self):
+        self.assertEqual(
+            on_the_host_network(nameservers=["100.64.0.9"]).posture.state_of("own-network"), Standing.UNMET
+        )
 
     def test_by_design_names_real_checks_and_says_why(self):
         from pydantic import ValidationError

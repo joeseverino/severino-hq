@@ -132,26 +132,14 @@ def _own_page(item: dict[str, Any], subject: dict[str, Any], anchor: str) -> str
 
 
 def _buttons(item: Any) -> list[dict[str, Any]]:
-    """An item's own actions, then its presses and its check, each once."""
+    """An item's own actions, then its presses, each once."""
 
     actions = [_plain(action) for action in item.get("actions", ())]
     presses = [step["link"] for step in item.get("steps", ()) if step["kind"] == "press"]
-    check = [item["check"]] if item.get("check") else []
-    for action in (*presses, *check):
+    for action in presses:
         if _identity(action) not in {_identity(known) for known in actions}:
             actions.append(action)
     return actions
-
-
-def _arranged(actions: list[dict[str, Any]], links: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    # A check again waits behind the owner's named page, so the two that
-    # stand on the row are the fix and where it is done.
-    return _one_primary(
-        [action for action in actions if action.get("name") != "verify"]
-        + links
-        + [action for action in actions if action.get("name") == "verify"],
-        links,
-    )
 
 
 def decision(item: dict[str, Any]) -> dict[str, Any]:
@@ -165,7 +153,7 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         "anchor": anchor,
         "page": _own_page(item, subject, anchor),
         "urgency": NOTICE if item.get("notice") else Tone(item["status"]).urgency,
-        "actions": _arranged(actions, links),
+        "actions": _one_primary(actions + links, links),
         "late": _late(item),
         "facts": _facts(item.get("facts", ())),
         "origin": _origin(item),

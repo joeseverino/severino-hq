@@ -211,6 +211,7 @@ func TestAReleaseWhoseWorkerIsNotTheSourcesSignedImageIsRefused(t *testing.T) {
 		"unsigned":           func(f *fakeHost) { f.pinsRunner(runnerImage); f.fail = []string{"/verifier/cosign verify"} },
 		"another repository": func(f *fakeHost) { f.pinsRunner(strings.Replace(runnerImage, "joeseverino", "someone-else", 1)) },
 		"by tag":             func(f *fakeHost) { f.pinsRunner(source.Runner() + ":latest") },
+		"none":               func(f *fakeHost) { _ = os.Remove(filepath.Join(f.image, AutomationImage)) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFakeHost(t)
@@ -243,7 +244,9 @@ func TestADeployThatFailsKeepsTheStandingReleasesImages(t *testing.T) {
 	for name, fail := range map[string]func(f *fakeHost){
 		"in the rehearsal": func(f *fakeHost) { f.rehearses(&rehearsal{notReady: true}) },
 		"in a rollback": func(f *fakeHost) {
-			f.fail = []string{filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host") + " install"}
+			f.on = map[string]func(){"systemctl restart " + hostcore.WebUnit: func() {
+				f.fail = []string{"docker run --rm --pull never --name severino-hq-setup-"}
+			}}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -310,41 +313,23 @@ func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.machine.Lib, "hq", "config", "synced-release")); err != nil {
 		t.Error("the tree is not the image's")
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Systemd, hostcore.WebUnit)); err != nil {
-		t.Error("the release's web unit was not installed")
+	// HQ restarts under the release's web unit and drop-ins, which the setup's
+	// web tag installs, and the rest of the setup waits for it to be healthy.
+	setups := f.setups()
+	if len(setups) != 2 || !strings.HasSuffix(setups[0], "--tags web "+filepath.Join(f.machine.Lib, SetupPlaybook)) || strings.Contains(setups[1], "--tags") {
+		t.Fatalf("the release did not set the host up for its restart, then whole:\n%s", strings.Join(setups, "\n"))
 	}
-	f.before(t, "systemctl restart "+hostcore.WebUnit, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install")
-	f.before(t, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install", "systemctl start severino-hq-controller.path")
+	f.before(t, "docker create --pull never "+imageID, setups[0])
+	f.before(t, setups[0], "systemctl restart "+hostcore.WebUnit)
+	f.before(t, "systemctl restart "+hostcore.WebUnit, setups[1])
+	f.before(t, setups[1], "systemctl start severino-hq-controller.path")
+	for _, setup := range setups {
+		if !strings.Contains(setup, " "+runnerImage+" ") {
+			t.Errorf("the setup ran in something other than the verified runner: %s", setup)
+		}
+	}
 	// The release just installed is verified before the deploy ends.
 	f.before(t, "systemctl start severino-hq-controller.path", "systemctl start "+DriftUnit)
-}
-
-// The web unit restarts under every drop-in of the release, the prefix
-// directory's sandbox among them, not under the last release's.
-func TestHQRestartsUnderTheReleasesDropIns(t *testing.T) {
-	f := newFakeHost(t)
-	if err := f.machine.Record(running); err != nil {
-		t.Fatal(err)
-	}
-	sandbox := "severino-hq-.service.d/20-sandbox.conf"
-	path := filepath.Join(f.image, "deploy", "systemd", sandbox)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("[Service]\nNoNewPrivileges=yes\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	var atRestart map[string]bool
-	f.boot = func() { atRestart = f.installed(hostcore.WebUnit, sandbox) }
-	d, _ := newDeployer(f)
-
-	if err := d.Release(context.Background(), next); err != nil {
-		t.Fatalf("%v\n%s", err, f.out.String())
-	}
-
-	if !atRestart[hostcore.WebUnit] || !atRestart[sandbox] {
-		t.Errorf("installed when HQ restarted: %v", atRestart)
-	}
 }
 
 // Drift found after a healthy release fails the deploy and leaves the release
@@ -457,7 +442,7 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	}
 }
 
-func TestAFailedInstallRollsTheTreeAndImageBack(t *testing.T) {
+func TestAFailedSetupRollsTheTreeAndImageBack(t *testing.T) {
 	f := newFakeHost(t)
 	if err := f.machine.Record(running); err != nil {
 		t.Fatal(err)
@@ -466,11 +451,14 @@ func TestAFailedInstallRollsTheTreeAndImageBack(t *testing.T) {
 	if err := os.WriteFile(marker, []byte("kept"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f.fail = []string{filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host") + " install"}
+	// The whole setup fails, once HQ is healthy on the release.
+	f.on = map[string]func(){"systemctl restart " + hostcore.WebUnit: func() {
+		f.fail = []string{"docker run --rm --pull never --name severino-hq-setup-"}
+	}}
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err == nil {
-		t.Fatal("a failed install deployed")
+		t.Fatal("a failed setup deployed")
 	}
 	data, _ := os.ReadFile(f.machine.ReleasePath())
 	if strings.TrimSpace(string(data)) != running {

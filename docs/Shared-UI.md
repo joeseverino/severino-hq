@@ -117,6 +117,7 @@ and those that hold across parts in [Design](Design.md).
 | `entity` | `link`, first and unnamed | required |  | The thing's link, as the link builder answered for it or a record's read writes it. |
 | `entity` | `code` | `False` |  | Its name drawn as code. |
 | `entity` | `label` |  |  | The words it is named by, in place of its own. |
+| `entity` | `lead` |  |  | Words said quietly before the name ("at", "by"), held to it. |
 | `entity` | `mark` |  |  | The punctuation after the name, held to it, or a list's `forloop`. |
 | `fact` | `label`, first and unnamed | required |  | Its label. |
 | `fact` | `cut` |  |  | A line longer than its cell, the detail's first, cut at its end and read whole from its tip. |
@@ -131,7 +132,7 @@ and those that hold across parts in [Design](Design.md).
 | `fact` | `title` |  |  | What pointing at it says. |
 | `fact` | `tone` |  |  | A status tone the fact is colored by, for what it means. |
 | `fact` | `url` |  |  | The page in HQ its value links to; an outside one is the block form's `{% entity %}`. |
-| `fact` | `value` |  |  | Its value, which makes it one tag with no end. |
+| `fact` | `value` |  |  | Its value, which makes it one tag with no end; an `Answer` gives its short answer as the value, its reasons as the detail's lines and its tone. |
 | `fact` | `zero` |  |  | Its value is nothing counted, drawn quiet. |
 | `fact` | `data_*` | | | Each a `data-` attribute. |
 | `facts` | `items` |  |  | Figures (`Kpi`) to draw as its facts, which makes it one tag with no end. |
@@ -710,10 +711,20 @@ with its mark before it, its value large under it, its detail under that. What a
 follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
 ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value
 is colored. A fact whose one target is its value's link is that link whole, its label and detail
-pressed as its value is; one holding another target keeps each its own. Given `{% heading %}`,
+pressed as its value is; one holding another target keeps each its own. A value whose words hold
+nothing but a link (a `prose` span around it) is that link alone. Given `{% heading %}`,
 `{% panel %}` and `{% foot %}` parts and an `id`, its value is the button that opens the panel
 in place, as a menu does, and each `data_*` option is its attribute, so a fragment region in the
 band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).
+
+**A value is the short answer.** A state, a count, a version: never a sentence, never its label's
+or its state's word again ("Waiting: Waiting for…"). The sentence that explains it is the detail,
+and a tone other than neutral or good says why there. A value a domain object words is an
+`Answer` (`value=update.brings_said`): its `short` is the value, its `because` the detail's lines
+(words, a link, or `Code`), its `tone` the fact's. So a sentence has nowhere to go but the
+detail: an `Answer` whose short is a sentence, or whose attention or serious tone has no reason,
+is refused where it is built, and a reason that opens with the short answer again is dropped.
+A measure in the detail says what it measures ("asked 3 minutes ago", never a bare "3 s").
 
 A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
 or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure
@@ -796,11 +807,13 @@ A list, the default, is the facts about one thing, each label beside its value. 
 pairs to a row as keep each a short label and a short value wide, so a few short facts fill a
 wide frame rather than stacking down its start. The pairs stand in columns every row shares, so
 each label stands under the label above it, and a list of fewer pairs than its columns spreads
-them over the row; every label is one width, so the values of a column line up. A value that is
-a run of several (a `labeled` or `codes` list, addresses) takes the row. Narrower than two pairs
-it is one pair to a row. A
-label with several values holds them as a list inside one fact. An identifier in a value (code,
-a `|breakable` name) runs inline, code a chip on each line it wraps to, so a value's first line
+them over the row; a column's label is as wide as its longest label and its value takes the
+rest, so the values of a column line up. A value that is a run of several (a `labeled` or `codes`
+list, addresses) takes the row. Narrower than two pairs it is one pair to a row. A
+label with several values holds them as a list inside one fact. Code a value or its detail holds
+is drawn as `|breakable` draws it, by the part, so it wraps only at a separator. An identifier
+moves to the next line whole where it fits there; one that opens the value runs inline, a chip
+on each line it wraps to, so a value's first line
 stands on its label's line in every engine; the value keeps a chip's end padding free at its end,
 so a wrapped line's chip stays inside its column in any face. A list opened to read more (in a disclosure, a
 popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and
@@ -1480,9 +1493,15 @@ as every table does. It reads, in order:
   says what was read, in the past tense, as a notice. These are words under the title, not a
   column: most rows have none. Since when (`Insight(since=...)`) is said in the origin panel, never
   on the row;
-- buttons: the owner's actions, the first step that can be taken now when the owner offered none,
-  and the check that reads again. At most one is primary. Where the reader sorts their own queue,
-  Dismiss or Restore is the last of them (`row_actions put_away=`).
+- buttons: the owner's actions, and the first step that can be taken now when the owner offered
+  none. At most one is primary. Where the reader sorts their own queue, Dismiss or Restore is the
+  last of them (`row_actions put_away=`).
+
+**A queue refreshes from its top.** No row reads its own subject again. The card that holds a queue
+draws one Refresh in its section's aside (`partials/_work_queue.html#refresh`), beside a Dismiss
+all where there is one. It asks the controller to read what every row rests on
+(`Finding.read_now`) in one press (`queue_table.refresh`), and draws nothing where no row rests on
+a reading or its reader may not ask.
 
 Closed, a row is one line where its words fit. Everything taller is the row's `row-below`, opened
 by its toggle into the line beneath, from the title's edge to the table's. A row toggles only where

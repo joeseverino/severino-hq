@@ -1271,6 +1271,18 @@
             },
             "x-go-type": "map[string][]string",
             "description": "Each machine's lines of what a change would do."
+          },
+          "handoff": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "#/components/schemas/StatedMachine"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "x-go-type": "map[string]string",
+            "description": "Each machine's systemd unit the run started and left running, whose job's end HQ settles the run at, by a read its procedure names (settled_by). The worker holds it to UnitName; the contract holds no pattern a request's string could be struck out of."
           }
         },
         "additionalProperties": false,
@@ -1774,6 +1786,13 @@
               "$ref": "#/components/schemas/ResourceKind"
             }
           },
+          "carry_kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            },
+            "description": "Kinds events keep current that the sweep reports as carried, asking nothing of their provider."
+          },
           "due": {
             "type": "boolean"
           },
@@ -1792,6 +1811,7 @@
           "carry",
           "forced",
           "only_kinds",
+          "carry_kinds",
           "due",
           "reason"
         ]
@@ -2549,6 +2569,11 @@
         "type": "object",
         "description": "The procedures an automation source's repository declares at the tip of its default branch, as the automation worker read them without running any: HQ stores it as a proposal and judges it.",
         "properties": {
+          "repository": {
+            "type": "string",
+            "maxLength": 140,
+            "description": "The repository read, owner/name, as the host's configuration names it."
+          },
           "branch": {
             "type": "string",
             "maxLength": 200
@@ -2591,6 +2616,7 @@
         },
         "additionalProperties": false,
         "required": [
+          "repository",
           "branch",
           "revision",
           "verification",
@@ -5032,9 +5058,11 @@
         "type": "string",
         "description": "An event HQ's own host tells it of from the controller.",
         "enum": [
+          "unit.job",
           "docker.container"
         ],
         "x-enum-varnames": [
+          "HostEventUnitJob",
           "HostEventDockerContainer"
         ]
       },
@@ -5102,6 +5130,22 @@
         ],
         "type": "object",
         "description": "One host.firewall record: Host firewall."
+      },
+      "HostJobResult": {
+        "type": "string",
+        "description": "How a job HQ's host tells it of ended, as systemd says it.",
+        "enum": [
+          "done",
+          "failed",
+          "timeout",
+          "canceled"
+        ],
+        "x-enum-varnames": [
+          "HostJobResultDone",
+          "HostJobResultFailed",
+          "HostJobResultTimeout",
+          "HostJobResultCanceled"
+        ]
       },
       "HostPerimeterRecord": {
         "properties": {
@@ -5628,11 +5672,13 @@
         "description": "A provider whose events HQ takes, as an admitted module's INBOUND declares it.",
         "enum": [
           "github_app",
-          "host"
+          "host",
+          "tailscale"
         ],
         "x-enum-varnames": [
           "InboundProviderGitHubApp",
-          "InboundProviderHost"
+          "InboundProviderHost",
+          "InboundProviderTailscale"
         ]
       },
       "InboundSource": {
@@ -6983,6 +7029,12 @@
         ],
         "type": "object",
         "description": "One tailscale.user record: Tailnet user."
+      },
+      "UnitName": {
+        "maxLength": 255,
+        "pattern": "^(?:[A-Za-z0-9:_.@-]|\\\\x[0-9a-f]{2})+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+        "type": "string",
+        "description": "A systemd unit's name, as systemd spells it."
       },
       "Verification": {
         "additionalProperties": false,

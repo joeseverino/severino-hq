@@ -31,7 +31,7 @@ from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.digests import canonical
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 
 from .conditions import DEGRADED, DRIFTED, READY, stamped
 from .contracts import endpoint_has_private_parts
@@ -39,6 +39,7 @@ from .credential_mint import parse_expiry, store_references
 from .ui import counted, ended
 lazy from .credential_sight import standing
 lazy from .facts import inventory_records
+lazy from .payload_words import value_words
 lazy from .projection import iso
 
 
@@ -423,7 +424,7 @@ def _differences(kind: str, declared: dict[str, Any], found: dict[str, Any]) -> 
 
     unobservable = PROVIDERS[kind].unobservable_fields
     return tuple(
-        (field, str(value), str(found.get(field, "")))
+        (field, value_words(value), value_words(found.get(field, "")))
         for field, value in declared.items()
         if field in found and field not in unobservable and _text(found.get(field, "")) != _text(value)
     )

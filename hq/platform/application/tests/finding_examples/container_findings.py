@@ -163,7 +163,7 @@ LOCAL = Raised(
         ("Container", "thumb"),
         ("Machine", BOX),
         *PULLED,
-        ("New vulnerabilities", "Not checked: it rebuilds on the host"),
+        ("New vulnerabilities", "Not checked. It rebuilds on the host."),
     ),
 )
 
@@ -189,7 +189,9 @@ STATES = (
             Raised(
                 title=MOVED,
                 presses=(APPROVE,),
-                evidence=facts(PULLED, ("New vulnerabilities", "Not checked yet")),
+                evidence=facts(
+                    PULLED, ("New vulnerabilities", "Not checked yet. Its new image's packages are not read yet.")
+                ),
             ),
         ),
     ),
@@ -201,9 +203,7 @@ STATES = (
             Raised(
                 title=MOVED,
                 presses=(APPROVE,),
-                evidence=facts(
-                    PULLED, ("New vulnerabilities", "Can't be checked: example/app publishes no package list")
-                ),
+                evidence=facts(PULLED, ("New vulnerabilities", "Can't check. example/app publishes no package list.")),
             ),
         ),
     ),
@@ -214,7 +214,7 @@ STATES = (
             Raised(
                 title=MOVED,
                 presses=(APPROVE,),
-                evidence=facts(PULLED, ("New vulnerabilities", "Not checked: it rebuilds on the host")),
+                evidence=facts(PULLED, ("New vulnerabilities", "Not checked. It rebuilds on the host.")),
             ),
         ),
     ),

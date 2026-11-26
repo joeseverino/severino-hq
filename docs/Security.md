@@ -707,9 +707,12 @@ path from the public internet. Setting it up is
   its environment (`HQ_INBOUND_HOSTNAME`, `CLOUDFLARE_ACCOUNT_ID`), never
   from this repository.
 - A webhook's body is read only when its `Content-Length` is within the
-  largest its provider's route declares (GitHub's 25 MB). Its signature is
-  checked over the raw body before anything parses it, and a request that
-  fails it never reaches the Durable Object.
+  largest its provider's route declares (GitHub's 25 MB, Tailscale's 1 MB).
+  Its signature is checked over the raw body before anything parses it, by
+  the one check every route's declared scheme goes through
+  (`worker/src/verify.ts`), which computes the HMAC once and compares each
+  digest in constant time. A request that fails it never reaches the Durable
+  Object.
 - A listener's socket is accepted only with the `SOCKET_TOKEN` bearer,
   compared in constant time, and tagged with the token's SHA-256. An event
   goes only to the sockets tagged with the token the Worker holds now, and
@@ -724,11 +727,18 @@ path from the public internet. Setting it up is
   the signature: a captured signed body can be sent again under a new
   delivery id, and each is a new event. Its cost is bounded by the read it
   asks, coalesced with any already asked.
+- Tailscale signs its time with the body (`Tailscale-Webhook-Signature`,
+  `t=<time>,v1=<HMAC-SHA256 of "<time>.<body>">`), and a request signed more
+  than five minutes from the Worker's clock is refused, so a captured one
+  is refused once its window passes. Its delivery names no ID, so each event
+  is named by the body's SHA-256 and its place in the body: a body sent again
+  is the events already stored.
 - Workers Logs records each request as its method, path and status, which
   the Worker logs itself. Invocation logs are off, since they keep the
   request's headers, the bearer among them.
-- Its secrets, `GITHUB_WEBHOOK_SECRET` and `SOCKET_TOKEN`, live in a
-  1Password item of the operator's, and the listener holds the same
+- Its secrets, `GITHUB_WEBHOOK_SECRET`, `TAILSCALE_WEBHOOK_SECRET` and
+  `SOCKET_TOKEN`, live in a 1Password item of the operator's, and the
+  listener holds the same
   `SOCKET_TOKEN` as the `cloudflare_events` connection's credential. They
   are Worker secrets, set by `mise run worker:deploy --with-secrets` from the
   operator's machine for the first deploy and each rotation. Every other
@@ -762,14 +772,19 @@ HQ's side of the socket is `severino-hq-listener.service`
   read again every reading the Worker's providers name, at most once a
   minute, so a gap is repaired by reading and nothing is replayed.
 
-`severino-hq-events-docker.service` tells HQ of a container's change on its
-host (`controller/host/dockerevents`, which states its security properties).
-It holds Docker's socket, which the controller's units hold already, under
-the shared sandbox alone: no network, no address family but `AF_UNIX`, no
-capability and no credential. It reads only Docker's event stream, and tells
-HQ only names (the container's, Docker's action, id and time) through
-`hq-controller events`, so a forged event costs one read of the
-containers.
+`severino-hq-events.service` tells HQ of a container's change on its host
+and of each start job systemd ended there, as the contract's `HostJobResult`
+names its ends (`controller/host/hostevents`,
+which states its security properties). It holds Docker's socket, which the
+controller's units hold already, and the system bus, under the shared
+sandbox alone: no network, no address family but `AF_UNIX`, no capability
+and no credential. It reads only Docker's event stream and systemd's
+`JobRemoved` signals, matched to the bus name systemd owns so no other
+client of the bus speaks for it, and tells HQ only names (the container's,
+Docker's action, id and time; the unit's, the job's result and id) through
+`hq-controller events`, so a forged event costs one read of the containers
+or the units, and one read-only settling read of each run held on a unit
+there, which settles nothing unless it states what the unit did.
 
 The deploy token is the one standing secret a workflow holds. Every other
 write a workflow makes is a GitHub token minted for one permission and one

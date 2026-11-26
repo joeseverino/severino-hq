@@ -193,6 +193,7 @@
       "profile": "read"
     }
   ],
+  "repository": "example/automation",
   "revision": "899c7e2e78d8bbb625308c4a1126b4d20a51360c",
   "unpinned": [
     {

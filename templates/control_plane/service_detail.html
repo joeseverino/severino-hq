@@ -146,7 +146,7 @@ close every one.
             {% endcomment %}
             {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack }}</code>{% endfact %}{% endif %}
             {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
-            {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer.{% else %}A compose file on {{ facet.observed.host }}. HQ cannot read it.{% endif %}{% endfact %}
+            {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer{% else %}A compose file{% endif %}{% detail %}{% if not facet.observed.portainer_managed %}<small>On {{ facet.observed.host }}, where HQ cannot read it</small>{% endif %}{% endfact %}
           {% endfacts %}
         {% endsection %}
         {% partial reading_lines %}

@@ -3,6 +3,7 @@ a provider connection, the principals a use case is called as, a template
 drawn and the widths a table's columns leave at, each made one way here."""
 
 from dataclasses import replace
+from datetime import timedelta
 from typing import Any
 
 from django.contrib.auth import get_user_model
@@ -11,8 +12,9 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection
-from hq.platform.application import roles
+from hq.domains.control_plane.models import InboundSource, ManagedResource, ProviderConnection
+from hq.platform.application import readings, roles
+from hq.platform.application.inbound_events import CHANNEL_EVERY, channel
 from hq.platform.application.markup_testing import elements
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
@@ -28,6 +30,7 @@ __all__ = (
     "OPERATOR",
     "READER",
     "SignedInTestCase",
+    "channel_heard",
     "connection",
     "declare",
     "leaving",
@@ -97,6 +100,15 @@ def managing_everything(*refs: tuple[str, str]) -> None:
         connection(provider, manages=True)
     for provider, ref in refs:
         connection(provider, ref, manages=True)
+
+
+def channel_heard(source: InboundSource = InboundSource.WORKER, *, silent: bool = False) -> None:
+    """``source``'s event channel last heard a moment ago, so its events keep
+    current what they cover; or, ``silent``, long enough ago that they keep
+    nothing and a page opened asks for it again."""
+
+    observed_at = timezone.now() - (3 * CHANNEL_EVERY if silent else timedelta(0))
+    readings.record(readings.heartbeat(channel(source)), {}, observed_at=observed_at)
 
 
 def run_ended(operation_id: str, worker: str, *, events: Any = (), **report: Any) -> None:

@@ -2,4 +2,4 @@
 What was read that shows a problem (`application.decisions`), given `facts`:
 each label once, with every value it was given, one that names a page linked
 to it, one a machine wrote (`Code`) in code.
-{% endcomment %}{% facts %}{% for fact in facts %}{% fact fact.label %}{% list kind="dots" %}{% for value in fact.values %}<li>{% if value.link %}{% entity value.link %}{% elif value.code %}<code>{{ value.text|breakable }}</code>{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}{% endfor %}{% endfacts %}
+{% endcomment %}{% facts %}{% for fact in facts %}{% fact fact.label %}{% list kind="dots" %}{% for value in fact.values %}<li>{% if value.link %}{% entity value.link %}{% elif value.code %}<code>{{ value.text }}</code>{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}{% endlist %}{% endfact %}{% endfor %}{% endfacts %}

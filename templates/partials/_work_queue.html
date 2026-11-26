@@ -5,9 +5,16 @@ rows are `queue_table`'s; the queue page's own sections are
 `action_items.html#queue_groups`, the same rows under their domains.
 
 `fold` folds a family under its name, as the queue page does.
+
+The one Refresh over a queue's rows (`items` and `also`, or `groups`' rows) is drawn
+at the top of the card that holds them, in its section's aside, where a row
+never draws its own (`queue_table.refresh`); a `refresh` given is drawn as it is:
+
+  {% aside %}{% include "partials/_work_queue.html#refresh" with items=rows only %}
 {% endcomment %}
 {% if items %}
 {% queue_table items fold=fold|default:False grouped=grouped|default:False here=here|default:False triage=triage|default:False glance=glance|default:False prefix="problem" as queue %}{% data_table queue %}
 {% else %}
 <p class="attention-clear">{% include "partials/_empty_state.html" with message=empty|default:"Nothing needs you." inline=True only %}</p>
 {% endif %}
+{% partialdef refresh %}{% if not refresh %}{% queue_refresh items also groups=groups as refresh %}{% endif %}{% if refresh %}{% include "partials/_page_action.html" with action=refresh only %}{% endif %}{% endpartialdef %}

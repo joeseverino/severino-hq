@@ -9,7 +9,6 @@ from hq.domains.control_plane.providers import PROVIDERS
 from . import trusted_networks
 from .action_links import command_url
 from .finding_model import (
-    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -231,8 +230,7 @@ def _loopback_steps(item: LoopbackGrant) -> tuple[Do, ...]:
         )
         for test in item.tests
     )
-    last = (*tests, Do(THEN_CHECK_AGAIN))
-    return (edit, *last)
+    return (edit, *tests)
 
 
 # The rules this module raises, beside the detectors that decide them.

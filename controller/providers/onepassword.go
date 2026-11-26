@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -120,16 +121,16 @@ func asWritten(field opField) writtenField {
 	return writtenField{kind, value}
 }
 
-func (r *Registry) onePasswordToken(ref string) (string, error) {
+func (r *Registry) onePasswordToken(ref string) (secret.Value, error) {
 	connection, err := r.Supplied.For(runtime.ConnectionProviderOnePassword, ref)
 	if err != nil {
-		return "", err
+		return secret.Value{}, err
 	}
 	account, err := runtime.Need(connection.ServiceAccount)
 	return account.APIToken, err
 }
 
-func (r *Registry) onePasswordCurrent(ctx context.Context, publication OnePasswordPublication, token string) (map[string]writtenField, []string, map[string]bool, error) {
+func (r *Registry) onePasswordCurrent(ctx context.Context, publication OnePasswordPublication, token secret.Value) (map[string]writtenField, []string, map[string]bool, error) {
 	raw, err := r.commands().Run(ctx,
 		[]string{"op", "item", "get", publication.Item, "--vault", publication.Vault, "--format", "json"},
 		nil, "1Password read for "+publication.Name, "", opEnvironment(token))
@@ -286,6 +287,6 @@ var opState = sync.OnceValue(func() string {
 
 // opEnvironment is all the op CLI is given: the publisher's token and where to
 // keep its state. With nowhere to keep it, op says so and the step fails.
-func opEnvironment(token string) map[string]string {
-	return map[string]string{"OP_SERVICE_ACCOUNT_TOKEN": token, "OP_CONFIG_DIR": opState()}
+func opEnvironment(token secret.Value) map[string]string {
+	return map[string]string{"OP_SERVICE_ACCOUNT_TOKEN": token.Reveal(), "OP_CONFIG_DIR": opState()}
 }

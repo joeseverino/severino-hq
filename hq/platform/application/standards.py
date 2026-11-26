@@ -3,17 +3,18 @@
 One primitive for every standard HQ keeps (HQ's own, a repository's access and
 settings, how a container is run), so each check says why it matters and how
 to fix it. "Cannot read" is never "not met", and a check a subject's job
-requires it to fail, declared with the reason, is "by design" and never a gap.
+requires it to fail, declared or derived with the reason, is "by design" and never a gap.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Self
 
 from .labels import dotted
 from .tone import Tone, Toned
 from .ui import counted, ended
 lazy from . import dashboard
+lazy from .cadence import ControllerSweepCommand
 lazy from .finding_model import Finding
 lazy from .standard_findings import worded
 
@@ -229,6 +230,12 @@ class Measurement:
     results: tuple[CheckResult, ...]
     # Whether an unmet check is a fault (Advanced HQ posture, for HQ's own).
     enforced: bool = True
+    # What a finding about one check offers (``standard_findings.Help``), for
+    # a standard whose subject has its fix written for it.
+    helps: Callable[[Check], Any] | None = None
+    # The kind of reading its checks are measured on, which its findings ask
+    # again to be checked on fresh data; "" where none is.
+    reads: str = ""
 
     @property
     def met(self) -> int:
@@ -289,7 +296,19 @@ class Measurement:
         fails by design with why."""
 
         unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
-        return tuple(worded(_rule(result.check), (result.check,), [(None, result)]) for result in unmet) + tuple(
+        read = ControllerSweepCommand(kinds=(self.reads,)) if self.reads else None
+        return tuple(
+            replace(
+                worded(
+                    _rule(result.check),
+                    (result.check,),
+                    [(None, result)],
+                    said=[self.helps(result.check)] if self.helps else None,
+                ),
+                read_now=read,
+            )
+            for result in unmet
+        ) + tuple(
             Finding(
                 rule=_rule(result.check),
                 subject="",
@@ -319,11 +338,14 @@ def measure(
     *,
     enforced: bool = True,
     quiet: tuple[Check, ...] = (),
+    helps: Callable[[Check], Any] | None = None,
+    reads: str = "",
 ) -> Measurement:
     """``subject`` against every check in ``standard`` that applies to it.
     ``intended`` maps a check it fails on purpose to why; with ``enforced``
     false an unmet check is an open item rather than a fault, as it is for
-    each check in ``quiet``."""
+    each check in ``quiet``; ``helps`` words each finding's fix; ``reads``
+    is the kind of reading the checks are measured on."""
 
     results = []
     for check in standard:
@@ -332,7 +354,7 @@ def measure(
         reading = check.test(subject)
         reason = (intended or {}).get(check.id, "") if reading.standing is Standing.UNMET else ""
         results.append(CheckResult(check, reading, reason, enforced and not any(check is held for held in quiet)))
-    return Measurement(subject, tuple(results), enforced)
+    return Measurement(subject, tuple(results), enforced, helps, reads)
 
 
 def _rule(check: Check) -> str:

@@ -229,10 +229,10 @@ class EveryRuleTests(TestCase):
             self.assertIsNotNone(gate, "its read gate is derived from what it is about")
             self.assertEqual(finding.read_capabilities, gate)
             if finding.scope:
-                self.assertIn(
-                    f"kind={finding.scope}",
-                    finding.check.url if finding.check else "",
-                    "a claim about a kind offers to read it again",
+                self.assertEqual(
+                    getattr(finding.read_now, "kinds", ()),
+                    (finding.scope,),
+                    "a claim about a kind asks to read it again",
                 )
             # One that follows from another is queued as its cause's item.
             item = causes.get(finding_key(finding), finding)

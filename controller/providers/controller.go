@@ -312,11 +312,12 @@ func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindRe
 	return runtime.KindReport{OK: true, Records: records, RefusedParts: ledger.entries}
 }
 
-// Inventory is everything each provider holds; with only, just those kinds.
+// Inventory is everything each provider holds; with only, just those kinds,
+// and each of carry reported as carried, as a reader not due reports itself.
 // Providers are read at once, one provider's kinds in turn, so a credential it
 // refuses is refused once and not by every kind asking at the same moment.
 // An unreachable provider reports as unreachable rather than failing the sweep.
-func (c *Controller) Inventory(ctx context.Context, only []runtime.ResourceKind) (runtime.Inventory, error) {
+func (c *Controller) Inventory(ctx context.Context, only, carry []runtime.ResourceKind) (runtime.Inventory, error) {
 	wantedOnly := map[string]bool{}
 	for _, kind := range only {
 		wantedOnly[string(kind)] = true
@@ -348,6 +349,10 @@ func (c *Controller) Inventory(ctx context.Context, only []runtime.ResourceKind)
 	})
 	for _, kind := range ordered {
 		if len(wantedOnly) > 0 && !wantedOnly[kind] {
+			continue
+		}
+		if slices.Contains(carry, runtime.ResourceKind(kind)) {
+			found[kind] = runtime.KindReport{OK: true, Records: []any{}, Carried: true}
 			continue
 		}
 		if !c.hasSource(kind, connected) {

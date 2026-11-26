@@ -23,6 +23,7 @@ import (
 
 	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 )
 
@@ -39,12 +40,8 @@ const (
 	maxBackoff     = 5 * time.Second
 )
 
-// Token is a Connect bearer token. It formats, logs and marshals as a
-// placeholder, so it cannot reach a log line or an error by accident; only
-// the request header reads it.
-type Token struct{ value string }
-
-const redacted = mask.Redacted
+// Token is a Connect bearer token, a secret only the request header reveals.
+type Token struct{ secret.Value }
 
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
@@ -58,14 +55,8 @@ func NewToken(raw []byte) (Token, error) {
 		return Token{}, errors.New("malformed Connect token")
 	}
 	mask.Learn(value)
-	return Token{value: value}, nil
+	return Token{secret.New(value)}, nil
 }
-
-func (Token) String() string               { return redacted }
-func (Token) GoString() string             { return redacted }
-func (Token) Format(f fmt.State, _ rune)   { _, _ = io.WriteString(f, redacted) }
-func (Token) LogValue() slog.Value         { return slog.StringValue(redacted) }
-func (Token) MarshalText() ([]byte, error) { return []byte(redacted), nil }
 
 // Failure classes; match with errors.Is.
 var (
@@ -216,14 +207,14 @@ func New(endpoint string, token Token, ports Ports) (*Client, error) {
 	if err := CheckEndpoint(endpoint, ports); err != nil {
 		return nil, err
 	}
-	if token.value == "" {
+	if token.IsZero() {
 		return nil, errors.New("empty Connect token")
 	}
 	return &Client{endpoint: endpoint, authorize: bearer(token), http: newHTTPClient(ports), Sleep: clock.Sleep}, nil
 }
 
 func bearer(token Token) func(*http.Request) {
-	return func(request *http.Request) { request.Header.Set("Authorization", "Bearer "+token.value) }
+	return func(request *http.Request) { request.Header.Set("Authorization", "Bearer "+token.Reveal()) }
 }
 
 // A Client formats and logs as its endpoint and nothing else.

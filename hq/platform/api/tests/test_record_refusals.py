@@ -54,16 +54,29 @@ class RecordRefusalTransportTests(TestCase):
             self.assertNotIn(SENT, response.content.decode())
 
     def test_a_field_naming_no_record_is_404_not_found_beside_the_field(self):
+        named = f"project:{SENT}"
         cases = (
-            ("calendar.entry.create", "write_calendar", {"title": "An event", "starts_on": "2026-03-01"}, "about"),
-            ("expense.create", "write_expenses", {"date": "2026-03-01", "vendor": "A", "item": "B"}, "paid_from"),
-            ("infrastructure.controller.refresh", "manage_infrastructure", {}, "connection_ref"),
+            (
+                "calendar.entry.create",
+                "write_calendar",
+                {"title": "An event", "starts_on": "2026-03-01"},
+                "about",
+                named,
+            ),
+            (
+                "expense.create",
+                "write_expenses",
+                {"date": "2026-03-01", "vendor": "A", "item": "B"},
+                "paid_from",
+                named,
+            ),
+            ("infrastructure.controller.refresh", "manage_infrastructure", {}, "connection_refs", [named]),
         )
-        for name, scope, payload, field in cases:
+        for name, scope, payload, field, value in cases:
             with self.subTest(name), _serving():
                 response = self.client.post(
                     f"/api/v2/capabilities/{name}/",
-                    data=json.dumps({"payload": {**payload, field: f"project:{SENT}"}}),
+                    data=json.dumps({"payload": {**payload, field: value}}),
                     content_type="application/json",
                     HTTP_AUTHORIZATION=f"Bearer {_token(scope=scope)}",
                     HTTP_IDEMPOTENCY_KEY=f"key-{name}",

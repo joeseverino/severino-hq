@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.network import split_host_port
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, read_record
 
 lazy from .connections import connection_rows

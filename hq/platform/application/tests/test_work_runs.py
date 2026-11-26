@@ -16,11 +16,10 @@ from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
 from hq.platform.core.testing import AGENT, operator, run_ended
 from hq.platform.core.tests.estate_sizes import at_both_sizes
 
-from ..capabilities import run_capability
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..resource_operations import operation_summary
 from ..resources import list_resource
-from ..security import Capability, Principal, operator_capabilities
+from ..security import Principal, operator_capabilities
 from ..work_runs import (
     JOB,
     NEWEST,
@@ -39,7 +38,7 @@ LOGS = "example.service_logs"
 WORKER = "example-worker"
 CLAIMS = (("automation.operation", "run"),)
 # What asks the automation worker for a scan, and what it rings on commit.
-REFRESH = "automation.source.refresh"
+SCAN = OperationRequest.Action.SCAN
 DOORBELL = "hq.platform.application.cadence._ring"
 READER = Principal("example-reader", "test", operator_capabilities())
 
@@ -318,28 +317,28 @@ class WorkKindsTests(WorkRunsTestCase):
 
 
 class ScanTests(WorkRunsTestCase):
-    """A Refresh's scan is listed with the rest of the automation work, named
-    by the command that asks for it."""
+    """A scan HQ asks for is listed with the rest of the automation work,
+    named by its action."""
 
     def scanned(self):
-        principal = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
+        from ..automation_sources import queue_scan
+        from ..security import internal_principal
+
         with mock.patch(DOORBELL), self.captureOnCommitCallbacks(execute=True):
-            answer = run_capability(REFRESH, {}, principal=principal, idempotency_key="example-refresh").answer
-        self.assertTrue(answer["ok"], answer)
-        return OperationRequest.objects.get(pk=answer["operation"]["id"])
+            scan = queue_scan(principal=internal_principal("controller"), once="example-scan")
+        self.assertIsNotNone(scan)
+        return scan
 
-    def test_a_scan_is_listed_by_its_command_s_own_words(self):
-        from ..capabilities import capability_title
-
+    def test_a_scan_is_listed_by_its_action_s_words(self):
         scan = self.scanned()
-        title = capability_title(REFRESH)
+        title = SCAN.label
         run = self.run_of(APP)
 
         listed = {row.id: row for row in self.listed()}
 
         self.assertEqual(set(listed), {str(scan.pk), str(run.pk)})
         row = listed[str(scan.pk)]
-        self.assertEqual((row.source, row.kind, row.title), (RUN, REFRESH, title))
+        self.assertEqual((row.source, row.kind, row.title), (RUN, SCAN, title))
         self.assertEqual((row.word, row.evidence.hosts), (JobState.QUEUED.label, ()))
 
     def test_a_scan_is_a_kind_of_work_the_list_is_filtered_by(self):
@@ -348,8 +347,8 @@ class ScanTests(WorkRunsTestCase):
 
         kinds = {found.kind: found for found in work_kinds()}
 
-        self.assertIn(REFRESH, kinds)
-        self.assertEqual([row["id"] for row in self.read(kind=REFRESH)], [str(scan.pk)])
+        self.assertIn(SCAN, kinds)
+        self.assertEqual([row["id"] for row in self.read(kind=SCAN)], [str(scan.pk)])
         self.assertEqual([row["kind"] for row in self.read(kind=RESTART_RUN)], [RESTART_RUN])
         self.assertNotIn(str(scan.pk), [row["id"] for row in self.read(host=APP)])
 

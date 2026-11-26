@@ -1,4 +1,4 @@
 {% comment %}HQ's status, release and machine, under its title (`page_aside`).{% endcomment %}
 {% list kind="dots" muted=True %}
-  <li>{% if hq.parts %}{% if hq.status.0 == "serious" %}{% status hq.status.1 tone=hq.status.0 href="#problems-here" %}{% else %}{% status hq.status.1 tone=hq.status.0 href="#hq-"|add:hq.parts.0|add:"-heading" %}{% endif %}{% else %}{% status hq.status.1 tone=hq.status.0 %}{% endif %}{% if hq.release.revision %}</li><li><code>{{ hq.release.short }}</code>{% endif %}{% if hq.machine %}</li><li>{% entity hq.machine.link %}{% endif %}{% if hq.container.uptime %}</li><li>{{ hq.container.uptime }}{% endif %}</li>
+  <li>{% if hq.parts %}{% if hq.status.0 == "serious" %}{% status hq.status.1 tone=hq.status.0 href="#problems-here" %}{% else %}{% status hq.status.1 tone=hq.status.0 href="#hq-"|add:hq.parts.0|add:"-heading" %}{% endif %}{% else %}{% status hq.status.1 tone=hq.status.0 %}{% endif %}{% if hq.release.commit %}</li><li><code>{{ hq.release.short }}</code>{% endif %}{% if hq.machine %}</li><li>{% entity hq.machine.link %}{% endif %}{% if hq.container.uptime %}</li><li>{{ hq.container.uptime }}{% endif %}</li>
 {% endlist %}

@@ -415,6 +415,7 @@ def entity(
     code: Annotated[bool, Describe("Its name drawn as code.")] = False,
     label: Annotated[Any, Describe("The words it is named by, in place of its own.")] = "",
     mark: Annotated[Any, Describe("The punctuation after the name, held to it, or a list's `forloop`.")] = "",
+    lead: Annotated[Any, Describe('Words said quietly before the name ("at", "by"), held to it.')] = "",
 ):
     """One entity name, as the link builder answered for it.
 
@@ -422,8 +423,18 @@ def entity(
     entity on a page renders here, marked ``data-entity``. An external link
     opens in a new tab without a way back to this page. A link to the page it
     is on renders as plain text. ``mark`` is the punctuation after the name
-    (or a list's ``forloop``), held to it as ``breakable`` holds it.
+    (or a list's ``forloop``), held to it as ``breakable`` holds it. ``lead``
+    is the muted words before it, which a line never leaves at its end alone.
     """
+    named = _named(context, link, code=code, label=label, mark=mark)
+    if not lead:
+        return named
+    return format_html('<span class="led"><span class="muted">{}</span> {}</span>', lead, named)
+
+
+def _named(context, link, *, code, label, mark):
+    """The name ``entity`` draws, before any words it leads with."""
+
     if isinstance(link, Mapping):
         link = EntityLink(**link)
     if link is None:
@@ -784,6 +795,7 @@ slotted(
         function=entity,
         public=True,
         example=tags.ENTITY,
+        states=tags.ENTITY_STATES,
     ),
 )
 slotted(

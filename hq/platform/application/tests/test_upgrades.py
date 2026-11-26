@@ -1,5 +1,3 @@
-from dataclasses import replace
-
 from django.test import TestCase
 from django.utils import timezone
 
@@ -68,7 +66,7 @@ class PlanTests(TestCase):
         self.assertEqual((plan.change, plan.risk, plan.target_digest), (PATCH, LOW, TARGET))
         self.assertEqual([advisory["id"] for advisory in plan.fixes], ["GHSA-high"])
         self.assertEqual(plan.verified_by, ("its health check",))
-        self.assertEqual((plan.fixes_tone, plan.data_tone, plan.verified_tone), ("good", "", ""))
+        self.assertEqual((plan.fixes_said.tone, plan.data_said.tone, plan.verified_said.tone), ("good", "", ""))
         self.assertEqual(plan.blockers, ())
 
     def test_its_data_is_its_writable_mounts(self):
@@ -96,7 +94,7 @@ class PlanTests(TestCase):
 
         plan = self.plan("app")
 
-        self.assertEqual(([mount["source"] for mount in plan.data], plan.data_tone), (["app_data"], "attention"))
+        self.assertEqual(([mount["source"] for mount in plan.data], plan.data_said.tone), (["app_data"], "attention"))
 
     def test_a_major_version_is_high_risk_and_waits_for_a_person(self):
         estate()
@@ -106,6 +104,8 @@ class PlanTests(TestCase):
 
         self.assertEqual((plan.change, plan.risk), (MAJOR, HIGH_RISK))
         self.assertIn("not-a-patch", [blocker.id for blocker in plan.not_automatic])
+        # The card says the size of the move beside its risk, so its reasons leave it out.
+        self.assertNotIn("not-a-patch", [blocker.id for blocker in plan.waits_on])
 
     def test_what_hq_cannot_act_on_blocks_it_by_name(self):
         estate()
@@ -116,15 +116,15 @@ class PlanTests(TestCase):
         self.assertEqual(blockers, {"no-target-digest", "not-declared", "mounts-unread"})
         self.assertFalse(self.plan("app").viable)
 
-    def test_nothing_is_automatic_before_its_target_is_read_and_opted_in(self):
+    def test_nothing_is_automatic_before_its_target_is_read(self):
         estate()
         published()
         inventory("portainer.runtime", [runtime("app", healthcheck=True)])
         container("app")
 
-        reasons = {blocker.id for blocker in self.plan("app").not_automatic}
+        reasons = {blocker.id for blocker in self.plan("app").waits_on}
 
-        self.assertLessEqual({"target-unread", "not-opted-in"}, reasons)
+        self.assertIn("target-unread", reasons)
 
     def test_hq_itself_is_never_planned_as_an_upgrade(self):
         from .test_github_estate import store
@@ -217,39 +217,27 @@ class JoinedReadingTests(TestCase):
         self.assertEqual(posture.state_of("no-docker-socket"), "unmet")
 
 
-class ReadinessTests(TestCase):
-    def test_a_current_container_says_what_an_upgrade_would_take_before_one_exists(self):
-        from ..containers import containers
-        from ..upgrades import readiness_of
+class UpgradeCardTests(TestCase):
+    def page(self, name):
+        from django.urls import reverse
+
+        from hq.platform.core.testing import operator
 
         estate()
         published()
-        container("web")
-        inventory(
-            "portainer.volume",
-            [
-                {
-                    "connection_ref": "example-portainer",
-                    "host": "example-box",
-                    "type": "bind",
-                    "source": "/opt/apps/web/data",
-                    "used_by": [{"container": "web", "destination": "/data", "read_only": False}],
-                },
-            ],
-        )
+        container(name)
+        operator(self.client)
+        return self.client.get(reverse("control_plane:detail", args=[f"example-box-{name}"])).content.decode()
 
-        found = readiness_of(next(item for item in containers() if item.running.name == "web"))
+    def test_a_container_with_nothing_newer_draws_no_upgrade_card(self):
+        self.assertNotIn('id="upgrade"', self.page("web"))
 
-        self.assertEqual([mount["source"] for mount in found.data], ["/opt/apps/web/data"])
-        self.assertEqual(found.verified_by, ())
-        reasons = {blocker.id for blocker in found.not_automatic}
-        self.assertLessEqual({"unverifiable", "attestations-unread", "not-opted-in"}, reasons)
-        # Nothing about a target it does not have.
-        self.assertFalse(reasons & {"no-target-digest", "not-a-patch", "target-affected"})
-        self.assertFalse(found.automatic)
-        self.assertEqual((found.verified_tone, found.automatic_tone), ("attention", ""))
-        ready = replace(found, verified_by=("its health check",), not_automatic=())
-        self.assertEqual((ready.verified_tone, ready.automatic_tone), ("good", "good"))
+    def test_a_container_with_a_newer_release_draws_its_upgrade_card(self):
+        page = self.page("kuma")
+
+        self.assertIn('id="upgrade"', page)
+        # Nothing is known against what runs, which the band says, so no move fixes anything.
+        self.assertNotIn(">Fixes<", page)
 
 
 class ExposureOrderTests(TestCase):

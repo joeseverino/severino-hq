@@ -509,7 +509,7 @@ def _declarations() -> dict[str, Declared]:
 
 
 def _origin_and_names(provider: Any, spec: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
-    return provider.origin(spec), tuple(provider.hostnames(spec))
+    return provider.origin(spec) if provider.origin else "", tuple(provider.hostnames(spec))
 
 
 def _services_by_host(index: Machines) -> dict[str, set[str]]:
@@ -587,8 +587,24 @@ def _resources_by_host() -> tuple[dict[str, set[str]], dict[str, str]]:
     return found, devices
 
 
-def served_by() -> dict[tuple[str, str], set[str]]:
-    """``{(machine, container): hostnames}``: which names each container answers for.
+# What a request for a name passes through on its way, by the facet of the
+# record that sends it there: each is one more name a restart interrupts.
+PASSES_THROUGH = {"dns": "resolves", "proxy": "routes"}
+
+
+@dataclass(frozen=True, slots=True)
+class Serving:
+    """What one container answers for: each name it is the origin of
+    (``names``), and each name a connection inside it holds the record of, by
+    what it does for it (``PASSES_THROUGH``: a DNS server resolves its
+    rewrites, a proxy routes its hosts)."""
+
+    names: tuple[str, ...] = ()
+    through: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+
+def served_by() -> dict[tuple[str, str], Serving]:
+    """``{(machine, container): Serving}``: which names each container answers for.
 
     Resolved the same way a service resolves its own origin, but without
     assembling every service to ask: the board builds facets, health and
@@ -599,27 +615,63 @@ def served_by() -> dict[tuple[str, str], set[str]]:
     return read_once("machines.served_by", _served_by)
 
 
-def _served_by() -> dict[tuple[str, str], set[str]]:
+def connections_inside() -> dict[tuple[str, str], tuple[ProviderConnection, ...]]:
+    """``{(machine, container): connections}``: each reported connection whose
+    endpoint is a container, placed the way every address HQ holds is placed
+    (``whereabouts.locate``); a loopback endpoint is the controller's own machine."""
+
+    def build() -> dict[tuple[str, str], tuple[ProviderConnection, ...]]:
+        at = whereabouts()
+        found: dict[tuple[str, str], dict[str, ProviderConnection]] = {}
+        for row in connection_rows():
+            origin = locate(row.endpoint, at=at, loopback_on=row.controller_id) if row.endpoint else None
+            if origin is not None and origin.host and origin.container:
+                found.setdefault((origin.host, origin.container), {}).setdefault(row.connection_ref, row)
+        return {key: tuple(rows.values()) for key, rows in found.items()}
+
+    return read_once("machines.connections_inside", build)
+
+
+def _served_by() -> dict[tuple[str, str], Serving]:
     machines = declared_machines()
     at = whereabouts(machines)
-    found: dict[tuple[str, str], set[str]] = {}
+    holders = {row.connection_ref: key for key, rows in connections_inside().items() for row in rows}
+    names: dict[tuple[str, str], set[str]] = {}
+    through: dict[tuple[str, str], dict[str, set[str]]] = {}
     # The shared read of every enabled declaration, not a query of its own.
     for resource in enabled_resources():
         provider = PROVIDERS.get(resource.kind)
-        if provider is None or provider.origin is None or provider.hostnames is None:
+        if provider is None or provider.hostnames is None:
             continue
         read = read_spec(resource.kind, resource.spec, partial(_origin_and_names, provider))
         if read is None:
             continue
-        origin, names = read
-        if not origin:
-            continue
-        located = locate(origin, machines, at)
-        if located.host and located.container:
-            found.setdefault((located.host, located.container), set()).update(
-                name for name in (normalized_hostname(item) for item in names) if name
-            )
-    return found
+        origin, found = read
+        hostnames = {name for name in map(normalized_hostname, found) if name}
+        located = locate(origin, machines, at) if origin else None
+        if located is not None and located.host and located.container:
+            names.setdefault((located.host, located.container), set()).update(hostnames)
+        holder = holders.get(_held_through(resource.spec, provider))
+        if holder is not None and provider.facet in PASSES_THROUGH:
+            through.setdefault(holder, {}).setdefault(PASSES_THROUGH[provider.facet], set()).update(hostnames)
+    return {
+        key: Serving(
+            tuple(sorted(names.get(key, ()))),
+            tuple((does, tuple(sorted(held))) for does, held in sorted(through.get(key, {}).items())),
+        )
+        for key in names.keys() | through.keys()
+    }
+
+
+def _held_through(spec: dict[str, Any], provider: Any) -> str:
+    """The connection a declaration's record is held through: the one it
+    names, else the one connection of its provider's kinds, else none."""
+
+    named = str(spec.get("connection_ref", "")).strip()
+    if named:
+        return named
+    refs = {row.connection_ref for row in connection_rows() if row.provider in provider.connection_providers}
+    return next(iter(refs)) if len(refs) == 1 else ""
 
 
 def container_context(host: str, name: str) -> dict[str, object]:
@@ -637,12 +689,8 @@ def container_context(host: str, name: str) -> dict[str, object]:
         (item for item in (found.containers if found else ()) if item.name == name),
         None,
     )
-    serves = served_by().get((found.name if found else host, name), set())
-    return {
-        "machine": found,
-        "running": running,
-        "serves": tuple(sorted(item for item in serves if item)),
-    }
+    serving = served_by().get((found.name if found else host, name), Serving())
+    return {"machine": found, "running": running, "serves": serving.names}
 
 
 def resources() -> tuple[ResourceSpec, ...]:

@@ -4,8 +4,7 @@ import re
 from dataclasses import replace
 from datetime import date
 
-from hq.domains.control_plane.observations.portainer import ENVIRONMENT_KIND
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, ENVIRONMENT_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .cadence import CONTROLLER_REFRESH, sweep_interval
@@ -14,8 +13,6 @@ from .delivery_progress import LABELS as DEPLOYING_LABELS
 from .derivations import since
 from .entity_links import kind_label, node_link, node_name
 from .finding_model import (
-    CHECK_AGAIN,
-    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -184,7 +181,6 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                 f"Restart {holder} on {machine}, so it opens the Docker socket again",
                 machine,
                 f"sh -c 'docker restart $(docker ps -q --filter label={label})'",
-                (THEN_CHECK_AGAIN,),
             )
             if holder
             else ()
@@ -193,7 +189,7 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="environment-read-empty",
                 subject=machine_id,
-                # Check again reads the containers, which is what proves it.
+                # A refresh reads the containers, which is what proves it.
                 scope=CONTAINER_KIND,
                 part=name,
                 title=(
@@ -802,7 +798,7 @@ RULES: tuple[FindingRule, ...] = (
         "Docker lists no containers",
         Tone.SERIOUS,
         _environment_read_empty,
-        operator_action=f"Restart Portainer, or its agent, on the machine, then press {CHECK_AGAIN}.",
+        operator_action="Restart Portainer, or its agent, on the machine.",
         no_help_reason="HQ restarts containers through Portainer, which cannot reach Docker there.",
         bars={Tone.SERIOUS: "a Docker environment that had containers lists none"},
     ),

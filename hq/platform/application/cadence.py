@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -23,6 +24,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Exists, F, Max, OuterRef, Q
 from django.utils import timezone
+from django.utils.text import get_text_list
 from pydantic import Field, GetJsonSchemaHandler
 from pydantic_core import CoreSchema
 
@@ -59,68 +61,63 @@ from .refusal_codes import Code
 from .security import Capability, Principal
 from .tone import Absent, Tone, Toned
 from .ui import ended
+lazy from . import outbound_work
 lazy from .adoption import manages_through, observes_only
 lazy from .facts import stored_snapshots
+lazy from .inbound_events import covers
 
-# A kind HQ stores readings of, or none. Read as a schema is first built, so
-# declaring the command loads no registry.
-type SweptKind = Annotated[
-    str,
-    Choices([("", "None"), *((kind, registry_label(kind)) for kind in sorted({*OBSERVATIONS, *PROVIDERS}))]),
-    Describe("The one type of reading to read now, from every connection."),
-]
+# A kind HQ stores readings of. Read as a schema is first built, so declaring
+# the command loads no registry.
+type SweptKind = Annotated[str, Choices([(kind, registry_label(kind)) for kind in sorted({*OBSERVATIONS, *PROVIDERS})])]
 
 
 @dataclass(frozen=True, slots=True)
 class ControllerSweepCommand:
-    """A wake-up request; with a subject, that subject is read on the next pull.
+    """A wake-up request; with subjects, those are read on the next pull.
 
-    ``connection_ref`` forces every kind its credential reads, ``kind`` one
-    kind, ``every_connection`` the whole sweep. At most one of the three.
+    Each of ``connection_refs`` forces every kind its credential reads, each of
+    ``kinds`` that kind, and ``every_connection`` the whole sweep, alone. A
+    page's Refresh names every subject its problems rest on, in one call.
     """
 
-    connection_ref: Annotated[
-        str,
+    connection_refs: Annotated[
+        tuple[str, ...],
         Names("connections"),
-        Field(title="Connection"),
-        Describe("The connection to read now, every type its credential reads."),
-    ] = ""
-    kind: Annotated[
-        SweptKind,
+        Field(title="Connections"),
+        Describe("The connections to read now, every type each one's credential reads."),
+    ] = ()
+    kinds: Annotated[
+        tuple[SweptKind, ...],
         Names("readings"),
-        Field(title="Type of reading"),
-    ] = ""
+        Field(title="Types of reading"),
+        Describe("The types of reading to read now, from every connection."),
+    ] = ()
     every_connection: Annotated[bool, Describe("Read every connection now.")] = False
 
     @classmethod
     def __get_pydantic_json_schema__(cls, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        # The subject each shape of the command names, said beside its fields.
+        # The shapes a sweep takes, said beside its fields: none, every
+        # connection alone, or some connections and types.
         declared: dict[str, Any] = handler(schema)
-        handler.resolve_ref_schema(declared)["oneOf"] = [_naming(subject) for subject in (None, *_UNNAMED)]
+        handler.resolve_ref_schema(declared)["oneOf"] = _SHAPES
         return declared
 
 
-# Each subject a sweep names, and what it holds when it names none: a blank
-# connection, no kind, not every connection.
-_UNNAMED: dict[str, dict[str, Any]] = {
-    "connection_ref": {"pattern": r"^\s*$"},
-    "kind": {"const": ""},
+_NONE: dict[str, dict[str, Any]] = {
+    "connection_refs": {"maxItems": 0},
+    "kinds": {"maxItems": 0},
     "every_connection": {"const": False},
 }
-_NAMED: dict[str, dict[str, Any]] = {
-    "connection_ref": {"pattern": r"\S"},
-    "kind": {"minLength": 1},
-    "every_connection": {"const": True},
-}
-
-
-def _naming(subject: str | None) -> dict[str, Any]:
-    """The shape of a sweep that names ``subject`` alone, or none."""
-
-    return {
-        "properties": {field: (_NAMED if field == subject else _UNNAMED)[field] for field in _UNNAMED},
-        "required": [subject] if subject else [],
-    }
+_SHAPES: list[dict[str, Any]] = [
+    {"properties": _NONE},
+    {"properties": {**_NONE, "every_connection": {"const": True}}, "required": ["every_connection"]},
+    {
+        "properties": {"every_connection": {"const": False}},
+        "anyOf": [
+            {"properties": {field: {"minItems": 1}}, "required": [field]} for field in ("connection_refs", "kinds")
+        ],
+    },
+]
 
 
 def _seconds(name: str) -> int:
@@ -433,13 +430,24 @@ def swept(kind: str) -> bool:
     return declared is not None and not declared.unobserved_reason
 
 
+def own_clock(kind: str) -> timedelta | None:
+    """How often ``kind`` is read on a clock of its own, slower than the
+    sweep's, or None for a kind every sweep reads: its declaration's, else the
+    idle sweep's while events keep it current (``inbound_events.covers``),
+    which returns to every sweep on its own once their channel goes silent."""
+
+    reading = OBSERVATIONS.get(kind)
+    if reading is not None and reading.every is not None:
+        return reading.every
+    return slowest_sweep_interval() if swept(kind) and covers(kind) else None
+
+
 def every_sweep(kind: str) -> bool:
     """Whether every sweep reads ``kind``: swept, and on no slower clock of its
     own. A kind on its own clock is carried by the sweeps between its reads, so
     its age says nothing about whether a sweep is due or has happened."""
 
-    reading = OBSERVATIONS.get(kind)
-    return swept(kind) and (reading is None or reading.every is None)
+    return swept(kind) and own_clock(kind) is None
 
 
 def sweep_due(controller_id: str = "") -> dict[str, object]:
@@ -463,6 +471,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         # When not empty, every kind the sweep reads: set when the cadence is
         # not due and every pending request names its kinds.
         "only_kinds": [],
+        "carry_kinds": _carry_kinds(forced),
     }
     if oldest is None:
         return {**verdict, "due": True, "reason": ended(sentence(Absent.NOT_READ))}
@@ -502,6 +511,24 @@ def _oldest_sweep() -> datetime | None:
     )
 
 
+def _carry_kinds(forced: tuple[ForcedRead, ...]) -> list[str]:
+    """The kinds events keep current that the sweep reports as they last
+    were: neither due on their own clock nor asked for. A controller's kind
+    with a clock of its declaration's is carried by its own plan."""
+
+    if any(read.kinds is None for read in forced):
+        return []
+    asked = {kind for read in forced for kind in read.kinds or ()}
+    return sorted(
+        kind
+        for kind, observed_at, updated_at in ProviderInventory.objects.values_list("kind", "observed_at", "updated_at")
+        if kind not in asked
+        and covers(kind)
+        and (every := own_clock(kind)) is not None
+        and not passed(attempted_at(observed_at, updated_at) + every)
+    )
+
+
 def _carry(controller_id: str, forced: tuple[ForcedRead, ...], *, failing: bool = False) -> list[str]:
     """The connections a controller's sweep reports as last found: none
     without a controller, and never one somebody asked to read."""
@@ -521,23 +548,26 @@ def _asked_kinds(forced: tuple[ForcedRead, ...]) -> list[str]:
     return sorted({kind for read in forced for kind in read.kinds or ()})
 
 
-def _read_subject(command: ControllerSweepCommand) -> tuple[str, str] | None:
-    """``(connection_ref, kind)`` the command forces, or None for a bare wake-up.
+type Subjects = tuple[tuple[str, ...], tuple[str, ...]]
 
-    Fails closed: a ref no controller reported. The command's type holds its
+
+def _read_subject(command: ControllerSweepCommand) -> Subjects | None:
+    """``(connection_refs, kinds)`` the command forces, both empty for every
+    connection, or None for a bare wake-up.
+
+    Fails closed: a ref no controller reported. The command's type holds each
     kind to one HQ stores.
     """
 
-    ref = command.connection_ref.strip()
-    kind = command.kind
-    named = [field for field, value in (("connection_ref", ref), ("kind", kind)) if value]
-    if command.every_connection:
-        named.append("every_connection")
-    if len(named) > 1:
-        raise ValidationError(dict.fromkeys(named, "Name one of connection_ref, kind or every_connection."))
-    if ref and not connection_providers(ref):
-        raise ValidationError({"connection_ref": ValidationError("No such connection.", code=Code.NOT_FOUND)})
-    return (ref, kind) if named else None
+    refs = tuple(dict.fromkeys(ref.strip() for ref in command.connection_refs if ref.strip()))
+    kinds = tuple(dict.fromkeys(command.kinds))
+    if command.every_connection and (refs or kinds):
+        raise ValidationError({"every_connection": "Name connections and types of reading, or every connection."})
+    if unknown := [ref for ref in refs if not connection_providers(ref)]:
+        raise ValidationError(
+            {"connection_refs": ValidationError(f"No such connection: {', '.join(unknown)}.", code=Code.NOT_FOUND)}
+        )
+    return (refs, kinds) if refs or kinds or command.every_connection else None
 
 
 def pass_due() -> str:
@@ -734,15 +764,24 @@ def ask(
     ``activity`` notes that a person asked, so the active cadence decides the
     sweep and a panel says its reading is under way. ``spaced`` is an
     event's ask, which waits a gap after its kind was stored
-    (``read_requests.EVENT_READ_GAP``). A kind HQ stores no
-    reading of is refused, since nothing would answer it and it would force
-    sweeps until it expired.
+    (``read_requests.EVENT_READ_GAP``). A kind HQ reads itself starts the
+    host job that declares it (``OutboundWork.reads``) once this commits
+    instead, which reads what of it is due. Any other kind HQ stores no
+    reading of is refused, since nothing would answer it and it
+    would force sweeps until it expired.
     """
 
     now = timezone.now()
     kinds = tuple(dict.fromkeys(reads))
-    if unknown := [kind for kind in kinds if kind not in OBSERVATIONS and kind not in PROVIDERS]:
+    read_here = {kind: work for kind in kinds if (work := outbound_work.reader_of(kind))}
+    if unknown := [
+        kind for kind in kinds if kind not in OBSERVATIONS and kind not in PROVIDERS and kind not in read_here
+    ]:
         raise ValidationError({"kind": ValidationError(f"No such type: {', '.join(unknown)}.", code="invalid_choice")})
+    if read_here:
+        kinds = tuple(kind for kind in kinds if kind not in read_here)
+        for work in dict.fromkeys(read_here.values()):
+            transaction.on_commit(partial(outbound_work.start_reading, work), robust=True)
     if activity:
         note_activity()
     for kind in kinds or (("",) if connection or every else ()):
@@ -758,7 +797,8 @@ def ask(
             request.requested_at, request.completed_at, request.awaited = now, None, activity
             request.audit_said = said
             request.save()
-    _ring_on_commit(doorbell)
+    if kinds or connection or every or panels or not read_here:
+        _ring_on_commit(doorbell)
     return now
 
 
@@ -778,21 +818,27 @@ def request_controller_sweep(
     *,
     principal: Principal,
 ) -> ControllerSweepRequested:
-    """Wake the pull-based controller; with a subject, have it read that now."""
+    """Wake the pull-based controller; with subjects, have it read those now."""
 
     del principal
     subject = _read_subject(command)
-    ref, kind = subject or ("", "")
+    refs, kinds = subject or ((), ())
     # Noted before policy is read, so the active cadence (not the twelve-hour
     # idle economy) decides the sweep.
-    at = ask(reads=(kind,) if kind else (), connection=ref, every=command.every_connection, activity=True)
+    asks = [ask(connection=ref, activity=True) for ref in refs]
+    if kinds or command.every_connection or not refs:
+        asks.append(ask(reads=kinds, every=command.every_connection, activity=True))
+    at = min(asks)
     verdict = sweep_due()
     said = _sweep_message(subject, due=bool(verdict["due"]))
-    # A bare wake-up names nothing to wait for.
+    # A bare wake-up names nothing to wait for; every connection waits on every kind.
+    forced = (*kinds, *(kind for ref in refs for kind in forced_kinds(ref, "") or ()))
     asked = (
         Asked(Standing(note=said), message=said)
         if subject is None
-        else asked_read(forced_kinds(ref, kind) or (), at, connection_ref=ref, message=said)
+        else asked_read(
+            dict.fromkeys(forced), at, connection_ref=refs[0] if len(refs) == 1 and not kinds else "", message=said
+        )
     )
     return {
         **asked.answer(),
@@ -821,19 +867,19 @@ CONTROLLER_REFRESH = CapabilitySpec(
 )
 
 
-def _read_label(subject: tuple[str, str] | None) -> str:
+def _read_label(subject: Subjects | None) -> str:
     if subject is None:
         return ""
-    ref, kind = subject
-    return ref or kind or "every connection"
+    refs, kinds = subject
+    return ", ".join((*refs, *kinds)) or "every connection"
 
 
-def _sweep_message(subject: tuple[str, str] | None, *, due: bool) -> str:
+def _sweep_message(subject: Subjects | None, *, due: bool) -> str:
     """What asking says, in the refresh command's own words."""
 
-    ref, kind = subject or ("", "")
-    if ref or kind:
-        return CONTROLLER_REFRESH.requested(ref or registry_label(kind))
+    refs, kinds = subject or ((), ())
+    if refs or kinds:
+        return CONTROLLER_REFRESH.requested(get_text_list([*refs, *map(registry_label, kinds)], "and"))
     asked = requested(CONTROLLER_REFRESH.words("all"))
     return asked if due or subject is not None else f"{asked} What HQ shows is already up to date."
 

@@ -121,23 +121,22 @@ def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStand
         if tick is None:
             return None
         if tick.state in _ACTIVE:
-            return MergeStanding(TICKING, Tone.ATTENTION, taken=True, lines=(waits_on(tick),), operation=tick)
+            return MergeStanding("Ticking", Tone.ATTENTION, taken=True, lines=(BOX, waits_on(tick)), operation=tick)
         result = tick.result or {}
         if tick.state != OperationRequest.State.SUCCEEDED:
-            return MergeStanding(NOT_TICKED, Tone.SERIOUS, lines=(str(result.get("message") or ""),), operation=tick)
+            message = str(result.get("message") or "")
+            return MergeStanding("Not ticked", Tone.SERIOUS, lines=(BOX, message, TRIES_AGAIN), operation=tick)
         if refused := str((result.get(THEN) or {}).get("refused") or ""):
-            return MergeStanding(NOT_ASKED, Tone.SERIOUS, lines=(refused,), operation=tick)
+            return MergeStanding("Renovate not asked", Tone.SERIOUS, lines=(refused, ASKS_AGAIN), operation=tick)
         since = tick.created_at
     return _run_standing(repository, since)
 
 
 # How an Open PR stands, as its card says it.
-TICKING = "Ticking its box on the Dependency Dashboard"
-NOT_TICKED = "Its box on the Dependency Dashboard was not ticked; Open PR tries again"
-NOT_ASKED = "Ticked, but Renovate was not asked to run; Open PR asks again"
-RUN_WAITS = "Waiting for Renovate's run"
-RUN_GOES = "Renovate is running"
-RUN_FAILED = "Renovate's run failed; Open PR asks again"
+BOX = "Its box on the Dependency Dashboard"
+RENOVATE = "Renovate's run"
+TRIES_AGAIN = "Open PR tries again"
+ASKS_AGAIN = "Open PR asks again"
 OPENED = "Renovate has opened its pull request."
 
 
@@ -147,14 +146,14 @@ def _run_standing(repository: str, since: datetime | None) -> MergeStanding | No
 
     if (asked := asked_at()) is not None and (since is None or asked >= since):
         said = controller_standing().cannot("", now=timezone.now())
-        return MergeStanding(RUN_WAITS, Tone.ATTENTION, taken=True, lines=(said,))
+        return MergeStanding("Waiting", Tone.ATTENTION, taken=True, lines=(RENOVATE, said))
     run = last_run(repository)
     if run is None or since is None or run.started_at < since:
         return None
     if run.seen == JobState.RUNNING:
-        return MergeStanding(RUN_GOES, Tone.ATTENTION, taken=True)
+        return MergeStanding("Running", Tone.ATTENTION, taken=True, lines=(RENOVATE,))
     if run.seen != JobState.SUCCEEDED:
-        return MergeStanding(RUN_FAILED, Tone.SERIOUS, lines=(run.seen.label,))
+        return MergeStanding("Failed", Tone.SERIOUS, lines=(RENOVATE, run.seen.label, ASKS_AGAIN))
     return None
 
 

@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory, ReadRequest
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.platform.application import cadence
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import ControllerReport, report_operation

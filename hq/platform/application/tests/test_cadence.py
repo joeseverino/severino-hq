@@ -25,7 +25,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import connection, declare, operator
+from hq.platform.core.testing import channel_heard, connection, declare, operator
 
 from .. import cadence, read_requests, readings
 from ..cadence import (
@@ -139,6 +139,36 @@ class SweepPolicyTests(TestCase):
     def test_nobody_having_used_it_is_not_an_error(self):
         self.assertFalse(recently_used())
 
+    @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=300, SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200)
+    def test_a_reading_events_keep_current_is_a_backstop_only_while_their_channel_is_heard(self):
+        """The App's webhook keeps the repositories current, so while its
+        listener is heard a sweep carries them until the idle interval; once
+        it falls silent they are swept as before. A reading no event keeps
+        current is swept whatever the channel says."""
+
+        note_activity()
+        swept(age_seconds=30)
+        swept(age_seconds=3600, kind="github.repository")
+        channel_heard()
+
+        heard = sweep_due()
+        self.assertFalse(heard["due"])
+        self.assertEqual(heard["carry_kinds"], ["github.repository"])
+
+        swept(age_seconds=50_000, kind="github.repository")
+        self.assertEqual(sweep_due()["carry_kinds"], [], "past its own clock it is read again")
+
+        swept(age_seconds=3600, kind="github.repository")
+        channel_heard(silent=True)
+        silent = sweep_due()
+        self.assertTrue(silent["due"])
+        self.assertEqual(silent["carry_kinds"], [])
+
+        channel_heard()
+        swept(age_seconds=3600, kind="github.repository")
+        swept(age_seconds=3600)
+        self.assertTrue(sweep_due()["due"], "a reading no event keeps current makes the sweep due")
+
     @override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=60)
     def test_the_oldest_sweep_decides(self):
         """A provider swept an hour ago is due even if another was swept now.
@@ -193,6 +223,17 @@ class DoorbellTests(TestCase):
         cadence._ring("controller")
 
         self.assertEqual((self.directory / "doorbell").read_bytes(), b"")
+
+    def test_a_reading_hq_takes_itself_starts_its_host_job_and_wakes_no_controller(self):
+        with (
+            mock.patch("hq.platform.application.outbound_work.start_for_host") as start,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            cadence.ask(reads=("registry.image",))
+
+        start.assert_called_once_with("registry.refresh")
+        self.assertFalse(ReadRequest.objects.exists())
+        self.assertFalse((self.directory / "doorbell").exists())
 
     def test_ringing_twice_leaves_one_doorbell(self):
         cadence._ring("controller")
@@ -599,30 +640,34 @@ class ControllerTimerTests(SimpleTestCase):
 
     def test_each_doorbell_is_the_one_its_path_unit_waits_on(self):
         """HQ is told only where the controller's doorbell is, and rings the
-        glance's and the automation worker's beside it: each must be the file
-        its unit on the host watches."""
+        others beside it: each must be the file its path unit on the host
+        waits to exist, and the service that unit starts removes it before it
+        works, so a ring while it runs starts it again when it ends."""
 
         units = Path(settings.BASE_DIR) / "deploy/systemd"
 
-        def watched(unit: str, key: str) -> Path:
-            (value,) = (
+        def setting(unit: str, key: str) -> str | None:
+            values = [
                 line.removeprefix(f"{key}=")
                 for line in (units / unit).read_text().splitlines()
                 if line.startswith(f"{key}=")
-            )
-            return Path(value)
+            ]
+            self.assertLessEqual(len(values), 1, (unit, key))
+            return values[0] if values else None
 
-        controller = watched("severino-hq-controller.path", "PathChanged")
-        for ring, unit, key in (
-            ("controller", "severino-hq-controller.path", "PathChanged"),
-            ("glance", "severino-hq-glance.path", "PathExists"),
-            ("automation", "severino-hq-automation.path", "PathExists"),
-        ):
-            with self.subTest(unit=unit), tempfile.TemporaryDirectory() as directory:
-                with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / controller.name)):
+        directories = set()
+        for ring in cadence.DOORBELLS:
+            path = f"severino-hq-{ring}.path"
+            with self.subTest(unit=path), tempfile.TemporaryDirectory() as directory:
+                with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / "controller-doorbell")):
                     self.assertTrue(cadence._ring(ring))
                 (rung,) = Path(directory).iterdir()
-                self.assertEqual(controller.with_name(rung.name), watched(unit, key))
+                watched = Path(setting(path, "PathExists") or "")
+                self.assertEqual(watched.name, rung.name)
+                self.assertIsNone(setting(path, "PathChanged"))
+                self.assertEqual(setting(str(setting(path, "Unit")), "ExecStartPre"), f"/bin/rm -f {watched}")
+                directories.add(watched.parent)
+        self.assertEqual(len(directories), 1, directories)
 
 
 class DefaultCadenceTests(TestCase):

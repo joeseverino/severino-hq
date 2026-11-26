@@ -88,6 +88,12 @@ hide = true
 extends = "hk"
 vars = { step = "file-lines" }
 
+["lint:lazy-imports"]
+description = "Every name a lazy from-import takes is one its module defines at its top level, read through ast (tools/lazy_imports.py)"
+hide = true
+extends = "hk"
+vars = { step = "lazy-imports" }
+
 ["lint:task-modes"]
 description = "Every file task under mise-tasks/ is executable, so mise runs it rather than hiding it"
 hide = true
@@ -136,6 +142,19 @@ run = "uv run deptry hq hq_sdk hq_runner"
 ["lint:imports"]
 description = "Each module imports only what pyproject.toml's import contracts allow it"
 hide = true
+tags = ["fast"]
+sources = [
+  "hq/**/*.py",
+  "hq_sdk/**/*.py",
+  "hq_runner/**/*.py",
+  "tools/**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+]
+outputs = []
 run = "uv run lint-imports --no-cache"
 
 ["lint:lockfile"]

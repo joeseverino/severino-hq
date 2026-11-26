@@ -219,13 +219,14 @@ class TemplateRecordTests(SimpleTestCase):
                 "{% if why %}{{ why }}{% endif %}{{ message }}{% for item in items %}{{ item }}{% endfor %}"
                 '{{ label|default:"" }}{% with total=items|length %}{{ total }}{% endwith %}'
                 '{% if why %}{% firstof why as said %}{% else %}{% firstof "" as said %}{% endif %}{{ said }}'
+                "{% partialdef aside %}{{ aside }}{% endpartialdef %}{% partialdef count inline %}{{ count }}{% endpartialdef %}"
             )
             .template.nodelist
         )
         reads = template_contract._Reads(engines["django"].engine)
         reads.walk(nodelist, set(), frozenset())
 
-        self.assertEqual(reads.found, {"why": False, "message": True, "items": True, "label": False})
+        self.assertEqual(reads.found, {"why": False, "message": True, "items": True, "label": False, "count": True})
 
     def test_a_public_block_the_frame_stops_drawing_fails_the_record(self):
         with (

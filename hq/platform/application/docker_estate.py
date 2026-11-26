@@ -14,8 +14,7 @@ from typing import Any
 from django.conf import settings
 lazy from django.urls import NoReverseMatch
 
-from hq.domains.control_plane.observations.portainer import IMAGE_KIND, image_title, short_id
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, IMAGE_KIND, image_title, short_id
 lazy from hq.platform.application.routes import reverse
 
 from .display_words import Code

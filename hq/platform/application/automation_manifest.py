@@ -94,6 +94,7 @@ _NO_EXECUTION_FIELD = Reason(
 _NAMED_FIELDS = Reason("input_free_form", "must name each field it allows, never take free-form values")
 _READ_PRIVILEGE = Reason("read_privilege", "is a read, which takes no privilege")
 _INVESTIGATION_READ = Reason("investigation_read", "must be read-only to investigate a finding")
+_SETTLED_CHANGE = Reason("settled_change", "names a read that settles it, which only a change hands off to")
 _CHANGE_CHECKED = Reason(
     "change_checked", "is a change, which needs preconditions and verification: its play's pre_tasks and post_tasks"
 )
@@ -150,6 +151,10 @@ def _closed(model: type[BaseModel], seen: set[type[BaseModel]]) -> None:
                 _closed(annotation, seen)
 
 
+# The input a procedure and the read that settles it (``settled_by``) both
+# take: the commit a run applies, which the read is asked at.
+REVISION_INPUT = "revision"
+
 # What a playbook may do: it acts on machines, so it never only changes a record.
 PlaybookEffect = Literal[Effect.READ, Effect.INFRASTRUCTURE_CHANGE, Effect.DESTRUCTIVE]
 
@@ -180,6 +185,11 @@ class ProcedureTerms(Closed):
     # one HQ declares the words of, so whoever asks for a run knows what to read
     # back. Empty: it states its result alone.
     readings: Annotated[tuple[DottedName, ...], Checked(sorted_unique)] = ()
+    # The read that settles a run of it once its playbook hands off to a unit
+    # it leaves running (``RunStated.handoff``): a procedure of effect read, of
+    # the same target kinds and the same revision input (``settling_problem``).
+    # None: a run of it that hands off is refused.
+    settled_by: DottedName | None = None
 
     @model_validator(mode="after")
     @checked
@@ -188,6 +198,8 @@ class ProcedureTerms(Closed):
             raise _READ_PRIVILEGE.refused()
         if self.investigates and self.effect != Effect.READ:
             raise _INVESTIGATION_READ.refused()
+        if self.settled_by is not None and (not self.effect.changes or self.settled_by == self.id):
+            raise _SETTLED_CHANGE.refused()
         return self
 
 

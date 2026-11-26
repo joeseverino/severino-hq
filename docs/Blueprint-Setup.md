@@ -57,7 +57,7 @@ fork changes them in every place listed.
 [`deploy/host.example.json`](../deploy/host.example.json), holds the vault,
 Connect, the runner and any grants.
 [Install](Install.md#6-install-the-runner-and-write-hostjson) says what each
-field is set to, and `hq-host bootstrap` renders the host's drop-ins from it
+field is set to, and the host's setup renders the host's drop-ins from it
 ([Secrets](Secrets.md#bootstrap-and-ownership)).
 
 ### The vault
@@ -79,7 +79,7 @@ the connections can see.
 | `SEVERINO_HQ_DEPLOY_HOST`, an SSH destination | the shell running `mise run check --release` |
 | `HQ_LOCAL_PYTHONPATH`, `HQ_LOCAL_PLUGINS` | `mise.local.toml` ([Development](Development.md#the-extension-set)) |
 | `SEVERINO_FAILURE_LOG_IDENTITY` | the operator's shell, for `mise run failure-logs` |
-| `GITHUB_WEBHOOK_SECRET`, `SOCKET_TOKEN` | a 1Password item of the operator's, for `mise run worker:deploy --with-secrets` and `mise run wire-github-app` ([Install](Install.md#12-hear-providers-events)) |
+| `GITHUB_WEBHOOK_SECRET`, `TAILSCALE_WEBHOOK_SECRET`, `SOCKET_TOKEN` | a 1Password item of the operator's, for `mise run worker:deploy --with-secrets` and `mise run wire-github-app` ([Install](Install.md#12-hear-providers-events)) |
 | Internal CA roots | `/usr/local/share/ca-certificates` on the host |
 
 ## 3. Residue

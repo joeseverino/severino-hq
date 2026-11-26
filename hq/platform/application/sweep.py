@@ -14,8 +14,8 @@ from django.db import transaction
 from hq.platform.core import bindings
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
-lazy from hq.domains.control_plane.observations.portainer import IMAGE_KIND
-lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, IMAGE_KIND
+lazy from hq.domains.control_plane.observations.public_registry import IMAGE_KIND as REGISTRY_IMAGE_KIND
 
 from .adoption import adopt_discovered, unmanaged
 from .inventory import (
@@ -25,7 +25,9 @@ from .inventory import (
 )
 from .read_requests import askers, settle_read_requests
 from .zones import RECORD_KIND, adopt_discovered_records
-lazy from . import outbound_work, problems
+lazy from . import problems
+lazy from .automation_sources import SCAN, scan_when_due
+lazy from .cadence import ask
 lazy from .first_seen import look_due
 lazy from .projects import sync_repositories
 lazy from .public_registry import registry_due
@@ -65,16 +67,22 @@ def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, An
         # otherwise its records would wait a whole sweep for no reason.
         adopted += adopt_discovered_records(principal=principal)["adopted"]
     # Every repository the GitHub App reads is a project, from the reading
-    # just stored.
+    # just stored, and a playbook source whose branch moved is scanned again.
     if REPOSITORY_KIND in payload:
         sync_repositories(principal=principal)
+        # HQ's own act too, so the scan's rows say HQ asked for it.
+        with bindings.audit_operation(operation=SCAN, principal=principal):
+            scan_when_due(principal=principal)
     # And everything already declared that the sweep just found unchanged, so
     # a declaration nothing touched still reads as observed.
     confirmed = confirm_observed(payload)
     # And the containers the sweep no longer lists at all, which were deleted.
     retired = retire_departed(payload)
     settle_read_requests()
-    _ring_for_new_images(payload)
+    # An image or a digest the containers just stored name and HQ has not
+    # read is read in minutes, not tomorrow.
+    if (CONTAINER_KIND in payload or IMAGE_KIND in payload) and registry_due():
+        ask(reads=(REGISTRY_IMAGE_KIND,))
     _note_open_problems()
     return {**result, "adopted": adopted, "confirmed": confirmed, "retired": retired}
 
@@ -89,14 +97,6 @@ def _note_open_problems() -> None:
                 problems.note_open_problems()
     except Exception:  # a look that fails must not lose the report
         logger.exception("The open problems could not be recorded after a report.")
-
-
-def _ring_for_new_images(payload: dict[str, Any]) -> None:
-    """Start the registry read, once the sweep is stored, when it found an
-    image or a digest HQ has not read, so it is read in minutes, not tomorrow."""
-
-    if (CONTAINER_KIND in payload or IMAGE_KIND in payload) and registry_due():
-        transaction.on_commit(lambda: outbound_work.start_for_host("registry.refresh"))
 
 
 def _adoptable_kinds() -> tuple[str, ...]:

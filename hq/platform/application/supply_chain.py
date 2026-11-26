@@ -4,11 +4,14 @@ traced, and whether anything known is wrong with it.
 Measured from what HQ reads about the image rather than from the container
 (docs/Derived-Facts.md#containers-and-images), all of it anonymously and none
 of it touching the image itself, so a check HQ could not read says so rather
-than failing.
+than failing. What only its publisher can attach (a package list, build
+provenance) is a fact on its page, never a check its operator could fail.
 """
 
 from datetime import UTC, datetime
 from typing import Any
+
+from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
 
 from .standards import Check, Examples, Measurement, Reading, measure
 lazy from .container_standard import example
@@ -16,19 +19,9 @@ lazy from .container_standard import example
 IMAGE_UNREAD = "Its image has not been read"
 
 
-def _attested(test):
-    def check(container: Any) -> Reading:
-        attested = container.standing.attested
-        if attested is None or attested.get("unread"):
-            return Reading.unavailable("Its attestations have not been read")
-        return Reading.judged(test(attested))
-
-    return check
-
-
 def _pulled(container: Any) -> bool:
-    """Whether a registry holds what runs, so a pin, a source, a publisher's
-    attestations and a tag apply to it: an image built on its host has none."""
+    """Whether a registry holds what runs, so a pin, a source and a tag
+    apply to it: an image built on its host has none."""
 
     return not container.standing.built_here
 
@@ -87,26 +80,6 @@ STANDARD: tuple[Check, ...] = (
         breaks=({"source": ""},),
     ),
     Check(
-        "provenance",
-        "Has build provenance",
-        _attested(lambda attested: bool(attested.get("provenance"))),
-        "Provenance says what it was built from and on, so a rebuild or a swapped base image shows.",
-        "Only its publisher can attach it.",
-        applies=_pulled,
-        unmet="No build provenance",
-        breaks=({"attested": {"provenance": None}},),
-    ),
-    Check(
-        "sbom",
-        "Has a package list (SBOM)",
-        _attested(lambda attested: bool(attested.get("packages"))),
-        "A package list is what vulnerabilities are matched against.",
-        "Only its publisher can attach it.",
-        applies=_pulled,
-        unmet="No package list (SBOM)",
-        breaks=({"attested": {"packages": []}},),
-    ),
-    Check(
         "no-urgent",
         "No fixable serious vulnerability",
         _no_urgent,
@@ -151,13 +124,12 @@ STANDARD: tuple[Check, ...] = (
 
 
 def supply_chain_of(container: Any) -> Measurement:
-    return measure(container, STANDARD)
+    return measure(container, STANDARD, reads=IMAGE_KIND)
 
 
 _READ = datetime(2026, 1, 1, tzinfo=UTC)
 
-# An image whose source, attestations, packages and advisories were all read
-# and found sound.
+# An image whose source, packages and advisories were all read and found sound.
 EXAMPLES = Examples(
     checks=STANDARD,
     subject=lambda record: example(**record),
@@ -165,7 +137,6 @@ EXAMPLES = Examples(
         "source": "https://github.com/example/web",
         "read_at": _READ,
         "upstream_read_at": _READ,
-        "attested": {"provenance": {"format": "SLSA 1.0"}, "packages": ["pkg:npm/a@1"]},
         "checked": {"findings": []},
     },
 )

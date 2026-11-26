@@ -72,7 +72,7 @@ class ReadNowView(AskMixin, View):
 
     @override
     def payload(self):
-        return read_now_payload({**self.request.GET.dict(), **self.request.POST.dict()})
+        return read_now_payload(self.request.GET, self.request.POST)
 
 
 class ReadStatusView(WatchView):

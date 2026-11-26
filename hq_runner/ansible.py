@@ -267,7 +267,7 @@ def modules(scratch: Path) -> Modules:
                 timeout=DOC_TIMEOUT_SECONDS,
             )
         if not isinstance(response, Mapping) or not response:
-            raise Refused("ModulesUnread", "Ansible didn't list the worker's modules. Refresh to try again.")
+            raise Refused("ModulesUnread", "Ansible didn't list the worker's modules.")
         return frozenset(name for name in response if isinstance(name, str))
 
     return read
@@ -286,7 +286,7 @@ def entry_point(role: str, response: Any) -> Mapping[str, Any] | None:
         raise Refused("NoArgumentSpec", f"Role {role} is missing. Add it at roles/{role}/ in the repository.")
     found = response.get(role)
     if not isinstance(found, Mapping):
-        raise Refused("NoArgumentSpec", f"Ansible described another role in place of {role}. Refresh to try again.")
+        raise Refused("NoArgumentSpec", f"Ansible described another role in place of {role}.")
     points = found.get("entry_points")
     main = points.get("main") if isinstance(points, Mapping) else None
     if not isinstance(main, Mapping):

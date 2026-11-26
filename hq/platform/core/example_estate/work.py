@@ -47,6 +47,9 @@ FAILING = "homelab"
 # and the app its open update moves to the newer release.
 APPS = "homelab"
 UPDATED_APP = "home-automation"
+# The app whose update the apps repository holds open beside it once each app
+# stands in a state of its own: the DNS server every name resolves through.
+RESOLVER_APP = "adguard"
 # The repositories HQ opens dependency updates for: each with an update open.
 OPTED_IN = (UPDATED, APPS)
 # The apps whose Compose files the apps repository holds: every container but
@@ -144,6 +147,7 @@ def repositories():
                 {
                     "environment": "production",
                     "sha": head,
+                    "image": f"ghcr.io/example/hq@{HQ_DIGEST}",
                     "state": "success",
                     "created_at": iso(timedelta(days=1)),
                     "url": "https://github.com/example/hq/deployments/production",
@@ -343,44 +347,44 @@ def _watched():
 UPDATER = "example-hq[bot]"
 
 
-def _app_update(name):
-    """Renovate's update of one app's pin to the newer release, checks
-    passing, as GitHub lists the pull request and the reading loads its
-    Compose file at base and head."""
+def _app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
+    """Renovate's update of ``app``'s pin to the release ``newer`` names,
+    checks passing, as GitHub lists the pull request and the reading loads
+    its Compose file at base and head."""
 
-    image = next(image for container, _port, image in CONTAINERS if container == UPDATED_APP)
+    image = next(image for container, _port, image in CONTAINERS if container == app)
     ref = ImageRef.parse(image)
-    after = f"{ref.name}:{NEWER[UPDATED_APP]}@{digest(ref.name, NEWER[UPDATED_APP])}"
+    after = f"{ref.name}:{newer[app]}@{digest(ref.name, newer[app])}"
     url = f"https://github.com/example/{name}"
     return {
-        "number": 58,
-        "title": f"Update {ref.repository} Docker tag to {NEWER[UPDATED_APP]}",
-        "url": f"{url}/pull/58",
+        "number": number,
+        "title": f"Update {ref.repository} Docker tag to {newer[app]}",
+        "url": f"{url}/pull/{number}",
         "author": UPDATER,
         "draft": False,
         "created_at": iso(timedelta(days=2)),
         "updated_at": iso(timedelta(hours=4)),
-        "head": hexed("update", name, UPDATED_APP, length=40),
+        "head": hexed("update", name, app, length=40),
         "base": hexed("head", name, length=40),
-        "branch": f"renovate/{UPDATED_APP}",
+        "branch": f"renovate/{app}",
         "head_repository": f"example/{name}",
         "labels": ["dependencies"],
         "checks": {"state": "success", "total": 2, "failing": [], "running": 0, "names": ["validate", "scan"]},
         "files": [
             {
-                "path": f"compose/{UPDATED_APP}/compose.yaml",
+                "path": f"compose/{app}/compose.yaml",
                 "status": "modified",
                 "additions": 1,
                 "deletions": 1,
-                "app": UPDATED_APP,
+                "app": app,
             }
         ],
         "changed_files": 1,
         "apps": [
             {
-                "app": UPDATED_APP,
+                "app": app,
                 "read": True,
-                "images": [{"service": UPDATED_APP, "before": f"{image}@{digest(ref.name, ref.tag)}", "after": after}],
+                "images": [{"service": app, "before": f"{image}@{digest(ref.name, ref.tag)}", "after": after}],
             }
         ],
     }
@@ -727,8 +731,9 @@ def worker_image_missing() -> None:
 
 
 # How the app update's approval ends in each seed that draws one: its preview
-# refused on the host, its merge made and the apply refused, or applied.
-PREVIEW_FAILED, NOT_APPLIED = "preview-failed", "not-applied"
+# waiting for the playbook worker, refused on the host, its merge made and the
+# apply refused, held on the pull unit it started, or applied.
+PREVIEW_QUEUED, PREVIEW_FAILED, NOT_APPLIED, HELD = "queued", "preview-failed", "not-applied", "held"
 # The steps a run stops on when the host refuses to start the pull.
 _REFUSED = (
     ("Ask sudo whether the deploy login may start the pull unit", "ok", ""),
@@ -742,6 +747,19 @@ _REFUSED = (
 MERGED_APP, HELD_APP, UNMATCHED_APP, UNHELD_APP = "immich", "jellyfin", "nginx-proxy-manager", "portainer"
 
 
+def unlisted() -> None:
+    """The open app update's new pin as a publisher that attaches no package
+    list leaves it: read, with nothing a scan can check."""
+
+    from hq.domains.control_plane.observations.public_registry import DIGEST_KIND, VULNERABILITY_KIND
+
+    image = ImageRef.parse(next(image for name, _port, image in CONTAINERS if name == UPDATED_APP))
+    pinned = f"{image.name}@{digest(image.name, NEWER[UPDATED_APP])}"
+    held = {kind: ProviderInventory.objects.get(kind=kind).records for kind in (DIGEST_KIND, VULNERABILITY_KIND)}
+    store(DIGEST_KIND, *({**each, "packages": []} if each["digest"] == pinned else each for each in held[DIGEST_KIND]))
+    store(VULNERABILITY_KIND, *(each for each in held[VULNERABILITY_KIND] if each["digest"] != pinned))
+
+
 def update_states(newer: dict[str, str]) -> None:
     """The apps repository as Renovate and its merges leave it beside the
     open update, the newer releases ``newer`` names out."""
@@ -751,6 +769,12 @@ def update_states(newer: dict[str, str]) -> None:
         "github.repository",
         *(_states(record, newer) if record["repository"] == f"example/{APPS}" else record for record in held),
     )
+
+
+def resolver_update(newer: dict[str, str]) -> dict:
+    """The apps repository's open update of the DNS server, to the release ``newer`` names."""
+
+    return _app_update(APPS, RESOLVER_APP, 59, newer)
 
 
 def _built() -> dict:
@@ -765,6 +789,7 @@ def _states(record: dict, newer: dict[str, str]) -> dict:
     kept = [path for path in record["compose"] if path.split("/")[1] not in (UNMATCHED_APP, UNHELD_APP)]
     return {
         **record,
+        "pull_requests": [*record["pull_requests"], resolver_update(newer)],
         "compose": [*kept, f"compose/{UNMATCHED_APP}/docker-compose.yml"],
         "compose_images": [
             _built(),
@@ -776,6 +801,37 @@ def _states(record: dict, newer: dict[str, str]) -> dict:
         ],
         "held_branches": [{"branch": f"renovate/{HELD_APP}", "marker": "unpend", "apps": [HELD_APP]}],
     }
+
+
+def _held(applied, merged: str) -> None:
+    """``applied`` held on the pull unit its playbook started, a minute in,
+    while the updated app's container is recreated on HQ's machine."""
+
+    from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource, OperationRequest
+    from hq.domains.control_plane.observations.host import DOCKER_CONTAINER
+    from hq.platform.application.resource_operations import HANDOFF
+
+    now = timezone.now()
+    claimed = now - timedelta(minutes=1)
+    OperationRequest.objects.filter(pk=applied.pk).update(
+        state=OperationRequest.State.CLAIMED,
+        claimed_by="example-worker",
+        claimed_at=claimed,
+        completed_at=None,
+        lease_expires_at=claimed + timedelta(seconds=1500),
+        result={HANDOFF: {MACHINE: f"example-pull@{merged}.service"}},
+    )
+    for number, (event, ago) in enumerate((("destroy", 40), ("start", 35), ("health_status: healthy", 20)), start=1):
+        InboundEvent.objects.create(
+            provider="host",
+            event=f"{DOCKER_CONTAINER}.{event}",
+            subject=UPDATED_APP,
+            delivery_id=f"00000000-0000-4000-9000-{number:012d}",
+            source=InboundSource.HOST,
+            received_at=now - timedelta(seconds=ago),
+            applied_at=now - timedelta(seconds=ago),
+            outcome=InboundOutcome.APPLIED,
+        )
 
 
 def approval(owner, ended: str) -> None:
@@ -816,8 +872,11 @@ def approval(owner, ended: str) -> None:
         return operation
 
     merging = {"head_sha": update["head"], "apps": [UPDATED_APP], THEN: applies}
+    previewed = {**applies, "parameters": {"revision": update["head"]}, CHECK: True, THEN: merging}
+    if ended == PREVIEW_QUEUED:
+        enqueue("run", lambda: (playbook, asked_fields(web_principal(owner), reason="", **previewed)))
+        return
     if ended == PREVIEW_FAILED:
-        previewed = {**applies, "parameters": {"revision": update["head"]}, CHECK: True, THEN: merging}
         record(playbook, "run", "failed", asked=previewed, result={"message": "A task failed.", "events": events})
         return
     pull = ManagedResource.objects.create(
@@ -832,8 +891,16 @@ def approval(owner, ended: str) -> None:
         "run",
         "failed" if failed else "succeeded",
         asked={**applies, "parameters": {"revision": merged}},
-        result={"message": "A task failed.", "events": events} if failed else {"message": "Applied."},
+        result={"message": "A task failed.", "events": events}
+        if failed
+        else {
+            "stated": {
+                "readings": {MACHINE: {"apps.receipt": [{"revision": merged, "last_attempt": merged, "ok": True}]}}
+            }
+        },
     )
+    if ended == HELD:
+        _held(applied, merged)
     record(
         pull,
         "merge",

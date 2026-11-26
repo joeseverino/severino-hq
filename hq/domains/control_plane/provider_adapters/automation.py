@@ -1,5 +1,5 @@
 """The records automation binds to: one per adopted playbook, which its runs
-bind to, and the source a Refresh scans for playbooks you adopt.
+bind to, and the source HQ scans for playbooks you adopt.
 
 Declaration-only. HQ writes a playbook's record from the adopted catalog,
 never from a form, so its spec is the playbook as data: what a run of it binds
@@ -152,12 +152,12 @@ class SourceSpec(ProviderModel):
 
 SOURCE = ProviderSpec(
     SOURCE_KIND,
-    "The repository your playbooks come from. HQ scans it when you press Refresh.",
+    "The repository your playbooks come from. HQ scans it each time its default branch moves.",
     SourceSpec,
     actions={
-        # The controller scans nothing: a scan is asked for by Refresh and
-        # claimed by HQ's runner, which holds the repository's token.
-        "reconcile": locked("Nothing to apply. Press Refresh on Playbooks to scan it."),
+        # The controller scans nothing: HQ asks for a scan when the
+        # repository moves, and HQ's runner, which holds its token, claims it.
+        "reconcile": locked("Nothing to apply. HQ scans it when its default branch moves."),
     },
     label="Playbooks",
     declaration_only=True,
@@ -166,12 +166,12 @@ SOURCE = ProviderSpec(
     # scan results and the playbooks adopted from it.
     home=lambda _resource: reverse("control_plane:playbooks"),
     # HQ never reads the host's configuration, only what its record says: a
-    # Refresh writes the one source, named by the host, so no person edits
-    # or removes it by hand.
+    # HQ writes the one source, named by the host, as it asks for its first
+    # scan, so no person edits or removes it by hand.
     sourced=lambda resource: resource.spec.get("named_by") == "host",
     created_from="automation",
-    removal_note=lambda _spec: "HQ forgets its scan results. Refresh records them again.",
-    unobserved_reason="Each Refresh reports what it found.",
+    removal_note=lambda _spec: "HQ forgets its scan results. The next scan records them again.",
+    unobserved_reason="Each scan reports what it found.",
 )
 
 DEFINITIONS = (OPERATION, SOURCE)

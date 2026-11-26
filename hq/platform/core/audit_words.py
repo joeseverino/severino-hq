@@ -17,6 +17,7 @@ from hq.platform.application.ui import counted
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
 lazy from hq.platform.application import capabilities
 lazy from hq.platform.application.approvals import LAPSE, REQUEST
+lazy from hq.platform.application.automation_sources import SCAN
 lazy from hq.platform.application.outbound_work import job_names
 lazy from hq.platform.application.reports import EXPORT
 lazy from hq.platform.application.security import MCP_OPERATION
@@ -90,7 +91,7 @@ def _titled() -> dict[str, str]:
     """The operations HQ binds that no capability, job or controller action
     declares, each titled where it is bound."""
 
-    return {operation: operation.title for operation in (REQUEST, LAPSE, MCP_OPERATION, EXPORT)}
+    return {operation: operation.title for operation in (REQUEST, LAPSE, MCP_OPERATION, EXPORT, SCAN)}
 
 
 # A controller's call runs as ``bridge.<action>``, and one the bridge turned

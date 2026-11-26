@@ -107,7 +107,8 @@ class UnitState(ReadingRow):
     # last became active.
     restarts: str = ""
     active_at: str = ""
-    # "yes" for a service HQ does not ship, read because systemd restarted it.
+    # "yes" for a service HQ does not ship, read because systemd restarted it
+    # or holds it as failed.
     foreign: str = ""
     # The units it cannot start without, and what HQ's own program last told
     # systemd of it, such as why its run failed.
@@ -418,8 +419,8 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
 
     found = []
     for node, units in machine_units(estate):
-        # A service another package installs is read only for its restarts;
-        # deploying HQ sets up none of it.
+        # A service another package installs is read only for its restarts
+        # and failures; deploying HQ sets up none of it.
         absent = tuple(unit for unit in units if unit.absent and not unit.foreign)
         if not absent:
             continue

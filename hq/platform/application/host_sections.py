@@ -579,8 +579,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Jobs",
         description="HQ's background jobs and their runs.",
         navigation=(NavigationItem("Background jobs", "jobs:list", "jobs", 132, "Infrastructure"),),
-        # Refresh queues a scan for HQ's runner, listed with the rest of its
-        # work, and Adopt makes a scan result the adopted playbooks.
+        # A scan HQ asks for is listed with the rest of its runner's work,
+        # and Adopt makes a scan result the adopted playbooks.
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.automation_adoption:capability_specs"),
             resources=_provider("hq.platform.application.run_reads:resources"),

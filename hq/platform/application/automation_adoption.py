@@ -54,6 +54,7 @@ from .record_fields import RecordId
 from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
+lazy from .automation_manifest import REVISION_INPUT
 lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, reading_words, timeout_words
 lazy from .findings import rule_for
 lazy from .labels import dotted, lower_first
@@ -413,6 +414,7 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
     shared = {path: name for path, name in sorted(objects.items()) if path not in every}
     found: dict[str, AdoptedProcedure] = {}
     unadoptable: dict[str, _Unadoptable] = {}
+    sidecars: dict[str, str] = {}
     for scanned in proposal.procedures:
         name = scanned["sidecar"]
         declared = scanned["declaration"].get("id") if isinstance(scanned["declaration"], dict) else None
@@ -427,7 +429,32 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
             )
             continue
         found[procedure.id] = procedure
+        sidecars[procedure.id] = name
+    for procedure in tuple(found.values()):
+        if said := _unsettled(procedure, found):
+            name = sidecars[procedure.id]
+            del found[procedure.id]
+            unadoptable[name] = _Unadoptable(
+                procedure.id, Quoted(procedure.title or name), (Quoted(said),), frozenset(used[name])
+            )
     return found, unadoptable
+
+
+def _unsettled(procedure: AdoptedProcedure, found: Mapping[str, AdoptedProcedure]) -> str:
+    """Why the read ``procedure`` names to settle it cannot, or "": it is a
+    read of this catalog, on the same kinds of target, taking the same
+    revision input, so HQ can ask it of the held run's machines at its revision."""
+
+    if procedure.settled_by is None:
+        return ""
+    read = found.get(procedure.settled_by)
+    if read is None or read.effect != Effect.READ:
+        return f"Its sidecar's settled_by names {procedure.settled_by}, which is no read of this commit."
+    if read.target_kinds != procedure.target_kinds:
+        return f"Its sidecar's settled_by names {read.id}, which runs on other kinds of target."
+    if REVISION_INPUT not in procedure.inputs or read.inputs.get(REVISION_INPUT) != procedure.inputs[REVISION_INPUT]:
+        return f"Its sidecar's settled_by names {read.id}, which does not take its {REVISION_INPUT} input."
+    return ""
 
 
 def _used(scanned: Mapping[str, Any], objects: Mapping[str, str]) -> set[str]:
@@ -672,7 +699,7 @@ def judged(proposal_id: int) -> AdoptionPlan:
 
     proposal = SourceProposal.objects.filter(pk=proposal_id).first()
     if proposal is None:
-        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
+        raise RecordNotFound("No scan result has that ID.")
     unplaced = _commit_refusals(proposal)
     procedures, unadoptable = _procedures(proposal)
     current = adopted()
@@ -759,7 +786,7 @@ def plan(proposal_id: int, playbook: str = "") -> AdoptionPlan:
     refused = (*planned.unplaced, *(named.problems if named else ())) if playbook else planned.refused
     if refused:
         raise PolicyError(
-            "This can't be adopted; details.refused lists why. Fix it in the repository, then Refresh.",
+            "This can't be adopted; details.refused lists why. Fix it in the repository; HQ scans the push.",
             details={"refused": list(refused)},
         )
     return planned
@@ -811,7 +838,7 @@ def _decided(planned: AdoptionPlan, playbook: str | None) -> tuple[PlaybookChang
     if chosen:
         return chosen
     if playbook in planned.proposal.rejected_playbooks:
-        raise PolicyError("That playbook's change was rejected. Refresh to scan again.")
+        raise PolicyError("That playbook's change was rejected.")
     if playbook not in planned.procedures and playbook not in planned.before:
         raise RecordNotFound("No playbook of this scan result has that id.")
     return ()
@@ -885,11 +912,11 @@ class RejectProposal:
 def reject(command: RejectProposal, *, principal: Principal) -> Rejected:
     """Set aside the change a scan result makes to one playbook, which stays
     as adopted, or the whole scan result, so nothing of it waits to be
-    adopted until the next Refresh reads another."""
+    adopted until the next scan reads another commit."""
 
     proposal = SourceProposal.objects.select_for_update().filter(pk=command.proposal).first()
     if proposal is None:
-        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
+        raise RecordNotFound("No scan result has that ID.")
     if proposal.rejected_at is not None or command.playbook in proposal.rejected_playbooks:
         return {"ok": True, "rejected": False, "message": "Already rejected."}
     chosen = _decided(judged(proposal.pk), command.playbook)
@@ -923,10 +950,9 @@ def prune_proposals() -> int:
 
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:
-    """The automation source's commands: Refresh, which proposes, and Adopt and Reject, which decide."""
+    """The automation source's commands: Adopt and Reject, which decide on what a scan proposes."""
 
     return (
-        *automation_sources.capability_specs(),
         CapabilitySpec(
             ADOPT,
             "Adopt what a scanned commit changes in the playbooks HQ runs: one playbook's change, or every "
@@ -952,7 +978,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             REJECT,
             "Reject what a scanned commit changes: one playbook's change, which stays as adopted, or the whole "
-            "commit, so nothing waits to be adopted until a Refresh reads another. Only an operator rejects, "
+            "commit, so nothing waits to be adopted until a scan reads another. Only an operator rejects, "
             "and never through an agent.",
             Effect.REMOTE_WRITE,
             Capability.ADOPT_PLAYBOOKS,

@@ -280,6 +280,13 @@ class StatedTests(PassTestCase):
                     "1 part of what the playbook stated is not reported: 1 past the bridge's bounds", report["message"]
                 )
 
+    def test_a_hand_off_is_reported_only_for_the_run_s_machine(self):
+        unit = "example-pull@0123abcd.service"
+        report = self.stating({"handoff": {fakes.APP: unit, "db.example.com": unit}})
+
+        self.assertEqual(report["stated"], {"handoff": {fakes.APP: unit}})
+        self.assertIn("for a machine it was not run on", report["message"])
+
     def test_a_kind_named_past_its_bound_is_left_out(self):
         report = self.stating({"readings": {fakes.APP: {"host." + "x" * 96: [{"mount": "/"}]}}})
 
@@ -317,13 +324,16 @@ class StatedTests(PassTestCase):
             "records that are not a list": {"readings": {fakes.APP: {"host.filesystem": {"mount": "/"}}}},
             "a record that is not an object": {"readings": {fakes.APP: {"host.filesystem": ["/"]}}},
             "a preview line that is not text": {"preview": {fakes.APP: [1]}},
+            "a hand-off that is a command": {"handoff": {fakes.APP: "/usr/bin/sh -c id"}},
+            "a hand-off that is a list": {"handoff": {fakes.APP: ["example.service"]}},
+            "a hand-off that is no unit": {"handoff": {fakes.APP: "example"}},
         }
         for case, artifact in cases.items():
             with self.subTest(case):
                 report = self.stating(artifact)
 
                 self.assertNotIn("stated", report)
-                self.assertIn("not shaped as a reading or a preview", report["message"])
+                self.assertIn("not shaped as a reading, a preview or a hand-off", report["message"])
 
     def test_a_secret_in_what_a_playbook_stated_never_reaches_the_report(self):
         report = self.stating(

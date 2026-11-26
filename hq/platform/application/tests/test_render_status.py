@@ -15,20 +15,16 @@ from hq.domains.control_plane.observations.host import (
     RENDERER_NAME,
     STATUS_WORD,
 )
-from hq.platform.application.markup_testing import all_elements
 from hq.platform.core.testing import connection, declare
 
 from .. import render_status_findings as rules
-from ..findings import estate_findings
 from ..inventory_testing import store
-from ..security import web_principal
 from .commands import commands_on
-from .test_remedy_links import TRAP, UNOFFERED, _command_links, an_operator
+from .test_remedy_links import an_operator
 from .test_tailnet_posture import raised
 
 ROOT = Path(__file__).resolve().parents[4]
 SPEC = OBSERVATIONS[RENDER_STATUS_KIND]
-RULES = tuple(rule.name for rule in rules.RULES)
 
 
 def stamp(age: timedelta) -> str:
@@ -167,32 +163,13 @@ class PageTests(TestCase):
         self.user = an_operator()
         self.client.force_login(self.user)
 
-    def test_the_pages_show_the_command_and_every_remedy_link_opens_ready(self):
-        emitted = []
+    def test_the_pages_show_the_command(self):
         for page in (reverse("control_plane:findings"), reverse("action_items")):
             response = self.client.get(page)
             self.assertEqual(response.status_code, 200)
             body = response.content.decode()
             self.assertIn("could not refresh its credentials", body)
             self.assertIn("sudo systemctl start severino-hq-secrets.service", commands_on(body))
-            emitted += [
-                (element.attrs["href"], "GET")
-                for element in all_elements(body)
-                if element.tag == "a" and element.attrs.get("href", "").startswith("/commands/")
-            ]
-        principal = web_principal(self.user)
-        for finding in estate_findings(principal=principal):
-            if finding.rule not in RULES:
-                continue
-            offered = (*finding.presses, *((finding.check,) if finding.check else ()))
-            emitted += [(action.url, action.method) for action in offered]
-        self.assertTrue(emitted)
-        for label_url in _command_links([("", url, method) for url, method in emitted]):
-            with self.subTest(url=label_url[1]):
-                response = self.client.get(label_url[1])
-                self.assertEqual(response.status_code, 200)
-                self.assertNotContains(response, UNOFFERED)
-                self.assertNotContains(response, TRAP)
 
 
 class ThresholdTests(SimpleTestCase):

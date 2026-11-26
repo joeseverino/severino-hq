@@ -93,7 +93,7 @@ def _steps(node: TopologyNode, row: FilesystemSpace) -> tuple[Run, ...]:
             f"Find what fills {row.mount}",
             node.label,
             f"du -xh --max-depth=1 {mount} | sort -h | tail",
-            ("Free space there, then check again.",),
+            ("Free space there.",),
         ),
     )
 
@@ -128,7 +128,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.SERIOUS,
         _nearly_full,
         gathered=True,
-        operator_action="Free space on the mount, then check again.",
+        operator_action="Free space on the mount.",
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: f"free space is under {SERIOUS_FREE} and {SERIOUS_SHARE} of the disk",

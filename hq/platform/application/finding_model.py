@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Annotated, NotRequired, TypedDict
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink, read_link
-from .cadence import CONTROLLER_REFRESH
 from .describe import Describe
 from .display_words import Code, as_members, in_words
 from .entity_links import EntityLink, link_url
@@ -162,9 +161,6 @@ class Finding:
     # Why HQ can neither run a remedy nor name the exact command for this one.
     # Derivation fills it from the rule when the finding carries neither.
     no_help_reason: str = ""
-    # The press that reads again what it rests on and runs its check, set by
-    # derivation: a button, never a step.
-    check: ActionLink | None = None
     # When this was first seen open: when its condition began, where the
     # detector read it, else where a look recorded it (application.first_seen).
     since: datetime | None = None
@@ -179,9 +175,8 @@ class Finding:
     # a container's name on its machine. A page about one of them alone tells
     # its own problems from its neighbors' by it.
     part: str = ""
-    # The read its verify step asks the controller for, set beside that step's
-    # link, whose target alone cannot say whether it names a connection or a
-    # kind; a door that calls rather than links sends it as the payload.
+    # What to read again so its check runs on fresh data, set by derivation
+    # where its reader may ask for it; the queue's Refresh asks it.
     read_now: ControllerSweepCommand | None = None
     # When the reading it rests on was taken, where one reading dates it, and
     # that reading's kind: a card says how old what it claims is once it is
@@ -454,14 +449,7 @@ def distinct(findings: Iterable[Finding]) -> tuple[Finding, ...]:
     return tuple(found[key] for key in sorted(found))
 
 
-# A problem card's own button: read what the claim rests on again, then run
-# the check against it.
-CHECK_AGAIN = "Check again"
 PLAYBOOK_INVESTIGATION = "playbook-investigation"
-# What a step says last when a fresh read is what confirms the fix. A problem
-# card carries Check again; a connection's own page carries the refresh.
-THEN_CHECK_AGAIN = f"Then press {CHECK_AGAIN}."
-THEN_REFRESH = f"Then press {CONTROLLER_REFRESH.words()}."
 
 # A machine name a shell takes as one word.
 _MACHINE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")

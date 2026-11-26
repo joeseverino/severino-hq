@@ -478,13 +478,20 @@ class ReleaseTests(SimpleTestCase):
         terms = {term.strip() for term in defined.group(1).split("&&")}
         self.assertEqual(terms, {"github.event_name == 'workflow_dispatch'", "github.ref == 'refs/heads/main'"})
 
-    def test_the_composition_is_pushed_and_signed_only_in_a_release(self):
+    def test_the_composition_is_pushed_and_signed_only_in_a_release_or_as_its_pull_requests(self):
+        """A pull request's verified composition is pushed and signed as its
+        own, which no deploy accepts, so its release can promote it."""
+        gates = {"env.IS_RELEASE == 'true'", "steps.verified.outputs.image != ''"}
+        opens = (
+            "env.IS_RELEASE == 'true' &&",
+            "github.event_name == 'pull_request' && steps.coordinated.outputs.found != 'true'",
+        )
         publishing = [step for step in self.steps if re.search(r"docker push|cosign sign\b", script(step))]
-        self.assertGreaterEqual(len(publishing), 2)
+        self.assertGreaterEqual(len(publishing), 3)
         for step in publishing:
             with self.subTest(step=label(step)):
                 gate = condition(step)
-                self.assertTrue(gate == "env.IS_RELEASE == 'true'" or gate.startswith("env.IS_RELEASE == 'true' &&"))
+                self.assertTrue(gate in gates or gate.startswith(opens))
                 self.assertNotIn("candidate", text(step))
 
     def test_branch_code_builds_without_the_jobs_credentials(self):
@@ -669,6 +676,9 @@ class PublicLogTests(SimpleTestCase):
 
     def test_withheld_output_leaves_the_runner_only_sealed(self):
         uploads = [step for step in self.steps if step.get("uses", "").startswith("actions/upload-artifact@")]
+        # The verified composition's record, one digest its own step writes.
+        (record,) = [upload for upload in uploads if upload["with"]["name"] == "composition"]
+        uploads.remove(record)
         self.assertTrue(uploads)
         for upload in uploads:
             with self.subTest(step=label(upload)):

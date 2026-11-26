@@ -1073,6 +1073,41 @@ task is an audit row under the run's own id that leads back to the ask, and
 the run's end is one DONE or FAILED row (`audit.work_ended`), as a job's is,
 never a change to its record's state.
 
+A playbook that starts a long unit and leaves it running ends at once,
+stating a hand-off (`RunStated.handoff`: each of its machines to the unit's
+name). Its procedure names the read that settles it (`settled_by`: a read of
+the same commit, target kinds and `revision` input, held at adoption). HQ
+holds the run claimed, the hand-off on its result, under a lease its
+declaration's `timeout_seconds` bounds from the claim, which no worker renews
+(`controller._hold`). It then settles it from that read alone, asked as HQ
+itself on the run's machines at its revision, under its correlation
+(`automation_runs.queue_settling`). That read's readings become the held
+run's, and its outcome and what follows it are any run's (`_settled`, then
+`_finish` and `app_update_approval.succeeded`). What wakes HQ to ask is
+level-triggered, as a Kubernetes controller's informer and resync are: a job's
+end on HQ's machine (`unit.job.<result>`) makes `automation.held` due, which
+the host job `automation.settle` reads by asking the read of each run held on
+that machine. The lease's bound asks it once no event did
+(`_settle_lapsed_holds`), and a watcher's reconnect asks it as it asks every
+reading its events carry. A held run elsewhere settles at the bound. Its
+security properties:
+
+- An event settles nothing. Which job ended is never read. A read that states
+  no reading settles nothing, so a forged event, or another unit's, costs one
+  read-only read. The bound ends the run as `OutcomeUnknown` only once a read
+  asked at or after it states nothing.
+- At most one read is in flight per held run. Its key counts the reads that
+  have ended, as a workqueue queues a key once while it waits and again once
+  it has been processed.
+- A hand-off names only the run's own machines, as a reading does, and only a
+  unit's name, which the worker holds to `UnitName`, the pattern
+  `HostUnitRecord.unit` is held to; the contract holds none, as no string a
+  request carries is held to a shape a strike could break. A
+  run whose procedure names no settling read may not state one.
+- A held run's playbook has ended, so it holds its machines against a change
+  alone (`_holding`). A read, the settling one included, runs beside the unit.
+- No new privilege: the read is `effect: read`, run under the read profile.
+
 A provider's declaration is Django's. Its controller half is Go, in
 `controller/providers/`: one file set per integration, each registering its
 readers, actions and probes in its `admit…` function, which `providers.New`
@@ -1381,7 +1416,7 @@ never an action.
 An automation procedure (an Ansible playbook a worker runs against a host) is
 declared beside its playbook, in the repository the worker reads
 ([Declaring a playbook](#declaring-a-playbook)). HQ learns a repository's
-procedures by a Refresh, which proposes them as that repository's tip declares
+procedures by a scan, which proposes them as that repository's tip declares
 them, and runs one only once a person has adopted the proposal. Each procedure of the adopted commit is then an `OperationManifest`
 (`hq/platform/application/automation_manifest.py`), and an
 `OperationRegistry` is built from them. No extension supplies a manifest, and
@@ -1428,8 +1463,8 @@ know that Ansible has no word for. That is the manifest's `id`, `target_kinds`,
 `hosts`, `privilege`, `effect`, `timeout_seconds`, `recovery`, `retry`,
 `fixes` and `readings`, as the table above has them. It also holds `inputs`, which gives each text input
 its roles' argument specs declare a `pattern` and a `max_length`. The rest is
-Ansible's own, read from the playbook and its roles at the commit ([Refreshing
-the playbooks](#refreshing-the-playbooks)), and a sidecar names no playbook,
+Ansible's own, read from the playbook and its roles at the commit ([Scanning
+the playbooks](#scanning-the-playbooks)), and a sidecar names no playbook,
 revision or repository.
 
 A read-only playbook may declare `investigates` with the finding rule names it
@@ -1461,7 +1496,7 @@ the schema judges a sidecar with.
 
 The schema holds a sidecar's shape: every key, its type and range, the dotted
 names, the enumerations, and the inputs' names. What it cannot say HQ still
-refuses at a Refresh, naming each in the proposal. That is a read that names a
+refuses at a scan, naming each in the proposal. That is a read that names a
 privilege, a host not in HQ's spelling, a statement that is only whitespace, an
 input `pattern` Python cannot compile, a finding in `fixes` HQ raises none of,
 a kind in `readings` HQ declares no words for, and two sidecars with one id.
@@ -1640,7 +1675,22 @@ asked it follow the run's status (`jobs:run_status`) and link to its page, and
 once it ends the card keeps how it went, linked to the run. A preview or an
 apply that ended badly names the step it stopped on and what it said, and an
 apply names each app its machine did not release, in the tone the `apps.pull`
-reading declares for that app's result.
+reading declares for that app's result. The applier states two readings of
+each machine, each record read through its model (`AppRelease`,
+`PullReceipt`): `apps.receipt`, the machine's last pull beside the revision
+asked (`{revision, last_attempt, ok}`, a preview's too), and `apps.pull`, what
+each app runs once that pull is of the revision asked (`{project, result,
+health, changed}`). An apply stands applied only where every machine's receipt
+is `ok`, and a preview says the last pull as attempted, never as applied. An
+app released with `changed` false reads as unchanged.
+
+Before it is pressed, Approve says what applying it interrupts while its
+containers restart, on the press and in a held request's preview
+(`app_update_approval.interrupted`): each name a container is the origin of,
+and each name whose record a connection inside it holds, by the record's facet
+(a DNS server resolves its rewrites, a proxy routes its hosts). Both come from
+`machines.served_by`, which places each connection's endpoint once
+(`machines.connections_inside`).
 
 An image built on its host is classified once, where its standing is decided
 (`containers._built_here`): the machine's copy holds no registry digest, and
@@ -1657,8 +1707,8 @@ machine last released it at a revision outside the record's `builds` for
 the app: the commits from the newest that changed its directory to the head,
 exact because the default branch takes squash merges alone. That revision is
 the `revision` of the newest run that succeeded on the machine whose
-`apps.pull` reading has a `{project, result}` record of the app with
-`result` "ok" (`app_update_approval.applied_at`).
+`apps.pull` reading has a record of the app with `result` "ok"
+(`app_update_approval.applied_at`).
 
 Its security properties:
 
@@ -1691,7 +1741,8 @@ Its security properties:
   approval, or a record that no longer pins it, runs nothing, and the merge
   says why.
 - Every check a run passes still applies: a worker must take runs, one run
-  per playbook, one writer per machine (`_holding`), and a login for each
+  per playbook, one writer per machine (`_holding`, where a held run holds
+  its machines against a change alone), and a login for each
   machine (`reached`). A refused merge (`head_moved`, `checks_failing`, `checks_pending`) queues
   no run.
 
@@ -1722,8 +1773,8 @@ HQ knows the worker is there by its claims. Each claim of nothing but its
 work records its arrival (`cadence.note_automation`), so a worker that finds
 nothing to take still counts as seen, and never as the controller. One never
 seen, or not seen within two of its timer's floors while it holds no run's
-lease, is absent (`cadence.automation_standing`). Refresh and every
-playbook's run are then refused with the reason, a run or scan already
+lease, is absent (`cadence.automation_standing`). No scan is then asked
+for, every playbook's run is refused with the reason, a run or scan already
 waiting reads "Not started", and the finding `automation-worker-absent` says
 how to set one up.
 
@@ -1754,7 +1805,7 @@ reaches is refused before anything runs. HQ refuses it earlier, when the run is
 asked for. Each scan reports every machine and profile the worker has a login
 for, never an address, user or key, and a run is held to the newest scan's
 (`automation_runs.reached`). The refusal lists each missing pair in
-`details.missing`, and says that a login added since the last Refresh is seen
+`details.missing`, and says that a login added since the last scan is seen
 after the next one. That list is the worker's word, so a worker that lies can
 only make the early refusal wrong. The worker's own check at the claim still
 holds.
@@ -1839,7 +1890,8 @@ hands over as the `artifact_data` of the `playbook_on_stats` event, each machine
 by name when it is keyed by machine. A playbook that sets none is said by
 its verification, which its checks have just held (`hq_runner/events.py`).
 Beside `result`, the same event carries the playbook's `readings`
-(`{machine: {kind: [record]}}`) and `preview` (`{machine: [line]}`), which
+(`{machine: {kind: [record]}}`), `preview` (`{machine: [line]}`) and
+`handoff` (`{machine: unit}`), which
 Ansible merges by machine and the report carries as `stated`; any other stat
 is dropped. Their bounds are the bridge contract's `RunStated`, `StatedText`
 and `StatedBytes`, and the worker keeps each part (one machine's records of
@@ -1854,25 +1906,33 @@ it reports and HQ as it settles, and the run keeps what was stated in its
 result. The `runs` read carries each reading as stated; the run's page says
 each record in the words its kind declares, a swept reading's
 `ObservationSpec` (`title`, `describe`) or a playbook's own `StatedKind`
-(the applier's `apps.pull`, `app_update_approval.PULLED_KIND`), names and
+(the applier's `apps.pull` and `apps.receipt`, `app_update_approval.PULLED_KIND`
+and `RECEIPT_KIND`), names and
 counts a kind HQ declares nothing of, and folds the readings as stated under
-Raw data (`work_runs.wording`). A task's message that is a line of JSON, as a
-retry's often is, it says in the words of the `StatedKind` whose `progress`
-reads that shape (the applier's following task: the app releasing and how
-each ended app ended), and any other as the task said it (`work_runs.told`);
-the `runs` read carries the message as the worker said it. A
+Raw data (`work_runs.wording`). A held run's page says what it waits on, each
+unit on its machine, and what each Compose project's containers on HQ's
+machine have done since it was claimed, from the container events HQ stored
+(`work_runs.held_note`); the event's name is shown, and nothing is settled by
+it. A
 journal names each claim before it is sent and records a run once it starts,
 so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook
 on the local machine through its entry point, fetched from a repository on
 the same machine.
 
-### Refreshing the playbooks
+### Scanning the playbooks
 
-HQ learns which playbooks the worker's repository offers only when a person
-asks: `automation.source.refresh` (Refresh) queues one scan of the
-`automation.source` record and rings the doorbell, with no timer and no
-webhook. A Refresh while one waits is answered that one. The worker claims it
+HQ learns which playbooks the worker's repository offers by scanning it each
+time its default branch moves. A push to it is an inbound event that makes the
+repositories' reading due; once that reading is stored, a head of the
+repository other than the newest scan result's commit, or no scan result that
+names the repository, queues one scan of the `automation.source` record as HQ
+itself and rings the doorbell (`automation_sources.scan_when_due`, from
+`sweep.record_sweep`), with no timer of its own. The scan report names the
+repository it read (`SourceCatalog.repository`, from the host's
+configuration), which is how HQ knows a push as this source's. A head is asked
+for once while its scan waits and once a day after one failed, and nothing is
+asked while no worker would take it. The worker claims it
 as `automation.source:scan`, asks the repository which commit its default
 branch points at, fetches that commit as it fetches a run's, and runs nothing
 of it (`hq_runner/catalog.py`). A playbook HQ may run has a sidecar,
@@ -1895,7 +1955,7 @@ of the report still arrives.
 Each task the plays reach names its module in full, from `ansible.builtin` or a
 collection the worker ships, and one ansible-doc lists in the worker
 (`ansible.modules`). Any other is a problem of that playbook naming the file,
-the task and the module (`catalog.unshipped`), so it is refused at the Refresh,
+the task and the module (`catalog.unshipped`), so it is refused at the scan,
 before anything is offered for adoption. A short name is refused whatever a
 `collections:` keyword says, so the keyword resolves nothing the scan admits.
 `ansible.legacy` is refused, since Ansible looks for it beside the playbook
@@ -1958,7 +2018,7 @@ playbook it would replace.
 
 Adopting is a person's act. Adopt and `automation.source.reject` (Reject)
 take `adopt_playbooks`, which `security.HELD_ONLY_AT` keeps at the operator's
-own interfaces: an agent may refresh, and its adoption or rejection is refused
+own interfaces: an agent's adoption or rejection is refused
 before anything is held, whatever its grant or rules say. Reject sets aside
 the change to one playbook it names (`SourceProposal.rejected_playbooks`),
 which stays as adopted, or the whole proposal (`SourceProposal.rejected_at`,
@@ -1968,14 +2028,14 @@ rejected (`Reviewed.pending`).
 
 The Playbooks page (`control_plane:playbooks`) is the catalog adopted now,
 each playbook linking its command page, with the commit last adopted at
-under the title. Refresh is followed while its scan runs, and the same line
-says why the newest scan failed. While a commit waits, the table holds a row
+under the title. The same line names a newer commit while it waits for
+adoption, and says why the newest scan failed. While a commit waits, the table holds a row
 for every playbook, adopted or brought by the commit, its last column the
 change table's Status, and each changed row its own Adopt and Reject
 (`automation_sources.playbook_rows`); the head carries View diff, Adopt all
-(when HQ can adopt every change that waits) and Reject all, then Refresh
+(when HQ can adopt every change that waits) and Reject all
 (`automation_sources.decisions`). View diff opens the audit entry that records
-the scan's read (`automation_sources.entry_url`): who refreshed and when, the
+the scan's read (`automation_sources.entry_url`): the
 commit read and the commit adopted, the commit's own refusals, each changed
 playbook with its Adopt and Reject, and the comparison as the change table,
 with Adopt all and Reject all while it waits. Every value is the

@@ -20,6 +20,7 @@ from .contract import ObservationRecord, ObservationSpec, Stamp, container_key
 
 PROVIDER = "portainer"
 
+CONTAINER_KIND = "portainer.container"
 ENVIRONMENT_KIND = "portainer.environment"
 NETWORK_KIND = "portainer.network"
 VOLUME_KIND = "portainer.volume"
@@ -249,6 +250,12 @@ def _users(field: str, of: Callable[[Any], Any] = lambda item: item) -> Callable
     return keys
 
 
+def _chosen(record: Mapping[str, Any]) -> bool:
+    """Whether a network is one an operator made, never one every Docker host has."""
+
+    return str(record.get("name", "")) not in DEFAULT_NETWORKS
+
+
 def _network(record: Mapping[str, Any]) -> str:
     parts = [str(record.get("driver", "") or ""), *(str(subnet) for subnet in record.get("subnets") or ())]
     if record.get("internal"):
@@ -294,9 +301,11 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("name", "")),
         relation="Networks",
         describe=_network,
-        containers=_users("containers"),
+        # A container on a default network says so in how it runs (its ports,
+        # the own-network check), so only a chosen network is a relation.
+        containers=lambda record: _users("containers")(record) if _chosen(record) else (),
         container_relation="On network",
-        connects=lambda record: str(record.get("name", "")) not in DEFAULT_NETWORKS,
+        connects=_chosen,
     ),
     ObservationSpec(
         VOLUME_KIND,

@@ -13,13 +13,12 @@ and what each may do: docs/Architecture.md, "Approving an app update".
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import timedelta
 from typing import Annotated, Any
 
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import capfirst, get_text_list
-from pydantic import Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMMIT, PULL_REQUEST_KIND, REPOSITORY
@@ -40,7 +39,7 @@ lazy from .app_update_open import ticked
 lazy from .app_updates import AppUpdate, app_updates, merged_of
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
-lazy from .automation_manifest import OperationManifest
+lazy from .automation_manifest import REVISION_INPUT as REVISION, OperationManifest
 lazy from .automation_runs import (
     CHECK,
     capability_name,
@@ -57,15 +56,15 @@ lazy from .container_findings import UPDATE
 lazy from .containers import Container
 lazy from .entity_links import web_url
 lazy from .github_estate import repositories
+lazy from .images import ImageRef
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
 lazy from .labels import dotted, lower_first
-lazy from .moments import duration
+lazy from .machines import served_by
+lazy from .moments import when
 lazy from .payload_words import ChangeRow
 lazy from .resource_operations import ACTION_CAPABILITY, THEN, OperationAsked, queue_carried_merge
 lazy from .work_runs import WorkRun, run_row, standing_of as run_standing
 
-# The input of the playbook that applies a merge: the commit it applies.
-REVISION = "revision"
 _COMMIT = re.compile(COMMIT)
 _ACTIVE = (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
 
@@ -166,30 +165,58 @@ def _measured(command: ApproveUpdateCommand) -> ApprovalSubject | None:
 FILES = "Files changed"
 
 
-def _shown(held: Any) -> ChangePreview:
-    """Each pin it moves, and the files it changes one link away, on GitHub."""
+# What an apply interrupts while a container restarts, by what the container
+# does for each name (``machines.Serving``), in the words that say it.
+_INTERRUPTS = {"serves": "serving", "resolves": "resolving", "routes": "routing"}
 
-    rows = tuple(
+
+def interrupted(items: tuple[Container, ...]) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """What applying ``items`` briefly interrupts as each restarts: the names
+    each serves, resolves or routes, by that word (``_INTERRUPTS``)."""
+
+    serving = served_by()
+    found: dict[str, set[str]] = {}
+    for item in items:
+        held = serving.get((item.machine.name, item.running.name))
+        for does, names in (("serves", held.names), *held.through) if held else ():
+            found.setdefault(_INTERRUPTS[does], set()).update(names)
+    return tuple((doing, tuple(sorted(names))) for doing, names in sorted(found.items()) if names)
+
+
+def _shown(held: Any) -> ChangePreview:
+    """Each pin it moves and what applying it interrupts, and the files it
+    changes one link away, on GitHub."""
+
+    pins = tuple(
         ChangeRow(
             label=f"{pin.get('app', '')} {pin.get('service', '')}".strip(),
-            before=str(pin.get("before") or ""),
-            after=str(pin.get("after") or ""),
+            before=_release(pin.get("before")),
+            after=_release(pin.get("after")),
             change="changed" if pin.get("before") else "added",
         )
         for pin in held.baseline.get("pins") or ()
     )
     # Its subject is the pull request, `owner/name#number`, whose files GitHub shows under its address.
-    pull = next(
-        (
-            web_url(update.url)
-            for update in app_updates()
-            if f"{update.repository}#{update.number}" == held.resource_key
-        ),
-        "",
+    update = next((each for each in app_updates() if f"{each.repository}#{each.number}" == held.resource_key), None)
+    interrupts = tuple(
+        ChangeRow(label=f"Interrupts {doing}", before="", after=", ".join(names), change="")
+        for doing, names in interrupted(update.containers if update else ())
     )
+    pull = web_url(update.url) if update else ""
     return ChangePreview(
-        label="Pins", rows=rows, lines=(), more_label=FILES if pull else "", more_url=f"{pull}/files" if pull else ""
+        label="Would change",
+        rows=(*pins, *interrupts),
+        lines=(),
+        more_label=FILES if pull else "",
+        more_url=f"{pull}/files" if pull else "",
     )
+
+
+def _release(reference: Any) -> str:
+    """A pin the consent holds whole, said as the release it names."""
+
+    image = ImageRef.parse(reference)
+    return image.said if image else ""
 
 
 def _may_run(manifest: OperationManifest, principal: Any) -> None:
@@ -482,11 +509,11 @@ def _unapprovable(update: AppUpdate) -> Sentence:
 
 # Why GitHub refused a merge (``github.MergeRefusal``), as the update says it.
 REFUSED = {
-    "head_moved": "GitHub refused the merge: the head moved after the approval.",
-    "not_mergeable": "GitHub refused the merge: it cannot merge it as it stands.",
-    "checks_failing": "GitHub refused the merge: its checks fail.",
-    "checks_pending": "HQ held the merge: its checks have not all passed.",
-    "not_installed": "GitHub refused the merge: HQ's GitHub App is not installed on its repository.",
+    "head_moved": ("Merge refused", "GitHub's answer: the head moved after the approval"),
+    "not_mergeable": ("Merge refused", "GitHub's answer: it cannot merge it as it stands"),
+    "checks_failing": ("Merge refused", "GitHub's answer: its checks fail"),
+    "checks_pending": ("Merge held", "Its checks have not all passed"),
+    "not_installed": ("Merge refused", "HQ's GitHub App is not installed on its repository"),
 }
 
 
@@ -526,7 +553,7 @@ def _previewed(preview: OperationRequest) -> MergeStanding:
         return _under_way(preview, run)
     if preview.state == OperationRequest.State.SUCCEEDED:
         refused = str(((preview.result or {}).get(THEN) or {}).get("refused") or "")
-        return MergeStanding(ended(f"Previewed. {refused}".strip()), Tone.SERIOUS, operation=preview, run=run)
+        return MergeStanding("Previewed", Tone.SERIOUS, lines=(refused or "Not merged",), operation=preview, run=run)
     return _failed("Preview failed", "approve", preview, run)
 
 
@@ -539,12 +566,11 @@ def _merged(merge: OperationRequest) -> MergeStanding:
         if then.get("run"):
             return _applied(merge, str(then["run"]))
         return MergeStanding(
-            ended(f"Merged. {then.get('refused') or ''}".strip()), Tone.SERIOUS, taken=True, operation=merge
+            "Merged", Tone.SERIOUS, taken=True, lines=(str(then.get("refused") or "Not applied"),), operation=merge
         )
     refused = str((result.get("status") or {}).get("refused") or "")
-    return MergeStanding(
-        REFUSED.get(refused) or str(result.get("message") or "The merge failed."), Tone.SERIOUS, operation=merge
-    )
+    word, why = REFUSED.get(refused) or ("Merge failed", str(result.get("message") or ""))
+    return MergeStanding(word, Tone.SERIOUS, lines=(why or "GitHub gave no reason",), operation=merge)
 
 
 def _applied(merge: OperationRequest, first: str) -> MergeStanding:
@@ -560,7 +586,7 @@ def _applied(merge: OperationRequest, first: str) -> MergeStanding:
     if standing.tone == Tone.GOOD:
         return standing
     # Once merged, a failed apply is pressed again from the default branch (``app_updates.UpdateKind.MERGED``).
-    return replace(standing, words=f"Merged, {lower_first(standing.words)}", taken=True)
+    return replace(standing, word="Merged", lines=(f"Apply {lower_first(standing.word)}", *standing.lines), taken=True)
 
 
 def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] = ()) -> MergeStanding | None:
@@ -588,12 +614,10 @@ def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] 
         done = apply.completed_at
         if done is not None and any(item.running.observed_at > done for item in items):
             return None
-        # An app the run did not release is said in the tone its reading gives it.
-        amiss = run.evidence.amiss
-        tone = Tone.worst((tone for _line, tone in amiss), Tone.GOOD)
-        return MergeStanding(
-            "Applied", tone, taken=True, lines=tuple(line for line, _tone in amiss), operation=apply, run=run
-        )
+        # Applied only where every machine's pull released every app.
+        if _pull_applied(run.evidence.stated):
+            return MergeStanding("Applied", Tone.GOOD, taken=True, operation=apply, run=run)
+        return _failed("Incomplete", "apply", apply, run)
     return _failed("Apply failed", "apply", apply, run)
 
 
@@ -603,10 +627,14 @@ def _under_way(operation: OperationRequest, run: WorkRun) -> MergeStanding:
 
     standing = run_standing(run)
     return MergeStanding(
-        standing.said,
+        standing.label,
         Tone.ATTENTION,
         taken=True,
-        lines=(waits_on(operation), duration(timedelta(seconds=standing.seconds), short=True)),
+        lines=(
+            standing.note,
+            waits_on(operation),
+            f"asked {when(standing.since)}" if standing.since else "",
+        ),
         operation=operation,
         run=run,
     )
@@ -618,11 +646,15 @@ def _failed(what: str, again: str, operation: OperationRequest, run: WorkRun) ->
     did not release."""
 
     step, said = run.stopped
-    at = f" at “{step}”" if step else ""
     return MergeStanding(
-        f"{ended(f'{what}{at}')} Fix what stopped it, then {again} again.",
+        what,
         Tone.SERIOUS,
-        lines=(said, *(line for line, _tone in run.evidence.amiss)),
+        lines=(
+            f"At “{step}”" if step else "",
+            said,
+            *(line for line, _tone in run.evidence.amiss),
+            f"Fix what stopped it, then {again} again",
+        ),
         operation=operation,
         run=run,
     )
@@ -638,51 +670,112 @@ def waits_on(operation: OperationRequest) -> str:
     return controller_standing().cannot("", now=timezone.now())
 
 
-# The reading the applier states of each machine it released apps on: one
-# ``{project, result, health}`` record per app (the applier's
-# ``compose_project_outcomes``), ``result`` one of these, each in its words
-# and the tone a record of it is said in.
+# The readings the applier states of each machine it runs on, each record
+# read through its model alone: what each app runs after the pull, stated
+# once the machine's last pull is of the revision asked, and one record of
+# that pull, stated by a preview too.
 PULLED = "apps.pull"
+RECEIPT = "apps.receipt"
 RELEASED = "ok"
+
+
+class AppRelease(BaseModel):
+    """What the applier did with one app (``compose_project_outcomes``):
+    ``result`` one of ``_RESULTS``, ``changed`` whether it replaced what ran."""
+
+    model_config = ConfigDict(frozen=True)
+
+    project: str
+    result: str
+    health: str = ""
+    changed: bool
+
+
+class PullReceipt(BaseModel):
+    """The machine's last pull, beside the revision a run asked for: the
+    revision that pull attempted, and whether it was of the one asked and
+    released every app."""
+
+    model_config = ConfigDict(frozen=True)
+
+    revision: str
+    last_attempt: str
+    ok: bool
+
+
+def _read[Model: BaseModel](model: type[Model], record: Mapping[str, Any]) -> Model | None:
+    try:
+        return model.model_validate(record)
+    except ValidationError:
+        return None
+
+
+# Each result in its words and the tone a record of it is said in; one that
+# released an app it did not change is said as left alone.
 _RESULTS = {
     RELEASED: ("Released", Tone.GOOD),
     "refused": ("Refused; its trial failed, so it runs as before", Tone.ATTENTION),
     "rolled_back": ("Rolled back", Tone.ATTENTION),
     "failed": ("Failed", Tone.SERIOUS),
 }
+UNCHANGED = ("Unchanged", Tone.NEUTRAL)
 
 
-def _result(record: Mapping[str, Any]) -> tuple[str, Tone]:
-    result = str(record.get("result") or "")
+def _result(result: str, *, changed: bool = True) -> tuple[str, Tone]:
+    if result == RELEASED and not changed:
+        return UNCHANGED
     return _RESULTS.get(result, (capfirst(result), Tone.NEUTRAL))
+
+
+def _released(record: Mapping[str, Any]) -> tuple[str, Tone]:
+    """What the applier did with one app and its tone; unread for a record not of its shape."""
+
+    release = _read(AppRelease, record)
+    return _result(release.result, changed=release.changed) if release else ("Unread", Tone.NEUTRAL)
 
 
 def _pulled(record: Mapping[str, Any]) -> str:
     """What the applier did with one app, and the health it found."""
 
-    return dotted(_result(record)[0], record.get("health") or "")
-
-
-def _releasing(line: Mapping[str, Any]) -> str | None:
-    """How far the applier's pull has got, from one pass of its following
-    task (``{running, result, releasing, ended: {project: result}}``): the
-    app it is releasing, then how each ended app ended."""
-
-    ended = line.get("ended")
-    if "releasing" not in line or not isinstance(ended, Mapping):
-        return None
-    releasing = line["releasing"]
-    said = (f"{app}: {_result({'result': result})[0]}" for app, result in ended.items())
-    return dotted(f"Releasing {releasing}" if releasing else "", *said)
+    release = _read(AppRelease, record)
+    return dotted(_released(record)[0], release.health if release else "")
 
 
 PULLED_KIND = StatedKind(
     "App releases",
     title=lambda record: str(record.get("project") or ""),
     describe=_pulled,
-    progress=_releasing,
-    tone=lambda record: _result(record)[1],
+    tone=lambda record: _released(record)[1],
 )
+
+
+def _receipt_said(record: Mapping[str, Any]) -> tuple[str, Tone]:
+    """The machine's last pull as it stands beside the revision asked: only
+    one of that revision that released every app applied it."""
+
+    receipt = _read(PullReceipt, record)
+    if receipt is None:
+        return "Unread", Tone.NEUTRAL
+    if receipt.ok:
+        return "Applied", Tone.GOOD
+    if receipt.last_attempt == receipt.revision:
+        return "Not every app released", Tone.SERIOUS
+    return (f"Last attempted {receipt.last_attempt[:12]}" if receipt.last_attempt else "Never pulled"), Tone.NEUTRAL
+
+
+RECEIPT_KIND = StatedKind(
+    "Pull",
+    title=lambda record: str(record.get("revision") or "")[:12],
+    describe=lambda record: _receipt_said(record)[0],
+    tone=lambda record: _receipt_said(record)[1],
+)
+
+
+def _pull_applied(stated: tuple[dict[str, Any], ...]) -> bool:
+    """Whether a run's readings say every machine's pull applied the revision it asked."""
+
+    receipts = [_read(PullReceipt, record) for each in stated if each["kind"] == RECEIPT for record in each["records"]]
+    return bool(receipts) and all(receipt is not None and receipt.ok for receipt in receipts)
 
 
 def applied_at(machine: str, app: str) -> str:
@@ -697,8 +790,8 @@ def applied_at(machine: str, app: str) -> str:
         **{f"result__stated__readings__{host}__has_key": PULLED},
     ).order_by("-created_at")
     for run in runs.only("input", "result").iterator():
-        pulled = run.result["stated"]["readings"][host][PULLED] or ()
-        if any(each.get("project") == app and each.get("result") == RELEASED for each in pulled):
+        pulled = (_read(AppRelease, each) for each in run.result["stated"]["readings"][host][PULLED] or ())
+        if any(each is not None and (each.project, each.result) == (app, RELEASED) for each in pulled):
             return str(((run.input or {}).get("parameters") or {}).get(REVISION) or "")
     return ""
 
@@ -735,7 +828,10 @@ def approval_of(update: AppUpdate) -> Approval:
     approval resolves it (``applier``), so no surface offers a press it refuses."""
 
     return _approval(
-        merge_standing(update), update.containers, _unapprovable(update), f"Merges {update.label}, then applies it"
+        merge_standing(update),
+        update.containers,
+        _unapprovable(update),
+        f"Merges {update.label} and applies its merge commit",
     )
 
 
@@ -768,4 +864,8 @@ def _approval(standing: MergeStanding | None, items: tuple[Container, ...], refu
     # A press while another run holds the playbook or its machines is refused (``queue_run``).
     if busy := run_in_way(manifest, hosts):
         return Approval(standing, busy)
-    return Approval(standing, said=ended(f"{does} on {get_text_list(list(hosts), 'and')}"))
+    interrupts = [f"{doing} {counted(len(names), 'name')}" for doing, names in interrupted(items)]
+    said = ended(f"{does} on {get_text_list(list(hosts), 'and')}")
+    return Approval(
+        standing, said=ended(f"{said} Interrupts {get_text_list(interrupts, 'and')}") if interrupts else said
+    )

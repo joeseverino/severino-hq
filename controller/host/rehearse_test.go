@@ -84,7 +84,7 @@ func (f *fakeHost) rehearsalLeftNothing(t *testing.T) {
 		if strings.HasPrefix(call, "docker volume rm --force "+rehearsedVolume) {
 			removed = i
 		}
-		if strings.HasPrefix(call, "docker run") {
+		if strings.HasPrefix(call, "docker run") && !isSetup(call) {
 			lastRun = i
 		}
 	}
@@ -113,6 +113,7 @@ func TestAFailedRehearsalLeavesProductionAsItWas(t *testing.T) {
 		{name: "killed for memory", says: "memory=killed", host: rehearsal{killed: true}},
 		{name: "the plan fails", says: "plan=exit-3", host: rehearsal{planExit: 3}},
 		{name: "the live web restarted meanwhile", says: "live=restarted", host: rehearsal{liveRestarts: true}},
+		{name: "the host's setup does not check", says: "setup=failed", fail: "docker run --rm --pull never --name severino-hq-setup-"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeHost(t)
@@ -181,7 +182,7 @@ func TestAPassingRehearsalGoesOnToTheRelease(t *testing.T) {
 		t.Fatalf("%v\n%s", err, f.out.String())
 	}
 
-	if !strings.Contains(f.out.String(), "result=pass") {
+	if !strings.Contains(f.out.String(), "result=pass") || !strings.Contains(f.out.String(), " setup=ok ") {
 		t.Errorf("no passing verdict in the deploy's log:\n%s", f.out.String())
 	}
 	f.before(t, planCall, "systemctl stop severino-hq-secrets.timer")
@@ -195,7 +196,7 @@ func TestAPassingRehearsalGoesOnToTheRelease(t *testing.T) {
 	var web, plan string
 	copied := false
 	for _, call := range f.calls() {
-		if !strings.HasPrefix(call, "docker run") {
+		if !strings.HasPrefix(call, "docker run") || isSetup(call) {
 			continue
 		}
 		if !strings.Contains(call, "--pull never") || !strings.Contains(call, " "+next) {

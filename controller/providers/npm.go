@@ -72,7 +72,7 @@ func (r *Registry) npmSession(ctx context.Context, ref string) (string, string, 
 	}
 	token, err := cached(ctx, r, "npm-token:"+base+":"+connection.Ref, func() (string, error) {
 		signIn := &npmapi.ClientWithResponses{ClientInterface: &npmapi.API{Server: base, Client: vendorDoer{r: r}}}
-		answer, err := json200(signIn.RequestTokenWithResponse(ctx, npmapi.RequestTokenJSONRequestBody{Identity: login.Username, Secret: login.Password}))
+		answer, err := json200(signIn.RequestTokenWithResponse(ctx, npmapi.RequestTokenJSONRequestBody{Identity: login.Username, Secret: login.Password.Reveal()}))
 		if err != nil {
 			return "", fmt.Errorf("npm sign-in: %w", err)
 		}

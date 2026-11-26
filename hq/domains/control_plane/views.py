@@ -67,7 +67,7 @@ lazy from hq.platform.application.projection import iso
 
 from .cells import run
 from .models import ApprovalRequest, ManagedResource, OperationRequest
-from .provider_adapters.portainer import CONTAINER_KIND
+from .observations.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
 from .providers import PROVIDERS, describe_providers, read_spec, readout_rows, shown_spec
 lazy from .container_views import container_detail
@@ -372,10 +372,10 @@ class InfrastructureDetailView(RecordPageMixin, TemplateView):
 
     @override
     def get_page_lede(self):
-        # A record whose name is its type says what it does instead.
+        # Its kind is the heading of its first section, or its own page's parts
+        # say it, so only a record named for its type says what it does here.
         kind = self.record["kind"]
-        label = kind_label(kind)
-        return PROVIDERS[kind].summary if label == self.get_page_title() else label
+        return PROVIDERS[kind].summary if kind_label(kind) == self.get_page_title() else ""
 
     @cached_property
     def all_relationships(self):
@@ -503,7 +503,9 @@ class InfrastructureDetailView(RecordPageMixin, TemplateView):
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
         context["readout_rows"] = () if kind == CONTAINER_KIND else _linked_readout(record, self.relationships)
-        context["relationships"] = self.relationships
+        # The readings joined to it are raw data beside its own, in one fold.
+        context["relationships"] = replace(self.relationships, readouts=())
+        context["readouts"] = self.relationships.readouts
         context["spec_rows"] = _spec_rows(kind, record["key"], record["spec"], _readout(record), beside_readout=True)
         history = operation_history(run_rows(changes(self.row.operations.all(), HISTORY_ROWS)))
         context["history"] = (history,) if history else ()

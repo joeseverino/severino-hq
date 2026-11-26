@@ -48,9 +48,9 @@ class ScannerTests(SimpleTestCase):
         for it is the one the vulnerability gate scanned; secrets in the image
         are a pass of their own."""
         compose_steps = [step for job in jobs(workflow("compose.yml")).values() for step in steps(job)]
-        (sign,) = [step for step in compose_steps if "cosign sign " in script(step)]
-        # Each image it signs is handed to it as a variable of its own.
-        shipped = set(sign.get("env", {}))
+        # Each image a step signs is handed to it as a variable of its own:
+        # the release's, and a pull request's verified composition.
+        shipped = {name for step in compose_steps if "cosign sign " in script(step) for name in step.get("env", {})}
         self.assertTrue(shipped)
         scanned = {
             image: sbom

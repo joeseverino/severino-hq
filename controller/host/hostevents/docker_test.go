@@ -1,4 +1,4 @@
-package dockerevents
+package hostevents
 
 import (
 	"bytes"
@@ -35,6 +35,9 @@ func passMessage(action string, timeNano int64) string {
 		`"name":"wizardly_example","severino-hq.role":"controller","severino-hq.run":"EXAMPLEEXAMPLEEXAMPLEEXAMPLE"}},` +
 		`"scope":"local","time":` + jsonInt(timeNano/int64(time.Second)) + `,"timeNano":` + jsonInt(timeNano) + "}\n"
 }
+
+// docker is the Docker source on socket, as the watcher's unit reads it.
+func docker(socket string) Source { return Docker(socket, slog.New(slog.DiscardHandler)) }
 
 func jsonInt(n int64) string {
 	data, _ := json.Marshal(n)
@@ -91,12 +94,12 @@ func fakeEngine(t *testing.T, streams ...stream) (socket string, asked chan url.
 	return socket, asked
 }
 
-// watch runs the watcher on socket until the test ends; each batch of
+// watch runs the watcher on sources until the test ends; each batch of
 // events it tells HQ arrives on told, and each reconnect on reconnected.
-func watch(t *testing.T, socket string) (told chan []byte, reconnected chan struct{}) {
+func watch(t *testing.T, sources ...Source) (told chan []byte, reconnected chan struct{}) {
 	t.Helper()
 	told, reconnected = make(chan []byte, 8), make(chan struct{}, 8)
-	watcher := New(socket, func(_ context.Context, again bool, lines []byte) error {
+	watcher := New(func(_ context.Context, again bool, lines []byte) error {
 		if again {
 			if len(lines) != 0 {
 				t.Errorf("a reconnect carried %s", lines)
@@ -106,7 +109,7 @@ func watch(t *testing.T, socket string) (told chan []byte, reconnected chan stru
 		}
 		told <- bytes.Clone(lines)
 		return nil
-	}, slog.New(slog.DiscardHandler))
+	}, slog.New(slog.DiscardHandler), sources...)
 	watcher.Burst.Window = 50 * time.Millisecond
 	watcher.FirstRetry, watcher.LastRetry = time.Millisecond, time.Millisecond
 	watcher.Jitter = func(bound time.Duration) time.Duration { return bound }
@@ -145,7 +148,7 @@ func arrivals(t *testing.T, lines []byte) []runtime.InboundArrival {
 
 func TestTheWatcherAsksDockerForTheContainerChangesHQReads(t *testing.T) {
 	socket, asked := fakeEngine(t)
-	_, _ = watch(t, socket)
+	_, _ = watch(t, docker(socket))
 
 	query := arrived(t, asked)
 	var filters map[string][]string
@@ -173,7 +176,7 @@ func TestABurstIsOneBatchOfEventsHQReads(t *testing.T) {
 		lines: engineMessage("die", at) + engineMessage("health_status: unhealthy", at+1) + engineMessage("start", at+2),
 		hold:  true,
 	})
-	told, _ := watch(t, socket)
+	told, _ := watch(t, docker(socket))
 
 	events := arrivals(t, arrived(t, told))
 	if len(events) != 3 {
@@ -206,7 +209,7 @@ func TestHQsOwnRunsAreNeverTold(t *testing.T) {
 		lines: passMessage("start", at) + passMessage("die", at+1) + passMessage("destroy", at+2) + engineMessage("die", at+3),
 		hold:  true,
 	})
-	told, _ := watch(t, socket)
+	told, _ := watch(t, docker(socket))
 
 	events := arrivals(t, arrived(t, told))
 	if len(events) != 1 || events[0].Subject != "my-container" {
@@ -219,7 +222,7 @@ func TestHQsOwnRunsAreNeverTold(t *testing.T) {
 func TestEachReadOfTheStreamTellsHQItReconnected(t *testing.T) {
 	const at = int64(1461943101381709551)
 	socket, asked := fakeEngine(t, stream{lines: engineMessage("die", at)}, stream{hold: true})
-	told, reconnected := watch(t, socket)
+	told, reconnected := watch(t, docker(socket))
 
 	arrived(t, asked)
 	arrived(t, reconnected)
@@ -235,12 +238,12 @@ func TestEachReadOfTheStreamTellsHQItReconnected(t *testing.T) {
 func TestAQuietStreamIsToldAsListening(t *testing.T) {
 	socket, _ := fakeEngine(t)
 	told := make(chan []byte, 8)
-	watcher := New(socket, func(_ context.Context, again bool, lines []byte) error {
+	watcher := New(func(_ context.Context, again bool, lines []byte) error {
 		if !again {
 			told <- bytes.Clone(lines)
 		}
 		return nil
-	}, slog.New(slog.DiscardHandler))
+	}, slog.New(slog.DiscardHandler), docker(socket))
 	watcher.Burst.Heartbeat = 20 * time.Millisecond
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

@@ -299,6 +299,13 @@ REPLACES = "replaces"
 # The key of an operation's input holding the step HQ queues once it
 # succeeds: HQ's own, never told to the worker that runs it.
 THEN = "then"
+# The key of a read's input naming the held run it settles (``automation_runs.queue_settling``):
+# HQ's own too.
+SETTLES = "settles"
+# The key of a run's result holding the unit its playbook started on each of
+# its machines and left running (``RunStated.handoff``), while HQ holds it
+# and once it settles.
+HANDOFF = "handoff"
 
 
 type Prepared = tuple[ManagedResource, dict[str, Any]]

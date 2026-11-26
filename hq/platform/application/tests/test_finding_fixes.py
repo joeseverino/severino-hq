@@ -8,7 +8,7 @@ import typing
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.platform.application.markup_testing import elements, links, with_class
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.testing import SignedInTestCase, connection, declare, operator

@@ -9,16 +9,13 @@ from typing import ClassVar, override
 
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
-from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 
 from hq.domains.control_plane.models import SourceProposal
-from hq.platform.application.action_links import capability_action_link
 from hq.platform.application.automation_adoption import ADOPT, REJECT
 from hq.platform.application.automation_findings import worker_problems
 from hq.platform.application.automation_sources import (
-    REFRESH,
     SourceStanding,
     decisions,
     entry_url,
@@ -31,10 +28,8 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.core.web_refusals import refused
 lazy from hq.domains.jobs.models import JobState
-lazy from hq.platform.application.asks import FAILED, Ask, AskMixin, Standing
-lazy from hq.platform.application.cadence import automation_standing
+lazy from hq.platform.application.asks import FAILED
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
-lazy from hq.platform.application.work_runs import UNENDED, run_status_url
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 
 
@@ -52,36 +47,9 @@ class PlaybooksView(PageMixin, TemplateView):
     def principal(self):
         return web_principal(self.request.user)
 
-    @cached_property
-    def untaken(self) -> str:
-        """Why a Refresh would be refused, while no playbook worker reports; ""."""
-
-        return automation_standing().cannot("refresh", now=timezone.now())
-
     @override
     def get_page_actions(self):
-        refresh = capability_action_link(REFRESH, principal=self.principal)
-        scanned, scan = self.sources.scanned, self.sources.scan
-        # A page loaded while a scan is under way follows it, and one that
-        # has not started says so; one that ended is said under the title
-        # (``_playbooks_read.html``).
-        unended = scan is not None and scan.state in UNENDED
-        live = unended and scanned.live
-        asked = (
-            Ask(
-                refresh.label,
-                reverse("control_plane:playbooks_refresh"),
-                standing=scanned if unended else Standing(),
-                status_url=run_status_url(str(scan.pk)) if live else "",
-                title=self.untaken or "Read your repository for a newer commit.",
-                # Refused while no worker would take it: the problem drawn on
-                # the page says how to set one up.
-                disabled=bool(self.untaken),
-            )
-            if refresh is not None
-            else None
-        )
-        return (*decisions(self.sources.pending, self.principal, diff=True), *((asked,) if asked else ()))
+        return decisions(self.sources.pending, self.principal, diff=True)
 
     @override
     def get_context_data(self, **kwargs):
@@ -89,7 +57,7 @@ class PlaybooksView(PageMixin, TemplateView):
         sources = self.sources
         context.update(
             page_aside="control_plane/_playbooks_read.html",
-            # View diff, Adopt all and Reject all, then Refresh, side by side while a commit waits.
+            # View diff, Adopt all and Reject all side by side while a commit waits.
             page_beside=MOST_BESIDE if sources.pending else "",
             failed_tone=(
                 JobState(sources.reached.seen).tone
@@ -105,13 +73,6 @@ class PlaybooksView(PageMixin, TemplateView):
             problems=worker_problems(self.principal),
         )
         return context
-
-
-class RefreshView(AskMixin, View):
-    """Ask HQ's runner to scan the repository now."""
-
-    capability = REFRESH
-    back_to = "control_plane:playbooks"
 
 
 class ProposalDecisionView(View):

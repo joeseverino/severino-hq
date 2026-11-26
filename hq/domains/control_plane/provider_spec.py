@@ -157,9 +157,29 @@ class ConnectionKind:
     gives: str = ""
 
 
-# How a provider signs the request that carries an event, as the Worker
-# verifies it before anything else is read.
-type InboundScheme = Literal["github-hmac-sha256"]
+@dataclass(frozen=True, slots=True)
+class SignatureScheme:
+    """How a provider signs the request that carries an event, as the Worker
+    verifies it before anything else is read (``worker/src/verify.ts``).
+
+    The signature is an HMAC-SHA256 in hex, keyed by the route's secret, in a
+    header of comma-separated ``key=value`` parts.
+    """
+
+    header: str
+    # The part that holds a digest. Several are any one matching, as a sender
+    # rotating its secret signs with both.
+    digest: str
+    # The part that holds the Unix time it was signed at, which is then
+    # signed too, as ``<time>.<body>``; none signs the body alone.
+    timestamp: str = ""
+    # How far that time may be from the Worker's clock before the request is
+    # refused as a replay.
+    window_seconds: int = 0
+
+    def __post_init__(self) -> None:
+        if not (self.header and self.digest) or bool(self.timestamp) != (self.window_seconds > 0):
+            raise ValueError("A signature names its header and digest, and a signed time with its window.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,16 +192,22 @@ class InboundSpec:
     source that reports over the bridge alone (HQ's own host jobs) has none.
     """
 
-    # Each event by the provider's name for it (a webhook's event header), or
-    # that name and the payload's action joined by a dot where one action
-    # differs from the rest; the readings it makes due.
+    # Each event by the provider's name for it, or that name and the
+    # payload's action joined by a dot where one action differs from the
+    # rest; the readings it makes due.
     events: Mapping[str, tuple[str, ...]]
     path: str = ""
-    scheme: InboundScheme | None = None
-    signature_header: str = ""
+    scheme: SignatureScheme | None = None
+    # Whether the body is a JSON array of events, each read on its own.
+    batched: bool = False
+    # The header that names the delivery, which a repeat keeps; without one,
+    # an event is named by the body's SHA-256 and its place in the body, so
+    # a body sent again is the event already stored.
     delivery_header: str = ""
+    # Where the event's name is: a header, or a JSON pointer into the event.
     event_header: str = ""
-    # JSON pointers into the request's body.
+    event_pointer: str = ""
+    # JSON pointers into the event.
     action_pointer: str = ""
     subject_pointer: str = ""
     # The Worker secret the signature is checked with.
@@ -191,13 +217,23 @@ class InboundSpec:
     max_body_bytes: int = 0
     # What the provider's app must hold to be sent these events.
     requires: tuple[Permission, ...] = ()
+    # The readings these events keep current, so while the channel is heard a
+    # sweep reads them only as a backstop (``inbound_events.covers``). One that
+    # can change with no event (another machine's, a delivery that failed) is
+    # left out.
+    complete: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.events or not all(self.events.values()):
             raise ValueError("An inbound declaration names each event's readings.")
-        route = (self.path, self.scheme, self.signature_header, self.delivery_header, self.event_header)
-        if any(route) and not all((*route, self.secret_binding, self.max_body_bytes)):
-            raise ValueError(f"The route {self.path!r} names its scheme, its headers, its secret and its largest body.")
+        if not set(self.complete) <= {kind for kinds in self.events.values() for kind in kinds}:
+            raise ValueError("An inbound declaration is complete only for readings its events name.")
+        named = (self.event_header, self.event_pointer)
+        route = (self.path, self.scheme, self.secret_binding, self.max_body_bytes)
+        if any((*route, *named)) and not (all(route) and sum(map(bool, named)) == 1):
+            raise ValueError(
+                f"The route {self.path!r} names its scheme, its secret, its largest body and where an event's name is."
+            )
 
     def reads(self, event: str) -> tuple[str, ...]:
         """The readings ``event`` makes due: its own entry, else its name's

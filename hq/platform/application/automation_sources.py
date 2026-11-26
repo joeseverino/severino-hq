@@ -1,9 +1,10 @@
-"""Refresh: asking HQ's runner which playbooks its repository declares, and
-storing what it found as a scan result HQ judged.
+"""Asking HQ's runner which playbooks its repository declares whenever that
+repository's default branch moves, and storing what it found as a scan result
+HQ judged.
 
 Nothing is fetched here: the worker reads the repository with the token only it
 holds and reports over the bridge. A proposal is never adopted and never
-runnable. How the scan reads a repository: docs/Architecture.md, "Refreshing
+runnable. How the scan reads a repository: docs/Architecture.md, "Scanning
 the playbooks".
 """
 
@@ -13,13 +14,11 @@ from collections import Counter
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, Any
 
-from django.db import transaction
 from django.utils import timezone
 from django.utils.text import Truncator
 from pydantic import (
     ConfigDict,
     Field,
-    StrictStr,
     StringConstraints,
     ValidationError,
 )
@@ -31,23 +30,22 @@ lazy from hq.platform.core.models import AuditLog
 lazy from hq.platform.core.templatetags.change_tags import change_mark
 
 from .automation_manifest import DottedName, ProcedureTerms
-from .command_fields import Checked, Describe, Reason, RequiredText
-from .contracts import Closed, Effect
-from .integration_specs import CapabilitySpec
-from .resource_operations import OperationAsked
+from .command_fields import Checked, Reason, RequiredText
+from .contracts import Closed
 from .security import Capability, Principal
+from .titled import Titled
 from .ui import ended
 lazy from . import asks, automation_adoption, pages
 lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
 lazy from .automation_runs import access_words, anywhere, capability_name
 lazy from .cadence import ask, automation_standing
-lazy from .capabilities import Consented, consent
 lazy from .entity_links import entity_link
 lazy from .findings import rule_for
-lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
-lazy from .record_errors import PolicyError, RecordNotFound
-lazy from .resource_operations import Prepared, asked_fields, enqueue, operation_asked
+lazy from .github_estate import repository_for
+lazy from .infrastructure import ManagedResourceCommand, save_sourced
+lazy from .record_errors import RecordNotFound
+lazy from .resource_operations import Prepared, asked_fields, enqueue
 lazy from .routes import reverse
 lazy from .tables import Cell, DataTable, Row, TableColumn
 lazy from .work_runs import UNENDED, run_rows, run_url, seen_as_runs, standing_of
@@ -65,7 +63,8 @@ if TYPE_CHECKING:
     from .automation_adoption import PlaybookChange
     from .pages import PageAction
 
-REFRESH = "automation.source.refresh"
+# HQ's own act of asking for a scan, as its audit rows name it.
+SCAN = Titled("automation.source.scan", "Asked for a scan of the playbooks")
 # The page the source's and its playbooks' commands belong to.
 PLAYBOOKS = "control_plane:playbooks"
 # The one source's record: the repository is the host's configuration, so
@@ -170,6 +169,7 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
     verification = catalog["verification"]
     return models.SourceProposal.objects.create(
         operation=operation,
+        repository=catalog["repository"],
         branch=catalog["branch"],
         revision=catalog["revision"],
         verified=verification["verified"],
@@ -182,45 +182,63 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
     )
 
 
-@dataclass(frozen=True, slots=True)
-class RefreshCommand:
-    """A Refresh takes nothing but why it was asked: the repository is the
-    host's configuration."""
-
-    reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is refreshed, kept with the scan.")] = ""
-
-
-def _source(consented: Consented) -> ManagedResource:
-    current = models.ManagedResource.objects.select_for_update().filter(key=SOURCE_KEY).first()
-    if current is None:
-        save_managed_resource(
-            ManagedResourceCommand(key=SOURCE_KEY, kind=SOURCE_KIND, spec={"named_by": "host"}), consented=consented
+def _source(principal: Principal) -> ManagedResource:
+    if not models.ManagedResource.objects.filter(key=SOURCE_KEY).exists():
+        save_sourced(
+            ManagedResourceCommand(key=SOURCE_KEY, kind=SOURCE_KIND, spec={"named_by": "host"}), principal=principal
         )
     return models.ManagedResource.objects.select_for_update().get(key=SOURCE_KEY)
 
 
-@transaction.atomic
-def refresh(command: RefreshCommand, *, consented: Consented) -> OperationAsked:
-    """Queue one scan of the automation source for the worker, and answer the
-    one already waiting while there is one."""
+def _moved_past(newest: SourceProposal | None) -> str | None:
+    """The head of the source's default branch when the newest scan result
+    is not of it; "" while no scan result names its repository, so one is
+    due; None when it is of the head, or the head was not read."""
+
+    if newest is None or not newest.repository:
+        return ""
+    found = repository_for(newest.repository)
+    head = str(((found.head if found else None) or {}).get("sha", ""))
+    return head if head and head != newest.revision else None
+
+
+def scan_when_due(*, principal: Principal) -> OperationRequest | None:
+    """``queue_scan`` as HQ, ``principal``, when the source's default branch
+    has moved past the newest scan result's commit, or no scan result names
+    its repository yet; once a day for each head, so a scan that failed is
+    tried again the next day.
+
+    Asked once a reading of the repositories is stored, which a push to the
+    repository makes due, so a push is scanned with nobody asking.
+    """
+
+    head = _moved_past(models.SourceProposal.objects.order_by("-pk").first())
+    if head is None:
+        return None
+    return queue_scan(principal=principal, once=f"scan:{head or 'unnamed'}:{timezone.now().date().isoformat()}")
+
+
+def queue_scan(*, principal: Principal, once: str) -> OperationRequest | None:
+    """Queue one scan of the automation source asked by ``principal``, once
+    for ``once``, and ring for the worker; the scan queued, else None: one
+    already waits, or no worker would take it. Its door binds it as ``SCAN``."""
+
+    # A scan no worker will take would wait for nothing: the finding that
+    # says so (``automation_findings``) carries how to set one up.
+    if automation_standing().cannot("scan", now=timezone.now()):
+        return None
 
     def prepare() -> Prepared:
-        # A scan no worker will take would wait for nothing: the finding that
-        # says so (``automation_findings``) carries how to set one up.
-        untaken = automation_standing().cannot("refresh", now=timezone.now())
-        if untaken:
-            raise PolicyError(untaken)
-        resource = _source(consented)
-        return resource, asked_fields(
-            consent(consented).principal, reason=command.reason, generation=resource.generation
-        )
+        resource = _source(principal)
+        return resource, asked_fields(principal, reason="", generation=resource.generation)
 
-    operation, created = enqueue(models.OperationRequest.Action.SCAN, prepare)
-    if created:
-        # The worker pulls the scan over the bridge; the ring only says one
-        # waits, and only once it is stored for the claim to find.
-        ask(doorbell="automation")
-    return operation_asked(operation, queued=created)
+    operation, created = enqueue(models.OperationRequest.Action.SCAN, prepare, once=once)
+    if not created:
+        return None
+    # The worker pulls the scan over the bridge; the ring only says one
+    # waits, and only once it is stored for the claim to find.
+    ask(doorbell="automation")
+    return operation
 
 
 # ----------------------------------------------------------- how it stands
@@ -270,7 +288,6 @@ class SourceStanding:
     the newest proposal reviewed, and the catalog adopted now."""
 
     scan: OperationRequest | None
-    scanned: Standing
     # The newest scan that ended, and how it went: whether HQ's worker
     # reached the repository.
     reached: OperationRequest | None
@@ -334,17 +351,15 @@ def standing(proposal: int | None = None) -> SourceStanding:
     proposals = models.SourceProposal.objects.order_by("-pk")
     found = proposals.filter(pk=proposal).first() if proposal is not None else proposals.first()
     if proposal is not None and found is None:
-        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
+        raise RecordNotFound("No scan result has that ID.")
     scans = _scans().order_by("-created_at")
     scan = scans.first()
-    scanned = standing_of(run_rows((scan,))[0]) if scan is not None else asks.Standing()
     # While a newer scan has not ended, started or not, what the page says of
     # the repository's reach is still the last one that ended.
     reached = scans.exclude(state__in=UNENDED).first() if scan is not None and scan.state in UNENDED else scan
     catalog = automation_adoption.adopted()
     return SourceStanding(
         scan=scan,
-        scanned=scanned,
         reached=reached,
         reach=standing_of(run_rows((reached,))[0]) if reached is not None else asks.Standing(),
         proposal=reviewed(found) if found is not None else None,
@@ -499,26 +514,4 @@ def _row(
         ),
         actions=shown,
         data=data,
-    )
-
-
-def capability_specs() -> tuple[CapabilitySpec, ...]:
-    return (
-        CapabilitySpec(
-            REFRESH,
-            "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
-            Effect.REMOTE_WRITE,
-            Capability.MANAGE_INFRASTRUCTURE,
-            RefreshCommand,
-            refresh,
-            execution_notes=(
-                "Queue one scan, or answer the one already waiting.",
-                "HQ reads the newest commit on the default branch and runs none of it.",
-                "Keep the scan result, with each way a playbook falls short.",
-            ),
-            label="Refresh playbooks",
-            verb=models.OperationRequest.Action.SCAN.label,
-            wants="scan your repository for playbooks",
-            home=PLAYBOOKS,
-        ),
     )

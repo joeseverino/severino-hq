@@ -11,10 +11,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .container_standard import POWERFUL_CAPABILITIES, holds_socket, writable_system_binds
-from .standards import Standing
+from django.utils.text import get_text_list
+
+from .container_standard import (
+    POWERFUL_CAPABILITIES,
+    ROOT_POSTURE,
+    holds_socket,
+    privileged_ports,
+    root_ports,
+    writable_system_binds,
+)
+from .finding_steps import Do
+from .standards import INTENDED, Check, Standing
 from .ui import ended
-lazy from .container_findings import socket_holder_link
 lazy from .upgrades import data_of
 
 # Where HQ has no reading of what it uses: enough for most small services,
@@ -72,32 +81,25 @@ class Hardening:
         files = self.container.compose_files
         return files[0] if files else ""
 
-    @property
-    def yaml(self) -> str:
-        """Every change, under its service, as one block to paste."""
+    def step(self, check: Check) -> Do | None:
+        """Its fix for ``check`` as one step under that check's finding: the
+        compose lines that meet it, with what they can break, or why HQ cannot
+        write them."""
 
-        if not self.changes:
-            return ""
-        body = "\n".join(_indent(change.yaml, 4) for change in self.changes)
-        return f"services:\n  {self.service}:\n{body}\n"
-
-    @property
-    def cautions(self) -> tuple[Change, ...]:
-        return tuple(change for change in self.changes if change.caution)
-
-    @property
-    def any(self) -> bool:
-        return bool(self.changes or self.removals or self.unwritten)
-
-    @property
-    def socket_link(self) -> Any:
-        """The update that marks it as holding the socket, when HQ watches it
-        and the socket is what it fails."""
-
-        if not self.container.running.watcher or not any(item.check == "no-docker-socket" for item in self.unwritten):
-            return None
-
-        return socket_holder_link(self.container)
+        where = self.compose_file or "its compose file"
+        then = f"Then run docker compose up -d {self.service} in its directory."
+        if changes := [change for change in self.changes if check.id in change.checks]:
+            body = "\n".join(_indent(change.yaml, 4) for change in changes)
+            cautions = tuple(change.caution for change in changes if change.caution)
+            return Do(f"Set in {where}", value=f"services:\n  {self.service}:\n{body}", notes=(*cautions, then))
+        for removal in self.removals:
+            if removal.check == check.id:
+                cautions = (removal.caution,) if removal.caution else ()
+                return Do(f"Remove from {where}", value="\n".join(removal.lines), notes=(*cautions, then))
+        for gap in self.unwritten:
+            if gap.check == check.id:
+                return Do(check.fix, notes=(gap.reason,))
+        return None
 
     def covers(self, check_id: str) -> bool:
         """Whether HQ wrote a change (or a removal) that meets ``check_id``."""
@@ -195,11 +197,13 @@ def _system_paths(container, _runtime, unmet):
     )
 
 
-def _capabilities(_container, runtime, unmet):
-    if "no-powerful-capability" not in unmet:
+def _capabilities(container, runtime, unmet):
+    if "no-powerful-capability" not in unmet or ("not-root" in unmet and _must_be_root(container)):
         return
     added = [str(cap) for cap in runtime.get("cap_add") or ()]
     kept = [cap for cap in added if cap not in POWERFUL_CAPABILITIES]
+    if privileged_ports(container) and "NET_BIND_SERVICE" not in kept:
+        kept.append("NET_BIND_SERVICE")
     powerful = [cap for cap in added if cap in POWERFUL_CAPABILITIES]
     yaml = 'cap_drop:\n  - "ALL"\n' + (_listed("cap_add", kept) if kept else "cap_add: []")
     yield Change(
@@ -312,23 +316,35 @@ def _served_port(runtime: Mapping[str, Any]) -> tuple[str, str]:
 def _user(container, runtime, unmet):
     if "not-root" not in unmet:
         return
-
+    if _must_be_root(container):
+        yield Change(
+            ("not-root", *({"no-powerful-capability"} & unmet)),
+            "cap_drop",
+            ROOT_POSTURE,
+            "It runs as root, which binding a port under 1024 on the host's network takes, with every other "
+            "capability dropped: anything else it did as root (changing file owners, for one) then fails.",
+        )
+        return
     data = [str(mount.get("source")) for mount in data_of(container.mounts) if mount.get("type") == "bind"]
-    low = sorted(
-        {
-            port
-            for binding in runtime.get("port_bindings") or ()
-            if (port := _port(binding)).isdigit() and int(port) < 1024
-        }
-    )
     caution = (
         f"Its files must be readable by {NON_ROOT} and its data writable: chown -R {NON_ROOT} {' '.join(data)} first."
         if data
         else "An image that expects root (installing or changing owners as it starts) refuses to run."
     )
-    if low:
-        caution += f" It listens on {', '.join(low)}, which only root binds without NET_BIND_SERVICE."
-    yield Change(("not-root",), "user", f'user: "{NON_ROOT}"', caution)
+    yaml = f'user: "{NON_ROOT}"'
+    if low := privileged_ports(container):
+        caution += (
+            f" It binds {get_text_list(low, 'and')} on the host's network, which takes NET_BIND_SERVICE, "
+            "and its image must grant that to its program."
+        )
+        added = [str(cap) for cap in runtime.get("cap_add") or ()]
+        if "no-powerful-capability" not in unmet and "NET_BIND_SERVICE" not in added:
+            yaml += "\n" + _listed("cap_add", [*added, "NET_BIND_SERVICE"])
+    yield Change(("not-root",), "user", yaml, caution)
+
+
+def _must_be_root(container) -> bool:
+    return bool(root_ports(container, waived=container.posture.state_of("no-new-privileges") == INTENDED))
 
 
 def _socket(_container, _runtime, unmet):

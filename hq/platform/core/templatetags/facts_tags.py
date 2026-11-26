@@ -1,14 +1,38 @@
 """Facts: every label and its value a page shows, drawn by one part, its
 ``{% facts %}`` around each ``{% fact %}``."""
 
+import re
+from collections.abc import Iterable
+from typing import NamedTuple
+
 from django import template
 from django.template.base import token_kwargs
+from django.utils.safestring import mark_safe
+from django.utils.text import capfirst
 
+from hq.platform.application.card_items import Answer
+from hq.platform.application.display_words import Code
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.part_examples import facts
 from hq.platform.core.template_parts import Option, Part, SlotsNode
+from hq.platform.core.templatetags.line_breaks import code_breaks
 
 register = template.Library()
+
+# A value of words around nothing but one link: the link alone, which a
+# reader sees as the value, never as a link among words.
+_LONE_LINK = re.compile(r'<span class="prose">(<a\b(?:(?!<a\b).)*</a>)</span>', re.DOTALL)
+
+
+@register.filter(is_safe=True)
+def fact_markup(value):
+    """A fact's value or detail as the part draws it: a link that is the whole
+    value stands alone, and code a page wrote bare wraps at its separators."""
+
+    drawn = code_breaks(value)
+    lone = _LONE_LINK.fullmatch(str(drawn)) if hasattr(drawn, "__html__") else None
+    return mark_safe(lone[1]) if lone else drawn  # noqa: S308 - a part of markup already drawn
+
 
 FACTS_PARTIAL = "partials/_facts.html"
 FACT_PARTIAL = "partials/_fact.html"
@@ -37,10 +61,41 @@ class FactTakes(Part):
 
     def values(self, given: dict) -> dict:
         given = super().values(given)
+        if isinstance(answer := given.get("value"), Answer):
+            if given.get("detail"):
+                raise ValueError("A fact given an Answer takes its detail from the answer's `because`.")
+            given = {**given, "value": answer.short, "detail": answer.because, "tone": given["tone"] or answer.tone}
         detail = given.get("detail")
         if isinstance(detail, list | tuple):
-            return {**given, "detail": "", "lines": tuple(line for line in detail if line)}
+            return {**given, "detail": "", "lines": _lines(line for line in detail if line)}
         return given
+
+
+class Line(NamedTuple):
+    """One line of a fact's detail as its partial draws it: words, code, or
+    the links that stand together, a dotted run of names."""
+
+    text: str = ""
+    code: bool = False
+    links: tuple = ()
+
+
+def _lines(given: Iterable[object]) -> tuple[Line, ...]:
+    """Each line as drawn, words after a finished sentence raised to start
+    their own."""
+
+    drawn: list[Line] = []
+    for line in given:
+        if isinstance(line, Code):
+            drawn.append(Line(line, code=True))
+        elif isinstance(line, str):
+            follows = bool(drawn) and drawn[-1].text.rstrip().endswith((".", "!", "?"))
+            drawn.append(Line(capfirst(line) if follows else line))
+        elif drawn and drawn[-1].links:
+            drawn[-1] = drawn[-1]._replace(links=(*drawn[-1].links, line))
+        else:
+            drawn.append(Line(links=(line,)))
+    return tuple(drawn)
 
 
 FACTS = Part(
@@ -87,11 +142,13 @@ FACTS = Part(
     pairs to a row as keep each a short label and a short value wide, so a few short facts fill a
     wide frame rather than stacking down its start. The pairs stand in columns every row shares, so
     each label stands under the label above it, and a list of fewer pairs than its columns spreads
-    them over the row; every label is one width, so the values of a column line up. A value that is
-    a run of several (a `labeled` or `codes` list, addresses) takes the row. Narrower than two pairs
-    it is one pair to a row. A
-    label with several values holds them as a list inside one fact. An identifier in a value (code,
-    a `|breakable` name) runs inline, code a chip on each line it wraps to, so a value's first line
+    them over the row; a column's label is as wide as its longest label and its value takes the
+    rest, so the values of a column line up. A value that is a run of several (a `labeled` or `codes`
+    list, addresses) takes the row. Narrower than two pairs it is one pair to a row. A
+    label with several values holds them as a list inside one fact. Code a value or its detail holds
+    is drawn as `|breakable` draws it, by the part, so it wraps only at a separator. An identifier
+    moves to the next line whole where it fits there; one that opens the value runs inline, a chip
+    on each line it wraps to, so a value's first line
     stands on its label's line in every engine; the value keeps a chip's end padding free at its end,
     so a wrapped line's chip stays inside its column in any face. A list opened to read more (in a disclosure, a
     popover, a dialog) or set above what a form changes keeps one pair to a row, sits closer and
@@ -154,10 +211,20 @@ FACT = FactTakes(
     follow it in a `<small>` ("9 containers"), in the label's voice. A link in a value is the value's
     ink, underlined only under the pointer and the focus, its fact tinted, so only a toned fact's value
     is colored. A fact whose one target is its value's link is that link whole, its label and detail
-    pressed as its value is; one holding another target keeps each its own. Given `{% heading %}`,
+    pressed as its value is; one holding another target keeps each its own. A value whose words hold
+    nothing but a link (a `prose` span around it) is that link alone. Given `{% heading %}`,
     `{% panel %}` and `{% foot %}` parts and an `id`, its value is the button that opens the panel
     in place, as a menu does, and each `data_*` option is its attribute, so a fragment region in the
     band holds facts refreshed in place as its own (`core/_dashboard_glance.html`).
+
+    **A value is the short answer.** A state, a count, a version: never a sentence, never its label's
+    or its state's word again ("Waiting: Waiting for…"). The sentence that explains it is the detail,
+    and a tone other than neutral or good says why there. A value a domain object words is an
+    `Answer` (`value=update.brings_said`): its `short` is the value, its `because` the detail's lines
+    (words, a link, or `Code`), its `tone` the fact's. So a sentence has nowhere to go but the
+    detail: an `Answer` whose short is a sentence, or whose attention or serious tone has no reason,
+    is refused where it is built, and a reason that opens with the short answer again is dropped.
+    A measure in the detail says what it measures ("asked 3 minutes ago", never a bare "3 s").
 
     A fact's detail is running words. Its lines are the ones its markup declares: a `<small>` each,
     or a `detail=` given as a list. What a fact holds past its lines (its record list, a disclosure
@@ -210,7 +277,12 @@ FACT = FactTakes(
     parts=("value", "detail", "heading", "panel", "foot"),
     ordered={"label": Option(required=True, about="Its label.")},
     options={
-        "value": Option(about="Its value, which makes it one tag with no end."),
+        "value": Option(
+            about=(
+                "Its value, which makes it one tag with no end; an `Answer` gives its short answer as the value, "
+                "its reasons as the detail's lines and its tone."
+            )
+        ),
         "url": Option(about="The page in HQ its value links to; an outside one is the block form's `{% entity %}`."),
         "modal": Option(about="The dialog its value's link opens where script runs."),
         "id": Option(about="The id of the panel its value opens in place, given a `panel` part."),

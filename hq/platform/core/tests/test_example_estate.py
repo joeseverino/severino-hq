@@ -22,7 +22,7 @@ from hq.platform.application import analytics, approval_review, approvals, githu
 from hq.platform.application.automation_adoption import ADOPT
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
-from hq.platform.application.markup_testing import all_elements, elements, select, within
+from hq.platform.application.markup_testing import all_elements, elements, select, text, within
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
 from hq.platform.application.topology import derive_topology
 from hq.platform.core import seeds
@@ -348,18 +348,18 @@ class WalkedStatesTests(TestCase):
         nodes = derive_topology(principal=principal).nodes
         (machine,) = [node.id for node in nodes if node.kind == "machine" and node.label == CONTROLLER]
         host = {
-            finding["rule"]: finding["subject"]
+            finding["rule"]: finding
             for finding in findings(principal=principal)["findings"]
             if (finding["scope"] or "").startswith("host.")
         }
-        page = self.walked(reverse("control_plane:machine", kwargs={"name": CONTROLLER}))
+        page = text(self.walked(reverse("control_plane:machine", kwargs={"name": CONTROLLER})))
 
         self.assertEqual([node.id for node in nodes if node.kind == "controller"], [])
         self.assertLessEqual({"filesystem-nearly-full", "reboot-pending"}, set(host))
-        for rule, subject in host.items():
+        for rule, finding in host.items():
             with self.subTest(rule=rule):
-                self.assertEqual(subject, machine)
-                self.assertContains(page, f"rule%3D{rule}")
+                self.assertEqual(finding["subject"], machine)
+                self.assertIn(f"finding:{rule}:{machine}", page)
 
     def test_the_unfiled_receipt_s_match_page_offers_its_expense_as_a_row(self):
         from hq.platform.core.example_estate.records import UNFILED, UNFILED_RECEIPT

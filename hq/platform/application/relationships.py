@@ -48,6 +48,14 @@ class Relationships:
         found = self.group(phrase)
         return tuple(item.entity.label for item in found.items) if found else ()
 
+    @property
+    def read_through(self) -> frozenset[str]:
+        """The connections the page names as what it is read through, so a
+        group read by one of them says when, never who again."""
+
+        found = self.group(RELATIONS["reaches"].inverse)
+        return frozenset(item.entity.url for item in found.items if item.entity.url) if found else frozenset()
+
     def without(self, *phrases: str) -> Relationships:
         """The same answer less the groups a page already renders elsewhere."""
 

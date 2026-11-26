@@ -12,6 +12,9 @@ User=root
 # The deploy checkout is not a suitable source for it: deployment has to be able
 # to write there, and what root runs should not be writable by what deploys.
 WorkingDirectory=/usr/local/lib/severino-hq
+# Removed before the pass asks for its work, so work queued while it runs rings
+# again, and its path unit starts the next pass when this ends.
+ExecStartPre=/bin/rm -f /run/severino-hq/controller-doorbell
 ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host controller --apply
 # A pass is seconds to a few minutes. A oneshot has no start timeout of its own, and one
 # that hangs keeps its timer from ever firing again.

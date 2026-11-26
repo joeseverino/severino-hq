@@ -14,6 +14,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // What the Worker's Hub sends for one verified GitHub delivery (worker/src/
@@ -96,7 +97,7 @@ func hq(t *testing.T) (*SocketBridge, chan InboundBatch) {
 func listenerFor(t *testing.T, w *hub, bridge *SocketBridge) *Listener {
 	t.Helper()
 	connection := connections.Connection{Ref: "events", Provider: string(ConnectionProviderCloudflareEvents),
-		APIToken: &connections.APIToken{URL: "wss" + strings.TrimPrefix(w.URL, "https"), APIToken: socketToken}}
+		APIToken: &connections.APIToken{URL: "wss" + strings.TrimPrefix(w.URL, "https"), APIToken: secret.New(socketToken)}}
 	listener, err := NewListener(connection, w.Client(), bridge.Events, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
@@ -205,7 +206,7 @@ func TestAnUnansweredPingEndsTheConnectionWithNoHeartbeat(t *testing.T) {
 	w := newHub(t, holding)
 	w.pong = false
 	listener := listenerFor(t, w, bridge)
-	listener.Ping = 10 * time.Millisecond
+	listener.Ping, listener.PongWait = 10*time.Millisecond, 10*time.Millisecond
 	run(t, listener)
 
 	for range 2 {
@@ -219,7 +220,7 @@ func TestAnUnansweredPingEndsTheConnectionWithNoHeartbeat(t *testing.T) {
 func TestTheTokenGoesOnlyToAWSSAddress(t *testing.T) {
 	for _, address := range []string{"ws://events.example.com/socket", "https://events.example.com/socket", "wss:///socket"} {
 		connection := connections.Connection{Provider: string(ConnectionProviderCloudflareEvents),
-			APIToken: &connections.APIToken{URL: address, APIToken: socketToken}}
+			APIToken: &connections.APIToken{URL: address, APIToken: secret.New(socketToken)}}
 		if _, err := NewListener(connection, http.DefaultClient, nil, nil); err == nil {
 			t.Errorf("a listener would send its token to %s", address)
 		}

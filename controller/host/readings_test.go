@@ -36,29 +36,30 @@ func TestReportedPassesOverAnInstanceWithNoUnitType(t *testing.T) {
 	}
 }
 
-// systemd answers a glob with every loaded service, each with its count of
-// restarts it made on its own; only a service it restarted, and that the
-// reported set does not already ask about, is asked about again.
-func TestRestartedIsEachServiceSystemdRestartedBeyondTheReportedSet(t *testing.T) {
-	shown := []byte("Id=example-upload.service\nNRestarts=4127\n\n" +
-		"Id=example-steady.service\nNRestarts=0\n\n" +
-		"Id=severino-hq-web.service\nNRestarts=2\n\n" +
-		"Id=example-oneshot.service\nNRestarts=\n\n" +
-		"Id=example-a\\x2db.service\nNRestarts=1\n")
+// A service outside the reported set is asked about again when systemd
+// restarted it on its own or holds it as failed, as a oneshot instance whose
+// run failed is: it was never restarted, so only its state says so.
+func TestTroubledIsEachServiceSystemdRestartedOrFailedBeyondTheReportedSet(t *testing.T) {
+	shown := []byte("Id=example-upload.service\nNRestarts=4127\nActiveState=active\n\n" +
+		"Id=example-steady.service\nNRestarts=0\nActiveState=active\n\n" +
+		"Id=severino-hq-web.service\nNRestarts=2\nActiveState=failed\n\n" +
+		"Id=example-pull@7ad6909.service\nNRestarts=0\nActiveState=failed\n\n" +
+		"Id=example-oneshot.service\nNRestarts=\nActiveState=inactive\n\n" +
+		"Id=example-a\\x2db.service\nNRestarts=1\nActiveState=active\n")
 
-	restarted := Restarted(shown, []string{"severino-hq-web.service"})
+	troubled := Troubled(shown, []string{"severino-hq-web.service"})
 
-	if want := []string{"example-a\\x2db.service", "example-upload.service"}; !slices.Equal(restarted, want) {
-		t.Errorf("restarted %v", restarted)
+	if want := []string{"example-a\\x2db.service", "example-pull@7ad6909.service", "example-upload.service"}; !slices.Equal(troubled, want) {
+		t.Errorf("troubled %v", troubled)
 	}
 }
 
 // The services asked about again are the ones the first answer named, and
-// with nothing restarting the answer is empty rather than absent, so HQ can
+// with nothing restarting or failed the answer is empty rather than absent, so HQ can
 // tell "none" from "systemd did not say".
-func TestRestartingAsksSystemdForTheStateOfEachRestartedService(t *testing.T) {
+func TestForeignAsksSystemdForTheStateOfEachTroubledService(t *testing.T) {
 	var asked [][]string
-	counts := "Id=example-upload.service\nNRestarts=12\n"
+	counts := "Id=example-upload.service\nNRestarts=12\nActiveState=active\n"
 	machine := &Machine{Command: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
 		asked = append(asked, args)
 		if slices.Contains(args, "*.service") {
@@ -67,7 +68,7 @@ func TestRestartingAsksSystemdForTheStateOfEachRestartedService(t *testing.T) {
 		return exec.CommandContext(ctx, "printf", "%s", "Id=example-upload.service\n")
 	}}
 
-	state, err := machine.Restarting(t.Context(), []string{"severino-hq-web.service"})
+	state, err := machine.Foreign(t.Context(), []string{"severino-hq-web.service"})
 
 	if err != nil || string(state) != "Id=example-upload.service\n" {
 		t.Fatalf("state %q, %v", state, err)
@@ -76,9 +77,9 @@ func TestRestartingAsksSystemdForTheStateOfEachRestartedService(t *testing.T) {
 		t.Errorf("asked %v", asked)
 	}
 
-	counts = "Id=example-upload.service\nNRestarts=0\n"
-	state, err = machine.Restarting(t.Context(), nil)
+	counts = "Id=example-upload.service\nNRestarts=0\nActiveState=inactive\n"
+	state, err = machine.Foreign(t.Context(), nil)
 	if err != nil || state == nil || len(state) != 0 {
-		t.Errorf("nothing restarting answered %q, %v", state, err)
+		t.Errorf("nothing troubled answered %q, %v", state, err)
 	}
 }

@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import portainer
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.observations.public_registry import (
     DIGEST_KIND,
     IMAGE_KIND,
@@ -15,7 +16,6 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.platform.application.docker_estate import release_pins
 from hq.platform.application.images import ImageRef
-from hq.platform.application.services import CONTAINER_KIND
 
 from .names import (
     BUILT,
@@ -52,6 +52,11 @@ PACKAGES = ("pkg:apk/alpine/musl@1.2.5-r1", "pkg:apk/alpine/openssl@3.3.2-r1", "
 # The one container its compose file starts by tag alone, so the machine holds
 # the digest it could be pinned to and HQ names that pin.
 BY_TAG = "nginx-proxy-manager"
+# The DNS server tailnet devices use, on the host's network its job needs and
+# as root, which binding port 53 there under no-new-privileges takes, keeping
+# more capabilities than NET_BIND_SERVICE.
+HOST_NETWORK = "adguard"
+DNS_PORT = 53
 
 
 def containers():
@@ -119,8 +124,9 @@ def _running(name, port, image):
         "image": started_by(name, image),
         "state": "running",
         "status": "Up 12 days (healthy)",
-        "ports": [port],
-        "network_mode": "bridge",
+        # Docker reports no published port on the host's network.
+        "ports": [] if name == HOST_NETWORK else [port],
+        "network_mode": "host" if name == HOST_NETWORK else "bridge",
         "portainer_managed": False,
     }
 
@@ -169,15 +175,16 @@ def _runtime(name, port):
         mounts.append(
             {"type": "bind", "source": "/var/run/docker.sock", "destination": "/var/run/docker.sock", "read_only": True}
         )
+    on_host = name == HOST_NETWORK
     return _on_machine(
         container=name,
         stack=name,
         service=name,
         image_id=digest("image-id", name),
-        **KEPT,
+        **KEPT | ({"network_mode": "host", "user": "", "cap_add": ["NET_BIND_SERVICE", "CHOWN"]} if on_host else {}),
         mounts=mounts,
-        port_bindings=[{"container_port": f"{port}/tcp", "host_ip": LAN, "host_port": str(port)}],
-        exposed_ports=[port],
+        port_bindings=[] if on_host else [{"container_port": f"{port}/tcp", "host_ip": LAN, "host_port": str(port)}],
+        exposed_ports=[DNS_PORT, port] if on_host else [port],
         started_at=iso(UP_FOR),
         # What it used at the last sweep: a few hundred megabytes, a little CPU.
         memory_usage=(48 + 16 * len(name)) * 1_048_576,
@@ -219,7 +226,7 @@ def _network():
         driver="bridge",
         scope="local",
         subnets=["172.18.0.0/16"],
-        containers=[name for name, _port, _image in CONTAINERS],
+        containers=[name for name, _port, _image in CONTAINERS if name != HOST_NETWORK],
     )
 
 

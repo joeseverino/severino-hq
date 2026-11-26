@@ -8,7 +8,7 @@ Each thing to try is a fact band's cell that leads to the page it names.
 {% section "Things to try" %}
   {% facts layout="band" %}
     {% url 'control_plane:playbooks' as playbooks_url %}
-    {% fact "Playbooks" value="Adopt one, read its runs" url=playbooks_url icon="deploy" %}
+    {% fact "Playbooks" value="Adopt one" detail="Then read its runs" url=playbooks_url icon="deploy" %}
     {% url 'core:audit_list' as audit_url %}{% with_query audit_url awaiting=1 as held_url %}
     {% fact "Approval" value="Agent DNS change" url=held_url icon="shield" %}
     {% url 'control_plane:containers' as containers_url %}

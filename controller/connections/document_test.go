@@ -11,16 +11,18 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
-const secret = "sentinel-document-secret"
+const secretValue = "sentinel-document-secret"
 
 var kept = Store{Vault: "example-vault", Item: "example-item"}
 
 func valid() Document {
 	return Document{SchemaVersion: SchemaVersion, Connections: []Connection{
-		{Ref: "example-b", Provider: "example", Store: kept, ServiceAccount: &ServiceAccount{APIToken: secret}},
-		{Ref: "example-a", Provider: "example", Manages: true, Store: kept, Login: &Login{URL: "https://a.example.com", Username: "reader", Password: secret}},
+		{Ref: "example-b", Provider: "example", Store: kept, ServiceAccount: &ServiceAccount{APIToken: secret.New(secretValue)}},
+		{Ref: "example-a", Provider: "example", Manages: true, Store: kept, Login: &Login{URL: "https://a.example.com", Username: "reader", Password: secret.New(secretValue)}},
 	}}
 }
 
@@ -40,16 +42,16 @@ func TestEncodeIsDeterministicAndRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, b := decoded.Connections[0], decoded.Connections[1]
-	if a.Ref != "example-a" || !a.Manages || a.Login == nil || a.Login.Password != secret || a.Shape() != "login" {
+	if a.Ref != "example-a" || !a.Manages || a.Login == nil || a.Login.Password != secret.New(secretValue) || a.Shape() != "login" {
 		t.Fatalf("the first connection did not round trip: %s", a)
 	}
-	if b.Ref != "example-b" || b.Manages || b.ServiceAccount == nil || b.ServiceAccount.APIToken != secret || b.Login != nil {
+	if b.Ref != "example-b" || b.Manages || b.ServiceAccount == nil || b.ServiceAccount.APIToken != secret.New(secretValue) || b.Login != nil {
 		t.Fatalf("the second connection did not round trip: %s", b)
 	}
 }
 
 func TestDecodeRefusals(t *testing.T) {
-	good := `{"schema_version":2,"connections":[{"ref":"a","provider":"example","manages":false,"store":{"vault":"v","item":"i"},"service_account":{"api_token":"` + secret + `"}}]}`
+	good := `{"schema_version":2,"connections":[{"ref":"a","provider":"example","manages":false,"store":{"vault":"v","item":"i"},"service_account":{"api_token":"` + secretValue + `"}}]}`
 	if _, err := Decode([]byte(good)); err != nil {
 		t.Fatal(err)
 	}
@@ -62,22 +64,22 @@ func TestDecodeRefusals(t *testing.T) {
 		"the older format":        `{"schema_version":2,"connections":[{"ref":"a","prefix":"A","values":{"CONNECTION_REF":"a"}}]}`,
 		"trailing value":          good + `{}`,
 		"trailing garbage":        good + `x`,
-		"not json":                `SECRET=` + secret,
+		"not json":                `SECRET=` + secretValue,
 		"empty":                   ``,
 		"null connections":        `{"schema_version":2,"connections":null}`,
 		"missing connections":     `{"schema_version":2}`,
 		"invalid ref":             strings.Replace(good, `"ref":"a"`, `"ref":"../a"`, 1),
 		"no provider":             strings.Replace(good, `"provider":"example"`, `"provider":""`, 1),
 		"multi-line provider":     strings.Replace(good, `"provider":"example"`, `"provider":"a\nb"`, 1),
-		"no shape":                strings.Replace(good, `,"service_account":{"api_token":"`+secret+`"}`, ``, 1),
+		"no shape":                strings.Replace(good, `,"service_account":{"api_token":"`+secretValue+`"}`, ``, 1),
 		"two shapes":              strings.Replace(good, `"service_account"`, `"oauth_client":{"client_id":"i","client_secret":"s"},"service_account"`, 1),
 		"an unknown shape":        strings.Replace(good, `"service_account"`, `"example_shape"`, 1),
 		"an undeclared setting":   strings.Replace(good, `"api_token":"`, `"url":"https://a.example.com","api_token":"`, 1),
 		"setting name case":       strings.Replace(good, `"api_token"`, `"API_TOKEN"`, 1),
-		"multi-line value":        strings.Replace(good, secret, secret+`\nINJECTED=x`, 1),
-		"nul in value":            strings.Replace(good, secret, secret+`\u0000`, 1),
-		"empty required value":    strings.Replace(good, secret, ``, 1),
-		"missing required value":  strings.Replace(good, `"api_token":"`+secret+`"`, ``, 1),
+		"multi-line value":        strings.Replace(good, secretValue, secretValue+`\nINJECTED=x`, 1),
+		"nul in value":            strings.Replace(good, secretValue, secretValue+`\u0000`, 1),
+		"empty required value":    strings.Replace(good, secretValue, ``, 1),
+		"missing required value":  strings.Replace(good, `"api_token":"`+secretValue+`"`, ``, 1),
 		"no store":                strings.Replace(good, `"store":{"vault":"v","item":"i"},`, ``, 1),
 		"an empty store item":     strings.Replace(good, `"item":"i"`, `"item":""`, 1),
 		"a multi-line bootstrap":  strings.Replace(good, `"item":"i"`, `"item":"i","bootstrap":"op://a/b\nc"`, 1),
@@ -85,7 +87,7 @@ func TestDecodeRefusals(t *testing.T) {
 		"repeated setting":        strings.Replace(good, `"api_token":"`, `"api_token":"first","api_token":"`, 1),
 		"repeated field":          strings.Replace(good, `"provider":"example"`, `"provider":"other","provider":"example"`, 1),
 		"field case":              strings.Replace(good, `"provider"`, `"Provider"`, 1),
-		"value wrong type":        strings.Replace(good, `"`+secret+`"`, `7`, 1),
+		"value wrong type":        strings.Replace(good, `"`+secretValue+`"`, `7`, 1),
 		"manages wrong type":      strings.Replace(good, `"manages":false`, `"manages":"yes"`, 1),
 	}
 	for name, input := range cases {
@@ -94,7 +96,7 @@ func TestDecodeRefusals(t *testing.T) {
 			if !errors.Is(err, ErrInvalid) {
 				t.Fatalf("accepted: %v", err)
 			}
-			if strings.Contains(err.Error(), secret) {
+			if strings.Contains(err.Error(), secretValue) {
 				t.Fatalf("the error carries a value: %v", err)
 			}
 		})
@@ -140,7 +142,7 @@ func TestAnOptionalSettingMayBeAbsent(t *testing.T) {
 
 func TestEncodeRefusesADocumentDecodeWouldCallTooLarge(t *testing.T) {
 	large := valid()
-	large.Connections[0].ServiceAccount = &ServiceAccount{APIToken: strings.Repeat("a", MaxBytes-600)}
+	large.Connections[0].ServiceAccount = &ServiceAccount{APIToken: secret.New(strings.Repeat("a", MaxBytes-600))}
 	encoded, err := large.Encode()
 	if err != nil {
 		t.Fatalf("a document under the bound was refused: %v", err)
@@ -148,7 +150,7 @@ func TestEncodeRefusesADocumentDecodeWouldCallTooLarge(t *testing.T) {
 	if _, err := Decode(encoded); err != nil {
 		t.Fatalf("what encodes does not decode: %v", err)
 	}
-	large.Connections[0].ServiceAccount = &ServiceAccount{APIToken: strings.Repeat("a", MaxBytes)}
+	large.Connections[0].ServiceAccount = &ServiceAccount{APIToken: secret.New(strings.Repeat("a", MaxBytes))}
 	if _, err := large.Encode(); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a document the reader refuses was encoded: %v", err)
 	}
@@ -156,7 +158,7 @@ func TestEncodeRefusesADocumentDecodeWouldCallTooLarge(t *testing.T) {
 
 func TestEncodeRefusesWhatDecodeWould(t *testing.T) {
 	broken := valid()
-	broken.Connections[0].ServiceAccount = &ServiceAccount{APIToken: "a\nb"}
+	broken.Connections[0].ServiceAccount = &ServiceAccount{APIToken: secret.New("a\nb")}
 	if _, err := broken.Encode(); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("encoded a multi-line value: %v", err)
 	}
@@ -209,14 +211,14 @@ func TestNoConnectionTypeHoldsSettingsByName(t *testing.T) {
 
 func TestWithSettingsNamesOnlyWhatTheShapeDeclares(t *testing.T) {
 	base := Connection{Ref: "example", Provider: "example", Store: kept}
-	typed, err := base.WithSettings("login", map[string]string{"URL": "https://a.example.com", "USERNAME": "reader", "PASSWORD": secret})
-	if err != nil || typed.Login == nil || typed.Login.Username != "reader" || typed.Login.Password != secret || typed.Shape() != "login" {
+	typed, err := base.WithSettings("login", map[string]secret.Value{"URL": secret.New("https://a.example.com"), "USERNAME": secret.New("reader"), "PASSWORD": secret.New(secretValue)})
+	if err != nil || typed.Login == nil || typed.Login.Username != "reader" || typed.Login.Password != secret.New(secretValue) || typed.Shape() != "login" {
 		t.Fatalf("a login was not typed: %v", err)
 	}
 	if base.Login != nil {
 		t.Fatal("the connection it was built from changed")
 	}
-	if _, err := base.WithSettings("login", map[string]string{"URL": "https://a.example.com", "API_TOKEN": secret}); !errors.Is(err, ErrInvalid) || strings.Contains(err.Error(), secret) {
+	if _, err := base.WithSettings("login", map[string]secret.Value{"URL": secret.New("https://a.example.com"), "API_TOKEN": secret.New(secretValue)}); !errors.Is(err, ErrInvalid) || strings.Contains(err.Error(), secretValue) {
 		t.Fatalf("a setting the shape does not declare was accepted: %v", err)
 	}
 	if _, err := base.WithSettings("example_shape", nil); !errors.Is(err, ErrInvalid) {
@@ -225,9 +227,9 @@ func TestWithSettingsNamesOnlyWhatTheShapeDeclares(t *testing.T) {
 }
 
 func TestTrimmedAndComplete(t *testing.T) {
-	spaced := Connection{Ref: "example", Provider: " example ", Store: kept, Login: &Login{URL: " https://a.example.com ", Username: "reader", Password: " "}}
+	spaced := Connection{Ref: "example", Provider: " example ", Store: kept, Login: &Login{URL: " https://a.example.com ", Username: "reader", Password: secret.New(" ")}}
 	trimmed := spaced.Trimmed()
-	if trimmed.Provider != "example" || trimmed.Login.URL != "https://a.example.com" || trimmed.Login.Password != "" {
+	if trimmed.Provider != "example" || trimmed.Login.URL != "https://a.example.com" || !trimmed.Login.Password.IsZero() {
 		t.Fatalf("not trimmed: %q %q", trimmed.Provider, trimmed.Login.URL)
 	}
 	if spaced.Login.URL != " https://a.example.com " {
@@ -236,7 +238,7 @@ func TestTrimmedAndComplete(t *testing.T) {
 	if trimmed.Complete() {
 		t.Fatal("a login with a blank password is complete")
 	}
-	trimmed.Login.Password = secret
+	trimmed.Login.Password = secret.New(secretValue)
 	if !trimmed.Complete() {
 		t.Fatal("a whole login is not complete")
 	}
@@ -249,9 +251,9 @@ func TestTrimmedAndComplete(t *testing.T) {
 // carries none of its settings, whatever the verb.
 func TestAConnectionNeverPrintsItsSettings(t *testing.T) {
 	for _, shape := range Shapes() {
-		settings := map[string]string{}
+		settings := map[string]secret.Value{}
 		for index, setting := range shape.Settings {
-			settings[setting.Name] = fmt.Sprintf("%s-%d", secret, index)
+			settings[setting.Name] = secret.New(fmt.Sprintf("%s-%d", secretValue, index))
 		}
 		connection, err := (Connection{Ref: "example", Provider: "example", Store: kept}).WithSettings(shape.Name, settings)
 		if err != nil {
@@ -265,7 +267,7 @@ func TestAConnectionNeverPrintsItsSettings(t *testing.T) {
 			connection.String(), fmt.Sprintf("%+v", &connection), fmt.Sprintf("%+v", document), fmt.Sprintf("%#v", document.Connections),
 			fmt.Errorf("refused: %v", connection).Error(), logged.String(),
 		} {
-			if strings.Contains(printed, secret) {
+			if strings.Contains(printed, secretValue) {
 				t.Fatalf("a %s connection printed a setting: %s", shape.Name, printed)
 			}
 			if !strings.Contains(printed, "example") {

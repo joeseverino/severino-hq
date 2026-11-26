@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/secrets/connect"
 	"github.com/joeseverino/severino-hq/controller/secrets/connect/testclient"
 	"github.com/joeseverino/severino-hq/controller/secrets/connecttest"
@@ -277,7 +278,7 @@ func TestAFirstRenderInstallsEveryConsumersFile(t *testing.T) {
 		t.Fatalf("the controller would refuse the document: %v", err)
 	}
 	example, edge := connection(document, "example"), connection(document, "edge")
-	if example.APIToken == nil || example.APIToken.APIToken != secretToken || edge.SSHTransport == nil || edge.SSHTransport.Host != "edge.example.com" ||
+	if example.APIToken == nil || example.APIToken.APIToken != secret.New(secretToken) || edge.SSHTransport == nil || edge.SSHTransport.Host != "edge.example.com" ||
 		example.Store.Vault != connecttest.VaultName || example.Store.Item != id(1) {
 		t.Fatal("the document does not hold the connections")
 	}
@@ -1322,7 +1323,7 @@ func TestTheWritersTokenReachesTheDocumentByProjection(t *testing.T) {
 	h := newHost(t, apiToken(1, "example", "EXAMPLE"), writer)
 	h.ok()
 	document, _ := connections.ReadFile(h.document(), os.Getuid())
-	if publisher := connection(document, "publisher"); publisher.ServiceAccount == nil || publisher.ServiceAccount.APIToken != secretWriter || publisher.Provider != "onepassword" {
+	if publisher := connection(document, "publisher"); publisher.ServiceAccount == nil || publisher.ServiceAccount.APIToken != secret.New(secretWriter) || publisher.Provider != "onepassword" {
 		t.Fatal("the writer's token did not reach the connections document")
 	}
 	if h.ok().Outcome != "current" {

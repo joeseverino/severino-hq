@@ -6,7 +6,10 @@
 //   and holds sockets HQ dials out to, and writes only to its own Hub.
 // - A webhook's body is read only when its Content-Length is within the
 //   largest its provider sends. Its signature is verified over the raw body,
-//   read once, before anything parses it; a request that fails is answered
+//   read once, before anything parses it, by the one check every route's
+//   scheme goes through (verify.ts), which compares in constant time. A
+//   scheme that signs its time is refused outside its window, so a captured
+//   request is not accepted again later. A request that fails is answered
 //   401 and never reaches the Hub.
 // - A socket is accepted only with the SOCKET_TOKEN bearer, compared in
 //   constant time before the upgrade reaches the Hub, and an event reaches
@@ -21,19 +24,13 @@
 //   or the body.
 import routes from "./generated/routes.json";
 import { bearer, Hub, SOCKET_PATH, tag, withinContract, type InboundEvent } from "./hub";
-import { VERIFIERS, type Verifier } from "./verify";
+import { verify } from "./verify";
 
 export { Hub };
 
 type Route = (typeof routes.providers)[number];
 
-const ROUTES = new Map(
-  routes.providers.map((route): [string, { route: Route; verify: Verifier }] => {
-    const verify = VERIFIERS[route.scheme];
-    if (!verify) throw new Error(`${route.provider}: no verifier for scheme ${route.scheme}`);
-    return [route.path, { route, verify }];
-  }),
-);
+const ROUTES = new Map(routes.providers.map((route): [string, Route] => [route.path, route]));
 
 const encoder = new TextEncoder();
 
@@ -71,46 +68,59 @@ async function socket(request: Request, env: Env): Promise<Response> {
   return hub(env).fetch(request);
 }
 
-async function webhook(request: Request, env: Env, route: Route, verify: Verifier): Promise<Response> {
+async function webhook(request: Request, env: Env, route: Route): Promise<Response> {
   if (request.method !== "POST") return answer(405);
   // Bounded before the body is read: a provider states its length, and
   // sends nothing larger than its declared cap.
   const length = request.headers.get("Content-Length") ?? "";
   if (!/^\d+$/.test(length)) return answer(411);
   if (Number(length) > route.max_body_bytes) return answer(413);
-  const body = await request.arrayBuffer();
+  const body = new Uint8Array(await request.arrayBuffer());
   const secret = (env as unknown as Record<string, unknown>)[route.secret_binding];
-  if (!(await verify(text(secret), request.headers.get(route.signature_header), body))) return answer(401);
+  if (!(await verify(route.scheme, text(secret), request.headers.get(route.scheme.header), body))) return answer(401);
 
-  const name = request.headers.get(route.event_header) ?? "";
-  const delivery = request.headers.get(route.delivery_header);
-  if (!route.events.includes(name)) return answer(202);
-  if (!delivery) return answer(400);
   let payload: unknown;
   try {
     payload = JSON.parse(new TextDecoder().decode(body));
   } catch {
     return answer(400);
   }
-  const action = text(pointer(payload, route.action_pointer));
-  const event: InboundEvent = {
-    provider: route.provider,
-    event: action ? `${name}.${action}` : name,
-    subject: text(pointer(payload, route.subject_pointer)),
-    delivery_id: delivery,
-    received_at: new Date().toISOString(),
-  };
-  if (!withinContract(event)) return answer(400);
+  const sent: unknown = route.batched ? payload : [payload];
+  if (!Array.isArray(sent)) return answer(400);
+  const header = (name: string) => (name ? request.headers.get(name) : null);
+  const named = header(route.event_header);
+  const taken = sent
+    .map((item: unknown, index) => ({ item, index, name: named ?? text(pointer(item, route.event_pointer)) }))
+    .filter(({ name }) => route.events.includes(name));
+  if (!taken.length) return answer(202);
+  // A provider that names no delivery has it named by the body it signed, so
+  // the same body sent again is the event already stored.
+  const delivery = route.delivery_header
+    ? header(route.delivery_header)
+    : new Uint8Array(await crypto.subtle.digest("SHA-256", body)).toHex();
+  if (!delivery) return answer(400);
+  const received_at = new Date().toISOString();
+  const events = taken.map(({ item, index, name }): InboundEvent => {
+    const action = route.action_pointer ? text(pointer(item, route.action_pointer)) : "";
+    return {
+      provider: route.provider,
+      event: action ? `${name}.${action}` : name,
+      subject: route.subject_pointer ? text(pointer(item, route.subject_pointer)) : "",
+      delivery_id: route.batched ? `${delivery}.${index}` : delivery,
+      received_at,
+    };
+  });
+  const within = events.filter(withinContract);
   // Answered whether or not a listener is connected: a listener re-reads on
   // every reconnect, which covers what it missed.
-  await hub(env).broadcast(event);
-  return answer(202);
+  for (const event of within) await hub(env).broadcast(event);
+  return answer(within.length === events.length ? 202 : 400);
 }
 
 function answered(request: Request, env: Env, path: string): Promise<Response> | Response {
   if (path === SOCKET_PATH) return socket(request, env);
-  const provider = ROUTES.get(path);
-  return provider ? webhook(request, env, provider.route, provider.verify) : answer(404);
+  const route = ROUTES.get(path);
+  return route ? webhook(request, env, route) : answer(404);
 }
 
 export default {

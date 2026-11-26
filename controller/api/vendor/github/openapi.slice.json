@@ -3962,6 +3962,17 @@
       "type": "string",
       "example": "a84d88e7554fc1fa21bcbc4efae3c782a70d2b9d"
      },
+     "payload": {
+      "oneOf": [
+       {
+        "type": "object",
+        "additionalProperties": true
+       },
+       {
+        "type": "string"
+       }
+      ]
+     },
      "environment": {
       "description": "Name for the target deployment environment.",
       "example": "production",
@@ -3976,6 +3987,7 @@
      "id",
      "sha",
      "environment",
+     "payload",
      "created_at"
     ]
    },

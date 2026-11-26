@@ -44,7 +44,7 @@ func (r *Registry) admitAdGuard() {
 func (r *Registry) adguard(ref string, sweep bool) *adguardapi.ClientWithResponses {
 	connection, err := r.Supplied.For(runtime.ConnectionProviderAdGuard, ref)
 	login, missing := runtime.Need(connection.Login)
-	doer := vendorDoer{r: r, err: cmp.Or(err, missing), headers: map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(login.Username+":"+login.Password))}}
+	doer := vendorDoer{r: r, err: cmp.Or(err, missing), headers: map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(login.Username+":"+login.Password.Reveal()))}}
 	if sweep {
 		doer.cache = "adguard:" + ref
 	}

@@ -40,7 +40,7 @@ The deploy and the host enforce the rest, which no request can show:
 | Sign-in is required | an anonymous visitor | HQ's access rules |
 | HQ trusts only the proxies it lists | a forged client address | the trusted-proxy list |
 | HQ never holds a credential | a compromised web process leaking keys | the renderer and controller split |
-| Secrets are read from a loopback Connect server | a stolen Connect token used from anywhere | `hq-host bootstrap` refuses any other address |
+| Secrets are read from a loopback Connect server | a stolen Connect token used from anywhere | `hq-host` refuses any other address in `host.json` |
 | Images are signed and pinned by digest | running a tampered build | the deploy's signature check |
 | No extension is dropped by a release | a release silently removing a domain | the deploy refuses an undeclared drop |
 

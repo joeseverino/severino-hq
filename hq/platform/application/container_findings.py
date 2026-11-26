@@ -12,12 +12,10 @@ from typing import Any
 
 from django.utils.text import capfirst
 
-from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
+from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, RUNTIME_KIND
 from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.routes import reverse
 
-from .action_links import command_action, read_link
 from .container_standard import STANDARD
 from .containers import VULNERABLE, Container, ImageStanding, containers
 from .display_words import Code
@@ -39,7 +37,7 @@ from .finding_steps import Do, Run
 from .images import fixed_in
 from .projection import read_once
 from .references import Kind
-from .standard_findings import Help, Measured, Per, Standard, why
+from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
 from .ui import agreed, ended
@@ -245,7 +243,7 @@ def _standing(state: UpdateState) -> tuple[Fact, ...]:
     lead = (
         entity_link(Kind.RUN, run.id, label=run_standing(run).label)
         if run is not None and run.url
-        else ended(standing.words)
+        else ended(standing.word)
     )
     return tuple((state.standing_label, said) for said in (lead, *map(ended, standing.lines)))
 
@@ -428,52 +426,32 @@ def _reach(running: list[Container]) -> tuple[str, str]:
     return exposure.level, ended(exposure.sentence)
 
 
-def _help(check_id: str) -> str:
-    if check_id == "no-docker-socket":
-        return "HQ cannot tell which calls it needs. Mark it if it should control Docker."
-    return "The compose change is on its page."
+def help_for(item: Container, check: Check) -> Help:
+    """What a finding that ``item`` fails ``check`` offers, on its page and on
+    Needs you alike: the compose change that meets it, and the update that
+    adopts it or marks it as holding the socket."""
+
+    if not item.running.watcher:
+        remedies: tuple[FindingRemedy, ...] = (_adopt(item, "Adopt it"),)
+    elif check.id == "no-docker-socket":
+        remedies = (
+            FindingRemedy(capability=UPDATE_CAPABILITY, target=item.running.watcher, intent=SOCKET_HOLDER_INTENT),
+        )
+    else:
+        remedies = ()
+    step = item.hardening.step(check)
+    return Help(steps=(step,) if step else (), remedies=remedies)
 
 
 def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
-    remedies: list[FindingRemedy] = []
-    offers: list[ActionLink] = []
-    for about in subjects:
-        item = about.measurement.subject
-        name = item.running.name
-        if not item.running.watcher:
-            remedies.append(_adopt(item, "Adopt it"))
-        elif check.id == "no-docker-socket":
-            remedies.append(
-                FindingRemedy(capability=UPDATE_CAPABILITY, target=item.running.watcher, intent=SOCKET_HOLDER_INTENT)
-            )
-        else:
-            offers.append(
-                read_link(
-                    "compose-change",
-                    f"Compose change for {name}",
-                    f"{item.url}#hardening",
-                    reason="The lines to add to its compose file, and what each can break.",
-                )
-            )
+    helps = [help_for(about.measurement.subject, check) for about in subjects]
     return Help(
-        steps=(Do(check.fix, notes=(*why(check), _help(check.id))),), remedies=tuple(remedies), offers=tuple(offers)
+        steps=tuple(step for help in helps for step in help.steps),
+        remedies=tuple(remedy for help in helps for remedy in help.remedies),
     )
 
 
 SOCKET_HOLDER_INTENT = "Mark as intended"
-
-
-def socket_holder_link(item: Container) -> ActionLink:
-    """The update of its declaration, where ``holds_docker_socket`` is set."""
-
-    key = item.running.watcher
-    return command_action(
-        "mark-socket-holder",
-        UPDATE_CAPABILITY,
-        target=key,
-        intent=SOCKET_HOLDER_INTENT,
-        reason="This container is meant to control Docker. Stop warning about it.",
-    )
 
 
 # Only its serious checks are raised; the rest wait on the container's page.

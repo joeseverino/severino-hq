@@ -43,21 +43,13 @@ func newCheckHost(t *testing.T) *checkHost {
 		table: strings.Replace(EgressRules(), "100.64.0.0/10, ", "100.64.0.0/10,\n\t\t\t\t     ", 1)}
 	lib := filepath.Join(root, "lib")
 	h.checker = &Checker{
-		Lib: lib, Systemd: filepath.Join(root, "systemd"), RootUID: uint32(os.Getuid()),
-		Release:   filepath.Join(root, "release"),
+		Lib: lib, RootUID: uint32(os.Getuid()),
 		FreeBytes: DeployFreeBytes, Free: func(string) (uint64, error) { return h.free, nil },
 		Command: h.command, Out: &h.out,
 	}
 	for _, path := range []string{"deploy/bin/hq-host", "deploy/bin/hq-edge", ".source"} {
 		h.file(filepath.Join(lib, path), 0o755)
 	}
-	for _, unit := range []string{"severino-hq-web.service", "severino-hq-backup.timer"} {
-		h.file(filepath.Join(lib, "deploy", "systemd", unit), 0o644)
-		h.file(filepath.Join(h.checker.Release, unit), 0o644)
-		h.file(filepath.Join(h.checker.Systemd, unit), 0o644)
-	}
-	// The release adds a unit the installed release does not ship: the deploy installs it.
-	h.file(filepath.Join(h.checker.Release, "severino-hq-example.timer"), 0o644)
 	return h
 }
 
@@ -136,7 +128,6 @@ func TestACurrentHostIsReady(t *testing.T) {
 	out := h.check(CheckReady)
 
 	h.says(out, "ok      the host is the release it runs, the runner's sudo rules with it")
-	h.says(out, "ok      every established unit is installed")
 	h.says(out, filepath.Join(h.checker.Lib, "deploy", "bin", "hq-host")+" is root's alone")
 	h.says(out, filepath.Join(h.checker.Lib, "deploy", "bin", "hq-edge")+" is root's alone")
 }
@@ -147,9 +138,6 @@ func TestEachHostFaultFailsAndSaysWhatItIs(t *testing.T) {
 		says    string
 	}{
 		"a full disk": {func(h *checkHost) { h.free = 1 << 20 }, "the deploy needs 512 MiB"},
-		"an established unit missing": {func(h *checkHost) {
-			os.Remove(filepath.Join(h.checker.Systemd, "severino-hq-backup.timer"))
-		}, "severino-hq-backup.timer is not installed"},
 		"a host that is not its release": {func(h *checkHost) {
 			h.verify, h.verifyErr = "drift: deploy/bin/hq-host differs from the image's\n", true
 		}, "FAIL    deploy/bin/hq-host differs from the image's"},

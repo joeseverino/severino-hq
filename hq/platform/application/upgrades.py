@@ -12,11 +12,14 @@ from typing import Annotated, Any
 
 from django.utils.text import capfirst, get_text_list
 
+from .card_items import Answer
+from .container_words import named
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .describe import Describe
+from .display_words import Code
 from .images import affected, version
 from .tone import Tone
-from .ui import ended
+from .ui import counted, ended
 lazy from . import exposure
 lazy from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
 lazy from .exposure import LEVELS
@@ -59,6 +62,15 @@ class Plan:
         return not self.blockers
 
     @property
+    def waits_on(self) -> tuple[Blocker, ...]:
+        """Why it would not apply without a person, less what the page's own
+        facts already say: the size of the move, what checks it afterwards and
+        its exact build."""
+
+        said = {"not-a-patch", "unverifiable", "no-target-digest"}
+        return tuple(blocker for blocker in self.not_automatic if blocker.id not in said)
+
+    @property
     def recommended(self) -> bool:
         """Whether moving to the target is worth doing: it brings no known
         vulnerability of its own and, where the running version has some,
@@ -71,16 +83,30 @@ class Plan:
         return bool(self.data)
 
     @property
-    def fixes_tone(self) -> str:
-        return Tone.GOOD if self.fixes else ""
+    def fixes_said(self) -> Answer:
+        """Of what is known against what runs, what the move fixes. Asked only
+        where something is known: otherwise the band's vulnerabilities say it."""
+
+        if self.fixes:
+            return fixes_said(self.fixes)
+        return Answer(f"None of {len(self.container.standing.known_vulnerabilities)}")
 
     @property
-    def data_tone(self) -> str:
-        return Tone.ATTENTION if self.stateful else ""
+    def data_said(self) -> Answer:
+        """The data it keeps, each mount named, in attention: a new version may rewrite it."""
+
+        if not self.data:
+            return Answer("Keeps no data", ("It has no writable mount",))
+        sources = tuple(Code(str(mount.get("source", ""))) for mount in self.data)
+        return Answer(counted(len(self.data), "mount"), ("A new version may rewrite it", *sources), Tone.ATTENTION)
 
     @property
-    def verified_tone(self) -> str:
-        return "" if self.verified_by else Tone.ATTENTION
+    def verified_said(self) -> Answer:
+        """What would show the new version works: the first over the rest, or nothing, in attention."""
+
+        if not self.verified_by:
+            return Answer("Nothing", ("HQ can only see that it stays running",), Tone.ATTENTION)
+        return Answer(capfirst(self.verified_by[0]), tuple(capfirst(what) for what in self.verified_by[1:]))
 
     @property
     def risk(self) -> str:
@@ -292,63 +318,13 @@ def _not_automatic(change: str, verified_by, blockers, unvetted=()) -> tuple[Blo
         found.append(
             Blocker("unverifiable", "Nothing would show that the new version works, other than that it stays running.")
         )
-    found.append(Blocker("not-opted-in", "Automatic upgrades are not turned on for this container."))
     return tuple(found)
 
 
-@dataclass(frozen=True, slots=True)
-class Readiness:
-    """What an upgrade of this container would take, before any is published:
-    what would verify it, the data it keeps, and what keeps it from
-    applying on its own. The same answer a plan gives, without a target."""
+def fixes_said(fixes: tuple[Mapping[str, Any], ...]) -> Answer:
+    """What a move fixes, counted, over the first two it names."""
 
-    container: Container
-    data: tuple[Mapping[str, Any], ...]
-    verified_by: tuple[str, ...]
-    blockers: tuple[Blocker, ...]
-    not_automatic: tuple[Blocker, ...]
-
-    @property
-    def automatic(self) -> bool:
-        return not self.not_automatic
-
-    @property
-    def automatic_tone(self) -> str:
-        return Tone.GOOD if self.automatic else ""
-
-    @property
-    def verified_tone(self) -> str:
-        return Tone.GOOD if self.verified_by else Tone.ATTENTION
-
-
-def readiness_of(item: Container) -> Readiness:
-    data = data_of(item.mounts)
-    verified_by = _verified_by(item)
-    blockers = tuple(
-        blocker
-        for blocker in _blockers(item, item.standing, ())
-        if blocker.id not in ("no-target-digest", "target-affected")
-    )
-    not_automatic = tuple(
-        blocker
-        for blocker in _not_automatic(PATCH, verified_by, blockers, _uncheckable(item.standing))
-        if blocker.id != "not-a-patch"
-    )
-    return Readiness(item, data, verified_by, blockers, not_automatic)
-
-
-def _uncheckable(standing: Any) -> tuple[Blocker, ...]:
-    """Whether a release of this image could be checked when one lands: its
-    publisher lists the packages of what runs now, or it does not."""
-
-    attested = standing.attested
-    if attested is None or attested.get("unread"):
-        return (Blocker("attestations-unread", "Its package list and build record have not been read yet."),)
-    if not attested.get("packages"):
-        return (
-            Blocker("no-package-list", "Its publisher provides no package list, so a new release cannot be checked."),
-        )
-    return ()
+    return Answer(counted(len(fixes), "known vulnerability", "known vulnerabilities"), named(fixes), Tone.GOOD)
 
 
 def plans() -> list[Plan]:

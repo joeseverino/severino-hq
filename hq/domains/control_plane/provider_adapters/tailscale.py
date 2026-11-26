@@ -20,9 +20,11 @@ from ..permissions import Tailscale
 from ..provider_spec import (
     ConnectionKind,
     ControllerVerification,
+    InboundSpec,
     ProviderModel,
     ProviderSpec,
     SharedValue,
+    SignatureScheme,
     applies,
     expiry_phrase,
 )
@@ -381,4 +383,58 @@ CONNECTIONS = {
         create_url="https://tailscale.com/kb/1215/oauth-clients",
         gives="Your tailnet's devices, who may reach what, and its DNS.",
     )
+}
+
+# What the tailnet's webhook sends, each event making due the reading of what
+# it changed; Tailscale's docs name each event and how it signs a delivery
+# (https://tailscale.com/kb/1213/webhooks). The user events that page leaves
+# out, which the console offers, are named in Tailscale's client
+# (https://github.com/tailscale/tailscale-client-go-v2/blob/main/webhooks.go).
+# Its deprecated nodeAuthorized and nodeNeedsAuthorization are left out, as
+# nodeApproved and nodeNeedsApproval replace them.
+_DEVICE_EVENTS = (
+    "nodeCreated",
+    "nodeNeedsApproval",
+    "nodeApproved",
+    "nodeKeyExpiringInOneDay",
+    "nodeKeyExpired",
+    "nodeDeleted",
+    "nodeNeedsSignature",
+    "nodeSigned",
+    "exitNodeIPForwardingNotEnabled",
+    "subnetIPForwardingNotEnabled",
+)
+_USER_EVENTS = (
+    "userCreated",
+    "userNeedsApproval",
+    "userApproved",
+    "userRoleUpdated",
+    "userSuspended",
+    "userRestored",
+    "userDeleted",
+)
+INBOUND = {
+    "tailscale": InboundSpec(
+        {
+            **dict.fromkeys(_DEVICE_EVENTS, (TAILNET_KIND,)),
+            **dict.fromkeys(_USER_EVENTS, (readings.USER_KIND,)),
+            "policyUpdate": (TAILNET_POLICY_KIND,),
+        },
+        path="/tailscale",
+        # "t=<unix time>,v1=<hex>", an HMAC-SHA256 of "<t>.<body>", refused
+        # when signed more than five minutes ago.
+        scheme=SignatureScheme("Tailscale-Webhook-Signature", "v1", timestamp="t", window_seconds=300),
+        # "The root payload object is always an array of events", and a
+        # delivery carries no ID of its own.
+        batched=True,
+        event_pointer="/type",
+        subject_pointer="/tailnet",
+        secret_binding="TAILSCALE_WEBHOOK_SECRET",  # noqa: S106 - the Worker secret's name, never its value
+        # Tailscale states no cap; an event is under a kilobyte, so this
+        # holds a thousand in one delivery.
+        max_body_bytes=1024 * 1024,
+        # Every change to the policy file is an event. A device goes online
+        # and offline with none.
+        complete=(TAILNET_POLICY_KIND,),
+    ),
 }

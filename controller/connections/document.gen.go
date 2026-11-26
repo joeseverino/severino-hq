@@ -4,9 +4,7 @@
 package connections
 
 import (
-	"fmt"
-	"io"
-	"log/slog"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // ACME The settings a connection of the acme shape arrives with.
@@ -17,20 +15,9 @@ type ACME struct {
 
 // APIToken The settings a connection of the api_token shape arrives with.
 type APIToken struct {
-	APIToken string `json:"api_token" secret:"true" setting:"API_TOKEN"`
-	URL      string `json:"url" setting:"URL"`
+	APIToken secret.Value `json:"api_token" setting:"API_TOKEN"`
+	URL      string       `json:"url" setting:"URL"`
 }
-
-// String is the settings with each secret one redacted.
-func (s APIToken) String() string { return redactedString(s) }
-
-// Format writes String for every verb: %+v and %#v would otherwise print
-// the secret.
-func (s APIToken) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state, s.String()) }
-
-// LogValue is what a structured log records of the settings: each secret
-// one redacted.
-func (s APIToken) LogValue() slog.Value { return redactedLog(s) }
 
 // Connection One connection: its reference, provider, credential store and settings, and whether HQ may change things through it.
 type Connection struct {
@@ -76,38 +63,16 @@ type GitHubApp struct {
 
 // Login The settings a connection of the login shape arrives with.
 type Login struct {
-	Password string `json:"password" secret:"true" setting:"PASSWORD"`
-	URL      string `json:"url" setting:"URL"`
-	Username string `json:"username" setting:"USERNAME"`
+	Password secret.Value `json:"password" setting:"PASSWORD"`
+	URL      string       `json:"url" setting:"URL"`
+	Username string       `json:"username" setting:"USERNAME"`
 }
-
-// String is the settings with each secret one redacted.
-func (s Login) String() string { return redactedString(s) }
-
-// Format writes String for every verb: %+v and %#v would otherwise print
-// the secret.
-func (s Login) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state, s.String()) }
-
-// LogValue is what a structured log records of the settings: each secret
-// one redacted.
-func (s Login) LogValue() slog.Value { return redactedLog(s) }
 
 // OAuthClient The settings a connection of the oauth_client shape arrives with.
 type OAuthClient struct {
-	ClientID     string `json:"client_id" setting:"CLIENT_ID"`
-	ClientSecret string `json:"client_secret" secret:"true" setting:"CLIENT_SECRET"`
+	ClientID     string       `json:"client_id" setting:"CLIENT_ID"`
+	ClientSecret secret.Value `json:"client_secret" setting:"CLIENT_SECRET"`
 }
-
-// String is the settings with each secret one redacted.
-func (s OAuthClient) String() string { return redactedString(s) }
-
-// Format writes String for every verb: %+v and %#v would otherwise print
-// the secret.
-func (s OAuthClient) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state, s.String()) }
-
-// LogValue is what a structured log records of the settings: each secret
-// one redacted.
-func (s OAuthClient) LogValue() slog.Value { return redactedLog(s) }
 
 // SSHTransport The settings a connection of the ssh_transport shape arrives with.
 type SSHTransport struct {
@@ -123,19 +88,8 @@ type SSHTransport struct {
 
 // ServiceAccount The settings a connection of the service_account shape arrives with.
 type ServiceAccount struct {
-	APIToken string `json:"api_token" secret:"true" setting:"API_TOKEN"`
+	APIToken secret.Value `json:"api_token" setting:"API_TOKEN"`
 }
-
-// String is the settings with each secret one redacted.
-func (s ServiceAccount) String() string { return redactedString(s) }
-
-// Format writes String for every verb: %+v and %#v would otherwise print
-// the secret.
-func (s ServiceAccount) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state, s.String()) }
-
-// LogValue is what a structured log records of the settings: each secret
-// one redacted.
-func (s ServiceAccount) LogValue() slog.Value { return redactedLog(s) }
 
 // Store References to a connection's credential: its vault, its item, and the bootstrap item that mints a replacement.
 type Store struct {

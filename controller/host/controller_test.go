@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 	"github.com/joeseverino/severino-hq/controller/secrets/project"
 )
@@ -35,7 +36,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_RUNS", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
-	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS", "SEVERINO_HOST_FILESYSTEMS", "SEVERINO_HOST_REBOOT",
+	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_FOREIGN_UNITS", "SEVERINO_HOST_FILESYSTEMS", "SEVERINO_HOST_REBOOT",
 	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET", "HQ_CONTROLLER_GRANTS",
 }
 
@@ -73,7 +74,7 @@ func newLaunch(t *testing.T) *launch {
 	}
 	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
 		{Ref: reference, Provider: "cloudflare_dns", Store: connections.Store{Vault: "Example", Item: "example"},
-			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: secret.New(sentinel)}},
 	}}.Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +328,7 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	for _, want := range []string{
 		"SEVERINO_RENDER_STATUS=hq=/run/severino-hq/render-status/hq.json",
 		"SEVERINO_HOST_UNITS=/run/severino-hq/units",
-		"SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting",
+		"SEVERINO_HOST_FOREIGN_UNITS=/run/severino-hq/units-foreign",
 		"SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json",
 		"SEVERINO_HOST_FILESYSTEMS=/run/severino-hq/filesystems.json",
 		"SEVERINO_HOST_REBOOT=/run/severino-hq/reboot.json",
@@ -338,7 +339,7 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	}
 	for target := range l.mounted {
 		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || slices.Contains([]string{
-			"/run/severino-hq/units", "/run/severino-hq/units-restarting",
+			"/run/severino-hq/units", "/run/severino-hq/units-foreign",
 			"/run/severino-hq/tailnet-lock.json", "/run/severino-hq/filesystems.json", "/run/severino-hq/reboot.json",
 		}, target) {
 			t.Errorf("%s was mounted with nothing to mount", target)
@@ -589,13 +590,13 @@ func glanceDocument(t *testing.T, l *launch) {
 	store := connections.Store{Vault: "Example", Item: "example"}
 	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
 		{Ref: "example-portainer", Provider: "portainer", Store: store,
-			APIToken: &connections.APIToken{URL: "https://portainer.example.com", APIToken: "portainer-token"}},
+			APIToken: &connections.APIToken{URL: "https://portainer.example.com", APIToken: secret.New("portainer-token")}},
 		{Ref: "example-ssh", Provider: "ssh", Store: store,
 			SSHTransport: &connections.SSHTransport{Host: "192.0.2.10", User: "example", HostKey: "key", Identity: "example-ssh", Port: "22"}},
 		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store,
-			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: secret.New(sentinel)}},
 		{Ref: "example-events", Provider: string(runtime.ConnectionProviderCloudflareEvents), Store: store,
-			APIToken: &connections.APIToken{URL: "wss://events.example.com/socket", APIToken: "socket-token"}},
+			APIToken: &connections.APIToken{URL: "wss://events.example.com/socket", APIToken: secret.New("socket-token")}},
 	}}.Encode()
 	if err != nil {
 		t.Fatal(err)

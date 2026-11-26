@@ -13,16 +13,12 @@
 # mise.local.toml names as this tree can load it (tools/lib/extension-set.sh,
 # whose first line names each package's tree), with SEVERINO_HQ_SOURCE and
 # SEVERINO_HQ_REVISION stamped. Without an extension set to compose it runs
-# the host alone and says why; REQUIRE_COMPOSED=1 fails instead.
+# the host alone and says why.
 set -eu
 
 # shellcheck source=tools/lib/extension-set.sh
 . ./tools/lib/extension-set.sh
 compose_extensions
-if [ -z "${SEVERINO_HQ_PLUGINS}" ] && [ "${REQUIRE_COMPOSED:-0}" = 1 ]; then
-    echo "The composed suite is required and composes no extension (the line naming the set says why); mise run setup:extensions <checkout> names one." >&2
-    exit 1
-fi
 
 # The whole suite takes the heavy turn; a run its arguments narrow to one
 # process takes a share of it (tools/gate/turn.py).

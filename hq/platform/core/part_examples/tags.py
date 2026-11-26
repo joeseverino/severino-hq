@@ -869,6 +869,15 @@ DOT = Example("{{ count }}{% dot %}{{ age }}", context={"count": "3 example host
 
 
 ENTITY = Example('{% entity "machine"|entity_of:name %}', context={"name": "example-host-01"})
+# A name led by quiet words, in a line too narrow for both: the words go to
+# the next line with the name rather than end a line alone.
+ENTITY_STATES = {
+    "led": Example(
+        '<p style="inline-size: 14rem">Built from an example source '
+        '{% entity "machine"|entity_of:name lead="on" %}</p>',
+        context={"name": "example-host-01"},
+    ),
+}
 
 
 PRESENT = Example(

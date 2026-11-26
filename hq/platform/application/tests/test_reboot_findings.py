@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.platform.application.markup_testing import text
 from hq.platform.core.testing import connection, declare, operator
 
 from ..findings import estate_findings
@@ -72,8 +73,7 @@ class WaitingTests(TestCase):
 
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-controller"}))
 
-        # Its "check again" returns to the rule's findings, carried URL-encoded.
-        self.assertContains(page, f"rule%3D{RULE}")
+        self.assertIn("example-controller waits on a restart", text(page.content.decode()))
 
     def test_an_edge_that_waits_shows_it_on_its_own_machines_page(self):
         from django.urls import reverse
@@ -90,7 +90,7 @@ class WaitingTests(TestCase):
 
         self.assertIn("example-edge", finding["title"])
         self.assertIn("linux-image-example", evidence(finding).get("Packages", ""))
-        self.assertContains(page, f"rule%3D{RULE}")
+        self.assertIn("example-edge waits on a restart", text(page.content.decode()))
         self.assertContains(page, "linux-image-example")
         # Its steps run on the edge, the machine that waits.
         commands = steps()

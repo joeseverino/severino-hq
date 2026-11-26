@@ -10,6 +10,8 @@ from hq.platform.core.part_examples import DRAWN_AT, NARROW, runs, table
 from hq.platform.core.template_parts import Example
 lazy from hq.platform.application.action_links import read_link
 lazy from hq.platform.application.approvals import DECISIONS, _decision_link
+lazy from hq.platform.application.asks import Ask
+lazy from hq.platform.application.cadence import CONTROLLER_REFRESH
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
 lazy from hq.platform.application.dashboard import finding_rows
@@ -17,7 +19,7 @@ lazy from hq.platform.application.decisions import decision
 lazy from hq.platform.application.display_words import Code
 lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
-lazy from hq.platform.application.finding_model import CHECK_AGAIN, Finding, opens
+lazy from hq.platform.application.finding_model import Finding, opens
 lazy from hq.platform.application.finding_steps import Do, Run
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
@@ -58,7 +60,7 @@ def _month_gone_by(month=date(2026, 1, 1)):
 
 
 def _problems(*titles, family="", status="attention"):
-    """The queue's items about a thing, each with its meaning and the check that reads again."""
+    """The queue's items about a thing, each with its meaning."""
 
     return list(
         finding_rows(
@@ -795,7 +797,7 @@ def opened_problems():
                     title="Example certificate expired",
                     explanation="It serves no name, so nothing breaks when it expires.",
                     evidence=(("Certificate", "example.com"), ("Held in", "example-proxy")),
-                    steps=(Do("Renew the certificate where it is held, then press Check again."),),
+                    steps=(Do("Renew the certificate where it is held."),),
                     no_help_reason="HQ cannot renew this certificate.",
                 ),
             ),
@@ -836,9 +838,9 @@ def _glance():
     held = "00000000-0000-4000-8000-000000000001"
     said = "Asked with: machines set to example-host-01, security only set to yes, and 2 more fields."
     asked = Finding("approval", held, "example-agent wants to run a playbook", Tone.ATTENTION, said, held=True)
-    run, check = opens("Open run", "https://github.example/runs/1"), read_link("verify", CHECK_AGAIN, "/findings/")
+    run = opens("Open run", "https://github.example/runs/1")
     failing = [
-        Finding("example", n, f"{n} is failing", Tone.SERIOUS, "Failing job: test", primary=run, check=check)
+        Finding("example", n, f"{n} is failing", Tone.SERIOUS, "Failing job: test", primary=run)
         for n in ("example-app", "example-site")
     ]
     first, *runs = finding_rows("example", "Example", (asked, *failing))
@@ -853,5 +855,17 @@ WORK_QUEUE_STATES = {
     # where its title does, commands in one column, a lone step close.
     "opened": Example(
         '{% include "partials/_work_queue.html" %}', lambda: {"items": opened_problems(), "grouped": True}
+    ),
+    # Under a section's heading, the queue's one Refresh at its end, beside
+    # what the heading says, where no row draws its own.
+    "refresh": Example(
+        '{% section "Example" count=2 %}{% include "partials/_work_queue.html" %}'
+        '{% aside %}{% include "partials/_work_queue.html#refresh" %}{% endsection %}',
+        lambda: {
+            "items": _problems("Example certificate expires soon", "Example backup is late"),
+            "grouped": True,
+            "here": True,
+            "refresh": Ask(CONTROLLER_REFRESH.words(), "/example/read/", title="Reads it again now.", compact=True),
+        },
     ),
 }

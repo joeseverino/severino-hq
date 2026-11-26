@@ -62,13 +62,12 @@ from .action_links import (
     topology_investigation_links,
 )
 from .answer_fields import Pinned, SchemaVersion
-from .contracts import Effect, route_url
+from .contracts import Effect
 from .derivations import derivation, present
 from .derived_inputs import FINDINGS_READS, estate_variant
 from .describe import Describe, listed
 from .finding_fold import Subsumed, beneath_causes, finding_key, finding_scopes
 from .finding_model import (
-    CHECK_AGAIN,
     PLAYBOOK_INVESTIGATION,
     Finding,
     FindingEstate,
@@ -80,7 +79,7 @@ from .finding_model import (
     parse_stamp,
     written_fact,
 )
-from .finding_steps import Do, Press, Run, WrittenCheck, WrittenReason, WrittenSteps
+from .finding_steps import Do, Press, Run, WrittenReason, WrittenSteps
 from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import held_graph
@@ -95,7 +94,6 @@ from .topology_model import (
     TopologyNode,
 )
 from .ui import ended
-from .url_query import with_query
 from .workflows import WrittenAction, claim_identity
 lazy from . import automation_runs, cadence, capabilities
 lazy from .domains import resources_of
@@ -392,8 +390,8 @@ def _presses(
 
 def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | None) -> Finding:
     """What derivation adds to a detector's finding: its remedies as the
-    presses this principal may make, then its steps, its reason, its check and
-    the pages about its subject."""
+    presses this principal may make, then its steps, its reason, the read
+    that checks it again and the pages about its subject."""
 
     remedies, diagnostics = _playbooks(finding, subject, principal)
     subject_reads = tuple(
@@ -403,7 +401,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
     presses = _presses((*finding.remedies, *remedies), principal, subject)
-    check, read_now = _verification(finding, principal, subject)
+    wanted = _read_subject(finding, subject)
     # Every field the detector set carries through; only what derivation adds changes.
     return replace(
         finding,
@@ -412,10 +410,9 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         investigations=investigations,
         steps=(*presses, *finding_steps(finding, pressed=bool(presses))),
         no_help_reason=_no_help_reason(finding),
-        check=check,
         subject_link=read_link("subject", subject.label, subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
-        read_now=read_now,
+        read_now=wanted if wanted is not None and read_now_link(principal, **asdict(wanted)) else None,
         # Where no one reading dates it, its subject's last read does.
         observed_at=finding.observed_at or (parse_stamp(subject.observed_at) if subject else None),
     )
@@ -495,40 +492,13 @@ def _read_subject(finding: Finding, subject: TopologyNode | None) -> cadence.Con
     is involved."""
 
     if subject is not None and subject.kind == "connection" and subject.connection_ref:
-        return cadence.ControllerSweepCommand(connection_ref=subject.connection_ref)
+        return cadence.ControllerSweepCommand(connection_refs=(subject.connection_ref,))
     kind = finding.scope or (subject.kind_key if subject is not None else "")
     if kind in OBSERVATIONS or (kind in PROVIDERS and is_observable(kind)):
-        return cadence.ControllerSweepCommand(kind=kind)
+        return cadence.ControllerSweepCommand(kinds=(kind,))
     if finding.affected_scopes:
         return cadence.ControllerSweepCommand(every_connection=True)
     return None
-
-
-def _verification(
-    finding: Finding, principal: Principal, subject: TopologyNode | None
-) -> tuple[ActionLink | None, cadence.ControllerSweepCommand | None]:
-    """Refresh and check again where a reading is involved; else check again.
-    With the link, the read it asks for, when it asks for one."""
-
-    findings_url = route_url("control_plane:findings")
-    if not findings_url:
-        return None, None
-    wanted = _read_subject(finding, subject)
-    read = read_now_link(principal, **asdict(wanted)) if wanted is not None else None
-    again = with_query(findings_url, {"rule": finding.rule})
-    if read is not None:
-        verify = command_action(
-            "verify",
-            read.capability,
-            with_query(read.url, {"next": again}),
-            method="POST",
-            target=read.target,
-            intent=CHECK_AGAIN,
-            reason="Reads it now, then checks again.",
-        )
-        return verify, wanted
-    verify = read_link("verify", CHECK_AGAIN, again, reason="Runs this check against current data.")
-    return verify, None
 
 
 def derive_findings(
@@ -640,7 +610,6 @@ class SerializedFinding(FindingFacts):
     """One finding as the API answers it; MCP's `get_findings` makes its actions tool calls."""
 
     steps: WrittenSteps
-    check: WrittenCheck
     offers: Annotated[list[WrittenAction], Describe("Reads of its subject this reader may run before acting.")]
     investigations: Annotated[
         list[WrittenAction],

@@ -4,133 +4,36 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
-// Install puts the release in Lib on the host: its units, its tmpfiles rule
-// and its verifier. The renderer's unit goes first, with every drop-in
-// (WithDropIns), because what follows consumes what it renders. If the install fails, every unit file is
-// put back as it was. Enabling severino-hq-web.service is what moves a host
-// from a compose-run container to the unit: the unit replaces the container
-// that holds HQ's name with its own, and is not enabled unless HQ comes up.
-//
-// connections checks the controller's connections document once rendered.
-func (m *Machine) Install(ctx context.Context, connections func() error) (err error) {
-	dir := m.UnitDir()
-	shipped, err := Shipped(dir)
+// Install sets the host up for the release its tree holds, as a deploy does
+// once HQ is healthy on it: root's verifier first, then the runner image the
+// tree pins, verified and pulled, which applies the host's playbook (Setup).
+// If the playbook fails, every unit file is put back as it was.
+func (d *Deployer) Install(ctx context.Context) (err error) {
+	if err := d.Verifier(ctx); err != nil {
+		return err
+	}
+	runner, err := pinnedRunner(d.Lib)
 	if err != nil {
 		return err
 	}
-	if err := m.Verifier(ctx); err != nil {
+	if err := d.pullVerified(ctx, runner); err != nil {
 		return err
 	}
-	if err := m.private(ctx, "Unit verification", "unit-verify", "systemd-analyze", append([]string{"verify"}, Verified(dir, shipped)...)...); err != nil {
-		return err
-	}
-
-	render := WithDropIns(shipped, SecretsUnit)
-	rest := slices.DeleteFunc(slices.Clone(shipped), func(name string) bool { return slices.Contains(render, name) })
-	restore, err := m.SnapshotUnits()
+	restore, err := d.SnapshotUnits()
 	if err != nil {
 		return err
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			err = errors.Join(err, restore(), m.run(context.WithoutCancel(ctx), "systemctl", "daemon-reload"))
-		}
-	}()
-	for _, name := range render {
-		if err := InstallUnit(dir, m.Systemd, name); err != nil {
-			return err
-		}
+	if err := d.Setup(ctx, runner, d.Lib); err != nil {
+		return errors.Join(err, restore(), d.run(context.WithoutCancel(ctx), "systemctl", "daemon-reload"))
 	}
-	if err := m.run(ctx, "systemctl", "daemon-reload"); err != nil {
-		return err
-	}
-	if err := m.run(ctx, "systemctl", "start", SecretsUnit); err != nil {
-		return fmt.Errorf("the render failed: %w", err)
-	}
-	if err := connections(); err != nil {
-		return err
-	}
-	if err := m.private(ctx, "Controller connection preflight", "controller-preflight", filepath.Join(m.Lib, "deploy", "bin", "hq-host"), "controller"); err != nil {
-		return err
-	}
-	if err := m.private(ctx, "Content index preflight", "content-index-preflight", "docker", "exec", hostcore.Container, "hq-controller", "job", "content.sync"); err != nil {
-		return err
-	}
-
-	for _, name := range rest {
-		if err := InstallUnit(dir, m.Systemd, name); err != nil {
-			return err
-		}
-	}
-	retired, err := Retired(shipped, m.Systemd)
-	if err != nil {
-		return err
-	}
-	for _, name := range retired {
-		_ = m.run(ctx, "systemctl", "disable", "--now", name)
-		if err := os.Remove(filepath.Join(m.Systemd, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	if err := m.run(ctx, "systemctl", "daemon-reload"); err != nil {
-		return err
-	}
-	if err := m.takeOver(ctx); err != nil {
-		return err
-	}
-	enabled, err := Enabled(dir, shipped)
-	if err != nil {
-		return err
-	}
-	if err := m.run(ctx, "systemctl", append([]string{"enable", "--now"}, enabled...)...); err != nil {
-		return err
-	}
-	if err := m.tmpfiles(); err != nil {
-		return err
-	}
-	committed = true
-	fmt.Fprintln(m.Out, "Severino HQ installed, preflighted, and enabled.")
-	return nil
-}
-
-// takeOver starts severino-hq-web.service on a host where it is not running
-// yet, recording the image the running container was deployed with as the
-// release: what is running is the truth, and a record left by an attempt
-// that failed is not. A start that fails leaves the unit disabled and HQ's
-// name free, so the deploy that called this can put its own container back.
-func (m *Machine) takeOver(ctx context.Context) error {
-	if m.active(ctx, hostcore.WebUnit) {
-		return nil
-	}
-	out, err := m.Command(ctx, "docker", "inspect", "--format", "{{.Config.Image}}", hostcore.Container).Output()
-	if err == nil {
-		image, err := Pinned(strings.TrimSpace(string(out)))
-		if err != nil {
-			return err
-		}
-		if err := m.Record(image); err != nil {
-			return err
-		}
-	} else if _, statErr := os.Stat(m.ReleasePath()); statErr != nil {
-		return fmt.Errorf("no container is running and no release is recorded: %w", err)
-	}
-	if err := m.run(ctx, "systemctl", "enable", "--now", hostcore.WebUnit); err != nil {
-		ctx := context.WithoutCancel(ctx)
-		_ = m.run(ctx, "systemctl", "disable", "--now", hostcore.WebUnit)
-		_ = m.run(ctx, "docker", "rm", "--force", hostcore.Container)
-		return fmt.Errorf("HQ did not come up under its unit: %w", err)
-	}
-	fmt.Fprintln(m.Out, "HQ runs under "+hostcore.WebUnit+".")
+	fmt.Fprintln(d.Out, "Severino HQ installed, preflighted, and enabled.")
 	return nil
 }
 
@@ -210,21 +113,4 @@ func (m *Machine) installedUnits() (map[string][]byte, error) {
 		}
 	}
 	return units, nil
-}
-
-// tmpfiles installs the tmpfiles rule that makes the doorbell directory at
-// every boot.
-func (m *Machine) tmpfiles() error {
-	rule, err := os.ReadFile(filepath.Join(m.Lib, "deploy", "tmpfiles", "severino-hq.conf"))
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(m.Tmpfiles, 0o755); err != nil {
-		return err
-	}
-	target := filepath.Join(m.Tmpfiles, "severino-hq.conf")
-	if err := atomicfile.WriteFile(target, rule, 0o644); err != nil {
-		return err
-	}
-	return m.run(context.Background(), "systemd-tmpfiles", "--create", target)
 }

@@ -144,27 +144,19 @@ def _advised(owner) -> None:
 
 
 def _rescanned(owner) -> None:
-    """The example estate once a later Refresh found the commit adopted, so
+    """The example estate once a later scan found the commit adopted, so
     the procedures page has nothing to adopt."""
 
     _estate(owner)
-    example_estate.automation.rescanned(owner)
+    example_estate.automation.rescanned()
 
 
 def _unadoptable(owner) -> None:
-    """The example estate once a later Refresh read a commit HQ can't adopt,
+    """The example estate once a later scan read a commit HQ can't adopt,
     so the Playbooks page says why for the commit and each playbook."""
 
     _estate(owner)
-    example_estate.automation.unadoptable(owner)
-
-
-def _scanning(owner) -> None:
-    """The example estate while a Refresh is under way, so the procedures
-    page follows a scan."""
-
-    _estate(owner)
-    example_estate.automation.scanning(owner)
+    example_estate.automation.unadoptable()
 
 
 def _unattended(owner) -> None:
@@ -247,10 +239,16 @@ def _approved(ended: str) -> Callable[[Any], None]:
     return seed
 
 
+def _unlisted(owner) -> None:
+    _estate(owner)
+    example_estate.work.unlisted()
+
+
 def _updates(on: str = "") -> Callable[[Any], None]:
     """The example estate with an update of each app in a state of its own
     (``example_estate.work.update_states``), applied by a playbook written
-    for its machine, or, given ``on``, only for that other machine."""
+    for its machine, or, given ``on``, only for that other machine; the
+    agent's approval of the DNS server's update waits for a person."""
 
     def seed(owner) -> None:
         from hq.platform.application.security import web_principal
@@ -262,6 +260,8 @@ def _updates(on: str = "") -> Callable[[Any], None]:
         example_estate.docker.updates_out()
         example_estate.work.update_states(example_estate.docker.UPDATES)
         example_estate.automation.applies_updates(web_principal(owner), (on or example_estate.names.MACHINE,))
+        update = example_estate.work.resolver_update(example_estate.docker.UPDATES)
+        example_estate.automation.asks_to_approve(update, f"example/{example_estate.work.APPS}")
 
     return seed
 
@@ -300,7 +300,6 @@ SEEDS: dict[str, Seed] = {
     "images-left": Seed(_images_left, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
     "unadoptable": Seed(_unadoptable, _SET_UP),
-    "scanning": Seed(_scanning, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.
@@ -313,7 +312,12 @@ SEEDS: dict[str, Seed] = {
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
-    **{f"update-{ended}": Seed(_approved(ended), _SET_UP) for ended in ("preview-failed", "not-applied", "applied")},
+    **{
+        f"update-{ended}": Seed(_approved(ended), _SET_UP)
+        for ended in ("queued", "preview-failed", "not-applied", "held", "applied")
+    },
+    # The open app update's new image, whose publisher attaches no package list.
+    "update-unlisted": Seed(_unlisted, _SET_UP),
     "app-updates": Seed(_updates(), _SET_UP),
     # Applied only by a playbook written for another machine.
     "app-updates-elsewhere": Seed(_updates("edge-01"), _SET_UP),

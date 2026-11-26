@@ -49,6 +49,14 @@ def applies(hosts=(APP,), **fields):
     return manifest(id=APPLY, input_type=Revision, hosts=hosts, fixes=("container-image-update",), **fields)
 
 
+def receipt(revision=MERGED, *, last=MERGED, ok=True, apps=()):
+    """What the applier states of the machine's last pull beside ``revision``,
+    and each app it released when that pull was of it."""
+
+    readings = {"apps.receipt": [{"revision": revision, "last_attempt": last, "ok": ok}]}
+    return {"readings": {APP: {**readings, **({"apps.pull": list(apps)} if apps else {})}}}
+
+
 def stopped(task=REFUSED_TASK, message=REFUSED_SAID):
     return [
         {"host": APP, "task": "Ask sudo whether the deploy login may start it", "outcome": "ok", "message": ""},
@@ -147,7 +155,7 @@ class ApproveUpdateTests(TestCase):
         from ..container_reads import get_app_update
 
         record = get_app_update("example:alpha:7:app")
-        self.assertEqual(record["merge"]["words"], self.standing().words)
+        self.assertEqual(record["merge"]["words"], self.standing().word)
         self.assertEqual(record["held"], self.standing().words)
         self.assertEqual(record["checks"]["state"], "success")
 
@@ -215,7 +223,7 @@ class ApproveUpdateTests(TestCase):
 
         self.assertFalse(approve.disabled, approve.title)
         # Beside it, what the press does.
-        self.assertEqual(page.context["container"]["state"].said, f"Merges #7, then applies it on {APP}.")
+        self.assertEqual(page.context["container"]["state"].said, f"Merges #7 and applies its merge commit on {APP}.")
         self.assertContains(page, "/approve/?next=")
         self.assertEqual(self.client.post(approve.url, {"__retry_key": "example-press"}).status_code, 302)
         self.assertEqual(self.preview().input["parameters"], {"revision": HEAD})
@@ -225,12 +233,53 @@ class ApproveUpdateTests(TestCase):
 
         self.assertEqual(answer.get("status"), "awaiting_approval", answer)
         self.assertFalse(OperationRequest.objects.exists())
-        # The person deciding sees each pin it moves, and every file it changes a link away.
+        # The person deciding sees each pin it moves as the release it names, and every file it changes a link away.
         from ..approval_review import preview
 
         shown = preview(ApprovalRequest.objects.get())
-        self.assertEqual([(row.label, row.change) for row in shown.rows], [("app app", "changed")])
+        self.assertEqual(
+            [(row.label, row.before, row.after, row.change) for row in shown.rows],
+            [("app app", "v1.2.0", "v1.2.1", "changed")],
+        )
         self.assertEqual(shown.more_url, "https://github.com/example/alpha/pull/7/files")
+
+    def test_the_preview_names_each_name_the_apply_interrupts_through_the_container_it_restarts(self):
+        from hq.platform.core.testing import connection, declare, operator
+
+        from ..approval_review import preview
+
+        # The app's container is the DNS server and the proxy, through the
+        # connections whose endpoints are in it, and the origin of one name.
+        declare("example-box", "machine", {"name": APP, "addresses": ["192.0.2.5"]})
+        spec = {"host": APP, "name": "app", "connection_ref": "example-portainer", "serves_ports": [81, 3000, 8080]}
+        declare("example-box-app", "portainer.container", spec)
+        connection("adguard", endpoint="http://192.0.2.5:3000")
+        connection("npm", endpoint="http://192.0.2.5:81")
+        spec = {"domain": "hq.example.com", "answer": "192.0.2.10", "connection_ref": "example-adguard"}
+        declare("example-hq-dns", "adguard.rewrite", spec)
+        spec = {"domain_names": ["wiki.example.com"], "forward_scheme": "http", "forward_host": "192.0.2.5"}
+        declare("example-wiki-proxy", "npm.proxy_host", {**spec, "forward_port": 8080})
+        # A second DNS server elsewhere resolves what it holds.
+        connection("adguard", "example-adguard-2", endpoint="http://192.0.2.99:3000")
+        spec = {"domain": "other.example.com", "answer": "192.0.2.20", "connection_ref": "example-adguard-2"}
+        declare("example-elsewhere", "adguard.rewrite", spec)
+        self.press(principal=AGENT)
+
+        shown = preview(ApprovalRequest.objects.get())
+
+        interrupts = {row.label: row.after for row in shown.rows if row.label.startswith("Interrupts")}
+        self.assertEqual(
+            interrupts,
+            {
+                "Interrupts resolving": "hq.example.com",
+                "Interrupts routing": "wiki.example.com",
+                "Interrupts serving": "wiki.example.com",
+            },
+        )
+        # The press says so before it is made.
+        operator(self.client)
+        page = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
+        self.assertIn("Interrupts resolving 1 name", page.context["container"]["state"].said)
 
     def test_an_approved_agents_call_previews_and_merges_as_approved(self):
         from django.contrib.auth import get_user_model
@@ -439,7 +488,7 @@ class ApproveUpdateTests(TestCase):
 
         self.merged()
         released = {"project": "thumb", "service": "thumb", "image": "example-thumb:local", "running_digest": ""}
-        self.worked(stated={"readings": {APP: {"apps.pull": [{**released, "health": "healthy", "result": "ok"}]}}})
+        self.worked(stated=receipt(apps=[{**released, "health": "healthy", "result": "ok", "changed": True}]))
         built(head={"sha": commits[0]}, builds=[{"app": "thumb", "commits": list(commits)}])
         return self.container_page("thumb").context["container"]
 
@@ -468,22 +517,48 @@ class ApproveUpdateTests(TestCase):
     def test_a_merge_whose_apply_passes_stands_applied(self):
         self.merged()
 
-        self.worked()
+        self.worked(stated=receipt(apps=[{"project": "app", "result": "ok", "changed": True}]))
 
-        self.assertEqual((self.standing().words, self.standing().tone), ("Applied", "good"))
+        self.assertEqual((self.standing().word, self.standing().tone), ("Applied", "good"))
         # A closed update that applied offers nothing more on the container's page.
         self.merged_on_main()
         container = self.container_page().context["container"]
-        self.assertEqual((container["state"].standing.words, container["act"]), ("Applied", None))
+        self.assertEqual((container["state"].standing.word, container["act"]), ("Applied", None))
 
-    def test_an_apply_whose_machine_rolled_an_app_back_stands_applied_in_the_tone_to_look_at(self):
+    def test_an_apply_whose_pull_did_not_release_every_app_does_not_stand_applied(self):
         self.merged()
 
-        self.worked(stated={"readings": {APP: {"apps.pull": [{"project": "app", "result": "rolled_back"}]}}})
+        rolled = {"project": "app", "result": "rolled_back", "changed": True}
+        self.worked(stated=receipt(ok=False, apps=[rolled]))
 
         standing = self.standing()
-        self.assertEqual(standing.tone, "attention")
+        self.assertNotEqual(standing.tone, "good")
+        self.assertNotIn("applied", standing.words.lower())
         self.assertTrue(any("app" in line and "Rolled back" in line for line in standing.lines), standing.lines)
+
+    def test_a_preview_says_the_machines_last_pull_as_attempted_and_an_unchanged_app_as_left_alone(self):
+        from ..work_runs import run_row
+
+        self.press()
+        # The machine's last pull was of another commit, which did not release every app.
+        preview = self.worked(stated=receipt(HEAD, last="7" * 40, ok=False))
+
+        (pull,) = run_row(preview).evidence.readings
+        ((_title, said, tone),) = pull.records
+        self.assertIn("7" * 12, said)
+        self.assertNotIn("Applied", said)
+        self.assertNotIn(tone, ("good", "serious"))
+        # An app the merge's pull left as it ran says so, beside one it replaced.
+        merge = self.settle()
+        self.assertTrue(merge.result["then"]["run"])
+        apps = [
+            {"project": "app", "result": "ok", "changed": False},
+            {"project": "web", "result": "ok", "changed": True},
+        ]
+        applied = self.worked(stated=receipt(apps=apps))
+        words = {reading.kind: reading.records for reading in run_row(applied).evidence.readings}
+        self.assertEqual([said for _title, said, _tone in words["apps.pull"]], ["Unchanged", "Released"])
+        self.assertEqual(words["apps.receipt"][0][1:], ("Applied", "good"))
 
     def test_a_container_read_running_an_older_pin_after_it_applied_is_applied_again(self):
         from django.utils import timezone
@@ -515,7 +590,7 @@ class ApproveUpdateTests(TestCase):
 
         self.assertFalse(self.applies().exists())
         # Said on the update, and pressed again once its head is reviewed.
-        self.assertEqual(self.standing().words, "GitHub refused the merge: the head moved after the approval.")
+        self.assertIn("head moved", self.standing().words)
         self.assertFalse(self.standing().taken)
 
     def test_a_merge_github_refused_is_merged_by_the_next_approval_at_that_head(self):

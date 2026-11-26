@@ -17,6 +17,7 @@ import (
 
 	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // automationSource is the repository whose runner image the fixture pins.
@@ -75,7 +76,7 @@ func newWorker(t *testing.T) *worker {
 		{Ref: "example-edge", Provider: "ssh", Store: store, SSHTransport: transport("198.51.100.7", "7722", connections.RunnerRole)},
 		{Ref: "example-named", Provider: "ssh", Store: store, SSHTransport: transport("named.example.com", "22", connections.RunnerRole)},
 		{Ref: "example-controller", Provider: "ssh", Store: store, SSHTransport: transport("198.51.100.7", "7722", "")},
-		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store, APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+		{Ref: "example-dns", Provider: "cloudflare_dns", Store: store, APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: secret.New(sentinel)}},
 	}}.Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -430,12 +431,12 @@ func TestAWorkerPastItsBoundIsRemoved(t *testing.T) {
 }
 
 // Nothing runs where there is nothing to run, or nothing to run it safely
-// with: no automation entry, a release with no worker image, a grant whose
+// with: no automation entry, a tree with no worker image, a grant whose
 // token is not placed yet, a table that cannot be loaded.
 func TestNoWorkerStartsWithoutWhatItNeeds(t *testing.T) {
 	for name, change := range map[string]func(w *worker) (fails bool){
 		"no automation entry": func(w *worker) bool { w.a.Project = nil; return false },
-		"no image":            func(w *worker) bool { _ = os.Remove(filepath.Join(w.a.Lib, AutomationImage)); return false },
+		"no image":            func(w *worker) bool { _ = os.Remove(filepath.Join(w.a.Lib, AutomationImage)); return true },
 		"no token yet":        func(w *worker) bool { _ = os.Remove(w.grant.Path); return true },
 		"no journal":          func(w *worker) bool { _ = os.Remove(w.a.Journal); return true },
 		"a journal that runs programs": func(w *worker) bool {

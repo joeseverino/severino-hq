@@ -27,6 +27,16 @@ actions:
   # generates marshals every field, an empty conclusion included.
   - target: $.paths['/repos/{owner}/{repo}/check-runs/{check_run_id}'].patch.requestBody.content['application/json'].schema.anyOf
     remove: true
+  # A deployment's payload is whatever its creator sent, an object or a
+  # string; it is decoded where it is read, so one of either shape never
+  # fails the listing.
+  - target: $.components.schemas.deployment.properties.payload.oneOf
+    remove: true
+  - target: $.components.schemas.deployment.properties.payload
+    update:
+      x-go-type: json.RawMessage
+      x-go-type-import:
+        path: encoding/json
   # An alert's dependency is an inline object the slice cannot narrow; its
   # enums go, since nothing reads them and they generate bare package-level names.
   - target: $.components.schemas['dependabot-alert'].properties.dependency.properties.scope

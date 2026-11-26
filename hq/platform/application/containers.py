@@ -16,6 +16,7 @@ from typing import Any
 lazy from django.utils import timezone
 
 from hq.domains.control_plane.observations.portainer import (
+    CONTAINER_KIND,
     IMAGE_KIND as PULLED_KIND,
     RUNTIME_KIND,
     STACK_KIND,
@@ -27,7 +28,6 @@ from hq.domains.control_plane.observations.public_registry import (
     UPSTREAM_KIND,
     VULNERABILITY_KIND,
 )
-from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
 from .container_state import ContainerCount, ContainerState, HealthCheck, uptime_of
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
@@ -47,10 +47,11 @@ lazy from .container_standard import posture_of, runtime_path
 lazy from .container_usage import usage_of
 lazy from .entity_links import container_link, entity_link
 lazy from .facts import inventory_records
+lazy from .freshness import Freshness, freshness
 lazy from .github_estate import build_of, repositories
 lazy from .infrastructure import enabled_resources
 lazy from .inventory import record_token
-lazy from .machines import machine as machine_named, served_by
+lazy from .machines import Serving, machine as machine_named, served_by
 lazy from .projects import projects_by_repository, repository_key
 lazy from .supply_chain import supply_chain_of
 
@@ -345,6 +346,13 @@ class ImageStanding(ImageStandingWords):
         return moment(str((self.checked or {}).get("read_at", "") or ""))
 
     @property
+    def attestations_read(self) -> bool:
+        """Whether HQ read what its publisher attached, so an absent package
+        list or provenance is a fact rather than a gap in what HQ knows."""
+
+        return self.attested is not None and not self.attested.get("unread")
+
+    @property
     def packages(self) -> int:
         return len((self.attested or {}).get("packages") or ())
 
@@ -405,6 +413,12 @@ class ImageStanding(ImageStandingWords):
         return CURRENT
 
     @property
+    def reading(self) -> Freshness:
+        """Its registry reading's age, judged by how often an image is read."""
+
+        return freshness(IMAGE_KIND, self.read_at)
+
+    @property
     def newest(self) -> bool:
         """Its registry was read and publishes nothing newer of this kind,
         whatever else is known about it."""
@@ -422,13 +436,14 @@ class ImageStanding(ImageStandingWords):
 
     @property
     def vulnerability_tone(self) -> str:
-        """What is known against it as a tone: none where nothing could be checked."""
+        """What is known against it as a tone: good only once its packages were
+        checked, since its project's advisories alone miss what its image adds."""
 
         if self.serious:
             return Tone.SERIOUS
         if self.state == VULNERABLE:
             return Tone.ATTENTION
-        return Tone.GOOD if self.checkable else ""
+        return Tone.GOOD if self.checked else ""
 
     @property
     def update_tone(self) -> str:
@@ -586,7 +601,7 @@ def _containers() -> list[Container]:
                 running=running,
                 machine=machine,
                 standing=_standing(running.image, machine.name, running.name),
-                serves=tuple(sorted(serves.get((machine.name, running.name), ()))),
+                serves=serves.get((machine.name, running.name), Serving()).names,
                 runtime=_runtimes().get((machine.name, running.name)),
             )
             for running in machine.containers
@@ -765,11 +780,11 @@ def _built_here(host: str, container: str, pulled: Mapping[str, Any]) -> bool:
     if not pulled or pulled.get("digests"):
         return False
     user = next((each for each in pulled.get("containers") or () if each.get("container") == container), {})
-    stack = _stacks().get((host, container), "")
+    stack = stacks().get((host, container), "")
     return builds(_compose_files().get((host, stack), ()), str(user.get("service", "") or ""))
 
 
-def _stacks() -> dict[tuple[str, str], str]:
+def stacks() -> dict[tuple[str, str], str]:
     """The Compose project each container belongs to, by ``(machine, container)``."""
 
     def records():

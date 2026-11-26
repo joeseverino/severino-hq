@@ -22,7 +22,7 @@ PUSH = {
     "received_at": "2026-01-15T12:00:00Z",
 }
 
-# As severino-hq-events-docker.service tells of one Docker event: the
+# As severino-hq-events.service tells of one Docker event: the
 # container's name, and Docker's own id, time and action as the delivery.
 DIED = {
     "provider": "host",
@@ -31,6 +31,11 @@ DIED = {
     "delivery_id": "ede54ee1afda366ab42f824e8a5ffd195155d853ceaec74a927f249ea270c743-1461943101381709551-die",
     "received_at": "2016-04-29T15:18:21.381709Z",
 }
+
+
+# What a GitHub delivery makes due: the repositories it is about, and the
+# webhook's delivery log, which now holds a delivery that arrived.
+PUSHED = ["github.repository", "github.webhook"]
 
 
 def worker(*events: dict) -> dict:
@@ -57,23 +62,52 @@ class ApplyEventsTests(TestCase):
         event = InboundEvent.objects.get()
         self.assertEqual((event.provider, event.event, event.subject), ("github_app", "push", "example/app"))
         self.assertEqual((event.source, event.outcome), ("worker", "applied"))
-        self.assertEqual(asked(), ["github.repository"])
+        self.assertEqual(asked(), PUSHED)
         self.assertEqual(answer["applied"], 1)
 
     def test_an_action_of_a_declared_event_is_that_event(self):
         self.apply(worker({**PUSH, "event": "pull_request.opened"}))
 
-        self.assertEqual(asked(), ["github.repository"])
+        self.assertEqual(asked(), PUSHED)
 
     def test_a_container_change_makes_the_container_readings_due(self):
+        """Each container reading a change moves, and once the controller
+        stores a recreated container running a digest HQ has not read, the
+        registry read starts, once."""
+
         from hq.domains.control_plane.models import InboundEvent
+
+        from ..report_testing import bridged
+        from .test_containers import running
 
         for action in ("die", "start", "health_status: unhealthy", "oom", "destroy"):
             event = {**DIED, "event": f"docker.container.{action}", "delivery_id": action}
             self.apply({"source": "host", "events": [event]})
 
-        self.assertEqual(asked(), [ENVIRONMENT_KIND])
+        self.assertEqual(
+            asked(), sorted([ENVIRONMENT_KIND, "portainer.container", "portainer.image", "portainer.runtime"])
+        )
         self.assertEqual(set(InboundEvent.objects.values_list("outcome", flat=True)), {"applied"})
+
+        recreated = running("example-app", "ghcr.io/example/app:v2@sha256:" + "c" * 64)
+        with (
+            mock.patch("hq.platform.application.outbound_work.start_for_host") as start,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            bridged("inventory", {"portainer.container": {"ok": True, "records": [recreated]}})
+        start.assert_called_once_with("registry.refresh")
+
+    def test_a_job_systemd_ended_failed_makes_the_unit_reading_due(self):
+        """For any unit on the host, HQ's or not, as severino-hq-events.service
+        tells of systemd's JobRemoved: the unit's name, and the job's id and
+        when it was heard as the delivery."""
+
+        self.apply({"source": "host", "events": [{
+            "provider": "host", "event": "unit.job.failed", "subject": "example-pull@7ad6909.service",
+            "delivery_id": "job-4021-1764158400000000000", "received_at": "2026-11-26T12:00:00Z",
+        }]})  # fmt: skip
+
+        self.assertEqual(asked(), ["host.unit"])
 
     def test_a_host_event_outside_the_declaration_makes_nothing_due(self):
         from hq.domains.control_plane.models import InboundEvent
@@ -130,10 +164,16 @@ class ApplyEventsTests(TestCase):
         self.assertIsNone(channel_standing(InboundSource.HOST).seen_at)
 
     def test_a_reconnect_asks_every_reading_the_worker_carries(self):
+        from hq.domains.control_plane.provider_adapters import INBOUND
+
+        routed = sorted(
+            {kind for spec in INBOUND.values() if spec.path for kinds in spec.events.values() for kind in kinds}
+        )
+
         answer = self.apply({**worker(), "reconnected": True})
 
-        self.assertEqual(asked(), ["github.repository"])
-        self.assertEqual(answer["asked"], ["github.repository"])
+        self.assertEqual(asked(), routed)
+        self.assertEqual(sorted(answer["asked"]), routed)
         ReadRequest.objects.all().delete()
 
         self.apply({**worker(), "reconnected": False})
@@ -161,12 +201,14 @@ class ApplyEventsTests(TestCase):
             with at(moment):
                 if sweep_due()["due"]:
                     passes.append(moment)
-                    ProviderInventory.objects.update_or_create(
-                        kind="github.repository", defaults={"records": [], "reachable": True, "observed_at": moment}
-                    )
+                    for kind in PUSHED:
+                        ProviderInventory.objects.update_or_create(
+                            kind=kind, defaults={"records": [], "reachable": True, "observed_at": moment}
+                        )
 
         with at(start - timedelta(hours=1)):
-            ProviderInventory.objects.create(kind="github.repository", records=[], reachable=True)
+            for kind in PUSHED:
+                ProviderInventory.objects.create(kind=kind, records=[], reachable=True)
         for second in range(25):
             with at(start + timedelta(seconds=second)):
                 self.apply(worker({**PUSH, "delivery_id": f"burst-{second}"}))
@@ -176,8 +218,9 @@ class ApplyEventsTests(TestCase):
 
         self.assertEqual(passes[0], start, "the first event reads at once")
         self.assertLessEqual(len(passes), 2)
-        read = ProviderInventory.objects.get(kind="github.repository").updated_at
-        self.assertGreater(read, ReadRequest.objects.get().requested_at, "the last event's ask was read")
+        for request in ReadRequest.objects.all():
+            read = ProviderInventory.objects.get(kind=request.kind).updated_at
+            self.assertGreater(read, request.requested_at, "the last event's ask was read")
 
     def test_events_stored_before_the_routine_window_are_deleted_whatever_their_sender_said(self):
         from hq.domains.control_plane.models import InboundEvent
@@ -216,4 +259,4 @@ class BridgeEventsTests(TestCase):
             bridge_client.call("events", worker(PUSH), app=bridge_client.events())
 
         self.assertEqual(InboundEvent.objects.get().delivery_id, PUSH["delivery_id"])
-        self.assertEqual(asked(), ["github.repository"])
+        self.assertEqual(asked(), PUSHED)

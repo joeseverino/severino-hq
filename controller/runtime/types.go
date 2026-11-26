@@ -120,7 +120,9 @@ type Providers interface {
 	NeedsMaterial(ResourceKind) bool
 	Execute(context.Context, Resource, string, bool) (Result, error)
 	Connections(context.Context, []string) ([]ConnectionRecord, error)
-	Inventory(context.Context, []ResourceKind) (Inventory, error)
+	// Inventory reads the kinds named (every one with none) and reports each
+	// of carry as carried, asking nothing of its provider.
+	Inventory(ctx context.Context, only, carry []ResourceKind) (Inventory, error)
 	AnalyticsSites(context.Context) ([]AnalyticsSiteIdentity, error)
 	Analytics(context.Context, []AnalyticsSiteIdentity, []AnalyticsWindow) (AnalyticsReadings, error)
 	Glance(context.Context, GlancePlan) (GlanceObservations, error)

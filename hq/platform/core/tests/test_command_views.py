@@ -116,11 +116,11 @@ class CommandViewTests(SignedInTestCase):
     def test_a_command_with_a_home_leads_back_there(self):
         """A command whose records are no resource of its own leads back, by
         its navigation's name, from its trail and its Cancel, to the page it
-        declares (Refresh, of Playbooks), else to its domain's page (a
-        lookup, of Tools)."""
+        declares (Reject a scanned commit, of Playbooks), else to its domain's
+        page (a lookup, of Tools)."""
 
         for name, label, route in (
-            ("automation.source.refresh", "Playbooks", "control_plane:playbooks"),
+            ("automation.source.reject", "Playbooks", "control_plane:playbooks"),
             ("lookup.name.read", "Tools", "control_plane:tools"),
         ):
             with self.subTest(command=name):

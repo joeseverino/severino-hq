@@ -18,7 +18,7 @@ lazy from annotationlib import Format
 lazy from django.template import engines
 lazy from django.template.backends.django import get_installed_libraries
 lazy from django.template.base import FilterExpression, NodeList, Variable
-lazy from django.template.defaulttags import CommentNode, ForNode, IfNode, WithNode
+lazy from django.template.defaulttags import CommentNode, ForNode, IfNode, PartialDefNode, PartialNode, WithNode
 lazy from django.template.library import import_library
 lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
@@ -301,6 +301,13 @@ class _Reads:
             self.walk(node.nodelist, bound | set(node.extra_context), guards)
         elif isinstance(node, IncludeNode):
             self._include(node, bound, guards)
+        elif isinstance(node, PartialDefNode):
+            # A partial not drawn in place reads only where it is drawn: its
+            # {% partial %} or an include of `name#partial`.
+            if node.inline:
+                self.walk(node.nodelist, bound, guards)
+        elif isinstance(node, PartialNode):
+            self.walk(node.partial_mapping[node.partial_name].nodelist, bound, guards)
         elif isinstance(node, BlockNode):
             self.blocks.setdefault(node.name, tuple(sorted(bound)))
             self.walk(node.nodelist, bound, guards)

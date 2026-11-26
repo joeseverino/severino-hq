@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"maps"
 	"net/netip"
 	"os"
@@ -117,10 +115,6 @@ func (a *Automation) Run(ctx context.Context) error {
 		return nil
 	}
 	pin, err := os.ReadFile(filepath.Join(a.Lib, AutomationImage))
-	if errors.Is(err, fs.ErrNotExist) {
-		fmt.Fprintln(a.Stdout, "This release ships no automation worker image.")
-		return nil
-	}
 	if err != nil {
 		return err
 	}

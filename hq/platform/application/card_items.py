@@ -5,14 +5,15 @@ Each is the shape one shared part draws (a band of facts,
 ``hq_sdk.ui`` exports so an extension fills the same part the host does.
 """
 
+import re
 from dataclasses import field
 from datetime import date
 from typing import Literal, Protocol
 
-from .display_words import QUOTED, display
+from .display_words import QUOTED, display, refused
 from .drawings import AllocationBar, Dots, Trend
 from .tone import Tone
-lazy from .ui import agreed, counted_forms
+lazy from .ui import agreed, counted_forms, ended
 
 
 @display
@@ -86,6 +87,43 @@ class Kpi:
             object.__setattr__(self, "is_zero", self.is_zero or not count.count)
         if self.detail_url and not self.detail:
             raise ValueError("Kpi detail_url needs a detail: a link is said by its words.")
+
+
+@display
+class Answer:
+    """A fact's value as a domain object hands it to ``{% fact value=... %}``:
+    the short answer (a state, a count, a version) and the lines that say why,
+    which the fact draws as its value and its detail. So a sentence has no
+    place but the detail, a tone that asks something of a reader comes with
+    its reason, and a line that opens with the answer's words again is dropped
+    here, once, as ``asks.Standing`` drops one."""
+
+    short: str
+    because: tuple[str | RowLink, ...] = ()
+    tone: Tone | Literal[""] = ""
+
+    def __post_init__(self) -> None:
+        kept = tuple(line for line in self.because if line and not _restates(line, self.short))
+        object.__setattr__(self, "because", kept)
+        if re.search(r"[.:;!?](?:\s|\Z)", self.short):
+            refused(f"Answer({self.short!r}) is a sentence: its reason belongs in `because`.", "An answer's sentence")
+        if self.tone in (Tone.ATTENTION, Tone.SERIOUS) and not kept:
+            refused(f"Answer({self.short!r}) has the {self.tone} tone and no reason for it.", "An answer's tone")
+
+    @property
+    def said(self) -> str:
+        """The answer and its reasons as one line of prose says them, where
+        nothing draws the two apart (a message, a finding's evidence)."""
+
+        reasons = [line for line in self.because if isinstance(line, str)]
+        return " ".join(ended(part) for part in (self.short, *reasons)) if reasons else self.short
+
+
+def _restates(line: str | RowLink, short: str) -> bool:
+    """Whether ``line`` opens by saying ``short`` again ("Waiting" and "Waiting for…")."""
+
+    said, word = (" ".join(re.findall(r"[\w']+", str(text).casefold())) for text in (line, short))
+    return isinstance(line, str) and bool(word) and f"{said} ".startswith(f"{word} ")
 
 
 @display

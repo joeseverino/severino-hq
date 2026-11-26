@@ -71,7 +71,7 @@ func present(raw json.RawMessage) bool {
 func (r *Registry) cloudflareDoer(provider runtime.ConnectionProvider, ref string) (string, string, vendorDoer) {
 	connection, err := r.Supplied.For(provider, ref)
 	token, missing := runtime.Need(connection.APIToken)
-	return connection.Ref, strings.TrimRight(token.URL, "/") + "/", vendorDoer{r: r, err: cmp.Or(err, missing), headers: map[string]string{"Authorization": "Bearer " + token.APIToken, "Accept": "application/json"}}
+	return connection.Ref, strings.TrimRight(token.URL, "/") + "/", vendorDoer{r: r, err: cmp.Or(err, missing), headers: map[string]string{"Authorization": "Bearer " + token.APIToken.Reveal(), "Accept": "application/json"}}
 }
 
 // cloudflare is one credential's client. Its exchange refuses without a call

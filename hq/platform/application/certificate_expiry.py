@@ -17,7 +17,7 @@ from .action_links import command_url
 from .entity_links import node_link
 from .expiry import days_until
 from .facts import Joined, inventory_records
-from .finding_model import THEN_CHECK_AGAIN, Finding, FindingEstate, FindingRemedy, FindingRule, opens
+from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule, opens
 from .labels import lower_first
 from .moments import expiry_words, moment
 from .references import Kind
@@ -302,7 +302,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         expiring,
         gathered=True,
-        operator_action=f"Renew it from its page or where it is held, or fix its renewal. {THEN_CHECK_AGAIN}",
+        operator_action="Renew it from its page or where it is held, or fix its renewal.",
         no_help_reason="HQ cannot renew this certificate.",
         bars={
             Tone.SERIOUS: f"a certificate in use expires within {SERIOUS_DAYS}",

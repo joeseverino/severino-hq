@@ -512,6 +512,21 @@ def save_adopted(
     return _save(command, principal=principal, consented=None, current_key=current_key)
 
 
+def save_sourced(command: ManagedResourceCommand, *, principal: Principal) -> ResourceSaved:
+    """Write down a new record HQ derives from its source, as HQ.
+
+    Asks no consent: only a record its kind's ``sourced`` claims is written,
+    one no person edits, and nothing is applied for a kind that is a
+    declaration alone.
+    """
+
+    provider = PROVIDERS[command.kind]
+    drawn = ManagedResource(key=command.key, kind=command.kind, spec=command.spec)
+    if not provider.declaration_only or provider.sourced is None or not provider.sourced(drawn):
+        raise PolicyError("HQ writes only a record its source names.")
+    return _save(command, principal=principal, consented=None)
+
+
 def _save(
     command: ManagedResourceCommand,
     *,

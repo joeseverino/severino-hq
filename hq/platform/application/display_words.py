@@ -151,14 +151,21 @@ def said_in_words(view: Any) -> None:
             continue
         for text, holder in _texts(value, value):
             if found := _machine_text(text, label=field.name.endswith("label")):
-                # Where a developer sees it, it fails where it was built; on a
-                # served page, text a record holds never takes the page down,
-                # so it is shown as it is and logged by where, never by what.
-                if settings.SEVERINO_STRICT_PRINT:
-                    raise ValueError(f"{where} carries {found}: say it in words. Got {holder!r}.")
-                logger.error(
-                    "%s carries %s: say it in words.", where, found.split(",")[0], extra={"event": "print.refused"}
+                refused(
+                    f"{where} carries {found}: say it in words. Got {holder!r}.",
+                    f"{where} carries {found.split(',')[0]}",
                 )
+
+
+def refused(said: str, logged: str) -> None:
+    """A view model built in a shape no page may show: where a developer sees
+    it, it fails where it was built; on a served page, text a record holds
+    never takes the page down, so it is shown as it is and ``logged`` says
+    where, never what."""
+
+    if settings.SEVERINO_STRICT_PRINT:
+        raise ValueError(said)
+    logger.error("%s: say it in words.", logged, extra={"event": "print.refused"})
 
 
 def _texts(value: Any, holder: Any) -> Iterator[tuple[str, Any]]:

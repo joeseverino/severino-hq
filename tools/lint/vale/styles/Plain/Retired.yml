@@ -10,8 +10,9 @@ swap:
   Action items: Needs you
   Command Center: Search
   Command center: Search
-  Request fresh sweep: Check again
-  Read now and check again: Check again
+  Request fresh sweep: Refresh
+  Read now and check again: Refresh
+  Check again: Refresh
   Read now: Refresh
   Read them now: Refresh them
   Read all now: Refresh all

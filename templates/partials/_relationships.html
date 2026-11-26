@@ -10,6 +10,15 @@
   keeps what cannot go elsewhere (what could not be read, the raw readings)
   without a heading over nothing.
 {% endcomment %}
+{% partialdef readouts %}
+  {% comment %}Each reading joined to the node, raw: `readouts` is Relationships.readouts.{% endcomment %}
+  {% for label, source, text in readouts %}
+    {% section label fold=True %}
+      {% if source %}{% muted element="p" %}Through {% entity source %}{% endmuted %}{% endif %}
+      <pre tabindex="0">{{ text }}</pre>
+    {% endsection %}
+  {% endfor %}
+{% endpartialdef %}
 {% partialdef rest %}
   {% comment %}What the page was read with, when it names that, as the card's last line.{% endcomment %}
   {% if read_with %}{% muted element="p" css="relation-source" %}Read with {% for link in read_with %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endmuted %}{% endif %}
@@ -17,14 +26,7 @@
     {% muted element="p" %}Could not be read: {{ relationships.unreadable|join:", " }}. This list may be incomplete. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections{% arrow %}</a>{% endmuted %}
   {% endif %}
   {% if relationships.readouts %}
-    {% section "Raw readings" fold=True %}
-      {% for label, source, text in relationships.readouts %}
-        {% section label fold=True %}
-          {% if source %}{% muted element="p" %}Through {% entity source %}{% endmuted %}{% endif %}
-          <pre tabindex="0">{{ text }}</pre>
-        {% endsection %}
-      {% endfor %}
-    {% endsection %}
+    {% section "Raw readings" fold=True %}{% with readouts=relationships.readouts %}{% partial readouts %}{% endwith %}{% endsection %}
   {% endif %}
 {% endpartialdef %}
 {% if relationships.groups %}
@@ -46,7 +48,7 @@
       {% for item in group.items %}
       <li{% if item.entity.detail or not shared and item.source or not shared and item.observed_at %} class="prose"{% endif %}>{% entity item.entity %}{% if item.entity.detail %} {% muted %}{{ item.entity.detail }}{% endmuted %}{% endif %}{% if not shared %}{% if item.source or item.observed_at %} {% muted %}({% if item.source %}through {% entity item.source %}{% endif %}{% if item.source and item.observed_at %}{% dot %}{% endif %}{% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %}){% endmuted %}{% endif %}{% endif %}{% if item.stale %} {% status "Out of date" tone="attention" %}{% endif %}</li>
       {% endfor %}
-    {% endlist %}{% detail %}{% if shared %}<small>From {% entity shared.source %}{% if shared.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=shared.observed_at only %}{% endif %}</small>{% endif %}{% endfact %}
+    {% endlist %}{% detail %}{% if shared %}<small>{% if shared.source.url not in relationships.read_through %}From {% entity shared.source %}{% if shared.observed_at %}{% dot %}{% endif %}{% endif %}{% if shared.observed_at %}{% include "partials/_reading_age.html" with at=shared.observed_at only %}{% endif %}</small>{% endif %}{% endfact %}
     {% endwith %}
     {% endfor %}
   {% endfacts %}

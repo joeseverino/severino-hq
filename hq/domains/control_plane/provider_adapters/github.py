@@ -21,7 +21,16 @@ from ..connection_shapes import GITHUB_APP
 from ..observations import github as readings
 from ..observations.github import PROVIDER
 from ..permissions import GitHub
-from ..provider_spec import ConnectionKind, InboundSpec, ProviderModel, ProviderSpec, SharedValue, applies, locked
+from ..provider_spec import (
+    ConnectionKind,
+    InboundSpec,
+    ProviderModel,
+    ProviderSpec,
+    SharedValue,
+    SignatureScheme,
+    applies,
+    locked,
+)
 
 KIND = "github.delivery"
 # Shared values (``SHARED``): the controller reports a sweep's record with the
@@ -265,18 +274,21 @@ CONNECTIONS = {
 }
 
 # What one App webhook sends from every installation, each event making the
-# repositories' reading due; GitHub's docs name the permission each needs
+# repositories' reading due, and the webhook's own, since a delivery that
+# arrived is one GitHub's log no longer counts as failing; GitHub's docs name
+# the permission each needs
 # (https://docs.github.com/en/webhooks/webhook-events-and-payloads). A
 # deployment review is requested the moment a run starts waiting on a reviewer.
 INBOUND = {
     PROVIDER: InboundSpec(
         dict.fromkeys(
             ("push", "workflow_run", "check_suite", "pull_request", "deployment_status", "deployment_review"),
-            (readings.REPOSITORY_KIND,),
+            (readings.REPOSITORY_KIND, readings.WEBHOOK_KIND),
         ),
         path="/github",
-        scheme="github-hmac-sha256",
-        signature_header="X-Hub-Signature-256",
+        # "sha256=<hex>" over the body alone (docs.github.com, validating
+        # webhook deliveries).
+        scheme=SignatureScheme("X-Hub-Signature-256", "sha256"),
         delivery_header="X-GitHub-Delivery",
         event_header="X-GitHub-Event",
         action_pointer="/action",
@@ -284,6 +296,8 @@ INBOUND = {
         secret_binding="GITHUB_WEBHOOK_SECRET",  # noqa: S106 - the Worker secret's name, never its value
         # "Payloads are capped at 25 MB" (docs.github.com, webhook events and payloads).
         max_body_bytes=25 * 1024 * 1024,
+        # The delivery log is not: a delivery that failed never arrives.
+        complete=(readings.REPOSITORY_KIND,),
         requires=(
             GitHub.CONTENTS_READ,
             GitHub.ACTIONS_READ,

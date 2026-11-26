@@ -86,3 +86,39 @@ class KpiAllocationTests(SimpleTestCase):
         drawn = _band(Kpi("Net worth", "$0.00", drawing=AllocationBar("Example assets", (Share("Cash", 0, 1),))))
 
         self.assertEqual(with_class(drawn, "allocation"), [])
+
+
+class AnswerTests(SimpleTestCase):
+    """A domain object's value reaches a fact as its short answer over its reasons."""
+
+    def _fact(self, answer) -> str:
+        return Template('{% facts %}{% fact "Approval" value=answer %}{% endfacts %}').render(
+            Context({"answer": answer})
+        )
+
+    def test_the_short_answer_is_the_value_and_its_reasons_the_detail_each_sentence_raised(self):
+        from ..card_items import Answer
+
+        drawn = self._fact(Answer("Waiting", ("The worker has not taken it yet.", "asked just now"), "attention"))
+
+        (fact,) = with_class(drawn, "fact")
+        self.assertIn("tone-attention", fact.classes)
+        self.assertEqual([value.words for value in with_class(drawn, "fact-value")], ["Waiting"])
+        self.assertEqual(
+            [detail.words for detail in with_class(drawn, "fact-detail")],
+            ["The worker has not taken it yet. Asked just now"],
+        )
+
+    def test_a_reason_that_opens_with_the_answer_again_is_dropped(self):
+        from ..card_items import Answer
+
+        answer = Answer("Waiting", ("Waiting for the worker.", "asked just now"))
+
+        self.assertEqual(answer.because, ("asked just now",))
+
+    def test_a_sentence_as_the_answer_and_a_tone_without_its_reason_are_refused(self):
+        from ..card_items import Answer
+
+        for made in (lambda: Answer("Can't check: no package list"), lambda: Answer("2 mounts", tone="attention")):
+            with self.subTest(), self.assertRaises(ValueError):
+                made()

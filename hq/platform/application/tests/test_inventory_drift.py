@@ -66,7 +66,7 @@ class DriftIsSaidOutLoudTests(TestCase):
         self._sweep(key_expiry_disabled=True)
 
         self.assertIn(
-            "Disable key expiry is now True. HQ set it to False.",
+            "Disable key expiry is now yes. HQ set it to no.",
             self.resource.conditions[0]["message"],
         )
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Runs IMAGE under severino-hq-web.service on this machine's systemd and docker,
-# the way a host runs it, through a boot, a crash and a reboot.
+# the way a host runs it, through a boot, a crash and a reboot, then sets the
+# host up with the release's playbook in RUNNER, the worker image built beside
+# it.
 #
-#   tools/pipeline/host-boot-drill.sh IMAGE
+#   tools/pipeline/host-boot-drill.sh IMAGE RUNNER
 #
 # A boot starts HQ before its environment is rendered: the unit must wait,
 # start nothing, and leave the file's path alone, then come up healthy once
@@ -10,12 +12,18 @@
 # release that cannot serve must fail its start, and the previous release
 # must come back, as a deploy's rollback brings it back. The unit runs in the
 # sandbox every HQ service shares, so the drill proves HQ serves inside it.
+# The setup is `hq-host setup`, the half of `hq-host install` after it verifies
+# and pulls the runner, since CI's images carry no Compose signature: applied
+# through nsenter on this systemd, it must then check clean, and verify must
+# name a unit edited after it. Connect and the render are stand-ins of the
+# drill's own, a unit and a host drop-in beside the shipped renderer.
 #
 # Needs systemd as PID 1, docker, and passwordless sudo: a CI runner, not a
 # laptop. Elsewhere it says it did not run and passes, unless CI is set.
 set -euo pipefail
 
-image="${1:?usage: host-boot-drill.sh IMAGE}"
+image="${1:?usage: host-boot-drill.sh IMAGE RUNNER}"
+runner="${2:?usage: host-boot-drill.sh IMAGE RUNNER}"
 if [ "$(cat /proc/1/comm 2>/dev/null || true)" != systemd ] || ! sudo -n true 2>/dev/null; then
   if [ "${CI:-}" = true ]; then
     echo "::error title=Host boot drill::It needs systemd as PID 1 and passwordless sudo, and CI has neither." >&2
@@ -35,12 +43,28 @@ registry_image=registry:3@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdae
 dropin=/etc/systemd/system/severino-hq-web.service.d
 sandbox=/etc/systemd/system/severino-hq-.service.d
 
+drill=/usr/local/lib/severino-hq-drill
+units=/etc/systemd/system
+
+# What the release installs in $units, by name: a mount among them holds its
+# directory until it is stopped, so cleanup stops each one before removing it.
+shipped=()
+for path in "$root"/deploy/systemd/*; do shipped+=("${path##*/}"); done
+
 cleanup() {
-  sudo systemctl stop severino-hq-web.service 2>/dev/null || true
-  sudo rm -rf /etc/systemd/system/severino-hq-web.service "$dropin" "$sandbox"
+  local running=()
+  for name in "${shipped[@]}"; do
+    # A drop-in directory runs nothing, and a template runs as its instances.
+    case $name in *.d) ;; *) running+=("${name/@./@*.}") ;; esac
+  done
+  sudo systemctl stop "${running[@]}" drill-connect.service 2>/dev/null || true
+  sudo rm -rf "${shipped[@]/#/$units/}"
+  sudo find "$units" \( -name 'severino-hq*' -o -name drill-connect.service \
+    -o -name 'actions.runner.example.service.d' \) -prune -exec rm -rf {} +
   sudo systemctl daemon-reload
   sudo docker rm --force severino-hq "$registry" >/dev/null 2>&1 || true
-  sudo rm -rf "$lib" /var/lib/severino-hq /run/severino-hq-secrets
+  sudo rm -rf "$lib" "$drill" /var/lib/severino-hq /run/severino-hq-secrets /etc/severino-hq \
+    /etc/sudoers.d/severino-hq-deploy /etc/tmpfiles.d/severino-hq.conf /var/log/severino-hq
 }
 trap cleanup EXIT
 
@@ -60,16 +84,18 @@ await() {
   return 1
 }
 
-# What a render installs: a root-only directory holding the web account's file.
-render() {
-  sudo install -d -o root -g root -m 0700 "$secrets"
-  printf '%s\n' \
-    DJANGO_SECRET_KEY=ci-only-drill-key-0123456789abcdef0123456789abcdef \
-    DJANGO_ALLOWED_HOSTS=127.0.0.1 \
-    SEVERINO_LOG_LEVEL=WARNING | sudo tee "$env_file" >/dev/null
-  sudo chown 10001:10001 "$env_file"
-  sudo chmod 0400 "$env_file"
-}
+# What a render installs: a root-only directory holding the web account's
+# file, and a connections document with none, root's alone at 0400 as the
+# controller's preflight requires. The setup below runs it as the renderer's
+# ExecStart, so it is a file of the drill's own.
+connections=/run/severino-hq-secrets/controller-connections.json
+sudo install -d -m 0755 "$drill"
+printf '%s\n' 'set -eu' "mkdir -p -m 0700 $secrets" \
+  "printf '%s\\n' DJANGO_SECRET_KEY=ci-only-drill-key-0123456789abcdef0123456789abcdef DJANGO_ALLOWED_HOSTS=127.0.0.1 SEVERINO_LOG_LEVEL=WARNING > $env_file" \
+  "chown 10001:10001 $env_file" "chmod 0400 $env_file" \
+  "printf '%s\\n' '{\"schema_version\": 2, \"connections\": []}' > $connections" "chmod 0400 $connections" |
+  sudo tee "$drill/render" >/dev/null
+render() { sudo sh "$drill/render"; }
 
 # A boot: /run is empty, and the unit starts before the render.
 boot() {
@@ -203,3 +229,38 @@ sudo systemctl restart severino-hq-web.service || fail "Schema rollback: the pre
 curl --fail --silent --max-time 5 http://127.0.0.1:8000/health/ready/ >/dev/null \
   || fail "Schema rollback: the unit is active but HQ does not answer."
 echo "Schema rollback: a release that migrated and could not serve was undone, schema and all."
+
+# The setup. Connect is a unit that only starts, and the renderer runs the
+# drill's render: both the drill's own files, which cleanup removes.
+sudo docker tag "$runner" localhost:5000/severino-hq-runner:drill
+for _ in $(seq 30); do sudo docker push --quiet localhost:5000/severino-hq-runner:drill >/dev/null 2>&1 && break; sleep 1; done
+runner_pinned=$(registry_digest localhost:5000/severino-hq-runner:drill)
+sudo "$lib/deploy/bin/hq-host" sync "$pinned"
+sudo install -d -m 0755 "$lib/deploy/automation" /etc/severino-hq "$units/severino-hq-secrets.service.d"
+printf '%s\n' "$runner_pinned" | sudo tee "$lib/deploy/automation/image" >/dev/null
+printf '%s\n' '{"vault": "Example Vault", "env_item": "example env",' \
+  '"connect": {"unit": "drill-connect.service", "url": "http://127.0.0.1:880", "credential": "op_connect_example"},' \
+  '"runner": {"unit": "actions.runner.example.service", "user": "nobody"}}' | sudo tee /etc/severino-hq/host.json >/dev/null
+printf '[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/bin/true\n' | sudo tee "$units/drill-connect.service" >/dev/null
+printf '[Service]\nLoadCredentialEncrypted=\nExecStart=\nExecStart=/bin/sh %s/render\n' "$drill" |
+  sudo tee "$units/severino-hq-secrets.service.d/90-drill.conf" >/dev/null
+sudo systemctl daemon-reload
+
+setup_failed() {
+  sudo tail -n 120 /var/log/severino-hq/setup.log || true
+  fail "Setup: $1"
+}
+sudo "$lib/deploy/bin/hq-host" setup "$runner_pinned" || setup_failed "the playbook did not apply through the runner image."
+for unit in severino-hq-secrets.timer severino-hq-controller.timer severino-hq-unit.socket; do
+  systemctl is-active --quiet "$unit" || setup_failed "$unit is not started."
+done
+sudo test -f /etc/sudoers.d/severino-hq-deploy || setup_failed "the deploy rule is not installed."
+check=$(sudo "$lib/deploy/bin/hq-host" install --check) || setup_failed "the check did not run: $check"
+grep -q 'changed=0 ' <<<"$check" || setup_failed "a check right after the apply would change something: $check"
+echo "Setup: the playbook applied through the runner image and nsenter, and a check finds nothing to change."
+
+echo '# edited' | sudo tee -a "$units/severino-hq-web.service" >/dev/null
+drift=$(sudo "$lib/deploy/bin/hq-host" verify 2>&1 || true)
+grep -qF "Install every drop-in and the units the restart needs: $units/severino-hq-web.service" <<<"$drift" \
+  || setup_failed "verify did not name the unit edited after the setup: $drift"
+echo "Setup: verify names a unit edited after the setup."

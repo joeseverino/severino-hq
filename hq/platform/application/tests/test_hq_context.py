@@ -109,7 +109,7 @@ def tailnet(**fields) -> None:
     store("tailscale.device", {"name": "example-box", "online": True, **fields})
 
 
-def estate(*, containers: int = 0, timers: int = 1, deployed: str = HEAD) -> None:
+def estate(*, containers: int = 0, timers: int = 1, deployed: str = HEAD, head: str = HEAD) -> None:
     declare("example-box", "machine", {"name": "example-box", "addresses": ["192.0.2.44"]})
     store(
         "portainer.container",
@@ -133,7 +133,10 @@ def estate(*, containers: int = 0, timers: int = 1, deployed: str = HEAD) -> Non
             "tags": ["example/old:1"], "created_at": stamp(timedelta(days=9)), "size": 10, "containers": [],
         },
     )  # fmt: skip
-    store("github.repository", repository(deployments=[{"environment": "production", "sha": deployed}]))
+    store(
+        "github.repository",
+        repository(head={"sha": head}, deployments=[{"environment": "production", "sha": deployed, "image": IMAGE}]),
+    )
     store(UNIT_KIND, *units(timers))
     store(
         RENDER_STATUS_KIND,
@@ -231,10 +234,20 @@ class ProjectionTests(TestCase):
         found = self.context()
 
         self.assertTrue(found.release.behind)
-        self.assertFalse(found.release.runs_deployed)
         self.assertEqual(found.release.standing, "main is ahead")
         self.assertEqual(found.container.standing.update_state, UPDATE_AVAILABLE)
         self.assertEqual(found.container.standing.update, "main is ahead")
+
+    def test_a_release_promoted_from_its_pull_request_is_what_production_deployed(self):
+        """Its image names the pull request's head; the deployment names the
+        commit on main that released the same digest."""
+
+        released = "f" * 40
+        estate(deployed=released, head=released)
+
+        found = self.context().release
+
+        self.assertEqual((found.runs_deployed, found.standing, found.short), (True, "Up to date", released[:7]))
 
     def test_unreadable_units_are_said_and_nothing_else_breaks(self):
         estate()

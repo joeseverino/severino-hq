@@ -56,17 +56,6 @@
               "steps.text",
               "steps.value",
               "no_help_reason",
-              "check",
-              "check.name",
-              "check.label",
-              "check.effect",
-              "check.url",
-              "check.method",
-              "check.capability",
-              "check.target",
-              "check.reason",
-              "check.recommended",
-              "check.refusal",
               "actions",
               "actions.name",
               "actions.label",
@@ -2726,17 +2715,6 @@
               "findings.steps.notes",
               "findings.steps.text",
               "findings.steps.value",
-              "findings.check",
-              "findings.check.name",
-              "findings.check.label",
-              "findings.check.effect",
-              "findings.check.url",
-              "findings.check.method",
-              "findings.check.capability",
-              "findings.check.target",
-              "findings.check.reason",
-              "findings.check.recommended",
-              "findings.check.refusal",
               "findings.offers",
               "findings.offers.name",
               "findings.offers.label",
@@ -4681,9 +4659,6 @@
             },
             "type": "array"
           },
-          "check": {
-            "$ref": "#/components/schemas/WrittenCheck"
-          },
           "count": {
             "description": "How many things it stands for, at least 1.",
             "type": "integer"
@@ -4768,7 +4743,6 @@
           "count",
           "steps",
           "no_help_reason",
-          "check",
           "actions",
           "subject",
           "notice",
@@ -4821,9 +4795,6 @@
               "$ref": "#/components/schemas/ActionLinkPartial"
             },
             "type": "array"
-          },
-          "check": {
-            "$ref": "#/components/schemas/WrittenCheckPartial"
           },
           "count": {
             "$ref": "#/components/schemas/ActionItem/properties/count"
@@ -7446,30 +7417,6 @@
         "required": [
           "payload"
         ],
-        "type": "object"
-      },
-      "AutomationSourceRefreshRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "additionalProperties": false,
-            "description": "A Refresh takes nothing but why it was asked: the repository is the\nhost's configuration.",
-            "properties": {
-              "reason": {
-                "default": "",
-                "description": "Why it is refreshed, kept with the scan.",
-                "maxLength": 300,
-                "type": "string"
-              }
-            },
-            "type": "object"
-          }
-        },
-        "required": [],
         "type": "object"
       },
       "AwaitingApproval": {
@@ -17491,77 +17438,76 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "A wake-up request; with a subject, that subject is read on the next pull.\n\n``connection_ref`` forces every kind its credential reads, ``kind`` one\nkind, ``every_connection`` the whole sweep. At most one of the three.",
+            "description": "A wake-up request; with subjects, those are read on the next pull.\n\nEach of ``connection_refs`` forces every kind its credential reads, each of\n``kinds`` that kind, and ``every_connection`` the whole sweep, alone. A\npage's Refresh names every subject its problems rest on, in one call.",
             "oneOf": [
               {
                 "properties": {
-                  "connection_ref": {
-                    "pattern": "^\\s*$"
+                  "connection_refs": {
+                    "maxItems": 0
                   },
                   "every_connection": {
                     "const": false
                   },
-                  "kind": {
-                    "const": ""
+                  "kinds": {
+                    "maxItems": 0
                   }
-                },
-                "required": []
+                }
               },
               {
                 "properties": {
-                  "connection_ref": {
-                    "pattern": "\\S"
-                  },
-                  "every_connection": {
-                    "const": false
-                  },
-                  "kind": {
-                    "const": ""
-                  }
-                },
-                "required": [
-                  "connection_ref"
-                ]
-              },
-              {
-                "properties": {
-                  "connection_ref": {
-                    "pattern": "^\\s*$"
-                  },
-                  "every_connection": {
-                    "const": false
-                  },
-                  "kind": {
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
-              },
-              {
-                "properties": {
-                  "connection_ref": {
-                    "pattern": "^\\s*$"
+                  "connection_refs": {
+                    "maxItems": 0
                   },
                   "every_connection": {
                     "const": true
                   },
-                  "kind": {
-                    "const": ""
+                  "kinds": {
+                    "maxItems": 0
                   }
                 },
                 "required": [
                   "every_connection"
                 ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "connection_refs": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "connection_refs"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kinds": {
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "kinds"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "every_connection": {
+                    "const": false
+                  }
+                }
               }
             ],
             "properties": {
-              "connection_ref": {
-                "default": "",
-                "description": "The connection to read now, every type its credential reads.",
-                "title": "Connection",
-                "type": "string",
+              "connection_refs": {
+                "default": [],
+                "description": "The connections to read now, every type each one's credential reads.",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Connections",
+                "type": "array",
                 "x-hq-records": {
                   "resource": "connections"
                 }
@@ -17571,10 +17517,14 @@
                 "description": "Read every connection now.",
                 "type": "boolean"
               },
-              "kind": {
-                "$ref": "#/components/schemas/SweptKind",
-                "default": "",
-                "title": "Type of reading",
+              "kinds": {
+                "default": [],
+                "description": "The types of reading to read now, from every connection.",
+                "items": {
+                  "$ref": "#/components/schemas/SweptKind"
+                },
+                "title": "Types of reading",
+                "type": "array",
                 "x-hq-records": {
                   "resource": "readings"
                 }
@@ -23031,7 +22981,7 @@
             "type": "string"
           },
           "reachable": {
-            "description": "The machines a run of it may name now, each by its name in HQ. HQ's runner has a login to each as it needs. A Refresh reads them anew.",
+            "description": "The machines a run of it may name now, each by its name in HQ. HQ's runner has a login to each as it needs. Each scan reads them anew.",
             "items": {
               "type": "string"
             },
@@ -28342,9 +28292,6 @@
           "affected_scopes": {
             "$ref": "#/components/schemas/FindingFacts/properties/affected_scopes"
           },
-          "check": {
-            "$ref": "#/components/schemas/WrittenCheck"
-          },
           "evidence": {
             "$ref": "#/components/schemas/FindingFacts/properties/evidence"
           },
@@ -28406,7 +28353,6 @@
           "no_help_reason",
           "since",
           "steps",
-          "check",
           "offers",
           "investigations"
         ],
@@ -28418,9 +28364,6 @@
         "properties": {
           "affected_scopes": {
             "$ref": "#/components/schemas/FindingFactsPartial/properties/affected_scopes"
-          },
-          "check": {
-            "$ref": "#/components/schemas/WrittenCheckPartial"
           },
           "evidence": {
             "$ref": "#/components/schemas/FindingFactsPartial/properties/evidence"
@@ -29837,9 +29780,7 @@
         "type": "object"
       },
       "SweptKind": {
-        "description": "The one type of reading to read now, from every connection.",
         "enum": [
-          "",
           "adguard.client",
           "adguard.dns",
           "adguard.query_summary",
@@ -29908,7 +29849,6 @@
         ],
         "type": "string",
         "x-enumDescriptions": {
-          "": "None",
           "adguard.client": "DNS client",
           "adguard.dns": "DNS server",
           "adguard.query_summary": "DNS lookups",
@@ -32572,32 +32512,6 @@
         ],
         "type": "object"
       },
-      "WrittenCheck": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/ActionLink",
-            "title": "Action link"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "The press that reads again what it rests on and runs its check; null where there is none.",
-        "title": "Written check"
-      },
-      "WrittenCheckPartial": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/ActionLinkPartial",
-            "title": "Action link"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "description": "The press that reads again what it rests on and runs its check; null where there is none.",
-        "title": "Written check"
-      },
       "WrittenReason": {
         "description": "Why HQ can neither run a fix nor name an exact command for it; empty when it can do either.",
         "type": "string"
@@ -33960,81 +33874,6 @@
           "hq.jobs"
         ],
         "x-hq-capability": "automation.run.cancel",
-        "x-hq-effect": "remote_write"
-      }
-    },
-    "/api/v2/capabilities/automation.source.refresh/": {
-      "post": {
-        "description": "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
-        "operationId": "automationSourceRefreshV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutomationSourceRefreshRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/OperationAskedSuccess"
-          },
-          "202": {
-            "$ref": "#/components/responses/AwaitingApprovalAccepted"
-          },
-          "400": {
-            "$ref": "#/components/responses/UntargetedChangeBadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ChangeForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ChangeNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ChangeConflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/ChangeTooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearer": [
-              "manage_infrastructure"
-            ]
-          }
-        ],
-        "summary": "Refresh playbooks",
-        "tags": [
-          "hq.jobs"
-        ],
-        "x-hq-capability": "automation.source.refresh",
         "x-hq-effect": "remote_write"
       }
     },
@@ -37950,7 +37789,6 @@
                 "asset.delete",
                 "asset.update",
                 "automation.run.cancel",
-                "automation.source.refresh",
                 "calendar.entry.create",
                 "calendar.entry.delete",
                 "calendar.entry.update",

@@ -25,7 +25,8 @@ What the listing does not say:
 - `fast` checks only the files a change touched and runs the tests it
   reaches through imports, names and the paths a module names. A gate or test
   that reads the whole tree (the derived files, the structural bar, a test
-  tagged `tree`) and the composed suite are CI's and `check`'s.
+  tagged `tree`) are CI's and `check`'s, and the composed suite is the
+  pull request's Composition job's.
 - A new test is proven to fail without the fix by `mise run test --at <base>
   <labels>`, never by a base worktree, snapshot or checkout made by hand.
 - In a worktree of your own, try a change on `dev:scratch`, a throwaway
@@ -36,9 +37,10 @@ A CI job is named for the task it runs (`lint`, `test`, `browser`, `build`,
 (`mise-tasks/lint.toml` for `lint:*`), never in a workflow.
 
 The composed suite (`mise run test --composed`) runs the host and its
-extensions together, as the image runs them. CI cannot run it, since it
-needs the extensions' checkouts. It loads the set the gitignored
-`mise.local.toml` names. A worktree Claude Code makes gets a copy of that
+extensions together, as the image runs them. CI runs it once per release, in
+a pull request's Composition job, on the composed image its merge then
+promotes ([Deployment](docs/Deployment.md#checked-once)). Run here, it loads
+the set the gitignored `mise.local.toml` names. A worktree Claude Code makes gets a copy of that
 file through `.worktreeinclude`, so it composes the extensions' main
 checkouts. To compose an extension worktree instead, set
 [one variable on the command line](docs/Development.md#the-extension-set).
@@ -238,9 +240,9 @@ pages the change never named, so the browser suite on the pushed branch judges
 every page in both engines; no whole-tree run is repeated on the Mac.
 
 That branch is ready when `mise run check --release` exits 0, or
-`mise run check --release --remote` for a pushed commit: every CI gate, the
-composed suite with the extension set required, and read-only checks of the
-deploy host (`hq-host check`, [Deployment](docs/Deployment.md)). `--skip-host`
+`mise run check --release --remote` for a pushed commit: every CI gate (the
+pull request's composition among them, read with `--remote`) and read-only
+checks of the deploy host (`hq-host check`, [Deployment](docs/Deployment.md)). `--skip-host`
 exits 2, never 0, and so does a host whose release nothing verified; the check
 says how to verify it.
 

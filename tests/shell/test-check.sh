@@ -3,12 +3,12 @@
 # deploy host reached through a fake ssh: with --release, exit 0 only when every
 # gate ran and passed. What the host half checks is hq-host check's, held by
 # controller/host/check_test.go; here, that it is built from HEAD for the
-# host's platform, handed the units, and its exit read.
+# host's platform, and its exit read.
 
 set -eu
 # Hermetic: none of what the gates are asked for comes from the caller.
-unset REQUIRE_COMPOSED SEVERINO_HQ_DEPLOY_HOST \
-    TEST_FAIL_CI TEST_FAIL_COMPOSED TEST_HOST_EXIT TEST_UNAME TEST_HOST_REFUSES TEST_PROGRAM_PAD
+unset SEVERINO_HQ_DEPLOY_HOST \
+    TEST_FAIL_CI TEST_HOST_EXIT TEST_UNAME TEST_HOST_REFUSES TEST_PROGRAM_PAD
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 work="$(mktemp -d)"
@@ -17,11 +17,11 @@ failures=0
 fail() { echo "FAIL $1" >&2; failures=$((failures + 1)); }
 
 # The fixture repository: the real task and its verdict helper, CI's
-# workflow, the units, and hq-host's source.
+# workflow, and hq-host's source.
 repo="${work}/repo"
 mkdir -p "${repo}/tools/gate" "${repo}/controller/cmd/hq-host" "${repo}/.github/workflows"
 cd "${repo_dir}"
-cp -R deploy .gitignore "${repo}/"
+cp .gitignore "${repo}/"
 cp .github/workflows/ci.yml "${repo}/.github/workflows/"
 cp controller/cmd/hq-host/main.go "${repo}/controller/cmd/hq-host/"
 cp tools/__init__.py "${repo}/tools/"
@@ -40,9 +40,6 @@ git_ init -q
 git_ add -A
 git_ commit -q -m main
 git_ update-ref refs/remotes/origin/main HEAD
-# The release adds a unit: its deploy installs it, so the host is not expected
-# to have it yet.
-printf '[Timer]\nOnCalendar=daily\n' >"${repo}/deploy/systemd/severino-hq-example.timer"
 printf '// the release\n' >>"${repo}/controller/cmd/hq-host/main.go"
 git_ add -A
 git_ commit -q -m release
@@ -80,11 +77,10 @@ if [ -n "${TEST_PROGRAM_PAD-}" ]; then dd if=/dev/zero bs=1024 count=4096 2>/dev
 EOF
 cat >"${bin}/mise" <<'EOF'
 #!/bin/sh
-echo "mise $* REQUIRE_COMPOSED=${REQUIRE_COMPOSED:-}" >>"${TEST_LOG}"
+echo "mise $*" >>"${TEST_LOG}"
 case "$*" in
     # The host's half is the real task's program, reaching the fake ssh.
     "run check:host") exec python3 -m tools.gate.host ;;
-    *"test --composed"*) exit "${TEST_FAIL_COMPOSED:-0}" ;;
     *) exit "${TEST_FAIL_CI:-0}" ;;
 esac
 EOF
@@ -122,7 +118,7 @@ status=0
 run_check || status=$?
 [ "${status}" -eq 0 ] || fail "a plain run whose gates pass: exit ${status}
 $(cat "${work}/out")"
-grep -qx "${GATES} REQUIRE_COMPOSED=" "${TEST_LOG}" || fail "a plain run did not run the pipeline's gates"
+grep -qx "${GATES}" "${TEST_LOG}" || fail "a plain run did not run the pipeline's gates"
 if grep -q "composed\|^ssh" "${TEST_LOG}"; then fail "a plain run went past the gates"; fi
 [ -f "${repo}/var/gate/check.txt" ] || fail "a plain run kept no verdict"
 export TEST_FAIL_CI=1
@@ -137,16 +133,14 @@ git_ checkout -q -- controller/cmd/hq-host/main.go
 #    checked by the release's own hq-host.
 expect 0 "a ready release"
 says "READY"
-grep -qx "${GATES} REQUIRE_COMPOSED=" "${TEST_LOG}" || fail "the pipeline's gates did not run"
-grep -qx "mise run test --composed REQUIRE_COMPOSED=1" "${TEST_LOG}" || fail "the composed suite ran without being required"
+grep -qx "${GATES}" "${TEST_LOG}" || fail "the pipeline's gates did not run"
+if grep -q "composed" "${TEST_LOG}"; then fail "a release run ran the composed suite, which its pull request's Composition runs"; fi
 [ -f "${repo}/var/gate/check-release.txt" ] || fail "a release run's verdict is not kept apart from a plain run's"
 logged "mise run check:host" "the host was not reached through check:host"
 logged "ssh -o BatchMode=yes deploy.example.test uname -s -m" "the host was not asked its platform"
 logged "GOOS=linux GOARCH=amd64 CGO_ENABLED=0" "the check was not built for the host's platform"
-logged "check --release" "the host did not run hq-host check"
+logged '/hq-host" check;' "the host did not run hq-host check"
 grep -qx "./hq-host" "${TEST_PAYLOAD}" || fail "the host was not handed hq-host"
-grep -qx "./release/deploy/systemd/severino-hq-example.timer" "${TEST_PAYLOAD}" ||
-    fail "the host was not handed the release's units"
 git_ show HEAD:controller/cmd/hq-host/main.go | cmp -s - "${TEST_PAYLOAD}.program" ||
     fail "hq-host was not built from HEAD"
 
@@ -200,9 +194,6 @@ expect 1 "a failing gate"
 says "[check-release] FAILED in"
 says "every gate CI runs"
 unset TEST_FAIL_CI
-export TEST_FAIL_COMPOSED=1
-expect 1 "a failing composed suite"
-unset TEST_FAIL_COMPOSED
 
 # 5. --remote reads what GitHub ran on HEAD instead of running the gates here.
 #    The fake gh answers from JSON pages, <API path with / as _>.<page>.json in

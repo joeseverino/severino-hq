@@ -15,6 +15,7 @@ import (
 
 	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
 // The listener's pace, each defined once.
@@ -38,21 +39,24 @@ const (
 // on each reconnect, so nothing is buffered across one.
 type Listener struct {
 	// URL is the Worker's socket (wss://), Token its bearer.
-	URL, Token string
+	URL   string
+	Token secret.Value
 	// Client makes the handshake; its timeout bounds the handshake alone.
 	Client *http.Client
 	// Post is the bridge's events action.
 	Post func(context.Context, InboundBatch) error
 	Log  *slog.Logger
-	// The pace, ListenerPing and NewBurst's unless a test sets its own.
-	Ping  time.Duration
-	Burst Burst
+	// The pace, ListenerPing and NewBurst's unless a test sets its own: a
+	// ping every Ping, each ending the connection unless answered within
+	// PongWait (gorilla/websocket's pingPeriod and pongWait).
+	Ping, PongWait time.Duration
+	Burst          Burst
 	Reconnect
 }
 
 // NewListener is the listener for an events connection.
 func NewListener(connection connections.Connection, client *http.Client, post func(context.Context, InboundBatch) error, log *slog.Logger) (*Listener, error) {
-	if connection.APIToken == nil || connection.APIToken.APIToken == "" {
+	if connection.APIToken == nil || connection.APIToken.APIToken.IsZero() {
 		return nil, &ProviderError{Message: "the events connection", Err: ErrSettingMissing}
 	}
 	if address, err := url.Parse(connection.APIToken.URL); err != nil || address.Scheme != "wss" || address.Host == "" {
@@ -60,7 +64,7 @@ func NewListener(connection connections.Connection, client *http.Client, post fu
 	}
 	return &Listener{
 		URL: connection.APIToken.URL, Token: connection.APIToken.APIToken, Client: client, Post: post, Log: log,
-		Ping: ListenerPing, Burst: NewBurst(), Reconnect: NewReconnect(),
+		Ping: ListenerPing, PongWait: ListenerPing, Burst: NewBurst(), Reconnect: NewReconnect(),
 	}, nil
 }
 
@@ -79,7 +83,7 @@ func (l *Listener) session(ctx context.Context) error {
 	// The library closes the handshake's body itself (Dial's documentation).
 	conn, _, err := websocket.Dial(ctx, l.URL, &websocket.DialOptions{ //nolint:bodyclose // see above
 		HTTPClient: l.Client,
-		HTTPHeader: http.Header{"Authorization": {"Bearer " + l.Token}},
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + l.Token.Reveal()}},
 	})
 	if err != nil {
 		return err
@@ -125,7 +129,7 @@ func (l *Listener) session(ctx context.Context) error {
 				return
 			case <-ticker.C:
 			}
-			pinged, stop := context.WithTimeout(ctx, l.Ping)
+			pinged, stop := context.WithTimeout(ctx, l.PongWait)
 			err := conn.Ping(pinged)
 			stop()
 			if err != nil {

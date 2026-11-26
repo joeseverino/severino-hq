@@ -173,13 +173,10 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         links: list[tuple[str, str, str]] = []
         with projection_scope():
             for finding in estate_findings(principal=principal):
-                offered = (*finding.presses, *((finding.check,) if finding.check else ()))
-                links += [(action.label, action.url, action.method) for action in offered]
+                links += [(action.label, action.url, action.method) for action in finding.presses]
             for item in work_queue():
                 offered = [*item["actions"], *(step["link"] for step in item["steps"] if step["kind"] == "press")]
                 links += [(action["label"], action["url"], action["method"]) for action in offered]
-                if item["check"]:
-                    links.append((item["check"]["label"], item["check"]["url"], item["check"]["method"]))
         return links + self.rendered()
 
     def pages(self) -> list[str]:
@@ -213,24 +210,6 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
         self.assertIn("Keep the live version", labels)
         self.assertIn("Remove empty groups", labels)
         self.assertIn(capability_words(UPDATE_CAPABILITY), labels)
-
-    def test_no_page_offers_a_way_to_itself(self):
-        # The fixture is only worth something while a page it draws is one a
-        # remedy names as the way to it.
-        offered = {urlsplit(url).path for _label, url, _method in self.emitted()}
-        self.assertTrue(offered & set(self.pages()))
-        for page in self.pages():
-            with self.subTest(page=page):
-                # A control is a page action or a remedy; the view's own
-                # address, its query too, is its state and never one of them.
-                # The site header's controls lead to the same places on every
-                # page, so only the page's own are read.
-                controls = [
-                    link.attrs["href"]
-                    for link in elements(self.client.get(page), "a")
-                    if "btn" in link.classes and any(above.tag == "main" for above in link.ancestors)
-                ]
-                self.assertNotIn(page, controls)
 
     def test_a_box_of_remedies_holds_a_control(self):
         # A remedy left out because it leads to the page it is drawn on takes

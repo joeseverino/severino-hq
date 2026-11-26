@@ -19,7 +19,7 @@ func allowanceSweep(t *testing.T, h *githubHarness) runtime.GitHubAllowanceRecor
 	done := h.r.BeginSnapshot()
 	defer done()
 	controller := NewController(h.r, runtime.ControllerRegistry{})
-	inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{runtime.ResourceKindGitHubRepository})
+	inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{runtime.ResourceKindGitHubRepository}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

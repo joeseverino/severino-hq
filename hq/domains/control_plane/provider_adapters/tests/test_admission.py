@@ -78,8 +78,12 @@ class InboundAdmissionTests(SimpleTestCase):
         with self.assertRaisesRegex(ValueError, "example_api"):
             admission.admitted((first, second), "INBOUND")
 
-    def test_every_event_makes_due_a_reading_hq_stores(self):
+    def test_every_event_makes_due_a_reading_hq_stores_or_reads_itself(self):
+        from hq.platform.application.outbound_work import reader_of
+
         for provider, spec in admission.INBOUND.items():
             for event, kinds in spec.events.items():
                 with self.subTest(provider=provider, event=event):
-                    self.assertTrue(all(kind in OBSERVATIONS or kind in PROVIDERS for kind in kinds), kinds)
+                    self.assertTrue(
+                        all(kind in OBSERVATIONS or kind in PROVIDERS or reader_of(kind) for kind in kinds), kinds
+                    )

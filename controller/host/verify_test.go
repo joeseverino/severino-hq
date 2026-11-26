@@ -18,12 +18,6 @@ func synced(t *testing.T) *fakeHost {
 	if err := f.machine.Sync(context.Background(), next); err != nil {
 		t.Fatal(err)
 	}
-	shipped, _ := Shipped(f.machine.UnitDir())
-	for _, name := range shipped {
-		if err := InstallUnit(f.machine.UnitDir(), f.machine.Systemd, name); err != nil {
-			t.Fatal(err)
-		}
-	}
 	return f
 }
 
@@ -53,12 +47,6 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.Remove(filepath.Join(f.machine.Lib, "hq", "config", "controller.json"))
-	if err := os.WriteFile(filepath.Join(f.machine.Systemd, "severino-hq-web.service"), []byte("edited\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(f.machine.Systemd, "severino-hq-old.timer"), nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
 
 	drift := strings.Join(f.verify(t), "\n")
 
@@ -66,8 +54,6 @@ func TestEveryKindOfDriftIsNamed(t *testing.T) {
 		"deploy/bin/hq-host differs from the image's",
 		"deploy/bin/planted is not the image's",
 		"hq/config/controller.json is missing from the tree",
-		"severino-hq-web.service is not the release's",
-		"severino-hq-old.timer is not shipped by the release",
 	} {
 		if !strings.Contains(drift, want) {
 			t.Errorf("not reported: %s\n%s", want, drift)
@@ -127,6 +113,9 @@ func TestEachRunnerSudoFaultIsDrift(t *testing.T) {
 		"a runner granted a command HQ does not render": {func(f *fakeHost, _ string) {
 			f.sudoRules += "    (root) NOPASSWD: /usr/local/lib/example/retired *\n"
 		}, "deployer may run /usr/local/lib/example/retired * through sudo, which HQ does not render"},
+		"a runner granted the setup": {func(f *fakeHost, program string) {
+			f.sudoRules += "    (root) NOPASSWD: " + program + " setup *\n"
+		}, "deployer may run <program> setup * through sudo, which HQ does not render"},
 		"a runner whose HQ rule is widened": {func(f *fakeHost, program string) {
 			f.sudoRules += "    (root) NOPASSWD: " + program + " *\n"
 		}, "deployer may run <program> * through sudo, which HQ does not render"},

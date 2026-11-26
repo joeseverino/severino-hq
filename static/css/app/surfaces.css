@@ -301,6 +301,9 @@
 /* A control after the words beside the heading stands as far from them as a
    row's controls stand apart. */
 .section-aside > * + :is(.btn, .ask) { margin-inline-start: var(--space-4); }
+/* An ask there (a queue's Refresh) says something under the heading only once
+   there is something to say, as one beside a page's title does. */
+.section-aside > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
 .section > .section-body {
   --section-start: var(--section-inset, var(--space-8));
   --section-end: var(--space-8);

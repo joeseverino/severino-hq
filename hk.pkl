@@ -114,6 +114,16 @@ hooks {
         glob = List("tools/file_lines.py") + toolchain
         check = "uv run python -m tools.file_lines"
       }
+      // A changed module's lazy importers are anywhere in the tree, so the
+      // step is handed the changed modules and reads every lazy import.
+      ["lazy-imports"] {
+        glob = List("**/*.py")
+        check = "uv run python -m tools.lazy_imports {{files}}"
+      }
+      ["lazy-imports-whole"] {
+        glob = List("tools/lazy_imports.py") + toolchain
+        check = "uv run python -m tools.lazy_imports"
+      }
       // mise runs a file under mise-tasks/ only when it is executable, and
       // hides one that is not; each starts with a shebang.
       ["task-modes"] {

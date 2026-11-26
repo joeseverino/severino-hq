@@ -1,0 +1,38 @@
+[
+  {
+    "timestamp": "2022-09-21T13:37:51.658918-04:00",
+    "version": 1,
+    "type": "test",
+    "tailnet": "example.com",
+    "message": "This is a test event",
+    "data": null
+  },
+  {
+    "timestamp": "2022-09-21T13:59:02.949217-04:00",
+    "version": 1,
+    "type": "nodeCreated",
+    "tailnet": "example.com",
+    "message": "Node workstation.example.com created",
+    "data": {
+      "nodeID": "nFJw3SRKTM59",
+      "deviceName": "workstation.example.com",
+      "managedBy": "person@example.com",
+      "actor": "person@example.com",
+      "url": "https://console.tailscale.com/admin/machines/192.0.2.10"
+    }
+  },
+  {
+    "timestamp": "2022-09-21T13:59:02.949278-04:00",
+    "version": 1,
+    "type": "nodeNeedsApproval",
+    "tailnet": "example.com",
+    "message": "Node workstation.example.com needs approval",
+    "data": {
+      "nodeID": "nFJw3SRKTM59",
+      "deviceName": "workstation.example.com",
+      "managedBy": "person@example.com",
+      "actor": "person@example.com",
+      "url": "https://console.tailscale.com/admin/machines/192.0.2.10"
+    }
+  }
+]

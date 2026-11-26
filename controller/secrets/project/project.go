@@ -12,6 +12,7 @@ import (
 
 	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
+	"github.com/joeseverino/severino-hq/controller/internal/secret"
 	"github.com/joeseverino/severino-hq/controller/secrets/connectapi"
 )
 
@@ -254,16 +255,18 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 		return nil, refuse("Connection ", ref, " names an unknown projection.")
 	}
 	found := connections.Connection{Ref: ref}
-	settings := map[string]string{}
+	// A projected value is a secret until it is written where it is used, so
+	// no refusal below can carry one.
+	settings := map[string]secret.Value{}
 	for _, variable := range variables(projection) {
 		entry := projection[variable]
-		value := ""
+		value := secret.Value{}
 		switch entry.Source {
 		case SourceRef:
-			value = ref
+			value = secret.New(ref)
 		case SourceURL:
 			if item.Urls != nil && *entry.Index < len(*item.Urls) {
-				value = (*item.Urls)[*entry.Index].Href
+				value = secret.New((*item.Urls)[*entry.Index].Href)
 			}
 		case SourceField:
 			kind, selector := "label", entry.Label
@@ -274,36 +277,36 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 			for _, field := range fields(item) {
 				if (kind == "id" && field.Id == selector) || (kind == "label" && Text(field.Label) == selector) {
 					matched++
-					value = Text(field.Value)
+					value = secret.New(Text(field.Value))
 				}
 			}
 			if matched == 0 && entry.Optional {
-				value = entry.Default
+				value = secret.New(entry.Default)
 			} else if matched != 1 {
 				return nil, refuse("Connection ", ref, " must contain exactly one field ", kind, "=", selector, "; found ", strconv.Itoa(matched), ".")
 			}
 		}
-		if value == "" && entry.Optional {
-			value = entry.Default
+		if value.IsZero() && entry.Optional {
+			value = secret.New(entry.Default)
 		}
-		if value == "" {
+		if value.IsZero() {
 			if entry.Optional {
 				continue
 			}
 			return nil, refuse("Connection ", ref, " is missing ", variable, ".")
 		}
-		if hasControl(value) {
+		if value.Holds(hasControl) {
 			return nil, refuse("Connection ", ref, " has a control character in ", variable, ".")
 		}
-		if strings.Contains(value, "op://") {
+		if value.Holds(func(value string) bool { return strings.Contains(value, "op://") }) {
 			return nil, refuse("Refusing: an unresolved reference survived injection.")
 		}
 		switch variable {
 		case RefVariable:
 		case ProviderVariable:
-			found.Provider = value
+			found.Provider = value.Reveal()
 		case ManagesVariable:
-			found.Manages = manages(value)
+			found.Manages = value.Holds(manages)
 		default:
 			settings[variable] = value
 		}

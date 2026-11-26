@@ -144,6 +144,37 @@ class GraphTests(TestCase):
         # Named as the container: its machine is the context, not its name.
         self.assertEqual(found.labels(RELATIONS["talks_to"].inverse), ("db",))
 
+    def test_a_container_is_on_only_the_networks_an_operator_made(self):
+        with projection_scope():
+            found = relationships_for("resource:lab-web", principal=READER)
+
+        self.assertEqual(found.labels("On network"), ("shop_default",))
+
+
+class ContainerPageTests(TestCase):
+    def test_a_group_read_through_a_connection_the_page_names_says_only_when(self):
+        from django.template.loader import render_to_string
+        from django.utils import timezone
+
+        from ..entity_links import EntityLink
+        from ..relationships import Relationships
+        from ..topology_model import RelationGroup, Relationship
+
+        portainer = EntityLink("example-portainer", "/infrastructure/connections/example-portainer/")
+        network = Relationship(EntityLink("shop_default", "/infrastructure/shop/"), portainer, timezone.now())
+        found = Relationships(
+            "resource:lab-web",
+            (
+                RelationGroup(RELATIONS["reaches"].inverse, 1, (Relationship(portainer),)),
+                RelationGroup("On network", 2, (network,)),
+            ),
+        )
+
+        said = render_to_string("partials/_relationships.html", {"relationships": found})
+
+        self.assertEqual(said.count(portainer.url), 1)
+        self.assertIn("Last read", said)
+
 
 class MachinePageTests(TestCase):
     def setUp(self):

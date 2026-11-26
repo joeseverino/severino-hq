@@ -137,7 +137,7 @@ def a_resource(**fields) -> ManagedResource:
         "key": "example-rewrite",
         "kind": "example.rewrite",
         "spec": {"connection_ref": "example-dns", "domain": "app.example.com", "answer": "192.0.2.10"},
-        "conditions": [{"type": "Ready", "status": "True"}],
+        "conditions": [{"type": "Ready", "status": True}],
     }
     return ManagedResource.objects.create(**{**values, **fields})
 
@@ -210,7 +210,7 @@ def json_mutated_in_place():
     a_resource()
     resource = ManagedResource.objects.get(pk=RESOURCE_ID)
     resource.spec["answer"] = "192.0.2.99"
-    resource.conditions.append({"type": "Synced", "status": "False"})
+    resource.conditions.append({"type": "Synced", "status": False})
     resource.status["phase"] = "pending"
     resource.save()
     resource.spec["nested"] = {"deep": [1, 2, 3]}
@@ -542,7 +542,7 @@ class RecordedChangeTests(TestCase):
             first,
             {
                 "spec": {"Answer": ["192.0.2.10", "192.0.2.99"]},
-                "conditions": {"Synced": ["", "type Synced, status False"]},
+                "conditions": {"Synced": ["", "type Synced, status no"]},
                 "status": {"Phase": ["", "pending"]},
             },
         )

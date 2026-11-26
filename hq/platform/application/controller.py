@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from functools import partial
 from typing import Any
@@ -36,8 +36,10 @@ from .infrastructure import CALLED_OFF, controller_contract, resolved_spec, seri
 from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
 from .projection import iso
-from .resource_operations import REPLACES, THEN, Prepared, enqueue, serialize_operation
+from .record_errors import PolicyError
+from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation
 lazy from .app_update_approval import succeeded
+lazy from .automation_runs import held_runs, operation_registry, queue_settling
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -126,10 +128,25 @@ def _fail_lapsed_runs(now) -> None:
         .select_related("resource")
         .filter(OPERATION_LAPSE.q(now), action=OperationRequest.Action.RUN)
         .exclude(resource__spec__retry="safe")
+        .exclude(result__has_key=HANDOFF)
     )
     for operation in lapsed:
         with own_operation(operation):
             _stopped(operation, {})
+
+
+def _settle_lapsed_holds(now) -> None:
+    """Ask the settling read of each held run its bound has passed, which no
+    event woke: it ends the run as that read finds it, or as an unknown
+    outcome where it finds nothing (``_settled``), and one that cannot be
+    asked ends it so now."""
+
+    for held in held_runs().select_for_update().filter(OPERATION_LAPSE.q(now)):
+        try:
+            queue_settling(held)
+        except PolicyError:
+            with own_operation(held):
+                _stopped(held, dict(held.result or {}))
 
 
 def release_lapsed(now) -> None:
@@ -142,11 +159,12 @@ def release_lapsed(now) -> None:
     """
 
     _fail_lapsed_runs(now)
+    _settle_lapsed_holds(now)
 
     switched_off = Q(resource__in=ManagedResource.objects.filter(enabled=False).values("pk")) & ~Q(
         action=OperationRequest.Action.DELETE
     )
-    OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).update(
+    OperationRequest.objects.filter(OPERATION_LAPSE.q(now)).exclude(result__has_key=HANDOFF).update(
         state=Case(
             When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
             default=Value(OperationRequest.State.QUEUED),
@@ -201,7 +219,9 @@ def _pending(operation: OperationRequest, *, claimed: bool = False) -> dict[str,
     # and hosts it was asked and approved for. A peek leases nothing, so it
     # is told none of it.
     if claimed and operation.action == OperationRequest.Action.RUN:
-        pending["input"] = {name: value for name, value in (operation.input or {}).items() if name != THEN}
+        pending["input"] = {
+            name: value for name, value in (operation.input or {}).items() if name not in (THEN, SETTLES)
+        }
     return pending
 
 
@@ -656,8 +676,10 @@ def _hold_stated(operation: OperationRequest, stated: dict[str, Any]) -> None:
     if violation is not None:
         raise ValueError(violation)
     hosts = set((operation.input or {}).get("hosts") or ())
-    if any(set(stated.get(stat) or {}) - hosts for stat in ("readings", "preview")):
+    if any(set(stated.get(stat) or {}) - hosts for stat in ("readings", "preview", HANDOFF)):
         raise ValueError("A run states only what it found on the machines it was run on.")
+    if stated.get(HANDOFF) and _settling_timeout(operation) is None:
+        raise ValueError("A run hands off only when its playbook names the read that settles it.")
     if _stated_bytes(stated) > limit("StatedBytes", "maxLength"):
         raise ValueError("What the run's playbook stated is larger than the bridge accepts.")
 
@@ -676,18 +698,74 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
     request holds no secret either.
     """
 
-    events = list((operation.result or {}).get(RUN_EVENTS) or ())
-    result: dict[str, Any] = {"message": report.message, "conditions": report.conditions, RUN_EVENTS: events}
-    if report.stated:
-        result["stated"] = struck(report.stated, declared_names())[0]
+    held = operation.result or {}
+    result: dict[str, Any] = {
+        "message": report.message,
+        "conditions": report.conditions,
+        RUN_EVENTS: list(held.get(RUN_EVENTS) or ()),
+    }
+    if HANDOFF in held:
+        result[HANDOFF] = held[HANDOFF]
+    stated = dict(report.stated or {})
+    handoff = stated.pop(HANDOFF, None)
+    if stated:
+        result["stated"] = struck(stated, declared_names())[0]
     # Ended as a run whose lease lapsed is (``_fail_lapsed_runs``).
     if any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions):
         _stopped(operation, result)
+    elif handoff and report.success:
+        _hold(operation, {**result, HANDOFF: handoff})
     else:
         _finish(operation, report, result)
         if report.success:
             succeeded(operation)
+        if settles := (operation.input or {}).get(SETTLES):
+            _settled(str(settles), report)
     return {"ok": True, "operation": serialize_operation(operation)}
+
+
+def _settling_timeout(operation: OperationRequest) -> int | None:
+    """How long a run of ``operation``'s procedure may be held, its
+    declaration's timeout, or None where it names no read that settles it."""
+
+    manifest = operation_registry().get(str((operation.input or {}).get("operation", "")))
+    return manifest.timeout_seconds if manifest is not None and manifest.settled_by else None
+
+
+def _hold(operation: OperationRequest, result: dict[str, Any]) -> None:
+    """Keep ``operation`` claimed once its playbook handed off to a unit it
+    left running, until the read its procedure names settles it
+    (``_settled``), bounded by its declaration's timeout from its claim: an
+    event on the unit's machine asks that read sooner (``host_work``), and
+    the bound asks it once no event did (``_settle_lapsed_holds``). No worker
+    renews it."""
+
+    bound = operation.claimed_at + timedelta(seconds=_settling_timeout(operation) or 0)
+    OperationRequest.objects.filter(pk=operation.pk).update(
+        result=result, lease_expires_at=bound, updated_at=timezone.now()
+    )
+    operation.result, operation.lease_expires_at = result, bound
+
+
+def _settled(held_id: str, report: ControllerReport) -> None:
+    """Settle the held run ``held_id`` from the read that settles it, now
+    ended: by the readings that read stated on its machines and whether it
+    succeeded, as though its own playbook had stated and ended so, so its
+    outcome and what follows it are any run's (``_finish``, ``succeeded``):
+    a read whose checks fail what it found fails the run. A read that stated none settles
+    nothing, unless the run's bound has passed, which ends it as an unknown
+    outcome. What woke HQ to ask is never read."""
+
+    held = held_runs().select_for_update().filter(pk=held_id).first()
+    if held is None:
+        return
+    readings = (report.stated or {}).get("readings")
+    with own_operation(held):
+        if readings:
+            stated = {"readings": readings}
+            _settle_run(held, replace(report, observed_generation=held.input.get("generation"), stated=stated))
+        elif OPERATION_LAPSE.holds(held, timezone.now()):
+            _stopped(held, dict(held.result or {}))
 
 
 def _settle_scan(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:

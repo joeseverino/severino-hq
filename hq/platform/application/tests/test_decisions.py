@@ -10,7 +10,6 @@ from django.test import SimpleTestCase
 from django.utils import timezone
 
 from hq.platform.application.action_links import read_link
-from hq.platform.application.contracts import Effect
 from hq.platform.application.decisions import decision
 from hq.platform.application.finding_steps import Do, Press, Run
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, with_class
@@ -33,7 +32,7 @@ def card(item) -> str:
 
 
 class DecisionTests(SimpleTestCase):
-    def item(self, *, actions=(), steps=(), check=None, **fields):
+    def item(self, *, actions=(), steps=(), **fields):
         return {
             "label": "Example needs a decision",
             "status": "attention",
@@ -42,58 +41,34 @@ class DecisionTests(SimpleTestCase):
             "count": 1,
             "actions": [asdict(action) for action in actions],
             "steps": [asdict(step) for step in steps],
-            "check": asdict(check) if check else None,
             **fields,
         }
 
-    def test_the_press_leads_and_its_check_follows_without_mutating_or_repeating_either(self):
+    def test_the_press_leads_without_mutating_or_repeating(self):
         action = read_link("fix", "Review change", "/example/review/", recommended=True)
-        verify = example_command("verify", "Recheck", "write", "/example/check/", method="POST")
-        item = self.item(steps=(Press(action),), check=verify)
+        item = self.item(steps=(Press(action),))
         before = deepcopy(item)
         shown = decision(item)
         self.assertEqual(item, before)
-        self.assertEqual(shown["actions"], [asdict(action), asdict(verify)])
+        self.assertEqual(shown["actions"], [asdict(action)])
         self.assertEqual(shown["steps"], [])
         html = card(item)
         self.assertEqual(row_hrefs(html).count("/example/review/"), 1)
-        (recheck,) = select(html, "formaction", "/example/check/")
-        self.assertEqual(recheck.attrs["form"], "hq-post")
         self.assertEqual(elements(html, "form"), [])
 
     def test_what_is_wrong_and_its_buttons_are_on_the_face_of_the_card(self):
         fix = example_command("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)
-        check = example_command("verify", "Check again", Effect.READ, "/example/check/", method="POST")
-        html = card(self.item(steps=(Press(fix),), check=check))
+        html = card(self.item(steps=(Press(fix),)))
 
         self.assertEqual(elements(html, "details") + elements(html, "ol"), [])
-        for words in ("What it means for the reader.", "Restore the example", "Check again"):
+        for words in ("What it means for the reader.", "Restore the example"):
             self.assertIn(words, text(html))
 
-    def test_a_lone_check_is_a_button_and_never_a_step(self):
-        check = example_command("verify", "Check again", Effect.READ, "/example/check/", method="POST")
-        shown = decision(self.item(check=check))
-
-        self.assertEqual(shown["actions"], [asdict(check)])
-        self.assertEqual(shown["steps"], [])
-
-    def test_a_check_stands_beside_the_owners_own_action(self):
-        own = read_link("open", "Open", "/example/")
-        check = example_command("verify", "Check again", Effect.READ, "/example/check/", method="POST")
-        shown = decision(self.item(actions=(own,), check=check))
-
-        self.assertEqual(shown["actions"], [asdict(own), asdict(check)])
-
-    def test_the_fix_and_the_named_page_stand_on_the_row_before_a_check(self):
+    def test_the_fix_and_the_named_page_stand_on_the_row(self):
         fix = example_command("remedy", "Renew certificate", "remote_write", "/commands/renew/", recommended=True)
-        check = read_link("verify", "Check again", "/example/check/")
-        shown = decision(
-            self.item(url="/certificates/example/", action="Open certificate", steps=(Press(fix),), check=check)
-        )
+        shown = decision(self.item(url="/certificates/example/", action="Open certificate", steps=(Press(fix),)))
 
-        self.assertEqual(
-            [action["label"] for action in shown["actions"]], ["Renew certificate", "Open certificate", "Check again"]
-        )
+        self.assertEqual([action["label"] for action in shown["actions"]], ["Renew certificate", "Open certificate"])
 
     def test_a_row_says_how_old_its_reading_is_only_once_it_is_out_of_date(self):
         from datetime import timedelta
@@ -114,8 +89,7 @@ class DecisionTests(SimpleTestCase):
         self.assertFalse(select(unknown, "data-reading-age"))
 
     def test_the_named_page_leads_when_nothing_else_is_recommended(self):
-        check = read_link("verify", "Check again", "/example/check/")
-        shown = decision(self.item(url="/example/plan/", action="Upgrade plan", check=check))
+        shown = decision(self.item(url="/example/plan/", action="Upgrade plan"))
 
         self.assertEqual([action["label"] for action in shown["actions"] if action["recommended"]], ["Upgrade plan"])
 

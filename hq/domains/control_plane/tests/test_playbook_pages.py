@@ -4,7 +4,6 @@ playbook with how the commit changes it and its own Adopt and Reject, and a
 person's View diff, Adopt all and Reject all; and the audit entry of the
 scan's read, which View diff opens, each drawn from what the estate stored."""
 
-import json
 from urllib.parse import urlsplit
 
 from django.db import connection
@@ -18,8 +17,6 @@ from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
-
-XHR = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
 
 
 def _sent() -> dict[str, str]:
@@ -163,22 +160,19 @@ class PlaybooksPageTests(TestCase):
         (failed,) = select(html, "data-scan-failed")
         self.assertIn(newest.result["message"], failed.words)
         self.assertTrue(any("data-reading-age" in shown.attrs for shown in within(html, "data-scan-failed")))
-        # A Refresh still waiting leaves the failure said.
-        self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR)
-        (still,) = select(self.page(), "data-scan-failed")
-        self.assertIn(newest.result["message"], still.words)
         # A scan that read the repository leaves only the commit adopted.
         from hq.platform.core.example_estate import automation
 
-        OperationRequest.objects.filter(action=OperationRequest.Action.SCAN, state="queued").delete()
-        automation.rescanned(self.owner)
+        automation.rescanned()
         html = self.page()
         self.assertFalse(select(html, "data-scan-failed"))
         self.assertEqual(len(select(html, "data-adopted-commit")), 1)
 
-    def test_a_newer_commit_puts_view_diff_adopt_all_and_reject_all_beside_refresh_at_the_far_right(self):
+    def test_a_newer_commit_is_said_to_wait_with_view_diff_adopt_all_and_reject_all_beside_the_title(self):
         newest = self.newest()
         html = self.page()
+        (waits,) = select(html, "data-commit-waits")
+        self.assertIn(newest.revision[:12], waits.words)
         head = _head(html)
         self.assertIn(_scan_page(newest), {element.attrs.get("href") for element in head})
         self.assertLessEqual({_adopt(newest.pk), _reject(newest.pk)}, _posts(html))
@@ -186,7 +180,6 @@ class PlaybooksPageTests(TestCase):
         self.assertIn("data-many", actions.attrs, "every one stands beside the title")
         beside = [element for element in head if not any("overflow-menu" in up.classes for up in element.ancestors)]
         labels = [element.words for element in beside if element.tag in {"a", "button"} and element.words]
-        self.assertEqual(labels[-1], "Refresh")
         self.assertLess(labels.index("View diff"), labels.index("Adopt all"))
         self.assertLess(labels.index("Adopt all"), labels.index("Reject all"))
 
@@ -258,9 +251,7 @@ class PlaybooksPageTests(TestCase):
         self.assertIn(automation.PACKAGE_UPGRADE, {procedure.id for procedure in procedures()})
         self.assertFalse(_decisions(self.page()))
 
-    def test_view_diff_opens_the_audit_entry_of_the_read_with_who_refreshed_both_commits_and_each_playbook_s_rows(
-        self,
-    ):
+    def test_view_diff_opens_the_audit_entry_of_the_read_with_both_commits_and_each_playbook_s_rows(self):
         from hq.platform.application.automation_adoption import plan
 
         newest = self.newest()
@@ -270,9 +261,8 @@ class PlaybooksPageTests(TestCase):
         html = self.page(url)
         said = text(html)
         adopted = AdoptedCatalog.objects.order_by("-pk").first()
-        for fact in ("Refreshed by", "Commit read", newest.revision[:12], "Commit adopted", adopted.revision[:12]):
+        for fact in ("Commit read", newest.revision[:12], "Commit adopted", adopted.revision[:12]):
             self.assertIn(fact, said)
-        self.assertIn(newest.operation.requested_actor, said)
         table = within(html, "class", "data-table")
         _says_each_widening_once(self, table, planned)
         rows = " ".join(element.words for element in table)
@@ -369,7 +359,7 @@ class PlaybooksPageTests(TestCase):
         links = {urlsplit(element.attrs["href"]).path for element in select(self.page(), "href")}
         self.assertFalse(changes & links)
 
-    def test_a_viewer_is_offered_neither_refresh_adopt_nor_reject(self):
+    def test_a_viewer_is_offered_neither_adopt_nor_reject(self):
         from hq.platform.application.roles import Role, assign
 
         newest = self.newest()
@@ -377,7 +367,6 @@ class PlaybooksPageTests(TestCase):
         assign(viewer, Role.VIEWER)
         self.client.force_login(viewer)
         posts = _posts(self.page())
-        self.assertNotIn(reverse("control_plane:playbooks_refresh"), posts)
         self.assertFalse({_adopt(newest.pk), _reject(newest.pk)} & posts)
 
     def worker_gone(self, seen=None):
@@ -404,79 +393,29 @@ class PlaybooksPageTests(TestCase):
     def setup_commands(self, html: str) -> str:
         return " ".join(element.words for element in with_class(html, "operator-command"))
 
-    def test_with_no_worker_ever_seen_refresh_is_refused_and_the_page_says_how_to_set_one_up(self):
+    def test_with_no_worker_ever_seen_the_page_says_how_to_set_one_up(self):
         self.worker_gone()
-        queued = OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).count()
 
-        answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
-        self.assertEqual(answered["state"], "failed")
-        self.assertIn("no playbook worker reports to this HQ", answered["note"])
-        self.assertEqual(OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).count(), queued)
-
-        html = self.page()
-        commands = self.setup_commands(html)
+        commands = self.setup_commands(self.page())
         self.assertIn("hq-host automation", commands)
         self.assertIn("/etc/severino-hq/host.json", commands)
-        refresh = [element for element in within(html, "data-ask") if element.tag == "button"]
-        self.assertTrue(refresh)
-        self.assertTrue(all("disabled" in element.attrs for element in refresh), "Refresh says why it is refused")
 
-    def test_a_worker_not_seen_within_its_interval_is_refused_the_same_and_says_when_it_was(self):
+    def test_a_worker_not_seen_within_its_interval_says_when_it_was_and_how_to_set_one_up(self):
         from datetime import timedelta
 
         self.worker_gone(seen=timedelta(hours=3))
 
-        answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
-        self.assertEqual(answered["state"], "failed")
-        # An amount and its unit are kept on one line.
-        self.assertIn(
-            "3 hours since a playbook worker last reported", answered["note"].replace("\N{NO-BREAK SPACE}", " ")
-        )
         html = self.page()
         self.assertIn("hq-host automation", self.setup_commands(html))
         self.assertIn("3 hours ago", text(html).replace("\N{NO-BREAK SPACE}", " "))
 
-    def test_a_worker_seen_lately_takes_a_refresh_and_the_page_draws_no_setup(self):
+    def test_a_worker_seen_lately_draws_no_setup(self):
         from datetime import timedelta
 
         # Seen inside its timer's interval, holding nothing.
         self.worker_gone(seen=timedelta(minutes=20))
 
-        answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
-        self.assertEqual(answered["state"], "queued")
-        self.assertIn("playbook worker", answered["note"])
         self.assertEqual(self.setup_commands(self.page()), "")
-
-    def test_a_refresh_behind_a_run_the_worker_holds_waits_for_it_however_long_ago_it_claimed(self):
-        from datetime import timedelta
-
-        from django.utils import timezone
-
-        held = OperationRequest.objects.filter(action="run", state=OperationRequest.State.CLAIMED)
-        self.assertTrue(held.filter(lease_expires_at__gt=timezone.now()).exists())
-        # The worker renews the run's lease, however long ago it claimed it.
-        OperationRequest.objects.filter(action__in=("scan", "run")).exclude(claimed_at=None).update(
-            claimed_at=timezone.now() - timedelta(hours=3)
-        )
-
-        answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
-        self.assertEqual(answered["state"], "queued")
-        self.assertIn("playbook worker", answered["note"])
-        self.assertNotIn("took", answered["note"])
-
-    def test_a_scan_waiting_when_the_worker_goes_reads_not_started_and_is_not_followed(self):
-        answered = json.loads(self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR).content)
-        self.assertEqual(answered["state"], "queued")
-        self.worker_gone()
-
-        followed = json.loads(self.client.get(answered["status"]).content)
-        self.assertEqual(followed["label"], "Not started")
-        self.assertFalse(followed["live"])
-        html = self.page()
-        self.assertFalse(select(html, "data-ask-status"), "nothing under way is followed")
-        said = " ".join(element.words for element in within(html, "data-ask"))
-        self.assertIn("Not started", said)
-        self.assertNotIn("Working", said)
 
     def test_a_run_waiting_while_no_worker_arrives_reads_not_started_with_the_setup(self):
         self.worker_gone()
@@ -506,39 +445,22 @@ class PlaybooksPageTests(TestCase):
         self.assertEqual({table: revisions.read().counts.get(table, 0) for table in tables}, before)
         self.assertFalse(UpstreamReading.objects.filter(key="automation-heartbeat").exists())
 
-    def test_refresh_queues_a_scan_its_page_follows(self):
-        response = self.client.post(reverse("control_plane:playbooks_refresh"), _sent(), **XHR)
-        self.assertEqual(response.status_code, 202)
-        answered = json.loads(response.content)
-        self.assertEqual(answered["state"], "queued")
-        followed = self.client.get(answered["status"])
-        self.assertEqual(followed.status_code, 200)
-        self.assertEqual(json.loads(followed.content)["state"], "queued")
-        # A page loaded while it waits follows it too, the menu's copy of Refresh as well.
-        asks = select(self.page(), "data-ask-status")
-        self.assertTrue(asks)
-        for ask in asks:
-            self.assertEqual(self.client.get(ask.attrs["data-ask-status"]).status_code, 200)
-
     def test_the_status_of_a_run_hq_never_queued_is_not_found(self):
         status = reverse("jobs:run_status", args=["00000000-0000-0000-0000-000000000000"])
         self.assertEqual(self.client.get(status).status_code, 404)
 
-    def test_a_scan_of_the_commit_adopted_offers_only_refresh_and_a_scan_under_way_is_followed(self):
+    def test_a_scan_of_the_commit_adopted_leaves_nothing_to_decide(self):
         from hq.platform.core.example_estate import automation
 
-        automation.rescanned(self.owner)
+        automation.rescanned()
         html = self.page()
-        self.assertNotIn("data-ask-status", html)
         self.assertFalse({path for path in _posts(html) if path.endswith(("/adopt/", "/reject/"))})
         self.assertNotIn("View diff", text(html))
-        automation.scanning(self.owner)
-        (ask,) = select(self.page(), "data-ask-status")
-        self.assertEqual(json.loads(self.client.get(ask.attrs["data-ask-status"]).content)["state"], "running")
+        self.assertFalse(select(html, "data-commit-waits"))
 
 
 class EmptyPlaybooksPageTests(TestCase):
-    """Before any scan: what to press, and nothing about a read that never happened."""
+    """Before any scan: nothing about a read that never happened."""
 
     @classmethod
     def setUpTestData(cls):
@@ -554,13 +476,10 @@ class EmptyPlaybooksPageTests(TestCase):
         self.assertFalse(select(html, "data-scan-failed"))
         self.assertIn("No playbooks are adopted yet.", text(html))
 
-    def test_where_automation_was_never_set_up_refresh_is_refused_and_nothing_is_raised(self):
+    def test_where_automation_was_never_set_up_nothing_is_raised(self):
         self.client.force_login(self.owner)
         html = self.client.get(reverse("control_plane:playbooks")).content.decode()
 
-        refresh = [element for element in within(html, "data-ask") if element.tag == "button"]
-        self.assertTrue(refresh)
-        self.assertTrue(all("disabled" in element.attrs for element in refresh), "Refresh says why it is refused")
         self.assertFalse(with_class(html, "operator-command"), "no setup is raised where nobody set automation up")
 
 
