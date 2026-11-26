@@ -346,6 +346,13 @@ class ImageStanding(ImageStandingWords):
         return moment(str((self.checked or {}).get("read_at", "") or ""))
 
     @property
+    def attestations_read(self) -> bool:
+        """Whether HQ read what its publisher attached, so an absent package
+        list or provenance is a fact rather than a gap in what HQ knows."""
+
+        return self.attested is not None and not self.attested.get("unread")
+
+    @property
     def packages(self) -> int:
         return len((self.attested or {}).get("packages") or ())
 

@@ -99,6 +99,20 @@ class SourceTests(TestCase):
         self.assertEqual(standing.commit_url, "https://github.com/example/web/commit/abc1234")
         self.assertEqual(standing.built_on, ("alpine:3.23",))
 
+    def test_what_only_its_publisher_can_attach_is_a_fact_and_never_a_failed_check(self):
+        estate()
+        container("app")
+        inventory("registry.digest", [attested(APP, packages=(), revision="")])
+        operator(self.client)
+
+        chain = item("app").supply_chain
+        page = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
+
+        self.assertEqual(chain.unmet, ())
+        self.assertEqual(chain.met, chain.measured)
+        self.assertContains(page, "None listed by its publisher")
+        self.assertContains(page, "None from its publisher")
+
     def test_an_image_in_githubs_registry_is_known_by_its_registry_last(self):
         estate()
         inventory(

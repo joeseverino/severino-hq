@@ -270,7 +270,7 @@ class BuiltHereTests(TestCase):
 
         checked = {result.check.id for result in self.thumb().supply_chain.results}
 
-        self.assertFalse(checked & {"pinned", "source-known", "provenance", "sbom", "tag-current"})
+        self.assertFalse(checked & {"pinned", "source-known", "tag-current"})
         self.assertIn("no-urgent", checked)
 
     def test_an_image_a_registry_digest_names_or_a_service_that_builds_nothing_is_pulled(self):
