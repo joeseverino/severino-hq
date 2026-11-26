@@ -205,17 +205,20 @@ describe("a Tailscale delivery", () => {
     expect(again).toMatchObject(first.map((event) => ({ delivery_id: (event as { delivery_id: string }).delivery_id })));
   });
 
-  it.each<[string, { age?: number; signed?: string | null }]>([
-    ["a wrong signature", { signed: `t=${Math.floor(Date.now() / 1000)},v1=${"0".repeat(64)}` }],
-    ["a signature older than its window", { age: tailscale.scheme.window_seconds + 60 }],
-    ["no signature", { signed: null }],
-  ])("with %s never reaches a listener", async (_, delivery) => {
+  // Tailscale counts a delivery answered 3xx, 4xx or 5xx as failed, so an
+  // event the route does not list is answered as delivered.
+  it.each<[string, unknown[], { age?: number; signed?: string | null }, number]>([
+    ["a wrong signature", tailscaleEvents, { signed: `t=${Math.floor(Date.now() / 1000)},v1=${"0".repeat(64)}` }, 401],
+    ["a signature older than its window", tailscaleEvents, { age: tailscale.scheme.window_seconds + 60 }, 401],
+    ["no signature", tailscaleEvents, { signed: null }, 401],
+    ["only events the route does not list", [tailscaleEvents[0], { ...tailscaleEvents[0], type: "webhookUpdated" }], {}, 202],
+  ])("with %s never reaches a listener", async (_, events, delivery, status) => {
     const listener = await listen();
 
-    const refused = await tailscaleDelivery(tailscaleEvents, delivery);
+    const refused = await tailscaleDelivery(events, delivery);
     await tailscaleDelivery([{ ...tailscaleEvents[1], type: "policyUpdate" }]);
 
-    expect(refused.status).toBe(401);
+    expect(refused.status).toBe(status);
     expect(await listener.next()).toMatchObject({ event: "policyUpdate" });
   });
 });

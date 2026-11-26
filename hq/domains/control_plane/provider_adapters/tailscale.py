@@ -387,9 +387,11 @@ CONNECTIONS = {
 
 # What the tailnet's webhook sends, each event making due the reading of what
 # it changed; Tailscale's docs name each event and how it signs a delivery
-# (https://tailscale.com/kb/1213/webhooks). Its deprecated nodeAuthorized and
-# nodeNeedsAuthorization are left out, as nodeApproved and nodeNeedsApproval
-# replace them.
+# (https://tailscale.com/kb/1213/webhooks). The user events that page leaves
+# out, which the console offers, are named in Tailscale's client
+# (https://github.com/tailscale/tailscale-client-go-v2/blob/main/webhooks.go).
+# Its deprecated nodeAuthorized and nodeNeedsAuthorization are left out, as
+# nodeApproved and nodeNeedsApproval replace them.
 _DEVICE_EVENTS = (
     "nodeCreated",
     "nodeNeedsApproval",
@@ -402,7 +404,15 @@ _DEVICE_EVENTS = (
     "exitNodeIPForwardingNotEnabled",
     "subnetIPForwardingNotEnabled",
 )
-_USER_EVENTS = ("userCreated", "userNeedsApproval", "userApproved", "userRoleUpdated")
+_USER_EVENTS = (
+    "userCreated",
+    "userNeedsApproval",
+    "userApproved",
+    "userRoleUpdated",
+    "userSuspended",
+    "userRestored",
+    "userDeleted",
+)
 INBOUND = {
     "tailscale": InboundSpec(
         {
@@ -424,7 +434,7 @@ INBOUND = {
         # holds a thousand in one delivery.
         max_body_bytes=1024 * 1024,
         # Every change to the policy file is an event. A device goes online
-        # and offline, and a user is removed or suspended, with none.
+        # and offline with none.
         complete=(TAILNET_POLICY_KIND,),
     ),
 }
