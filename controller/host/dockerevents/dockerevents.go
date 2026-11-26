@@ -57,8 +57,8 @@ type Watcher struct {
 	// reading.
 	Tell func(ctx context.Context, reconnected bool, lines []byte) error
 	Log  *slog.Logger
-	// The pace, runtime.BurstWindow unless a test sets its own.
-	Window time.Duration
+	// The pace, runtime.NewBurst's unless a test sets its own.
+	Burst runtime.Burst
 	runtime.Reconnect
 }
 
@@ -71,7 +71,7 @@ func New(socket string, tell func(context.Context, bool, []byte) error, log *slo
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		}}},
 		Tell: tell, Log: log,
-		Window: runtime.BurstWindow, Reconnect: runtime.NewReconnect(),
+		Burst: runtime.NewBurst(), Reconnect: runtime.NewReconnect(),
 	}
 }
 
@@ -128,7 +128,8 @@ func (d *Watcher) Run(ctx context.Context) {
 }
 
 // session is one read of the stream: HQ is told the watcher reconnected,
-// then each burst as one batch.
+// then each burst as one batch, and while nothing happens that it is still
+// reading.
 func (d *Watcher) session(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -157,7 +158,7 @@ func (d *Watcher) session(ctx context.Context) error {
 	ended := make(chan error, 1)
 	go d.read(ctx, response.Body, heard, ended)
 
-	burst := runtime.Burst{Window: d.Window}
+	burst := d.Burst
 	for {
 		select {
 		case <-ctx.Done():
@@ -168,8 +169,10 @@ func (d *Watcher) session(ctx context.Context) error {
 			}
 		case err := <-ended:
 			// Every event read was handed over before the stream's end was.
-			if told := d.tell(ctx, burst.Take()); told != nil {
-				return told
+			if burst.Held() {
+				if told := d.tell(ctx, burst.Take()); told != nil {
+					return told
+				}
 			}
 			if errors.Is(err, io.EOF) {
 				return errStreamEnded
@@ -214,11 +217,8 @@ func (d *Watcher) read(ctx context.Context, stream io.Reader, heard chan<- runti
 	}
 }
 
-// tell hands batch to HQ.
+// tell hands batch to HQ; one with no events says the watcher is reading.
 func (d *Watcher) tell(ctx context.Context, batch []runtime.InboundArrival) error {
-	if len(batch) == 0 {
-		return nil
-	}
 	var lines bytes.Buffer
 	encoder := json.NewEncoder(&lines)
 	for _, event := range batch {

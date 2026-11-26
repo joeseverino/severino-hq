@@ -188,7 +188,7 @@ func TestAnAnsweredSocketIsPingedAndHeardAsAHeartbeat(t *testing.T) {
 	bridge, batches := hq(t)
 	w := newHub(t, holding)
 	listener := listenerFor(t, w, bridge)
-	listener.Ping, listener.Heartbeat = 10*time.Millisecond, 50*time.Millisecond
+	listener.Ping, listener.Burst.Heartbeat = 10*time.Millisecond, 50*time.Millisecond
 	run(t, listener)
 
 	next(t, batches, "batch on connecting")
@@ -205,7 +205,7 @@ func TestAnUnansweredPingEndsTheConnectionWithNoHeartbeat(t *testing.T) {
 	w := newHub(t, holding)
 	w.pong = false
 	listener := listenerFor(t, w, bridge)
-	listener.Ping, listener.Heartbeat = 10*time.Millisecond, 0
+	listener.Ping = 10 * time.Millisecond
 	run(t, listener)
 
 	for range 2 {

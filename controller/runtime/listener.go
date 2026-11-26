@@ -26,10 +26,6 @@ const (
 	listenerReadLimit = 16 << 10
 )
 
-// ListenerHeartbeat is how often the listener tells HQ it is listening while
-// nothing happens: HQ's declaration, which holds the channel's silence to it.
-var ListenerHeartbeat = time.Duration(api.MustLimit("InboundHeartbeatSeconds", "default")) * time.Second
-
 // Listener holds the inbound-events Worker's socket open, outbound, and tells
 // HQ each event it hears through the bridge's events action.
 //
@@ -48,9 +44,9 @@ type Listener struct {
 	// Post is the bridge's events action.
 	Post func(context.Context, InboundBatch) error
 	Log  *slog.Logger
-	// The pace, ListenerPing, BurstWindow and ListenerHeartbeat unless a test
-	// sets its own.
-	Ping, Window, Heartbeat time.Duration
+	// The pace, ListenerPing and NewBurst's unless a test sets its own.
+	Ping  time.Duration
+	Burst Burst
 	Reconnect
 }
 
@@ -64,7 +60,7 @@ func NewListener(connection connections.Connection, client *http.Client, post fu
 	}
 	return &Listener{
 		URL: connection.APIToken.URL, Token: connection.APIToken.APIToken, Client: client, Post: post, Log: log,
-		Ping: ListenerPing, Window: BurstWindow, Heartbeat: ListenerHeartbeat, Reconnect: NewReconnect(),
+		Ping: ListenerPing, Burst: NewBurst(), Reconnect: NewReconnect(),
 	}, nil
 }
 
@@ -74,7 +70,9 @@ func (l *Listener) Run(ctx context.Context) {
 }
 
 // session is one connection: HQ is told it reconnected, then hears each event
-// in batches, and that the socket still answers, until either side fails.
+// in batches, and that the socket still answers, until either side fails. A
+// ping unanswered ends it, so a batch with no events says the socket
+// answered within the last two pings.
 func (l *Listener) session(ctx context.Context) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
@@ -89,7 +87,6 @@ func (l *Listener) session(ctx context.Context) error {
 	defer func() { _ = conn.CloseNow() }()
 	conn.SetReadLimit(listenerReadLimit)
 
-	posted := time.Now()
 	post := func(batch InboundBatch) error {
 		batch.Source = InboundSourceWorker
 		if batch.Events == nil {
@@ -98,7 +95,6 @@ func (l *Listener) session(ctx context.Context) error {
 		if err := l.Post(ctx, batch); err != nil {
 			return fmt.Errorf("HQ refused the events: %w", err)
 		}
-		posted = time.Now()
 		return nil
 	}
 	if err := post(InboundBatch{Reconnected: true}); err != nil {
@@ -120,7 +116,6 @@ func (l *Listener) session(ctx context.Context) error {
 			}
 		}
 	}()
-	answered := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(l.Ping)
 		defer ticker.Stop()
@@ -137,15 +132,10 @@ func (l *Listener) session(ctx context.Context) error {
 				cancel(err)
 				return
 			}
-			select {
-			case answered <- struct{}{}:
-			case <-ctx.Done():
-				return
-			}
 		}
 	}()
 
-	burst := Burst{Window: l.Window}
+	burst := l.Burst
 	for {
 		select {
 		case <-ctx.Done():
@@ -160,10 +150,6 @@ func (l *Listener) session(ctx context.Context) error {
 				continue
 			}
 		case <-burst.Due():
-		case <-answered:
-			if burst.Held() || time.Since(posted) < l.Heartbeat {
-				continue
-			}
 		}
 		if err := post(InboundBatch{Events: burst.Take()}); err != nil {
 			return err

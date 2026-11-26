@@ -107,7 +107,7 @@ func watch(t *testing.T, socket string) (told chan []byte, reconnected chan stru
 		told <- bytes.Clone(lines)
 		return nil
 	}, slog.New(slog.DiscardHandler))
-	watcher.Window = 50 * time.Millisecond
+	watcher.Burst.Window = 50 * time.Millisecond
 	watcher.FirstRetry, watcher.LastRetry = time.Millisecond, time.Millisecond
 	watcher.Jitter = func(bound time.Duration) time.Duration { return bound }
 	ctx, cancel := context.WithCancel(context.Background())
@@ -228,4 +228,28 @@ func TestEachReadOfTheStreamTellsHQItReconnected(t *testing.T) {
 	}
 	arrived(t, asked)
 	arrived(t, reconnected)
+}
+
+// A stream that stays quiet is still told, at the pace HQ holds the host's
+// channel to, so a quiet host never reads as one that stopped reporting.
+func TestAQuietStreamIsToldAsListening(t *testing.T) {
+	socket, _ := fakeEngine(t)
+	told := make(chan []byte, 8)
+	watcher := New(socket, func(_ context.Context, again bool, lines []byte) error {
+		if !again {
+			told <- bytes.Clone(lines)
+		}
+		return nil
+	}, slog.New(slog.DiscardHandler))
+	watcher.Burst.Heartbeat = 20 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { watcher.Run(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	for range 2 {
+		if lines := arrived(t, told); len(lines) != 0 {
+			t.Fatalf("a quiet stream told %s", lines)
+		}
+	}
 }
