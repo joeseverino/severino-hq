@@ -5,6 +5,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"slices"
 	"strings"
@@ -50,6 +51,9 @@ type Transport interface {
 	// Exchange is Request with the answer's status and headers, which a
 	// refusal keeps too: the ETag of the version read, what a rate limit has left.
 	Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (runtime.Answer, error)
+	// Download reads the body behind a signed link address hands out, cut at
+	// limit bytes, with none of headers sent past the link.
+	Download(ctx context.Context, address string, headers map[string]string, limit int64, read func(io.Reader) error) (runtime.Answer, error)
 }
 
 // Action is a registered handler as the controller dispatches it: the

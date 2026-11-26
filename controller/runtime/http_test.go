@@ -230,3 +230,26 @@ func TestMultipartNamesCannotEndTheirHeader(t *testing.T) {
 		t.Errorf("filename %q, want %q", received[1].Filename, want)
 	}
 }
+
+// A download link is followed once and only to https: a link that is not
+// is refused before anything is read from it.
+func TestDownloadFollowsOnlyAnHTTPSLink(t *testing.T) {
+	served := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/logs" {
+			http.Redirect(w, r, "/signed", http.StatusFound)
+			return
+		}
+		served = true
+		_, _ = w.Write([]byte("log"))
+	}))
+	defer server.Close()
+	h := &HTTPClient{}
+	_, err := h.Download(t.Context(), server.URL+"/logs", map[string]string{"Authorization": "Bearer example"}, 1<<10, func(io.Reader) error {
+		t.Error("an http link was read")
+		return nil
+	})
+	if provider, ok := errors.AsType[*ProviderError](err); !ok || provider.Failure != FailureClassAddress || served {
+		t.Fatalf("err %v, served %v", err, served)
+	}
+}

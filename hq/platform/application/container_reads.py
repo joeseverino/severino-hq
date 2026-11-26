@@ -263,7 +263,10 @@ def serialize_app_update(update: Any) -> AppUpdateRecord:
             }
             for pin in update.pins
         ],
-        checks={key: update.checks.get(key, default) for key, default in _CHECKS.items()},
+        checks={
+            **{key: update.checks.get(key, default) for key, default in _CHECKS.items()},
+            "why": update.checks_said.why,
+        },
         fixes=_advisories(update.fixes),
         brings=_advisories(update.brings),
         merge=_merge(approval.standing) if approval.standing else None,

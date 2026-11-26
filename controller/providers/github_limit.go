@@ -244,21 +244,29 @@ func githubRateLimited(header http.Header, err error, now time.Time) error {
 // answer is counted there; a refusal for a limit is named as one either way.
 func (r *Registry) githubExchange(token string) func(context.Context, string, string, map[string]string, any) (runtime.Answer, error) {
 	return func(ctx context.Context, address, method string, headers map[string]string, payload any) (runtime.Answer, error) {
-		var budget *githubBudget
-		if token != "" {
-			budget = r.githubSpend().of(token)
-			if method == http.MethodGet || address == githubAPI+githubGraphQL {
-				if err := budget.admit(); err != nil {
-					return runtime.Answer{}, err
-				}
+		return r.githubSpending(token, method == http.MethodGet || address == githubAPI+githubGraphQL, func() (runtime.Answer, error) {
+			return r.HTTP.Exchange(ctx, address, method, headers, payload)
+		})
+	}
+}
+
+// githubSpending is one call to GitHub's API under token: a read passes the
+// installation's fuse first, and its answer is counted there.
+func (r *Registry) githubSpending(token string, reads bool, call func() (runtime.Answer, error)) (runtime.Answer, error) {
+	var budget *githubBudget
+	if token != "" {
+		budget = r.githubSpend().of(token)
+		if reads {
+			if err := budget.admit(); err != nil {
+				return runtime.Answer{}, err
 			}
 		}
-		answer, err := r.HTTP.Exchange(ctx, address, method, headers, payload)
-		if budget != nil {
-			budget.note(answer.Header, err, r.Now())
-		}
-		return answer, githubRateLimited(answer.Header, err, r.Now())
 	}
+	answer, err := call()
+	if budget != nil {
+		budget.note(answer.Header, err, r.Now())
+	}
+	return answer, githubRateLimited(answer.Header, err, r.Now())
 }
 
 // githubQuery is one GraphQL query under token, which passes the fuse as a

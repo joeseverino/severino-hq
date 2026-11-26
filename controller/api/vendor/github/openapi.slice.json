@@ -4543,9 +4543,14 @@
       "description": "Contents of the issue comment",
       "example": "What version of Safari were you using when you observed this bug?",
       "type": "string"
+     },
+     "user": {
+      "$ref": "#/components/schemas/nullable-simple-user"
      }
     },
-    "required": []
+    "required": [
+     "user"
+    ]
    },
    "job": {
     "title": "Job",

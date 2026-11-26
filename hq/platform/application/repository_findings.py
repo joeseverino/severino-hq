@@ -4,10 +4,13 @@ Read from the ``github.repository`` reading. One about an out-of-date reading
 says what was read, in the past tense, as a notice only.
 """
 
-from collections.abc import Callable, Iterator
+import re
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import replace
 from datetime import timedelta
+from typing import Any
 
+from hq.domains.control_plane.observations.github import JobFailure
 from hq.platform.application.routes import reverse
 
 from .action_links import read_link
@@ -23,6 +26,7 @@ from .github_estate import (
     SERIOUS_ALERTS,
     WAITING_SERIOUS_AFTER,
     Repository,
+    failure_cause,
     repositories,
 )
 from .github_posture import COMMANDS, REASONS, STANDARD, calls_workflows, left_out, postures
@@ -30,7 +34,7 @@ from .moments import moment
 from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
-from .ui import counted
+from .ui import counted, ended
 lazy from .projects import projects_by_repository, repository_key
 
 PROJECTS = "hq.projects"
@@ -108,26 +112,55 @@ def _failing(repo: Repository) -> Iterator[Said]:
     if not repo.failing:
         return
     checks = repo.record["checks"]
-    # Each job by the step it failed at, where the reading names one.
-    steps = checks.get("steps") or {}
-    failing = [f"{job} (at {steps[job]})" if steps.get(job) else job for job in checks.get("failing") or []]
+    # Each job by the step it failed at, and why, where the reading says.
+    failures = checks.get("failures") or {}
+    jobs = checks.get("failing") or []
+    failing = [f"{job} (at {failures[job]['step']})" if failures.get(job, {}).get("step") else job for job in jobs]
+    causes = [(job, cause) for job in jobs[:4] if (cause := failure_cause(failures.get(job) or {}))]
+    said = [cause if len(jobs) == 1 else f"{job}: {cause}" for job, cause in causes]
     runs = repo.failing_runs
     one = runs[0] if len(runs) == 1 else None
     sha = repo.head.get("sha", "")
+    # With no failing workflow run, what fails is a check on the head
+    # commit that no workflow owns, and this lists it.
+    listed = () if runs or not sha else (Run("See the failing checks", _failing_checks(repo.name, sha)),)
     finding = _about(
         repo,
         FAILING,
         title=f"{repo.short} is failing on {repo.default_branch}",
         severity=Tone.SERIOUS,
-        explanation=_named("Failing job", "Failing jobs", failing) or "A check failed.",
+        explanation=". ".join((_named("Failing job", "Failing jobs", failing) or "A check failed.", *said)),
         evidence=(("Failing", str(len(failing) or 1)),),
         primary=opens("Open run", one.url) if one else opens("Open checks", f"{repo.url}/commit/{sha}"),
         offers=() if one else runs,
-        # With no failing workflow run, what fails is a check on the head
-        # commit that no workflow owns, and this lists it.
-        steps=() if runs or not sha else (Run("See the failing checks", _failing_checks(repo.name, sha)),),
+        steps=(*dict.fromkeys(step for job in jobs if (step := _next_step(failures.get(job) or {}))), *listed),
     )
     yield finding, f"{repo.short} was failing on {repo.default_branch}"
+
+
+# A mise lock that holds no entry for a version its config pins, or that
+# its config does not name: what locking again from the config answers.
+_UNLOCKED = re.compile(r"mise ERROR .*(is not in the lockfile|cannot lock)")
+# A vulnerability govulncheck reports, and the standard library release that fixes it.
+_VULNERABILITY = re.compile(r"^Vulnerability #\d+: (\S+)")
+_FIXED_IN_GO = re.compile(r"^Fixed in: (\S+)@(go\d\S*)")
+
+
+def _next_step(failure: Mapping[str, Any]) -> Run | Do | None:
+    """What to do about a job's failure in its own terms, where its log says
+    which: none for any other, which the rule's step answers."""
+
+    log = [line.strip() for line in JobFailure.model_validate(failure).log]
+    if any(_UNLOCKED.search(line) for line in log):
+        return Run("Lock every tool mise.toml pins, then commit mise.lock", "mise lock")
+    vulnerability = next((found[1] for line in log if (found := _VULNERABILITY.match(line))), "")
+    fixed = next((found for line in log if (found := _FIXED_IN_GO.match(line))), None)
+    if fixed:
+        return Do(
+            ended(f"Move Go to {fixed[2]}, the release that fixes {vulnerability or fixed[1]} in {fixed[1]}"),
+            value=fixed[2],
+        )
+    return None
 
 
 def _failing_checks(name: str, sha: str) -> str:
@@ -292,7 +325,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.SERIOUS,
         _each(_failing),
         operator_action="Read the failing run's log on GitHub, then fix what it names.",
-        no_help_reason="HQ reads which checks fail, not their logs.",
+        no_help_reason=CANNOT_WRITE,
         bars={Tone.SERIOUS: "a workflow's latest run on the default branch fails, or a check on its newest commit"},
         domain=PROJECTS,
         gathered=True,

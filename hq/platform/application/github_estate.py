@@ -7,10 +7,11 @@ few things on GitHub that wait on a person: a deploy held for approval, a
 default branch failing, a serious alert, an admission about to lapse.
 """
 
+import re
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 from hq.domains.control_plane.observations.contract import ReadingPart
 from hq.domains.control_plane.observations.github import (
@@ -18,6 +19,7 @@ from hq.domains.control_plane.observations.github import (
     DEPENDABOT,
     LEAKED_CREDENTIALS,
     REPOSITORY_KIND,
+    JobFailure,
     RepositoryRecord,
 )
 from hq.platform.application.labels import dotted
@@ -125,13 +127,49 @@ _PULL_CHECKS = {
 }
 
 
-def pull_checks(pull: Mapping[str, Any]) -> tuple[str, str, str]:
+class PullChecks(NamedTuple):
     """A pull request's checks as every page says them: the badge, its tone,
-    and the failing ones named while they fail."""
+    the failing ones named while they fail, and why, in the failing tool's
+    own words: what its update run could not update, else its first failing
+    job's cause (``failure_cause``)."""
 
+    badge: str
+    tone: str
+    failing: str
+    why: str
+
+
+def pull_checks(pull: Mapping[str, Any]) -> PullChecks:
     checks = pull.get("checks") or {}
     badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", Tone.NEUTRAL))
-    return badge, tone, ", ".join(checks.get("failing") or ()) if checks.get("state") == "failure" else ""
+    if checks.get("state") != "failure":
+        return PullChecks(badge, tone, "", "")
+    failures = checks.get("failures") or {}
+    causes = (
+        failure_cause({"log": pull.get("artifact_problem") or ()}),
+        *(failure_cause(failures[job]) for job in checks.get("failing") or () if job in failures),
+    )
+    return PullChecks(badge, tone, ", ".join(checks.get("failing") or ()), next((each for each in causes if each), ""))
+
+
+# What GitHub's log marks a step's end with when the tool said nothing of
+# its own: an exit code alone.
+_EXITED = re.compile(r"(Process completed|The process '.*' failed) with exit code \d+\.?")
+# A line of a tool's output that says what failed.
+_SAYS_FAILED = re.compile(r"\b(error|fatal|panic|failed|failure)\b|^Vulnerability #\d+:", re.IGNORECASE)
+
+
+def failure_cause(failure: Mapping[str, Any]) -> str:
+    """Why a job failed, in its own words: the error GitHub's log marks,
+    where it says more than an exit code; else the first line of output
+    before it that says what failed, else the last; empty where the reading
+    read no log (``JobFailure``)."""
+
+    said = JobFailure.model_validate(failure)
+    if said.error and not _EXITED.fullmatch(said.error):
+        return said.error
+    log = [line.strip() for line in said.log]
+    return next((line for line in log if _SAYS_FAILED.search(line)), log[-1] if log else said.error)
 
 
 def _severity_rank(level: str) -> int:
@@ -272,10 +310,12 @@ class Repository:
             if update.repository == self.name:
                 apps.setdefault(update.number, []).extend((update.app, update.fixes_counted))
         for pull in self.update_pulls:
-            badge, tone, failing = pull_checks(pull)
+            checks = pull_checks(pull)
             opened = f"opened {when(pull['opened'])}" if pull["opened"] else ""
             said = apps.get(pull.get("number"), ())
-            rows.append(_pull_row(pull, *said, failing, meta=opened, badge=badge, status=tone))
+            rows.append(
+                _pull_row(pull, *said, checks.failing, checks.why, meta=opened, badge=checks.badge, status=checks.tone)
+            )
         for alert in self.unmatched_alerts:
             fixed = alert.get("first_patched_version")
             severity = str(alert.get("severity") or "")

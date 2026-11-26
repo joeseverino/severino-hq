@@ -196,6 +196,7 @@
               "checks.total",
               "checks.failing",
               "checks.running",
+              "checks.why",
               "merge",
               "merge.words",
               "merge.tone",
@@ -8833,13 +8834,18 @@
           "total": {
             "description": "How many checks ran on the head.",
             "type": "integer"
+          },
+          "why": {
+            "description": "Why they fail, in the failing tool's own words; empty while none fail.",
+            "type": "string"
           }
         },
         "required": [
           "state",
           "total",
           "failing",
-          "running"
+          "running",
+          "why"
         ],
         "type": "object"
       },
@@ -8857,6 +8863,9 @@
           },
           "total": {
             "$ref": "#/components/schemas/ChecksPart/properties/total"
+          },
+          "why": {
+            "$ref": "#/components/schemas/ChecksPart/properties/why"
           }
         },
         "type": "object"

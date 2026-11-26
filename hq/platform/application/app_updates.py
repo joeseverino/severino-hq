@@ -18,7 +18,7 @@ from hq.domains.control_plane.models import OperationRequest
 
 from .containers import Container, containers, published_digest, ranked, standing_of
 from .entity_links import EntityLink
-from .github_estate import UPDATE_BRANCH, Repository, pull_checks, repositories
+from .github_estate import UPDATE_BRANCH, PullChecks, Repository, pull_checks, repositories
 from .images import ImageRef
 from .projection import projection_scope, read_once
 from .tone import Tone
@@ -103,6 +103,8 @@ class AppUpdate:
     fixes: tuple[Mapping[str, Any], ...]
     brings: tuple[Mapping[str, Any], ...]
     checks: Mapping[str, Any]
+    # What its update run said it could not update, while its checks fail.
+    artifact_problem: tuple[str, ...]
     # Whether its Compose files loaded at base and head with every image
     # resolved: otherwise its pins are read on GitHub alone.
     readable: bool
@@ -128,10 +130,8 @@ class AppUpdate:
         return self.readable and bool(self.pins) and all(pin.scanned for pin in self.pins)
 
     @property
-    def checks_said(self) -> tuple[str, str, str]:
-        """Its checks as every page says them: badge, tone, the failing ones."""
-
-        return pull_checks({"checks": self.checks})
+    def checks_said(self) -> PullChecks:
+        return pull_checks({"checks": self.checks, "artifact_problem": self.artifact_problem})
 
     @property
     def fixes_tone(self) -> str:
@@ -331,6 +331,7 @@ def _update(
         fixes=ranked(fixes.values()),
         brings=ranked(brings.values()),
         checks=pull.get("checks") or {},
+        artifact_problem=tuple(pull.get("artifact_problem") or ()),
         readable=bool(change.get("read")),
         renovates=bool(repository.updater)
         and pull.get("author") == repository.updater

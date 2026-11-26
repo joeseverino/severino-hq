@@ -1,3 +1,6 @@
+from typing import Any
+
+from ...finding_steps import Do, Run
 from ...github_posture import EXAMPLES as POSTURE
 from ...tone import Tone
 from . import NOW, Ago, Example, Examples, Raised, ago
@@ -34,6 +37,42 @@ def access(**changes) -> dict:
     return {**POSTURE.kept["access"], **changes}
 
 
+# A failing job as the reading says why: a lock that refuses an install, its
+# cause above the exit GitHub marks, and a standard library fixed in a later
+# release, its report many lines above it.
+UNLOCKED = {
+    "step": "Install tools",
+    "error": "The process '/home/runner/.local/bin/mise' failed with exit code 1",
+    "log": [
+        "[command]/home/runner/.local/bin/mise install",
+        "mise ERROR Failed to install aqua:astral-sh/uv@0.13.10: uv@0.13.10 is not in the lockfile",
+        "mise ERROR Run with --verbose or MISE_VERBOSE=1 for more information",
+    ],
+}
+VULNERABLE = {
+    "step": "Scan",
+    "error": "Process completed with exit code 3.",
+    "log": [
+        "=== Symbol Results ===",
+        "Vulnerability #1: GO-2026-6859",
+        "    A crafted request can exhaust a server's memory in net/http.",
+        "  Standard library",
+        "    Found in: net/http@go1.27.3",
+        "    Fixed in: net/http@go1.27.4",
+        "Your code is affected by 1 vulnerability from the Go standard library.",
+    ],
+}
+# An error the tool marks itself says why on its own.
+MARKED = {"step": "Lint", "error": "main.go:3:1: undefined: example", "log": ["golangci-lint run"]}
+
+
+def failed(**failures: dict) -> dict[str, Any]:
+    """The record of a workflow run whose jobs failed as ``failures`` say."""
+
+    run = {"name": "CI", "url": "https://github.com/example/alpha/actions/runs/1"}
+    return {"checks": {"state": "failure", "failing": sorted(failures), "failures": failures}, "failing_runs": [run]}
+
+
 QUIET = alpha(checks={"state": "success"}, alerts={"code_scanning": {"low": 2}})
 SERIOUS = Tone.SERIOUS
 WAITS = "Compose waits for your approval to deploy to production"
@@ -52,11 +91,39 @@ EXAMPLES = (
         "github-failing",
         fires=(
             alpha(checks={"state": "failure", "failing": ["lint"]}, raises=("alpha is failing on main",)),
-            # A job of a workflow run says the step it failed at.
+            # A job of a workflow run says the step it failed at, and why where
+            # its log was read.
             alpha(
-                checks={"state": "failure", "failing": ["lint", "test"], "steps": {"test": "Run tests"}},
+                checks={"state": "failure", "failing": ["lint", "test"], "failures": {"test": {"step": "Run tests"}}},
                 raises=(
                     Raised(title="alpha is failing on main", explanation="Failing jobs: lint, test (at Run tests)"),
+                ),
+            ),
+            alpha(
+                **failed(ci=UNLOCKED),
+                raises=(
+                    Raised(
+                        title="alpha is failing on main",
+                        explanation="Failing job: ci (at Install tools). mise ERROR Failed to install"
+                        " aqua:astral-sh/uv@0.13.10: uv@0.13.10 is not in the lockfile",
+                        steps=(Run("Lock every tool mise.toml pins, then commit mise.lock", "mise lock"),),
+                    ),
+                ),
+            ),
+            alpha(
+                **failed(scan=VULNERABLE, lint=MARKED),
+                raises=(
+                    Raised(
+                        title="alpha is failing on main",
+                        explanation="Failing jobs: lint (at Lint), scan (at Scan). lint: main.go:3:1: undefined:"
+                        " example. scan: Vulnerability #1: GO-2026-6859",
+                        steps=(
+                            Do(
+                                "Move Go to go1.27.4, the release that fixes GO-2026-6859 in net/http.",
+                                value="go1.27.4",
+                            ),
+                        ),
+                    ),
                 ),
             ),
         ),
