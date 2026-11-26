@@ -31,7 +31,7 @@ from .projection import Combined, read_once
 from .quoted import Quoted
 from .routes import reverse
 from .tone import Tone, Toned
-lazy from .app_update_approval import PULLED, PULLED_KIND
+lazy from .app_update_approval import PULLED, PULLED_KIND, RECEIPT, RECEIPT_KIND
 lazy from .automation_adoption import playbook_titles
 lazy from .cadence import automation_standing
 lazy from .entity_links import entity_link
@@ -133,7 +133,7 @@ class Reading:
 def _stated_kinds() -> dict[str, StatedKind]:
     """The readings only a playbook states, by kind."""
 
-    return {PULLED: PULLED_KIND}
+    return {PULLED: PULLED_KIND, RECEIPT: RECEIPT_KIND}
 
 
 def wording(kind: str) -> ObservationSpec | StatedKind | None:

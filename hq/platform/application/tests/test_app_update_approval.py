@@ -49,6 +49,14 @@ def applies(hosts=(APP,), **fields):
     return manifest(id=APPLY, input_type=Revision, hosts=hosts, fixes=("container-image-update",), **fields)
 
 
+def receipt(revision=MERGED, *, last=MERGED, ok=True, apps=()):
+    """What the applier states of the machine's last pull beside ``revision``,
+    and each app it released when that pull was of it."""
+
+    readings = {"apps.receipt": [{"revision": revision, "last_attempt": last, "ok": ok}]}
+    return {"readings": {APP: {**readings, **({"apps.pull": list(apps)} if apps else {})}}}
+
+
 def stopped(task=REFUSED_TASK, message=REFUSED_SAID):
     return [
         {"host": APP, "task": "Ask sudo whether the deploy login may start it", "outcome": "ok", "message": ""},
@@ -480,7 +488,7 @@ class ApproveUpdateTests(TestCase):
 
         self.merged()
         released = {"project": "thumb", "service": "thumb", "image": "example-thumb:local", "running_digest": ""}
-        self.worked(stated={"readings": {APP: {"apps.pull": [{**released, "health": "healthy", "result": "ok"}]}}})
+        self.worked(stated=receipt(apps=[{**released, "health": "healthy", "result": "ok", "changed": True}]))
         built(head={"sha": commits[0]}, builds=[{"app": "thumb", "commits": list(commits)}])
         return self.container_page("thumb").context["container"]
 
@@ -509,7 +517,7 @@ class ApproveUpdateTests(TestCase):
     def test_a_merge_whose_apply_passes_stands_applied(self):
         self.merged()
 
-        self.worked()
+        self.worked(stated=receipt(apps=[{"project": "app", "result": "ok", "changed": True}]))
 
         self.assertEqual((self.standing().word, self.standing().tone), ("Applied", "good"))
         # A closed update that applied offers nothing more on the container's page.
@@ -517,14 +525,40 @@ class ApproveUpdateTests(TestCase):
         container = self.container_page().context["container"]
         self.assertEqual((container["state"].standing.word, container["act"]), ("Applied", None))
 
-    def test_an_apply_whose_machine_rolled_an_app_back_stands_applied_in_the_tone_to_look_at(self):
+    def test_an_apply_whose_pull_did_not_release_every_app_does_not_stand_applied(self):
         self.merged()
 
-        self.worked(stated={"readings": {APP: {"apps.pull": [{"project": "app", "result": "rolled_back"}]}}})
+        rolled = {"project": "app", "result": "rolled_back", "changed": True}
+        self.worked(stated=receipt(ok=False, apps=[rolled]))
 
         standing = self.standing()
-        self.assertEqual(standing.tone, "attention")
+        self.assertNotEqual(standing.tone, "good")
+        self.assertNotIn("applied", standing.words.lower())
         self.assertTrue(any("app" in line and "Rolled back" in line for line in standing.lines), standing.lines)
+
+    def test_a_preview_says_the_machines_last_pull_as_attempted_and_an_unchanged_app_as_left_alone(self):
+        from ..work_runs import run_row
+
+        self.press()
+        # The machine's last pull was of another commit, which did not release every app.
+        preview = self.worked(stated=receipt(HEAD, last="7" * 40, ok=False))
+
+        (pull,) = run_row(preview).evidence.readings
+        ((_title, said, tone),) = pull.records
+        self.assertIn("7" * 12, said)
+        self.assertNotIn("Applied", said)
+        self.assertNotIn(tone, ("good", "serious"))
+        # An app the merge's pull left as it ran says so, beside one it replaced.
+        merge = self.settle()
+        self.assertTrue(merge.result["then"]["run"])
+        apps = [
+            {"project": "app", "result": "ok", "changed": False},
+            {"project": "web", "result": "ok", "changed": True},
+        ]
+        applied = self.worked(stated=receipt(apps=apps))
+        words = {reading.kind: reading.records for reading in run_row(applied).evidence.readings}
+        self.assertEqual([said for _title, said, _tone in words["apps.pull"]], ["Unchanged", "Released"])
+        self.assertEqual(words["apps.receipt"][0][1:], ("Applied", "good"))
 
     def test_a_container_read_running_an_older_pin_after_it_applied_is_applied_again(self):
         from django.utils import timezone

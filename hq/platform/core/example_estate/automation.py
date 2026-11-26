@@ -335,7 +335,7 @@ def _apply(hosts: tuple[str, ...]) -> dict[str, Any]:
             "retry": "observe_first",
             "recovery": ["Run it again; each app converges to its pins."],
             "fixes": ["container-image-update"],
-            "readings": ["apps.pull"],
+            "readings": ["apps.pull", "apps.receipt"],
             "hosts": list(hosts),
             "inputs": {"revision": {"pattern": "^[0-9a-f]{40}$", "max_length": 40}},
         },
@@ -472,29 +472,29 @@ REPORTED = Ended(
 )
 
 
-# What the applier stated of each app it released (its ``compose_project_outcomes``).
+# What the applier stated of each app it released (its ``compose_project_outcomes``),
+# one the commit did not change left as it ran, and of the pull, which applied it.
 RELEASES = [
     {"project": app, "service": app, "image": image, "running_digest": f"sha256:{hexed('digest', app)}", **said}
     for app, image, said in (
-        ("forgejo", "codeberg.org/forgejo/forgejo:9.0.2", {"health": "healthy", "result": "ok"}),
-        ("immich", "ghcr.io/immich-app/immich-server:v1.120.1", {"health": "healthy", "result": "ok"}),
-        (
-            "jellyfin",
-            "jellyfin/jellyfin:10.10.1",
-            {"health": "unhealthy: restarted 3 times in its settle window", "result": "rolled_back"},
-        ),
+        ("forgejo", "codeberg.org/forgejo/forgejo:9.0.2", {"health": "healthy", "result": "ok", "changed": True}),
+        ("immich", "ghcr.io/immich-app/immich-server:v1.120.1", {"health": "healthy", "result": "ok", "changed": True}),
+        ("jellyfin", "jellyfin/jellyfin:10.10.1", {"health": "healthy", "result": "ok", "changed": False}),
     )
 ]
 APPLIED = Ended(
     success=True,
-    message=f"{APPLY_REVISION[:12]}: released 2 apps; rolled back jellyfin",
+    message="",
     events=(
         ("Fetch the commit", "ok", ""),
         ("Release forgejo", "changed", "Released."),
         ("Release immich", "changed", "Released."),
-        ("Release jellyfin", "changed", "Rolled back."),
+        ("Release jellyfin", "ok", "Unchanged."),
     ),
-    readings={"apps.pull": RELEASES},
+    readings={
+        "apps.pull": RELEASES,
+        "apps.receipt": [{"revision": APPLY_REVISION, "last_attempt": APPLY_REVISION, "ok": True}],
+    },
 )
 # How far the applier has got releasing the next commit: the host's pull
 # started, and its follow's latest pass, one app released and the next under way.

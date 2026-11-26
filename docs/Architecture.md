@@ -1640,7 +1640,22 @@ asked it follow the run's status (`jobs:run_status`) and link to its page, and
 once it ends the card keeps how it went, linked to the run. A preview or an
 apply that ended badly names the step it stopped on and what it said, and an
 apply names each app its machine did not release, in the tone the `apps.pull`
-reading declares for that app's result.
+reading declares for that app's result. The applier states two readings of
+each machine, each record read through its model (`AppRelease`,
+`PullReceipt`): `apps.receipt`, the machine's last pull beside the revision
+asked (`{revision, last_attempt, ok}`, a preview's too), and `apps.pull`, what
+each app runs once that pull is of the revision asked (`{project, result,
+health, changed}`). An apply stands applied only where every machine's receipt
+is `ok`, and a preview says the last pull as attempted, never as applied. An
+app released with `changed` false reads as unchanged.
+
+Before it is pressed, Approve says what applying it interrupts while its
+containers restart, on the press and in a held request's preview
+(`app_update_approval.interrupted`): each name a container is the origin of,
+and each name whose record a connection inside it holds, by the record's facet
+(a DNS server resolves its rewrites, a proxy routes its hosts). Both come from
+`machines.served_by`, which places each connection's endpoint once
+(`machines.connections_inside`).
 
 An image built on its host is classified once, where its standing is decided
 (`containers._built_here`): the machine's copy holds no registry digest, and
@@ -1657,8 +1672,8 @@ machine last released it at a revision outside the record's `builds` for
 the app: the commits from the newest that changed its directory to the head,
 exact because the default branch takes squash merges alone. That revision is
 the `revision` of the newest run that succeeded on the machine whose
-`apps.pull` reading has a `{project, result}` record of the app with
-`result` "ok" (`app_update_approval.applied_at`).
+`apps.pull` reading has a record of the app with `result` "ok"
+(`app_update_approval.applied_at`).
 
 Its security properties:
 
@@ -1854,7 +1869,8 @@ it reports and HQ as it settles, and the run keeps what was stated in its
 result. The `runs` read carries each reading as stated; the run's page says
 each record in the words its kind declares, a swept reading's
 `ObservationSpec` (`title`, `describe`) or a playbook's own `StatedKind`
-(the applier's `apps.pull`, `app_update_approval.PULLED_KIND`), names and
+(the applier's `apps.pull` and `apps.receipt`, `app_update_approval.PULLED_KIND`
+and `RECEIPT_KIND`), names and
 counts a kind HQ declares nothing of, and folds the readings as stated under
 Raw data (`work_runs.wording`). A task's message that is a line of JSON, as a
 retry's often is, it says in the words of the `StatedKind` whose `progress`

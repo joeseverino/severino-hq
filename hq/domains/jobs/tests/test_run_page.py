@@ -221,7 +221,7 @@ class LiveRunPageTests(TestCase):
 
         touched = {**touching, "outcome": "changed", "message": "Touched."}
         self.worker("renew", {"events": [hello, touched]}, operation=operation, lease_seconds=120)
-        pulled = {"project": "example-app", "result": "rolled_back", "health": "unhealthy"}
+        pulled = {"project": "example-app", "result": "rolled_back", "health": "unhealthy", "changed": True}
         report = {
             "success": True,
             "observed_generation": claimed["input"]["generation"],

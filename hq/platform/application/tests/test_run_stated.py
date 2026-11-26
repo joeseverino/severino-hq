@@ -83,7 +83,10 @@ class KeptTests(RunStatedTestCase):
         from ..work_runs import RunEvidence
 
         undeclared = [{"example_member": 1}, {}]
-        pulled = [{"project": "example-app", "result": "rolled_back"}, {"project": "example-other", "result": "ok"}]
+        pulled = [
+            {"project": "example-app", "result": "rolled_back", "changed": True},
+            {"project": "example-other", "result": "ok", "changed": True},
+        ]
         evidence = RunEvidence(
             stated=(
                 {"host": APP, "kind": "host.filesystem", "records": [FILESYSTEM]},
