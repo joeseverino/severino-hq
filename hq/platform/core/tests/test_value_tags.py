@@ -6,7 +6,7 @@ from django.test import SimpleTestCase
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.entity_links import EntityLink
-from hq.platform.application.markup_testing import all_elements, links, select, text, texts, with_class
+from hq.platform.application.markup_testing import all_elements, elements, links, select, text, texts, with_class
 from hq.platform.application.printable import Unprintable
 from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.value_tags import (
@@ -308,8 +308,8 @@ class BreakableTests(SimpleTestCase):
 
         printed = entity({}, link, lead="on")
 
-        (held,) = [element for element in all_elements(printed) if "led" in element.classes]
-        self.assertEqual(held.words, "on example-docker-host")
+        (name,) = elements(printed, "a")
+        self.assertIn("on example-docker-host", [unit.words for unit in name.ancestors])
         self.assertEqual(links(printed), [("example-docker-host", "/machines/example-docker-host/")])
 
     def test_a_link_is_named_without_its_mark(self):
