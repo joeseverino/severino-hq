@@ -128,7 +128,7 @@ func TestUnconnectedKindSaysConnectedFalseOnTheWire(t *testing.T) {
 		t.Fatal("an unconnected kind was read")
 		return nil, nil
 	}
-	found, err := controller.Inventory(t.Context(), nil)
+	found, err := controller.Inventory(t.Context(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestUnconnectedKindSaysConnectedFalseOnTheWire(t *testing.T) {
 	}
 	read := inventoryController("beta.thing")
 	read.readers["beta.thing"] = func(context.Context) ([]any, error) { return []any{}, nil }
-	found, _ = read.Inventory(t.Context(), nil)
+	found, _ = read.Inventory(t.Context(), nil, nil)
 	if data, _ := json.Marshal(found["beta.thing"]); strings.Contains(string(data), "connected") {
 		t.Fatalf("a read kind carries connected: %s", data)
 	}
@@ -161,7 +161,7 @@ func TestReadFailuresBecomeReportFields(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			controller := inventoryController("alpha.thing")
 			controller.readers["alpha.thing"] = func(context.Context) ([]any, error) { return nil, c.err }
-			found, _ := controller.Inventory(t.Context(), nil)
+			found, _ := controller.Inventory(t.Context(), nil, nil)
 			report := found["alpha.thing"]
 			if report.OK || report.Refusal != c.refusal || report.Error != c.text || !utf8.ValidString(report.Error) {
 				t.Fatalf("%+v", report)
@@ -196,7 +196,7 @@ func TestInventoryReadsProviderGroupsConcurrentlyWithoutRacing(t *testing.T) {
 		}
 	}
 	done := controller.BeginSnapshot()
-	found, err := controller.Inventory(t.Context(), nil)
+	found, err := controller.Inventory(t.Context(), nil, nil)
 	done()
 	if err != nil || len(found) != len(kinds) {
 		t.Fatalf("%v %d", err, len(found))
@@ -217,8 +217,25 @@ func TestOnlyReadsTheKindsAsked(t *testing.T) {
 	for _, kind := range []string{"alpha.one", "beta.one"} {
 		controller.readers[kind] = func(context.Context) ([]any, error) { return []any{kind}, nil }
 	}
-	found, _ := controller.Inventory(t.Context(), []runtime.ResourceKind{"beta.one"})
+	found, _ := controller.Inventory(t.Context(), []runtime.ResourceKind{"beta.one"}, nil)
 	if _, read := found["alpha.one"]; read || len(found) != 1 {
 		t.Fatalf("%+v", found)
+	}
+}
+
+// A kind HQ says events keep current is reported carried, its reader never
+// called, while the rest of the sweep reads as usual.
+func TestACarriedKindIsNotRead(t *testing.T) {
+	controller := inventoryController("alpha.one", "beta.one")
+	called := map[string]bool{}
+	for _, kind := range []string{"alpha.one", "beta.one"} {
+		controller.readers[kind] = func(context.Context) ([]any, error) {
+			called[kind] = true
+			return []any{kind}, nil
+		}
+	}
+	found, _ := controller.Inventory(t.Context(), nil, []runtime.ResourceKind{"beta.one"})
+	if called["beta.one"] || !found["beta.one"].Carried || !called["alpha.one"] || found["alpha.one"].Carried {
+		t.Fatalf("%+v, readers called %v", found, called)
 	}
 }

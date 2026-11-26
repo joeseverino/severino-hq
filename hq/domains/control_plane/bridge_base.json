@@ -1774,6 +1774,13 @@
               "$ref": "#/components/schemas/ResourceKind"
             }
           },
+          "carry_kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            },
+            "description": "Kinds events keep current that the sweep reports as carried, asking nothing of their provider."
+          },
           "due": {
             "type": "boolean"
           },
@@ -1792,6 +1799,7 @@
           "carry",
           "forced",
           "only_kinds",
+          "carry_kinds",
           "due",
           "reason"
         ]

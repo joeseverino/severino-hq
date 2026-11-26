@@ -43,9 +43,9 @@ SETTINGS = {
     "observability": {"enabled": True, "head_sampling_rate": 1, "logs": {"invocation_logs": False}},
 }
 
-# What the Worker never reads: HQ's readings for each event, and what the
-# provider's app must hold.
-OFF_ROUTE = {"events", "requires"}
+# What the Worker never reads: HQ's readings for each event, which of them
+# the events keep current, and what the provider's app must hold.
+OFF_ROUTE = {"events", "complete", "requires"}
 
 
 def routes() -> list[dict[str, object]]:

@@ -61,6 +61,7 @@ from .tone import Absent, Tone, Toned
 from .ui import ended
 lazy from .adoption import manages_through, observes_only
 lazy from .facts import stored_snapshots
+lazy from .inbound_events import covers
 
 # A kind HQ stores readings of, or none. Read as a schema is first built, so
 # declaring the command loads no registry.
@@ -433,13 +434,24 @@ def swept(kind: str) -> bool:
     return declared is not None and not declared.unobserved_reason
 
 
+def own_clock(kind: str) -> timedelta | None:
+    """How often ``kind`` is read on a clock of its own, slower than the
+    sweep's, or None for a kind every sweep reads: its declaration's, else the
+    idle sweep's while events keep it current (``inbound_events.covers``),
+    which returns to every sweep on its own once their channel goes silent."""
+
+    reading = OBSERVATIONS.get(kind)
+    if reading is not None and reading.every is not None:
+        return reading.every
+    return slowest_sweep_interval() if swept(kind) and covers(kind) else None
+
+
 def every_sweep(kind: str) -> bool:
     """Whether every sweep reads ``kind``: swept, and on no slower clock of its
     own. A kind on its own clock is carried by the sweeps between its reads, so
     its age says nothing about whether a sweep is due or has happened."""
 
-    reading = OBSERVATIONS.get(kind)
-    return swept(kind) and (reading is None or reading.every is None)
+    return swept(kind) and own_clock(kind) is None
 
 
 def sweep_due(controller_id: str = "") -> dict[str, object]:
@@ -463,6 +475,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         # When not empty, every kind the sweep reads: set when the cadence is
         # not due and every pending request names its kinds.
         "only_kinds": [],
+        "carry_kinds": _carry_kinds(forced),
     }
     if oldest is None:
         return {**verdict, "due": True, "reason": ended(sentence(Absent.NOT_READ))}
@@ -499,6 +512,24 @@ def _oldest_sweep() -> datetime | None:
     return min(
         (attempted_at(observed_at, updated_at) for kind, observed_at, updated_at in rows if every_sweep(kind)),
         default=None,
+    )
+
+
+def _carry_kinds(forced: tuple[ForcedRead, ...]) -> list[str]:
+    """The kinds events keep current that the sweep reports as they last
+    were: neither due on their own clock nor asked for. A controller's kind
+    with a clock of its declaration's is carried by its own plan."""
+
+    if any(read.kinds is None for read in forced):
+        return []
+    asked = {kind for read in forced for kind in read.kinds or ()}
+    return sorted(
+        kind
+        for kind, observed_at, updated_at in ProviderInventory.objects.values_list("kind", "observed_at", "updated_at")
+        if kind not in asked
+        and covers(kind)
+        and (every := own_clock(kind)) is not None
+        and not passed(attempted_at(observed_at, updated_at) + every)
     )
 
 

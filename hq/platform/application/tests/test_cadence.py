@@ -139,6 +139,43 @@ class SweepPolicyTests(TestCase):
     def test_nobody_having_used_it_is_not_an_error(self):
         self.assertFalse(recently_used())
 
+    @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=300, SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200)
+    def test_a_reading_events_keep_current_is_a_backstop_only_while_their_channel_is_heard(self):
+        """The App's webhook keeps the repositories current, so while its
+        listener is heard a sweep carries them until the idle interval; once
+        it falls silent they are swept as before. A reading no event keeps
+        current is swept whatever the channel says."""
+
+        from hq.domains.control_plane.models import InboundSource
+        from hq.platform.core.models import UpstreamReading
+
+        from ..inbound_events import channel
+
+        note_activity()
+        swept(age_seconds=30)
+        swept(age_seconds=3600, kind="github.repository")
+        readings.note(channel(InboundSource.WORKER), every=timedelta(0))
+
+        heard = sweep_due()
+        self.assertFalse(heard["due"])
+        self.assertEqual(heard["carry_kinds"], ["github.repository"])
+
+        swept(age_seconds=50_000, kind="github.repository")
+        self.assertEqual(sweep_due()["carry_kinds"], [], "past its own clock it is read again")
+
+        swept(age_seconds=3600, kind="github.repository")
+        UpstreamReading.objects.filter(key=readings.heartbeat(channel(InboundSource.WORKER))).update(
+            observed_at=timezone.now() - timedelta(minutes=11)
+        )
+        silent = sweep_due()
+        self.assertTrue(silent["due"])
+        self.assertEqual(silent["carry_kinds"], [])
+
+        readings.note(channel(InboundSource.WORKER), every=timedelta(0))
+        swept(age_seconds=3600, kind="github.repository")
+        swept(age_seconds=3600)
+        self.assertTrue(sweep_due()["due"], "a reading no event keeps current makes the sweep due")
+
     @override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=60)
     def test_the_oldest_sweep_decides(self):
         """A provider swept an hour ago is due even if another was swept now.

@@ -168,7 +168,7 @@ func TestHostUnitsAreReadOnlyWhereTheLauncherNamesTheReading(t *testing.T) {
 	shown := writeHostUnits(t, hostUnitsShown)
 	for path, want := range map[string]int{"": -1, shown: 3} {
 		controller := &Controller{Registry: New(runtime.Environment{HostUnits: path}, supplied(), &fakeHTTP{}), Declared: declared}
-		inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind})
+		inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

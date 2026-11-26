@@ -12,16 +12,18 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.utils import timezone
+from django.utils.text import get_text_list
 
 from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
 
-from .cadence import WorkerStanding, controller_standing, every_sweep, sweep_due
+from .cadence import WorkerStanding, controller_standing, every_sweep, own_clock, sweep_due
 from .entity_links import kind_label
 from .freshness import Freshness, freshness
 from .moments import duration
 from .read_requests import ForcedRead, forced_reads
 from .tone import Tone
 lazy from .facts import every_snapshot
+lazy from .inbound_events import covers
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +55,8 @@ class ControllerPage:
     swept_at: datetime | None
     sweep_due: bool
     next_sweep_at: datetime | None
-    # How often everything is read, in words.
+    # How often everything is read, in words, then each reading on a clock of
+    # its own with its clock.
     sweep_every: str
     # Of what every sweep reads, the reading tried longest ago: the one that
     # decides when the next sweep is due, and the one to look at when it is late.
@@ -88,6 +91,20 @@ def _reading(row: ProviderInventory) -> KindReading:
         records=len(row.records) if isinstance(row.records, list) else 0,
         result=result,
         ok=ok,
+    )
+
+
+def _own_clocks(readings: tuple[KindReading, ...]) -> str:
+    """Each reading read on a clock of its own, as "GitHub profiles every
+    6 hours", and "and on each event" for one events keep current."""
+
+    return get_text_list(
+        [
+            f"{reading.label} every {duration(clock)}{' and on each event' if covers(reading.kind) else ''}"
+            for reading in readings
+            if (clock := own_clock(reading.kind)) is not None
+        ],
+        "and",
     )
 
 
@@ -128,7 +145,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         swept_at=max((reading.attempted_at for reading in readings), default=None),
         sweep_due=due,
         next_sweep_at=(None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))),
-        sweep_every=duration(every),
+        sweep_every="; ".join(filter(None, (duration(every), _own_clocks(readings)))),
         oldest=oldest,
         overdue=oldest is not None and interval > 0 and now - oldest.attempted_at > 2 * every,
         readings=readings,

@@ -2917,8 +2917,11 @@ type StepFailure struct {
 // SweepVerdict defines model for SweepVerdict.
 type SweepVerdict struct {
 	// AgeSeconds Absent before anything has been swept.
-	AgeSeconds      int            `json:"age_seconds,omitempty"`
-	Carry           []string       `json:"carry"`
+	AgeSeconds int      `json:"age_seconds,omitempty"`
+	Carry      []string `json:"carry"`
+
+	// CarryKinds Kinds events keep current that the sweep reports as carried, asking nothing of their provider.
+	CarryKinds      []ResourceKind `json:"carry_kinds"`
 	Due             bool           `json:"due"`
 	Forced          []ForcedRead   `json:"forced"`
 	IntervalSeconds int            `json:"interval_seconds"`

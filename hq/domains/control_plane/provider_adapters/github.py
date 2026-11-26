@@ -286,6 +286,8 @@ INBOUND = {
         secret_binding="GITHUB_WEBHOOK_SECRET",  # noqa: S106 - the Worker secret's name, never its value
         # "Payloads are capped at 25 MB" (docs.github.com, webhook events and payloads).
         max_body_bytes=25 * 1024 * 1024,
+        # The delivery log is not: a delivery that failed never arrives.
+        complete=(readings.REPOSITORY_KIND,),
         requires=(
             GitHub.CONTENTS_READ,
             GitHub.ACTIONS_READ,

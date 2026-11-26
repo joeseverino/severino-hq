@@ -377,7 +377,10 @@ An unknown ref or kind is `invalid_input`. It needs `manage_infrastructure`.
 The request is stored as a `ReadRequest` and audited against its connection.
 It makes the controller's `sweep-due` answer due, whatever the cadence says.
 When only requests make it due, `only_kinds` names every kind the controller
-reads.
+reads. `carry_kinds` names each kind an inbound declaration keeps current
+(`InboundSpec.complete`) while its channel is heard, until the idle interval
+has passed since it was read: the sweep reports it carried and asks its
+provider nothing, and a page opened asks nothing for it either.
 
 A request is answered once each forced reading is stored after it, and stops
 forcing after `SEVERINO_READ_REQUEST_SECONDS`. The web form is

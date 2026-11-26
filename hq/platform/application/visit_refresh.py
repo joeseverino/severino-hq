@@ -36,6 +36,7 @@ lazy from . import machines
 lazy from .connection_security import ingress_kinds
 lazy from .credential_sight import fed_kinds
 lazy from .entity_links import entity_link
+lazy from .inbound_events import covers
 lazy from .service_list import listed_service
 lazy from .services import alias_target
 
@@ -53,10 +54,11 @@ def askable(kind: str) -> bool:
     The sweep must read it, or the request is never answered and forces sweeps
     until it expires. And its reader must not log in to a machine: a host
     counts its logins, so those are left to the sweep's own clock. A kind
-    nothing declares is neither, so it is not asked for.
+    nothing declares is neither, so it is not asked for, nor one events keep
+    current.
     """
 
-    if not swept(kind):
+    if not swept(kind) or covers(kind):
         return False
     reading = OBSERVATIONS.get(kind)
     if reading is not None:

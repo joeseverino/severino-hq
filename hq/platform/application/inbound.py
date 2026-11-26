@@ -36,7 +36,7 @@ lazy from hq.domains.control_plane.bridge_contract import departs
 lazy from hq.domains.control_plane.provider_adapters import INBOUND
 
 from . import readings
-from .inbound_events import channel
+from .inbound_events import arrives_by, channel
 from .moments import moment
 lazy from .cadence import ask
 
@@ -48,15 +48,10 @@ _NOTED_EVERY = timedelta(minutes=1)
 
 def _carried(source: InboundSource) -> list[str]:
     """Every reading the events ``source`` carries make due: what a gap in its
-    channel may have missed. The Worker carries each provider it routes."""
+    channel may have missed."""
 
-    routed = source == InboundSource.WORKER
     return [
-        kind
-        for spec in INBOUND.values()
-        if bool(spec.path) == routed
-        for kinds in spec.events.values()
-        for kind in kinds
+        kind for spec in INBOUND.values() if arrives_by(spec) == source for kinds in spec.events.values() for kind in kinds
     ]
 
 

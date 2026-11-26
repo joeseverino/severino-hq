@@ -21,7 +21,7 @@ func (w *Worker) sweep(ctx context.Context) error {
 	if len(verdict.OnlyKinds) == 0 || slices.ContainsFunc(verdict.Forced, func(read ForcedRead) bool { return read.ConnectionRef != "" }) {
 		w.connections(ctx, verdict.Carry)
 	}
-	inventory, err := w.Providers.Inventory(ctx, verdict.OnlyKinds)
+	inventory, err := w.Providers.Inventory(ctx, verdict.OnlyKinds, verdict.CarryKinds)
 	if err != nil {
 		return err
 	}

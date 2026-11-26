@@ -27,7 +27,7 @@ from .labels import dotted
 from .moments import duration, when
 from .process_caches import kept
 lazy from . import plugins, readings
-lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
+lazy from .cadence import own_clock, slowest_sweep_interval, ssh_probe_interval
 lazy from .tables import Piece
 
 CURRENT = "current"
@@ -185,9 +185,9 @@ def cadence(kind: str = "") -> ReadCadence:
 
     if (named := _NAMED.get(kind)) is not None:
         return named()
+    if (every := own_clock(kind)) is not None:
+        return missed(every, 2)
     spec = OBSERVATIONS.get(kind)
-    if spec is not None and spec.every is not None:
-        return missed(spec.every, 2)
     if spec is None and (read := _read_through().get(kind)):
         # A connection HQ reaches itself is judged by the readings through it:
         # by the slowest it reads on a clock, else by one asked for on open.

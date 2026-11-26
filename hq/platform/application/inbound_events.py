@@ -7,6 +7,8 @@ finding reads here without being able to say an event happened.
 from datetime import timedelta
 
 from hq.domains.control_plane.models import InboundSource
+lazy from hq.domains.control_plane.provider_adapters import INBOUND
+lazy from hq.domains.control_plane.provider_spec import InboundSpec
 
 from . import readings
 from .derivations import passed
@@ -54,3 +56,23 @@ def channel_standing(source: InboundSource) -> WorkerStanding:
         return WorkerStanding(seen_at=None, silent=False, named=LISTENER_NAMED, unheard=unheard(source))
     silent = passed(seen_at + 2 * CHANNEL_EVERY)
     return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=LISTENER_NAMED)
+
+
+def covers(kind: str) -> bool:
+    """Whether events keep ``kind`` current now: a declaration is complete
+    for it and its channel was heard lately. A channel gone silent, or never
+    heard, covers nothing, so its readings are swept as before."""
+
+    for spec in INBOUND.values():
+        if kind in spec.complete:
+            standing = channel_standing(arrives_by(spec))
+            if standing.seen_at is not None and not standing.silent:
+                return True
+    return False
+
+
+def arrives_by(spec: InboundSpec) -> InboundSource:
+    """The channel a declaration's events arrive by: the Worker routes each
+    one with a path, and HQ's own host jobs tell the rest."""
+
+    return InboundSource.WORKER if spec.path else InboundSource.HOST

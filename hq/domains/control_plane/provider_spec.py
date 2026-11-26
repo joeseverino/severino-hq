@@ -191,10 +191,17 @@ class InboundSpec:
     max_body_bytes: int = 0
     # What the provider's app must hold to be sent these events.
     requires: tuple[Permission, ...] = ()
+    # The readings these events keep current, so while the channel is heard a
+    # sweep reads them only as a backstop (``inbound_events.covers``). One that
+    # can change with no event (another machine's, a delivery that failed) is
+    # left out.
+    complete: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.events or not all(self.events.values()):
             raise ValueError("An inbound declaration names each event's readings.")
+        if not set(self.complete) <= {kind for kinds in self.events.values() for kind in kinds}:
+            raise ValueError("An inbound declaration is complete only for readings its events name.")
         route = (self.path, self.scheme, self.signature_header, self.delivery_header, self.event_header)
         if any(route) and not all((*route, self.secret_binding, self.max_body_bytes)):
             raise ValueError(f"The route {self.path!r} names its scheme, its headers, its secret and its largest body.")
