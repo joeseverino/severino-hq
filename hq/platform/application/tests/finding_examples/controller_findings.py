@@ -7,7 +7,7 @@ from hq.platform.core.testing import connection, declare
 from ...refused_reports import note
 from ..inventory_records import kind_read
 from ..test_findings import observed
-from . import AT, NOW, Ago, Example, Examples, Raised, ago, stored
+from . import AT, NOW, Ago, Example, Examples, Raised, ago, delivery_findings, stored
 
 REWRITE, CONTAINER, MACHINE = "adguard.rewrite", "portainer.container", "machine"
 DEGRADED = [{"type": "Degraded", "status": True, "reason": "Failed", "message": "The provider refused it."}]
@@ -201,7 +201,8 @@ EXAMPLES = (
                 raises=(Raised(title=UNCONFIRMED, evidence=(("What", "HQ deploys"), ("Status", "Has a problem"))),),
             ),
         ),
-        quiet=(HEALTHY,),
+        # A deploy on its way, or waiting on a reviewer, is not one.
+        quiet=(HEALTHY, delivery_findings.RUNNING, delivery_findings.WAITING),
     ),
     Examples(
         "reconciled-but-still-wrong",

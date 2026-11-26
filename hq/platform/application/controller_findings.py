@@ -10,6 +10,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 
 from .cadence import CONTROLLER_REFRESH, sweep_interval
 from .credential_findings import UNREPORTED
+from .delivery_progress import LABELS as DEPLOYING_LABELS
 from .derivations import since
 from .entity_links import kind_label, node_link, node_name
 from .finding_model import (
@@ -485,6 +486,9 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
         if node.kind == "resource"
         and node.managed
         and node.status in {Tone.ATTENTION, Tone.SERIOUS}
+        # A deploy on its way, or held for a reviewer, is no fault: the
+        # delivery's own findings and github-waiting say it.
+        and node.status_label not in DEPLOYING_LABELS.values()
         # The other rule owns the converged case and says something sharper
         # about it, so this one takes what is left rather than doubling it.
         and (node.declared_revision != node.observed_revision or _reports_itself(node))
