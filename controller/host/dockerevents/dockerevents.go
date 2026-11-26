@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -66,9 +65,8 @@ type Watcher struct {
 	Tell func(ctx context.Context, lines []byte) error
 	Log  *slog.Logger
 	// The pace, the listener's unless a test sets its own.
-	Window, FirstRetry, LastRetry, Steady time.Duration
-	// Jitter is the wait before a reconnect, given its bound.
-	Jitter func(bound time.Duration) time.Duration
+	Window time.Duration
+	runtime.Reconnect
 }
 
 // New is the watcher on Docker's socket at socket, telling HQ
@@ -80,10 +78,7 @@ func New(socket string, tell func(context.Context, []byte) error, log *slog.Logg
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		}}},
 		Tell: tell, Log: log,
-		Window: runtime.ListenerWindow, FirstRetry: runtime.ListenerFirstRetry,
-		LastRetry: runtime.ListenerLastRetry, Steady: runtime.ListenerSteady,
-		// A wait needs spreading, not secrecy.
-		Jitter: rand.N[time.Duration], //nolint:gosec // G404: see above
+		Window: runtime.ListenerWindow, Reconnect: runtime.NewReconnect(),
 	}
 }
 
@@ -136,26 +131,9 @@ var errStreamEnded = errors.New("docker ended its event stream")
 // event HQ stored whenever the stream or HQ fails.
 func (d *Watcher) Run(ctx context.Context) {
 	var since int64
-	retry := d.FirstRetry
-	for {
-		began := time.Now()
-		err := d.session(ctx, &since)
-		if ctx.Err() != nil {
-			return
-		}
-		if time.Since(began) >= d.Steady {
-			retry = d.FirstRetry
-		}
-		wait := d.Jitter(retry)
-		d.Log.Warn("docker events lost", slog.String("event", "docker-events.reconnect"),
-			slog.Any("error", err), slog.Duration("wait", wait))
-		retry = min(2*retry, d.LastRetry)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(wait):
-		}
-	}
+	d.Reconnect.Run(ctx, d.Log, "docker events lost", "docker-events.reconnect", func(ctx context.Context) error {
+		return d.session(ctx, &since)
+	})
 }
 
 // session is one read of the stream, from since when HQ stored an event

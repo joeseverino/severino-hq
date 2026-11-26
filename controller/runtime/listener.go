@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"time"
@@ -24,13 +23,6 @@ const (
 	ListenerPing = 30 * time.Second
 	// ListenerWindow is how long a burst of events is gathered into one batch.
 	ListenerWindow = 100 * time.Millisecond
-	// ListenerFirstRetry and ListenerLastRetry bound the wait before each
-	// reconnect, which doubles from the first to the last.
-	ListenerFirstRetry = time.Second
-	ListenerLastRetry  = time.Minute
-	// ListenerSteady is how long a connection holds before the wait starts
-	// again from the first.
-	ListenerSteady = time.Minute
 	// listenerReadLimit bounds one message: an event is its names alone.
 	listenerReadLimit = 16 << 10
 )
@@ -58,11 +50,8 @@ type Listener struct {
 	Post func(context.Context, InboundBatch) error
 	Log  *slog.Logger
 	// The pace, ListenerPing and the rest unless a test sets its own.
-	Ping, Window, FirstRetry, LastRetry, Steady, Heartbeat time.Duration
-	// Jitter is the wait before a reconnect, given its bound: uniform below
-	// it (full jitter), so listeners that lost the socket together do not
-	// return together.
-	Jitter func(bound time.Duration) time.Duration
+	Ping, Window, Heartbeat time.Duration
+	Reconnect
 }
 
 // NewListener is the listener for an events connection.
@@ -75,35 +64,13 @@ func NewListener(connection connections.Connection, client *http.Client, post fu
 	}
 	return &Listener{
 		URL: connection.APIToken.URL, Token: connection.APIToken.APIToken, Client: client, Post: post, Log: log,
-		Ping: ListenerPing, Window: ListenerWindow, FirstRetry: ListenerFirstRetry, LastRetry: ListenerLastRetry,
-		Steady: ListenerSteady, Heartbeat: ListenerHeartbeat,
-		// A wait needs spreading, not secrecy.
-		Jitter: rand.N[time.Duration], //nolint:gosec // G404: see above
+		Ping: ListenerPing, Window: ListenerWindow, Heartbeat: ListenerHeartbeat, Reconnect: NewReconnect(),
 	}, nil
 }
 
 // Run listens until ctx ends, reconnecting whenever the socket or HQ fails.
 func (l *Listener) Run(ctx context.Context) {
-	retry := l.FirstRetry
-	for {
-		began := time.Now()
-		err := l.session(ctx)
-		if ctx.Err() != nil {
-			return
-		}
-		if time.Since(began) >= l.Steady {
-			retry = l.FirstRetry
-		}
-		wait := l.Jitter(retry)
-		l.Log.Warn("event socket lost", slog.String("event", "listener.reconnect"),
-			slog.Any("error", err), slog.Duration("wait", wait))
-		retry = min(2*retry, l.LastRetry)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(wait):
-		}
-	}
+	l.Reconnect.Run(ctx, l.Log, "event socket lost", "listener.reconnect", l.session)
 }
 
 // session is one connection: HQ is told it reconnected, then hears each event

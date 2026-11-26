@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -185,84 +184,6 @@ func TestADroppedSocketReconnectsAndHQReadsAgainEachTime(t *testing.T) {
 	}
 }
 
-func TestTheWaitBeforeEachReconnectDoublesToAMinuteWithFullJitter(t *testing.T) {
-	bridge, _ := hq(t)
-	w := newHub(t, holding)
-	listener := listenerFor(t, w, bridge)
-	listener.Token = "refused"
-	var mu sync.Mutex
-	var bounds []time.Duration
-	listener.Jitter = func(bound time.Duration) time.Duration {
-		mu.Lock()
-		defer mu.Unlock()
-		bounds = append(bounds, bound)
-		return 0
-	}
-	run(t, listener)
-	for range 10 {
-		next(t, w.dialed, "dial")
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	want := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second,
-		32 * time.Second, time.Minute, time.Minute}
-	if len(bounds) < len(want) {
-		t.Fatalf("%d waits after 10 dials", len(bounds))
-	}
-	for i, bound := range want {
-		if bounds[i] != bound {
-			t.Fatalf("waits %v, not %v", bounds[:len(want)], want)
-		}
-	}
-}
-
-func TestAWaitIsDrawnFromAllOfItsBound(t *testing.T) {
-	connection := connections.Connection{APIToken: &connections.APIToken{URL: "wss://events.example.com/socket", APIToken: socketToken}}
-	listener, err := NewListener(connection, http.DefaultClient, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	drawn := map[time.Duration]bool{}
-	for range 100 {
-		wait := listener.Jitter(time.Second)
-		if wait < 0 || wait >= time.Second {
-			t.Fatalf("a wait of %s for a bound of a second", wait)
-		}
-		drawn[wait] = true
-	}
-	if len(drawn) < 2 {
-		t.Error("every wait is the same, so listeners that dropped together return together")
-	}
-}
-
-func TestAConnectionThatHeldStartsTheWaitAgain(t *testing.T) {
-	bridge, _ := hq(t)
-	w := newHub(t, func(context.Context, *websocket.Conn) {})
-	listener := listenerFor(t, w, bridge)
-	listener.Steady = 0
-	var mu sync.Mutex
-	var bounds []time.Duration
-	listener.Jitter = func(bound time.Duration) time.Duration {
-		mu.Lock()
-		defer mu.Unlock()
-		bounds = append(bounds, bound)
-		return 0
-	}
-	run(t, listener)
-	for range 4 {
-		next(t, w.dialed, "dial")
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	for _, bound := range bounds {
-		if bound != time.Second {
-			t.Fatalf("waits %v after connections that held", bounds)
-		}
-	}
-}
-
 func TestAnAnsweredSocketIsPingedAndHeardAsAHeartbeat(t *testing.T) {
 	bridge, batches := hq(t)
 	w := newHub(t, holding)
@@ -298,8 +219,8 @@ func TestAnUnansweredPingEndsTheConnectionWithNoHeartbeat(t *testing.T) {
 func TestTheListenerKeepsThePaceHQDeclares(t *testing.T) {
 	bridge, _ := hq(t)
 	listener := listenerFor(t, newHub(t, holding), bridge)
-	if listener.Ping != 30*time.Second || listener.FirstRetry != time.Second || listener.LastRetry != time.Minute {
-		t.Errorf("pings every %s and waits %s to %s", listener.Ping, listener.FirstRetry, listener.LastRetry)
+	if listener.Ping != 30*time.Second {
+		t.Errorf("pings every %s", listener.Ping)
 	}
 	// inbound_events.CHANNEL_EVERY's worker source, through the contract.
 	if listener.Heartbeat != 5*time.Minute {
