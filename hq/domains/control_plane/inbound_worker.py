@@ -37,6 +37,10 @@ SETTINGS = {
     "workers_dev": False,
     "exports": {"Hub": {"type": "durable-object", "storage": "sqlite"}},
     "durable_objects": {"bindings": [{"name": "HUB", "class_name": "Hub"}]},
+    # Every request is logged, by the Worker's own line of its method, path
+    # and status: invocation logs keep the request's headers, and Cloudflare
+    # documents no redaction of them in Workers Logs.
+    "observability": {"enabled": True, "head_sampling_rate": 1, "logs": {"invocation_logs": False}},
 }
 
 # What the Worker never reads: HQ's readings for each event, and what the

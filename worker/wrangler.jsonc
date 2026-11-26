@@ -22,6 +22,13 @@
       }
     ]
   },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "invocation_logs": false
+    }
+  },
   "secrets": {
     "required": [
       "GITHUB_WEBHOOK_SECRET",

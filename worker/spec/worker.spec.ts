@@ -1,5 +1,5 @@
 import { env, exports } from "cloudflare:workers";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import arrival from "../src/generated/arrival.json";
 import routes from "../src/generated/routes.json";
 import { SOCKET_PATH } from "../src/hub";
@@ -190,5 +190,21 @@ describe("a listener's socket", () => {
     expect(await current.next()).toMatchObject({ delivery_id: "delivery-rotated" });
     expect(await closed).toBe(1008);
     expect(heard).toStrictEqual([]);
+  });
+});
+
+describe("a request's log", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("is its method, path and status alone, never a header", async () => {
+    const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await listen();
+    await deliver({ event: "push", payload: push, id: "delivery-logged" });
+
+    expect(logged.mock.calls).toStrictEqual([
+      [{ method: "GET", path: SOCKET_PATH, status: 101 }],
+      [{ method: "POST", path: github.path, status: 202 }],
+    ]);
   });
 });

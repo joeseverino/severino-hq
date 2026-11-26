@@ -17,6 +17,8 @@
 //   with its own credentials. An event outside the bridge contract's bounds
 //   is answered 400 and never sent.
 // - Every secret is a Worker secret, named by the route that uses it.
+// - A request is logged as its method, path and status alone, never a header
+//   or the body.
 import routes from "./generated/routes.json";
 import { bearer, Hub, SOCKET_PATH, tag, withinContract, type InboundEvent } from "./hub";
 import { VERIFIERS, type Verifier } from "./verify";
@@ -105,11 +107,19 @@ async function webhook(request: Request, env: Env, route: Route, verify: Verifie
   return answer(202);
 }
 
+function answered(request: Request, env: Env, path: string): Promise<Response> | Response {
+  if (path === SOCKET_PATH) return socket(request, env);
+  const provider = ROUTES.get(path);
+  return provider ? webhook(request, env, provider.route, provider.verify) : answer(404);
+}
+
 export default {
   async fetch(request, env): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (path === SOCKET_PATH) return socket(request, env);
-    const provider = ROUTES.get(path);
-    return provider ? webhook(request, env, provider.route, provider.verify) : answer(404);
+    const response = await answered(request, env, path);
+    // The one record a request leaves in Workers Logs, whose invocation logs
+    // are off since they keep the request's headers, the bearer among them.
+    console.log({ method: request.method, path, status: response.status });
+    return response;
   },
 } satisfies ExportedHandler<Env>;
