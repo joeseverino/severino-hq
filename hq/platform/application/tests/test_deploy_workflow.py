@@ -78,14 +78,12 @@ class DeployTests(SimpleTestCase):
         Approve needs, reads the environment Approve waits on before it records
         anything, with the job's token and Actions read alone."""
         from hq.platform.application.github_posture import REVIEW_APP_ID
-        from tools.credentials import RELEASE
 
-        self.assertEqual(self.environment("approve"), RELEASE)
         self.assertIn("resolve", self.needs("approve"))
         check, resolve = self.release_check()
         (record,) = [i for i, step in enumerate(resolve) if '/deployments"' in script(step)]
         self.assertLess(check, record)
-        self.assertIn(f"/environments/{RELEASE}", script(resolve[check]))
+        self.assertIn(f"/environments/{self.environment('approve')}", script(resolve[check]))
         self.assertEqual(resolve[check]["env"]["REVIEW_APP"], f"${{{{ secrets.{REVIEW_APP_ID} }}}}")
         self.assertEqual(resolve[check]["env"]["GH_TOKEN"], "${{ github.token }}")
         self.assertEqual(self.jobs["resolve"]["permissions"].get("actions"), "read")

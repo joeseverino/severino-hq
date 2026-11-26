@@ -14,6 +14,7 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.test_pipeline import jobs, workflow
 from hq.platform.core.tests.task import Usage
 from tests.mise_tasks import body, mise_tasks
 from tools import credentials
@@ -25,6 +26,8 @@ MINTED = "minted-secret-9876543210"
 EXCHANGED = "exchanged-token-555"
 CF_API = "https://api.example.test"
 TS_API = "https://ts.example.test"
+# The environment Deploy's Approve waits on, which wire-github-app --review protects.
+RELEASE = f"repos/example/host/environments/{jobs(workflow('deploy.yml'))['approve']['environment']}"
 
 GROUPS = [
     {"id": "g-acct-settings", "name": "Account Settings Read", "scopes": ["com.cloudflare.api.account"]},
@@ -397,7 +400,7 @@ class AppWebhookTests(SimpleTestCase):
         return {"url": call.json["url"], "content_type": "json", "secret": "********", "insecure_ssl": "0"}
 
     def wire(self, rules: str = '{"total_count": 0, "custom_deployment_protection_rules": []}', **flags: str):
-        release = "repos/example/host/environments/release"
+        release = RELEASE
         commands = Commands(
             {
                 ("op", "document", "get"): self.key,
@@ -448,7 +451,7 @@ class AppWebhookTests(SimpleTestCase):
             if argv[:2] == ["gh", "secret"]
         ]
         self.assertEqual(secrets, [(["gh", "secret", "set", "HQ_REVIEW_APP_ID", "--repo", "example/host"], "4242")])
-        release = "repos/example/host/environments/release"
+        release = RELEASE
         self.assertIn(
             ["gh", "api", "-X", "POST", f"{release}/deployment_protection_rules", "-F", "integration_id=4242"],
             commands.argv,
