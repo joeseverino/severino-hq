@@ -1590,7 +1590,7 @@ deploy/                   systemd units, tmpfiles rule, remote targets, host.jso
 composition/              the composed image
 policy/                   the extension admission policy
 demo/                     the static demo site built from HQ's own pages
-worker/                   TypeScript: the Cloudflare Worker that verifies providers' webhooks and sends their names to the host's listener (lint:worker, test:worker)
+worker/                   TypeScript: the Cloudflare Worker that verifies providers' webhooks and sends their names to the host's listener (lint:worker, test:worker; worker:deploy deploys it, [Security](Security.md#the-inbound-events-worker))
 tools/                    development and CI programs, never in the image (tools/README.md)
 mise-tasks/               every task outside mise.toml: one TOML file per CI job (lint.toml, ...) and operator.toml, and beside each a folder of script tasks
 tests/                    synthetic extension fixtures, the SDK consumer, property and shell suites
