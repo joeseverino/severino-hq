@@ -1,16 +1,21 @@
 package providers
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
-	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 const (
+	// The deploy review App's connection, beside the main App's hq-app.
+	reviewApp   = "deploy-review"
+	reviewAppID = "67890"
 	reviewHead  = "aaaa000000000000000000000000000000000000"
 	reviewRun   = "/repos/example/app/actions/runs/41"
 	reviewRoute = reviewRun + "/deployment_protection_rule"
@@ -48,8 +53,13 @@ func TestGitHubReviewAnswersTheRunAtTheCommitSeen(t *testing.T) {
 				t.Errorf("the review names the environment and the answer: %v", writes[0].body)
 			}
 			grant, _ := h.grantOf(writes[0])
-			if !slices.Equal(grant.Repositories, []string{"app"}) || grant.Permissions != (githubapi.AppPermissions{Deployments: "write"}) {
-				t.Errorf("the review's token holds its repository and Deployments write alone: %+v", grant)
+			if !slices.Equal(grant.Repositories, []string{"app"}) || grant.Permissions != githubReviewGrant {
+				t.Errorf("the review's token holds its repository and the review's grant alone: %+v", grant)
+			}
+			for _, call := range h.recorded() {
+				if strings.HasSuffix(call.path, "/access_tokens") && jwtIssuer(call.auth) != reviewAppID {
+					t.Errorf("a review signs as the deploy review App alone: %s", call.auth)
+				}
 			}
 		})
 	}
@@ -83,4 +93,31 @@ func TestGitHubReviewRefusesAnyMismatch(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Only the deploy review App answers a rule, so with the main App alone
+// connected a review reaches GitHub not at all.
+func TestGitHubReviewNeverSignsAsTheMainApp(t *testing.T) {
+	h := newGitHubHarness(t, reviewRoutes("waiting", reviewHead, "release"), runtime.Environment{})
+	h.r.Supplied = supplied(githubAppConnection("hq-app", "12345"))
+	if _, err := h.r.runAction(t.Context(), runtime.ResourceKindGitHubDeploymentReview, "reconcile", reviewSpec("approved"), nil, true); err == nil {
+		t.Fatal("a review with no deploy review App answered")
+	}
+	if calls := h.recorded(); len(calls) != 0 {
+		t.Errorf("reached GitHub: %v", calls)
+	}
+}
+
+// jwtIssuer is the app a JWT in an Authorization header signs for.
+func jwtIssuer(auth string) string {
+	parts := strings.Split(strings.TrimPrefix(auth, "Bearer "), ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	raw, _ := base64.RawURLEncoding.DecodeString(parts[1])
+	var claims struct {
+		Issuer string `json:"iss"`
+	}
+	_ = json.Unmarshal(raw, &claims)
+	return claims.Issuer
 }

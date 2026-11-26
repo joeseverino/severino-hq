@@ -428,6 +428,21 @@ class AppWebhookTests(SimpleTestCase):
         for event in github["events"]:
             self.assertIn(event, out)
 
+    def test_the_review_app_gets_its_webhook_and_its_key_goes_nowhere_else(self):
+        commands, out = self.wire(review="true", webhook_secret=self.REFERENCE, webhook_host="events.example.com")
+
+        (call,) = self.calls
+        self.assertEqual(call.url, "https://api.github.com/app/hook/config")
+        self.assertFalse([argv for argv in commands.argv if argv[:2] == ["gh", "secret"]])
+        self.assertIn("subscribe to deployment_protection_rule.", out)
+
+    def test_the_review_app_is_refused_an_extension_or_no_webhook(self):
+        for flags in ({"extension": "example/ext", "webhook_secret": self.REFERENCE}, {}):
+            with self.subTest(flags=flags), self.assertRaises(Refused):
+                self.wire(review="true", webhook_host="events.example.com", **flags)
+
+        self.assertEqual(self.calls, [])
+
     def test_a_webhook_without_its_host_reads_no_secret_and_calls_nothing(self):
         with self.assertRaises(Refused):
             self.wire(webhook_secret=self.REFERENCE)

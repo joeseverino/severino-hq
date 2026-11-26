@@ -88,17 +88,18 @@ func (e ConditionType) Valid() bool {
 
 // Defines values for ConnectionProvider.
 const (
-	ConnectionProviderACME             ConnectionProvider = "acme"
-	ConnectionProviderAdGuard          ConnectionProvider = "adguard"
-	ConnectionProviderCloudflareAPI    ConnectionProvider = "cloudflare_api"
-	ConnectionProviderCloudflareDNS    ConnectionProvider = "cloudflare_dns"
-	ConnectionProviderCloudflareEvents ConnectionProvider = "cloudflare_events"
-	ConnectionProviderGitHubApp        ConnectionProvider = "github_app"
-	ConnectionProviderNPM              ConnectionProvider = "npm"
-	ConnectionProviderOnePassword      ConnectionProvider = "onepassword"
-	ConnectionProviderPortainer        ConnectionProvider = "portainer"
-	ConnectionProviderSSH              ConnectionProvider = "ssh"
-	ConnectionProviderTailscale        ConnectionProvider = "tailscale"
+	ConnectionProviderACME               ConnectionProvider = "acme"
+	ConnectionProviderAdGuard            ConnectionProvider = "adguard"
+	ConnectionProviderCloudflareAPI      ConnectionProvider = "cloudflare_api"
+	ConnectionProviderCloudflareDNS      ConnectionProvider = "cloudflare_dns"
+	ConnectionProviderCloudflareEvents   ConnectionProvider = "cloudflare_events"
+	ConnectionProviderGitHubApp          ConnectionProvider = "github_app"
+	ConnectionProviderGitHubDeployReview ConnectionProvider = "github_deploy_review"
+	ConnectionProviderNPM                ConnectionProvider = "npm"
+	ConnectionProviderOnePassword        ConnectionProvider = "onepassword"
+	ConnectionProviderPortainer          ConnectionProvider = "portainer"
+	ConnectionProviderSSH                ConnectionProvider = "ssh"
+	ConnectionProviderTailscale          ConnectionProvider = "tailscale"
 )
 
 // Valid indicates whether the value is a known member of the ConnectionProvider enum.
@@ -115,6 +116,8 @@ func (e ConnectionProvider) Valid() bool {
 	case ConnectionProviderCloudflareEvents:
 		return true
 	case ConnectionProviderGitHubApp:
+		return true
+	case ConnectionProviderGitHubDeployReview:
 		return true
 	case ConnectionProviderNPM:
 		return true

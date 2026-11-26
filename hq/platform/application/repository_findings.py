@@ -347,7 +347,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _each(_waiting),
         operator_action="Approve or reject the run on GitHub, as one of its required reviewers.",
-        no_help_reason="HQ answers only an environment where its GitHub App is the protection rule.",
+        no_help_reason="HQ answers only an environment where its deploy review App is the protection rule.",
         bars={
             Tone.SERIOUS: f"a run has waited for approval for {WAITING_SERIOUS_AFTER}",
             Tone.ATTENTION: "a run waits for approval",

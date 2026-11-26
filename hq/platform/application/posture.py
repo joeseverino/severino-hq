@@ -310,7 +310,7 @@ STANDARD: tuple[Check, ...] = (
         "Deploys wait for your approval",
         _approval,
         "a merge reaching production before you see it",
-        "Make HQ's GitHub App the protection rule of the environment the deploy job waits on, or add yourself as "
+        "Make HQ's deploy review App the protection rule of the environment the deploy job waits on, or add yourself as "
         "its required reviewer.",
         unmet="Deploys do not wait for approval",
         holds="Nothing reaches production until you approve it.",

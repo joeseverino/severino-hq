@@ -35,7 +35,6 @@ GITHUB_APP: ConnectionShape = ConnectionShape(
         # The name of the key item, never the key.
         Setting("SIGNING_KEY", label="signing_key"),
     ),
-    provider="github_app",
 )
 LOGIN: ConnectionShape = ConnectionShape(
     "login",

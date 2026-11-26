@@ -159,7 +159,7 @@ func (r *Registry) handOffDependencyRuns(ctx context.Context, plan runtime.Depen
 			slog.String("event", "controller.dependency_run.skipped"))
 		return nil, nil
 	}
-	c, err := r.githubConnection("")
+	c, err := r.githubConnection()
 	if err != nil {
 		return nil, err
 	}

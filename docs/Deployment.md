@@ -154,14 +154,30 @@ itself: "Start all waiting jobs" on the run releases it without HQ, which the
 finding names once the run has waited past its threshold. What each part may
 do: [Security](Security.md#releasing-a-deploy).
 
-Setting it up, once, on the repository that deploys HQ:
+The rule is a GitHub App of its own, the deploy review App, whose key only
+the controller holds: GitHub takes a rule's answer only from the App that is
+the rule, so the main App's key, which CI and every extension also hold,
+cannot release a deploy. Setting it up, once, on the repository that deploys
+HQ:
 
-1. Subscribe HQ's App to the "Deployment protection rule" event, on its
-   settings page (GitHub has no API for an App's events), and accept the
-   Deployments write permission on the installation.
-2. Create the `release` environment, `main` only, administrators allowed to
-   bypass its rules.
-3. Enable HQ's App as its deployment protection rule.
+1. Register the review App from the Setup page link
+   [Connections](Connections.md#github-deploy-review-app) gives, which fills
+   in its permissions and its one event; name it, give it a homepage, create
+   it, then generate a private key and store it in 1Password as an SSH Key
+   item.
+2. Install it on the host repository alone.
+3. Point its webhook at the inbound-events Worker, with the secret the Worker
+   verifies, then tick Active on its settings page as the command says:
+
+   ```sh
+   mise run wire-github-app --review --vault 'Example Vault' --item 'example review app' --client-id EXAMPLE_CLIENT_ID --webhook-secret 'op://Example Vault/example events/GITHUB_WEBHOOK_SECRET'
+   ```
+
+4. Store its connection item as [Connections](Connections.md#github-deploy-review-app)
+   lays it out, `manages` set.
+5. Create the `release` environment, `main` only, administrators allowed to
+   bypass its rules, and enable the review App as its deployment protection
+   rule.
 
 ### When a run fails
 
@@ -191,15 +207,18 @@ prints: they move between steps as files.
 
 ### HQ's GitHub App
 
-One app, registered with no webhook and the permissions in
+Two apps, each registered with the permissions in
 [`deploy/github-apps.json`](../deploy/github-apps.json) (a test holds them to
-what HQ asks for), installed on the host repository, every extension and each
-repository a host grant names ([Tokens on the host](#tokens-on-the-host)). Each
-use mints an hour-long token for only what it does:
+what HQ asks for). The main app is installed on the host repository, every
+extension and each repository a host grant names
+([Tokens on the host](#tokens-on-the-host)); the deploy review app, on the host
+repository alone ([Releasing a deploy](#releasing-a-deploy)). Each use mints
+an hour-long token for only what it does:
 
 | Who | Holds the key as | Asks for |
 | :--- | :--- | :--- |
-| the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs; Contents and Pull requests write on one repository to merge a pull request you approved; Deployments write on one repository to answer a deploy you approved or rejected |
+| the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs; Contents and Pull requests write on one repository to merge a pull request you approved |
+| the controller, as the deploy review app | its own SSH Key item, rendered the same way | Actions read and Deployments write on the host repository to answer a deploy you approved or rejected |
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
 | Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
 

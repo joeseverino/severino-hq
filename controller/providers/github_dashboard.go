@@ -28,7 +28,7 @@ func (r *Registry) githubDashboardBox(ctx context.Context, spec GitHubDashboardB
 	if !apply {
 		return Result{Changed: true, Message: "Would tick " + spec.Branch + " on the Dependency Dashboard."}, nil
 	}
-	c, err := r.githubConnection("")
+	c, err := r.githubConnection()
 	if err != nil {
 		return Result{}, err
 	}

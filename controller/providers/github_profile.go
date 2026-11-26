@@ -120,7 +120,7 @@ func (r *Registry) githubPublicBearer(ctx context.Context) (string, error) {
 	if len(r.Supplied.Refs(runtime.ConnectionProviderGitHubApp)) == 0 {
 		return "", nil
 	}
-	c, err := r.githubConnection("")
+	c, err := r.githubConnection()
 	if err != nil {
 		return "", err
 	}

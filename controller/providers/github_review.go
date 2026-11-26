@@ -10,14 +10,16 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// HQ's answer as a repository's custom deployment protection rule: the run is
-// read again under the repository's read token, and answered only while it
-// still waits on the environment at the commit a person saw, under a token for
-// that repository's deployments alone.
+// HQ's answer as a repository's custom deployment protection rule, signed as
+// the deploy review App alone: GitHub takes a rule's answer only from the App
+// that is the rule, so the main App's key cannot release a deploy. The run is
+// read again and answered only while it still waits on the environment at the
+// commit a person saw.
 
-// githubReviewWrite is what a review's token holds: Deployments write, the
-// one permission GitHub names for reviewing a custom protection rule.
-var githubReviewWrite = githubapi.AppPermissions{Deployments: githubapi.AppPermissionsDeploymentsWrite}
+// githubReviewGrant is what a review's token holds, the two permissions
+// GitHub's custom protection rule guide names: Actions read for the run,
+// Deployments write for the answer.
+var githubReviewGrant = githubapi.AppPermissions{Actions: githubapi.AppPermissionsActionsRead, Deployments: githubapi.AppPermissionsDeploymentsWrite}
 
 // GitHubDeploymentReviewSpec is a github.deployment_review declaration.
 type GitHubDeploymentReviewSpec = runtime.GitHubDeploymentReviewSpec
@@ -33,7 +35,7 @@ func (r *Registry) githubReview(ctx context.Context, spec GitHubDeploymentReview
 	if !apply {
 		return Result{Changed: true, Message: "Would answer " + string(spec.State) + " to " + which + "."}, nil
 	}
-	c, err := r.githubConnection("")
+	c, err := r.githubConnectionOf(runtime.ConnectionProviderGitHubDeployReview, "")
 	if err != nil {
 		return Result{}, err
 	}
@@ -43,12 +45,12 @@ func (r *Registry) githubReview(ctx context.Context, spec GitHubDeploymentReview
 	}
 	if _, err := r.githubInstallation(ctx, c, owner, repo); err != nil {
 		if httpStatus(err) == http.StatusNotFound {
-			return Result{}, &ProviderError{Message: "The GitHub App is not installed on " + spec.Repository + "."}
+			return Result{}, &ProviderError{Message: "The deploy review App is not installed on " + spec.Repository + "."}
 		}
 		return Result{}, err
 	}
-	g := r.githubRepository(ctx, c, spec.Repository)
-	found, err := json200(g.api.ActionsGetWorkflowRunWithResponse(ctx, owner, repo, run))
+	api := r.githubAs(ctx, c, []string{spec.Repository}, githubReviewGrant)
+	found, err := json200(api.ActionsGetWorkflowRunWithResponse(ctx, owner, repo, run))
 	if httpStatus(err) == http.StatusNotFound {
 		return Result{}, &ProviderError{Message: which + " no longer exists."}
 	}
@@ -61,7 +63,7 @@ func (r *Registry) githubReview(ctx context.Context, spec GitHubDeploymentReview
 	if found.HeadSha != spec.HeadSha {
 		return Result{}, &ProviderError{Message: which + " deploys " + short(found.HeadSha, 7) + ", not " + short(spec.HeadSha, 7) + "."}
 	}
-	pending, err := json200(g.api.ActionsGetPendingDeploymentsForRunWithResponse(ctx, owner, repo, run))
+	pending, err := json200(api.ActionsGetPendingDeploymentsForRunWithResponse(ctx, owner, repo, run))
 	if err != nil {
 		return Result{}, err
 	}
@@ -69,7 +71,7 @@ func (r *Registry) githubReview(ctx context.Context, spec GitHubDeploymentReview
 		return Result{}, &ProviderError{Message: which + " no longer waits on " + spec.Environment + "."}
 	}
 	body := githubapi.ActionsReviewCustomGatesForRunJSONRequestBody{EnvironmentName: spec.Environment, State: githubapi.ReviewCustomGatesStateRequiredState(spec.State)}
-	if _, err := r.githubAs(ctx, c, []string{spec.Repository}, githubReviewWrite).ActionsReviewCustomGatesForRunWithResponse(ctx, owner, repo, run, body); err != nil {
+	if _, err := api.ActionsReviewCustomGatesForRunWithResponse(ctx, owner, repo, run, body); err != nil {
 		return Result{}, err
 	}
 	return Result{Changed: true, Message: verb + " " + which + " at " + short(spec.HeadSha, 7) + "."}, nil

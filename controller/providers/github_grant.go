@@ -186,7 +186,7 @@ func (r *Registry) HandOffGrants(ctx context.Context) {
 		return
 	}
 	log := r.commands().logger()
-	c, err := r.githubConnection("")
+	c, err := r.githubConnection()
 	if err != nil {
 		log.Warn("grants are due, but this pass holds no GitHub App to mint them with",
 			slog.String("event", "controller.grant.skipped"), slog.Any("error", err))

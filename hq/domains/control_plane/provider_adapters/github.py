@@ -16,6 +16,7 @@ from pydantic import Field
 from hq.platform.application.describe import Describe
 from hq.platform.application.record_fields import RecordId
 from hq.platform.application.ui import ended
+from hq.platform.application.url_query import with_query
 
 from ..connection_shapes import GITHUB_APP
 from ..observations import github as readings
@@ -24,6 +25,11 @@ from ..permissions import GitHub
 from ..provider_spec import ConnectionKind, InboundSpec, ProviderModel, ProviderSpec, SharedValue, applies, locked
 
 KIND = "github.delivery"
+# The App that answers a deploy waiting on its protection rule. It is an
+# identity of its own, held by the controller alone, so the main App's key,
+# which CI and every extension's admission also hold, cannot release a deploy:
+# GitHub takes a rule's answer only from the App that is the rule.
+REVIEW_PROVIDER = "github_deploy_review"
 # Shared values (``SHARED``): the controller reports a sweep's record with the
 # same defaults, which is what lets `adopts` recognize it.
 CURRENT = "Every extension's latest admission, confirmed on GitHub"
@@ -235,7 +241,7 @@ DEPLOYMENT_REVIEW = ProviderSpec(
     actions={"reconcile": applies()},
     label="Deployment review",
     name=lambda spec: f"{spec.get('repository', '')} run {spec.get('run_id', '')} to {spec.get('environment', '')}",
-    connection_providers=(PROVIDER,),
+    connection_providers=(REVIEW_PROVIDER,),
     identity=lambda spec: (str(spec["repository"]), str(spec["run_id"]), str(spec["environment"])),
     key_hint=lambda spec: f"{spec.get('repository', '')}-{spec.get('run_id', '')}".replace("/", "-"),
     console=lambda spec: f"https://github.com/{spec.get('repository', '')}/actions/runs/{spec.get('run_id', '')}",
@@ -287,6 +293,23 @@ SHARED = (
     ),
 )
 
+# What the review App holds: it reads the run and its pending deployments
+# again, then answers the rule (GitHub's custom protection rule guide).
+REVIEW_WRITES = (GitHub.ACTIONS_READ, GitHub.DEPLOYMENTS_WRITE)
+# What it is sent: GitHub offers an App as a rule only once it subscribes.
+REVIEW_EVENTS = ("deployment_protection_rule",)
+
+
+def _registration(permissions: tuple[GitHub, ...], events: tuple[str, ...]) -> str:
+    """GitHub's new-App form, filled in with the permissions and events, left to its owner alone."""
+
+    fields = [
+        ("public", "false"),
+        *((key, level) for key, _, level in (each.api.partition(": ") for each in permissions)),
+    ]
+    return with_query("https://github.com/settings/apps/new", [*fields, *(("events[]", event) for event in events)])
+
+
 # The connection this provider's credential arrives through, beside its kinds:
 # admitting the module admits both.
 CONNECTIONS = {
@@ -300,10 +323,23 @@ CONNECTIONS = {
         create_url="https://github.com/settings/apps/new",
         gives="Repo rules on your repositories, and HQ's deploys waiting for your approval.",
     ),
+    REVIEW_PROVIDER: ConnectionKind(
+        "GitHub deploy review App",
+        "scoped",
+        GITHUB_APP,
+        create=(
+            "A second GitHub App on your account, installed on the host repository alone, made the protection rule"
+            " of the environment Deploy waits on; mise run wire-github-app --review points its webhook at HQ."
+        ),
+        create_url=_registration(REVIEW_WRITES, REVIEW_EVENTS),
+        writes=REVIEW_WRITES,
+        gives="Approve or reject a deploy waiting on HQ, from HQ.",
+    ),
 }
 
-# What one App webhook sends from every installation, each event making the
-# repositories' reading due; GitHub's docs name the permission each needs
+# What the Apps' webhooks send from every installation, each event making the
+# repositories' reading due: the review App's, its protection rule event, comes
+# to the same route. GitHub's docs name the permission each needs
 # (https://docs.github.com/en/webhooks/webhook-events-and-payloads).
 INBOUND = {
     PROVIDER: InboundSpec(

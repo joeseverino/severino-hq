@@ -28,7 +28,7 @@ def waiting(since: Ago, sha: str = HEAD) -> list[dict]:
     return [{"id": 9, "name": "Compose", "environments": ["release"], "sha": sha, "created_at": since, "url": "u"}]
 
 
-# The environment a run waits on, with HQ's App as its protection rule.
+# The environment a run waits on, with HQ's deploy review App as its protection rule.
 RULED = [{"name": "release", "hq_rule": True}]
 
 

@@ -29,7 +29,7 @@ func (r *Registry) githubMerge(ctx context.Context, spec GitHubPullRequestSpec, 
 	if !apply {
 		return Result{Changed: true, Message: "Would merge " + which + "."}, nil
 	}
-	c, err := r.githubConnection("")
+	c, err := r.githubConnection()
 	if err != nil {
 		return Result{}, err
 	}

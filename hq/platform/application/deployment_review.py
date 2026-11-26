@@ -72,7 +72,7 @@ def waiting_run(repository: str, run_id: int, environment: str) -> dict[str, Any
 
 
 def hq_rules(repository: str, environment: str) -> bool:
-    """Whether HQ's App is an enabled custom deployment protection rule on ``repository``'s ``environment``."""
+    """Whether HQ's deploy review App is an enabled custom deployment protection rule on ``repository``'s ``environment``."""
 
     repo = repositories().get(repository)
     return any(
@@ -154,7 +154,7 @@ def _answer(state: ReviewState):
 # Each refusal both answers share, as their execution notes say them.
 _CHECKS = (
     "Refuse a run the repository's reading does not hold waiting on that environment, or at another commit.",
-    "Refuse an environment where HQ's GitHub App is not an enabled protection rule.",
+    "Refuse an environment where HQ's deploy review App is not an enabled protection rule.",
     "The controller reads the run again and answers only while it still waits there at that commit.",
     "When an agent asks, it waits for an operator's approval.",
 )

@@ -767,29 +767,34 @@ a Worker secret's value, so the token cannot read the Worker's secrets.
 ## Releasing a deploy
 
 Deploy's Approve job waits on the `release` environment, whose one
-protection rule is HQ's GitHub App, a custom deployment protection rule.
-Deploy (`deploy.yml`) is started only by a dispatch on `main` and deploys only
-a commit Compose published and signed, so the rule decides when a merged
-commit ships, never what ships.
+protection rule is HQ's deploy review App, a custom deployment protection
+rule. Deploy (`deploy.yml`) is started only by a dispatch on `main` and
+deploys only a commit Compose published and signed, so the rule decides when
+a merged commit ships, never what ships.
 
-- HQ never answers on its own. The `github-waiting` finding offers Approve and
+Who holds which key:
+
+| Key | Held by | Can answer the rule |
+| :--- | :--- | :--- |
+| the deploy review App's | the controller alone, rendered from its connection item | yes: the rule is that App |
+| the main App's (`HQ_APP_KEY`) | the controller, CI's Release, Compose, each extension's `admission` environment | no: GitHub takes a rule's answer only from the App that is the rule |
+
+- Only a person's press in HQ, or an agent's request a person approved, makes
+  the controller answer. The `github-waiting` finding offers Approve and
   Reject (`deployment.approve`, `deployment.reject`) for a run waiting on an
-  environment whose rule is HQ's App, at the commit the reading holds. A
-  person's press answers; an agent's waits for a person's approval, always
+  environment whose rule is the review App, at the commit the reading holds.
+  An agent's call waits for a person's approval, always
   (`waits_for_a_person(every_call)`). An event from GitHub only makes the
   repository's reading due.
-- The answer is the controller's (`controller/providers/github_review.go`):
-  it reads the run again and answers only while it still waits on that
-  environment at that commit, under a token for that one repository and
-  Deployments write. A commit production already runs is offered and allowed
-  Reject alone.
-- Whoever holds the App's key can mint a Deployments write token and answer
-  the rule: the controller, and the workflows that hold `HQ_APP_KEY` (CI's
-  Release, Compose, each extension's `admission` environment). What an answer
-  releases is still only the signed composition of a commit on `main`, which
-  root verifies before it deploys ([A deploy](Deployment.md#a-deploy)). A
-  stolen key can ship such a release without a person, an older one
-  included, and nothing that is not one.
+- The answer is the controller's (`controller/providers/github_review.go`),
+  signed as the review App and never the main one: it reads the run again and
+  answers only while it still waits on that environment at that commit, under
+  a token for that one repository with Actions read and Deployments write. A
+  commit production already runs is offered and allowed Reject alone.
+- The review App is installed on the host repository alone and holds nothing
+  else, so its key reaches no code, secret or other repository. A stolen main
+  key still mints Deployments write on the host, which records deployments
+  but answers no rule.
 - With HQ down, the run waits up to 30 days, then fails; it never releases
   itself. A repository administrator releases it without HQ by "Start all
   waiting jobs" on the run, as long as the environment lets administrators

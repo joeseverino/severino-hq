@@ -25,6 +25,7 @@ import jwt
 from hq.platform.application.http_read import UNREACHABLE
 from hq.platform.core.tests.task import Usage
 lazy from hq.domains.control_plane.credential_reads import observer_permissions
+lazy from hq.domains.control_plane.provider_adapters.github import REVIEW_EVENTS
 lazy from hq.platform.application.entity_links import https_url
 
 # The secrets the wiring sets, as HQ's posture check names them.
@@ -522,6 +523,8 @@ def admission_environment(programs: Programs, repository: str) -> None:
 def wire_github_app(usage: Usage, programs: Programs, out: IO[str], send: Send = https) -> None:
     """The host's HQ_APP_KEY and HQ_APP_CLIENT_ID secrets; on each extension, the key in ``admission`` and the ID.
 
+    With ``--review`` it sets the deploy review App's webhook and nothing else.
+
     The client ID is a secret too. A variable is state outside the repository
     that changes what a build does, which the posture standard rejects, and a
     secret stays out of public logs.
@@ -530,6 +533,13 @@ def wire_github_app(usage: Usage, programs: Programs, out: IO[str], send: Send =
     vault, item, client_id = usage.text("vault"), usage.text("item"), usage.text("client_id")
     if not (vault and item and client_id):
         raise UsageError("--vault, --item and --client-id are required.")
+    if usage.switch("review"):
+        # The review App's key stays with the controller: no secret, here or
+        # on an extension, ever holds it.
+        if usage.repeated("extension") or not usage.text("webhook_secret"):
+            raise UsageError("--review sets the deploy review App's webhook alone: --webhook-secret, no --extension.")
+        app_webhook(usage, programs, private_key(programs, vault, item), client_id, out, send, REVIEW_EVENTS)
+        return
     key = private_key(programs, vault, item)
     host = programs.output(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).strip()
     programs.output(["gh", "secret", "set", APP_KEY, "--repo", host], stdin=key)
@@ -549,7 +559,9 @@ ROUTES = Path(__file__).resolve().parents[1] / "worker" / "src" / "generated" / 
 GITHUB_API = "https://api.github.com"
 
 
-def app_webhook(usage: Usage, programs: Programs, key: str, client_id: str, out: IO[str], send: Send) -> None:
+def app_webhook(
+    usage: Usage, programs: Programs, key: str, client_id: str, out: IO[str], send: Send, events: Sequence[str] = ()
+) -> None:
     """The App's webhook: the Worker's github route on the inbound host, and the secret the Worker verifies with.
 
     GitHub sets the address, format and secret only as the App itself, through
@@ -576,7 +588,7 @@ def app_webhook(usage: Usage, programs: Programs, key: str, client_id: str, out:
         message = answer.get("message") if isinstance(answer, dict) else None
         raise Refused(f"GitHub refused the App's webhook: {message or 'unreadable response'}")
     print(f"The App's webhook delivers to {url}, signed with the secret the Worker holds.", file=out)
-    print(f"On the App's settings page: tick Active and subscribe to {', '.join(route['events'])}.", file=out)
+    print(f"On the App's settings page: tick Active and subscribe to {', '.join(events or route['events'])}.", file=out)
 
 
 # ------------------------------------------------------------------ the entry
