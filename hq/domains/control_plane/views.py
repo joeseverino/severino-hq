@@ -372,10 +372,10 @@ class InfrastructureDetailView(RecordPageMixin, TemplateView):
 
     @override
     def get_page_lede(self):
-        # A record whose name is its type says what it does instead.
+        # Its kind is the heading of its first section, or its own page's parts
+        # say it, so only a record named for its type says what it does here.
         kind = self.record["kind"]
-        label = kind_label(kind)
-        return PROVIDERS[kind].summary if label == self.get_page_title() else label
+        return PROVIDERS[kind].summary if kind_label(kind) == self.get_page_title() else ""
 
     @cached_property
     def all_relationships(self):
