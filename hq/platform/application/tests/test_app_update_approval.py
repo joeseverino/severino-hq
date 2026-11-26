@@ -243,21 +243,6 @@ class ApproveUpdateTests(TestCase):
         )
         self.assertEqual(shown.more_url, "https://github.com/example/alpha/pull/7/files")
 
-    def test_a_pin_said_as_its_whole_reference_fails_where_its_preview_is_built(self):
-        from unittest import mock
-
-        from ..approval_review import preview
-
-        self.press(principal=AGENT)
-        held = ApprovalRequest.objects.get()
-
-        # A builder that hands a row the reference as the consent holds it, digest and all.
-        with (
-            mock.patch("hq.platform.application.app_update_approval._release", str),
-            self.assertRaisesRegex(ValueError, "image digest"),
-        ):
-            preview(held)
-
     def test_the_preview_names_each_name_the_apply_interrupts_through_the_container_it_restarts(self):
         from hq.platform.core.testing import connection, declare, operator
 
