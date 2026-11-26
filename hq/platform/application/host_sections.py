@@ -567,6 +567,14 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         ),
     ),
     DomainDescriptor(
+        id="hq.events",
+        label="Events",
+        description="What providers and HQ's host told HQ happened, and the readings each made due.",
+        # No place in the menu: the controller's page leads to it, beside the
+        # listener's standing.
+        integration=PluginIntegration(resources=_provider("hq.platform.application.inbound_reads:resources")),
+    ),
+    DomainDescriptor(
         id="hq.jobs",
         label="Jobs",
         description="HQ's background jobs and their runs.",

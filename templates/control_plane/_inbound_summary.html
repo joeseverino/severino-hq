@@ -1,0 +1,4 @@
+{% comment %}
+Each channel that tells HQ of events, the head's line of facts (`page_facts`):
+its standing (`inbound_events.channel_standing`) and when it was last heard.
+{% endcomment %}{% for label, standing in channels %}{% if not forloop.first %}{% dot %}{% endif %}{% status label standing.state tone=standing.state pill=False %}{% if standing.known %}, heard {{ standing.seen_at|when }}{% endif %}{% endfor %}

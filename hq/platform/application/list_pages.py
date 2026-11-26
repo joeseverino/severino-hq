@@ -180,7 +180,8 @@ class ListPageMixin(PageMixin):
         model = self.spec.search.model if self.spec.search else None
         return {
             "query": query,
-            "search_placeholder": self.table_search_placeholder,
+            # A box only where the list reads a search: one that sends `q` to nothing narrows nothing.
+            "search_placeholder": self.table_search_placeholder if SEARCH_FIELD in listing.query.model_fields else "",
             "filters": filters,
             "toggles": toggles,
             "sorts": listing.sorts,

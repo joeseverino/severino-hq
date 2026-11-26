@@ -14,6 +14,11 @@ for it. Nothing here asks it anything.
     {% elif standing.silent %}<small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>
     {% else %}<small>Last connected {{ standing.seen_at|when }}.</small>{% endif %}
   {% endfact %}
+  {% fact listener.named|capfirst icon="bell" %}
+    {% status listener.state dot=True ink="context" %}
+  {% detail %}
+    {% if listener.known %}<small>Last heard {{ listener.seen_at|when }}.</small>{% endif %}
+  {% endfact %}
   {% fact "Reading" icon="eye" tone=sight.tone %}
     {% include "partials/_reading_age.html" with at=controller.swept_at only %}
   {% detail %}
