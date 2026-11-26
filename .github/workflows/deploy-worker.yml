@@ -1,10 +1,11 @@
 name: Deploy Worker
 
 # The inbound-events Worker (worker/), deployed to Cloudflare by
-# `mise run worker:deploy` once a person approves: on each push to main that
-# changes it, or by hand. The Worker is the public verifier in front of HQ,
-# so its token lives on an environment of its own whose reviewers hold the
-# job, and the job holds nothing else.
+# `mise run worker:deploy` on each push to main that changes it, or by hand
+# from main. The merge to main is the approval, and a Worker deploy takes
+# nothing down, so its environment has no reviewer; the environment deploys
+# from main alone, so no other branch's workflow reaches the token, and the
+# job holds nothing else.
 #
 # The environment's secrets are the token, the account and the hostname. The
 # account and the hostname are secrets, though neither grants anything, so

@@ -47,7 +47,7 @@ fork changes them in every place listed.
 | The `production` environment, with required reviewers | repository environments | Deploy's approval |
 | The `admission` environment on each extension, `main` only, holding `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` | each extension's settings, set by `mise run wire-github-app` | an admission starting Compose |
 | HQ's GitHub App: the permissions in [`deploy/github-apps.json`](../deploy/github-apps.json), installed on the host and every extension, its webhook the inbound-events Worker's github route | the account's app settings; the webhook set by `mise run wire-github-app --webhook-secret` ([Install](Install.md#12-hear-providers-events)) | everything above, and the controller |
-| The `inbound-worker` environment, the operator its required reviewer, holding `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `HQ_INBOUND_HOSTNAME` | the repository's settings ([Install](Install.md#12-hear-providers-events)) | Deploy Worker |
+| The `inbound-worker` environment, deploying from `main` alone, holding `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `HQ_INBOUND_HOSTNAME` | the repository's settings ([Install](Install.md#12-hear-providers-events)) | Deploy Worker |
 | A `main` ruleset requiring **Ready** from GitHub Actions, with code scanning holding a merge on a CodeQL alert | repository rules | merges |
 | A self-hosted runner with the `severino-hq` label | the host ([Install](Install.md#6-install-the-runner-and-write-hostjson)) | Deploy |
 

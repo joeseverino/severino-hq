@@ -462,13 +462,16 @@ and item names for you to fill in.
    CLOUDFLARE_BOOTSTRAP_TOKEN='op://Example Bootstrap/cloudflare/credential' op run -- mise run mint:cloudflare --account 0123abcd --name hq-worker-deploy --permissions mise-tasks/worker/deploy.permissions --store 'op://Example Vault/example worker deploy/credential'
    ```
 
-3. Create the `inbound-worker` environment, with you as its required
-   reviewer, and give it the token, the account and the hostname. Deploy
-   Worker runs there on each merge that changes the Worker, once you approve
-   it:
+3. Create the `inbound-worker` environment, deploying from `main` alone, and
+   give it the token, the account and the hostname. Deploy Worker runs there
+   on each merge that changes the Worker:
 
    ```sh
-   gh api -X PUT repos/OWNER/REPO/environments/inbound-worker -F 'reviewers[][type]=User' -F "reviewers[][id]=$(gh api user --jq .id)"
+   gh api -X PUT repos/OWNER/REPO/environments/inbound-worker -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'
+   ```
+
+   ```sh
+   gh api -X POST repos/OWNER/REPO/environments/inbound-worker/deployment-branch-policies -f name=main -f type=branch
    ```
 
    ```sh
