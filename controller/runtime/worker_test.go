@@ -268,11 +268,14 @@ func TestAGlancePassStopsWhenHQRefusesItsReport(t *testing.T) {
 	}
 }
 
-// Root gives a glance pass the Portainer connections by the name this
-// registry gives the provider.
-func TestTheGlanceIsGivenPortainerByItsDeclaredName(t *testing.T) {
+// Root gives a glance pass the Portainer connections, and the listener the
+// events one, by the names this registry gives the providers.
+func TestRootLendsConnectionsByTheirDeclaredNames(t *testing.T) {
 	if host.PortainerProvider != string(ConnectionProviderPortainer) {
 		t.Errorf("root gives a glance %q connections; Portainer's are %q", host.PortainerProvider, ConnectionProviderPortainer)
+	}
+	if host.EventsProvider != string(ConnectionProviderCloudflareEvents) {
+		t.Errorf("root gives the listener %q connections; the events socket's are %q", host.EventsProvider, ConnectionProviderCloudflareEvents)
 	}
 }
 

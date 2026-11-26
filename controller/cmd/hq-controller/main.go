@@ -14,6 +14,10 @@
 // listener can pipe a stream into it. Input with no events says SOURCE is
 // listening.
 //
+// "hq-controller listen" holds the inbound-events Worker's socket open, the
+// one events connection it is given, and tells HQ each event it hears, until
+// it is stopped. It reaches HQ only through the bridge's events action.
+//
 // "hq-controller ready [unix:PATH] URL" is the image's healthcheck: exit 0
 // when URL answers 200, asked on the socket at PATH when one is given, with
 // no interpreter started per probe.
@@ -24,7 +28,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	jsonv2 "encoding/json/v2"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -57,6 +61,8 @@ func main() {
 		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
 	case "events":
 		code = events(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdin, stdout)
+	case "listen":
+		code = listen(ctx, os.Args[2:], stdout)
 	case "ready":
 		code = ready(ctx, os.Args[2:], stdout)
 	default:
@@ -153,8 +159,8 @@ func events(ctx context.Context, args []string, socket string, stdin io.Reader, 
 	for line := 1; ; line++ {
 		text, readErr := reader.ReadBytes('\n')
 		if len(bytes.TrimSpace(text)) > 0 {
-			var event runtime.InboundArrival
-			if err := jsonv2.Unmarshal(bytes.TrimSpace(text), &event, jsonv2.RejectUnknownMembers(true)); err != nil {
+			event, err := runtime.ReadArrival(bytes.TrimSpace(text))
+			if err != nil {
 				return fail(fmt.Sprintf("line %d is not an event: %v", line, err))
 			}
 			batch.Events = append(batch.Events, event)
@@ -177,6 +183,42 @@ func events(ctx context.Context, args []string, socket string, stdin io.Reader, 
 		OK     bool `json:"ok"`
 		Posted int  `json:"posted"`
 	}{true, posted})
+	return 0
+}
+
+// listen runs the listener on the events connection the launcher lent, until
+// ctx ends. One that cannot start is exit 1, so its unit starts it again.
+func listen(ctx context.Context, args []string, stdout io.Writer) int {
+	fail := func(err error) int {
+		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
+		return 1
+	}
+	if len(args) != 0 {
+		fail(errors.New("usage: hq-controller listen"))
+		return 2
+	}
+	env, supplied, err := load(os.Environ())
+	if err != nil {
+		return fail(err)
+	}
+	connection, err := supplied.For(runtime.ConnectionProviderCloudflareEvents, "")
+	if err != nil {
+		return fail(err)
+	}
+	bridge, err := runtime.NewSocketBridge(env.BridgeSocket)
+	if err != nil {
+		return fail(err)
+	}
+	transport, err := runtime.NewHTTPClient(env.CAFile)
+	if err != nil {
+		return fail(err)
+	}
+	client := &http.Client{Transport: transport.Transport, Timeout: transport.Timeout}
+	listener, err := runtime.NewListener(connection, client, bridge.Events, mask.Logger(os.Stderr))
+	if err != nil {
+		return fail(err)
+	}
+	listener.Run(ctx)
 	return 0
 }
 

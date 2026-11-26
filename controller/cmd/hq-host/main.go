@@ -3,7 +3,8 @@
 //
 //	hq-host run-web          the web container (severino-hq-web.service)
 //	hq-host controller       one controller pass, planning; --apply to apply,
-//	                         --glance to read only the dashboard panels HQ waits on
+//	                         --glance to read only the dashboard panels HQ waits on,
+//	                         --events to hold the inbound-events socket until stopped
 //	hq-host renovate         run the dependency handoff a pass spooled
 //	hq-host automation       run the automation worker until no run is queued
 //	hq-host install          install the release in the root-owned tree
@@ -45,10 +46,10 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | unit --serve | check --release DIR | edge-receiver | dry-run | verified DIR"
+const usage = "usage: hq-host run-web | controller [--apply | --glance | --events] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | unit --serve | check --release DIR | edge-receiver | dry-run | verified DIR"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
-var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance}
+var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance, "--events": host.Listen}
 
 // hostConfig is the host's own configuration, which bootstrap reads.
 const hostConfig = "/etc/severino-hq/host.json"

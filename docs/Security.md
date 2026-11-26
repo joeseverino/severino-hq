@@ -725,6 +725,23 @@ path from the public internet.
   sends, are set on the App's settings page, since GitHub has no API for
   them.
 
+HQ's side of the socket is `severino-hq-listener.service`
+(`controller/runtime/listener.go`, which states its security properties):
+
+- It dials out and is never dialed. It holds one credential, the socket's
+  token (the `cloudflare_events` connection, read from the operator's own
+  secret store), and sends it only over TLS to the `wss://` address that
+  connection names.
+- Its container runs as the web account, with no capability, no new
+  privileges and a `noexec` temporary directory. It is given only that
+  connection, the host's roots and the bridge, and reaches HQ only through
+  the bridge's `events` action. The unit starting it has no network and no
+  more than a glance's.
+- It sends nothing on the socket but pings. What it hears is held to the
+  contract's `InboundArrival`; anything else is dropped. A reconnect makes HQ
+  read again every reading the Worker's providers name, at most once a
+  minute, so a gap is repaired by reading and nothing is replayed.
+
 The deploy token is the one standing secret a workflow holds. Every other
 write a workflow makes is a GitHub token minted for one permission and one
 job. `CLOUDFLARE_API_TOKEN` lives on the `inbound-worker` environment,

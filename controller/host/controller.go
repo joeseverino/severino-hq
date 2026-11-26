@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
@@ -86,7 +87,43 @@ const (
 	// the bridge; no certificate state, unit socket, host reading or way to
 	// hand work back to root.
 	Glance
+	// Listen holds the inbound-events Worker's socket open until it is
+	// stopped. Its container is given what a glance's is, but of the
+	// connections only the events one (eventsReads).
+	Listen
 )
+
+// partial is whether the pass is given less than a controller pass: no
+// certificate state, unit socket, host reading or way to hand work to root.
+func (p Pass) partial() bool { return p == Glance || p == Listen }
+
+// lends is whether the pass is given a connection. No pass is given the
+// automation worker's way to a machine, whose key the controller never holds.
+func (p Pass) lends(connection connections.Connection) bool {
+	switch {
+	case runnerTransport(connection):
+		return false
+	case p == Glance:
+		return glanceReads(connection)
+	case p == Listen:
+		return eventsReads(connection)
+	}
+	return true
+}
+
+// EventsProvider is the provider name of the inbound-events Worker's socket,
+// as the controller's registry declares it (held to it by a test there).
+const EventsProvider = "cloudflare_events"
+
+// eventsReads is whether a connection is the socket the listener holds.
+func eventsReads(connection connections.Connection) bool {
+	return connection.Provider == EventsProvider
+}
+
+// ListenerContainer names the listener's container, so one left by a
+// listener that was killed is removed before the next starts and two never
+// hold the socket at once.
+const ListenerContainer = "severino-hq-listener"
 
 // PortainerProvider is the provider name of a Portainer connection, as the
 // controller's registry declares it (held to it by a test there).
@@ -103,7 +140,7 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	if err := c.Connections(); err != nil {
 		return err
 	}
-	if pass != Glance {
+	if !pass.partial() {
 		if err := c.prepareACME(); err != nil {
 			return err
 		}
@@ -118,8 +155,13 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	}
 	defer os.RemoveAll(run)
 
-	if err := c.copySecrets(ctx, run, pass == Glance); err != nil {
+	lent, err := c.copySecrets(ctx, run, pass)
+	if err != nil {
 		return err
+	}
+	if pass == Listen && lent == 0 {
+		fmt.Fprintln(c.Stdout, "No events connection is configured, so there is no socket to hold.")
+		return nil
 	}
 	image, source, err := c.image(ctx)
 	if err != nil {
@@ -127,9 +169,9 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	}
 	own := c.beginRun()
 	defer own.end()
-	role := "controller"
-	if pass == Glance {
-		role = "glance"
+	role := map[Pass]string{Glance: "glance", Listen: "listener"}[pass]
+	if role == "" {
+		role = "controller"
 	}
 	args := []string{
 		"run", "--rm", "--network", "host", "--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID), "--cap-drop", "ALL",
@@ -147,7 +189,11 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		"--env", "HQ_CONTROLLER_CONNECTIONS=" + controllerConnections,
 		"--env", "HQ_CONTROLLER_SSH_DIR=" + controllerSSH,
 	}
-	if pass == Glance {
+	if pass == Listen {
+		_ = c.Command(ctx, "docker", "rm", "--force", ListenerContainer).Run()
+		args = append(args, "--name", ListenerContainer)
+	}
+	if pass.partial() {
 		roots, err := c.roots(run)
 		if err != nil {
 			return err
@@ -189,11 +235,16 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		args = append(args, "--apply")
 	case Glance:
 		args = append(args, "--glance")
+	case Listen:
+		args = append(args, "listen")
 	}
 	command := c.Command(ctx, "docker", args...)
 	command.Stdout, command.Stderr = c.Stdout, c.Stderr
+	// A stop is passed on to the container (docker run's signal proxy), which
+	// a killed client would leave running.
+	command.Cancel = func() error { return command.Process.Signal(syscall.SIGTERM) }
 	err = command.Run()
-	if pass != Glance {
+	if !pass.partial() {
 		// A pass that failed after minting still leaves tokens worth running.
 		c.takeHandoffs(run)
 	}
@@ -258,17 +309,14 @@ func (c *Controller) pruneRuns() {
 	}
 }
 
-// copySecrets lends the run its connections and their identities, the
-// controller's: every connection but the automation worker's, whose key the
-// controller never holds. A glance's are only the connections it reads.
-func (c *Controller) copySecrets(ctx context.Context, run string, glance bool) error {
-	keep := func(connection connections.Connection) bool {
-		return !runnerTransport(connection) && (!glance || glanceReads(connection))
+// copySecrets lends the run the connections its pass is given (Pass.lends)
+// and their identities, and answers how many it lent.
+func (c *Controller) copySecrets(ctx context.Context, run string, pass Pass) (int, error) {
+	lent, err := lendConnections(ctx, c.Lock, c.Connections, c.SecretDir, run, pass.lends)
+	if err != nil {
+		return 0, err
 	}
-	if _, err := lendConnections(ctx, c.Lock, c.Connections, c.SecretDir, run, keep); err != nil {
-		return err
-	}
-	return c.ownTree(run)
+	return len(lent), c.ownTree(run)
 }
 
 // runnerTransport is whether a connection is the automation worker's way to

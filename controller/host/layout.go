@@ -58,6 +58,8 @@ const (
 	ControllerUnit = "severino-hq-controller.service"
 	// GlanceUnit runs one glance pass, beside a controller pass.
 	GlanceUnit = "severino-hq-glance.service"
+	// ListenerUnit holds the inbound-events Worker's socket, resident.
+	ListenerUnit = "severino-hq-listener.service"
 	// BackupUnit snapshots HQ's volumes.
 	BackupUnit = "severino-hq-backup.service"
 	// DeployFreeBytes is the free space on / a deploy needs before it pulls.

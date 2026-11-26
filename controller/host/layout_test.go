@@ -128,32 +128,50 @@ func TestARefreshDuringAGlanceStartsTheNext(t *testing.T) {
 	}
 }
 
-// The glance unit is given no more than the controller unit: each setting
-// that confines the controller confines the glance the same way, and the
-// glance writes nowhere the controller cannot.
-func TestTheGlanceUnitIsGivenNoMoreThanTheControllers(t *testing.T) {
+// The glance and listener units are given no more than the controller unit:
+// each setting that confines the controller confines them the same way, and
+// they write nowhere the controller cannot.
+func TestThePartialPassUnitsAreGivenNoMoreThanTheControllers(t *testing.T) {
 	systemd := filepath.Join("..", "..", "deploy", "systemd")
-	for _, key := range []string{"User", "Group", "NoNewPrivileges", "PrivateTmp", "ProtectHome", "ProtectSystem", "WorkingDirectory"} {
-		want, _ := effective(t, systemd, ControllerUnit, key)
-		if got, _ := effective(t, systemd, GlanceUnit, key); got != want {
-			t.Errorf("%s=%q for the glance, %q for the controller", key, got, want)
-		}
-	}
-	// What the glance may write, hold or reach is what the controller may.
-	for _, key := range []string{"ReadWritePaths", "CapabilityBoundingSet", "RestrictAddressFamilies", "SystemCallFilter"} {
-		_, wide := effective(t, systemd, ControllerUnit, key)
-		_, given := effective(t, systemd, GlanceUnit, key)
-		for _, word := range given {
-			if !slices.Contains(wide, word) {
-				t.Errorf("the glance's %s holds %s, which the controller's does not", key, word)
+	for _, unit := range []string{GlanceUnit, ListenerUnit} {
+		for _, key := range []string{"User", "Group", "NoNewPrivileges", "PrivateTmp", "ProtectHome", "ProtectSystem", "WorkingDirectory"} {
+			want, _ := effective(t, systemd, ControllerUnit, key)
+			if got, _ := effective(t, systemd, unit, key); got != want {
+				t.Errorf("%s=%q for %s, %q for the controller", key, got, unit, want)
 			}
 		}
-	}
-	if net, _ := effective(t, systemd, GlanceUnit, "PrivateNetwork"); !systemdTrue(net) {
-		t.Errorf("the glance reaches the host's network (PrivateNetwork=%q), and reads nothing there", net)
+		// What it may write, hold or reach is what the controller may.
+		for _, key := range []string{"ReadWritePaths", "CapabilityBoundingSet", "RestrictAddressFamilies", "SystemCallFilter"} {
+			_, wide := effective(t, systemd, ControllerUnit, key)
+			_, given := effective(t, systemd, unit, key)
+			for _, word := range given {
+				if !slices.Contains(wide, word) {
+					t.Errorf("%s's %s holds %s, which the controller's does not", unit, key, word)
+				}
+			}
+		}
+		// Its container dials out through dockerd's network, never the unit's.
+		if net, _ := effective(t, systemd, unit, "PrivateNetwork"); !systemdTrue(net) {
+			t.Errorf("%s reaches the host's network (PrivateNetwork=%q)", unit, net)
+		}
 	}
 	if got, bound := unitSetting(t, GlanceUnit, "TimeoutStartSec"), unitSetting(t, ControllerUnit, "TimeoutStartSec"); got >= bound {
 		t.Errorf("a glance may run %s, as long as a sweep's %s", got, bound)
+	}
+}
+
+// The listener holds the socket for as long as HQ runs: started again
+// whenever it ends, and with HQ, so it runs the image HQ runs.
+func TestTheListenerUnitHoldsTheSocketWhileHQRuns(t *testing.T) {
+	service := filepath.Join("..", "..", "deploy", "systemd", ListenerUnit)
+	if got := unitValue(t, service, "ExecStart"); got != HostProgram+" controller --events" {
+		t.Errorf("the listener unit runs %q", got)
+	}
+	if got := unitValue(t, service, "Restart"); got != "always" {
+		t.Errorf("the listener is started again only on %q", got)
+	}
+	if got := unitValue(t, service, "PartOf"); got != hostcore.WebUnit {
+		t.Errorf("the listener is part of %q, not HQ's unit", got)
 	}
 }
 
