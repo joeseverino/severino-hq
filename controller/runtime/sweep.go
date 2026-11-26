@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"log/slog"
+	"slices"
 )
 
 func (w *Worker) sweep(ctx context.Context) error {
@@ -15,14 +16,10 @@ func (w *Worker) sweep(ctx context.Context) error {
 	}
 	closeSnapshot := w.Providers.BeginSnapshot()
 	defer closeSnapshot()
-	connections, err := w.Providers.Connections(ctx, verdict.Carry)
-	if err != nil {
-		w.logger().Warn("connections sweep skipped", slog.Any("error", err))
-	} else {
-		if connections == nil {
-			connections = []ConnectionRecord{}
-		}
-		w.post("connections", w.Bridge.Connections(ctx, w.ID, connections))
+	// A sweep of named kinds, as an event asks, probes no connection unless a
+	// forced read names one.
+	if len(verdict.OnlyKinds) == 0 || slices.ContainsFunc(verdict.Forced, func(read ForcedRead) bool { return read.ConnectionRef != "" }) {
+		w.connections(ctx, verdict.Carry)
 	}
 	inventory, err := w.Providers.Inventory(ctx, verdict.OnlyKinds)
 	if err != nil {
@@ -44,6 +41,19 @@ func (w *Worker) sweep(ctx context.Context) error {
 	}
 	w.post("analytics", w.Bridge.Analytics(ctx, w.ID, readings))
 	return nil
+}
+
+// connections probes every connection, but the carried, and tells HQ.
+func (w *Worker) connections(ctx context.Context, carry []string) {
+	connections, err := w.Providers.Connections(ctx, carry)
+	if err != nil {
+		w.logger().Warn("connections sweep skipped", slog.Any("error", err))
+		return
+	}
+	if connections == nil {
+		connections = []ConnectionRecord{}
+	}
+	w.post("connections", w.Bridge.Connections(ctx, w.ID, connections))
 }
 
 func (w *Worker) analyticsWindows(ctx context.Context, sites []AnalyticsSiteIdentity) []AnalyticsWindow {
