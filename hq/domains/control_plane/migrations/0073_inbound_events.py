@@ -15,6 +15,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AddField(
+            model_name="readrequest",
+            name="spaced",
+            field=models.BooleanField(default=False),
+        ),
         migrations.CreateModel(
             name="InboundEvent",
             fields=[

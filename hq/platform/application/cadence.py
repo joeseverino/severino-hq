@@ -53,7 +53,7 @@ from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import CapabilitySpec, requested
 from .labels import sentence
 from .moments import duration
-from .read_requests import ForcedRead, connection_providers, forced_kinds, forced_reads
+from .read_requests import ForcedRead, connection_providers, due_reads, forced_kinds, forced_reads
 from .record_errors import Sentence
 from .refusal_codes import Code
 from .security import Capability, Principal
@@ -451,7 +451,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
     and only one of them is a fault.
     """
 
-    forced = forced_reads()
+    forced = due_reads(forced_reads())
     interval = sweep_interval()
     oldest = _oldest_sweep()
     verdict: dict[str, object] = {
@@ -725,13 +725,16 @@ def ask(
     panels: Mapping[str, str] | None = None,
     doorbell: Doorbell = "controller",
     activity: bool = False,
+    spaced: bool = False,
 ) -> datetime:
     """Ask a worker outside this process for work, the one way HQ does: store
     what is asked, in the caller's transaction, and ring ``doorbell`` once
     it commits. When it was asked.
 
     ``activity`` notes that a person asked, so the active cadence decides the
-    sweep and a panel says its reading is under way. A kind HQ stores no
+    sweep and a panel says its reading is under way. ``spaced`` is an
+    event's ask, which waits a gap after its kind was stored
+    (``read_requests.EVENT_READ_GAP``). A kind HQ stores no
     reading of is refused, since nothing would answer it and it would force
     sweeps until it expired.
     """
@@ -744,7 +747,9 @@ def ask(
         note_activity()
     for kind in kinds or (("",) if connection or every else ()):
         ReadRequest.objects.update_or_create(
-            connection_ref=connection, kind=kind, defaults={"requested_at": now, "traceparent": queued_in()}
+            connection_ref=connection,
+            kind=kind,
+            defaults={"requested_at": now, "traceparent": queued_in(), "spaced": spaced},
         )
     if panels:
         asked = DashboardRefreshRequest.objects.select_for_update().in_bulk(list(panels), field_name="panel_id")

@@ -97,7 +97,7 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
         counts[str(outcome)] += 1
         asked.update(dict.fromkeys(kinds))
     if asked:
-        ask(reads=asked)
+        ask(reads=asked, spaced=True)
     return {"ok": True, **counts, "asked": list(asked)}
 
 

@@ -15,9 +15,17 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 lazy from hq.platform.core.attribution import continuing
 
+from .derivations import reached
 lazy from .cadence import every_sweep
 lazy from .credential_sight import fed_kinds
 lazy from .projection import iso
+
+# How long after a kind was stored an event's ask for it waits, so a burst of
+# events is a read at once and one more after it rather than a pass for each:
+# a reading two minutes behind is still fresh, and every pass spends the
+# providers' request budgets. No longer than a request lives, so the one that
+# waits is still pending when the gap ends. A person's ask never waits.
+EVENT_READ_GAP = timedelta(minutes=2)
 
 
 def read_request_lifetime() -> timedelta:
@@ -36,6 +44,9 @@ class ForcedRead:
     kinds: tuple[str, ...] | None
     # The creation context of its latest ask, which its answer continues.
     traceparent: str = ""
+    # When an event's ask for a kind read lately may force a pass, or None
+    # for one that may at once.
+    waits_until: datetime | None = None
 
     @property
     def subject(self) -> str:
@@ -116,12 +127,29 @@ def forced_reads(asked: Iterable[ReadRequest] | None = None) -> tuple[ForcedRead
             request.connection_ref,
             request.kind,
             request.requested_at,
-            forced_kinds(request.connection_ref, request.kind),
+            (kinds := forced_kinds(request.connection_ref, request.kind)),
             request.traceparent,
+            _spaced(request, kinds, stored),
         )
         for request in requests
     )
     return tuple(read for read in reads if not _answered(read, stored, probed))
+
+
+def _spaced(request: ReadRequest, kinds: tuple[str, ...] | None, stored: dict[str, datetime]) -> datetime | None:
+    """When an event's ask may force a pass: ``EVENT_READ_GAP`` after the
+    kinds it forces were stored, or None once one of them never was."""
+
+    if not request.spaced or not kinds or any(kind not in stored for kind in kinds):
+        return None
+    return min(stored[kind] for kind in kinds) + EVENT_READ_GAP
+
+
+def due_reads(forced: tuple[ForcedRead, ...]) -> tuple[ForcedRead, ...]:
+    """Of ``forced``, the reads that force a pass now: an event's waits
+    out its gap, still pending, so nothing it asked for is lost."""
+
+    return tuple(read for read in forced if read.waits_until is None or reached(read.waits_until))
 
 
 def askers(kinds: Iterable[str]) -> dict[str, str]:

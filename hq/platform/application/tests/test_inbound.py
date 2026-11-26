@@ -1,10 +1,11 @@
 """An event HQ is told of makes the readings its provider declares due, once
 per delivery, and makes nothing due that no declaration names."""
 
+from contextlib import contextmanager
 from datetime import timedelta
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ReadRequest
@@ -149,6 +150,45 @@ class ApplyEventsTests(TestCase):
         self.apply(reconnected)
 
         self.assertEqual(asked(), ["github.repository"])
+
+    @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=3600, SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200)
+    def test_a_burst_of_events_is_read_at_once_and_once_after_it(self):
+        from hq.domains.control_plane.models import ProviderInventory
+
+        from ..cadence import sweep_due
+        from ..derivation_testing import frozen
+
+        start = timezone.now()
+        passes = []
+
+        @contextmanager
+        def at(moment):
+            with frozen(moment), mock.patch("django.utils.timezone.now", return_value=moment):
+                yield
+
+        def sweep(moment):
+            """A pass, whenever one is due: it stores what was asked."""
+
+            with at(moment):
+                if sweep_due()["due"]:
+                    passes.append(moment)
+                    ProviderInventory.objects.update_or_create(
+                        kind="github.repository", defaults={"records": [], "reachable": True, "observed_at": moment}
+                    )
+
+        with at(start - timedelta(hours=1)):
+            ProviderInventory.objects.create(kind="github.repository", records=[], reachable=True)
+        for second in range(25):
+            with at(start + timedelta(seconds=second)):
+                self.apply(worker({**PUSH, "delivery_id": f"burst-{second}"}))
+            sweep(start + timedelta(seconds=second))
+        for second in range(30, 900, 30):
+            sweep(start + timedelta(seconds=second))
+
+        self.assertEqual(passes[0], start, "the first event reads at once")
+        self.assertLessEqual(len(passes), 2)
+        read = ProviderInventory.objects.get(kind="github.repository").updated_at
+        self.assertGreater(read, ReadRequest.objects.get().requested_at, "the last event's ask was read")
 
     def test_events_past_the_routine_window_are_deleted(self):
         from hq.domains.control_plane.models import InboundEvent

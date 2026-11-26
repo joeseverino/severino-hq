@@ -354,6 +354,9 @@ class ReadRequest(TimestampedModel):
     # The chain of its latest ask, which the sweep that answers it continues
     # (``sweep.record_sweep``).
     traceparent = queued_chain()
+    # Its latest ask was an event's, which waits a gap after its kind was
+    # stored (``read_requests.EVENT_READ_GAP``).
+    spaced = models.BooleanField(default=False)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=("connection_ref", "kind"), name="one_read_request_per_subject")]
