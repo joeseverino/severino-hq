@@ -16,7 +16,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 from .approvals import COMPARED, DECLARATIONS, NO_OFFER, WARNINGS, offers, shown_by
 from .contracts import Effect
 from .doors import NOBODY
-from .payload_words import STEP, ChangeRow, changed_words, document, field_words, value_words
+from .payload_words import ChangeRow, changed_words, document, field_words, value_words
 from .security import Principal
 from .tone import Tone
 lazy from . import capabilities
@@ -52,7 +52,7 @@ class ChangeGroup:
     def named(self) -> tuple[ChangeRow, ...]:
         """Its fields that move, each named by the record too ("Empty a cache › Access")."""
 
-        return tuple(replace(row, label=f"{self.label}{STEP}{row.label}") for row in self.rows)
+        return tuple(replace(row, within=self.label) for row in self.rows)
 
     @property
     def whole(self) -> str:

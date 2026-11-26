@@ -173,6 +173,15 @@ class ChangeRow:
     after: str
     change: str
     redacted: bool = False
+    # The record of a comparison of many it is a field of, by the record's
+    # name, which is often its author's (``Quoted``): never one str with ``label``.
+    within: str = ""
+
+    @property
+    def named(self) -> str:
+        """Its label, after its record's name where it has one ("Empty a cache › Access")."""
+
+        return f"{self.within}{STEP}{self.label}" if self.within else self.label
 
 
 # Between the names of a value inside a document, outermost first.

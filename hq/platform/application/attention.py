@@ -211,9 +211,9 @@ def _asked_change(shown) -> str:
 
     moves = [
         (
-            f"{lower_first(row.label)} from {row.before} to {row.after or 'empty'}"
+            f"{lower_first(row.named)} from {row.before} to {row.after or 'empty'}"
             if row.before
-            else f"{lower_first(row.label)} set to {row.after}"
+            else f"{lower_first(row.named)} set to {row.after}"
         )
         for row in shown.changes[:3]
     ]
