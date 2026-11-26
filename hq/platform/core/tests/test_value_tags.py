@@ -19,6 +19,7 @@ from hq.platform.core.templatetags.value_tags import (
     readout,
     when,
 )
+from hq.platform.core.testing import render
 
 
 def pieces(html):
@@ -117,6 +118,17 @@ class BreakableTests(SimpleTestCase):
 
     def test_a_hostname_and_a_path_wrap_after_their_dots_and_slashes(self):
         self.assertEqual(pieces(breakable("app.dev.example.com/api")), ["app.dev.", "example.com/", "api"])
+
+    def test_code_a_fact_holds_bare_wraps_where_its_name_would(self):
+        """A path written as plain code, in a fact's value or its detail."""
+
+        html = render(
+            '{% facts %}{% fact "Defined in" %}<code>/opt/apps/docker-compose.yml</code>'
+            "{% detail %}<code>uptime-kuma:builder-go</code>{% endfact %}{% endfacts %}"
+        )
+
+        for name in ("/opt/apps/docker-compose.yml", "uptime-kuma:builder-go"):
+            self.assertIn(f"<code>{breakable(name)}</code>", html)
 
     def test_a_scrap_of_a_name_stays_with_its_neighbor(self):
         """A piece under three characters is never a line of its own."""

@@ -25,22 +25,6 @@ class FactsTagTests(SimpleTestCase):
         self.assertTrue(all(detail in small.ancestors for small in elements(html, "small")))
         self.assertNotIn("·", detail.words)
 
-    def test_code_a_page_writes_bare_wraps_only_at_its_separators(self):
-        """A path written as plain code, in a value or a detail, breaks after
-        a slash and never inside its hyphenated file name."""
-
-        html = render(
-            '{% facts %}{% fact "Defined in" %}<code>/opt/apps/docker-compose.yml</code>'
-            "{% detail %}<code>uptime-kuma:builder-go</code>{% endfact %}{% endfacts %}"
-        )
-
-        for name in ("fact-value", "fact-detail"):
-            (part,) = with_class(html, name)
-            self.assertTrue([seam for seam in with_class(html, "seam") if part in seam.ancestors], name)
-        self.assertEqual(
-            [whole.words for whole in with_class(html, "whole")], ["docker-compose.yml", "uptime-kuma:", "builder-go"]
-        )
-
     def test_a_value_that_is_only_a_link_is_the_values_own_link(self):
         """Words around nothing but a link leave it the whole value, drawn as
         a value's link is, never as a link among words."""
