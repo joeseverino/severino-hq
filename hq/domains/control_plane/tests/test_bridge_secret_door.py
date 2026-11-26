@@ -50,6 +50,18 @@ EXAMPLES: dict[str, Any] = {
     },
     "steps": [{"subject": "example-npm", "step": "npm.proxy_host:reconcile", "reason": "refused"}],
     "analytics-plan": [{"site_tag": "tag", "connection_ref": "example-api"}],
+    "events": {
+        "source": "worker",
+        "events": [
+            {
+                "provider": "github_app",
+                "event": "push",
+                "subject": "example/app",
+                "delivery_id": "72d3162e-cc78-11e3-81ab-4c9367dc0958",
+                "received_at": "2026-01-15T12:00:00Z",
+            }
+        ],
+    },
     "analytics": {
         "sites": [
             {

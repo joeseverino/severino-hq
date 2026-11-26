@@ -38020,6 +38020,7 @@
                 "service-wiring-incomplete",
                 "posture-unmet",
                 "automation-worker-absent",
+                "event-channel-silent",
                 "deploy-waiting",
                 "deploy-running",
                 "machine-offline",

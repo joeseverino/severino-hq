@@ -29,6 +29,7 @@ from hq.platform.application.controller import (
     schedule_automatic_operations,
 )
 from hq.platform.application.glance_refresh import dashboard_refresh_plan, record_dashboard_observations
+from hq.platform.application.inbound import apply_events
 from hq.platform.application.infrastructure import controller_contract
 from hq.platform.application.inventory import record_connections, record_step_failures
 from hq.platform.application.outbound_work import run_for_host
@@ -214,6 +215,12 @@ def _job(parameters: Parameters, payload: Any) -> Any:
     return run_for_host(parameters["name"])
 
 
+def _events(parameters: Parameters, payload: Any) -> Any:
+    # Held to the contract's ``InboundBatch`` before it arrives here.
+    del parameters
+    return apply_events(payload)
+
+
 def _schedule(parameters: Parameters, payload: Any) -> Any:
     del payload
     return schedule_automatic_operations(parameters["controller-id"])
@@ -268,6 +275,7 @@ ACTIONS: tuple[Action, ...] = (
     Action("glance", "The controller refreshed the dashboard", _glance),
     Action("registry", "The controller read what each provider declares", _registry),
     Action("job", "The controller ran scheduled work", _job),
+    Action("events", "The listener said what happened outside", _events),
 )
 # HQ's playbook worker's socket: its claim, renewal and report, and nothing else.
 WORKER_ACTIONS: tuple[Action, ...] = _queue(WORKER_LANE)

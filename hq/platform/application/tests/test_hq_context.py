@@ -568,7 +568,9 @@ class CadencedWorkTests(TestCase):
         self.assertEqual((row.every, row.result, row.next_due, row.runs), ("Daily", "Not done yet", None, None))
 
     def test_every_piece_with_a_cadence_has_a_row_and_none_without(self):
-        self.assertEqual(set(self.rows()), {"audit.prune", "content.sync", "registry.refresh", "sessions.clear"})
+        self.assertEqual(
+            set(self.rows()), {"audit.prune", "content.sync", "events.prune", "registry.refresh", "sessions.clear"}
+        )
 
     def test_the_cost_does_not_grow_with_the_jobs(self):
         def arrange(count):

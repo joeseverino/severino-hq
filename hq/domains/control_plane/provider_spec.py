@@ -161,6 +161,52 @@ class ConnectionKind:
     gives: str = ""
 
 
+# How a provider signs the request that carries an event, as the Worker
+# verifies it before anything else is read.
+type InboundScheme = Literal["github-hmac-sha256"]
+
+
+@dataclass(frozen=True, slots=True)
+class InboundSpec:
+    """The events one provider tells HQ of, and the readings each makes due.
+
+    An event carries no truth: HQ only asks for the readings it names and
+    reads them with its own credentials (``application.inbound``). The route's
+    fields say how the Worker receives and verifies the provider's request; a
+    source that reports over the bridge alone (HQ's own host jobs) has none.
+    """
+
+    # Each event by the provider's name for it (a webhook's event header), or
+    # that name and the payload's action joined by a dot where one action
+    # differs from the rest; the readings it makes due.
+    events: Mapping[str, tuple[str, ...]]
+    path: str = ""
+    scheme: InboundScheme | None = None
+    signature_header: str = ""
+    delivery_header: str = ""
+    event_header: str = ""
+    # JSON pointers into the request's body.
+    action_pointer: str = ""
+    subject_pointer: str = ""
+    # The Worker secret the signature is checked with.
+    secret_binding: str = ""
+    # What the provider's app must hold to be sent these events.
+    requires: tuple[Permission, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.events or not all(self.events.values()):
+            raise ValueError("An inbound declaration names each event's readings.")
+        route = (self.path, self.scheme, self.signature_header, self.delivery_header, self.event_header)
+        if any(route) and not all((*route, self.secret_binding)):
+            raise ValueError(f"The route {self.path!r} names its scheme, its headers and its secret.")
+
+    def reads(self, event: str) -> tuple[str, ...]:
+        """The readings ``event`` makes due: its own entry, else its name's
+        before the action; none for an event HQ does not take."""
+
+        return self.events.get(event) or self.events.get(event.partition(".")[0], ())
+
+
 class ProviderModel(Closed):
     model_config = ConfigDict(frozen=True)
 

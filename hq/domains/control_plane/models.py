@@ -16,7 +16,7 @@ from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.core.attribution import queued_chain
 from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
-from hq.platform.core.rules import Rule, one_of, singleton
+from hq.platform.core.rules import Rule, has_text, one_of, singleton
 from hq.platform.core.stored_json import StoredJSONField
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 lazy from hq.platform.application.approval_review import title as approval_title
@@ -359,6 +359,58 @@ class ReadRequest(TimestampedModel):
     @override
     def __str__(self) -> str:
         return f"Read {self.connection_ref or self.kind or 'every connection'} now"
+
+
+class InboundSource(models.TextChoices):
+    """Who told HQ an event happened: the listener on the Worker's socket, or
+    HQ's own host jobs."""
+
+    WORKER = "worker", "Worker"
+    HOST = "host", "Host"
+
+
+class InboundOutcome(models.TextChoices):
+    """What an event made due: the readings it names, or nothing, for one HQ
+    does not take."""
+
+    APPLIED = "applied", "Applied"
+    IGNORED = "ignored", "Ignored"
+
+
+class InboundEvent(TimestampedModel):
+    """One event a provider or HQ's host said happened, once per delivery.
+
+    It holds the event's name and never its body: what changed is read again
+    with HQ's own credentials (``application.inbound``).
+    """
+
+    provider = models.CharField(max_length=64)
+    event = models.CharField(max_length=120)
+    # What it is about, as the provider names it (a repository's full name).
+    subject = models.CharField(max_length=255, blank=True)
+    delivery_id = models.CharField("delivery ID", max_length=128)
+    source = models.CharField(max_length=16, choices=InboundSource.choices)
+    received_at = models.DateTimeField()
+    applied_at = models.DateTimeField(default=timezone.now)
+    outcome = models.CharField(max_length=16, choices=InboundOutcome.choices)
+    # The reading kinds it made due.
+    reads = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ("-received_at",)
+        constraints = [
+            # A delivery the sender repeats is the one event.
+            models.UniqueConstraint(fields=("provider", "delivery_id"), name="one_inbound_event_per_delivery"),
+            one_of("source", InboundSource, "inbound_source_is_declared"),
+            one_of("outcome", InboundOutcome, "inbound_outcome_is_declared"),
+            has_text("provider", "inbound_event_names_its_provider", "An event names its provider."),
+            has_text("event", "inbound_event_is_named", "An event is named."),
+            has_text("delivery_id", "inbound_event_names_its_delivery", "An event names its delivery."),
+        ]
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.provider} {self.event}" + (f" on {self.subject}" if self.subject else "")
 
 
 class DashboardConfiguration(TimestampedModel):

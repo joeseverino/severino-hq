@@ -8,6 +8,7 @@ from pydantic import ConfigDict, Field
 from hq.platform.application.reasons import Checked
 lazy from hq.platform.application.labels import human_bytes
 
+from ..provider_spec import InboundSpec
 from .contract import ObservationRecord, ObservationSpec, Stamp
 
 
@@ -434,3 +435,8 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         relation="Restart state of",
     ),
 )
+
+# What HQ's own host jobs say happened: a unit that failed, which every
+# severino-hq unit's OnFailure= reports (``host_work.units.read``).
+UNIT_FAILED = "unit.failed"
+INBOUND = {"host": InboundSpec({UNIT_FAILED: (UNIT_KIND,)})}

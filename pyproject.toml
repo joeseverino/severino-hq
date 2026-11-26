@@ -256,6 +256,17 @@ allowed_importers = [
 broken_contract_guidance = "Leave the binding to the capability runner or the job runner (attribution.own_operation); work outside both is a door."
 
 [[tool.importlinter.contracts]]
+name = "Only the bridge's events action and HQ's own host jobs say an event happened, so no other door can force a read by claiming one"
+type = "protected"
+protected_modules = ["hq.platform.application.inbound"]
+allowed_importers = [
+  "hq.**.tests",
+  "hq.domains.control_plane.bridge_actions",
+  "hq.platform.application.host_work",
+]
+broken_contract_guidance = "Read what HQ was told from inbound_events; a new source reports through the bridge's events action."
+
+[[tool.importlinter.contracts]]
 name = "Only the places a request may wait from enter an outbound exception, and only a job leaves its request"
 type = "protected"
 protected_modules = ["hq.platform.core.outbound_allowed"]

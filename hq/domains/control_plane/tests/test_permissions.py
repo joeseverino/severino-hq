@@ -10,12 +10,15 @@ ROOT = Path(__file__).resolve().parents[4]
 
 
 def asked(provider: str) -> tuple[str, ...]:
-    """Every permission HQ names to an operator for one connection provider."""
+    """Every permission HQ names to an operator for one connection provider,
+    the events it is sent included."""
 
     from ..connection_kinds import CONNECTION_KINDS
     from ..credential_reads import observer_permissions
+    from ..provider_adapters import INBOUND
 
-    return (*observer_permissions(provider), *CONNECTION_KINDS[provider].writes)
+    inbound = INBOUND[provider].requires if provider in INBOUND else ()
+    return (*observer_permissions(provider), *CONNECTION_KINDS[provider].writes, *inbound)
 
 
 class PermissionTableTests(SimpleTestCase):

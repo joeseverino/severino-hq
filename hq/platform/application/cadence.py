@@ -295,7 +295,8 @@ def controller_standing(now: datetime | None = None) -> WorkerStanding:
 # HQ's playbook worker's arrival, a reading rather than a file beside the
 # controller's: the findings and the queue that say it is absent are derived
 # from rows (``derivations``), so a row is what moves them when it arrives.
-AUTOMATION_HEARTBEAT = "automation-heartbeat"
+AUTOMATION = "automation"
+AUTOMATION_HEARTBEAT = readings.heartbeat(AUTOMATION)
 # The host starts the worker this long after the last one ended, as well as at
 # its doorbell. deploy/systemd/severino-hq-automation.timer must hold the same
 # value (tested).
@@ -318,9 +319,7 @@ def note_automation() -> None:
     page. It holds a moment and nothing else, so it names no secret.
     """
 
-    reading = readings.stored(AUTOMATION_HEARTBEAT)
-    if reading is None or timezone.now() - reading.observed_at >= _AUTOMATION_NOTED_EVERY:
-        readings.record(AUTOMATION_HEARTBEAT, {})
+    readings.note(AUTOMATION, every=_AUTOMATION_NOTED_EVERY)
 
 
 def automation_standing() -> WorkerStanding:
@@ -332,13 +331,12 @@ def automation_standing() -> WorkerStanding:
 
     now = present()
     work = OperationRequest.objects.filter(action__in=AUTOMATION_WORK)
-    heartbeat = readings.stored(AUTOMATION_HEARTBEAT)
     # The last lease to run out decides whether any is still held.
     found = work.aggregate(
         newest=Max("claimed_at"), leased=Max("lease_expires_at", filter=Q(state=OperationRequest.State.CLAIMED))
     )
     claimed, leased = found["newest"], found["leased"]
-    seen = [moment for moment in (heartbeat.observed_at if heartbeat else None, claimed) if moment is not None]
+    seen = [moment for moment in (readings.heard(AUTOMATION), claimed) if moment is not None]
     if not seen:
         return WorkerStanding(seen_at=None, silent=False, named=PLAYBOOK_WORKER_NAMED)
     seen_at = max(seen)

@@ -7,7 +7,7 @@ page, or the write that changed the value.
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import reduce
 from operator import or_
 from typing import Any
@@ -23,6 +23,9 @@ from .projection import read_once
 
 # Every reading of a kept kind by its key, held once a projection asked for one.
 _KEPT = "readings.kept"
+# Every heartbeat's key ends so, and when each was noted is held the same way.
+_HEARTBEAT = "-heartbeat"
+_HEARD = "readings.heard"
 
 
 def stored(key: str) -> UpstreamReading | None:
@@ -42,6 +45,32 @@ def record(key: str, value: Any, *, observed_at: datetime | None = None) -> None
         key=key, defaults={"value": value, "observed_at": observed_at or timezone.now()}
     )
     read_once(_KEPT, list).clear()
+    read_once(_HEARD, list).clear()
+
+
+def heartbeat(name: str) -> str:
+    """The reading that holds when ``name`` last arrived."""
+
+    return f"{name}{_HEARTBEAT}"
+
+
+def note(name: str, *, every: timedelta) -> None:
+    """Record that ``name`` arrived now, at most once per ``every``: a
+    heartbeat holds a moment and nothing else, and an age is worded no finer."""
+
+    reading = stored(heartbeat(name))
+    if reading is None or timezone.now() - reading.observed_at >= every:
+        record(heartbeat(name), {})
+
+
+def heard(name: str) -> datetime | None:
+    """When ``name`` last arrived, read with every other heartbeat in one
+    query a projection, so each worker or channel that reports adds none."""
+
+    found = read_once(_HEARD, list)
+    if not found:
+        found.append(dict(UpstreamReading.objects.filter(key__endswith=_HEARTBEAT).values_list("key", "observed_at")))
+    return found[0].get(heartbeat(name))
 
 
 def _kept() -> dict[str, UpstreamReading]:

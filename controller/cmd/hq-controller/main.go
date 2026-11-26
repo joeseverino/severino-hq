@@ -9,14 +9,22 @@
 // "hq-controller job NAME" is the other thing a timer asks of HQ: one piece of
 // scheduled work, done by the running process. It reads no connection.
 //
+// "hq-controller events SOURCE" tells HQ what SOURCE was told happened: one
+// event per line of its input, posted in batches as they arrive, so a
+// listener can pipe a stream into it. Input with no events says SOURCE is
+// listening.
+//
 // "hq-controller ready [unix:PATH] URL" is the image's healthcheck: exit 0
 // when URL answers 200, asked on the socket at PATH when one is given, with
 // no interpreter started per probe.
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -47,6 +55,8 @@ func main() {
 	switch mode {
 	case "job":
 		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
+	case "events":
+		code = events(ctx, os.Args[2:], os.Getenv(BridgeSocket), os.Stdin, stdout)
 	case "ready":
 		code = ready(ctx, os.Args[2:], stdout)
 	default:
@@ -109,6 +119,65 @@ func job(ctx context.Context, args []string, socket string, stdout io.Writer) in
 		return 0
 	}
 	return 1
+}
+
+// events posts each line of input as an event SOURCE was told of. A batch is
+// what has arrived when the input pauses, up to the contract's bound, so a
+// burst is one call and a lone event is posted at once. A line that is not an
+// event, or a batch HQ refuses, ends it with exit 1.
+func events(ctx context.Context, args []string, socket string, stdin io.Reader, stdout io.Writer) int {
+	fail := func(message string) int {
+		_ = json.NewEncoder(stdout).Encode(failure{Message: message})
+		return 1
+	}
+	if len(args) != 1 || !runtime.InboundSource(args[0]).Valid() {
+		fail("usage: hq-controller events host|worker")
+		return 2
+	}
+	bridge, err := runtime.NewSocketBridge(strings.TrimSpace(socket))
+	if err != nil {
+		return fail(err.Error())
+	}
+	batch := runtime.InboundBatch{Source: runtime.InboundSource(args[0]), Events: []runtime.InboundArrival{}}
+	posted := 0
+	post := func() error {
+		if err := bridge.Events(ctx, batch); err != nil {
+			return err
+		}
+		posted += len(batch.Events)
+		batch.Events = batch.Events[:0]
+		return nil
+	}
+	reader := bufio.NewReader(stdin)
+	sent := false
+	for line := 1; ; line++ {
+		text, readErr := reader.ReadBytes('\n')
+		if len(bytes.TrimSpace(text)) > 0 {
+			var event runtime.InboundArrival
+			if err := jsonv2.Unmarshal(bytes.TrimSpace(text), &event, jsonv2.RejectUnknownMembers(true)); err != nil {
+				return fail(fmt.Sprintf("line %d is not an event: %v", line, err))
+			}
+			batch.Events = append(batch.Events, event)
+		}
+		ended := readErr != nil
+		if len(batch.Events) > 0 && (ended || reader.Buffered() == 0 || len(batch.Events) == runtime.MaxInboundEvents) || ended && !sent {
+			if err := post(); err != nil {
+				return fail(err.Error())
+			}
+			sent = true
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return fail(readErr.Error())
+		}
+	}
+	_ = json.NewEncoder(stdout).Encode(struct {
+		OK     bool `json:"ok"`
+		Posted int  `json:"posted"`
+	}{true, posted})
+	return 0
 }
 
 // readyTimeout is under the healthcheck's own timeout, so a slow answer is

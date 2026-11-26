@@ -23,6 +23,7 @@ from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import (
     ApprovalRequest,
     DashboardConfiguration,
+    InboundEvent,
     OperationRequest,
 )
 from hq.domains.docs_index.models import DocumentationRecord
@@ -90,6 +91,9 @@ class RuleTests(TestCase):
         agent = AgentIdentity.objects.create(client_id="example-agent")
         device = AgentDevice.objects.create(identity=agent, node_id="nEXAMPLECNTRL")
         operator = get_user_model().objects.create_user("example-operator", password="x" * 20)
+        told = InboundEvent.objects.create(
+            provider="host", event="unit.failed", delivery_id="d-1", source="host", received_at=now, outcome="applied"
+        )
 
         def changed(instance, **values):
             return lambda: type(instance).objects.filter(pk=instance.pk).update(**values)
@@ -123,6 +127,11 @@ class RuleTests(TestCase):
             "person_role_is_a_known_role": changed(operator.person_role, role="example"),
             "dashboard_configuration_is_one_row": lambda: DashboardConfiguration.objects.create(pk=2),
             "analytics_vitalsdaily_sample_interval": lambda: site.vitals.create(date=DAY, sample_interval=0),
+            "inbound_source_is_declared": changed(told, source="browser"),
+            "inbound_outcome_is_declared": changed(told, outcome="maybe"),
+            "inbound_event_names_its_provider": changed(told, provider=" "),
+            "inbound_event_is_named": changed(told, event=" "),
+            "inbound_event_names_its_delivery": changed(told, delivery_id=" "),
         }
 
         for name, write in refused.items():

@@ -204,6 +204,14 @@ func (b *SocketBridge) Job(ctx context.Context, name string) (JobOutcome, error)
 	return outcome, err
 }
 
+// Events tells HQ what one source was told happened. A batch with no events
+// says the source is listening.
+func (b *SocketBridge) Events(ctx context.Context, batch InboundBatch) error {
+	return b.call(ctx, batch, nil, func(ctx context.Context, kind string, body io.Reader) (*http.Response, error) {
+		return b.client.EventsWithBody(ctx, kind, body)
+	})
+}
+
 func (b *SocketBridge) SweepDue(ctx context.Context, controllerID string) (SweepVerdict, error) {
 	var verdict SweepVerdict
 	err := b.call(ctx, nil, &verdict, func(ctx context.Context, _ string, _ io.Reader) (*http.Response, error) {

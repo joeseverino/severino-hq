@@ -24,6 +24,7 @@ class ControlPlaneConfig(AppConfig):
             DashboardConfiguration,
             DashboardMachine,
             DashboardRefreshRequest,
+            InboundEvent,
             ManagedResource,
             NotManaged,
             OperationRequest,
@@ -57,6 +58,8 @@ class ControlPlaneConfig(AppConfig):
         # Who asked for a dashboard panel to be read now, filed with the other
         # asks for a reading, so the log's one toggle shows or hides them all.
         register_audit(DashboardRefreshRequest, READ_REQUEST, observation=("completed_at",), required=True)
+        # An event that made a reading due, filed with the asks it stands for.
+        register_audit(InboundEvent, READ_REQUEST, subject=lambda event: event.subject, required=True)
         # What the dashboard shows, and on which machines, under one label.
         register_audit(DashboardConfiguration, DASHBOARD, required=True)
         register_audit(DashboardMachine, DASHBOARD, subject=lambda placement: placement.machine.key, required=True)

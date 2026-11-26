@@ -20,7 +20,8 @@ from hq.platform.application.ui import ended
 from ..connection_shapes import GITHUB_APP
 from ..observations import github as readings
 from ..observations.github import PROVIDER
-from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, SharedValue, applies, locked
+from ..permissions import GitHub
+from ..provider_spec import ConnectionKind, InboundSpec, ProviderModel, ProviderSpec, SharedValue, applies, locked
 
 KIND = "github.delivery"
 # Shared values (``SHARED``): the controller reports a sweep's record with the
@@ -257,5 +258,31 @@ CONNECTIONS = {
         create="A GitHub App on your account; mise run wire-github-app records its ID and stores its key.",
         create_url="https://github.com/settings/apps/new",
         gives="Repo rules on your repositories, and HQ's deploys waiting for your approval.",
+    ),
+}
+
+# What one App webhook sends from every installation, each event making the
+# repositories' reading due; GitHub's docs name the permission each needs
+# (https://docs.github.com/en/webhooks/webhook-events-and-payloads).
+INBOUND = {
+    PROVIDER: InboundSpec(
+        dict.fromkeys(
+            ("push", "workflow_run", "check_suite", "pull_request", "deployment_status"), (readings.REPOSITORY_KIND,)
+        ),
+        path="/github",
+        scheme="github-hmac-sha256",
+        signature_header="X-Hub-Signature-256",
+        delivery_header="X-GitHub-Delivery",
+        event_header="X-GitHub-Event",
+        action_pointer="/action",
+        subject_pointer="/repository/full_name",
+        secret_binding="GITHUB_WEBHOOK_SECRET",  # noqa: S106 - the Worker secret's name, never its value
+        requires=(
+            GitHub.CONTENTS_READ,
+            GitHub.ACTIONS_READ,
+            GitHub.CHECKS_READ,
+            GitHub.PULL_REQUESTS_READ,
+            GitHub.DEPLOYMENTS_READ,
+        ),
     ),
 }
