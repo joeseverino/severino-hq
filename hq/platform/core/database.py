@@ -60,6 +60,13 @@ def serialized[T](work: Callable[[], T], using: str = DEFAULT_DB_ALIAS) -> T:
         return work()
 
 
+def writes(using: str = DEFAULT_DB_ALIAS) -> int | None:
+    """How many statements that change rows this thread's connection has run; None where HQ cannot count them."""
+
+    connection = connections[using]
+    return connection.writes if isinstance(connection, sqlite.DatabaseWrapper) else None
+
+
 def holds_write_lock(using: str = DEFAULT_DB_ALIAS) -> bool:
     """Whether this thread's connection holds the write lock until it commits
     (``sqlite.DatabaseWrapper``: from its first write, begun optimistically)."""

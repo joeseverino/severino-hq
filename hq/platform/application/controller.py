@@ -25,7 +25,6 @@ from hq.domains.control_plane.providers import (
 )
 from hq.platform.core.attribution import own_operation
 from hq.platform.core.audit import Outcome, work_ended
-from hq.platform.core.database import serialized
 from hq.platform.core.facets import Failure
 lazy from hq.domains.control_plane.bridge_contract import declared_names, departs, limit
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
@@ -37,7 +36,7 @@ from .conditions import DRIFTED, PROBLEMS, holding, stamped
 from .infrastructure import CALLED_OFF, controller_contract, resolved_spec, serialize_resource
 from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
-from .projection import iso
+from .projection import iso, serialized_reads
 from .record_errors import PolicyError
 from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation
 lazy from .app_update_approval import succeeded
@@ -322,12 +321,12 @@ def _finding_repairs(controller_id: str, now) -> list[str]:
     this class of fault: it asks "has the declaration changed, or is something
     reporting broken?" and the failure it misses is the one where nothing
     changed and nothing looked broken. Serialized, so deriving the findings
-    holds no writer back.
+    holds no writer back and reads each thing once.
     """
 
     if not settings.SEVERINO_FINDINGS_AUTO_REMEDY:
         return []
-    return serialized(partial(_repairs, controller_id, now))
+    return serialized_reads(partial(_repairs, controller_id, now))
 
 
 def _repairs(controller_id: str, now) -> list[str]:

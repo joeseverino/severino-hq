@@ -14,7 +14,6 @@ from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidat
 
 from hq.platform.core import bindings
 from hq.platform.core.audit import audit_connection, record_event, tallied
-from hq.platform.core.database import serialized
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
 lazy from hq.domains.control_plane.providers import PROVIDERS
@@ -46,7 +45,7 @@ from .integration_specs import (
 )
 from .integrations import held_graph
 from .labels import human_label
-from .projection import QueryRefusal
+from .projection import QueryRefusal, serialized_reads
 from .record_errors import PolicyError
 from .refusal_codes import Code
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
@@ -400,11 +399,12 @@ def _authorized_run(
         )
 
     # Every capability is one transaction, holding the write lock only from
-    # its first write, so nothing it reads or derives first holds a writer back.
+    # its first write, and one projection until then, so nothing it reads or
+    # derives first holds a writer back or is derived twice.
     if not key:
-        return Ran(serialized(act))
+        return Ran(serialized_reads(act))
     try:
-        return serialized(
+        return serialized_reads(
             lambda: _once(
                 spec,
                 key,

@@ -32,6 +32,8 @@ lazy from hq.platform.core import attribution, tracing
 # A statement that starts with one of these takes no lock of its own: a read,
 # or the ``BEGIN`` that takes it.
 UNLOCKED = ("SELECT", "PRAGMA", "EXPLAIN", "VALUES", "BEGIN")
+# Statements that mark or end a transaction's part, which change no row.
+MARKS = ("SAVEPOINT", "RELEASE", "ROLLBACK")
 LOCKED = "database is locked"
 
 
@@ -81,6 +83,9 @@ class DatabaseWrapper(base.DatabaseWrapper):
         # The ``data_version`` its first read saw, or None before one.
         self.seen: int | None = None
         self.stale = False
+        # How many statements that change rows this connection has run, so a
+        # projection knows when what it read may have changed under it.
+        self.writes = 0
 
     @override
     def create_cursor(self, name=None):
@@ -116,9 +121,12 @@ class DatabaseWrapper(base.DatabaseWrapper):
     def before(self, query: str) -> None:
         if self.stale:
             raise Stale("This transaction read what another has since changed.")
+        head = query.lstrip()[:9].upper()
+        if not head.startswith(UNLOCKED + MARKS):
+            self.writes += 1
         if self.unbegun is None:
             return
-        if query.lstrip()[:7].upper().startswith(UNLOCKED):
+        if head.startswith(UNLOCKED):
             if self.seen is None and not query.lstrip().upper().startswith("PRAGMA DATA_VERSION"):
                 self.seen = self._data_version()
             return

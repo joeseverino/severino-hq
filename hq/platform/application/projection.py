@@ -19,6 +19,8 @@ from django.db.models import FETCH_PEERS, FETCH_RAISE, Model, Q, QuerySet
 from pydantic import ConfigDict
 lazy from django.utils import timezone
 
+lazy from hq.platform.core import database
+
 from .record_errors import RecordNotFound
 lazy from .search import apply_search
 
@@ -37,6 +39,9 @@ _MISSING = sentinel("_MISSING")
 _READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar("hq_projection_read_scope", default=None)
 # Where a scope keeps what it was seeded with, apart from what it read since.
 _SEED = "projection.seed"
+# Where a scope that serves only reads made before writing keeps how many
+# writes its connection had made when it opened.
+_WRITES = "projection.writes"
 
 
 class QueryRefusal(ValueError):
@@ -79,6 +84,23 @@ def projection_scope(seed: Mapping[str, Any] | None = None, *, apart: bool = Fal
         yield
 
 
+def serialized_reads[T](work: Callable[[], T]) -> T:
+    """Run ``work`` as ``database.serialized`` does, what it reads before it
+    first writes shared in one projection, as a page's GET is.
+
+    The one way a capability runs (``capabilities``), so no handler derives
+    the same thing twice. Each run reads afresh, a run again after a stale read
+    included, and once it writes it reads everything anew, so it never reads
+    a value it has just changed.
+    """
+
+    def scoped() -> T:
+        with _READ_SCOPE.set({_SEED: {}, _WRITES: database.writes()}):
+            return work()
+
+    return database.serialized(scoped)
+
+
 def seeded() -> dict[str, Any]:
     """What the projection in progress was seeded with; nothing outside one."""
 
@@ -90,7 +112,7 @@ def read_once[T](key: str, loader: Callable[[], T]) -> T:
     """Load once inside ``projection_scope``; behave normally outside one."""
 
     scope = _READ_SCOPE.get()
-    if scope is None:
+    if scope is None or (_WRITES in scope and database.writes() != scope[_WRITES]):
         return loader()
     found = scope.get(key, _MISSING)
     if found is _MISSING:
