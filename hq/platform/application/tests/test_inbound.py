@@ -284,3 +284,34 @@ class EventsWorkerTests(TestCase):
                 )
 
                 self.assertEqual(events_worker().behind, behind)
+
+    def test_each_route_the_worker_serves_is_counted_by_what_it_answered(self, _tag):
+        from hq.platform.application.inbound_events import events_worker
+        from hq.platform.application.inventory_testing import store
+
+        answers = [
+            {"route": "/github", "status": 202, "requests": 40, "last_hour": 5},
+            {"route": "/github", "status": 401, "requests": 3, "last_hour": 1},
+            {"route": "/github", "status": 413, "requests": 2, "last_hour": 0},
+            {"route": "/socket", "status": 101, "requests": 4, "last_hour": 0},
+            {"route": "/example-retired", "status": 401, "requests": 9, "last_hour": 9},
+        ]
+        store("cloudflare.worker", {"connection_ref": "example-cloudflare", "name": "hq-events", "answers": answers})
+
+        routes = {route.path: route for route in events_worker().routes}
+
+        # Every route it serves, counted or not, and none it no longer serves.
+        self.assertEqual(set(routes), {"/github", "/tailscale", "/socket"})
+        github = routes["/github"]
+        self.assertEqual((github.accepted, github.refused, github.unsigned), (40, 5, 3))
+        self.assertEqual((github.accepted_last_hour, github.unsigned_last_hour), (5, 1))
+        self.assertEqual((routes["/socket"].accepted, routes["/tailscale"].refused), (4, 0))
+        self.assertEqual(github.secret, "GITHUB_WEBHOOK_SECRET")
+
+    def test_a_worker_whose_answers_were_not_read_counts_no_route(self, _tag):
+        from hq.platform.application.inbound_events import events_worker
+        from hq.platform.application.inventory_testing import store
+
+        store("cloudflare.worker", {"connection_ref": "example-cloudflare", "name": "hq-events"})
+
+        self.assertIsNone(events_worker().routes)

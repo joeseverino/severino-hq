@@ -759,6 +759,12 @@ path from the public internet. Setting it up is
 - Workers Logs records each request as its method, path and status, which
   the Worker logs itself. Invocation logs are off, since they keep the
   request's headers, the bearer among them.
+- Each answer is also one Analytics Engine data point of its path and
+  status alone, in the `hq_events` dataset. HQ's `cloudflare.worker` reading
+  counts it by route through the SQL API, under the Account Analytics Read
+  it already holds. A route that refused every request of the last hour,
+  three or more, for its signature or token raises
+  `events-worker-refusing`, naming the secret to check.
 - Its secrets, `GITHUB_WEBHOOK_SECRET`, `TAILSCALE_WEBHOOK_SECRET` and
   `SOCKET_TOKEN`, live in a 1Password item of the operator's, and the
   listener holds the same

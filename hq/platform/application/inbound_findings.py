@@ -1,8 +1,10 @@
 """A channel that tells HQ of events, gone quiet: HQ then learns of a change
 only at its next sweep. One never heard is not set up, which is nothing to raise.
 
-And the events Worker Cloudflare runs, deployed from other routes than HQ
-generates, so it verifies and passes on events by the routes it was deployed with."""
+And the events Worker Cloudflare runs: deployed from other routes than HQ
+generates, so it verifies and passes on events by the routes it was deployed
+with, or refusing every request to a route for its signature or token, so a
+secret that was rotated on one side only drops what that route carries."""
 
 from hq.domains.control_plane.models import InboundSource
 from hq.domains.control_plane.observations.cloudflare import WORKER_KIND
@@ -17,6 +19,7 @@ lazy from .routes import reverse
 
 RULE = "event-channel-silent"
 BEHIND = "events-worker-behind"
+REFUSING = "events-worker-refusing"
 # The unit on HQ's machine that runs each channel's reader (deploy/systemd).
 READERS = {
     InboundSource.WORKER: "severino-hq-listener.service",
@@ -42,17 +45,24 @@ def _silent(estate: FindingEstate) -> tuple[Finding, ...]:
     )
 
 
+def _connection(estate: FindingEstate, ref: str) -> str:
+    """The node of the connection the Worker was read through, or ""."""
+
+    return next(
+        (node.id for node in estate.nodes() if node.kind == "connection" and node.connection_ref == ref and ref), ""
+    )
+
+
 def _behind(estate: FindingEstate) -> tuple[Finding, ...]:
     worker = events_worker()
     if not worker.behind:
         return ()
-    nodes = {node.connection_ref: node for node in estate.nodes() if node.kind == "connection" and node.connection_ref}
-    node = nodes.get(worker.connection_ref)
+    subject = _connection(estate, worker.connection_ref)
     return (
         Finding(
             rule=BEHIND,
-            subject=node.id if node is not None else "",
-            part="" if node is not None else worker.connection_ref,
+            subject=subject,
+            part="" if subject else worker.connection_ref,
             title="The events Worker is behind HQ's routes",
             severity=Tone.ATTENTION,
             explanation="Events for a route HQ added or changed since its deploy are refused or verified the old way.",
@@ -71,6 +81,35 @@ def _behind(estate: FindingEstate) -> tuple[Finding, ...]:
             observed_at=worker.standing.sight.observed_at,
             reads=WORKER_KIND,
         ),
+    )
+
+
+def _refusing(estate: FindingEstate) -> tuple[Finding, ...]:
+    worker = events_worker()
+    subject = _connection(estate, worker.connection_ref)
+    return tuple(
+        Finding(
+            rule=REFUSING,
+            subject=subject,
+            part=route.path,
+            title=f"The events Worker refuses {route.named}'s {route.proof}",
+            severity=Tone.ATTENTION,
+            explanation=f"Every request to {route.path} in the last hour was refused: {route.secret} does not match.",
+            evidence=(
+                ("Refused, last hour", str(route.unsigned_last_hour)),
+                ("Accepted, last hour", str(route.accepted_last_hour)),
+                ("Secret", route.secret),
+            ),
+            steps=(
+                Do(f"Set the Worker's {route.secret} to the one {route.named} uses."),
+                Run(label="Upload it", command="mise run worker:deploy --with-secrets"),
+            ),
+            primary=opens("Open events", reverse("control_plane:events")),
+            observed_at=worker.standing.sight.observed_at,
+            reads=WORKER_KIND,
+        )
+        for route in worker.routes or ()
+        if route.refusing
     )
 
 
@@ -96,5 +135,16 @@ RULES: tuple[FindingRule, ...] = (
         no_help_reason="HQ holds no credential that deploys the Worker.",
         bars={Tone.ATTENTION: "the deployed Worker carries other routes than HQ generates"},
         clears="the deployed Worker's version carries the routes HQ generates",
+    ),
+    FindingRule(
+        REFUSING,
+        "Events Worker refusing",
+        Tone.ATTENTION,
+        _refusing,
+        gathered=True,
+        operator_action="Set the Worker secret the route checks to the one its sender uses.",
+        no_help_reason="HQ holds no credential that sets the Worker's secrets.",
+        bars={Tone.ATTENTION: "every request to a route in the last hour was refused for its signature or token"},
+        clears="the route accepts a request again",
     ),
 )

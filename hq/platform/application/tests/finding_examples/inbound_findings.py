@@ -34,9 +34,10 @@ BEHIND = "The events Worker is behind HQ's routes"
 WORKER = "cloudflare.worker"
 
 
-def deployed(*tags: str, name: str = "hq-events") -> Example:
+def deployed(*tags: str, name: str = "hq-events", answers: list[dict] | None = None) -> Example:
     """The Worker ``name`` on the account, serving one version per tag, or
-    never deployed; a version's tag is what its deploy gave it."""
+    never deployed; a version's tag is what its deploy gave it. ``answers``
+    are its counts by route and status, where a version binds the dataset."""
 
     record = {
         "connection_ref": "example-cloudflare",
@@ -50,8 +51,22 @@ def deployed(*tags: str, name: str = "hq-events") -> Example:
         ],
         "requests": 120,
         "errors": 0,
+        "answers": answers,
     }
     return Example(readings={WORKER: [record]}, raises=(BEHIND,) if name == "hq-events" and tags else ())
+
+
+def answered(*counts: tuple[str, int, int, int], raises: tuple[str, ...] = ()) -> Example:
+    """The events Worker, deployed as HQ's routes make it, having answered each
+    (route, status, requests over the day, of them in the last hour)."""
+
+    found = deployed(
+        answers=[
+            {"route": route, "status": status, "requests": requests, "last_hour": last_hour}
+            for route, status, requests, last_hour in counts
+        ]
+    )
+    return Example(readings=found.readings, raises=raises)
 
 
 EXAMPLES = (
@@ -81,5 +96,27 @@ EXAMPLES = (
         fires=(deployed(""), deployed("ffffffffffffffffffffffffffffffff", "")),
         # Never deployed; another Worker deployed untagged.
         quiet=(deployed(), deployed("", name="example-site")),
+    ),
+    Examples(
+        "events-worker-refusing",
+        # Every delivery of the last hour refused for its signature, as after
+        # a rotation on one side; the listener retrying with an old token.
+        fires=(
+            answered(
+                ("/github", 202, 40, 0),
+                ("/github", 401, 9, 9),
+                raises=("The events Worker refuses GitHub App's signature",),
+            ),
+            answered(("/socket", 401, 30, 30), raises=("The events Worker refuses the event listener's token",)),
+        ),
+        # Fewer than a rotation makes; one accepted beside them; refused only
+        # earlier in the day; a route the Worker no longer serves; never counted.
+        quiet=(
+            answered(("/github", 401, 2, 2)),
+            answered(("/github", 202, 1, 1), ("/github", 401, 9, 9)),
+            answered(("/github", 401, 9, 0)),
+            answered(("/example-retired", 401, 9, 9)),
+            deployed(),
+        ),
     ),
 )

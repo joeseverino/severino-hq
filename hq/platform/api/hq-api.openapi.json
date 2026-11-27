@@ -38428,6 +38428,7 @@
                 "offsite-backup-late",
                 "event-channel-silent",
                 "events-worker-behind",
+                "events-worker-refusing",
                 "deploy-running",
                 "machine-offline",
                 "content-drafts",

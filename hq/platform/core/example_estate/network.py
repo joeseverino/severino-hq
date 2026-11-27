@@ -191,6 +191,15 @@ def zone():
             "errors": 3,
             "cpu_time_p50_us": 812.0,
             "cpu_time_p99_us": 4_210.0,
+            # Tailscale signs with a secret the Worker no longer holds, so
+            # every one of its deliveries is refused.
+            "answers": [
+                {"route": "/github", "status": 202, "requests": 1_240, "last_hour": 41},
+                {"route": "/github", "status": 401, "requests": 3, "last_hour": 0},
+                {"route": "/github", "status": 413, "requests": 1, "last_hour": 0},
+                {"route": "/tailscale", "status": 401, "requests": 34, "last_hour": 12},
+                {"route": "/socket", "status": 101, "requests": 6, "last_hour": 0},
+            ],
         },
     )
     # The rest of the account: nothing on Pages, D1, Access or tunnels.

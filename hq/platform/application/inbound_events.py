@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.models import InboundSource
 from hq.domains.control_plane.observations.cloudflare import WORKER_KIND
 lazy from hq.domains.control_plane import inbound_worker
@@ -18,6 +20,7 @@ lazy from hq.domains.control_plane.provider_spec import InboundSpec
 
 from . import readings
 from .derivations import passed
+from .entity_links import provider_label
 from .moments import moment
 from .projection import read_once
 lazy from .cadence import WorkerStanding, WorkerState
@@ -123,11 +126,53 @@ def taken() -> tuple[Taken, ...]:
     return tuple(found)
 
 
+# A route is refusing when every request it answered in the last hour was
+# refused for its signature or token, at least this many of them: what a
+# rotated secret does to a provider's deliveries or the listener's retries,
+# where a stray unsigned request makes one.
+REFUSING_AT = 3
+# The status the Worker answers a request whose signature or token does not
+# match the secret it holds.
+UNSIGNED = 401
+
+
+@dataclass(frozen=True, slots=True)
+class RouteAnswers:
+    """How the events Worker answered one of its routes over the last day."""
+
+    path: str
+    label: str
+    # The route's sender, in a sentence, and what of its request the Worker
+    # checks against the Worker secret ``secret``.
+    named: str
+    proof: str
+    secret: str
+    accepted: int = 0
+    refused: int = 0
+    # Of those refused, the ones whose signature or token did not match.
+    unsigned: int = 0
+    accepted_last_hour: int = 0
+    unsigned_last_hour: int = 0
+
+    @property
+    def refusing(self) -> bool:
+        return self.unsigned_last_hour >= REFUSING_AT and not self.accepted_last_hour
+
+    @property
+    def said(self) -> tuple[str, ...]:
+        """The detail under its count: what was refused, and for what."""
+
+        lines = [f"{self.refused} refused"]
+        if self.unsigned:
+            lines.append(f"{self.unsigned} not matching {self.secret}")
+        return tuple(lines)
+
+
 @dataclass(frozen=True, slots=True)
 class EventsWorker:
     """The events Worker as Cloudflare runs it, from the ``cloudflare.worker``
-    reading: the deployment serving it and its last day of invocations, none
-    of either where the reading holds none."""
+    reading: the deployment serving it, its last day of invocations and how
+    it answered each route, none of each where the reading holds none."""
 
     standing: Standing
     connection_ref: str = ""
@@ -139,6 +184,7 @@ class EventsWorker:
     # CPU time per invocation, in milliseconds.
     cpu_time_p50_ms: float | None = None
     cpu_time_p99_ms: float | None = None
+    routes: tuple[RouteAnswers, ...] | None = None
 
     @property
     def deployed(self) -> bool:
@@ -178,7 +224,40 @@ def _events_worker() -> EventsWorker:
         errors=record.get("errors"),
         cpu_time_p50_ms=_milliseconds(record.get("cpu_time_p50_us")),
         cpu_time_p99_ms=_milliseconds(record.get("cpu_time_p99_us")),
+        routes=None if record.get("answers") is None else _routes(record["answers"]),
     )
+
+
+def _routes(answers: list[dict[str, Any]]) -> tuple[RouteAnswers, ...]:
+    """Each route the Worker serves now, with its answers counted by status."""
+
+    declared = [
+        (str(route["path"]), label, label, "signature", str(route["secret_binding"]))
+        for route in inbound_worker.routes()
+        for label in (provider_label(str(route["provider"])),)
+    ]
+    listener = (capfirst(LISTENER_NAMED), f"the {LISTENER_NAMED}", "token", inbound_worker.SOCKET_TOKEN)
+    declared.append((inbound_worker.SOCKET_PATH, *listener))
+    found = []
+    for path, label, named, proof, secret in declared:
+        mine = [answer for answer in answers if answer.get("route") == path]
+        accepted = [answer for answer in mine if answer["status"] < 400]
+        unsigned = [answer for answer in mine if answer["status"] == UNSIGNED]
+        found.append(
+            RouteAnswers(
+                path=path,
+                label=label,
+                named=named,
+                proof=proof,
+                secret=secret,
+                accepted=sum(answer["requests"] for answer in accepted),
+                refused=sum(answer["requests"] for answer in mine if answer["status"] >= 400),
+                unsigned=sum(answer["requests"] for answer in unsigned),
+                accepted_last_hour=sum(answer["last_hour"] for answer in accepted),
+                unsigned_last_hour=sum(answer["last_hour"] for answer in unsigned),
+            )
+        )
+    return tuple(found)
 
 
 def _milliseconds(micros: float | None) -> float | None:
