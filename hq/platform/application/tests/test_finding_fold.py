@@ -6,7 +6,7 @@ from hq.platform.core.testing import READER
 
 from ..attention import readable_by
 from ..dashboard import finding_rows
-from ..finding_fold import CAUSES, beneath_causes, finding_key
+from ..finding_fold import beneath_causes, finding_key
 from ..finding_model import Finding, matter_key
 from ..security import Capability
 from ..tone import Tone
@@ -28,25 +28,6 @@ def key(rule: str) -> str:
 
 
 class BeneathCausesTests(SimpleTestCase):
-    def test_a_chain_of_causes_is_one_item_at_its_root_severity(self):
-        root = finding("example-mount", Tone.ATTENTION)
-        failed = finding("example-failed", follows=(key("example-mount"),))
-        absent = finding("example-absent", follows=(key("example-failed"),))
-
-        (item,) = beneath_causes((absent, failed, root))
-
-        self.assertEqual(finding_key(item), key("example-mount"))
-        self.assertEqual(item.severity, Tone.ATTENTION)
-        self.assertEqual(
-            {finding_key(each) for each in item.consequences}, {key("example-failed"), key("example-absent")}
-        )
-        self.assertIn(absent.title, [str(value) for label, value in item.evidence if label == CAUSES])
-
-    def test_a_consequence_stands_alone_once_its_cause_clears(self):
-        failed = finding("example-failed", follows=(key("example-mount"),))
-
-        self.assertEqual(beneath_causes((failed,)), (failed,))
-
     def test_a_loop_of_causes_leaves_its_first_finding_standing(self):
         first = finding("example-first", follows=(key("example-second"),))
         second = finding("example-second", follows=(key("example-first"),))

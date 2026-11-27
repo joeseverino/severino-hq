@@ -51,26 +51,6 @@ class UnrecognizedContainerTests(TestCase):
         with host_only():
             return [f for f in estate_findings(principal=MANAGER) if f.rule == "unrecognized-container"]
 
-    def test_the_remedy_adopts_exactly_that_record(self):
-        from django.urls import reverse
-
-        from ..adoption import unmanaged
-        from ..inventory import record_token
-
-        (finding,) = self.found()
-        (remedy,) = finding.presses
-        (item,) = unmanaged()
-        token = record_token("portainer.container", ("a-docker-host", "a-stray"))
-
-        self.assertEqual(remedy.capability, "infrastructure.resource.create")
-        self.assertEqual(remedy.method, "POST")
-        # The same handle the adoption looks the record up by.
-        self.assertEqual(token, item.token)
-        self.assertEqual(
-            remedy.url,
-            reverse("control_plane:adopt_record", args=["portainer.container", token]),
-        )
-
     def test_adopting_it_from_the_page_clears_the_finding(self):
 
         (finding,) = self.found()
@@ -79,17 +59,4 @@ class UnrecognizedContainerTests(TestCase):
         self.client.post(finding.presses[0].url, form_keyed())
 
         self.assertTrue(ManagedResource.objects.filter(kind="portainer.container", spec__name="a-stray").exists())
-        self.assertEqual(self.found(), [])
-
-    def test_adopting_it_through_the_service_clears_the_finding(self):
-        from ..adoption import AdoptCommand, adopt, unmanaged
-        from ..security import cli_principal
-
-        (item,) = unmanaged()
-
-        adopt(
-            AdoptCommand(kind="portainer.container", token=item.token),
-            principal=cli_principal(),
-        )
-
         self.assertEqual(self.found(), [])

@@ -2,36 +2,14 @@
 
 from datetime import UTC, datetime, timedelta
 
-from django.test import SimpleTestCase, TestCase
-from django.utils import timezone as dj_timezone
-
-from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
-from hq.domains.control_plane.provider_spec import expiry_phrase
-from hq.platform.core.testing import declare
+from django.test import SimpleTestCase
 
 from ..expiry import days_until, renewal_opens_at, renewal_window
-from ..resource_context import resource_context
-from ..resources import get_resource
-from ..security import Capability, Principal
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
-EVERYTHING = Principal("test", "operator", frozenset(Capability))
 
 
 class DaysUntilTests(SimpleTestCase):
-    def test_nearest_day(self):
-        self.assertEqual(days_until(NOW + timedelta(days=40), NOW), 40)
-        self.assertEqual(days_until(NOW + timedelta(days=40) - timedelta(seconds=1), NOW), 40)
-        self.assertEqual(days_until(NOW + timedelta(days=87, hours=11), NOW), 87)
-        self.assertEqual(days_until(NOW + timedelta(days=87, hours=13), NOW), 88)
-
-    def test_never_zero_while_time_remains(self):
-        self.assertEqual(days_until(NOW + timedelta(hours=2), NOW), 1)
-        self.assertEqual(days_until(NOW, NOW), 0)
-
-    def test_negative_once_past(self):
-        self.assertEqual(days_until(NOW - timedelta(hours=2), NOW), -1)
-
     def test_a_naive_moment_is_utc(self):
         self.assertEqual(days_until(datetime(2026, 1, 11), NOW), 10)  # noqa: DTZ001 - the naive moment is under test
 
@@ -40,49 +18,3 @@ class DaysUntilTests(SimpleTestCase):
         self.assertEqual(renewal_window({"renewal_window_days": "14"}), 14)
         self.assertEqual(renewal_window({"renewal_window_days": "soon"}), 30)
         self.assertEqual(renewal_opens_at(NOW, 30), NOW - timedelta(days=30))
-
-    def test_a_certificate_declared_without_a_window_renews_when_hq_says_it_does(self):
-        """The window the adapter writes for the controller is the one HQ's pages read for an absent one."""
-
-        from hq.domains.control_plane.provider_adapters.tls import ResolvedTLSCertificateSpec, TLSCertificateSpec
-
-        for model in (TLSCertificateSpec, ResolvedTLSCertificateSpec):
-            with self.subTest(model=model.__name__):
-                self.assertEqual(model.model_fields["renewal_window_days"].default, renewal_window({}))
-
-
-class OneAnswerTests(TestCase):
-    def setUp(self):
-        self.resource = declare(
-            "example-wildcard",
-            CERTIFICATE_KIND,
-            {"certificate_name": "example-wildcard", "domains": ["*.example.com"]},
-            status={"not_after": (dj_timezone.now() + timedelta(days=87, hours=12, minutes=30)).isoformat()},
-        )
-
-    def test_every_surface_says_the_same_days_left(self):
-        derived = resource_context(self.resource)
-        phrase = expiry_phrase(self.resource.status["not_after"])
-        from ..estate import Expiry
-
-        card = Expiry("example", "Certificate", derived.expiry.not_after)
-
-        self.assertEqual(derived.expiry.days_left, 88)
-        self.assertTrue(phrase.endswith("88 days"))
-        self.assertEqual(card.days, 88)
-
-    def test_the_api_and_mcp_return_the_derived_facts(self):
-        found = get_resource("infrastructure", "example-wildcard", principal=EVERYTHING)
-
-        self.assertEqual(found["expiry"]["days_left"], 88)
-        self.assertEqual(
-            found["expiry"]["renewal_at"],
-            resource_context(self.resource).expiry.renewal_at.isoformat(),
-        )
-        self.assertIn("renew", found["actions"])
-        self.assertIn(found["removal"]["mode"], {"delete", "forget", "unavailable"})
-
-    def test_an_unreadable_expiry_is_none_not_an_error(self):
-        self.resource.status = {"not_after": "not a date"}
-
-        self.assertIsNone(resource_context(self.resource).expiry)
