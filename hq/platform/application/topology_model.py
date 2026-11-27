@@ -9,6 +9,7 @@ from datetime import datetime
 from hashlib import sha256
 from typing import Annotated
 
+from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .action_links import ActionLink as TopologyAction
@@ -299,12 +300,28 @@ JOINED_KINDS = frozenset({"machine", "service", "zone", "registry", "controller"
 _OBSERVABLE_KINDS = frozenset({"connection", *JOINED_KINDS})
 
 
+def ability_id(family: str, name: str) -> str:
+    """The node of one ability a connection family declares."""
+
+    return Kind.ABILITY.of(f"{family}:{name}")
+
+
+def read_kind(ability: str) -> str:
+    """The kind HQ reads that an ability node (``ability_id``) stands for, or ""."""
+
+    name = Kind.ABILITY.identity_in(ability).partition(":")[2]
+    provider = PROVIDERS.get(name)
+    return name if name in OBSERVATIONS or (provider is not None and provider.sweeps) else ""
+
+
 def observable(node: TopologyNode) -> bool:
     """Whether anything can observe this node, so "never observed" is a gap."""
 
     if node.kind == "resource":
         provider = PROVIDERS.get(node.kind_key)
         return not (provider and provider.unobserved_reason)
+    if node.kind == "ability":
+        return bool(read_kind(node.id))
     return node.kind in _OBSERVABLE_KINDS
 
 

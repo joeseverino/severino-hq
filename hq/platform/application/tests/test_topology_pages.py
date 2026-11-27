@@ -10,16 +10,20 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.observations.r2 import BACKUP_KIND
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivation_testing import uncached
+from hq.platform.application.inventory_testing import store
 from hq.platform.application.markup_testing import hrefs, links, select, text, texts, within
 from hq.platform.core.testing import NOBODY, READER, connection, declare, operator
 from hq_sdk.testing import plain
 
 from ..action_links import topology_investigation_links, topology_url
 from ..command_center import command_center
+from ..connection_catalog import CONTROLLER_CONNECTIONS
 from ..connections import ConnectionAbility, ConnectionInstance, ConnectionSpec
 from ..plugin_testing import offering
+from ..references import Kind
 from ..security import Capability
 from ..topology import derive_topology, topology as serialized_topology
 from ..topology_lenses import apply_lens, lens_for, topology_lenses
@@ -204,6 +208,17 @@ class TopologyPageTests(TestCase):
         # A kind a sweep reads is not observed yet; one no sweep reads never is.
         self.assertNotContains(disabled, "HQ does not read this")
         self.assertContains(unswept, "HQ does not read this")
+
+    def test_a_reading_ability_is_read_when_its_kind_was(self):
+        """Every reading a connection can take is something HQ reads, whether
+        or not its records join anything on the map."""
+
+        store(BACKUP_KIND, {"connection_ref": "example-backups", "key": "example.tar.gz"}, age=timedelta(hours=3))
+
+        body = self.body(Kind.ABILITY.of(f"{CONTROLLER_CONNECTIONS}:{BACKUP_KIND}"))
+
+        self.assertNotContains(body, "HQ does not read this")
+        self.assertContains(body, "3\xa0hours ago")
 
     def test_the_whole_map_leaves_out_quiet_lanes_and_unlinked_cards_until_asked(self):
         from ..topology_lenses import QUIET_KINDS

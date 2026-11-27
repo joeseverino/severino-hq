@@ -9,7 +9,9 @@ mutation that could drift from the thing it claims to represent.
 
 import re
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field, StringConstraints, create_model
@@ -65,10 +67,12 @@ from .topology_model import (
     TopologyEdge,
     TopologyNode,
     TopologyTrace,
+    ability_id,
     derived_id,
     edge_between,
     gate_covers,
     newest_stamp,
+    read_kind,
 )
 lazy from . import derived_reads
 lazy from .adoption import manages_through
@@ -273,11 +277,12 @@ def _connection_nodes(
     nodes: dict[str, TopologyNode],
     edges: dict[str, TopologyEdge],
     principal: Principal,
+    read: Mapping[str, datetime],
 ) -> None:
     for group in groups:
         spec_actions = _connection_actions(group.spec)
         connection_url = spec_actions[0].url if spec_actions else ""
-        _declared_ability_nodes(group, nodes, principal)
+        _declared_ability_nodes(group, nodes, principal, read)
         for connection in group.connections:
             instance = connection.instance
             node = _connection_node(group, instance, spec_actions, connection_url)
@@ -289,23 +294,25 @@ def _connection_nodes(
             _ability_edges(group, connection, node.id, edges)
 
 
-def _declared_ability_nodes(group, nodes, principal) -> None:
+def _declared_ability_nodes(group, nodes, principal, read: Mapping[str, datetime]) -> None:
     # A declared ability exists even when no controller currently reports a
     # matching connection. Keeping it in the graph makes the difference
     # between unsupported and temporarily unobserved explicit, and keeps
-    # resources of that kind discoverable instead of orphaning them.
+    # resources of that kind discoverable instead of orphaning them. One that
+    # reads a kind was observed when that kind was last read.
     for ability in group.spec.abilities:
-        ability_id = Kind.ABILITY.of(f"{group.spec.name}:{ability.name}")
+        node_id = ability_id(group.spec.name, ability.name)
         nodes.setdefault(
-            ability_id,
+            node_id,
             TopologyNode(
-                id=ability_id,
+                id=node_id,
                 kind="ability",
                 label=ability.label,
                 subtitle=group.spec.label,
                 detail=ability.summary,
-                url=_focus_url(ability_id),
-                actions=_ability_actions(ability, ability_id, principal),
+                url=_focus_url(node_id),
+                observed_at=iso(read.get(read_kind(node_id))) or "",
+                actions=_ability_actions(ability, node_id, principal),
                 read_capabilities=required_capability_names(group.spec),
             ),
         )
@@ -384,9 +391,10 @@ def _dependency_edges(instance, connection, nodes, edges) -> None:
 
 def _ability_edges(group, connection, connection_id, edges) -> None:
     for state in connection.abilities:
-        ability_id = Kind.ABILITY.of(f"{group.spec.name}:{state.ability.name}")
         available = Tone.GOOD if state.available is True else Tone.SERIOUS if state.available is False else Tone.NEUTRAL
-        relation = edge_between(connection_id, ability_id, "enables", status=available)
+        relation = edge_between(
+            connection_id, ability_id(group.spec.name, state.ability.name), "enables", status=available
+        )
         edges[relation.id] = relation
 
 
@@ -483,7 +491,7 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
         for resource in resources:
             node = _resource_node(resource)
             nodes[node.id] = node
-        _connection_nodes(connection_catalog(principal=principal), nodes, edges, principal)
+        _connection_nodes(connection_catalog(principal=principal), nodes, edges, principal, kinds_read())
         subjects = add_estate(nodes, edges, resources)
         return RelationGraph(Topology(tuple(nodes.values()), tuple(edges.values())), subjects)
 
@@ -511,7 +519,8 @@ def _derive(principal: Principal) -> Topology:
             nodes[resource_id] = replace(nodes[resource_id], facts=extra)
 
     groups = connection_catalog(principal=principal)
-    _connection_nodes(groups, nodes, edges, principal)
+    read = kinds_read()
+    _connection_nodes(groups, nodes, edges, principal, read)
     add_estate(nodes, edges, resources)
     add_connection_facts(nodes)
     _governs_edges(groups, resources, edges)
@@ -524,7 +533,7 @@ def _derive(principal: Principal) -> Topology:
         )
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
-    return Topology(ordered_nodes, ordered_edges, kinds_read=tuple(kinds_read().items()))
+    return Topology(ordered_nodes, ordered_edges, kinds_read=tuple(read.items()))
 
 
 def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
@@ -571,10 +580,10 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
         resources_by_kind.setdefault(resource.kind, []).append(Kind.RESOURCE.of(resource.key))
     for group in groups:
         for ability in group.spec.abilities:
-            ability_id = Kind.ABILITY.of(f"{group.spec.name}:{ability.name}")
+            governor = ability_id(group.spec.name, ability.name)
             for kind in ability.governs_kinds:
                 for resource_id in resources_by_kind.get(kind, ()):
-                    relation = edge_between(ability_id, resource_id, "governs")
+                    relation = edge_between(governor, resource_id, "governs")
                     edges[relation.id] = relation
 
 
