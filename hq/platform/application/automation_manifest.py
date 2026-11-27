@@ -252,12 +252,8 @@ class OperationRegistry(Mapping[str, OperationManifest]):
     __slots__ = ("_by_id",)
 
     def __init__(self, manifests: tuple[OperationManifest, ...]) -> None:
-        if not isinstance(manifests, tuple):
-            raise TypeError("A registry is supplied a tuple of manifests.")
         by_id: dict[str, OperationManifest] = {}
         for manifest in manifests:
-            if not isinstance(manifest, OperationManifest):
-                raise TypeError(f"{manifest!r} is not an OperationManifest.")
             if manifest.id in by_id:
                 raise DuplicateOperation(f"Two operation manifests have the id {manifest.id!r}.")
             by_id[manifest.id] = manifest

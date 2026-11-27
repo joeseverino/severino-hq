@@ -83,11 +83,3 @@ class RegistryTests(SimpleTestCase):
     def test_it_refuses_a_duplicate_id(self) -> None:
         with self.assertRaises(DuplicateOperation):
             OperationRegistry((manifest(), manifest(timeout_seconds=60)))
-
-    def test_it_is_supplied_manifests_and_nothing_else(self) -> None:
-        with self.assertRaises(TypeError):
-            OperationRegistry([manifest()])  # type: ignore[arg-type]  # a list is the refusal under test
-        with self.assertRaises(TypeError):
-            OperationRegistry((declared(),))  # type: ignore[arg-type]  # a mapping is the refusal under test
-        with self.assertRaises(TypeError):
-            OperationRegistry("example.service_logs")  # type: ignore[arg-type]  # a path is the refusal under test
