@@ -17950,7 +17950,7 @@
         "type": "object"
       },
       "InfrastructureResourceResetFailedTarget": {
-        "description": "The background job to act on: its key.",
+        "description": "The HQ unit to act on: its key.",
         "examples": [
           "example-key"
         ],
@@ -17977,7 +17977,7 @@
         "type": "object"
       },
       "InfrastructureResourceRestartTarget": {
-        "description": "The container or background job to act on: its key.",
+        "description": "The container or HQ unit to act on: its key.",
         "examples": [
           "example-key"
         ],
@@ -19673,7 +19673,7 @@
           "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.pull_request": "Pull request",
-          "host.unit": "Background job",
+          "host.unit": "HQ unit",
           "machine": "Machine",
           "network": "Network",
           "npm.proxy_host": "Proxy host",
@@ -30226,7 +30226,7 @@
           "host.reboot": "Pending restart",
           "host.render_status": "Credentials refresh",
           "host.tailnet_lock": "Tailnet lock",
-          "host.unit": "Background job",
+          "host.unit": "HQ unit",
           "hq.request_path": "Requests reaching HQ",
           "machine": "Machine",
           "machine.telemetry": "Machine figures",
@@ -36321,7 +36321,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.enable/": {
       "post": {
-        "description": "Have one of HQ's background jobs start at boot.",
+        "description": "Have one of HQ's units start at boot.",
         "operationId": "infrastructureResourceEnableV2",
         "parameters": [
           {
@@ -36386,7 +36386,7 @@
             ]
           }
         ],
-        "summary": "Enable a background job",
+        "summary": "Enable an HQ unit",
         "tags": [
           "hq.infrastructure"
         ],
@@ -36546,7 +36546,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.reset_failed/": {
       "post": {
-        "description": "Clear the failure systemd holds against one of HQ's background jobs.",
+        "description": "Clear the failure systemd holds against one of HQ's units.",
         "operationId": "infrastructureResourceResetFailedV2",
         "parameters": [
           {
@@ -36611,7 +36611,7 @@
             ]
           }
         ],
-        "summary": "Clear failure a background job",
+        "summary": "Clear the failure of an HQ unit",
         "tags": [
           "hq.infrastructure"
         ],
@@ -36621,7 +36621,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.restart/": {
       "post": {
-        "description": "Restart a container, or a background job of HQ's own.",
+        "description": "Restart a container, or one of HQ's units.",
         "operationId": "infrastructureResourceRestartV2",
         "parameters": [
           {
@@ -36686,7 +36686,7 @@
             ]
           }
         ],
-        "summary": "Restart a container or background job",
+        "summary": "Restart a container or HQ unit",
         "tags": [
           "hq.infrastructure"
         ],
@@ -36696,7 +36696,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.start/": {
       "post": {
-        "description": "Start a container, or a background job of HQ's own.",
+        "description": "Start a container, or one of HQ's units.",
         "operationId": "infrastructureResourceStartV2",
         "parameters": [
           {
@@ -36761,7 +36761,7 @@
             ]
           }
         ],
-        "summary": "Start a container or background job",
+        "summary": "Start a container or HQ unit",
         "tags": [
           "hq.infrastructure"
         ],
@@ -41859,7 +41859,7 @@
     },
     "/api/v2/resources/hq/": {
       "get": {
-        "description": "HQ itself: its release and branch, machine and container, background jobs, what it reads and open problems.",
+        "description": "HQ itself: its release and branch, machine and container, units, what it reads and open problems.",
         "operationId": "listHqV2",
         "parameters": [
           {
