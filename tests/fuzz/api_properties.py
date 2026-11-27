@@ -17,7 +17,6 @@ from django.core.wsgi import get_wsgi_application
 from django.db import transaction
 from django.test import override_settings
 from hypothesis import HealthCheck, settings, strategies as st
-from pydantic import ValidationError as PydanticValidationError
 from schemathesis.config import SchemathesisConfig
 from schemathesis.generation import GenerationMode
 from schemathesis.generation.hypothesis.builder import HypothesisTestConfig, HypothesisTestMode, create_test
@@ -33,6 +32,7 @@ from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.command_fields import Describe
 from hq.platform.application.domains import records_of
 from hq.platform.application.host_sections import load
+from hq.platform.application.input_errors import takes
 from hq.platform.application.integration_specs import STALE_WRITE_KEYWORD
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import compile_integration_graph
@@ -177,17 +177,9 @@ def as_issued(context, case):
         case.query = {
             key: value
             for key, value in case.query.items()
-            if not key.startswith("where[") or (model is not None and _takes(model, key[6:-1], value))
+            if not key.startswith("where[") or (model is not None and takes(model, key[6:-1], value))
         }
     return case
-
-
-def _takes(model, name, value) -> bool:
-    try:
-        model.model_validate({name: value})
-    except PydanticValidationError:
-        return False
-    return True
 
 
 def names_another(case) -> bool:

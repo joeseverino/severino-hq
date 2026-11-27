@@ -11,9 +11,10 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from difflib import get_close_matches
-from typing import Any, get_args
+from typing import Annotated, Any, get_args
 
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError as DjangoValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import ErrorType
 
@@ -97,6 +98,20 @@ def unknown_field_errors(fields: Sequence[str]) -> list[dict[str, Any]]:
     """Pydantic's ``extra_forbidden`` shape, for a field no Pydantic type refused."""
 
     return [{**_EXTRA, "loc": [field]} for field in fields]
+
+
+def takes(model: type[BaseModel], name: str, value: Any) -> bool:
+    """Whether field ``name`` of ``model`` takes ``value`` as its own type, strictly; one it lacks takes none."""
+
+    taken = model.model_fields.get(name)
+    if taken is None:
+        return False
+    kind: Any = Annotated[taken.annotation, *taken.metadata] if taken.metadata else taken.annotation
+    try:
+        TypeAdapter(kind).validate_python(value, strict=True)
+    except ValidationError:
+        return False
+    return True
 
 
 def misnamed(name: str) -> PydanticCustomError:
