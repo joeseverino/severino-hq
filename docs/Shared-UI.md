@@ -1463,8 +1463,8 @@ Once the page is showing, it posts that. HQ works out which kinds the page is as
 asks the controller for those whose last attempt is older than their cadence
 (`hq/platform/application/freshness.py`).
 
-- Opening a page never logs in to a machine: a kind whose reader opens a shell is left to the
-  scheduled read.
+- Opening a page never logs in to a machine: a kind HQ declares read by logging in is left to the
+  scheduled read, and the controller refuses every other kind's reader a shell.
 - A page in a background tab asks for nothing, a GET never does, and the request cannot name a
   connection or a kind.
 - When the reading lands, the page's content is fetched again and swapped in place, the ask's own

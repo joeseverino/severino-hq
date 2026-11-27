@@ -1,6 +1,5 @@
 """An open page asks for its own readings: only those, only when due, only by POST."""
 
-import re
 from datetime import timedelta
 from html.parser import HTMLParser
 from pathlib import Path
@@ -9,7 +8,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.core import signing
 from django.db import connection
-from django.test import Client, SimpleTestCase, TestCase, override_settings, tag
+from django.test import Client, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -360,40 +359,6 @@ class AskableTests(TestCase):
         for kind in (*LOGS_IN, "tls.certificate", "registry.domain", "a.kind.nothing.declares"):
             with self.subTest(kind=kind):
                 self.assertFalse(askable(kind))
-
-
-@tag("source")
-class AskableSourceTests(SimpleTestCase):
-    """Only the known controller readers open a shell."""
-
-    def test_only_the_known_readers_open_a_shell(self):
-        """``askable`` trusts what a kind declares: read through "ssh" or not.
-
-        That holds only while the readers that log in are the ones declared to.
-        A module that starts running a shell command on a machine fails here,
-        so whoever adds it decides how its kinds are asked for, rather than
-        finding out from a host's login records.
-        """
-
-        root = Path(__file__).resolve().parents[4]
-        opens_a_shell = re.compile(r"\.SSH\(ctx")
-        found = sorted(
-            str(path.relative_to(root))
-            for path in (root / "controller" / "providers").glob("*.go")
-            if not path.name.endswith("_test.go") and opens_a_shell.search(path.read_text(encoding="utf-8"))
-        )
-
-        self.assertEqual(
-            found,
-            [
-                "controller/providers/caddy.go",
-                "controller/providers/controller.go",
-                "controller/providers/glance.go",
-                "controller/providers/host_readings.go",
-                "controller/providers/host_reboot.go",
-                "controller/providers/tls.go",
-            ],
-        )
 
 
 @SWEEPS

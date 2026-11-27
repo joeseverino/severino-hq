@@ -14,7 +14,7 @@ lazy from hq.platform.application.entity_links import page_url
 lazy from hq.platform.application.readings import KEPT
 lazy from hq.platform.application.references import Kind
 
-from .attribution import unattributed_kinds
+from .attribution import logging_in, unattributed_kinds
 from .connection_kinds import CONNECTION_LABELS
 from .observations import OBSERVATIONS
 from .observations.contract import Reader, ReadingPart
@@ -219,6 +219,8 @@ def provider_reads() -> Mapping[str, tuple[Read, ...]]:
 # Kinds a controller reports as readings rather than as resources; see
 # control_plane.observations.
 OBSERVATION_KINDS = frozenset(OBSERVATIONS)
+# Every kind read by logging in to a machine (``attribution.logging_in``).
+LOGGING_IN = logging_in(OBSERVATIONS, PROVIDERS.values())
 
 
 if _unattributed := unattributed_kinds(OBSERVATIONS, PROVIDERS.values()):

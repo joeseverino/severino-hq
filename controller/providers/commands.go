@@ -147,11 +147,20 @@ func (c *Commands) result(step, subject string, stdout, stderr []byte, exit int,
 	return stdout, nil
 }
 
+// ErrNoShell is a reader whose kind HQ does not declare to log in (and so asks
+// for whenever a page opens) asking for a shell; a host counts its logins.
+var ErrNoShell = errors.New("its kind is not declared to log in to a machine")
+
+type shellRefusedKey struct{}
+
 // SSH runs one forced operation on a connection's host, with host keys pinned
 // and nothing read from an SSH config. The remote side receives operation as
 // the command, which a forced command reads as SSH_ORIGINAL_COMMAND, and
 // payload on its standard input.
 func (c *Commands) SSH(ctx context.Context, ref, operation string, payload []byte) ([]byte, error) {
+	if kind, refused := ctx.Value(shellRefusedKey{}).(string); refused {
+		return nil, &ProviderError{Message: kind, Err: ErrNoShell}
+	}
 	target, err := c.Supplied.SSH(ref)
 	if err != nil {
 		return nil, err

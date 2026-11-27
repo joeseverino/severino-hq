@@ -134,6 +134,7 @@ func edgeRebootInventory(t *testing.T, answers map[string]string) (runtime.KindR
 	declared := runtime.ControllerRegistry{
 		Observations:          map[string]string{string(kind): string(runtime.ConnectionProviderSSH)},
 		ConnectionCredentials: []runtime.ConnectionProvider{runtime.ConnectionProviderSSH},
+		LoggingIn:             []runtime.ResourceKind{kind},
 	}
 	inventory, err := (&Controller{Registry: registry, Declared: declared}).Inventory(t.Context(), []runtime.ResourceKind{kind}, nil)
 	if err != nil {

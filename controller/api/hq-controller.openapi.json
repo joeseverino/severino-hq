@@ -1956,6 +1956,13 @@
             },
             "description": "Providers a connection credential is modeled for."
           },
+          "logging_in": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            },
+            "description": "Kinds read by logging in to a machine: the only readers the controller lets open a shell."
+          },
           "extensions": {
             "type": "array",
             "description": "Each admitted extension the running image composes, which delivery follows.",
@@ -1982,6 +1989,7 @@
           "connection_providers",
           "observations",
           "connection_credentials",
+          "logging_in",
           "extensions",
           "github_profiles",
           "github_repositories",

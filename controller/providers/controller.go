@@ -256,12 +256,15 @@ func (c *Controller) Connections(ctx context.Context, carry []string) ([]runtime
 	return reported, nil
 }
 
+func (c *Controller) logsIn(kind string) bool {
+	return slices.Contains(c.Declared.LoggingIn, runtime.ResourceKind(kind))
+}
+
 // providerOf is whose kind this is, so one provider's kinds are read in turn:
 // every kind read by logging in to a machine is the ssh group.
 func (c *Controller) providerOf(kind string) string {
-	const ssh = string(runtime.ConnectionProviderSSH)
-	if c.Declared.Observations[kind] == ssh || slices.Contains(c.Declared.ConnectionProviders[kind], runtime.ConnectionProviderSSH) {
-		return ssh
+	if c.logsIn(kind) {
+		return string(runtime.ConnectionProviderSSH)
 	}
 	vendor, _, _ := strings.Cut(kind, ".")
 	return vendor
@@ -371,7 +374,11 @@ func (c *Controller) Inventory(ctx context.Context, only, carry []runtime.Resour
 		wg.Go(func() {
 			for _, kind := range kinds {
 				began := time.Now()
-				report := c.readKind(ctx, c.readers[kind])
+				read := ctx
+				if !c.logsIn(kind) {
+					read = context.WithValue(ctx, shellRefusedKey{}, kind) // Commands.SSH refuses it
+				}
+				report := c.readKind(read, c.readers[kind])
 				mu.Lock()
 				found[kind], took[kind] = report, time.Since(began)
 				mu.Unlock()

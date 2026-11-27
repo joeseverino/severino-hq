@@ -1814,6 +1814,9 @@ type ControllerRegistry struct {
 	GithubRepositories GitHubRepositoriesPlan `json:"github_repositories"`
 	Locked             []LockedAction         `json:"locked"`
 
+	// LoggingIn Kinds read by logging in to a machine: the only readers the controller lets open a shell.
+	LoggingIn []ResourceKind `json:"logging_in"`
+
 	// MaterialKinds Kinds whose work needs material HQ holds.
 	MaterialKinds []ResourceKind `json:"material_kinds"`
 

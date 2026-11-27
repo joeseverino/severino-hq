@@ -18,6 +18,7 @@ from hq.domains.control_plane.models import OPERATION_LAPSE, ManagedResource, Op
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND
 from hq.domains.control_plane.providers import (
+    LOGGING_IN,
     PROVIDERS,
     controller_capability_registry,
     enabled_controller_actions,
@@ -864,6 +865,7 @@ def controller_registry() -> dict[str, Any]:
         },
         "observations": {kind: reading.provider for kind, reading in sorted(OBSERVATIONS.items())},
         "connection_credentials": sorted(CONNECTION_CREDENTIALS),
+        "logging_in": sorted(LOGGING_IN),
         "extensions": [dict(source) for source in admitted_sources()],
         "github_profiles": github_profiles(),
         "github_repositories": github_repositories(),
