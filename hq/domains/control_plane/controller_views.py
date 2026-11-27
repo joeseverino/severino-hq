@@ -6,13 +6,14 @@ from django.views.generic import TemplateView
 
 from hq.domains.control_plane.models import InboundSource
 from hq.platform.application.connection_setup import docs_url
-from hq.platform.application.controller_page import controller_page
+from hq.platform.application.controller_page import controller_page, controller_problems
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.hq_context.sight_part import sight
 from hq.platform.application.inbound_events import channel_standing, setup_guide
 from hq.platform.application.moments import when
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
+from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Cell, DataTable, TableColumn
 
 PENDING = (
@@ -48,6 +49,7 @@ class ControllerView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         controller = context["controller"] = controller_page()
+        context["problems"] = controller_problems(web_principal(self.request.user))
         # How current the readings are, counted as HQ's own page counts them.
         context["sight"] = sight()
         listener = context["listener"] = channel_standing(InboundSource.WORKER)

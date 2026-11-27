@@ -14,7 +14,6 @@ from hq.platform.application.labels import dotted
 
 from ..integration_specs import ListRead, ResourceSpec
 from ..projection import page_of, projection_scope
-from ..references import Kind
 from ..resources import EmptyQuery
 from ..tone import Tone
 from .band import Tile
@@ -22,6 +21,7 @@ from .release_part import Release, release, release_json, release_tile, reposito
 from .sight_part import KEYLESS, HqSight, sight, sight_json, sight_tile
 from .work_part import Renderer, Work, WorkUnit, work, work_json
 lazy from .. import automation_findings, backup_findings, hq_self, request_context
+lazy from ..controller_page import controller_keys
 lazy from ..entity_links import entity_link
 lazy from ..estate_records import Problem
 lazy from ..findings import estate_findings, finding_key
@@ -133,7 +133,7 @@ def _problems(
     # and so are those about HQ's own work: its playbook workers and its
     # off-site backup.
     found = estate_findings(principal=principal)
-    keys = [finding_key(finding) for finding in found if Kind.CONTROLLER.identity_in(finding.subject)]
+    keys = controller_keys(found)
     work = (automation_findings.RULE, backup_findings.RULE)
     work_keys = [finding_key(finding) for finding in found if finding.rule in work]
     repository = repository_of(container)

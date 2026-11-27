@@ -99,6 +99,14 @@ class EventsPageTests(TestCase):
         self.assertIn("Last seen just now.", strip_tags(arrived.content.decode()))
         self.assertContains(arrived, reverse("control_plane:events"))
 
+    def test_the_listener_gone_silent_stands_on_events_and_the_controller(self):
+        channel_heard(InboundSource.WORKER, silent=True)
+
+        for page in ("control_plane:events", "control_plane:controller"):
+            with self.subTest(page):
+                problems = self.client.get(reverse(page)).context["problems"]
+                self.assertIn("The event listener stopped reporting", [item["label"] for item in problems])
+
 
 class MadeDueTests(SimpleTestCase):
     def test_every_reading_a_declared_event_makes_due_is_named(self):

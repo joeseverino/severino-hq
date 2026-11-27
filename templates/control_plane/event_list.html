@@ -6,9 +6,10 @@ routes HQ generates, its last day of invocations, how it answered each route
 (accepted, refused, and refused for a signature or token that does not match
 its secret) and how its reading stands;
 then every event HQ takes (`inbound_events.taken`): each admitted provider's
-declaration, its events by the readings they make due.
+declaration, its events by the readings they make due. Above it all, the
+open problems whose fix is read here (`problems`).
 {% endcomment %}
-{% block page %}{{ block.super }}
+{% block page %}{% include "partials/_problems.html" with problems=problems only %}{{ block.super }}
 {% with standing=worker.standing %}
 {% section "Worker" %}
   {% facts layout="band" %}

@@ -612,6 +612,8 @@ class ListTableTests(SignedInTestCase):
                 if cell.tag == "td"
                 and "row-gutter" in cell.classes
                 and any(each.tag == "tbody" for each in cell.ancestors)
+                # The list's own rows, not the problems the page draws above it.
+                and any("data-table-results" in each.attrs for each in cell.ancestors)
             ]
             read += bool(names)
             for cell in names:

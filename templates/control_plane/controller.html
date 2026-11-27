@@ -3,8 +3,10 @@
 {% comment %}
 What HQ knows of the controller from what it left behind: when it last
 connected, what it read and when, when it reads next, and the changes waiting
-for it. Nothing here asks it anything.
+for it, under the open problems about it and the listener (`problems`).
+Nothing here asks it anything.
 {% endcomment %}
+{% include "partials/_problems.html" with problems=problems only %}
 {% with standing=controller.standing %}
 {% card element="div" %}{% facts layout="band" label="Controller status" %}
   {% fact "Controller" icon="activity" %}

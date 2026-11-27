@@ -15,7 +15,7 @@ from .tone import Tone
 from .unit_findings import HQ_HOST, WORKER_READ, stopped_reporting, unit_causes
 lazy from .automation_runs import READ_PROFILE
 lazy from .automation_workers import ProfileWorker, profile_workers
-lazy from .problems import About, problems_by_part
+lazy from .problems import About, problems_of
 lazy from .routes import reverse
 
 RULE = "automation-worker-absent"
@@ -43,7 +43,7 @@ def worker_problems(principal: Principal) -> tuple[dict[str, Any], ...]:
     found by its queue item's key (``findings.finding_key``)."""
 
     keys = tuple(matter_key(RULE, "", worker.profile) for worker in profile_workers())
-    return tuple(item for _part, item in problems_by_part({RULE: About(keys=keys)}, principal))
+    return problems_of(About(keys=keys), principal)
 
 
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:

@@ -12,8 +12,9 @@ from hq.platform.application.inbound_events import channel_standing, events_work
 from hq.platform.application.inbound_reads import INBOUND_EVENTS
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction
+from hq.platform.application.problems import About, problems_of
 from hq.platform.application.routes import reverse
-from hq.platform.application.security import Capability
+from hq.platform.application.security import Capability, web_principal
 from hq.platform.application.tables import DataTable
 
 from .inbound_tables import EVENT_COLUMNS, grouped, taken_table
@@ -51,4 +52,7 @@ class InboundEventListView(ListPageMixin, TemplateView):
         context["page_facts"] = render_to_string("control_plane/_inbound_summary.html", {"channels": channels})
         context["taken"] = taken_table(taken())
         context["worker"] = events_worker()
+        # About no record with a page: each problem whose fix is read here.
+        here = About(under=(reverse("control_plane:events"),))
+        context["problems"] = problems_of(here, web_principal(self.request.user))
         return context
