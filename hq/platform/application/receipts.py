@@ -84,11 +84,8 @@ class ReceiptFile:
 
     name: RequiredText
     content_type: str
-    # Bounded before it is decoded, so a file over the limit is refused
-    # without its bytes ever being held.
     content: Annotated[
         bytes,
-        Field(max_length=RECEIPT_FILE.max_encoded),
         Checked(_decoded, Reason("base64", "must be base64")),
         Field(json_schema_extra={"format": "base64"}),
         Field(description="The file's bytes, base64-encoded."),

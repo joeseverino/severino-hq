@@ -10,12 +10,14 @@ hold each call's body to it, and the proxy in front of HQ to the largest
 
 import math
 from functools import cache
-from typing import get_type_hints
+from typing import Any, get_args, get_origin, get_type_hints
 
 from django import forms
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLResolver, get_resolver, get_urlconf
+lazy from annotated_types import MaxLen
+lazy from pydantic.fields import FieldInfo
 
 from .command_fields import Upload, upload_of
 from .forms import FileField
@@ -44,15 +46,33 @@ def _posted(form: type[forms.BaseForm]) -> int:
     return total
 
 
-def _uploads(command: type) -> tuple[Upload, ...]:
+def _carried(command: type, name: str, hint: Any) -> tuple[Upload, int] | None:
+    """The ``Upload`` a field's files carry and how many one call sends: one,
+    or as many as its list holds."""
+
+    if upload := upload_of(hint):
+        return upload, 1
+    field = FieldInfo.from_annotation(hint)
+    if get_origin(field.annotation) not in {list, tuple} or not (upload := upload_of(get_args(field.annotation)[0])):
+        return None
+    most = [bound.max_length for bound in field.metadata if isinstance(bound, MaxLen)]
+    if not most:
+        raise ImproperlyConfigured(
+            f"{command.__module__}.{command.__qualname__}.{name} takes any number of files. "
+            "Give it Field(max_length=...), which says how many one call sends."
+        )
+    return upload, min(most)
+
+
+def _uploads(command: type) -> tuple[tuple[Upload, int], ...]:
     hints = get_type_hints(command, include_extras=True)
-    return tuple(upload for hint in hints.values() if (upload := upload_of(hint)))
+    return tuple(found for name, hint in hints.items() if (found := _carried(command, name, hint)))
 
 
 def _drawn(command: type) -> int:
     """The most bytes of files one post of ``command``'s form sends."""
 
-    return sum(upload.max_bytes for upload in _uploads(command))
+    return sum(upload.max_bytes * count for upload, count in _uploads(command))
 
 
 # Read once per command, since its declaration is fixed when HQ starts.
@@ -60,7 +80,7 @@ def _drawn(command: type) -> int:
 def _encoded(command: type) -> int:
     """The most bytes of files one call of ``command`` sends as JSON, each base64-encoded."""
 
-    return sum(upload.max_encoded for upload in _uploads(command))
+    return sum(upload.max_encoded * count for upload, count in _uploads(command))
 
 
 def call_body(name: str) -> int:

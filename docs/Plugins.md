@@ -122,7 +122,11 @@ domain; the SDK owns integration mechanics:
 A form that takes files names each field `hq_sdk.forms.FileField` (or
 `MultipleFileField`) with the largest file it takes, and its view names the
 form as `form_class`. The page refuses a larger file before sending it, the
-field refuses one sent anyway, and HQ holds the proxy in front of it to the
+field refuses one sent anyway. A command field that takes a file in JSON, or a
+list's items that each are one, carries `hq_sdk.capabilities.Upload` with the
+largest file it takes, and a list says how many with `Field(max_length=...)`:
+every door refuses a larger file as sent, and a call's body is held to the
+files it may carry. HQ holds the proxy in front of it to the
 largest request any composed form or command takes
 (`hq.platform.application.uploads`), raising `proxy-refuses-uploads` when it
 is lower.
