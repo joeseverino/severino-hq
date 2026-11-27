@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
@@ -91,19 +90,11 @@ type Deployer struct {
 	Lock string
 }
 
-// HoldDeploys takes the deploy lock at path exclusively, waiting out a unit
-// action that holds it shared, and returns its release.
-func HoldDeploys(path string) (func(), error) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("the deploy lock could not be opened: %w", err)
-	}
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
-		file.Close()
-		return nil, fmt.Errorf("the deploy lock could not be taken: %w", err)
-	}
-	return func() { file.Close() }, nil
-}
+// deployLockWait bounds how long a deploy waits out a unit request that
+// holds the deploy lock shared: past the longest one may run
+// (severino-hq-unit@'s RuntimeMaxSec), so the lock still held then is held by
+// something other than a request.
+const deployLockWait = 6 * time.Minute
 
 // verified refuses image unless root's cosign finds it signed by the
 // source's compose workflow. image is pinned by digest, so what is verified
@@ -427,7 +418,12 @@ func (d *Deployer) restoreSchema(ctx context.Context, kept string) error {
 // they already started. It takes the deploy lock first and returns what it
 // stopped, with the lock's release.
 func (d *Deployer) hold(ctx context.Context) ([]string, func(), error) {
-	release, err := HoldDeploys(d.Lock)
+	// The tmpfiles rule makes the lock's directory at boot; a deploy makes it
+	// on a host whose rule predates it.
+	if err := ownDirectory(filepath.Dir(d.Lock)); err != nil {
+		return nil, nil, err
+	}
+	release, err := Lock{Path: d.Lock, Wait: deployLockWait}.Exclusive(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

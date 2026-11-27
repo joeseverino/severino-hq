@@ -110,7 +110,7 @@ var (
 	permissionLevel = []string{"read", "write", "admin"}
 	// grantReserved is every directory of HQ's own under /run: a token placed
 	// there would reach the account or unit that directory is for.
-	grantReserved = []string{hostcore.RunDir, hostcore.SecretDir, RenovateSpool, UnitSocketDir, RunsDir}
+	grantReserved = []string{hostcore.RunDir, hostcore.SecretDir, RenovateSpool, UnitSocketDir, RunsDir, DeployLockDir}
 )
 
 // checkGrants refuses a host's grants unless each has a name of its own, one

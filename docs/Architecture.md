@@ -1443,7 +1443,10 @@ The socket takes these in a second grammar, beside the container's:
 - **A deploy holds the units.** The socket takes `host.DeployLock` shared
   while it acts, and refuses when it cannot. A deploy takes it exclusively
   while it holds the timers and replaces the release, so a timer the deploy
-  stopped on purpose is not started under it.
+  stopped on purpose is not started under it. The lock is `host.Lock`'s: in
+  a directory only root can change, opened without following a link, and
+  waited for no longer than the longest unit request, so no other account can
+  swap it, plant a link in its place or hold it to stall a deploy.
 - **A start does not wait.** `--no-block` queues the job and returns, so the
   controller's own pass can ask for its unit without waiting on itself. The
   next reading says how it went.

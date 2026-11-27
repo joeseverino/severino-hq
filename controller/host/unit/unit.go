@@ -59,7 +59,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"syscall"
 
 	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -214,7 +213,7 @@ func (r *Runner) Run(ctx context.Context, request string) Result {
 		var shipped bool
 		if shipped, err = r.ships(verb, name); err == nil && shipped {
 			var release func()
-			if release, err = r.unheld(); err == nil {
+			if release, err = r.unheld(ctx); err == nil {
 				defer release()
 				err = r.loaded(ctx, name)
 			}
@@ -275,22 +274,18 @@ func (r *Runner) ships(verb, name string) (bool, error) {
 }
 
 // unheld takes the deploy lock shared, refusing while a deploy holds it.
-func (r *Runner) unheld() (func(), error) {
+func (r *Runner) unheld(ctx context.Context) (func(), error) {
 	if r.DeployLock == "" {
 		return func() {}, nil
 	}
-	file, err := os.OpenFile(r.DeployLock, os.O_CREATE|os.O_RDONLY, 0o600)
+	release, err := host.Lock{Path: r.DeployLock}.Shared(ctx)
+	if held := (host.LockHeld{}); errors.As(err, &held) {
+		return nil, refusal("a deploy is replacing the release; ask again once it ends")
+	}
 	if err != nil {
-		return nil, refusal("the deploy lock could not be opened")
+		return nil, refusal(err.Error())
 	}
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
-		file.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, refusal("a deploy is replacing the release; ask again once it ends")
-		}
-		return nil, refusal("the deploy lock could not be taken")
-	}
-	return func() { file.Close() }, nil
+	return release, nil
 }
 
 // loaded refuses a unit systemd does not hold loaded under exactly that name.

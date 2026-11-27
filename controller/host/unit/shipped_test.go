@@ -80,7 +80,7 @@ func TestOnlyAUnitTheReleaseShipsTakesTheSecondGrammar(t *testing.T) {
 
 func TestAShippedUnitIsRefusedWhileADeployHoldsTheRelease(t *testing.T) {
 	runner, calls := release(t)
-	release, err := host.HoldDeploys(runner.DeployLock)
+	release, err := host.Lock{Path: runner.DeployLock}.Exclusive(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
