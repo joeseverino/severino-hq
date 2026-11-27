@@ -74,3 +74,7 @@ class Check:
     part: Part | None = None
     plants: tuple[Plant, ...] = ()
     clear: tuple[Example, ...] = ()
+
+    def __post_init__(self):
+        if not self.reader_sees.strip():
+            raise ValueError("a check says what a reader sees when it fails")
