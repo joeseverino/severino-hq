@@ -9,13 +9,11 @@ so none can be returned.
 from datetime import datetime
 from typing import Any
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .json_schemas import as_written
-from .labels import human_label
 from .own_addresses import tailnet_sightings
 from .projection import page_of, page_size, projection_scope
 from .record_errors import RecordNotFound, one_of
@@ -28,7 +26,7 @@ lazy from .command_center import estate_search
 lazy from .connection_records import CredentialRecord, TallyPart
 lazy from .credential_sight import credential_sight, sight
 lazy from .domain_records import DnsRecordPart, DomainRecord, DomainRow, InsightPart
-lazy from .entity_links import entity_link
+lazy from .entity_links import entity_link, provider_label
 lazy from .estate import estate_reading
 lazy from .glance import machine_metrics
 lazy from .hq_self import serving
@@ -345,7 +343,7 @@ def _reading(kind: str, row: ProviderInventory | None) -> ReadingItem:
         "kind": kind,
         "label": spec.label,
         "provider": spec.provider,
-        "provider_label": CONNECTION_LABELS.get(spec.provider, human_label(spec.provider)),
+        "provider_label": provider_label(spec.provider),
         "read_by": spec.read_by,
         "facet": spec.facet,
         "relation": spec.relation,

@@ -3,13 +3,11 @@ the API and MCP's ``list_resource`` read."""
 
 from typing import Annotated, Any, TypedDict
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource
 
 from .answer_fields import DateTime
 from .describe import Describe, listed
 from .integration_specs import ListFilter, ListRead, ListSort, ResourceSpec
-from .labels import human_label
 from .projection import guarded, iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import RecordId
@@ -17,6 +15,7 @@ from .resources import BoundedQuery, SearchText
 from .search_contracts import SearchDefinition
 from .security import Capability
 from .ui import ended
+lazy from .entity_links import provider_label
 
 INBOUND_EVENTS = "inbound_events"
 
@@ -55,7 +54,7 @@ def _item(event: InboundEvent) -> dict[str, Any]:
     return {
         "id": event.pk,
         "provider": event.provider,
-        "provider_label": CONNECTION_LABELS.get(event.provider, human_label(event.provider)),
+        "provider_label": provider_label(event.provider),
         "event": event.event,
         "subject": event.subject,
         "delivery_id": event.delivery_id,
