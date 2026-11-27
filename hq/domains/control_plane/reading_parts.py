@@ -60,7 +60,7 @@ def parts_of(kind: str) -> Mapping[str, ReadingPart]:
         declared = spec.parts
     else:
         provider = PROVIDERS.get(kind)
-        whole = ReadingPart(WHOLE, (provider.label if provider else "") or kind)
+        whole = ReadingPart(WHOLE, provider.label if provider else kind)
         declared = provider.parts if provider else ()
     return frozendict({WHOLE: whole, **{part.name: part for part in declared}})
 

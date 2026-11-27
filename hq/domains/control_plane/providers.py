@@ -4,18 +4,20 @@ import logging
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import Any
+from functools import cache, lru_cache
+from typing import Any, Literal
 
 from hq.platform.application.labels import human_label
 from hq.platform.application.record_errors import Sentence
 lazy from hq.platform.application.default_hold import needs_approval
 lazy from hq.platform.application.entity_links import page_url
+lazy from hq.platform.application.readings import KEPT
 lazy from hq.platform.application.references import Kind
 
 from .attribution import unattributed_kinds
 from .connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from .observations import OBSERVATIONS
+from .observations.contract import Reader, ReadingPart
 from .provider_adapters import DECLARATIONS
 from .provider_spec import (
     SERVICE_FACETS,
@@ -170,6 +172,53 @@ def read_spec[T](kind: str, spec: Mapping[str, Any], read: Callable[[dict[str, A
             extra={"event": "providers.spec.unreadable", "kind": kind},
         )
         return None
+
+
+@dataclass(frozen=True, slots=True)
+class Read:
+    """One thing a provider reads: a reading, a resource kind a sweep reads
+    back, the parts of another provider's kind, or a value kept outside the
+    inventory (``readings.Kept``)."""
+
+    kind: str
+    label: str
+    source: Literal["reading", "resource", "part"]
+    by: Reader = "controller"
+    permissions: tuple[str, ...] = ()
+    # The kept value this is, read when ``answered`` says a stored value of it
+    # came through this provider; ``kind`` is then the cadence its age is judged by.
+    kept: Any = None
+    answered: Callable[[Any], bool] | None = None
+
+
+@cache
+def provider_reads() -> Mapping[str, tuple[Read, ...]]:
+    """Everything each provider reads, by provider: the one index of what
+    reads what, from the declarations alone."""
+
+    found: dict[str, list[Read]] = {}
+    for kind, reading in OBSERVATIONS.items():
+        found.setdefault(reading.provider, []).append(
+            Read(kind, reading.label, "reading", reading.read_by, tuple(reading.requires))
+        )
+    for kind, spec in PROVIDERS.items():
+        if spec.sweeps:
+            for provider in spec.connection_providers:
+                found.setdefault(provider, []).append(Read(kind, spec.label, "resource"))
+        by_provider: dict[str, list[ReadingPart]] = {}
+        for part in spec.parts:
+            if part.provider and part.provider not in spec.connection_providers:
+                by_provider.setdefault(part.provider, []).append(part)
+        for provider, parts in by_provider.items():
+            label = ", ".join(part.label for part in parts)
+            needs = tuple(dict.fromkeys(name for part in parts for name in part.requires))
+            found.setdefault(provider, []).append(Read(kind, label, "part", permissions=needs))
+    for kept in KEPT:
+        for provider, answered in kept.through.items():
+            found.setdefault(provider, []).append(
+                Read(kept.cadence, kept.label, "reading", "hq", kept=kept, answered=answered)
+            )
+    return frozendict({provider: tuple(reads) for provider, reads in found.items()})
 
 
 # Kinds a controller reports as readings rather than as resources; see

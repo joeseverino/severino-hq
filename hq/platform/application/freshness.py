@@ -19,14 +19,14 @@ from functools import cache
 lazy from django.core.exceptions import ImproperlyConfigured
 
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import PROVIDERS, provider_reads
 lazy from hq.platform.core.included_parts import READING_AGE
 
 from .derivations import reached
 from .labels import dotted
 from .moments import duration, when
 from .process_caches import kept
-lazy from . import plugins, readings
+lazy from . import plugins
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
 lazy from .tables import Piece
 
@@ -210,14 +210,10 @@ def cadence(kind: str = "") -> ReadCadence:
 def _read_through() -> dict[str, tuple[str, ...]]:
     """The kinds of reading HQ takes itself, by the connection they come through."""
 
-    found: dict[str, list[str]] = {}
-    for kind, spec in OBSERVATIONS.items():
-        if spec.read_by == "hq":
-            found.setdefault(spec.provider, []).append(kind)
-    for reading in readings.KEPT:
-        for provider in reading.through:
-            found.setdefault(provider, []).append(reading.cadence)
-    return {provider: tuple(kinds) for provider, kinds in found.items()}
+    found = {
+        provider: tuple(read.kind for read in reads if read.by == "hq") for provider, reads in provider_reads().items()
+    }
+    return {provider: kinds for provider, kinds in found.items() if kinds}
 
 
 def stale_after(kind: str = "") -> timedelta:

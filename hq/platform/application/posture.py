@@ -13,9 +13,8 @@ from django.utils.text import capfirst
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 from hq.platform.core.oidc import sso_only
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
-lazy from hq.domains.control_plane.providers import PROVIDERS, registry_label
+lazy from hq.domains.control_plane.providers import registry_label
 
 from .action_links import ActionLink
 from .finding_model import opens
@@ -24,7 +23,7 @@ from .standard_findings import Measured, Per, Standard
 from .standards import Check, Measurement, Reading, Standing, measure
 from .tone import Tone
 from .ui import counted
-lazy from . import cadence, tailnet
+lazy from . import cadence, page_reads, tailnet
 lazy from .connection_catalog import connection_catalog
 lazy from .connection_security import estate_readings, ingress_kinds, tailnet_policy_reading
 lazy from .connection_setup import docs_url, setups
@@ -60,18 +59,6 @@ def _observed(reading: Reading, kinds: tuple[str, ...]) -> Reading:
     return reading
 
 
-def _readers(kinds: tuple[str, ...]) -> tuple[str, ...]:
-    """The connection providers whose readings these kinds are, from their declarations."""
-
-    found: list[str] = []
-    for kind in kinds:
-        if kind in OBSERVATIONS:
-            found.append(OBSERVATIONS[kind].provider)
-        elif kind in PROVIDERS:
-            found.extend(PROVIDERS[kind].connection_providers)
-    return tuple(dict.fromkeys(found))
-
-
 def _not_read(kinds: tuple[str, ...], *, held: str = "") -> Reading:
     """A check HQ could not judge, and why, as its evidence: no connection
     reads it (and which to add), no controller has run, the last read failed,
@@ -79,7 +66,7 @@ def _not_read(kinds: tuple[str, ...], *, held: str = "") -> Reading:
     answer."""
 
     connected = {row.provider for row in connection_rows()}
-    readers = [provider for provider in _readers(kinds) if provider in CONNECTION_LABELS]
+    readers = page_reads.readers(kinds)
     if readers and not connected.intersection(readers):
         labels = " or ".join(CONNECTION_LABELS[provider] for provider in readers)
         return Reading.unavailable(f"No {labels} connection reads it", fix=f"connect {labels}", fix_url=_setup_url())

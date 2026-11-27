@@ -1,16 +1,14 @@
 """What HQ can see: every kind the controller reads, by the connection
 provider that takes it, and how current each is."""
 
-from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
-lazy from hq.domains.control_plane.observations import OBSERVATIONS
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import provider_reads
 
-from ..labels import dotted, human_label
+from ..labels import dotted
 from ..projection import iso, read_once
 from ..tables import Cell, DataTable, Group, TableColumn
 from ..tone import Tone
@@ -157,24 +155,19 @@ def sight() -> HqSight:
     return read_once("hq_context.sight", _sight)
 
 
-def _read_kinds() -> Iterator[tuple[str, str, str, tuple[str, ...], str]]:
-    """Each kind the sweep reads, as (kind, label, provider, permissions,
-    source): every reading, then every resource kind whose records it reads."""
-
-    for kind, spec in OBSERVATIONS.items():
-        yield kind, spec.label, spec.provider, tuple(spec.requires), "reading"
-    for kind, spec in PROVIDERS.items():
-        if spec.connection_providers and not spec.unobserved_reason:
-            yield kind, spec.label or human_label(kind), spec.connection_providers[0], (), "resource"
-
-
 def _sight() -> HqSight:
     stored = {kind: rows[0] for kind, rows in stored_snapshots().items() if rows}
     reported = {CONNECTION_LABELS.get(row.provider) for row in connection_rows()}
     groups: dict[str, list[Sees]] = {}
-    for kind, label, provider, permissions, source in _read_kinds():
-        row = _sees(kind, label, provider, sight_of(kind, label, source, stored.get(kind), permissions=permissions))
-        groups.setdefault(CONNECTION_LABELS.get(provider, KEYLESS), []).append(row)
+    # Each inventory kind once, under the provider that reads it whole.
+    for provider, reads in provider_reads().items():
+        for read in reads:
+            if read.source == "part" or read.kept is not None:
+                continue
+            seen = sight_of(read.kind, read.label, read.source, stored.get(read.kind), permissions=read.permissions)
+            groups.setdefault(CONNECTION_LABELS.get(provider, KEYLESS), []).append(
+                _sees(read.kind, read.label, provider, seen)
+            )
     # A provider that takes a connection and has none is said in one line; a
     # reading that needs no connection is always listed, read or not, and so is
     # every reading of a connection the controller has reported, read yet or not.

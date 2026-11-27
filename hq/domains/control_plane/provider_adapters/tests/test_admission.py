@@ -93,10 +93,25 @@ class ObservedTests(SimpleTestCase):
     def test_a_kind_is_swept_or_says_why_not_and_never_both(self):
         from dataclasses import replace
 
-        swept, unswept = PROVIDERS["adguard.rewrite"], PROVIDERS["machine"]
-        for case in (
-            {"spec": swept, "unobserved_reason": "Nothing reads it."},
-            {"spec": unswept, "unobserved_reason": ""},
-        ):
-            with self.subTest(case["spec"].kind), self.assertRaisesRegex(ValueError, "exactly one"):
-                replace(case["spec"], unobserved_reason=case["unobserved_reason"])
+        for kind, reason in (("adguard.rewrite", "Nothing reads it."), ("machine", "")):
+            with self.subTest(kind), self.assertRaisesRegex(ValueError, "exactly one"):
+                replace(PROVIDERS[kind], unobserved_reason=reason)
+
+
+class ProviderReadsTests(SimpleTestCase):
+    def test_every_kind_hq_keeps_is_read_by_a_provider_and_each_part_with_what_it_needs(self):
+        from hq.domains.control_plane.providers import provider_reads
+        from hq.platform.application.readings import KEPT
+
+        listed = {
+            (provider, read.kind, read.source): read for provider, reads in provider_reads().items() for read in reads
+        }
+        named = {read.kind for read in listed.values()}
+        self.assertLessEqual({*OBSERVATIONS, *(kind for kind, spec in PROVIDERS.items() if spec.sweeps)}, named)
+        self.assertFalse({kind for kind, spec in PROVIDERS.items() if not spec.sweeps} & named)
+        self.assertLessEqual({kept.cadence for kept in KEPT if kept.through}, named)
+        for kind, spec in PROVIDERS.items():
+            for part in spec.parts:
+                if part.provider and part.provider not in spec.connection_providers:
+                    with self.subTest(kind=kind, part=part.name):
+                        self.assertLessEqual(set(part.requires), set(listed[(part.provider, kind, "part")].permissions))
